@@ -1,0 +1,10 @@
+.logo {
+    width: 30px;
+}
+.topbar {
+    border-bottom: var(--paper-border-width) solid
+        var(--paper-medium-dark-border);
+    padding: var(--paper-uigap-half);
+    padding-left: var(--paper-uigap);
+    padding-right: var(--paper-uigap);
+}

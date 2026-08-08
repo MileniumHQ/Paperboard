@@ -1,0 +1,12 @@
+{
+    "paperui": {
+        "introduction": {
+            "index": 0,
+            "name": "Introduction"
+        },
+        "quick-start": {
+            "index": 1,
+            "name": "Quick Start"
+        }
+    }
+}
