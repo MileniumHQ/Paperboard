@@ -1,12 +1,63 @@
 {
+    "meta": {
+        "sections": {
+            "paperui": {
+                "name": "PaperUI",
+                "icon": "palette",
+                "image": "/paperui.png",
+                "description": "Design beautiful interfaces."
+            },
+            "paperboard": {
+                "name": "Paperboard",
+                "icon": "grid_view",
+                "image": "/paperboard.png",
+                "description": "Do more with your computer."
+            },
+            "paperapi": {
+                "name": "PaperAPI",
+                "icon": "api",
+                "image": "/paperapi.png",
+                "description": "Create memorable experiences."
+            }
+        }
+    },
     "paperui": {
-        "introduction": {
-            "index": 0,
-            "name": "Introduction"
-        },
-        "quick-start": {
-            "index": 1,
-            "name": "Quick Start"
+        "subsections": {
+            "getting-started": {
+                "name": "Getting started",
+                "icon": "rocket_launch",
+                "pages": {
+                    "introduction": {
+                        "index": 0,
+                        "name": "Introduction",
+                        "file": "00-introduction"
+                    },
+                    "quick-start": {
+                        "index": 1,
+                        "name": "Quick start",
+                        "file": "01-quick-start"
+                    }
+                }
+            },
+            "components": {
+                "name": "Components",
+                "icon": "folder",
+                "sort": "alphabetical",
+                "pages": {
+                    "paperbadge": {
+                        "name": "PaperBadge"
+                    },
+                    "paperbutton": {
+                        "name": "PaperButton"
+                    },
+                    "papercode": {
+                        "name": "PaperCode"
+                    },
+                    "papercontainer": {
+                        "name": "PaperContainer"
+                    }
+                }
+            }
         }
     }
 }
