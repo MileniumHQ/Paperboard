@@ -5,7 +5,9 @@ export default function f() {
         <>
             <PaperText preset="header">Introduction</PaperText>
             <PaperSeparator />
-            <PaperText preset="subheader">What is PaperUI?</PaperText>
+            <PaperText id="what-is-paperui" preset="subheader">
+                What is PaperUI?
+            </PaperText>
             <PaperText preset="body">
                 PaperUI is a tactile and beautiful SolidJS component library
                 made for Paperboard. PaperUI shines most when used in the
@@ -13,7 +15,9 @@ export default function f() {
                 for Paperboard, but can be used elsewhere if customized.
             </PaperText>
             <PaperSeparator />
-            <PaperText preset="subheader">Thinking in PaperUI</PaperText>
+            <PaperText id="thinking-in-paperui" preset="subheader">
+                Thinking in PaperUI
+            </PaperText>
             <PaperText preset="body">
                 When developing a board, it's important that it matches the
                 theme and design language of the rest of the app. PaperUI is

@@ -12,8 +12,12 @@ export default function f() {
             <PaperText preset="header">Quick Start</PaperText>
             <PaperText preset="body">Let's get you set up!</PaperText>
             <PaperSeparator />
-            <PaperText preset="subheader">Getting started</PaperText>
-            <PaperText preset="title">Prerequisites</PaperText>
+            <PaperText id="getting-started" preset="subheader">
+                Getting started
+            </PaperText>
+            <PaperText id="prerequisites" preset="title">
+                Prerequisites
+            </PaperText>
             <PaperText preset="body">
                 Since PaperUI is a SolidJS library, it's of paramount importance
                 that you are familiar with the{" "}
@@ -22,7 +26,9 @@ export default function f() {
                 </PaperLink>
                 .
             </PaperText>
-            <PaperText preset="title">1. Installation</PaperText>
+            <PaperText id="installation" preset="title">
+                1. Installation
+            </PaperText>
             <PaperText preset="body">
                 First, import SolidJS and PaperUI from NPM using your preferred
                 package manager.
@@ -36,7 +42,7 @@ export default function f() {
                 <PaperCode>index.tsx</PaperCode>
                 ).
             </PaperText>
-            <PaperCode block lang="tsx">
+            <PaperCode block language="jsx">
                 import "paperui/style.css";
             </PaperCode>
             <PaperQuote variant="blue" icon="info" title="FYI">
@@ -44,7 +50,9 @@ export default function f() {
                 included fonts for you. (Nunito, Nunito Sans, SUSE Mono, and
                 Google's Material Symbols Rounded)
             </PaperQuote>
-            <PaperText preset="title">2. Provider Setup</PaperText>
+            <PaperText id="provider-setup" preset="title">
+                2. Provider Setup
+            </PaperText>
             <PaperText preset="body">
                 Wrap your app in the{" "}
                 <PaperLink href="./components/PaperProvider">
@@ -52,7 +60,7 @@ export default function f() {
                 </PaperLink>{" "}
                 component. This establishes styles and context.
             </PaperText>
-            <PaperCode block lang="tsx">
+            <PaperCode block language="jsx">
                 {`import { render } from "solid-js/web";
 import { PaperProvider } from "paperui";
 import "paperui/style.css";
