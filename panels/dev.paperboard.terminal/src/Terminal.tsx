@@ -37,11 +37,10 @@ export function TerminalComponent(props: TerminalComponentProps) {
     let fitAddon: FitAddon | null = null;
     let resizeObserver: ResizeObserver | null = null;
 
-    onMount(async () => {
-        try {
-            await document.fonts.load('14px "SUSE Mono"');
-            await document.fonts.ready;
-        } catch (e) {}
+    onMount(() => {
+        document.fonts?.ready?.then(() => {
+            safeFit();
+        }).catch(() => {});
 
         const bg = getVar("--paper-background-backest", "#0d0e12");
         const fg = getVar("--paper-main-text", "#ffffff");
