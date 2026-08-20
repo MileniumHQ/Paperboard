@@ -7,8 +7,8 @@
       "dependencies": {
         "@xterm/addon-fit": "^0.11.0",
         "@xterm/xterm": "^6.0.0",
-        "paperapi": "file:/home/pxltail/Documents/Projects/Paperboard/PaperAPI",
-        "paperui": "file:/home/pxltail/Documents/Projects/Paperboard/PaperUI",
+        "paperapi": "file:/home/pxlkt/Documents/Paperboard/PaperAPI",
+        "paperui": "file:/home/pxlkt/Documents/Paperboard/PaperUI",
         "solid-js": "^1.9.13",
       },
       "devDependencies": {
@@ -160,6 +160,8 @@
     "@types/deep-eql": ["@types/deep-eql@4.0.2", "", {}, "sha512-c9h9dVVMigMPc4bwTvC5dxqtqJZwQPePsWjPlpSOnojbor6pGqdk541lfA7AqFQr5pB1BRdq0juY9db81BwyFw=="],
 
     "@types/estree": ["@types/estree@1.0.9", "", {}, "sha512-GhdPgy1el4/ImP05X05Uw4cw2/M93BCUmnEvWZNStlCzEKME4Fkk+YpoA5OiHNQmoS7Cafb8Xa3Pya8m1Qrzeg=="],
+
+    "@types/prismjs": ["@types/prismjs@1.26.6", "", {}, "sha512-vqlvI7qlMvcCBbVe0AKAb4f97//Hy0EBTaiW8AalRnG/xAN5zOiWWyrNqNXeq8+KAuvRewjCVY1+IPxk4RdNYw=="],
 
     "@vitest/expect": ["@vitest/expect@4.1.10", "", { "dependencies": { "@standard-schema/spec": "^1.1.0", "@types/chai": "^5.2.2", "@vitest/spy": "4.1.10", "@vitest/utils": "4.1.10", "chai": "^6.2.2", "tinyrainbow": "^3.1.0" } }, "sha512-YsCn+qAk1GWjQOWFEsEcL2gNQ0zmVmQu3T03qP6UyjhtmdtwtbuI+DASn/7iQB3HGTXkdBwGddzxPlmiql5vlA=="],
 
@@ -315,9 +317,9 @@
 
     "obug": ["obug@2.1.4", "", {}, "sha512-4a+OsYv9UktOJKE+l1A4OufDgdRF9PifWj+tJnHURo/P+WOxpG4GzUFL9qCalmWauao6ogiG+QvnCovwPoyAWA=="],
 
-    "paperapi": ["paperapi@file:../../../Documents/Projects/Paperboard/PaperAPI", { "devDependencies": { "typescript": "~6.0.2", "vite": "^8.1.0", "vite-plugin-dts": "^5.0.3" } }],
+    "paperapi": ["paperapi@file:../../../Documents/Paperboard/PaperAPI", { "devDependencies": { "typescript": "~6.0.2", "vite": "^8.1.0", "vite-plugin-dts": "^5.0.3" } }],
 
-    "paperui": ["paperui@file:../../../Documents/Projects/Paperboard/PaperUI", { "dependencies": { "solid-transition-group": "^0.3.0" }, "devDependencies": { "@solidjs/testing-library": "^0.8.10", "jsdom": "^30.0.1", "solid-js": "^1.9.13", "typescript": "~6.0.2", "vite": "^8.1.0", "vite-plugin-dts": "^5.0.3", "vite-plugin-solid": "^2.11.12", "vitest": "^4.1.10" }, "peerDependencies": { "solid-js": "^1.9.0" } }],
+    "paperui": ["paperui@file:../../../Documents/Paperboard/PaperUI", { "dependencies": { "prismjs": "^1.30.0", "solid-transition-group": "^0.3.0" }, "devDependencies": { "@solidjs/testing-library": "^0.8.10", "@types/prismjs": "^1.26.6", "jsdom": "^30.0.1", "solid-js": "^1.9.13", "typescript": "~6.0.2", "vite": "^8.1.0", "vite-plugin-dts": "^5.0.3", "vite-plugin-solid": "^2.11.12", "vitest": "^4.1.10" }, "peerDependencies": { "solid-js": "^1.9.0" } }],
 
     "parse5": ["parse5@8.0.1", "", { "dependencies": { "entities": "^8.0.0" } }, "sha512-z1e/HMG90obSGeidlli3hj7cbocou0/wa5HacvI3ASx34PecNjNQeaHNo5WIZpWofN9kgkqV1q5YvXe3F0FoPw=="],
 
@@ -334,6 +336,8 @@
     "postcss": ["postcss@8.5.23", "", { "dependencies": { "nanoid": "^3.3.16", "picocolors": "^1.1.1", "source-map-js": "^1.2.1" } }, "sha512-g50586zr4bZmwFiTlflMu8E0bDTb5I5gertgwAKmsdUlTQIhZtunzUlD1WSzwcVWPoAVpsrA6vlfCD7oXvRwgg=="],
 
     "pretty-format": ["pretty-format@27.5.1", "", { "dependencies": { "ansi-regex": "^5.0.1", "ansi-styles": "^5.0.0", "react-is": "^17.0.1" } }, "sha512-Qb1gy5OrP5+zDf2Bvnzdl3jsTf1qXVMazbvCoKhtKqVs4/YK4ozX4gKQJJVyNe+cajNPn0KoC0MC3FUmaHWEmQ=="],
+
+    "prismjs": ["prismjs@1.30.0", "", {}, "sha512-DEvV2ZF2r2/63V+tK8hQvrR2ZGn10srHbXviTlcv7Kpzw8jWiNTqbVgjO3IY8RxrrOUF8VPMQQFysYYYv0YZxw=="],
 
     "punycode": ["punycode@2.3.1", "", {}, "sha512-vYt7UD1U9Wg6138shLtLOvdAu+8DsC/ilFtEVHcH+wydcSpNE20AfSOduf6MkRFahL5FY7X1oU7nKVZFtfq8Fg=="],
 
