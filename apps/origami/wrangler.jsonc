@@ -1,0 +1,28 @@
+{
+    "$schema": "node_modules/wrangler/config-schema.json",
+    "name": "origami",
+    "main": "src/index.ts",
+    "account_id": "355f97d9a981bff4cd52aa362ae577c7",
+    "compatibility_date": "2026-08-18",
+    "routes": [
+        {
+            "pattern": "origami.ariapis.com",
+            "custom_domain": true,
+        },
+    ],
+    "kv_namespaces": [
+        {
+            "binding": "PACKAGES",
+            "id": "89764cd39f114ba18e25945504982bf0",
+        },
+    ],
+    "r2_buckets": [
+        {
+            "binding": "BOARDS_BUCKET",
+            "bucket_name": "paperboard-boards"
+        }
+    ],
+    "observability": {
+        "enabled": true,
+    },
+}
