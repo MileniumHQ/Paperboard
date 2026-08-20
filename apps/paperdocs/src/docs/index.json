@@ -134,6 +134,9 @@
                     "paperloader": {
                         "name": "PaperLoader"
                     },
+                    "papermediacard": {
+                        "name": "PaperMediaCard"
+                    },
                     "papermenu": {
                         "name": "PaperMenu"
                     },
