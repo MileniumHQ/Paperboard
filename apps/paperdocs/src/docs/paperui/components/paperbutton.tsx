@@ -1,9 +1,7 @@
 import {
-    PaperBadge,
     PaperButton,
     PaperCode,
     PaperContainer,
-    PaperEffect,
     PaperFlex,
     PaperIcon,
     PaperLink,
@@ -17,193 +15,117 @@ export default function f() {
     return (
         <>
             <PaperText preset="header">PaperButton</PaperText>
+            <PaperText preset="body">
+                The primary interactive button component in PaperUI, providing tactile feedback, semantic color variants, dimensional sizing modifiers, and icon-only layouts.
+            </PaperText>
             <PaperSeparator />
+
             <PaperText id="overview" preset="subheader">
                 Overview
             </PaperText>
             <PaperText preset="body">
-                The <PaperCode>PaperButton</PaperCode> component is the primary
-                button component in PaperUI. It supports icons, as well as
-                various size and color variants.
+                <strong>PaperButton</strong> is an accessible clickable primitive extending native HTML <PaperCode>&lt;button&gt;</PaperCode> capabilities. It incorporates tactile elevation borders, active compression dynamics, focus management, and automatic accessibility labelling for icon buttons.
             </PaperText>
-            <PaperCode
-                block
-                lang="tsx"
-            >{`<PaperButton>Open</PaperButton>`}</PaperCode>
-            <PaperContainer>
-                <PaperFlex center padding="full">
-                    <PaperButton>Open</PaperButton>
-                </PaperFlex>
-            </PaperContainer>
-            <PaperText id="variants" preset="subheader">
-                Variants
-            </PaperText>
-            <PaperText preset="body">
-                Using the <PaperCode>variant</PaperCode> prop, the component's
-                five different color variants can be used to signify the type of
-                action the button is related to. Here are some example use cases
-                for each color:
-            </PaperText>
-            <PaperTextList>
-                <PaperText preset="body">
-                    <PaperCode>blue</PaperCode> (or <PaperCode>brand</PaperCode>
-                    ) This is the brand color, therefore should be the default
-                    choice for buttons.
-                </PaperText>
-                <PaperText preset="body">
-                    <PaperCode>red</PaperCode> Breaking or dangerous action.
-                </PaperText>
-                <PaperText preset="body">
-                    <PaperCode>green</PaperCode> Action resulting in completion
-                    or success.
-                </PaperText>
-                <PaperText preset="body">
-                    <PaperCode>yellow</PaperCode> Risky action.
-                </PaperText>
-                <PaperText preset="body">
-                    <PaperCode>text</PaperCode> Less important action.
-                </PaperText>
-            </PaperTextList>
-            <PaperCode block language="jsx">
-                {`<PaperButton variant="blue">Open</PaperButton>
-<PaperButton variant="red">Delete</PaperButton>
-<PaperButton variant="green">Finish</PaperButton>
-<PaperButton variant="yellow">Rename</PaperButton>
-<PaperButton variant="text">Back</PaperButton>`}
-            </PaperCode>
-            <PaperContainer>
-                <PaperFlex padding="full" center direction="row" gap="half">
-                    <PaperButton variant="blue">Open</PaperButton>
-                    <PaperButton variant="red">Delete</PaperButton>
-                    <PaperButton variant="green">Finish</PaperButton>
-                    <PaperButton variant="yellow">Rename</PaperButton>
-                    <PaperButton variant="text">Back</PaperButton>
-                </PaperFlex>
-            </PaperContainer>
-            <PaperText id="icons" preset="subheader">
-                Icons
-            </PaperText>
-            <PaperText preset="body">
-                PaperButton supports a standard{" "}
-                <PaperLink href="./papericon">
-                    <PaperCode>PaperIcon</PaperCode>
-                </PaperLink>{" "}
-                component inline.
-            </PaperText>
-            <PaperCode block language="jsx">
-                {`<PaperButton variant="green"><PaperIcon>check_circle</PaperIcon> Finish</PaperButton>
-<PaperButton variant="red">
-    <PaperIcon>close</PaperIcon>
-    Close
-</PaperButton>
-<PaperButton variant="text">
-    <PaperIcon>arrow_back</PaperIcon>
-    Back
-</PaperButton>`}
-            </PaperCode>
-            <PaperContainer>
-                <PaperFlex padding="full" center direction="row" gap="half">
-                    <PaperButton variant="green">
-                        <PaperIcon>check_circle</PaperIcon> Finish
-                    </PaperButton>
-                    <PaperButton variant="red">
-                        <PaperIcon>close</PaperIcon> Close
-                    </PaperButton>
-                    <PaperButton variant="text">
-                        <PaperIcon>arrow_back</PaperIcon> Back
-                    </PaperButton>
-                </PaperFlex>
-            </PaperContainer>
-            <PaperText preset="body">
-                Or, you can set the <PaperCode>icon</PaperCode> prop if you
-                intend for the button to only include an icon.
-            </PaperText>
-            <PaperCode block language="jsx">
-                {`<PaperButton icon>
-    <PaperIcon>info</PaperIcon>
-</PaperButton>
-<PaperButton icon variant="yellow">
-    <PaperIcon>warning</PaperIcon>
-</PaperButton>`}
-            </PaperCode>
-            <PaperContainer>
-                <PaperFlex padding="full" center direction="row" gap="half">
-                    <PaperButton icon>
-                        <PaperIcon>info</PaperIcon>
-                    </PaperButton>
-                    <PaperButton icon variant="yellow">
-                        <PaperIcon>warning</PaperIcon>
-                    </PaperButton>
-                </PaperFlex>
-            </PaperContainer>
-            <PaperText id="sizes" preset="subheader">
-                Sizes
-            </PaperText>
-            <PaperText preset="body">
-                PaperButton also supports various sizes so it can maintain its
-                use across different types of interfaces. Pick whichever button
-                fits your use case best!
-            </PaperText>
-            <PaperText preset="body">
-                You can add each size by simply adding their corresponding prop.
-                (<PaperCode>compact</PaperCode>, <PaperCode>tiny</PaperCode>)
-            </PaperText>
-            <PaperCode block language="jsx">
-                {`<PaperButton>Normal</PaperButton>
-<PaperButton compact>Compact</PaperButton>
-<PaperButton tiny>Tiny</PaperButton>
-<PaperButton icon>
-    <PaperIcon>clock_loader_90</PaperIcon>
-</PaperButton>
-<PaperButton compact icon>
-    <PaperIcon>clock_loader_60</PaperIcon>
-</PaperButton>
-<PaperButton tiny icon>
-    <PaperIcon>clock_loader_10</PaperIcon>
-</PaperButton>`}
-            </PaperCode>
-            <PaperContainer>
-                <PaperFlex padding="full" center direction="row" gap="half">
-                    <PaperButton>Normal</PaperButton>
-                    <PaperButton compact>Compact</PaperButton>
-                    <PaperButton tiny>Tiny</PaperButton>
-                    <PaperButton icon>
-                        <PaperIcon>clock_loader_90</PaperIcon>
-                    </PaperButton>
-                    <PaperButton compact icon>
-                        <PaperIcon>clock_loader_60</PaperIcon>
-                    </PaperButton>
-                    <PaperButton tiny icon>
-                        <PaperIcon>clock_loader_10</PaperIcon>
-                    </PaperButton>
-                </PaperFlex>
-            </PaperContainer>
-            <PaperText id="papereffect" preset="subheader">
-                PaperEffect
-            </PaperText>
-            <PaperText preset="body">
-                PaperButton is designed from the beginning to work great in
-                tandem with <PaperLink href="./papereffect"><PaperCode>PaperEffect</PaperCode></PaperLink>, and vice versa.
-            </PaperText>
-            <PaperText preset="body">
-                You can learn more about <PaperLink href="./papereffect"><PaperCode>PaperEffect</PaperCode></PaperLink> and how it's meant to be
-                used.
-            </PaperText>
-            <PaperCode block language="jsx">
-                {`<PaperEffect>
-    <PaperButton>Quirky Button</PaperButton>
-</PaperEffect>`}
-            </PaperCode>
-            <PaperContainer>
-                <PaperFlex padding="full" center direction="row" gap="half">
-                    <PaperEffect>
-                        <PaperButton>Quirky Button</PaperButton>
-                    </PaperEffect>
-                </PaperFlex>
-            </PaperContainer>
+
             <PaperSeparator />
-            <PaperText id="props" preset="subheader">
-                Props
+
+            <PaperText id="variants" preset="subheader">
+                Color and Style Variants
+            </PaperText>
+            <PaperText preset="body">
+                Buttons support five chromatic styles alongside a borderless <PaperCode>"text"</PaperCode> variant:
+            </PaperText>
+
+            <PaperCode block language="tsx">
+                {`<PaperFlex direction="row" gap="half" wrap>
+    <PaperButton>Default</PaperButton>
+    <PaperButton variant="brand">Brand</PaperButton>
+    <PaperButton variant="blue">Blue</PaperButton>
+    <PaperButton variant="green">Green</PaperButton>
+    <PaperButton variant="yellow">Yellow</PaperButton>
+    <PaperButton variant="red">Red</PaperButton>
+    <PaperButton variant="text">Text Button</PaperButton>
+</PaperFlex>`}
+            </PaperCode>
+
+            <PaperContainer>
+                <PaperFlex padding="full" center direction="row" gap="half" wrap>
+                    <PaperButton>Default</PaperButton>
+                    <PaperButton variant="brand">Brand</PaperButton>
+                    <PaperButton variant="blue">Blue</PaperButton>
+                    <PaperButton variant="green">Green</PaperButton>
+                    <PaperButton variant="yellow">Yellow</PaperButton>
+                    <PaperButton variant="red">Red</PaperButton>
+                    <PaperButton variant="text">Text Button</PaperButton>
+                </PaperFlex>
+            </PaperContainer>
+
+            <PaperSeparator />
+
+            <PaperText id="sizing" preset="subheader">
+                Sizing Modifiers
+            </PaperText>
+            <PaperText preset="body">
+                Density can be reduced using the <PaperCode>compact</PaperCode> and <PaperCode>tiny</PaperCode> boolean attributes for toolbars, inline actions, and data tables:
+            </PaperText>
+
+            <PaperCode block language="tsx">
+                {`<PaperFlex direction="row" gap="half" align="center">
+    <PaperButton variant="blue">Standard</PaperButton>
+    <PaperButton variant="blue" compact>Compact</PaperButton>
+    <PaperButton variant="blue" tiny>Tiny</PaperButton>
+</PaperFlex>`}
+            </PaperCode>
+
+            <PaperContainer>
+                <PaperFlex padding="full" center direction="row" gap="half" align="center" wrap>
+                    <PaperButton variant="blue">Standard</PaperButton>
+                    <PaperButton variant="blue" compact>Compact</PaperButton>
+                    <PaperButton variant="blue" tiny>Tiny</PaperButton>
+                </PaperFlex>
+            </PaperContainer>
+
+            <PaperSeparator />
+
+            <PaperText id="icon-buttons" preset="subheader">
+                Icon Buttons
+            </PaperText>
+            <PaperText preset="body">
+                Passing the <PaperCode>icon</PaperCode> boolean prop formats the button into an equal-ratio square container optimized for single icon glyphs. The button automatically copies plain text children into the <PaperCode>aria-label</PaperCode> attribute if a dedicated label is omitted.
+            </PaperText>
+
+            <PaperCode block language="tsx">
+                {`<PaperFlex direction="row" gap="half">
+    <PaperButton icon variant="blue" aria-label="Search">
+        <PaperIcon zeroHeight>search</PaperIcon>
+    </PaperButton>
+    <PaperButton icon variant="green" aria-label="Add item">
+        <PaperIcon zeroHeight>add</PaperIcon>
+    </PaperButton>
+    <PaperButton icon variant="red" tiny aria-label="Delete">
+        <PaperIcon zeroHeight>delete</PaperIcon>
+    </PaperButton>
+</PaperFlex>`}
+            </PaperCode>
+
+            <PaperContainer>
+                <PaperFlex padding="full" center direction="row" gap="half">
+                    <PaperButton icon variant="blue" aria-label="Search">
+                        <PaperIcon zeroHeight>search</PaperIcon>
+                    </PaperButton>
+                    <PaperButton icon variant="green" aria-label="Add item">
+                        <PaperIcon zeroHeight>add</PaperIcon>
+                    </PaperButton>
+                    <PaperButton icon variant="red" tiny aria-label="Delete">
+                        <PaperIcon zeroHeight>delete</PaperIcon>
+                    </PaperButton>
+                </PaperFlex>
+            </PaperContainer>
+
+            <PaperSeparator />
+
+            <PaperText id="specification" preset="subheader">
+                Technical Specification
             </PaperText>
             <PaperTable>
                 <thead>
@@ -216,82 +138,60 @@ export default function f() {
                 </thead>
                 <tbody>
                     <tr>
-                        <td>
-                            <PaperCode>variant</PaperCode>
-                        </td>
-                        <td>
-                            <PaperCode>
-                                "blue" | "green" | "yellow" | "red" | "brand" |
-                                "text"
-                            </PaperCode>
-                        </td>
-                        <td>
-                            <PaperCode>brand</PaperCode>
-                        </td>
-                        <td>Color variant of the button.</td>
+                        <td><PaperCode>variant</PaperCode></td>
+                        <td><PaperCode>"blue" | "green" | "yellow" | "red" | "brand" | "text"</PaperCode></td>
+                        <td><PaperCode>undefined</PaperCode></td>
+                        <td>Color style variant modifying button background and border palette.</td>
                     </tr>
                     <tr>
-                        <td>
-                            <PaperCode>icon</PaperCode>
-                        </td>
-                        <td>
-                            <PaperCode>boolean</PaperCode>
-                        </td>
-                        <td>
-                            <PaperCode>false</PaperCode>
-                        </td>
-                        <td>Applies icon-only button styling.</td>
+                        <td><PaperCode>compact</PaperCode></td>
+                        <td><PaperCode>boolean</PaperCode></td>
+                        <td><PaperCode>false</PaperCode></td>
+                        <td>Reduces padding and font size for medium-density layouts.</td>
                     </tr>
                     <tr>
-                        <td>
-                            <PaperCode>compact</PaperCode>
-                        </td>
-                        <td>
-                            <PaperCode>boolean</PaperCode>
-                        </td>
-                        <td>
-                            <PaperCode>false</PaperCode>
-                        </td>
-                        <td>Applies compact size styling.</td>
+                        <td><PaperCode>tiny</PaperCode></td>
+                        <td><PaperCode>boolean</PaperCode></td>
+                        <td><PaperCode>false</PaperCode></td>
+                        <td>Minimizes dimensions for dense toolbars and table rows.</td>
                     </tr>
                     <tr>
-                        <td>
-                            <PaperCode>tiny</PaperCode>
-                        </td>
-                        <td>
-                            <PaperCode>boolean</PaperCode>
-                        </td>
-                        <td>
-                            <PaperCode>false</PaperCode>
-                        </td>
-                        <td>Applies tiny size styling.</td>
+                        <td><PaperCode>icon</PaperCode></td>
+                        <td><PaperCode>boolean</PaperCode></td>
+                        <td><PaperCode>false</PaperCode></td>
+                        <td>Enforces square dimensions for icon-only button layouts.</td>
                     </tr>
                     <tr>
-                        <td>
-                            <PaperCode>disabled</PaperCode>
-                        </td>
-                        <td>
-                            <PaperCode>boolean</PaperCode>
-                        </td>
-                        <td>
-                            <PaperCode>false</PaperCode>
-                        </td>
-                        <td>Disables the button and prevents interaction.</td>
+                        <td><PaperCode>disabled</PaperCode></td>
+                        <td><PaperCode>boolean</PaperCode></td>
+                        <td><PaperCode>false</PaperCode></td>
+                        <td>Disables user interaction and applies muted opacity.</td>
                     </tr>
                     <tr>
-                        <td>
-                            <PaperCode>children</PaperCode>
-                        </td>
-                        <td>
-                            <PaperCode>JSX.Element</PaperCode>
-                        </td>
-                        <td>
-                            <PaperCode>undefined</PaperCode>
-                        </td>
-                        <td>Button content.</td>
+                        <td><PaperCode>type</PaperCode></td>
+                        <td><PaperCode>"button" | "submit" | "reset"</PaperCode></td>
+                        <td><PaperCode>"button"</PaperCode></td>
+                        <td>HTML button execution type attribute.</td>
                     </tr>
                 </tbody>
             </PaperTable>
+
+            <PaperSeparator />
+
+            <PaperText id="see-also" preset="subheader">
+                See Also
+            </PaperText>
+            <PaperTextList>
+                <PaperText preset="body">
+                    <PaperLink href="/paperui/papereffect">PaperEffect</PaperLink> — Tactile container creating raised 3D borders for buttons.
+                </PaperText>
+                <PaperText preset="body">
+                    <PaperLink href="/paperui/papericon">PaperIcon</PaperLink> — Icon component designed for embedding inside PaperButton.
+                </PaperText>
+                <PaperText preset="body">
+                    <PaperLink href="/paperui/paperlink">PaperLink</PaperLink> — Anchor component for URL-based navigation.
+                </PaperText>
+            </PaperTextList>
         </>
     );
 }
