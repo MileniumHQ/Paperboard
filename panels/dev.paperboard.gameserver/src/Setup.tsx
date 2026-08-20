@@ -672,7 +672,7 @@ export default function Setup(props: SetupProps) {
     const [serverSoftware, setServerSoftware] =
         createSignal<ServerSoftwareType>(props.initialSoftware || "paper");
     const [serverVersion, setServerVersion] = createSignal<string>(
-        props.initialVersion || "26.2",
+        props.initialVersion || "",
     );
 
     const handleFinishSetup = async () => {
@@ -726,9 +726,10 @@ export default function Setup(props: SetupProps) {
                         <PaperSelector
                             name="serverSoftware"
                             value={serverSoftware()}
-                            onValueChange={(val) =>
-                                setServerSoftware(val as ServerSoftwareType)
-                            }
+                            onValueChange={(val) => {
+                                setServerSoftware(val as ServerSoftwareType);
+                                setServerVersion("");
+                            }}
                         >
                             <PaperSelectorItem
                                 value="vanilla"
@@ -770,7 +771,7 @@ export default function Setup(props: SetupProps) {
                 </PaperCenteredInterface>
             </PaperWizardStep>
 
-            <PaperWizardStep index={2}>
+            <PaperWizardStep index={2} canProceed={Boolean(serverVersion())}>
                 <VersionStep
                     software={serverSoftware()}
                     selectedVersion={serverVersion()}
