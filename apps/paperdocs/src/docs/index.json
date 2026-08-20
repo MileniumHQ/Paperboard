@@ -39,9 +39,57 @@
                     }
                 }
             },
+            "foundations": {
+                "name": "Foundations",
+                "icon": "format_paint",
+                "pages": {
+                    "colors": {
+                        "index": 0,
+                        "name": "Colors",
+                        "file": "colors"
+                    },
+                    "typography": {
+                        "index": 1,
+                        "name": "Typography & Fonts",
+                        "file": "typography"
+                    },
+                    "variables": {
+                        "index": 2,
+                        "name": "Variables & Spacing",
+                        "file": "variables"
+                    },
+                    "theming": {
+                        "index": 3,
+                        "name": "Theming",
+                        "file": "theming"
+                    }
+                }
+            },
+            "templates": {
+                "name": "Templates",
+                "icon": "dashboard_customize",
+                "sort": "alphabetical",
+                "pages": {
+                    "papercenteredinterface": {
+                        "name": "PaperCenteredInterface"
+                    },
+                    "paperflex": {
+                        "name": "PaperFlex"
+                    },
+                    "paperinterfacegroup": {
+                        "name": "PaperInterfaceGroup"
+                    },
+                    "papersettinglist": {
+                        "name": "PaperSettingList"
+                    },
+                    "paperwizard": {
+                        "name": "PaperWizard"
+                    }
+                }
+            },
             "components": {
                 "name": "Components",
-                "icon": "folder",
+                "icon": "widgets",
                 "sort": "alphabetical",
                 "pages": {
                     "paperbadge": {
@@ -50,11 +98,88 @@
                     "paperbutton": {
                         "name": "PaperButton"
                     },
+                    "papercheckbox": {
+                        "name": "PaperCheckbox"
+                    },
                     "papercode": {
                         "name": "PaperCode"
                     },
+                    "paperconsole": {
+                        "name": "PaperConsole"
+                    },
                     "papercontainer": {
                         "name": "PaperContainer"
+                    },
+                    "papercontextmenu": {
+                        "name": "PaperContextMenu"
+                    },
+                    "papereffect": {
+                        "name": "PaperEffect"
+                    },
+                    "papericon": {
+                        "name": "PaperIcon"
+                    },
+                    "paperinput": {
+                        "name": "PaperInput"
+                    },
+                    "paperkbd": {
+                        "name": "PaperKbd"
+                    },
+                    "paperlink": {
+                        "name": "PaperLink"
+                    },
+                    "paperlist": {
+                        "name": "PaperList"
+                    },
+                    "paperloader": {
+                        "name": "PaperLoader"
+                    },
+                    "papermenu": {
+                        "name": "PaperMenu"
+                    },
+                    "papermodal": {
+                        "name": "PaperModal"
+                    },
+                    "paperprovider": {
+                        "name": "PaperProvider"
+                    },
+                    "paperquote": {
+                        "name": "PaperQuote"
+                    },
+                    "paperrail": {
+                        "name": "PaperRail"
+                    },
+                    "paperselector": {
+                        "name": "PaperSelector"
+                    },
+                    "paperseparator": {
+                        "name": "PaperSeparator"
+                    },
+                    "paperspacer": {
+                        "name": "PaperSpacer"
+                    },
+                    "papertable": {
+                        "name": "PaperTable"
+                    },
+                    "papertext": {
+                        "name": "PaperText"
+                    },
+                    "papertextlist": {
+                        "name": "PaperTextList"
+                    },
+                    "papertoggle": {
+                        "name": "PaperToggle"
+                    }
+                }
+            },
+            "tutorials": {
+                "name": "Tutorials",
+                "icon": "school",
+                "pages": {
+                    "overview": {
+                        "index": 0,
+                        "name": "Overview",
+                        "file": "overview"
                     }
                 }
             }
