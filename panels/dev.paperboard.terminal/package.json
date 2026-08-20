@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "pack": "bun run node_modules/paperapi/bin/cli.ts pack",
+    "publish": "bun run node_modules/paperapi/bin/cli.ts publish",
     "preview": "vite preview"
   },
   "dependencies": {
