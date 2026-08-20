@@ -2,22 +2,31 @@ import { onMount, onCleanup } from "solid-js";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { getVar } from "paperui";
-import { terminalApi } from "paperapi";
+import { terminalApi, clipboardApi } from "paperapi";
 import "@xterm/xterm/css/xterm.css";
 
 export const activeTerminals = new Map<string, Terminal>();
 
-export function copySelection(id: string) {
+export async function copySelection(id: string) {
     const term = activeTerminals.get(id);
     const selection = term?.getSelection() || window.getSelection()?.toString();
     if (selection) {
-        navigator.clipboard.writeText(selection);
+        try {
+            await clipboardApi.writeText(selection);
+        } catch {
+            await navigator.clipboard?.writeText?.(selection);
+        }
     }
 }
 
 export async function pasteClipboard(id: string) {
     try {
-        const text = await navigator.clipboard.readText();
+        let text = "";
+        try {
+            text = await clipboardApi.readText();
+        } catch {
+            text = (await navigator.clipboard?.readText?.()) || "";
+        }
         if (text) {
             terminalApi.write(id, text);
         }
@@ -143,7 +152,10 @@ export function TerminalComponent(props: TerminalComponentProps) {
     return (
         <div
             ref={containerRef}
-            onContextMenu={(e) => props.onContextMenu?.(e)}
+            onContextMenu={(e) => {
+                e.preventDefault();
+                props.onContextMenu?.(e);
+            }}
             style={{
                 width: "100%",
                 height: "100%",
