@@ -16,7 +16,7 @@ export default function f() {
         <>
             <PaperText preset="header">PaperEffect</PaperText>
             <PaperText preset="body">
-                A tactile elevation decorator primitive that wraps interactive controls to impart physical depth, displacement offsets, and color-matched drop borders.
+                <strong>PaperEffect</strong> is a tactile elevation decorator primitive that wraps interactive controls to impart physical depth, displacement offsets, and color-matched drop borders.
             </PaperText>
             <PaperSeparator />
 

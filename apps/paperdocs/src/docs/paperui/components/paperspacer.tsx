@@ -16,7 +16,7 @@ export default function f() {
         <>
             <PaperText preset="header">PaperSpacer</PaperText>
             <PaperText preset="body">
-                A flexible layout and whitespace primitive functioning as an auto-expanding flex spring or fixed-dimension spacing element.
+                <strong>PaperSpacer</strong> is a flexible layout and whitespace primitive functioning as an auto-expanding flex spring or fixed-dimension spacing element.
             </PaperText>
             <PaperSeparator />
 

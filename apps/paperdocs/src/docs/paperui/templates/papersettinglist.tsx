@@ -25,7 +25,7 @@ export default function f() {
         <>
             <PaperText preset="header">PaperSettingList</PaperText>
             <PaperText preset="body">
-                A standardized form and settings layout template that uses event delegation to automatically harvest key-value configuration state across nested form controls.
+                <strong>PaperSettingList</strong> is a standardized form and settings layout template that uses event delegation to automatically harvest key-value configuration state across nested form controls.
             </PaperText>
             <PaperSeparator />
 

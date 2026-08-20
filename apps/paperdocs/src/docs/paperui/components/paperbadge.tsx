@@ -15,7 +15,7 @@ export default function f() {
         <>
             <PaperText preset="header">PaperBadge</PaperText>
             <PaperText preset="body">
-                A compact graphical badge primitive used for categorical labeling, status indication, numeric counts, and metadata tagging.
+                <strong>PaperBadge</strong> is a compact graphical badge primitive used for categorical labeling, status indication, numeric counts, and metadata tagging.
             </PaperText>
             <PaperSeparator />
 

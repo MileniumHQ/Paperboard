@@ -22,7 +22,7 @@ export default function f() {
         <>
             <PaperText preset="header">PaperList</PaperText>
             <PaperText preset="body">
-                A single-selection list and tab group component supporting horizontal/vertical layouts, pointer-driven drag-and-drop reordering, and dismissible items with lifecycle callbacks.
+                <strong>PaperList</strong> is a single-selection list and tab group component supporting horizontal/vertical layouts, pointer-driven drag-and-drop reordering, and dismissible items with lifecycle callbacks.
             </PaperText>
             <PaperSeparator />
 

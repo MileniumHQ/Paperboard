@@ -32,7 +32,7 @@ export default function f() {
         <>
             <PaperText preset="header">PaperLoader</PaperText>
             <PaperText preset="body">
-                A progress indicator and asynchronous task lifecycle monitor displaying percentage completion, status animations, and operational labels.
+                <strong>PaperLoader</strong> is a progress indicator and asynchronous task lifecycle monitor displaying percentage completion, status animations, and operational labels.
             </PaperText>
             <PaperSeparator />
 

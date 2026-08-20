@@ -101,9 +101,7 @@ export default function f() {
         <>
             <PaperText preset="header">PaperConsole</PaperText>
             <PaperText preset="body">
-                An interactive terminal and command execution interface
-                providing semantic entry formatting, history navigation, and
-                bottom-anchored scrolling.
+                <strong>PaperConsole</strong> is an interactive terminal and command execution interface providing semantic entry formatting, history navigation, and bottom-anchored scrolling.
             </PaperText>
             <PaperSeparator />
 

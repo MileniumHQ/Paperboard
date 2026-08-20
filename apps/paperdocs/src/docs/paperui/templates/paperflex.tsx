@@ -16,7 +16,7 @@ export default function f() {
         <>
             <PaperText preset="header">PaperFlex</PaperText>
             <PaperText preset="body">
-                The primary flexbox layout template in PaperUI, providing responsive alignment, standardized gap and padding scales, surface layer background resolution, and interactive pointer-driven resize capabilities.
+                <strong>PaperFlex</strong> is the primary flexbox layout template in PaperUI, providing responsive alignment, standardized gap and padding scales, surface layer background resolution, and interactive pointer-driven resize capabilities.
             </PaperText>
             <PaperSeparator />
 
@@ -24,7 +24,7 @@ export default function f() {
                 Overview
             </PaperText>
             <PaperText preset="body">
-                <strong>PaperFlex</strong> serves as the fundamental structural container for arranging components across horizontal and vertical axes. It bridges the PaperUI design token scale with CSS Flexbox properties, mapping named string literals (such as <PaperCode>"half"</PaperCode> or <PaperCode>"double"</PaperCode>) to computed pixel values derived from <PaperCode>--paper-uigap</PaperCode>.
+                <strong>PaperFlex</strong> serves as the fundamental structural container for arranging components across horizontal and vertical axes. It bridges the PaperUI design token scale with CSS Flexbox properties, mapping named string literals (such as <PaperCode>"half"</PaperCode> or <PaperCode>"double"</PaperCode>) to computed values derived from <PaperCode>--paper-uigap</PaperCode>.
             </PaperText>
 
             <PaperSeparator />
@@ -87,7 +87,7 @@ export default function f() {
                             style={{
                                 flex: "1",
                                 "border-radius": "var(--paper-border-radius)",
-                                border: "1px solid var(--paper-medium-border)",
+                                border: "var(--paper-border-width) solid var(--paper-medium-border)",
                             }}
                         >
                             <PaperText size={2} weight={700}>frontest</PaperText>
@@ -99,7 +99,7 @@ export default function f() {
                             style={{
                                 flex: "1",
                                 "border-radius": "var(--paper-border-radius)",
-                                border: "1px solid var(--paper-medium-border)",
+                                border: "var(--paper-border-width) solid var(--paper-medium-border)",
                             }}
                         >
                             <PaperText size={2} weight={700}>front</PaperText>
@@ -111,7 +111,7 @@ export default function f() {
                             style={{
                                 flex: "1",
                                 "border-radius": "var(--paper-border-radius)",
-                                border: "1px solid var(--paper-medium-border)",
+                                border: "var(--paper-border-width) solid var(--paper-medium-border)",
                             }}
                         >
                             <PaperText size={2} weight={700}>back</PaperText>
@@ -135,7 +135,7 @@ export default function f() {
     resizable
     background="front"
     padding="full"
-    style={{ "min-width": "200px", "max-width": "500px" }}
+    style={{ "min-width": "var(--paper-sidebar-width)", "max-width": "var(--paper-centered-width-medium)" }}
 >
     <PaperText size={2}>Drag trailing border to resize width</PaperText>
 </PaperFlex>`}
@@ -150,10 +150,10 @@ export default function f() {
                         padding="full"
                         align="center"
                         style={{
-                            "min-width": "220px",
-                            "max-width": "460px",
+                            "min-width": "var(--paper-sidebar-width)",
+                            "max-width": "var(--paper-centered-width-medium)",
                             "border-radius": "var(--paper-border-radius)",
-                            border: "1px solid var(--paper-medium-border)",
+                            border: "var(--paper-border-width) solid var(--paper-medium-border)",
                         }}
                     >
                         <PaperIcon zeroHeight>swap_horiz</PaperIcon>

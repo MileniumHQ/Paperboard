@@ -19,7 +19,7 @@ export default function f() {
         <>
             <PaperText preset="header">PaperToggle</PaperText>
             <PaperText preset="body">
-                A binary switch input primitive featuring animated sliding knob physics, integrated status icons, keyboard accessibility, and reactive state synchronization.
+                <strong>PaperToggle</strong> is a binary switch input primitive featuring animated sliding knob physics, integrated status icons, keyboard accessibility, and reactive state synchronization.
             </PaperText>
             <PaperSeparator />
 

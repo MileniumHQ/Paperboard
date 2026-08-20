@@ -15,7 +15,7 @@ export default function f() {
         <>
             <PaperText preset="header">PaperQuote</PaperText>
             <PaperText preset="body">
-                A callout, blockquote, and advisory alert component providing semantic color accents, leading icons, titles, and formatted prose containers.
+                <strong>PaperQuote</strong> is a callout, blockquote, and advisory alert component providing semantic color accents, leading icons, titles, and formatted prose containers.
             </PaperText>
             <PaperSeparator />
 

@@ -14,7 +14,7 @@ export default function f() {
         <>
             <PaperText preset="header">PaperCode</PaperText>
             <PaperText preset="body">
-                A syntax-highlighted code rendering primitive supporting inline code fragments, multiline code blocks, PrismJS grammar integration, and clipboard copy operations.
+                <strong>PaperCode</strong> is a syntax-highlighted code rendering primitive supporting inline code fragments, multiline code blocks, PrismJS grammar integration, and clipboard copy operations.
             </PaperText>
             <PaperSeparator />
 

@@ -15,7 +15,7 @@ export default function f() {
         <>
             <PaperText preset="header">PaperTable</PaperText>
             <PaperText preset="body">
-                A tabular data presentation primitive equipped with an automatic horizontal overflow wrapper, pre-styled column headers, and token-bound cell typography.
+                <strong>PaperTable</strong> is a tabular data presentation primitive equipped with an automatic horizontal overflow wrapper, pre-styled column headers, and token-bound cell typography.
             </PaperText>
             <PaperSeparator />
 

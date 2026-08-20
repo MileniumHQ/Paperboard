@@ -19,9 +19,7 @@ export default function f() {
         <>
             <PaperText preset="header">PaperRail</PaperText>
             <PaperText preset="body">
-                A slim vertical navigation rail component designed for top-level
-                workspace switching, icon-driven application navigation, and
-                docked side controls.
+                <strong>PaperRail</strong> is a slim vertical navigation rail component designed for top-level workspace switching, icon-driven application navigation, and docked side controls.
             </PaperText>
             <PaperSeparator />
 
@@ -72,7 +70,7 @@ function AppNavigation() {
                 <div
                     style={{
                         width: "100%",
-                        height: "280px",
+                        height: "var(--paper-centered-height-small)",
                         display: "flex",
                         "flex-direction": "row",
                         overflow: "hidden",
@@ -140,7 +138,7 @@ function AppNavigation() {
 
                         <PaperText
                             preset="body"
-                            color="var(--paper-light-text)"
+                            color="light"
                         >
                             Click any icon on the left rail to switch workspace
                             modes seamlessly. PaperRail docks neatly to the

@@ -17,7 +17,7 @@ export default function f() {
         <>
             <PaperText preset="header">PaperCenteredInterface</PaperText>
             <PaperText preset="body">
-                A structural layout template that centers modal-like content, initialization prompts, setup flows, and standalone utility interfaces.
+                <strong>PaperCenteredInterface</strong> is a structural layout template that centers modal-like content, initialization prompts, setup flows, and standalone utility interfaces.
             </PaperText>
             <PaperSeparator />
 
@@ -25,7 +25,7 @@ export default function f() {
                 Overview
             </PaperText>
             <PaperText preset="body">
-                <strong>PaperCenteredInterface</strong> is a higher-order layout template in PaperUI designed to constrain and horizontally/vertically center interactive interfaces within a designated viewport. It enforces standard dimensional limits defined by the <PaperCode>--paper-centered-width</PaperCode> (600px) and <PaperCode>--paper-centered-height</PaperCode> (400px) design tokens.
+                <strong>PaperCenteredInterface</strong> is a higher-order layout template in PaperUI designed to constrain and horizontally/vertically center interactive interfaces within a designated viewport. It enforces standard dimensional limits defined by the <PaperCode>--paper-centered-width</PaperCode> and <PaperCode>--paper-centered-height</PaperCode> design tokens.
             </PaperText>
 
             <PaperSeparator />
@@ -56,9 +56,9 @@ function WelcomeScreen() {
             </PaperCode>
 
             <PaperContainer>
-                <PaperFlex padding="full" center style={{ width: "100%", "min-height": "260px" }}>
-                    <div style={{ width: "100%", "max-width": "500px" }}>
-                        <PaperCenteredInterface style={{ "min-height": "200px" }}>
+                <PaperFlex padding="full" center style={{ width: "100%", "min-height": "var(--paper-centered-height-small)" }}>
+                    <div style={{ width: "100%", "max-width": "var(--paper-centered-width-medium)" }}>
+                        <PaperCenteredInterface style={{ "min-height": "var(--paper-centered-height-small)" }}>
                             <PaperFlex padding="double" gap="half" center>
                                 <PaperIcon zeroHeight>dashboard_customize</PaperIcon>
                                 <PaperText preset="title">Workspace Initializer</PaperText>

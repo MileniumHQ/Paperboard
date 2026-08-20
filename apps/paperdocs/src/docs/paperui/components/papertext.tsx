@@ -14,7 +14,7 @@ export default function f() {
         <>
             <PaperText preset="header">PaperText</PaperText>
             <PaperText preset="body">
-                A polymorphic typography primitive providing systematic size and weight presets, rounded typeface switching, and automatic anchor link copying.
+                <strong>PaperText</strong> is a polymorphic typography primitive providing systematic size and weight presets, rounded typeface switching, and automatic anchor link copying.
             </PaperText>
             <PaperSeparator />
 

@@ -20,7 +20,7 @@ export default function f() {
         <>
             <PaperText preset="header">PaperSelector</PaperText>
             <PaperText preset="body">
-                A tactile segmented radio selection control component for choosing among mutually exclusive options, display modes, or configuration presets.
+                <strong>PaperSelector</strong> is a tactile segmented radio selection control component for choosing among mutually exclusive options, display modes, or configuration presets.
             </PaperText>
             <PaperSeparator />
 

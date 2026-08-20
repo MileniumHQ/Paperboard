@@ -15,7 +15,7 @@ export default function f() {
         <>
             <PaperText preset="header">PaperKbd</PaperText>
             <PaperText preset="body">
-                A semantic keyboard accelerator primitive representing physical keyboard keys, shortcuts, and modifier key combinations.
+                <strong>PaperKbd</strong> is a semantic keyboard accelerator primitive representing physical keyboard keys, shortcuts, and modifier key combinations.
             </PaperText>
             <PaperSeparator />
 

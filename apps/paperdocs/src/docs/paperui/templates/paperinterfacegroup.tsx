@@ -23,7 +23,7 @@ export default function f() {
         <>
             <PaperText preset="header">PaperInterfaceGroup</PaperText>
             <PaperText preset="body">
-                A declarative conditional rendering template designed for
+                <strong>PaperInterfaceGroup</strong> is a declarative conditional rendering template designed for
                 multi-view navigation, sub-interface switching, tab panels, and
                 state-driven interface segregation.
             </PaperText>

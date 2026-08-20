@@ -20,7 +20,7 @@ export default function f() {
         <>
             <PaperText preset="header">PaperCheckbox</PaperText>
             <PaperText preset="body">
-                A compact binary selection primitive providing tactile state elevation, keyboard navigation, integrated label and descriptive text slots, and reactive state synchronization.
+                <strong>PaperCheckbox</strong> is a compact binary selection primitive providing tactile state elevation, keyboard navigation, integrated label and descriptive text slots, and reactive state synchronization.
             </PaperText>
             <PaperSeparator />
 

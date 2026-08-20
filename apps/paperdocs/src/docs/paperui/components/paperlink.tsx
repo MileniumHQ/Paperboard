@@ -14,7 +14,7 @@ export default function f() {
         <>
             <PaperText preset="header">PaperLink</PaperText>
             <PaperText preset="body">
-                An accessible hyperlink navigation primitive featuring automatic external destination detection, security attribute injection, and trailing external icon indicators.
+                <strong>PaperLink</strong> is an accessible hyperlink navigation primitive featuring automatic external destination detection, security attribute injection, and trailing external icon indicators.
             </PaperText>
             <PaperSeparator />
 

@@ -24,7 +24,7 @@ export default function f() {
         <>
             <PaperText preset="header">PaperContextMenu</PaperText>
             <PaperText preset="body">
-                A portal-rendered contextual floating overlay menu component supporting cursor/element anchor positioning, cascading nested submenus, action headers, keyboard navigation, and reactive state management.
+                <strong>PaperContextMenu</strong> is a portal-rendered contextual floating overlay menu component supporting cursor/element anchor positioning, cascading nested submenus, action headers, keyboard navigation, and reactive state management.
             </PaperText>
             <PaperSeparator />
 

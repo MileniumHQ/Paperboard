@@ -16,7 +16,7 @@ export default function f() {
         <>
             <PaperText preset="header">PaperButton</PaperText>
             <PaperText preset="body">
-                The primary interactive button component in PaperUI, providing tactile feedback, semantic color variants, dimensional sizing modifiers, and icon-only layouts.
+                <strong>PaperButton</strong> is the primary interactive button component in PaperUI, providing tactile feedback, semantic color variants, dimensional sizing modifiers, and icon-only layouts.
             </PaperText>
             <PaperSeparator />
 

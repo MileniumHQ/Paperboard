@@ -17,7 +17,7 @@ export default function f() {
         <>
             <PaperText preset="header">PaperProvider</PaperText>
             <PaperText preset="body">
-                The root context provider component of PaperUI responsible for theme resolution, system color-scheme observation, body attribute synchronization, and layout constraint classes.
+                <strong>PaperProvider</strong> is the root context provider component of PaperUI responsible for theme resolution, system color-scheme observation, body attribute synchronization, and layout constraint classes.
             </PaperText>
             <PaperSeparator />
 

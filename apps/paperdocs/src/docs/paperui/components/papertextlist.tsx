@@ -14,7 +14,7 @@ export default function f() {
         <>
             <PaperText preset="header">PaperTextList</PaperText>
             <PaperText preset="body">
-                A structured typography list container component rendering ordered or unordered bullet points with token-aligned spacing and item sizing.
+                <strong>PaperTextList</strong> is a structured typography list container component rendering ordered or unordered bullet points with token-aligned spacing and item sizing.
             </PaperText>
             <PaperSeparator />
 

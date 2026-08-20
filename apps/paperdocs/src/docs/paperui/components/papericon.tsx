@@ -15,7 +15,7 @@ export default function f() {
         <>
             <PaperText preset="header">PaperIcon</PaperText>
             <PaperText preset="body">
-                A standardized iconography primitive rendering Google Material Symbols Rounded glyphs, image assets, monogram chips, and inline alignment helpers.
+                <strong>PaperIcon</strong> is a standardized iconography primitive rendering Google Material Symbols Rounded glyphs, image assets, monogram chips, and inline alignment helpers.
             </PaperText>
             <PaperSeparator />
 

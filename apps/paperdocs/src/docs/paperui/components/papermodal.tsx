@@ -25,7 +25,7 @@ export default function f() {
         <>
             <PaperText preset="header">PaperModal</PaperText>
             <PaperText preset="body">
-                A portal-rendered dialog overlay primitive supporting animated transitions, focus entrapment, backdrop dismissal, keyboard shortcuts, and structured header/footer slots.
+                <strong>PaperModal</strong> is a portal-rendered dialog overlay primitive supporting animated transitions, focus entrapment, backdrop dismissal, keyboard shortcuts, and structured header/footer slots.
             </PaperText>
             <PaperSeparator />
 

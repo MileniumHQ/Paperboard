@@ -43,7 +43,7 @@ export default function f() {
         <>
             <PaperText preset="header">PaperWizard</PaperText>
             <PaperText preset="body">
-                A multi-step sequential wizard template managing step
+                <strong>PaperWizard</strong> is a multi-step sequential wizard template managing step
                 transitions, form state accumulation, animated step cards,
                 progress calculation, and programmatic completion handlers.
             </PaperText>

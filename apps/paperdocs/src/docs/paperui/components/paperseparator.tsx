@@ -15,7 +15,7 @@ export default function f() {
         <>
             <PaperText preset="header">PaperSeparator</PaperText>
             <PaperText preset="body">
-                A visual divider and structural rule primitive rendering horizontal or vertical boundary lines between distinct interface sections.
+                <strong>PaperSeparator</strong> is a visual divider and structural rule primitive rendering horizontal or vertical boundary lines between distinct interface sections.
             </PaperText>
             <PaperSeparator />
 

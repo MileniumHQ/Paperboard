@@ -15,7 +15,7 @@ export default function f() {
         <>
             <PaperText preset="header">PaperContainer</PaperText>
             <PaperText preset="body">
-                A standardized framed container primitive providing visual separation, elevation shadows, background token binding, and rounded border geometry.
+                <strong>PaperContainer</strong> is a standardized framed container primitive providing visual separation, elevation shadows, background token binding, and rounded border geometry.
             </PaperText>
             <PaperSeparator />
 
@@ -49,7 +49,7 @@ export default function f() {
 
             <PaperContainer>
                 <PaperFlex padding="full" center>
-                    <PaperContainer style={{ width: "100%", "max-width": "420px" }}>
+                    <PaperContainer style={{ width: "100%", "max-width": "var(--paper-centered-width-small)" }}>
                         <PaperFlex padding="double" gap="half" center>
                             <PaperText preset="title">Encapsulated Content</PaperText>
                             <PaperText preset="body">
