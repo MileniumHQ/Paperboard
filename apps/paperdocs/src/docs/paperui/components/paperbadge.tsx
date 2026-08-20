@@ -14,101 +14,111 @@ export default function f() {
     return (
         <>
             <PaperText preset="header">PaperBadge</PaperText>
+            <PaperText preset="body">
+                A compact graphical badge primitive used for categorical labeling, status indication, numeric counts, and metadata tagging.
+            </PaperText>
             <PaperSeparator />
+
             <PaperText id="overview" preset="subheader">
                 Overview
             </PaperText>
             <PaperText preset="body">
-                The <PaperCode>PaperBadge</PaperCode> component can be used to
-                display a status or label inline. It supports icons and various
-                color variants.
-            </PaperText>
-            <PaperCode
-                block
-                lang="tsx"
-            >{`<PaperBadge variant="green" icon="check">Active</PaperBadge>`}</PaperCode>
-            <PaperContainer>
-                <PaperFlex padding="full" center>
-                    <PaperBadge variant="green" icon="check">
-                        Active
-                    </PaperBadge>
-                </PaperFlex>
-            </PaperContainer>
-            <PaperText id="variants" preset="subheader">
-                Variants
-            </PaperText>
-            <PaperText preset="body">
-                Using the <PaperCode>variant</PaperCode> prop, the component's
-                five different color variants can be used to signify different
-                states. Here are some example use cases for each color:
-            </PaperText>
-            <PaperTextList>
-                <PaperText preset="body">
-                    <PaperCode>blue</PaperCode> Neutral, informative, or
-                    pending.
-                </PaperText>
-                <PaperText preset="body">
-                    <PaperCode>red</PaperCode> Failed or denied.
-                </PaperText>
-                <PaperText preset="body">
-                    <PaperCode>green</PaperCode> Succeeded or accepted.
-                </PaperText>
-                <PaperText preset="body">
-                    <PaperCode>yellow</PaperCode> Warning or in progress.
-                </PaperText>
-                <PaperText preset="body">
-                    <PaperCode>monochrome</PaperCode> Disabled or neutral.
-                </PaperText>
-            </PaperTextList>
-            <PaperCode block language="jsx">
-                {`<PaperBadge variant="blue">In Review</PaperBadge>
-<PaperBadge variant="red">Failed</PaperBadge>
-<PaperBadge variant="green">Completed</PaperBadge>
-<PaperBadge variant="yellow">Warning</PaperBadge>
-<PaperBadge variant="monochrome">1.0.2</PaperBadge>`}
-            </PaperCode>
-            <PaperContainer>
-                <PaperFlex padding="full" center direction="row" gap="half">
-                    <PaperBadge variant="blue">In Review</PaperBadge>
-                    <PaperBadge variant="red">Failed</PaperBadge>
-                    <PaperBadge variant="green">Completed</PaperBadge>
-                    <PaperBadge variant="yellow">Warning</PaperBadge>
-                    <PaperBadge variant="monochrome">1.0.2</PaperBadge>
-                </PaperFlex>
-            </PaperContainer>
-            <PaperText id="icons" preset="subheader">
-                Icons
-            </PaperText>
-            <PaperText preset="body">
-                PaperBadge supports a standard{" "}
-                <PaperLink href="./papericon">
-                    <PaperCode>PaperIcon</PaperCode>
-                </PaperLink>{" "}
-                component or icon name string via the{" "}
-                <PaperCode>icon</PaperCode> prop.
+                <strong>PaperBadge</strong> is an inline status and annotation component in PaperUI. It pairs chromatic background fills with rounded borders, optional iconography, and concise text labels. Badges are typically integrated alongside titles, table cells, list items, and summary cards to communicate operational state or categorization.
             </PaperText>
 
-            <PaperCode block language="jsx">
-                {`<PaperBadge variant="red" icon="exclamation">Important</PaperBadge>
-<PaperBadge variant="blue" icon="flash_on">Sonic</PaperBadge>
-<PaperBadge variant="green" icon="rocket_launch">Built in 0.2s</PaperBadge>`}
+            <PaperSeparator />
+
+            <PaperText id="color-variants" preset="subheader">
+                Color Variants
+            </PaperText>
+            <PaperText preset="body">
+                The component provides five semantic color variants configured via the <PaperCode>variant</PaperCode> prop:
+            </PaperText>
+
+            <PaperTable>
+                <thead>
+                    <tr>
+                        <th>Variant</th>
+                        <th>Semantic Connotation</th>
+                        <th>Standard Application</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><PaperCode>"monochrome"</PaperCode></td>
+                        <td>Neutral / Default</td>
+                        <td>Version identifiers, neutral counts, inactive states.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>"blue"</PaperCode></td>
+                        <td>Informative / In-Progress</td>
+                        <td>Active reviews, ongoing synchronizations, informational tags.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>"green"</PaperCode></td>
+                        <td>Success / Operational</td>
+                        <td>Completed builds, approved reviews, healthy services.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>"yellow"</PaperCode></td>
+                        <td>Warning / Cautionary</td>
+                        <td>Approaching resource quotas, pending migrations, non-fatal warnings.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>"red"</PaperCode></td>
+                        <td>Critical / Failed</td>
+                        <td>Broken builds, permission rejections, failed deployment pipelines.</td>
+                    </tr>
+                </tbody>
+            </PaperTable>
+
+            <PaperCode block language="tsx">
+                {`<PaperFlex direction="row" gap="half">
+    <PaperBadge variant="monochrome">v1.4.0</PaperBadge>
+    <PaperBadge variant="blue">In Review</PaperBadge>
+    <PaperBadge variant="green">Healthy</PaperBadge>
+    <PaperBadge variant="yellow">Attention</PaperBadge>
+    <PaperBadge variant="red">Failed</PaperBadge>
+</PaperFlex>`}
             </PaperCode>
+
             <PaperContainer>
-                <PaperFlex padding="full" center direction="row" gap="half">
-                    <PaperBadge variant="red" icon="exclamation">
-                        Important
-                    </PaperBadge>
-                    <PaperBadge variant="blue" icon="flash_on">
-                        Sonic
-                    </PaperBadge>
-                    <PaperBadge variant="green" icon="rocket_launch">
-                        Built in 0.2s
-                    </PaperBadge>
+                <PaperFlex padding="full" center direction="row" gap="half" wrap>
+                    <PaperBadge variant="monochrome">v1.4.0</PaperBadge>
+                    <PaperBadge variant="blue">In Review</PaperBadge>
+                    <PaperBadge variant="green">Healthy</PaperBadge>
+                    <PaperBadge variant="yellow">Attention</PaperBadge>
+                    <PaperBadge variant="red">Failed</PaperBadge>
                 </PaperFlex>
             </PaperContainer>
+
             <PaperSeparator />
-            <PaperText id="props" preset="subheader">
-                Props
+
+            <PaperText id="icon-integration" preset="subheader">
+                Icon Integration
+            </PaperText>
+            <PaperText preset="body">
+                Badges accept leading icons via the <PaperCode>icon</PaperCode> prop. The value may be supplied either as a string corresponding to a Material Symbol glyph name or as an instantiated <PaperLink href="/paperui/papericon"><PaperCode>PaperIcon</PaperCode></PaperLink> element:
+            </PaperText>
+
+            <PaperCode block language="tsx">
+                {`<PaperBadge variant="green" icon="check_circle">Verified</PaperBadge>
+<PaperBadge variant="blue" icon="sync">Syncing</PaperBadge>
+<PaperBadge variant="red" icon="error">Error Detected</PaperBadge>`}
+            </PaperCode>
+
+            <PaperContainer>
+                <PaperFlex padding="full" center direction="row" gap="half" wrap>
+                    <PaperBadge variant="green" icon="check_circle">Verified</PaperBadge>
+                    <PaperBadge variant="blue" icon="sync">Syncing</PaperBadge>
+                    <PaperBadge variant="red" icon="error">Error Detected</PaperBadge>
+                </PaperFlex>
+            </PaperContainer>
+
+            <PaperSeparator />
+
+            <PaperText id="specification" preset="subheader">
+                Technical Specification
             </PaperText>
             <PaperTable>
                 <thead>
@@ -121,46 +131,48 @@ export default function f() {
                 </thead>
                 <tbody>
                     <tr>
-                        <td>
-                            <PaperCode>variant</PaperCode>
-                        </td>
-                        <td>
-                            <PaperCode>
-                                "monochrome" | "blue" | "green" | "yellow" |
-                                "red"
-                            </PaperCode>
-                        </td>
-                        <td>
-                            <PaperCode>"monochrome"</PaperCode>
-                        </td>
-                        <td>Color theme or variant of the badge.</td>
+                        <td><PaperCode>variant</PaperCode></td>
+                        <td><PaperCode>"monochrome" | "blue" | "green" | "yellow" | "red"</PaperCode></td>
+                        <td><PaperCode>"monochrome"</PaperCode></td>
+                        <td>Visual color scheme and theme variant of the badge container.</td>
                     </tr>
                     <tr>
-                        <td>
-                            <PaperCode>icon</PaperCode>
-                        </td>
-                        <td>
-                            <PaperCode>JSX.Element | string</PaperCode>
-                        </td>
-                        <td>
-                            <PaperCode>undefined</PaperCode>
-                        </td>
-                        <td>Icon name string or PaperIcon component.</td>
+                        <td><PaperCode>icon</PaperCode></td>
+                        <td><PaperCode>string | JSX.Element</PaperCode></td>
+                        <td><PaperCode>undefined</PaperCode></td>
+                        <td>Material icon identifier string or PaperIcon element rendered before the label.</td>
                     </tr>
                     <tr>
-                        <td>
-                            <PaperCode>children</PaperCode>
-                        </td>
-                        <td>
-                            <PaperCode>JSX.Element</PaperCode>
-                        </td>
-                        <td>
-                            <PaperCode>undefined</PaperCode>
-                        </td>
-                        <td>Badge label.</td>
+                        <td><PaperCode>children</PaperCode></td>
+                        <td><PaperCode>JSX.Element</PaperCode></td>
+                        <td><PaperCode>undefined</PaperCode></td>
+                        <td>Badge text content or child elements.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>class</PaperCode> / <PaperCode>classList</PaperCode></td>
+                        <td><PaperCode>string | Record&lt;string, boolean&gt;</PaperCode></td>
+                        <td><PaperCode>undefined</PaperCode></td>
+                        <td>Custom CSS class names or conditional class mapping.</td>
                     </tr>
                 </tbody>
             </PaperTable>
+
+            <PaperSeparator />
+
+            <PaperText id="see-also" preset="subheader">
+                See Also
+            </PaperText>
+            <PaperTextList>
+                <PaperText preset="body">
+                    <PaperLink href="/paperui/papericon">PaperIcon</PaperLink> — Icon rendering component embedded inside badges.
+                </PaperText>
+                <PaperText preset="body">
+                    <PaperLink href="/paperui/paperbutton">PaperButton</PaperLink> — Interactive button primitive sharing color variant conventions.
+                </PaperText>
+                <PaperText preset="body">
+                    <PaperLink href="/paperui/colors">Colors</PaperLink> — Design system color token specification.
+                </PaperText>
+            </PaperTextList>
         </>
     );
 }

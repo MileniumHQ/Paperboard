@@ -1,5 +1,4 @@
 import {
-    PaperBadge,
     PaperCode,
     PaperContainer,
     PaperFlex,
@@ -14,104 +13,92 @@ export default function f() {
     return (
         <>
             <PaperText preset="header">PaperCode</PaperText>
+            <PaperText preset="body">
+                A syntax-highlighted code rendering primitive supporting inline code fragments, multiline code blocks, PrismJS grammar integration, and clipboard copy operations.
+            </PaperText>
             <PaperSeparator />
+
             <PaperText id="overview" preset="subheader">
                 Overview
             </PaperText>
             <PaperText preset="body">
-                The <PaperCode>PaperCode</PaperCode> component can be used to
-                display program terms or code with proper formatting, fonts,
-                separation and highlighting.
+                <strong>PaperCode</strong> provides formatted display of programming languages, CLI commands, and configuration data. It utilizes <PaperCode>SUSE Mono</PaperCode> typography, subtle background surface fills, and integrated syntax tokenizers powered by PrismJS.
             </PaperText>
-            <PaperText preset="title">Block Example</PaperText>
-            <PaperCode block lang="js">{`<PaperCode block lang="js">
-{\`function decideIfFriend() {
-    const answer = prompt("Do you like Sonic?");
-    if (answer == "yes") {
-        alert("You're my friend!");
-        return true;
-    } else {
-        alert("You're not my friend. :(");
-        return false;
-        }
-    }
-\`}
-</PaperCode>`}</PaperCode>
+
+            <PaperSeparator />
+
+            <PaperText id="inline-code" preset="subheader">
+                Inline Code
+            </PaperText>
+            <PaperText preset="body">
+                When the <PaperCode>block</PaperCode> prop is omitted, <PaperCode>PaperCode</PaperCode> renders as an inline HTML <PaperCode>&lt;code&gt;</PaperCode> element with compact padding and subtle rounded borders.
+            </PaperText>
+
+            <PaperCode block language="tsx">
+                {`<PaperText preset="body">
+    Configure the option using <PaperCode>theme="dark"</PaperCode> on initialization.
+</PaperText>`}
+            </PaperCode>
+
             <PaperContainer>
-                <PaperFlex center padding="full">
-                    <PaperCode block lang="js">
-                        {`function decideIfFriend() {
-    const answer = prompt("Do you like Sonic?");
-    if (answer == "yes") {
-        alert("You're my friend!");
-        return true;
-    } else {
-        alert("You're not my friend. :(");
-        return false;
-    }
+                <PaperFlex padding="full" center>
+                    <PaperText preset="body">
+                        Configure the option using <PaperCode>theme="dark"</PaperCode> on initialization.
+                    </PaperText>
+                </PaperFlex>
+            </PaperContainer>
+
+            <PaperSeparator />
+
+            <PaperText id="block-code" preset="subheader">
+                Block Code & Copy Button
+            </PaperText>
+            <PaperText preset="body">
+                Setting <PaperCode>block</PaperCode> to <PaperCode>true</PaperCode> renders a multi-line <PaperCode>&lt;pre&gt;</PaperCode> container. By default, block mode automatically equips a top-right clipboard copy button:
+            </PaperText>
+
+            <PaperCode block language="tsx">
+                {`<PaperCode block language="tsx">
+    {\`import { PaperButton } from "paperui";
+
+function Example() {
+    return <PaperButton variant="brand">Click Me</PaperButton>;
+}\`}
+</PaperCode>`}
+            </PaperCode>
+
+            <PaperContainer>
+                <PaperFlex padding="full" gap="half">
+                    <PaperCode block language="tsx">
+                        {`import { PaperButton } from "paperui";
+
+function Example() {
+    return <PaperButton variant="brand">Click Me</PaperButton>;
 }`}
                     </PaperCode>
                 </PaperFlex>
             </PaperContainer>
-            <PaperText preset="title">Inline Example</PaperText>
-            <PaperCode
-                block
-                lang="js"
-            >{`<PaperCode>SonicFriendshipStatus</PaperCode>`}</PaperCode>
-            <PaperContainer>
-                <PaperFlex center padding="full">
-                    <PaperCode>SonicFriendshipStatus</PaperCode>
-                </PaperFlex>
-            </PaperContainer>
-            <PaperText id="syntax-highlighting" preset="subheader">
-                Syntax Highlighting
+
+            <PaperSeparator />
+
+            <PaperText id="supported-languages" preset="subheader">
+                Supported Grammars
             </PaperText>
             <PaperText preset="body">
-                When using <PaperCode>block</PaperCode>, PaperCode automatically
-                applies syntax highlighting using{" "}
-                <PaperLink external href="https://prismjs.com">
-                    Prism.js
-                </PaperLink>
-                .<br />
-                <strong>Supported languages:</strong>
+                PaperCode includes built-in Prism grammars for the following identifiers via the <PaperCode>language</PaperCode> prop:
             </PaperText>
             <PaperTextList>
-                <PaperText preset="body">
-                    <PaperCode>tsx</PaperCode>
-                    <PaperCode>typescript</PaperCode>
-                    <PaperCode>ts</PaperCode>
-                </PaperText>
-                <PaperText preset="body">
-                    <PaperCode>jsx</PaperCode>
-                    <PaperCode>javascript</PaperCode>
-                    <PaperCode>js</PaperCode>
-                </PaperText>
-                <PaperText preset="body">
-                    <PaperCode>css</PaperCode>
-                </PaperText>
-                <PaperText preset="body">
-                    <PaperCode>json</PaperCode>
-                </PaperText>
-                <PaperText preset="body">
-                    <PaperCode>bash</PaperCode>
-                </PaperText>
-                <PaperText preset="body">
-                    <PaperCode>clike</PaperCode> (
-                    <PaperText>C-like languages</PaperText>)
-                </PaperText>
+                <PaperText preset="body"><PaperCode>"tsx"</PaperCode> / <PaperCode>"jsx"</PaperCode> (TypeScript and React/Solid JSX syntax)</PaperText>
+                <PaperText preset="body"><PaperCode>"typescript"</PaperCode> / <PaperCode>"javascript"</PaperCode></PaperText>
+                <PaperText preset="body"><PaperCode>"json"</PaperCode> (JSON payloads and configuration files)</PaperText>
+                <PaperText preset="body"><PaperCode>"bash"</PaperCode> (Shell and terminal commands)</PaperText>
+                <PaperText preset="body"><PaperCode>"css"</PaperCode> (Style declarations and tokens)</PaperText>
             </PaperTextList>
-            <PaperText id="copy-to-clipboard" preset="subheader">
-                Copy-to-Clipboard
-            </PaperText>
-            <PaperText preset="body">
-                PaperCode includes a copy-to-clipboard button enabled by default
-                in the top right. To disable it, set the{" "}
-                <PaperCode>copyable</PaperCode> prop to{" "}
-                <PaperCode>false</PaperCode>.
-            </PaperText>
+
             <PaperSeparator />
-            <PaperText id="props" preset="subheader">
-                Props
+
+            <PaperText id="specification" preset="subheader">
+                Technical Specification
             </PaperText>
             <PaperTable>
                 <thead>
@@ -124,58 +111,45 @@ export default function f() {
                 </thead>
                 <tbody>
                     <tr>
-                        <td>
-                            <PaperCode>block</PaperCode>
-                        </td>
-                        <td>
-                            <PaperCode>boolean</PaperCode>
-                        </td>
-                        <td>
-                            <PaperCode>false</PaperCode>
-                        </td>
-                        <td>Renders contents as a multi-line code block.</td>
+                        <td><PaperCode>block</PaperCode></td>
+                        <td><PaperCode>boolean</PaperCode></td>
+                        <td><PaperCode>false</PaperCode></td>
+                        <td>Renders code in a multi-line block container with line numbers and overflow scrolling.</td>
                     </tr>
                     <tr>
-                        <td>
-                            <PaperCode>language</PaperCode>
-                        </td>
-                        <td>
-                            <PaperCode>string</PaperCode>
-                        </td>
-                        <td>
-                            <PaperCode>"tsx"</PaperCode>
-                        </td>
-                        <td>
-                            Language for syntax highlighting to appear in (if{" "}
-                            <PaperCode>block</PaperCode> is enabled).
-                        </td>
+                        <td><PaperCode>language</PaperCode></td>
+                        <td><PaperCode>string</PaperCode></td>
+                        <td><PaperCode>"tsx"</PaperCode></td>
+                        <td>Prism syntax grammar identifier.</td>
                     </tr>
                     <tr>
-                        <td>
-                            <PaperCode>copyable</PaperCode>
-                        </td>
-                        <td>
-                            <PaperCode>boolean</PaperCode>
-                        </td>
-                        <td>
-                            <PaperCode>block ? true : false</PaperCode>
-                        </td>
-                        <td>Enables the copy-to-clipboard button.</td>
+                        <td><PaperCode>copyable</PaperCode></td>
+                        <td><PaperCode>boolean</PaperCode></td>
+                        <td><PaperCode>true (if block)</PaperCode></td>
+                        <td>Enables the floating clipboard copy button.</td>
                     </tr>
                     <tr>
-                        <td>
-                            <PaperCode>children</PaperCode>
-                        </td>
-                        <td>
-                            <PaperCode>JSX.Element | string</PaperCode>
-                        </td>
-                        <td>
-                            <PaperCode>undefined</PaperCode>
-                        </td>
-                        <td>Code snippet.</td>
+                        <td><PaperCode>children</PaperCode></td>
+                        <td><PaperCode>string | string[]</PaperCode></td>
+                        <td><PaperCode>undefined</PaperCode></td>
+                        <td>Raw code string or token array to highlight and render.</td>
                     </tr>
                 </tbody>
             </PaperTable>
+
+            <PaperSeparator />
+
+            <PaperText id="see-also" preset="subheader">
+                See Also
+            </PaperText>
+            <PaperTextList>
+                <PaperText preset="body">
+                    <PaperLink href="/paperui/paperkbd">PaperKbd</PaperLink> — Keyboard accelerator chip primitive.
+                </PaperText>
+                <PaperText preset="body">
+                    <PaperLink href="/paperui/typography">Typography & Fonts</PaperLink> — Information regarding the SUSE Mono font family.
+                </PaperText>
+            </PaperTextList>
         </>
     );
 }
