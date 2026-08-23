@@ -1,0 +1,65 @@
+.PaperRail {
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap-half);
+    padding: var(--paper-uigap-half);
+    width: fit-content;
+    height: 100%;
+    border-right: var(--paper-border-width) solid var(--paper-medium-border);
+    background: var(--paper-background-frontest);
+}
+
+.PaperRailItem {
+    width: var(--paper-item-size-small);
+    height: var(--paper-item-size-small);
+    aspect-ratio: 1;
+    flex-shrink: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    border: 0;
+    border-radius: var(--paper-border-radius-half);
+    outline: var(--paper-thick-border-width) solid transparent;
+    cursor: pointer;
+    transition:
+        outline var(--paper-short-transition),
+        background var(--paper-tiny-transition);
+}
+
+.PaperRailItem:hover {
+    background: var(--paper-background-front);
+}
+
+.railIcon {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--paper-lightest-text);
+    font-size: var(--paper-icon-size-xlarge);
+    transition: color var(--paper-short-transition);
+}
+
+.PaperRailItem.selected {
+    outline: var(--paper-thick-border-width) solid var(--paper-front-blue);
+}
+
+.PaperRailItem.selected .railIcon {
+    color: var(--paper-back-blue);
+}
+
+.railAction {
+    background: transparent;
+    cursor: pointer;
+}
+
+.PaperRailItem.disabled {
+    cursor: not-allowed;
+}
+.PaperRailItem.disabled .railIcon {
+    opacity: 0.4;
+}
+.PaperRailItem.disabled:hover {
+    background: transparent;
+}

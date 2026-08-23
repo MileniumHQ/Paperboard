@@ -1,0 +1,38 @@
+.PaperProgress {
+    display: block;
+    width: 100%;
+    height: calc(var(--paper-thickest-border-width) * 2);
+    background: var(--paper-background-definition);
+    border: none;
+    border-radius: var(--paper-thickest-border-width);
+    overflow: hidden;
+    position: relative;
+    box-sizing: border-box;
+}
+
+.bar {
+    height: 100%;
+    background: var(--paper-front-blue);
+    border-radius: var(--paper-thick-border-width);
+    transition: width 0.35s cubic-bezier(0.2, 0, 0.2, 1);
+    will-change: width;
+}
+
+.indeterminate .bar {
+    width: 35%;
+    position: absolute;
+    top: 0;
+    left: 0;
+    transition: none;
+    animation: indeterminateSweep 1.1s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    will-change: transform;
+}
+
+@keyframes indeterminateSweep {
+    0% {
+        transform: translateX(-100%);
+    }
+    100% {
+        transform: translateX(300%);
+    }
+}
