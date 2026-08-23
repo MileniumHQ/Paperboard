@@ -142,12 +142,43 @@ function ThemeController() {
 
             <PaperSeparator />
 
+            <PaperText id="text-selection" preset="subheader">
+                Text Selection Behavior & Utilities
+            </PaperText>
+            <PaperText preset="body">
+                PaperUI preserves normal text selection by default across websites and documentation. When building desktop applications or embedded panel frames, non-selectable chrome behavior can be enabled on-demand using classes or attributes:
+            </PaperText>
+
+            <PaperTable>
+                <thead>
+                    <tr>
+                        <th>Class / Attribute</th>
+                        <th>Target</th>
+                        <th>Behavior</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><PaperCode>.unselectable</PaperCode> / <PaperCode>[data-unselectable="true"]</PaperCode></td>
+                        <td>Container / Root</td>
+                        <td>Applies <PaperCode>user-select: none</PaperCode> across chrome while maintaining selection in inputs, textareas, and code blocks.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>.selectable</PaperCode> / <PaperCode>[data-selectable="true"]</PaperCode></td>
+                        <td>Specific Element</td>
+                        <td>Forces <PaperCode>user-select: text</PaperCode> on targeted content inside an unselectable container.</td>
+                    </tr>
+                </tbody>
+            </PaperTable>
+
+            <PaperSeparator />
+
             <PaperText id="see-also" preset="subheader">
                 See Also
             </PaperText>
             <PaperTextList>
                 <PaperText preset="body">
-                    <PaperLink href="/paperui/paperprovider">PaperProvider</PaperLink> — Application root provider component reference.
+                    <PaperLink href="/paperui/paperprovider">PaperProvider</PaperLink> — Application root provider component reference and unselectable prop.
                 </PaperText>
                 <PaperText preset="body">
                     <PaperLink href="/paperui/colors">Colors</PaperLink> — Specification of theme-adaptive surface and text colors.

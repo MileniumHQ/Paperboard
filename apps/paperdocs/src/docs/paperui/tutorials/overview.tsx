@@ -22,7 +22,7 @@ export default function f() {
                 Overview
             </PaperText>
             <PaperText preset="body">
-                The <strong>Tutorials</strong> section comprises human-authored guides focused on practical application design, complex state orchestration, custom board development, and end-to-end integration with Paperboard APIs.
+                The <strong>Tutorials</strong> section comprises human-authored guides focused on practical application design, complex state orchestration, custom panel development, and end-to-end integration with Paperboard APIs.
             </PaperText>
 
             <PaperQuote variant="blue" icon="edit_note" title="Human-Authored Guides">
@@ -36,7 +36,7 @@ export default function f() {
             </PaperText>
             <PaperTextList>
                 <PaperText preset="body">
-                    <strong>Building Your First Paperboard Board:</strong> An end-to-end guide creating an extension board with <PaperCode>PaperFlex</PaperCode>, <PaperCode>PaperRail</PaperCode>, and reactive widgets.
+                    <strong>Building Your First Paperboard Panel:</strong> An end-to-end guide creating an extension panel with <PaperCode>PaperFlex</PaperCode>, <PaperCode>PaperRail</PaperCode>, and reactive widgets.
                 </PaperText>
                 <PaperText preset="body">
                     <strong>Managing Complex Multi-Step Forms:</strong> Utilizing <PaperCode>PaperWizard</PaperCode> and <PaperCode>PaperSettingList</PaperCode> with validation schemas.

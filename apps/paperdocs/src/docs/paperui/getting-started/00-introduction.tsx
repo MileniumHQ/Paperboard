@@ -22,7 +22,7 @@ export default function f() {
                 Overview
             </PaperText>
             <PaperText preset="body">
-                <strong>PaperUI</strong> is a component library and design system engineered for the <PaperLink href="https://docs.solidjs.com/" external>SolidJS</PaperLink> declarative reactive framework. Originally developed as the primary graphical user interface foundation for Paperboard and its extensible board ecosystem, PaperUI provides a curated collection of pre-styled, accessible, and theme-adaptive user interface primitives and structural templates.
+                <strong>PaperUI</strong> is a component library and design system engineered for the <PaperLink href="https://docs.solidjs.com/" external>SolidJS</PaperLink> declarative reactive framework. Originally developed as the primary graphical user interface foundation for Paperboard and its extensible panel ecosystem, PaperUI provides a curated collection of pre-styled, accessible, and theme-adaptive user interface primitives and structural templates.
             </PaperText>
             <PaperText preset="body">
                 The library prioritizes tactile visual feedback, systematic tokenization through CSS Custom Properties, and zero-runtime overhead via SolidJS fine-grained reactivity.

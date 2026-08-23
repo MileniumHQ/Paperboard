@@ -43,9 +43,10 @@ export default function f() {
         <>
             <PaperText preset="header">PaperWizard</PaperText>
             <PaperText preset="body">
-                <strong>PaperWizard</strong> is a multi-step sequential wizard template managing step
-                transitions, form state accumulation, animated step cards,
-                progress calculation, and programmatic completion handlers.
+                <strong>PaperWizard</strong> is a multi-step sequential wizard
+                template managing step transitions, form state accumulation,
+                animated step cards, progress calculation, and programmatic
+                completion handlers.
             </PaperText>
             <PaperSeparator />
 
@@ -84,15 +85,15 @@ function DeploymentWizard() {
             finishVariant="green"
             onComplete={(data) => console.log("Final data:", data)}
         >
-            <PaperWizardStep index={0} title="Step 1: Project Details">
-                <PaperFlex gap="half">
+            <PaperWizardStep index={0}>
+                <PaperFlex gap="half" center fullHeight fullWidth>
                     <PaperText preset="body">Enter the project identifier:</PaperText>
                     <PaperInput name="projectName" placeholder="my-app" />
                 </PaperFlex>
             </PaperWizardStep>
 
-            <PaperWizardStep index={1} title="Step 2: Environment">
-                <PaperFlex gap="half">
+            <PaperWizardStep index={1}>
+                <PaperFlex gap="half" center fullHeight fullWidth>
                     <PaperText preset="body">Specify the deployment target:</PaperText>
                     <PaperInput name="environment" placeholder="production" />
                 </PaperFlex>
@@ -118,12 +119,14 @@ function DeploymentWizard() {
                             finishVariant="green"
                             onComplete={(data) => setWizardResult(data)}
                         >
-                            <PaperWizardStep
-                                index={0}
-                                title="1. Project Definition"
-                            >
-                                <PaperFlex gap="half" paddingY="half">
-                                    <PaperText preset="body">
+                            <PaperWizardStep index={0}>
+                                <PaperFlex
+                                    gap="half"
+                                    center
+                                    fullHeight
+                                    fullWidth
+                                >
+                                    <PaperText>
                                         Enter the application title:
                                     </PaperText>
                                     <PaperInput
@@ -134,11 +137,13 @@ function DeploymentWizard() {
                                 </PaperFlex>
                             </PaperWizardStep>
 
-                            <PaperWizardStep
-                                index={1}
-                                title="2. Deployment Region"
-                            >
-                                <PaperFlex gap="half" paddingY="half">
+                            <PaperWizardStep index={1}>
+                                <PaperFlex
+                                    gap="half"
+                                    center
+                                    fullHeight
+                                    fullWidth
+                                >
                                     <PaperText preset="body">
                                         Specify target cloud region:
                                     </PaperText>
@@ -358,6 +363,64 @@ function DeploymentWizard() {
                         <td>
                             Callback executed whenever the active step
                             transitions.
+                        </td>
+                    </tr>
+                </tbody>
+            </PaperTable>
+
+            <PaperText id="props-wizard-step" preset="title">
+                PaperWizardStep Props
+            </PaperText>
+            <PaperTable>
+                <thead>
+                    <tr>
+                        <th>Prop</th>
+                        <th>Type</th>
+                        <th>Default</th>
+                        <th>Description</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>
+                            <PaperCode>index</PaperCode>
+                        </td>
+                        <td>
+                            <PaperCode>number</PaperCode>
+                        </td>
+                        <td>
+                            <em>required</em>
+                        </td>
+                        <td>
+                            Zero-indexed step position defining sequence order.
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>
+                            <PaperCode>canProceed</PaperCode>
+                        </td>
+                        <td>
+                            <PaperCode>boolean</PaperCode>
+                        </td>
+                        <td>
+                            <PaperCode>true</PaperCode>
+                        </td>
+                        <td>
+                            Whether the user can navigate forward from this step.
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>
+                            <PaperCode>onStepActive</PaperCode>
+                        </td>
+                        <td>
+                            <PaperCode>() =&gt; void</PaperCode>
+                        </td>
+                        <td>
+                            <PaperCode>undefined</PaperCode>
+                        </td>
+                        <td>
+                            Callback executed when this step becomes the active view.
                         </td>
                     </tr>
                 </tbody>
