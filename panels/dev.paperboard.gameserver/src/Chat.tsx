@@ -13,6 +13,7 @@ import {
     PaperInput,
     PaperButton,
     PaperIcon,
+    getVarCss,
 } from "paperui";
 import {
     chatMessages,
@@ -22,111 +23,12 @@ import {
 } from "./server";
 import "./style.css";
 
-const skinUrlCache = new Map<string, string>();
-const skinPromiseCache = new Map<string, Promise<string | null>>();
-
-const DEFAULT_STEVE_SKIN =
-    "https://textures.minecraft.net/texture/1a429dd934449830588661eb175069a5840d210967ab4cb8798e1694f481c967";
-
-export async function fetchMojangSkinUrl(
-    username: string,
-): Promise<string | null> {
-    if (skinUrlCache.has(username)) {
-        return skinUrlCache.get(username)!;
-    }
-    if (skinPromiseCache.has(username)) {
-        return skinPromiseCache.get(username)!;
-    }
-
-    const promise = (async () => {
-        try {
-            const res = await fetch(
-                `https://api.mojang.com/users/profiles/minecraft/${encodeURIComponent(username)}`,
-            );
-            if (!res.ok) return null;
-            const profile = await res.json();
-            if (!profile?.id) return null;
-
-            const sessionRes = await fetch(
-                `https://sessionserver.mojang.com/session/minecraft/profile/${profile.id}`,
-            );
-            if (!sessionRes.ok) return null;
-            const sessionData = await sessionRes.json();
-            const prop = sessionData.properties?.find(
-                (p: any) => p.name === "textures",
-            );
-            if (!prop?.value) return null;
-
-            const decoded = JSON.parse(atob(prop.value));
-            const skinUrl = decoded?.textures?.SKIN?.url || null;
-            if (skinUrl) {
-                const secureUrl = skinUrl.replace(/^http:\/\//i, "https://");
-                skinUrlCache.set(username, secureUrl);
-                return secureUrl;
-            }
-            return null;
-        } catch (err) {
-            console.error(
-                `[Mojang API] Could not fetch skin for ${username}:`,
-                err,
-            );
-            return null;
-        }
-    })();
-
-    skinPromiseCache.set(username, promise);
-    return promise;
-}
-
+// Renders Minecraft player head avatar using high-speed CDN with Steve fallback
 export function PlayerAvatar(props: { name: string }) {
-    let canvasRef: HTMLCanvasElement | undefined;
-
-    const drawSkin = (img: HTMLImageElement) => {
-        if (!canvasRef) return;
-        const ctx = canvasRef.getContext("2d");
-        if (!ctx) return;
-
-        const w = 32;
-        const h = 32;
-        canvasRef.width = w;
-        canvasRef.height = h;
-
-        ctx.imageSmoothingEnabled = false;
-        ctx.clearRect(0, 0, w, h);
-
-        const innerSize = 27;
-        const offset = Math.round((w - innerSize) / 2);
-        ctx.drawImage(img, 8, 8, 8, 8, offset, offset, innerSize, innerSize);
-
-        ctx.drawImage(img, 40, 8, 8, 8, 0, 0, w, h);
-    };
-
-    const loadAndDraw = async () => {
-        const url = await fetchMojangSkinUrl(props.name);
-        const img = new Image();
-        img.onload = () => drawSkin(img);
-        img.onerror = () => {
-            const fallback = new Image();
-            fallback.onload = () => drawSkin(fallback);
-            fallback.src = DEFAULT_STEVE_SKIN;
-        };
-        img.src = url || DEFAULT_STEVE_SKIN;
-    };
-
-    onMount(() => {
-        loadAndDraw();
-    });
-
-    createEffect(() => {
-        props.name;
-        loadAndDraw();
-    });
-
     return (
-        <canvas
-            ref={canvasRef}
-            width={32}
-            height={32}
+        <img
+            src={`https://mc-heads.net/avatar/${encodeURIComponent(props.name)}/32`}
+            alt={props.name}
             style={{
                 width: "1.35em",
                 height: "1.35em",
@@ -135,10 +37,14 @@ export function PlayerAvatar(props: { name: string }) {
                 "border-radius": "0.15em",
                 "margin-top": "0.05em",
             }}
+            onError={(e) => {
+                e.currentTarget.src = "https://mc-heads.net/avatar/MHF_Steve/32";
+            }}
         />
     );
 }
 
+// Formats chat messages into styled elements with player avatars
 function renderChatMessageContent(text: string): JSX.Element {
     const chatMatch = text.match(/^<([a-zA-Z0-9_]{1,16})>\s*(.*)$/);
     if (chatMatch) {
@@ -168,12 +74,7 @@ function renderChatMessageContent(text: string): JSX.Element {
         return (
             <PaperFlex direction="row" gap="half" align="center">
                 <PlayerAvatar name={joinMatch[1]} />
-                <span
-                    style={{
-                        color: "var(--paper-front-green)",
-                        "word-break": "break-word",
-                    }}
-                >
+                <span style={{ color: getVarCss("front-green"), "word-break": "break-word" }}>
                     <strong>{joinMatch[1]}</strong> {joinMatch[2]}
                 </span>
             </PaperFlex>
@@ -185,12 +86,7 @@ function renderChatMessageContent(text: string): JSX.Element {
         return (
             <PaperFlex direction="row" gap="half" align="center">
                 <PlayerAvatar name={leaveMatch[1]} />
-                <span
-                    style={{
-                        color: "var(--paper-front-red)",
-                        "word-break": "break-word",
-                    }}
-                >
+                <span style={{ color: getVarCss("front-red"), "word-break": "break-word" }}>
                     <strong>{leaveMatch[1]}</strong> {leaveMatch[2]}
                 </span>
             </PaperFlex>
@@ -204,20 +100,14 @@ export default function Chat() {
     let scrollRef: HTMLDivElement | undefined;
     const [inputVal, setInputVal] = createSignal("");
 
-    onMount(() => {
-        initServerListeners();
-    });
+    onMount(() => initServerListeners());
 
     const scrollToBottom = () => {
-        if (scrollRef) {
-            scrollRef.scrollTop = scrollRef.scrollHeight;
-        }
+        if (scrollRef) scrollRef.scrollTop = scrollRef.scrollHeight;
     };
 
     createEffect(() => {
-        if (chatMessages().length > 0) {
-            setTimeout(scrollToBottom, 0);
-        }
+        if (chatMessages().length > 0) setTimeout(scrollToBottom, 0);
     });
 
     const handleSend = (e: Event) => {
@@ -232,9 +122,7 @@ export default function Chat() {
     return (
         <PaperFlex fullHeight fullWidth padding="double" gap="threefourths">
             <PaperFlex fullWidth style={{ flex: 1, "min-height": 0 }}>
-                <PaperContainer
-                    style={{ flex: 1, height: "100%", "min-height": 0 }}
-                >
+                <PaperContainer style={{ flex: 1, height: "100%", "min-height": 0 }}>
                     <div
                         ref={scrollRef}
                         style={{
@@ -251,34 +139,15 @@ export default function Chat() {
                         <Show
                             when={chatMessages().length > 0}
                             fallback={
-                                <PaperFlex
-                                    fullHeight
-                                    fullWidth
-                                    align="center"
-                                    justify="center"
-                                    style={{ opacity: 0.6 }}
-                                >
-                                    <PaperText preset="caption">
-                                        No in-game messages yet.
-                                    </PaperText>
+                                <PaperFlex fullHeight fullWidth align="center" justify="center" style={{ opacity: 0.6 }}>
+                                    <PaperText preset="caption">No in-game messages yet.</PaperText>
                                 </PaperFlex>
                             }
                         >
                             <For each={chatMessages()}>
                                 {(msg) => (
-                                    <PaperFlex
-                                        direction="row"
-                                        gap="half"
-                                        align="flex-start"
-                                        style={{ "line-height": 1.4 }}
-                                    >
-                                        <PaperText
-                                            size={3}
-                                            style={{
-                                                flex: 1,
-                                                "word-break": "break-word",
-                                            }}
-                                        >
+                                    <PaperFlex direction="row" gap="half" align="flex-start" style={{ "line-height": 1.4 }}>
+                                        <PaperText size={3} style={{ flex: 1, "word-break": "break-word" }}>
                                             {renderChatMessageContent(msg.text)}
                                         </PaperText>
                                     </PaperFlex>
@@ -306,12 +175,7 @@ export default function Chat() {
                     onInput={(e) => setInputVal(e.currentTarget.value)}
                     disabled={serverStatus() === "offline"}
                 />
-                <PaperButton
-                    compact
-                    disabled={
-                        !inputVal().trim() || serverStatus() === "offline"
-                    }
-                >
+                <PaperButton compact disabled={!inputVal().trim() || serverStatus() === "offline"}>
                     <PaperIcon>send</PaperIcon>
                     Say
                 </PaperButton>

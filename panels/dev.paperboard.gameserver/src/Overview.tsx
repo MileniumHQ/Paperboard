@@ -27,6 +27,7 @@ import {
     getStatusBadge,
 } from "./server";
 import { SOFTWARE_NAMES } from "./Setup";
+import ServerIssueModal from "./ServerIssueModal";
 import "./style.css";
 
 export default function Overview() {
@@ -40,12 +41,21 @@ export default function Overview() {
     const handleCopyAddress = async () => {
         const addr = `${localIp()}:${serverPort()}`;
         try {
-            await navigator.clipboard.writeText(addr);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
-        } catch (err) {
-            console.error("Failed to copy address:", err);
+            if (navigator.clipboard?.writeText) {
+                await navigator.clipboard.writeText(addr);
+            }
+        } catch {
+            const textarea = document.createElement("textarea");
+            textarea.value = addr;
+            textarea.style.position = "fixed";
+            textarea.style.opacity = "0";
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand("copy");
+            document.body.removeChild(textarea);
         }
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
     };
 
     const badge = () => getStatusBadge(serverStatus());
@@ -54,17 +64,9 @@ export default function Overview() {
         <PaperFlex fullHeight fullWidth padding="double" gap="threefourths">
             <PaperContainer style={{ "flex-shrink": 0 }}>
                 <PaperFlex fullWidth padding="full">
-                    <PaperFlex
-                        direction="row"
-                        justify="space-between"
-                        align="center"
-                    >
+                    <PaperFlex direction="row" justify="space-between" align="center">
                         <PaperFlex gap="onefourth">
-                            <PaperFlex
-                                direction="row"
-                                gap="half"
-                                align="center"
-                            >
+                            <PaperFlex direction="row" gap="half" align="center">
                                 <PaperText weight={700} size={8}>
                                     {localIp()}:{serverPort()}
                                 </PaperText>
@@ -72,9 +74,7 @@ export default function Overview() {
                                     icon
                                     tiny
                                     onClick={handleCopyAddress}
-                                    title={
-                                        copied() ? "Copied!" : "Copy address"
-                                    }
+                                    title={copied() ? "Copied!" : "Copy address"}
                                 >
                                     {copied() ? "check" : "content_copy"}
                                 </PaperButton>
@@ -119,23 +119,14 @@ export default function Overview() {
                     </Show>
 
                     <Show when={serverStatus() === "online"}>
-                        <PaperButton
-                            variant="yellow"
-                            compact
-                            onClick={restartServer}
-                        >
+                        <PaperButton variant="yellow" compact onClick={restartServer}>
                             <PaperIcon>restart_alt</PaperIcon>
                             Restart
                         </PaperButton>
                     </Show>
                 </PaperFlex>
 
-                <PaperFlex
-                    direction="row"
-                    align="center"
-                    gap="half"
-                    style={{ height: "fit-content" }}
-                >
+                <PaperFlex direction="row" align="center" gap="half" style={{ height: "fit-content" }}>
                     <PaperBadge>{serverVersion()}</PaperBadge>
                     <PaperBadge>
                         {SOFTWARE_NAMES[serverSoftware()] || serverSoftware()}
@@ -146,14 +137,8 @@ export default function Overview() {
             <PaperSeparator />
 
             <PaperFlex fullWidth style={{ flex: 1, "min-height": 0 }}>
-                <PaperContainer
-                    style={{ flex: 1, height: "100%", "min-height": 0 }}
-                >
-                    <PaperFlex
-                        padding="full"
-                        fullHeight
-                        style={{ "min-height": 0 }}
-                    >
+                <PaperContainer style={{ flex: 1, height: "100%", "min-height": 0 }}>
+                    <PaperFlex padding="full" fullHeight style={{ "min-height": 0 }}>
                         <PaperConsole
                             entries={serverEntries()}
                             onCommand={sendServerCommand}
@@ -163,6 +148,8 @@ export default function Overview() {
                     </PaperFlex>
                 </PaperContainer>
             </PaperFlex>
+
+            <ServerIssueModal />
         </PaperFlex>
     );
 }

@@ -27,7 +27,6 @@ import {
     fileApi,
     config,
     packageApi,
-    processApi,
     type PackageProgress,
 } from "paperapi";
 import {
@@ -42,65 +41,7 @@ export const SOFTWARE_NAMES: Record<ServerSoftwareType, string> = {
     vanilla: "Vanilla",
     paper: "Paper",
     fabric: "Fabric",
-    neoforge: "NeoForge",
 };
-
-export function parseServerSetupOutput(
-    chunk: string,
-    currentPercent: number,
-): number {
-    const l = chunk.toLowerCase();
-    if (
-        l.includes("downloading mojang") ||
-        l.includes("downloading vanilla") ||
-        l.includes("downloading library") ||
-        l.includes("considering library") ||
-        l.includes("downloading")
-    ) {
-        return Math.max(currentPercent, 25);
-    }
-    if (
-        l.includes("unpacking") ||
-        l.includes("applying patches") ||
-        l.includes("extracting") ||
-        l.includes("extract_files") ||
-        l.includes("building processors")
-    ) {
-        return Math.max(currentPercent, 50);
-    }
-    if (
-        l.includes("starting net.minecraft.server.main") ||
-        l.includes("starting org.bukkit") ||
-        l.includes("starting net.fabricmc") ||
-        l.includes("fabric loader") ||
-        l.includes("process_minecraft_jar") ||
-        l.includes("fancymodloader") ||
-        l.includes("[bootstrap]") ||
-        l.includes("loading libraries")
-    ) {
-        return Math.max(currentPercent, 70);
-    }
-    if (
-        l.includes("initializing plugins") ||
-        l.includes("initialising converters") ||
-        l.includes("loading paper") ||
-        l.includes("spongepowered mixin") ||
-        (l.includes("loading") && l.includes("mods")) ||
-        l.includes("servermain") ||
-        l.includes("loading fml") ||
-        l.includes("the server installed successfully")
-    ) {
-        return Math.max(currentPercent, 85);
-    }
-    if (
-        l.includes("eula") ||
-        l.includes("agree to the eula") ||
-        l.includes("failed to load eula.txt")
-    ) {
-        return 90;
-    }
-    return currentPercent;
-}
 
 interface VersionStepProps {
     software: ServerSoftwareType;
@@ -108,8 +49,8 @@ interface VersionStepProps {
     onSelectVersion: (version: string) => void;
 }
 
+// Version selection step with filtering and search
 function VersionStep(props: VersionStepProps) {
-    const wizard = useWizard();
     const [searchQuery, setSearchQuery] = createSignal("");
     const [allVersions, setAllVersions] = createSignal<VersionItem[]>([]);
     const [loading, setLoading] = createSignal(true);
@@ -122,21 +63,13 @@ function VersionStep(props: VersionStepProps) {
     const loadVersions = async () => {
         setLoading(true);
         try {
-            const versions = await getDetailedVersionsForSoftware(
-                props.software,
-            );
+            const versions = await getDetailedVersionsForSoftware(props.software);
             setAllVersions(versions);
             if (versions.length > 0) {
-                const currentExists = versions.some(
-                    (v) => v.id === props.selectedVersion,
-                );
+                const currentExists = versions.some((v) => v.id === props.selectedVersion);
                 if (!currentExists) {
-                    const firstRelease =
-                        versions.find((v) => v.type === "release") ||
-                        versions[0];
-                    if (firstRelease) {
-                        props.onSelectVersion(firstRelease.id);
-                    }
+                    const firstRelease = versions.find((v) => v.type === "release") || versions[0];
+                    if (firstRelease) props.onSelectVersion(firstRelease.id);
                 }
             }
         } catch (err) {
@@ -147,9 +80,7 @@ function VersionStep(props: VersionStepProps) {
     };
 
     createEffect(() => {
-        if (props.software) {
-            loadVersions();
-        }
+        if (props.software) loadVersions();
     });
 
     const filteredVersions = () => {
@@ -162,12 +93,9 @@ function VersionStep(props: VersionStepProps) {
         return allVersions().filter((item) => {
             if (item.type === "release" && !rel) return false;
             if (item.type === "snapshot" && !snap) return false;
-            if ((item.type === "old_beta" || item.type === "beta") && !beta)
-                return false;
+            if ((item.type === "old_beta" || item.type === "beta") && !beta) return false;
             if (item.type === "old_alpha" && !alpha) return false;
-
             if (query && !item.id.toLowerCase().includes(query)) return false;
-
             return true;
         });
     };
@@ -178,8 +106,7 @@ function VersionStep(props: VersionStepProps) {
                 <PaperFlex direction="column" gap="half">
                     <PaperText preset="title">Choose Version</PaperText>
                     <PaperText preset="body">
-                        Select a Minecraft version for your{" "}
-                        {SOFTWARE_NAMES[props.software]} server.
+                        Select a Minecraft version for your {SOFTWARE_NAMES[props.software]} server.
                     </PaperText>
                 </PaperFlex>
 
@@ -201,26 +128,15 @@ function VersionStep(props: VersionStepProps) {
                             icon="search"
                             placeholder="Search versions..."
                             value={searchQuery()}
-                            onInput={(e) =>
-                                setSearchQuery(e.currentTarget.value)
-                            }
+                            onInput={(e) => setSearchQuery(e.currentTarget.value)}
                         />
 
-                        <PaperContainer
-                            style={{
-                                flex: 1,
-                                "min-height": 0,
-                                "overflow-y": "auto",
-                            }}
-                        >
+                        <PaperContainer style={{ flex: 1, "min-height": 0, "overflow-y": "auto" }}>
                             <Show
                                 when={!loading()}
                                 fallback={
                                     <PaperFlex padding="full" center>
-                                        <PaperText
-                                            preset="body"
-                                            color={getVarCss("light-text")}
-                                        >
+                                        <PaperText preset="body" color={getVarCss("light-text")}>
                                             Loading versions...
                                         </PaperText>
                                     </PaperFlex>
@@ -230,12 +146,8 @@ function VersionStep(props: VersionStepProps) {
                                     when={filteredVersions().length > 0}
                                     fallback={
                                         <PaperFlex padding="full" center>
-                                            <PaperText
-                                                preset="body"
-                                                color={getVarCss("light-text")}
-                                            >
-                                                No versions matching your
-                                                filters.
+                                            <PaperText preset="body" color={getVarCss("light-text")}>
+                                                No versions matching your filters.
                                             </PaperText>
                                         </PaperFlex>
                                     }
@@ -243,24 +155,16 @@ function VersionStep(props: VersionStepProps) {
                                     <PaperList
                                         name="minecraftVersion"
                                         value={props.selectedVersion}
-                                        onValueChange={(val) =>
-                                            props.onSelectVersion(String(val))
-                                        }
-                                        style={{
-                                            width: "100%",
-                                            height: "auto",
-                                            border: "none",
-                                            background: "transparent",
-                                        }}
+                                        onValueChange={(val) => props.onSelectVersion(String(val))}
+                                        style={{ width: "100%", height: "auto", border: "none", background: "transparent" }}
                                     >
                                         <For each={filteredVersions()}>
                                             {(item) => (
                                                 <PaperListItem
                                                     value={item.id}
                                                     description={
-                                                        item.type &&
-                                                        item.type !== "release"
-                                                            ? `${item.type.replace("old_", "")}`
+                                                        item.type && item.type !== "release"
+                                                            ? item.type.replace("old_", "")
                                                             : undefined
                                                     }
                                                 >
@@ -274,32 +178,11 @@ function VersionStep(props: VersionStepProps) {
                         </PaperContainer>
                     </PaperFlex>
 
-                    <div
-                        style={{
-                            "flex-shrink": 0,
-                            display: "flex",
-                            "flex-direction": "column",
-                            "min-height": 0,
-                        }}
-                    >
-                        <PaperContainer
-                            style={{
-                                height: "100%",
-                                "overflow-y": "auto",
-                            }}
-                        >
-                            <PaperFlex
-                                direction="column"
-                                gap="full"
-                                padding="full"
-                            >
-                                <PaperText preset="title">
-                                    Version Types
-                                </PaperText>
-                                <PaperFlex
-                                    direction="column"
-                                    gap="threefourths"
-                                >
+                    <div style={{ "flex-shrink": 0, display: "flex", "flex-direction": "column", "min-height": 0 }}>
+                        <PaperContainer style={{ height: "100%", "overflow-y": "auto" }}>
+                            <PaperFlex direction="column" gap="full" padding="full">
+                                <PaperText preset="title">Version Types</PaperText>
+                                <PaperFlex direction="column" gap="threefourths">
                                     <PaperCheckbox
                                         checked={includeReleases()}
                                         onChange={setIncludeReleases}
@@ -323,13 +206,6 @@ function VersionStep(props: VersionStepProps) {
                                             label="Alpha Versions"
                                         />
                                     </Show>
-                                    <Show when={props.software === "neoforge"}>
-                                        <PaperCheckbox
-                                            checked={includeBetas()}
-                                            onChange={setIncludeBetas}
-                                            label="Beta Builds"
-                                        />
-                                    </Show>
                                 </PaperFlex>
                             </PaperFlex>
                         </PaperContainer>
@@ -345,24 +221,18 @@ interface InstallStepProps {
     version: string;
 }
 
+// Download and initial setup installation step
 function InstallStep(props: InstallStepProps) {
     const wizard = useWizard();
 
     const [javaDownloadPercent, setJavaDownloadPercent] = createSignal(0);
-    const [javaDownloadStatus, setJavaDownloadStatus] =
-        createSignal<LoaderStatus>("loading");
-
+    const [javaDownloadStatus, setJavaDownloadStatus] = createSignal<LoaderStatus>("loading");
     const [javaExtractPercent, setJavaExtractPercent] = createSignal(0);
-    const [javaExtractStatus, setJavaExtractStatus] =
-        createSignal<LoaderStatus>("waiting");
-
+    const [javaExtractStatus, setJavaExtractStatus] = createSignal<LoaderStatus>("waiting");
     const [softwarePercent, setSoftwarePercent] = createSignal(0);
-    const [softwareStatus, setSoftwareStatus] =
-        createSignal<LoaderStatus>("waiting");
-
+    const [softwareStatus, setSoftwareStatus] = createSignal<LoaderStatus>("waiting");
     const [setupPercent, setSetupPercent] = createSignal(0);
     const [setupStatus, setSetupStatus] = createSignal<LoaderStatus>("waiting");
-
     const [showEulaModal, setShowEulaModal] = createSignal(false);
 
     let started = false;
@@ -381,35 +251,21 @@ function InstallStep(props: InstallStepProps) {
                 setJavaExtractPercent(100);
                 setJavaExtractStatus("success");
             } else {
-                await packageApi.download(
-                    javaPkg,
-                    (progress: PackageProgress) => {
-                        if (progress.stage === "downloading") {
-                            setJavaDownloadStatus("loading");
-                            setJavaDownloadPercent(progress.percent);
-                            setJavaExtractStatus("waiting");
-                        } else if (progress.stage === "verifying") {
-                            setJavaDownloadStatus("loading");
-                            setJavaDownloadPercent(100);
-                            setJavaExtractStatus("waiting");
-                        } else if (progress.stage === "extracting") {
-                            setJavaDownloadStatus("success");
-                            setJavaDownloadPercent(100);
-                            setJavaExtractStatus("loading");
-                            setJavaExtractPercent(progress.percent);
-                        } else if (progress.stage === "completed") {
-                            setJavaDownloadStatus("success");
-                            setJavaDownloadPercent(100);
-                            setJavaExtractStatus("success");
-                            setJavaExtractPercent(100);
-                        } else if (progress.stage === "error") {
-                            setJavaDownloadStatus("error");
-                            setJavaExtractStatus("error");
-                            throw new Error("Java download failed");
-                        }
-                    },
-                );
-
+                await packageApi.download(javaPkg, (progress: PackageProgress) => {
+                    if (progress.stage === "downloading") {
+                        setJavaDownloadStatus("loading");
+                        setJavaDownloadPercent(progress.percent);
+                    } else if (progress.stage === "extracting") {
+                        setJavaDownloadStatus("success");
+                        setJavaDownloadPercent(100);
+                        setJavaExtractStatus("loading");
+                        setJavaExtractPercent(progress.percent);
+                    } else if (progress.stage === "completed") {
+                        setJavaDownloadStatus("success");
+                        setJavaExtractStatus("success");
+                        setJavaExtractPercent(100);
+                    }
+                });
                 setJavaDownloadStatus("success");
                 setJavaDownloadPercent(100);
                 setJavaExtractStatus("success");
@@ -419,7 +275,6 @@ function InstallStep(props: InstallStepProps) {
             console.error("[InstallStep] Java installation error:", err);
             setJavaExtractStatus("error");
             wizard?.setOptionsShown(true);
-            wizard?.setCanProceed(false);
             return;
         }
 
@@ -427,11 +282,7 @@ function InstallStep(props: InstallStepProps) {
             setSoftwareStatus("loading");
             setSoftwarePercent(0);
 
-            const downloadInfo = await getSoftwareDownload(
-                props.software,
-                props.version,
-            );
-
+            const downloadInfo = await getSoftwareDownload(props.software, props.version);
             await fileApi.download({
                 url: downloadInfo.url,
                 targetPath: "server.jar",
@@ -441,14 +292,9 @@ function InstallStep(props: InstallStepProps) {
                     if (p.stage === "downloading") {
                         setSoftwareStatus("loading");
                         setSoftwarePercent(p.percent);
-                    } else if (p.stage === "verifying") {
-                        setSoftwareStatus("loading");
-                        setSoftwarePercent(100);
                     } else if (p.stage === "completed") {
                         setSoftwareStatus("success");
                         setSoftwarePercent(100);
-                    } else if (p.stage === "error") {
-                        setSoftwareStatus("error");
                     }
                 },
             });
@@ -459,81 +305,26 @@ function InstallStep(props: InstallStepProps) {
             console.error("[InstallStep] Server software download error:", err);
             setSoftwareStatus("error");
             wizard?.setOptionsShown(true);
-            wizard?.setCanProceed(false);
             return;
         }
 
         try {
-            setSetupStatus("loading");
-            setSetupPercent(10);
-
-            const javaPkg = getRequiredJavaVersion(props.version);
-            const javaPath = await packageApi.getPath(javaPkg);
-            const isWin =
-                typeof navigator !== "undefined" &&
-                navigator.platform?.toLowerCase().includes("win");
-            const javaBin = `${javaPath}/bin/${isWin ? "java.exe" : "java"}`;
-            const serverDir = await fileApi.getPath("");
-
-            if (props.software === "neoforge") {
-                await processApi.run({
-                    command: javaBin,
-                    args: ["-jar", "server.jar", "--install-server"],
-                    cwd: serverDir,
-                    onData: (chunk) => {
-                        const nextPercent = parseServerSetupOutput(
-                            chunk,
-                            setupPercent(),
-                        );
-                        if (nextPercent !== setupPercent()) {
-                            setSetupPercent(nextPercent);
-                        }
-                    },
-                });
-
-                await processApi.run({
-                    command: isWin ? "cmd.exe" : "bash",
-                    args: isWin
-                        ? ["/c", "run.bat", "nogui"]
-                        : ["run.sh", "nogui"],
-                    cwd: serverDir,
-                    env: {
-                        JAVA_HOME: javaPath,
-                    },
-                    onData: (chunk) => {
-                        const nextPercent = parseServerSetupOutput(
-                            chunk,
-                            setupPercent(),
-                        );
-                        if (nextPercent !== setupPercent()) {
-                            setSetupPercent(nextPercent);
-                        }
-                    },
-                });
-            } else {
-                await processApi.run({
-                    command: javaBin,
-                    args: ["-jar", "server.jar", "nogui"],
-                    cwd: serverDir,
-                    onData: (chunk) => {
-                        const nextPercent = parseServerSetupOutput(
-                            chunk,
-                            setupPercent(),
-                        );
-                        if (nextPercent !== setupPercent()) {
-                            setSetupPercent(nextPercent);
-                        }
-                    },
-                });
+            const eulaContent = await fileApi.read("eula.txt").catch(() => "");
+            if (eulaContent && eulaContent.includes("eula=true")) {
+                setSetupPercent(100);
+                setSetupStatus("success");
+                wizard?.setOptionsShown(true);
+                wizard?.setCanProceed(true);
+                return;
             }
 
-            setSetupPercent(90);
+            setSetupStatus("loading");
+            setSetupPercent(50);
             setShowEulaModal(true);
         } catch (err) {
             console.error("[InstallStep] Server setup error:", err);
             setSetupStatus("error");
             wizard?.setOptionsShown(true);
-            wizard?.setCanProceed(false);
         }
     };
 
@@ -557,12 +348,7 @@ function InstallStep(props: InstallStepProps) {
         setShowEulaModal(false);
         try {
             await fileApi.clear();
-        } catch (err) {
-            console.warn(
-                "[InstallStep] Failed to clear files on decline:",
-                err,
-            );
-        }
+        } catch {}
 
         setJavaDownloadPercent(0);
         setJavaDownloadStatus("loading");
@@ -586,8 +372,7 @@ function InstallStep(props: InstallStepProps) {
         }
     });
 
-    const softwareName = () =>
-        SOFTWARE_NAMES[props.software] || "Server Software";
+    const softwareName = () => SOFTWARE_NAMES[props.software] || "Server Software";
 
     return (
         <>
@@ -623,17 +408,8 @@ function InstallStep(props: InstallStepProps) {
                 onClose={handleDeclineEula}
                 title="Minecraft End User License Agreement"
                 footer={
-                    <PaperFlex
-                        direction="row"
-                        justify="flex-end"
-                        gap="half"
-                        fullWidth
-                    >
-                        <PaperButton
-                            onClick={handleDeclineEula}
-                            compact
-                            variant="text"
-                        >
+                    <PaperFlex direction="row" justify="flex-end" gap="half" fullWidth>
+                        <PaperButton onClick={handleDeclineEula} compact variant="text">
                             Decline
                         </PaperButton>
                         <PaperButton onClick={handleAgreeEula} compact>
@@ -644,15 +420,10 @@ function InstallStep(props: InstallStepProps) {
             >
                 <PaperFlex direction="column" gap="half">
                     <PaperText preset="body">
-                        To run a Minecraft server, you must review and agree to
-                        Mojang's official End User License Agreement (EULA). You
-                        can review the complete terms online:
+                        To run a Minecraft server, you must review and agree to Mojang's official End User License Agreement (EULA).
                     </PaperText>
                     <PaperQuote>
-                        <PaperLink
-                            href="https://aka.ms/MinecraftEULA"
-                            target="_blank"
-                        >
+                        <PaperLink href="https://aka.ms/MinecraftEULA" target="_blank">
                             https://aka.ms/MinecraftEULA
                         </PaperLink>
                     </PaperQuote>
@@ -671,9 +442,7 @@ export interface SetupProps {
 export default function Setup(props: SetupProps) {
     const [serverSoftware, setServerSoftware] =
         createSignal<ServerSoftwareType>(props.initialSoftware || "paper");
-    const [serverVersion, setServerVersion] = createSignal<string>(
-        props.initialVersion || "",
-    );
+    const [serverVersion, setServerVersion] = createSignal<string>(props.initialVersion || "");
 
     const handleFinishSetup = async () => {
         try {
@@ -700,9 +469,7 @@ export default function Setup(props: SetupProps) {
                 <PaperCenteredInterface>
                     <PaperFlex direction="column" gap="half">
                         <PaperText preset="title">Select Game</PaperText>
-                        <PaperText preset="body">
-                            Choose what game you want to run.
-                        </PaperText>
+                        <PaperText preset="body">Choose what game you want to run.</PaperText>
                         <PaperSelector name="gameType" value="minecraftJava">
                             <PaperSelectorItem value="minecraftJava">
                                 Minecraft: Java Edition
@@ -720,8 +487,7 @@ export default function Setup(props: SetupProps) {
                     <PaperFlex direction="column" gap="half">
                         <PaperText preset="title">Server Software</PaperText>
                         <PaperText preset="body">
-                            Pick a server software depending on your needs. You
-                            can change this later.
+                            Pick a server software depending on your needs. You can change this later.
                         </PaperText>
                         <PaperSelector
                             name="serverSoftware"
@@ -743,10 +509,7 @@ export default function Setup(props: SetupProps) {
                                 icon={<PaperIcon src="/assets/paper.png" />}
                                 description={
                                     <>
-                                        <strong>Recommended.</strong> Vast
-                                        plugin support and high performance, but
-                                        makes opinionated changes to some game
-                                        mechanics.
+                                        <strong>Recommended.</strong> Vast plugin support and high performance, but makes opinionated changes to some game mechanics.
                                     </>
                                 }
                             >
@@ -755,16 +518,9 @@ export default function Setup(props: SetupProps) {
                             <PaperSelectorItem
                                 value="fabric"
                                 icon={<PaperIcon src="/assets/fabric.png" />}
-                                description="Limited traditional plugins upport, but extensively supports lighter mods. Does not improve performance out of the box."
+                                description="Limited traditional plugins support, but extensively supports lighter mods. Does not improve performance out of the box."
                             >
                                 Fabric
-                            </PaperSelectorItem>
-                            <PaperSelectorItem
-                                value="neoforge"
-                                icon={<PaperIcon src="/assets/neoforge.png" />}
-                                description="Limited traditional plugin support, but required for most larger modpacks and has the best support for heavier mods."
-                            >
-                                NeoForge
                             </PaperSelectorItem>
                         </PaperSelector>
                     </PaperFlex>
@@ -780,10 +536,7 @@ export default function Setup(props: SetupProps) {
             </PaperWizardStep>
 
             <PaperWizardStep index={3}>
-                <InstallStep
-                    software={serverSoftware()}
-                    version={serverVersion()}
-                />
+                <InstallStep software={serverSoftware()} version={serverVersion()} />
             </PaperWizardStep>
         </PaperWizard>
     );
