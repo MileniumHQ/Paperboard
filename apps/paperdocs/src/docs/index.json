@@ -143,6 +143,9 @@
                     "papermodal": {
                         "name": "PaperModal"
                     },
+                    "paperprogress": {
+                        "name": "PaperProgress"
+                    },
                     "paperprovider": {
                         "name": "PaperProvider"
                     },
