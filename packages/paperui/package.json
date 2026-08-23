@@ -1,5 +1,5 @@
 {
-    "name": "paperui",
+    "name": "@paperboard-dev/paperui",
     "version": "0.1.0",
     "type": "module",
     "main": "./dist/paperui.cjs.js",
@@ -64,5 +64,8 @@
         "type": "git",
         "url": "git+https://github.com/paperboard-dev/PaperUI.git"
     },
-    "license": "MIT"
+    "license": "MIT",
+    "publishConfig": {
+        "access": "public"
+    }
 }

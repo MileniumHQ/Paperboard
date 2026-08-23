@@ -14,8 +14,8 @@
     "jsx": "preserve",
     "jsxImportSource": "solid-js",
     "paths": {
-      "paperui/style.css": ["./src/styles/styles.css"],
-      "paperui": ["./src/index.ts"]
+      "@paperboard-dev/paperui/style.css": ["./src/styles/styles.css"],
+      "@paperboard-dev/paperui": ["./src/index.ts"]
     }
   },
   "include": ["src"]
