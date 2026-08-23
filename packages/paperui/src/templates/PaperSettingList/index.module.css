@@ -1,0 +1,61 @@
+.PaperSettingList {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    overflow: hidden;
+}
+
+.PaperSettingItem:nth-child(odd) {
+    background: var(--paper-background-frontest);
+}
+
+.PaperSettingItem:nth-child(even) {
+    background: var(--paper-background-front);
+}
+
+.PaperSettingItem {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--paper-uigap-sixfourths);
+    gap: var(--paper-uigap);
+    border-bottom: var(--paper-border-width) solid var(--paper-medium-border);
+    transition: background var(--paper-short-transition);
+}
+
+.PaperSettingItem:last-child {
+    border-bottom: 0;
+}
+
+.PaperSettingItem:hover {
+    background: color-mix(in srgb, var(--paper-front-blue) 5%, transparent);
+}
+
+.itemLeft {
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap-onefourth);
+    flex: 1;
+    min-width: 0;
+}
+
+.itemTitle {
+    color: var(--paper-main-text);
+}
+
+.itemDescription {
+    color: var(--paper-light-text);
+}
+
+.itemRight {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--paper-uigap-half);
+    flex-shrink: 0;
+}
+
+.disabled {
+    pointer-events: none;
+    opacity: 0.5;
+}
