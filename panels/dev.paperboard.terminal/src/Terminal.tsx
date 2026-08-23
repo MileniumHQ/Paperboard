@@ -1,12 +1,13 @@
 import { onMount, onCleanup } from "solid-js";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
-import { getVar } from "paperui";
+import { getVar, getVarCss } from "paperui";
 import { terminalApi, clipboardApi } from "paperapi";
 import "@xterm/xterm/css/xterm.css";
 
 export const activeTerminals = new Map<string, Terminal>();
 
+// Copies active selection from terminal or window to clipboard
 export async function copySelection(id: string) {
     const term = activeTerminals.get(id);
     const selection = term?.getSelection() || window.getSelection()?.toString();
@@ -19,6 +20,7 @@ export async function copySelection(id: string) {
     }
 }
 
+// Pastes system clipboard content into terminal input
 export async function pasteClipboard(id: string) {
     try {
         let text = "";
@@ -27,9 +29,7 @@ export async function pasteClipboard(id: string) {
         } catch {
             text = (await navigator.clipboard?.readText?.()) || "";
         }
-        if (text) {
-            terminalApi.write(id, text);
-        }
+        if (text) terminalApi.write(id, text);
     } catch (err) {
         console.error("[Terminal] Paste failed:", err);
     }
@@ -47,17 +47,15 @@ export function TerminalComponent(props: TerminalComponentProps) {
     let resizeObserver: ResizeObserver | null = null;
 
     onMount(() => {
-        document.fonts?.ready?.then(() => {
-            safeFit();
-        }).catch(() => {});
+        document.fonts?.ready?.then(() => safeFit()).catch(() => {});
 
-        const bg = getVar("--paper-background-backest", "#0d0e12");
-        const fg = getVar("--paper-main-text", "#ffffff");
-        const blue = getVar("--paper-front-blue", "#2981e5");
-        const red = getVar("--paper-front-red", "#e73648");
-        const green = getVar("--paper-front-green", "#0d9d0d");
-        const yellow = getVar("--paper-front-yellow", "#d7a51d");
-        const lightText = getVar("--paper-light-text", "#a0a0a0");
+        const bg = getVar("background-backest", "#0d0e12");
+        const fg = getVar("main-text", "#ffffff");
+        const blue = getVar("front-blue", "#2981e5");
+        const red = getVar("front-red", "#e73648");
+        const green = getVar("front-green", "#0d9d0d");
+        const yellow = getVar("front-yellow", "#d7a51d");
+        const lightText = getVar("light-text", "#a0a0a0");
 
         term = new Terminal({
             fontFamily: '"SUSE Mono", monospace',
@@ -68,7 +66,7 @@ export function TerminalComponent(props: TerminalComponentProps) {
                 foreground: fg,
                 cursor: blue,
                 selectionBackground: "rgba(41, 129, 229, 0.3)",
-                black: getVar("--paper-background-back", "#1d1d1d"),
+                black: getVar("background-back", "#1d1d1d"),
                 red,
                 green,
                 yellow,
@@ -88,6 +86,7 @@ export function TerminalComponent(props: TerminalComponentProps) {
         term.open(containerRef);
         activeTerminals.set(props.id, term);
 
+        // Keyboard copy / paste shortcuts (Ctrl+Shift+C / Ctrl+Shift+V)
         term.attachCustomKeyEventHandler((arg) => {
             if (arg.ctrlKey && arg.shiftKey && arg.type === "keydown") {
                 if (arg.code === "KeyC") {
@@ -102,13 +101,8 @@ export function TerminalComponent(props: TerminalComponentProps) {
             return true;
         });
 
-        terminalApi.onData(props.id, (data) => {
-            term?.write(data);
-        });
-
-        term.onData((data) => {
-            terminalApi.write(props.id, data);
-        });
+        terminalApi.onData(props.id, (data) => term?.write(data));
+        term.onData((data) => terminalApi.write(props.id, data));
 
         terminalApi.create(props.id, {
             cols: term.cols,
@@ -124,21 +118,15 @@ export function TerminalComponent(props: TerminalComponentProps) {
             ) {
                 try {
                     fitAddon.fit();
-                    if (term) {
-                        terminalApi.resize(props.id, term.cols, term.rows);
-                    }
-                } catch (e) {}
+                    if (term) terminalApi.resize(props.id, term.cols, term.rows);
+                } catch {}
             }
         };
 
-        requestAnimationFrame(() => {
-            safeFit();
-        });
+        requestAnimationFrame(() => safeFit());
         setTimeout(safeFit, 100);
 
-        resizeObserver = new ResizeObserver(() => {
-            safeFit();
-        });
+        resizeObserver = new ResizeObserver(() => safeFit());
         resizeObserver.observe(containerRef);
 
         onCleanup(() => {
@@ -160,9 +148,9 @@ export function TerminalComponent(props: TerminalComponentProps) {
                 width: "100%",
                 height: "100%",
                 flex: "1",
-                background: "var(--paper-background-backest)",
-                color: "var(--paper-main-text)",
-                padding: "var(--paper-uigap-half)",
+                background: getVarCss("background-backest"),
+                color: getVarCss("main-text"),
+                padding: getVarCss("uigap-half"),
                 "box-sizing": "border-box",
                 overflow: "hidden",
             }}
