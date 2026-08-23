@@ -3,6 +3,7 @@
 // Runtime types generated with workerd@1.20260815.1 2026-08-18 
 interface __BaseEnv_Env {
 	PACKAGES: KVNamespace;
+	PANELS_BUCKET: R2Bucket;
 	BOARDS_BUCKET: R2Bucket;
 	AUTH_KEY: string;
 }
