@@ -1,0 +1,13 @@
+.PaperSpacer {
+    flex: 1 1 auto;
+}
+
+.PaperSpacer.horizontal {
+    flex: 0 0 auto;
+    width: var(--spacer-size, auto);
+}
+
+.PaperSpacer.vertical {
+    flex: 0 0 auto;
+    height: var(--spacer-size, auto);
+}

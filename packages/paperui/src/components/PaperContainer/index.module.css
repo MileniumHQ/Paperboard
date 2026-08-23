@@ -1,0 +1,7 @@
+.PaperContainer {
+    width: 100%;
+    border-radius: var(--paper-border-radius);
+    border: var(--paper-border-width) solid var(--paper-medium-border);
+    background: var(--paper-background-frontest);
+    overflow: hidden;
+}
