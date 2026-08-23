@@ -1,23 +1,25 @@
 {
-  "name": "gameserver",
-  "private": true,
-  "version": "0.0.0",
-  "type": "module",
-  "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
-    "pack": "bun run node_modules/paperapi/bin/cli.ts pack",
-    "publish": "bun run node_modules/paperapi/bin/cli.ts publish",
-    "preview": "vite preview"
-  },
-  "dependencies": {
-    "paperapi": "file:/home/pxlkt/Documents/Paperboard/PaperAPI",
-    "paperui": "file:/home/pxlkt/Documents/Paperboard/PaperUI",
-    "solid-js": "^1.9.13"
-  },
-  "devDependencies": {
-    "typescript": "~6.0.2",
-    "vite": "^8.1.0",
-    "vite-plugin-solid": "^2.11.14"
-  }
+    "name": "dev.paperboard.gameserver",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "dev": "vite",
+        "build": "tsc && vite build",
+        "pack": "bun run node_modules/paperapi/bin/cli.ts pack",
+        "preview": "vite preview"
+    },
+    "dependencies": {
+        "dot-properties": "^1.1.1",
+        "paperapi": "file:/home/pxlkt/Documents/Paperboard/PaperAPI",
+        "paperui": "file:/home/pxlkt/Documents/Paperboard/PaperUI",
+        "semver": "^7.8.5",
+        "solid-js": "^1.9.13",
+        "strip-ansi": "^7.2.0"
+    },
+    "devDependencies": {
+        "@types/semver": "^7.8.0",
+        "typescript": "~6.0.2",
+        "vite": "^8.1.0",
+        "vite-plugin-solid": "^2.11.14"
+    }
 }
