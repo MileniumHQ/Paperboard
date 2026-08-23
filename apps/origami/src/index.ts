@@ -1,15 +1,17 @@
 import { updateJavaPackages } from "./updateJava";
 import {
-    getBoardsIndex,
-    getBoard,
-    saveBoard,
-    deleteBoard,
-    type BoardRecord,
-} from "./boards";
+    getPanelsIndex,
+    getPanel,
+    savePanel,
+    deletePanel,
+    type PanelRecord,
+} from "./panels";
 
 export interface Env {
     PACKAGES: KVNamespace;
+    PANELS_BUCKET?: R2Bucket;
     BOARDS_BUCKET?: R2Bucket;
+    PAPERDL_BUCKET?: R2Bucket;
     AUTH_KEY?: string;
 }
 
@@ -79,22 +81,33 @@ export default {
             });
         }
 
+        const bucket = env.PANELS_BUCKET || env.BOARDS_BUCKET;
         const url = new URL(request.url);
         const pathname = url.pathname;
 
         try {
             if (pathname === "/" || pathname === "/health") {
                 return jsonResponse({
-                    service: "Origami Package & Board Registry",
+                    service: "Origami Package & Panel Registry",
                     status: "healthy",
                     endpoints: [
                         "/package/:name.json",
                         "/package/index.json",
+                        "/panels/index.json",
+                        "/panel/:id.json",
+                        "/panel/:id/download",
+                        "/panel/publish",
                         "/boards/index.json",
                         "/board/:id.json",
                         "/board/:id/download",
                         "/board/publish",
                         "/update/java",
+                        "/paperdl/:app/index.json",
+                        "/paperdl/:app/confirm",
+                        "/paperdl/:app/:target/download",
+                        "/paperdl/paperboard/latest.yml",
+                        "/paperdl/paperboard/latest-mac.yml",
+                        "/paperdl/paperboard/latest-linux.yml",
                     ],
                 });
             }
@@ -140,6 +153,9 @@ export default {
             }
 
             if (
+                pathname === "/panels/index.json" ||
+                pathname === "/panels" ||
+                pathname === "/panels/" ||
                 pathname === "/boards/index.json" ||
                 pathname === "/boards" ||
                 pathname === "/boards/"
@@ -151,11 +167,13 @@ export default {
                     );
                 }
 
-                const index = await getBoardsIndex(env.PACKAGES);
+                const index = await getPanelsIndex(env.PACKAGES);
                 return jsonResponse(index);
             }
 
             if (
+                pathname === "/panel/publish" ||
+                pathname === "/panels/publish" ||
                 pathname === "/board/publish" ||
                 pathname === "/boards/publish"
             ) {
@@ -192,7 +210,7 @@ export default {
                         );
                     }
 
-                    let metadata: Partial<BoardRecord>;
+                    let metadata: Partial<PanelRecord>;
                     try {
                         metadata = JSON.parse(metadataRaw);
                     } catch {
@@ -223,10 +241,10 @@ export default {
                         .map((b) => b.toString(16).padStart(2, "0"))
                         .join("");
 
-                    const archiveKey = `boards/${metadata.id}/${metadata.id}-${metadata.version}.tar.gz`;
+                    const archiveKey = `panels/${metadata.id}/${metadata.id}-${metadata.version}.tar.gz`;
 
-                    if (env.BOARDS_BUCKET) {
-                        await env.BOARDS_BUCKET.put(archiveKey, archiveBuffer, {
+                    if (bucket) {
+                        await bucket.put(archiveKey, archiveBuffer, {
                             httpMetadata: {
                                 contentType: "application/gzip",
                             },
@@ -240,15 +258,15 @@ export default {
 
                     const iconFile = formData.get("icon") as File | null;
                     let iconUrl: string | undefined = undefined;
-                    if (iconFile && env.BOARDS_BUCKET) {
+                    if (iconFile && bucket) {
                         const iconExt = iconFile.name.endsWith(".svg")
                             ? "svg"
                             : iconFile.name.endsWith(".webp")
                               ? "webp"
                               : "png";
-                        const iconKey = `boards/${metadata.id}/icon.${iconExt}`;
+                        const iconKey = `panels/${metadata.id}/icon.${iconExt}`;
                         const iconBuffer = await iconFile.arrayBuffer();
-                        await env.BOARDS_BUCKET.put(iconKey, iconBuffer, {
+                        await bucket.put(iconKey, iconBuffer, {
                             httpMetadata: {
                                 contentType:
                                     iconFile.type ||
@@ -259,10 +277,10 @@ export default {
                                     "public, max-age=31536000, immutable",
                             },
                         });
-                        iconUrl = `${url.origin}/board/${metadata.id}/icon`;
+                        iconUrl = `${url.origin}/panel/${metadata.id}/icon`;
                     }
 
-                    const record: BoardRecord = {
+                    const record: PanelRecord = {
                         id: metadata.id,
                         name: metadata.name,
                         version: metadata.version,
@@ -272,16 +290,20 @@ export default {
                         archiveKey,
                         sha256,
                         sizeBytes,
-                        downloadUrl: `${url.origin}/board/${metadata.id}/download`,
+                        downloadUrl: `${url.origin}/panel/${metadata.id}/download`,
                         updatedAt: new Date().toISOString(),
                         manifest: metadata.manifest || (metadata as any),
                     };
 
-                    await saveBoard(env.PACKAGES, record);
-                    return jsonResponse({ success: true, board: record });
+                    await savePanel(env.PACKAGES, record);
+                    return jsonResponse({
+                        success: true,
+                        panel: record,
+                        board: record,
+                    });
                 }
 
-                const body = (await request.json()) as Partial<BoardRecord>;
+                const body = (await request.json()) as Partial<PanelRecord>;
                 if (!body.id || !body.name || !body.version) {
                     return jsonResponse(
                         {
@@ -291,7 +313,7 @@ export default {
                     );
                 }
 
-                const record: BoardRecord = {
+                const record: PanelRecord = {
                     id: body.id,
                     name: body.name,
                     version: body.version,
@@ -299,32 +321,34 @@ export default {
                     icon: body.icon,
                     downloadUrl:
                         body.downloadUrl ||
-                        `${url.origin}/board/${body.id}/download`,
+                        `${url.origin}/panel/${body.id}/download`,
                     sha256: body.sha256,
                     sizeBytes: body.sizeBytes,
                     updatedAt: new Date().toISOString(),
                     manifest: body.manifest || (body as any),
                 };
 
-                await saveBoard(env.PACKAGES, record);
-                return jsonResponse({ success: true, board: record });
+                await savePanel(env.PACKAGES, record);
+                return jsonResponse({
+                    success: true,
+                    panel: record,
+                    board: record,
+                });
             }
 
             const downloadMatch = pathname.match(
-                /^\/board\/([a-zA-Z0-9_\-\.]+)\/download$/,
+                /^\/(?:panel|board)\/([a-zA-Z0-9_\-\.]+)\/download$/,
             );
             if (downloadMatch && downloadMatch[1]) {
-                const boardId = downloadMatch[1];
-                const record = await getBoard(env.PACKAGES, boardId);
+                const panelId = downloadMatch[1];
+                const record = await getPanel(env.PACKAGES, panelId);
 
                 if (!record) {
-                    return jsonResponse({ error: "Board not found" }, 404);
+                    return jsonResponse({ error: "Panel not found" }, 404);
                 }
 
-                if (env.BOARDS_BUCKET && record.archiveKey) {
-                    const object = await env.BOARDS_BUCKET.get(
-                        record.archiveKey,
-                    );
+                if (bucket && record.archiveKey) {
+                    const object = await bucket.get(record.archiveKey);
                     if (object) {
                         const headers = new Headers();
                         object.writeHttpMetadata(headers);
@@ -349,21 +373,28 @@ export default {
                 );
             }
 
-            // Board icon route: GET /board/:id/icon
             const iconMatch = pathname.match(
-                /^\/board\/([a-zA-Z0-9_\-\.]+)\/icon(?:\.(png|svg|webp))?$/,
+                /^\/(?:panel|board)\/([a-zA-Z0-9_\-\.]+)\/icon(?:\.(png|svg|webp))?$/,
             );
             if (iconMatch && iconMatch[1] && request.method === "GET") {
-                const boardId = iconMatch[1];
-                if (env.BOARDS_BUCKET) {
+                const panelId = iconMatch[1];
+                if (bucket) {
                     for (const ext of ["png", "svg", "webp"]) {
-                        const object = await env.BOARDS_BUCKET.get(
-                            `boards/${boardId}/icon.${ext}`,
+                        let object = await bucket.get(
+                            `panels/${panelId}/icon.${ext}`,
                         );
+                        if (!object) {
+                            object = await bucket.get(
+                                `boards/${panelId}/icon.${ext}`,
+                            );
+                        }
                         if (object) {
                             const headers = new Headers();
                             object.writeHttpMetadata(headers);
-                            headers.set("Cache-Control", "public, max-age=86400");
+                            headers.set(
+                                "Cache-Control",
+                                "public, max-age=86400",
+                            );
                             headers.set("Access-Control-Allow-Origin", "*");
                             return new Response(object.body, { headers });
                         }
@@ -372,37 +403,37 @@ export default {
                 return jsonResponse({ error: "Icon not found" }, 404);
             }
 
-            const boardMatch = pathname.match(
-                /^\/board\/([a-zA-Z0-9_\-\.]+)(?:\.json)?$/,
+            const panelMatch = pathname.match(
+                /^\/(?:panel|board)\/([a-zA-Z0-9_\-\.]+)(?:\.json)?$/,
             );
-            if (boardMatch && boardMatch[1] && request.method === "GET") {
-                const boardId = boardMatch[1];
-                const record = await getBoard(env.PACKAGES, boardId);
+            if (panelMatch && panelMatch[1] && request.method === "GET") {
+                const panelId = panelMatch[1];
+                const record = await getPanel(env.PACKAGES, panelId);
 
                 if (!record) {
-                    return jsonResponse({ error: "Board not found" }, 404);
+                    return jsonResponse({ error: "Panel not found" }, 404);
                 }
 
                 return jsonResponse(record);
             }
 
-            if (boardMatch && boardMatch[1] && request.method === "DELETE") {
+            if (panelMatch && panelMatch[1] && request.method === "DELETE") {
                 if (!verifyAuth(request, env)) {
                     return jsonResponse({ error: "Unauthorized" }, 401);
                 }
 
-                const boardId = boardMatch[1];
-                const deleted = await deleteBoard(
+                const panelId = panelMatch[1];
+                const deleted = await deletePanel(
                     env.PACKAGES,
-                    env.BOARDS_BUCKET,
-                    boardId,
+                    bucket,
+                    panelId,
                 );
 
                 if (!deleted) {
-                    return jsonResponse({ error: "Board not found" }, 404);
+                    return jsonResponse({ error: "Panel not found" }, 404);
                 }
 
-                return jsonResponse({ success: true, deletedId: boardId });
+                return jsonResponse({ success: true, deletedId: panelId });
             }
 
             if (request.method !== "GET" && request.method !== "HEAD") {
@@ -434,6 +465,8 @@ export default {
                         .map((k) => k.name)
                         .filter(
                             (name) =>
+                                !name.startsWith("panel:") &&
+                                !name.startsWith("panels:") &&
                                 !name.startsWith("board:") &&
                                 !name.startsWith("boards:"),
                         );
@@ -505,6 +538,204 @@ export default {
 
                 return jsonResponse(pkgData);
             }
+
+            // ── paperdl: binary distribution for crane and paperboard ──────────────
+            const paperdlMatch = pathname.match(
+                /^\/paperdl\/(crane|paperboard)(\/.*)?$/,
+            );
+            if (paperdlMatch) {
+                const app = paperdlMatch[1] as "crane" | "paperboard";
+                const sub = paperdlMatch[2] || "";
+                const dl = env.PAPERDL_BUCKET;
+
+                // GET index
+                if (
+                    request.method === "GET" &&
+                    (sub === "/index.json" || sub === "" || sub === "/")
+                ) {
+                    if (!dl) {
+                        return jsonResponse(
+                            { error: "PAPERDL_BUCKET not configured" },
+                            500,
+                        );
+                    }
+                    const obj = await dl.get(`${app}/index.json`);
+                    if (!obj) return jsonResponse({});
+                    const text = await obj.text();
+                    return new Response(text, {
+                        headers: {
+                            "Content-Type": "application/json",
+                            "Cache-Control": "no-cache",
+                            "Access-Control-Allow-Origin": "*",
+                        },
+                    });
+                }
+
+                // GET electron-updater YAML feeds  (paperboard only)
+                if (
+                    request.method === "GET" &&
+                    app === "paperboard" &&
+                    (sub === "/latest.yml" ||
+                        sub === "/latest-mac.yml" ||
+                        sub === "/latest-linux.yml")
+                ) {
+                    if (!dl) {
+                        return jsonResponse(
+                            { error: "PAPERDL_BUCKET not configured" },
+                            500,
+                        );
+                    }
+                    const obj = await dl.get(`paperboard${sub}`);
+                    if (!obj) return jsonResponse({ error: "Not found" }, 404);
+                    return new Response(obj.body, {
+                        headers: {
+                            "Content-Type": "text/yaml; charset=utf-8",
+                            "Cache-Control": "no-cache",
+                            "Access-Control-Allow-Origin": "*",
+                        },
+                    });
+                }
+
+                // GET binary download
+                const dlMatch = sub.match(/^\/([a-zA-Z0-9_\-]+)\/download$/);
+                if (request.method === "GET" && dlMatch && dlMatch[1]) {
+                    if (!dl) {
+                        return jsonResponse(
+                            { error: "PAPERDL_BUCKET not configured" },
+                            500,
+                        );
+                    }
+                    const target = dlMatch[1];
+                    const obj = await dl.get(`${app}/${target}`);
+                    if (!obj) return jsonResponse({ error: "Not found" }, 404);
+                    const headers = new Headers();
+                    obj.writeHttpMetadata(headers);
+                    headers.set("etag", obj.httpEtag);
+                    headers.set("Cache-Control", "no-cache");
+                    headers.set("Access-Control-Allow-Origin", "*");
+                    const meta = obj.customMetadata || {};
+                    if (meta.filename) {
+                        headers.set(
+                            "Content-Disposition",
+                            `attachment; filename="${meta.filename}"`,
+                        );
+                    }
+                    return new Response(obj.body, { headers });
+                }
+
+                // POST confirm  (auth required, JSON only — binary was uploaded directly to R2)
+                // @ts-ignore it put an error there that was stupid
+                if (sub === "/confirm" && request.method === "POST") {
+                    if (!verifyAuth(request, env)) {
+                        return jsonResponse({ error: "Unauthorized" }, 401);
+                    }
+                    if (!dl) {
+                        return jsonResponse(
+                            { error: "PAPERDL_BUCKET not configured" },
+                            500,
+                        );
+                    }
+                    if (!env.PACKAGES) {
+                        return jsonResponse(
+                            { error: "PACKAGES KV not configured" },
+                            500,
+                        );
+                    }
+
+                    const body = (await request.json()) as {
+                        target?: string;
+                        version?: string;
+                        filename?: string;
+                        sha256?: string;
+                        sha512?: string;
+                        sizeBytes?: number;
+                        downloadUrl?: string;
+                    };
+                    const {
+                        target,
+                        version,
+                        filename,
+                        sha256,
+                        sha512,
+                        sizeBytes,
+                        downloadUrl,
+                    } = body;
+
+                    if (!target || !version || !sha256 || !sha512) {
+                        return jsonResponse(
+                            {
+                                error: "body must include target, version, sha256, sha512",
+                            },
+                            400,
+                        );
+                    }
+
+                    // Update KV index
+                    const existing = ((await env.PACKAGES.get(
+                        `paperdl:${app}:index`,
+                        { type: "json" },
+                    )) || {}) as Record<string, unknown>;
+                    existing[target] = {
+                        target,
+                        version,
+                        filename: filename || target,
+                        sha256,
+                        sha512,
+                        sizeBytes: sizeBytes ?? 0,
+                        downloadUrl:
+                            downloadUrl ??
+                            `${url.origin}/paperdl/${app}/${target}/download`,
+                        publishedAt: new Date().toISOString(),
+                    };
+                    await env.PACKAGES.put(
+                        `paperdl:${app}:index`,
+                        JSON.stringify(existing),
+                    );
+
+                    // For paperboard: write electron-updater YAML feeds
+                    if (app === "paperboard") {
+                        const dlUrl =
+                            downloadUrl ??
+                            `${url.origin}/paperdl/paperboard/${target}/download`;
+                        const yamlContent = [
+                            `version: ${version}`,
+                            `files:`,
+                            `  - url: ${dlUrl}`,
+                            `    sha512: ${sha512}`,
+                            `    size: ${sizeBytes ?? 0}`,
+                            `path: ${dlUrl}`,
+                            `sha512: ${sha512}`,
+                            `releaseDate: '${new Date().toISOString()}'`,
+                        ].join("\n");
+
+                        let ymlKey: string | null = null;
+                        if (target.startsWith("windows"))
+                            ymlKey = "paperboard/latest.yml";
+                        else if (target.startsWith("macos"))
+                            ymlKey = "paperboard/latest-mac.yml";
+                        else if (target.startsWith("linux"))
+                            ymlKey = "paperboard/latest-linux.yml";
+
+                        if (ymlKey) {
+                            await dl.put(ymlKey, yamlContent, {
+                                httpMetadata: { contentType: "text/yaml" },
+                            });
+                        }
+                    }
+
+                    return jsonResponse({
+                        success: true,
+                        app,
+                        target,
+                        version,
+                        sha256,
+                        downloadUrl:
+                            downloadUrl ??
+                            `${url.origin}/paperdl/${app}/${target}/download`,
+                    });
+                }
+            }
+            // ─────────────────────────────────────────────────────────────────────
 
             return jsonResponse({ error: "Not Found" }, 404);
         } catch (err) {

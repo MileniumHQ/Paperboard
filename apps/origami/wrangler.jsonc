@@ -7,22 +7,30 @@
     "routes": [
         {
             "pattern": "origami.ariapis.com",
-            "custom_domain": true,
-        },
+            "custom_domain": true
+        }
     ],
     "kv_namespaces": [
         {
             "binding": "PACKAGES",
-            "id": "89764cd39f114ba18e25945504982bf0",
-        },
+            "id": "89764cd39f114ba18e25945504982bf0"
+        }
     ],
     "r2_buckets": [
         {
+            "binding": "PANELS_BUCKET",
+            "bucket_name": "paperboard-boards"
+        },
+        {
             "binding": "BOARDS_BUCKET",
             "bucket_name": "paperboard-boards"
+        },
+        {
+            "binding": "PAPERDL_BUCKET",
+            "bucket_name": "paperboard-paperdl"
         }
     ],
     "observability": {
-        "enabled": true,
-    },
+        "enabled": true
+    }
 }
