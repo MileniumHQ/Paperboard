@@ -34,7 +34,7 @@ export default function f() {
                 triggers.
             </PaperText>
             <PaperText preset="body">
-                Common applications include application stores, board library
+                Common applications include application stores, panel library
                 catalogs, plugin explorers, world save selectors, and rich
                 profile summary cards.
             </PaperText>

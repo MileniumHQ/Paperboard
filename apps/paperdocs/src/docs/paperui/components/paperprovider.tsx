@@ -87,6 +87,26 @@ function ThemeSwitcher() {
 
             <PaperSeparator />
 
+            <PaperText id="selection-control" preset="subheader">
+                Text Selection Control
+            </PaperText>
+            <PaperText preset="body">
+                By default, PaperUI leaves standard browser text selection enabled so that web applications, documentation portals, and content pages remain fully selectable. For desktop applications (such as Paperboard) and panel windows where a native, non-highlightable chrome is desired, pass the <PaperCode>unselectable</PaperCode> (or <PaperCode>noSelect</PaperCode>) prop:
+            </PaperText>
+
+            <PaperCode block language="tsx">
+                {`// Enables native desktop app unselectable chrome
+<PaperProvider theme="system" styleBody unselectable fullScreen>
+    <DesktopApp />
+</PaperProvider>`}
+            </PaperCode>
+
+            <PaperText preset="body">
+                Even when <PaperCode>unselectable</PaperCode> is active on the provider, user-editable inputs, textareas, code blocks, and elements marked with <PaperCode class="selectable">.selectable</PaperCode> automatically retain text selection.
+            </PaperText>
+
+            <PaperSeparator />
+
             <PaperText id="specification" preset="subheader">
                 Technical Specification
             </PaperText>
@@ -111,6 +131,12 @@ function ThemeSwitcher() {
                         <td><PaperCode>boolean</PaperCode></td>
                         <td><PaperCode>false</PaperCode></td>
                         <td>Applies <PaperCode>data-paperui-theme</PaperCode> directly to the HTML <PaperCode>&lt;body&gt;</PaperCode> element.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>unselectable</PaperCode> / <PaperCode>noSelect</PaperCode></td>
+                        <td><PaperCode>boolean</PaperCode></td>
+                        <td><PaperCode>false</PaperCode></td>
+                        <td>Disables text selection across root chrome while preserving selection in inputs, textareas, and code blocks.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>fullScreen</PaperCode></td>

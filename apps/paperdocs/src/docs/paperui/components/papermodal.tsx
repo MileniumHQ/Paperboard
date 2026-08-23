@@ -64,8 +64,8 @@ function DialogDemo() {
                 title="Confirm Workspace Export"
                 footer={
                     <PaperFlex direction="row" justify="flex-end" gap="half">
-                        <PaperButton onClick={() => setIsOpen(false)}>Cancel</PaperButton>
-                        <PaperButton variant="green" onClick={() => setIsOpen(false)}>
+                        <PaperButton compact onClick={() => setIsOpen(false)}>Cancel</PaperButton>
+                        <PaperButton compact variant="green" onClick={() => setIsOpen(false)}>
                             Confirm Export
                         </PaperButton>
                     </PaperFlex>
@@ -101,8 +101,8 @@ function DialogDemo() {
                 size={modalSize()}
                 footer={
                     <PaperFlex direction="row" justify="flex-end" gap="half" style={{ width: "100%" }}>
-                        <PaperButton onClick={() => setIsModalOpen(false)}>Dismiss</PaperButton>
-                        <PaperButton variant="brand" onClick={() => setIsModalOpen(false)}>
+                        <PaperButton compact onClick={() => setIsModalOpen(false)}>Dismiss</PaperButton>
+                        <PaperButton compact variant="brand" onClick={() => setIsModalOpen(false)}>
                             Save Changes
                         </PaperButton>
                     </PaperFlex>
@@ -156,6 +156,24 @@ function DialogDemo() {
                         <td><PaperCode>"small" | "medium" | "large" | "full"</PaperCode></td>
                         <td><PaperCode>"medium"</PaperCode></td>
                         <td>Predefined width/height constraint preset for the dialog window.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>fullscreen</PaperCode></td>
+                        <td><PaperCode>boolean</PaperCode></td>
+                        <td><PaperCode>false</PaperCode></td>
+                        <td>Expands the modal to occupy 100vw and 100vh without rounded borders.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>noHeader</PaperCode></td>
+                        <td><PaperCode>boolean</PaperCode></td>
+                        <td><PaperCode>false</PaperCode></td>
+                        <td>Hides the header bar. When onClose is supplied, a floating close button is absolutely positioned in the top-right corner.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>noPadding</PaperCode></td>
+                        <td><PaperCode>boolean</PaperCode></td>
+                        <td><PaperCode>false</PaperCode></td>
+                        <td>Removes default inner body padding so full-bleed components (such as PaperWizard) fit flush with the modal edges.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>closeOnBackdropClick</PaperCode></td>

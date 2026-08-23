@@ -274,6 +274,66 @@ function AppNavigation() {
                 </tbody>
             </PaperTable>
 
+            <PaperText id="props-action" preset="title">
+                PaperRailAction Props
+            </PaperText>
+            <PaperTable>
+                <thead>
+                    <tr>
+                        <th>Prop</th>
+                        <th>Type</th>
+                        <th>Default</th>
+                        <th>Description</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>
+                            <PaperCode>icon</PaperCode>
+                        </td>
+                        <td>
+                            <PaperCode>string | JSX.Element</PaperCode>
+                        </td>
+                        <td>
+                            <em>Required</em>
+                        </td>
+                        <td>
+                            Glyph name or icon element rendered within the action
+                            button.
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>
+                            <PaperCode>label</PaperCode>
+                        </td>
+                        <td>
+                            <PaperCode>string</PaperCode>
+                        </td>
+                        <td>
+                            <PaperCode>undefined</PaperCode>
+                        </td>
+                        <td>
+                            Tooltip and accessibility title attribute for the
+                            action button.
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>
+                            <PaperCode>onClick</PaperCode>
+                        </td>
+                        <td>
+                            <PaperCode>() =&gt; void</PaperCode>
+                        </td>
+                        <td>
+                            <PaperCode>undefined</PaperCode>
+                        </td>
+                        <td>
+                            Click event handler triggered on every click without altering rail selection state.
+                        </td>
+                    </tr>
+                </tbody>
+            </PaperTable>
+
             <PaperSeparator />
 
             <PaperText id="see-also" preset="subheader">
