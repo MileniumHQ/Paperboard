@@ -1,0 +1,50 @@
+@font-face {
+    font-family: "Nunito";
+    font-style: normal;
+    font-weight: 200 1000;
+    font-display: swap;
+    src: url(../font/Nunito.woff2) format("woff2");
+}
+@font-face {
+    font-family: "Nunito";
+    font-style: italic;
+    font-weight: 200 1000;
+    font-display: swap;
+    src: url(../font/NunitoItalic.woff2) format("woff2");
+}
+@font-face {
+    font-family: "Nunito Sans";
+    font-style: normal;
+    font-weight: 200 1000;
+    font-stretch: 75% 125%;
+    font-display: swap;
+    src: url(../font/NunitoSans.woff2) format("woff2");
+}
+@font-face {
+    font-family: "Nunito Sans";
+    font-style: italic;
+    font-weight: 200 1000;
+    font-stretch: 75% 125%;
+    font-display: swap;
+    src: url(../font/NunitoSansItalic.woff2) format("woff2");
+}
+@font-face {
+    font-family: "SUSE Mono";
+    font-style: normal;
+    font-weight: 100 800;
+    font-display: swap;
+    src: url(../font/SuseMono.woff2) format("woff2");
+}
+@font-face {
+    font-family: "SUSE Mono";
+    font-style: italic;
+    font-weight: 100 800;
+    font-display: swap;
+    src: url(../font/SUSEMonoItalic.woff2) format("woff2");
+}
+@font-face {
+    font-family: "Material Symbols Rounded";
+    font-style: normal;
+    font-weight: 100 700;
+    src: url(../font/MaterialSymbolsRounded.woff2) format("woff2");
+}

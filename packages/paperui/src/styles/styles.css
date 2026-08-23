@@ -1,0 +1,214 @@
+@import "./colors.css";
+@import "./effects.css";
+@import "./fonts.css";
+@import "./rules.css";
+
+:root {
+    --paper-font-family:
+        "Nunito Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+        Helvetica, Arial, sans-serif;
+    --paper-font-family-rounded:
+        "Nunito", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+        Helvetica, Arial, sans-serif;
+    --paper-font-family-code: "SUSE Mono", monospace;
+    --paper-focus-ring: 2px solid var(--paper-front-blue);
+    --paper-focus-offset: 2px;
+}
+
+html,
+body {
+    margin: 0;
+    padding: 0;
+    font-family: var(--paper-font-family);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+.paperui-root,
+[data-paperui-theme] {
+    font-family: var(--paper-font-family);
+    box-sizing: border-box;
+    color: var(--paper-main-text);
+    background-color: var(--paper-background-backest);
+}
+
+.unselectable,
+.paperui-root.unselectable,
+[data-unselectable="true"],
+.no-select {
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+input,
+textarea,
+select,
+[contenteditable="true"],
+[contenteditable=""] {
+    -webkit-user-select: text;
+    user-select: text;
+}
+
+code,
+pre,
+kbd,
+samp,
+.selectable,
+.selectable-text,
+[data-selectable="true"] {
+    -webkit-user-select: text;
+    user-select: text;
+}
+
+.paperui-root.fullScreen {
+    width: 100vw;
+    height: 100vh;
+}
+
+.paperui-root.fullWidth {
+    width: 100vw;
+}
+
+.paperui-root.fullHeight {
+    height: 100vh;
+}
+
+.paperui-root.scrollable {
+    overflow-y: auto;
+}
+
+.paperui-root.fullScreen.scrollable {
+    min-height: 100vh;
+    height: auto;
+    overflow-y: auto;
+}
+
+.paperui-root.fullHeight.scrollable {
+    min-height: 100vh;
+    height: auto;
+    overflow-y: auto;
+}
+
+:root {
+    /* Radii & Borders */
+    --paper-border-radius: 12px;
+    --paper-border-radius-half: 6px;
+
+    --paper-border-width: 1px;
+    --paper-thick-border-width: 2px;
+    --paper-thickest-border-width: 3px;
+
+    /* Spacing & UI Gap Scale */
+    --paper-uigap: 12px;
+    --paper-uigap-onefourth: calc(var(--paper-uigap) * 0.25);
+    --paper-uigap-half: calc(var(--paper-uigap) * 0.5);
+    --paper-uigap-threefourths: calc(var(--paper-uigap) * 0.75);
+    --paper-uigap-sixfourths: calc(var(--paper-uigap) * 1.5);
+    --paper-uigap-double: calc(var(--paper-uigap) * 2);
+    --paper-uigap-triple: calc(var(--paper-uigap) * 3);
+    --paper-uigap-quadruple: calc(var(--paper-uigap) * 4);
+
+    /* Shadows & Blurs */
+    --paper-element-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    --paper-heavy-element-shadow: 0 2px 6px 1px rgba(0, 0, 0, 0.2);
+    --paper-blur-light: blur(5px);
+    --paper-blur-medium: blur(10px);
+    --paper-blur-heavy: blur(15px);
+
+    /* Typography Scale */
+    --paper-text-size-0: 0px;
+    --paper-text-size-1: 12px;
+    --paper-text-size-2: 14px;
+    --paper-text-size-3: 16px;
+    --paper-text-size-4: 18px;
+    --paper-text-size-5: 20px;
+    --paper-text-size-6: 22px;
+    --paper-text-size-7: 24px;
+    --paper-text-size-8: 26px;
+    --paper-text-size-9: 30px;
+    --paper-text-size-10: 34px;
+    --paper-text-size-11: 38px;
+    --paper-text-size-12: 42px;
+    --paper-text-size-13: 50px;
+    --paper-text-size-14: 58px;
+    --paper-text-size-15: 66px;
+    --paper-text-size-16: 74px;
+    --paper-text-size-17: 82px;
+
+    /* Icon Sizes */
+    --paper-icon-size-small: 18px;
+    --paper-icon-size-medium: 22px;
+    --paper-icon-size-large: 26px;
+    --paper-icon-size-xlarge: 28px;
+    --paper-icon-size-huge: 30px;
+
+    /* Component Dimensions */
+    --paper-sidebar-width: 190px;
+    --paper-centered-width: 600px;
+    --paper-centered-height: 400px;
+    --paper-centered-width-small: 420px;
+    --paper-centered-height-small: 300px;
+    --paper-centered-width-medium: 600px;
+    --paper-centered-height-medium: 400px;
+    --paper-centered-width-large: 760px;
+    --paper-centered-height-large: 520px;
+    --paper-centered-width-wide: 920px;
+    --paper-centered-height-wide: 580px;
+    --paper-loader-width: 400px;
+
+    /* Item Sizes */
+    --paper-item-size-tiny: 28px;
+    --paper-item-size-small: 36px;
+    --paper-item-size-medium: 48px;
+    --paper-item-size-large: 64px;
+}
+
+* {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(
+            in srgb,
+            var(--paper-anti-background) 20%,
+            transparent
+        )
+        transparent;
+}
+
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: color-mix(
+        in srgb,
+        var(--paper-anti-background) 18%,
+        transparent
+    );
+    border-radius: var(--paper-border-radius);
+    border: 2px solid transparent;
+    background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: color-mix(
+        in srgb,
+        var(--paper-anti-background) 32%,
+        transparent
+    );
+    border: 2px solid transparent;
+    background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:active {
+    background: var(--paper-front-blue);
+    border: 2px solid transparent;
+    background-clip: padding-box;
+}
+
+::-webkit-scrollbar-corner {
+    background: transparent;
+}

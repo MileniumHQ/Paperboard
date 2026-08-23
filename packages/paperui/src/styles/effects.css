@@ -1,0 +1,22 @@
+:root {
+    /* Transition Durations */
+    --paper-tiny-transition: 0.15s;
+    --paper-short-transition: 0.2s;
+    --paper-medium-transition: 0.4s;
+    --paper-long-transition: 0.6s;
+}
+
+/* Keyframe Animations */
+@keyframes PaperTemplateLeave {
+    to {
+        transform: translateX(-25%);
+        opacity: 0;
+    }
+}
+
+@keyframes PaperTemplateEnter {
+    from {
+        transform: translateX(25%);
+        opacity: 0;
+    }
+}
