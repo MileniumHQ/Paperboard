@@ -33,7 +33,6 @@
         var(--paper-uigap-threefourths) +
             (var(--menu-indent-level, 0) * var(--paper-uigap))
     );
-    will-change: background;
     border: 0;
     gap: var(--paper-uigap-half);
     display: flex;
@@ -48,7 +47,6 @@
     transition:
         background var(--paper-short-transition),
         color var(--paper-short-transition);
-    will-change: color, background;
 }
 
 .menuIcon {

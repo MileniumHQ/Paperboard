@@ -11,7 +11,6 @@
     justify-content: center;
     z-index: 1000;
     padding: var(--paper-uigap-double);
-    will-change: opacity;
     transform: translateZ(0);
 }
 
@@ -26,7 +25,6 @@
     max-height: 85vh;
     overflow: hidden;
     position: relative;
-    will-change: transform, opacity;
     transform: translateZ(0);
 }
 
@@ -108,7 +106,7 @@
 }
 
 .backdropTransitionIn .modalBox {
-    animation: modalScaleIn var(--paper-short-transition) cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation: modalScaleIn var(--paper-short-transition) var(--paper-ease-emphasized) both;
 }
 
 .backdropTransitionOut {

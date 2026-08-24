@@ -14,7 +14,6 @@
     box-sizing: border-box;
     width: 100%;
     color: var(--paper-main-text);
-    will-change: transform, box-shadow;
     transform: translateZ(0);
     transition:
         transform var(--paper-tiny-transition) ease,

@@ -22,7 +22,6 @@
     left: 0;
     background: var(--paper-front-blue);
     transition: var(--paper-short-transition) height;
-    will-change: height;
 }
 
 .inputIcon {
@@ -78,7 +77,6 @@
     transition:
         var(--paper-medium-transition) border,
         var(--paper-medium-transition) color;
-    will-change: border, color;
     width: 100%;
 }
 

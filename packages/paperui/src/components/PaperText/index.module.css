@@ -36,7 +36,7 @@
     display: inline-flex;
     align-items: center;
     opacity: 0.6;
-    transition: opacity 0.15s ease;
+    transition: opacity var(--paper-tiny-transition) ease;
 }
 .anchorLink:hover {
     opacity: 1;

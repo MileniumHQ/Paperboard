@@ -20,7 +20,7 @@
     background: var(--paper-background-element);
     display: flex;
     align-items: center;
-    transition: background 0.3s ease;
+    transition: background var(--paper-mid-transition) ease;
 }
 
 .checked .track {
@@ -43,11 +43,10 @@
     justify-content: center;
     box-sizing: border-box;
     transition:
-        left 0.38s cubic-bezier(0.7, 0, 0.2, 1),
-        transform 0.2s ease,
-        box-shadow 0.2s ease,
-        border-color 0.3s ease;
-    will-change: left, transform, box-shadow;
+        left 0.38s var(--paper-ease-slide),
+        transform var(--paper-short-transition) ease,
+        box-shadow var(--paper-short-transition) ease,
+        border-color var(--paper-mid-transition) ease;
 }
 
 .checked .knob {
