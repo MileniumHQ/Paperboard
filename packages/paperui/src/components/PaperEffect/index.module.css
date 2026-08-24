@@ -9,11 +9,8 @@
     cursor: pointer;
     border-radius: var(--paper-border-radius);
     position: relative;
-    transform-style: preserve-3d;
-    backface-visibility: hidden;
-    transform: translateZ(0);
+    isolation: isolate;
     transition: box-shadow var(--paper-short-transition), transform var(--paper-short-transition);
-    will-change: transform;
 }
 .PaperEffect::before {
     content: "";
@@ -25,14 +22,8 @@
     top: 0;
     background: var(--transition-color);
     transition: transform var(--paper-short-transition), background var(--paper-short-transition);
-    will-change: transform, background;
-    transform-style: preserve-3d;
-    backface-visibility: hidden;
-    transform: translate3d(
-        var(--transform-size),
-        var(--transform-size),
-        calc(var(--paper-border-width) * -1)
-    );
+    transform: translate3d(var(--transform-size), var(--transform-size), 0);
+    z-index: -1;
 }
 
 .PaperEffect:hover:not(:active) {
@@ -46,7 +37,7 @@
     transform: translate3d(
         calc(var(--transform-size) - var(--hover-offset)),
         calc(var(--transform-size) - var(--hover-offset)),
-        calc(var(--paper-border-width) * -1)
+        0
     );
 }
 
@@ -58,11 +49,7 @@
     );
 }
 .PaperEffect:active::before {
-    transform: translate3d(
-        0,
-        0,
-        calc(var(--paper-border-width) * -1)
-    );
+    transform: translate3d(0, 0, 0);
 }
 
 .PaperEffect > button:active,
@@ -136,4 +123,46 @@
 .PaperEffect:has([class*="text"]):hover:not(:active) {
     box-shadow: var(--transform-size) var(--transform-size) 0 var(--transition-color);
     transform: translate3d(calc(var(--transform-size) * -1), calc(var(--transform-size) * -1), 0);
+}
+
+/* ─── Reduced motion / performance mode ────────────────────────────────────
+   Displacement IS motion. Anchored effects give feedback through the shadow
+   layer alone: hover keeps the resting offset, pressing fades the offset
+   shadow away instead of sliding the element onto it. */
+
+:global([data-paperui-motion="reduced"]) .PaperEffect:hover:not(:active),
+:global([data-paperui-motion="reduced"]) .PaperEffect:active {
+    transform: translate3d(0, 0, 0);
+}
+:global([data-paperui-motion="reduced"]) .PaperEffect:hover:not(:active)::before {
+    transform: translate3d(var(--transform-size), var(--transform-size), 0);
+}
+:global([data-paperui-motion="reduced"]) .PaperEffect:active::before {
+    transform: translate3d(var(--transform-size), var(--transform-size), 0);
+    opacity: 0;
+}
+
+:global([data-paperui-motion="reduced"]) .text:hover:not(:active),
+:global([data-paperui-motion="reduced"]) .PaperEffect:has([class*="text"]):hover:not(:active) {
+    transform: translate3d(0, 0, 0);
+    box-shadow: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .PaperEffect:hover:not(:active),
+    .PaperEffect:active {
+        transform: translate3d(0, 0, 0);
+    }
+    .PaperEffect:hover:not(:active)::before {
+        transform: translate3d(var(--transform-size), var(--transform-size), 0);
+    }
+    .PaperEffect:active::before {
+        transform: translate3d(var(--transform-size), var(--transform-size), 0);
+        opacity: 0;
+    }
+    .text:hover:not(:active),
+    .PaperEffect:has([class*="text"]):hover:not(:active) {
+        transform: translate3d(0, 0, 0);
+        box-shadow: none;
+    }
 }
