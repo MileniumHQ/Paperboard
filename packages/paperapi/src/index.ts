@@ -6,7 +6,6 @@ export * from "./config";
 export * from "./package";
 export * from "./file";
 export * from "./process";
-export * from "./computers";
 export * from "./panels";
 export * from "./system";
 
@@ -34,7 +33,7 @@ export const terminalApi = {
 
     onData: (id: string, callback: (data: string) => void) => {
         on(`terminal-data:${id}`, (event: unknown, data: any) => {
-            const str = unpackIpcPayload<string>(event, data);
+            const str = unpackIpcPayload<string>(event, data) as string;
             if (str) callback(str);
         });
     },
@@ -47,11 +46,4 @@ export const terminalApi = {
     },
 };
 
-// Clipboard helper API
-export const clipboardApi = {
-    readText: () => invoke<string>("clipboard-read"),
-    writeText: (text: string) => invoke<boolean>("clipboard-write", text),
-};
-
 export const terminal = terminalApi;
-export const clipboard = clipboardApi;
