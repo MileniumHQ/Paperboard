@@ -76,6 +76,9 @@ export const fileApi = {
     read: (targetPath: string, appId?: string): Promise<string | null> =>
         invoke("file-read", { targetPath, appId: appId || getHost() }),
 
+    delete: (targetPath: string, appId?: string): Promise<boolean> =>
+        invoke("file-delete", { targetPath, appId: appId || getHost() }),
+
     clear: (appId?: string): Promise<boolean> =>
         invoke("file-clear", { appId: appId || getHost() }),
 };

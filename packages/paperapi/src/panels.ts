@@ -1,4 +1,8 @@
-import { invoke } from "./ipc";
+import { invokeIn } from "./ipc";
+
+const REGISTRY_URL =
+    (typeof process !== "undefined" && (process as any).env?.ORIGAMI_REGISTRY_URL) ||
+    "https://origami.ariapis.com";
 
 export interface PanelItem {
     id: string;
@@ -14,13 +18,98 @@ export interface PanelItem {
     isInstalled?: boolean;
 }
 
-// Panel store and lifecycle management API
+// Panel store and lifecycle management API.
+//
+// Every method takes an explicit computer scope: `list("remote-1")` lists the
+// panels of that computer, whatever else is happening in the app. Omitting
+// the scope resolves to the ambient one (panel bootstrap param / local).
 export const panelsApi = {
-    list: (): Promise<PanelItem[]> => invoke<PanelItem[]>("panels-list"),
-    registry: (): Promise<PanelItem[]> => invoke<PanelItem[]>("panels-registry"),
-    install: (panelId: string): Promise<boolean> => invoke<boolean>("panel-install", panelId),
-    uninstall: (panelId: string): Promise<boolean> => invoke<boolean>("panel-uninstall", panelId),
-    remove: (panelId: string): Promise<boolean> => invoke<boolean>("panel-uninstall", panelId),
+    list: (scope?: string): Promise<PanelItem[]> =>
+        invokeIn<PanelItem[]>(scope, "panels-list"),
+
+    /** Fetches the registry index and merges it with installed panels. */
+    registry: async (scope?: string): Promise<PanelItem[]> => {
+        let installed: PanelItem[] = [];
+        try {
+            installed = await panelsApi.list(scope);
+        } catch {
+            installed = [];
+        }
+        const installedMap = new Map(installed.map((p) => [p.id, p]));
+
+        try {
+            let res = await fetch(`${REGISTRY_URL}/panels/index.json`);
+            if (!res.ok) {
+                res = await fetch(`${REGISTRY_URL}/boards/index.json`);
+            }
+            if (!res.ok) {
+                throw new Error(`Registry returned HTTP ${res.status}`);
+            }
+            const registryData = (await res.json()) as Record<string, any>;
+
+            const panels: PanelItem[] = [];
+            for (const [id, record] of Object.entries(registryData)) {
+                const localPanel = installedMap.get(id);
+                panels.push({
+                    id,
+                    name: record.name || localPanel?.name || id,
+                    description:
+                        record.description ||
+                        localPanel?.description ||
+                        record.manifest?.description,
+                    version:
+                        record.version ||
+                        localPanel?.version ||
+                        record.manifest?.version ||
+                        "1.0.0",
+                    publisher:
+                        record.publisher ||
+                        record.manifest?.publisher ||
+                        record.manifest?.author ||
+                        localPanel?.publisher ||
+                        "Paperboard",
+                    icon: record.icon || localPanel?.icon,
+                    iconUrl:
+                        record.iconUrl ||
+                        `${REGISTRY_URL}/panel/${id}/icon`,
+                    downloadUrl:
+                        record.downloadUrl ||
+                        `${REGISTRY_URL}/panel/${id}/download`,
+                    size: localPanel?.size || "Unknown",
+                    updatedAt: record.updatedAt
+                        ? new Date(record.updatedAt).toLocaleDateString(
+                              undefined,
+                              {
+                                  year: "numeric",
+                                  month: "short",
+                                  day: "numeric",
+                              },
+                          )
+                        : localPanel?.updatedAt || "Recently",
+                    isInstalled: installedMap.has(id),
+                });
+            }
+
+            // Include locally installed panels absent from the registry
+            for (const local of installed) {
+                if (!panels.some((p) => p.id === local.id)) {
+                    panels.push(local);
+                }
+            }
+
+            return panels;
+        } catch {
+            // Registry unreachable — degrade to the installed set
+            return installed;
+        }
+    },
+
+    install: (panelId: string, scope?: string): Promise<boolean> =>
+        invokeIn<boolean>(scope, "panel-install", panelId),
+    uninstall: (panelId: string, scope?: string): Promise<boolean> =>
+        invokeIn<boolean>(scope, "panel-uninstall", panelId),
+    remove: (panelId: string, scope?: string): Promise<boolean> =>
+        invokeIn<boolean>(scope, "panel-uninstall", panelId),
 };
 
 export const panels = panelsApi;

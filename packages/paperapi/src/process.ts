@@ -45,7 +45,7 @@ export const processApi = {
 
     onData: (id: string, callback: (data: string) => void): void => {
         on(`process-data:${id}`, (event: unknown, data: any) => {
-            const text = unpackIpcPayload<string>(event, data);
+            const text = unpackIpcPayload<string>(event, data) as string;
             if (text) callback(text);
         });
         invoke<boolean>("process-exists", { id })
@@ -57,14 +57,14 @@ export const processApi = {
 
     onStdout: (id: string, callback: (data: string) => void): void => {
         on(`process-stdout:${id}`, (event: unknown, data: any) => {
-            const text = unpackIpcPayload<string>(event, data);
+            const text = unpackIpcPayload<string>(event, data) as string;
             if (text) callback(text);
         });
     },
 
     onStderr: (id: string, callback: (data: string) => void): void => {
         on(`process-stderr:${id}`, (event: unknown, data: any) => {
-            const text = unpackIpcPayload<string>(event, data);
+            const text = unpackIpcPayload<string>(event, data) as string;
             if (text) callback(text);
         });
     },
@@ -81,19 +81,19 @@ export const processApi = {
 
         if (options.onData) {
             on(`process-data:${id}`, (event: unknown, data: any) => {
-                const text = unpackIpcPayload<string>(event, data);
+                const text = unpackIpcPayload<string>(event, data) as string;
                 options.onData!(text);
             });
         }
         if (options.onStdout) {
             on(`process-stdout:${id}`, (event: unknown, data: any) => {
-                const text = unpackIpcPayload<string>(event, data);
+                const text = unpackIpcPayload<string>(event, data) as string;
                 options.onStdout!(text);
             });
         }
         if (options.onStderr) {
             on(`process-stderr:${id}`, (event: unknown, data: any) => {
-                const text = unpackIpcPayload<string>(event, data);
+                const text = unpackIpcPayload<string>(event, data) as string;
                 options.onStderr!(text);
             });
         }
