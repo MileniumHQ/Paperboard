@@ -9,7 +9,7 @@ import {
     PaperConsole,
     PaperBadge,
     PaperEffect,
-} from "paperui";
+} from "@paperboard-dev/paperui";
 import {
     serverStatus,
     serverEntries,
@@ -25,10 +25,10 @@ import {
     restartServer,
     sendServerCommand,
     getStatusBadge,
-} from "./server";
-import { SOFTWARE_NAMES } from "./Setup";
+} from "../lib/server";
+import { SOFTWARE_NAMES } from "../lib/software";
 import ServerIssueModal from "./ServerIssueModal";
-import "./style.css";
+import "../style.css";
 
 export default function Overview() {
     const [copied, setCopied] = createSignal(false);

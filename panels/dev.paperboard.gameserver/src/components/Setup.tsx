@@ -22,26 +22,21 @@ import {
     useWizard,
     getVarCss,
     type LoaderStatus,
-} from "paperui";
+} from "@paperboard-dev/paperui";
 import {
     fileApi,
     config,
     packageApi,
     type PackageProgress,
-} from "paperapi";
+} from "@paperboard-dev/paperapi";
 import {
     getSoftwareDownload,
     getDetailedVersionsForSoftware,
     getRequiredJavaVersion,
+    SOFTWARE_NAMES,
     type ServerSoftwareType,
     type VersionItem,
-} from "./software";
-
-export const SOFTWARE_NAMES: Record<ServerSoftwareType, string> = {
-    vanilla: "Vanilla",
-    paper: "Paper",
-    fabric: "Fabric",
-};
+} from "../lib/software";
 
 interface VersionStepProps {
     software: ServerSoftwareType;
@@ -348,7 +343,9 @@ function InstallStep(props: InstallStepProps) {
         setShowEulaModal(false);
         try {
             await fileApi.clear();
-        } catch {}
+        } catch (err) {
+            console.error("[Setup] Failed to clear server files after EULA decline:", err);
+        }
 
         setJavaDownloadPercent(0);
         setJavaDownloadStatus("loading");

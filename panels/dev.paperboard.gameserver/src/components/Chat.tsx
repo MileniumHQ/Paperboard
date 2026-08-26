@@ -14,16 +14,16 @@ import {
     PaperButton,
     PaperIcon,
     getVarCss,
-} from "paperui";
+} from "@paperboard-dev/paperui";
 import {
     chatMessages,
     sendChatMessage,
     serverStatus,
     initServerListeners,
-} from "./server";
-import "./style.css";
+} from "../lib/server";
+import "../style.css";
 
-// Renders Minecraft player head avatar using high-speed CDN with Steve fallback
+// Player head avatar with Steve fallback
 export function PlayerAvatar(props: { name: string }) {
     return (
         <img
@@ -44,7 +44,7 @@ export function PlayerAvatar(props: { name: string }) {
     );
 }
 
-// Formats chat messages into styled elements with player avatars
+// Renders chat messages with player avatars
 function renderChatMessageContent(text: string): JSX.Element {
     const chatMatch = text.match(/^<([a-zA-Z0-9_]{1,16})>\s*(.*)$/);
     if (chatMatch) {

@@ -1,6 +1,6 @@
 import { type Component, For, Show } from "solid-js";
-import { PaperFlex, PaperModal, PaperButton, PaperText, PaperIcon } from "paperui";
-import { activeIssue, clearActiveIssue } from "./diagnostics";
+import { PaperFlex, PaperModal, PaperButton, PaperText, PaperIcon } from "@paperboard-dev/paperui";
+import { activeIssue, clearActiveIssue } from "../lib/diagnostics";
 
 const ServerIssueModal: Component = () => {
     return (
