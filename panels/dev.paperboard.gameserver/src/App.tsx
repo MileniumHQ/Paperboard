@@ -5,12 +5,18 @@ import {
     PaperMenuItem,
     PaperInterfaceGroup,
     PaperInterfaceItem,
-} from "paperui";
-import { config } from "paperapi";
-import Setup from "./Setup";
-import Overview from "./Overview";
-import Chat from "./Chat";
-import "paperui/style.css";
+} from "@paperboard-dev/paperui";
+import { config } from "@paperboard-dev/paperapi";
+import Setup from "./components/Setup";
+import Overview from "./components/Overview";
+import Chat from "./components/Chat";
+import Options from "./components/Options";
+import GameRules from "./components/GameRules";
+import Players from "./components/Players";
+import Plugins from "./components/Plugins";
+import Worlds from "./components/Worlds";
+import Advanced from "./components/Advanced";
+import "@paperboard-dev/paperui/style.css";
 import "./style.css";
 
 export default function App() {
@@ -63,22 +69,19 @@ export default function App() {
                             Players
                         </PaperMenuItem>
                         <PaperMenuItem value="plugins" icon="extension">
-                            Plugins/Mods
+                            Plugins
                         </PaperMenuItem>
-                        <PaperMenuItem value="version" icon="deployed_code">
-                            Version
+                        <PaperMenuItem value="worlds" icon="public">
+                            Worlds
                         </PaperMenuItem>
-                        <PaperMenuItem value="world" icon="public">
-                            World
-                        </PaperMenuItem>
-                        <PaperMenuItem value="backups" icon="backup">
-                            Backups
+                        <PaperMenuItem value="advanced" icon="settings">
+                            Advanced
                         </PaperMenuItem>
                     </PaperMenu>
 
                     <PaperInterfaceGroup
                         value={activeTab()}
-                        style={{ flex: 1, height: "100%" }}
+                        style={{ flex: 1, height: "100%", "min-height": 0, overflow: "auto" }}
                     >
                         <PaperInterfaceItem value="overview">
                             <Overview />
@@ -86,13 +89,24 @@ export default function App() {
                         <PaperInterfaceItem value="chat">
                             <Chat />
                         </PaperInterfaceItem>
-                        <PaperInterfaceItem value="options" />
-                        <PaperInterfaceItem value="gamerules" />
-                        <PaperInterfaceItem value="players" />
-                        <PaperInterfaceItem value="plugins" />
-                        <PaperInterfaceItem value="version" />
-                        <PaperInterfaceItem value="world" />
-                        <PaperInterfaceItem value="backups" />
+                        <PaperInterfaceItem value="options">
+                            <Options />
+                        </PaperInterfaceItem>
+                        <PaperInterfaceItem value="gamerules">
+                            <GameRules />
+                        </PaperInterfaceItem>
+                        <PaperInterfaceItem value="players">
+                            <Players />
+                        </PaperInterfaceItem>
+                        <PaperInterfaceItem value="plugins">
+                            <Plugins />
+                        </PaperInterfaceItem>
+                        <PaperInterfaceItem value="worlds">
+                            <Worlds />
+                        </PaperInterfaceItem>
+                        <PaperInterfaceItem value="advanced">
+                            <Advanced />
+                        </PaperInterfaceItem>
                     </PaperInterfaceGroup>
                 </PaperFlex>
             </Show>
