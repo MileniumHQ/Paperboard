@@ -155,8 +155,10 @@ function SelectMenuInner(
 
     const toggleOpen = () => {
         if (local.disabled) return;
-        setOpen(!open());
-        if (!open()) {
+        const willOpen = !open();
+        setOpen(willOpen);
+        // Signals update synchronously, so capture intent before flipping state
+        if (willOpen) {
             setHighlighted(currentValue() ?? options()[0]?.value ?? null);
         }
     };
