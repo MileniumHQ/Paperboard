@@ -1,8 +1,5 @@
 import { invokeIn } from "./ipc";
-
-const REGISTRY_URL =
-    (typeof process !== "undefined" && (process as any).env?.ORIGAMI_REGISTRY_URL) ||
-    "https://origami.ariapis.com";
+import { REGISTRY_URL } from "./config";
 
 export interface PanelItem {
     id: string;
@@ -18,11 +15,7 @@ export interface PanelItem {
     isInstalled?: boolean;
 }
 
-// Panel store and lifecycle management API.
-//
-// Every method takes an explicit computer scope: `list("remote-1")` lists the
-// panels of that computer, whatever else is happening in the app. Omitting
-// the scope resolves to the ambient one (panel bootstrap param / local).
+// Panel store and lifecycle API; scope omitted = ambient
 export const panelsApi = {
     list: (scope?: string): Promise<PanelItem[]> =>
         invokeIn<PanelItem[]>(scope, "panels-list"),

@@ -1,11 +1,14 @@
-import { invokeIn } from "./ipc";
+import { invokeIn, getPanelId } from "./ipc";
 
-// Resolves current panel host identifier
-const getHost = () => (typeof window !== "undefined" ? window.location?.hostname : "");
+// Panel registry base URL. Override with the ORIGAMI_REGISTRY_URL env var.
+export const REGISTRY_URL: string =
+    (typeof process !== "undefined" && process.env?.ORIGAMI_REGISTRY_URL) ||
+    "https://origami.ariapis.com";
 
-// Panel configuration persistence API. The optional `scope` names the target
-// computer; omitted means the ambient scope (panel bootstrap param / local).
-// Note: the special "app-settings" config id is always host-local by design.
+// Resolves current panel id (hostname minus the computer scope prefix)
+const getHost = () => getPanelId();
+
+// Panel configuration persistence API; scope omitted = ambient
 export const config = {
     get: <T = any>(id?: string, scope?: string): Promise<T> =>
         invokeIn<T>(scope, "config-get", id || getHost()),

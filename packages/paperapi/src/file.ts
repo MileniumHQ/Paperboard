@@ -1,7 +1,7 @@
-import { invoke, on } from "./ipc";
+import { invoke, on, getPanelId } from "./ipc";
 
-// Resolves current panel host identifier
-const getHost = () => (typeof window !== "undefined" ? window.location?.hostname : "");
+// Resolves current panel id (hostname minus the computer scope prefix)
+const getHost = () => getPanelId();
 
 export interface FileDownloadProgress {
     downloadId: string;
