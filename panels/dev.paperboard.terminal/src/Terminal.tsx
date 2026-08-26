@@ -1,38 +1,25 @@
 import { onMount, onCleanup } from "solid-js";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
-import { getVar, getVarCss } from "paperui";
-import { terminalApi, clipboardApi } from "paperapi";
+import { getVar, getVarCss } from "@paperboard-dev/paperui";
+import { terminalApi } from "@paperboard-dev/paperapi";
 import "@xterm/xterm/css/xterm.css";
 
 export const activeTerminals = new Map<string, Terminal>();
 
-// Copies active selection from terminal or window to clipboard
+// Copy terminal or window selection to the system clipboard
 export async function copySelection(id: string) {
     const term = activeTerminals.get(id);
     const selection = term?.getSelection() || window.getSelection()?.toString();
     if (selection) {
-        try {
-            await clipboardApi.writeText(selection);
-        } catch {
-            await navigator.clipboard?.writeText?.(selection);
-        }
+        await navigator.clipboard.writeText(selection);
     }
 }
 
 // Pastes system clipboard content into terminal input
 export async function pasteClipboard(id: string) {
-    try {
-        let text = "";
-        try {
-            text = await clipboardApi.readText();
-        } catch {
-            text = (await navigator.clipboard?.readText?.()) || "";
-        }
-        if (text) terminalApi.write(id, text);
-    } catch (err) {
-        console.error("[Terminal] Paste failed:", err);
-    }
+    const text = await navigator.clipboard.readText();
+    if (text) terminalApi.write(id, text);
 }
 
 export interface TerminalComponentProps {
