@@ -7,12 +7,12 @@ import {
     PaperSeparator,
     PaperText,
     PaperTextList,
-} from "paperui";
+} from "@paperboard-dev/paperui";
 
 export default function f() {
     return (
         <>
-            <PaperText preset="header">Quick Start</PaperText>
+            <PaperText preset="header">Quick start</PaperText>
             <PaperText preset="body">
                 Step-by-step procedures for installing, configuring, and bootstrapping a SolidJS application with the PaperUI component library.
             </PaperText>
@@ -22,7 +22,7 @@ export default function f() {
                 Prerequisites
             </PaperText>
             <PaperText preset="body">
-                Utilization of PaperUI requires an environment equipped with <PaperLink href="https://nodejs.org/" external>Node.js</PaperLink> (version 18 or newer) or <PaperLink href="https://bun.sh/" external>Bun</PaperLink>, alongside a functional <PaperLink href="https://docs.solidjs.com/" external>SolidJS</PaperLink> project initialized with <PaperLink href="https://vitejs.dev/" external>Vite</PaperLink> or equivalent module bundler.
+                PaperUI requires <PaperLink href="https://nodejs.org/" external>Node.js</PaperLink> (version 18 or newer) or <PaperLink href="https://bun.sh/" external>Bun</PaperLink>, alongside a <PaperLink href="https://docs.solidjs.com/" external>SolidJS</PaperLink> project initialized with <PaperLink href="https://vitejs.dev/" external>Vite</PaperLink> or an equivalent module bundler.
             </PaperText>
 
             <PaperSeparator />
@@ -31,11 +31,11 @@ export default function f() {
                 Installation
             </PaperText>
             <PaperText preset="body">
-                PaperUI is distributed via the standard NPM registry. The package and its peer dependency (<PaperCode>solid-js</PaperCode>) can be installed using any standard JavaScript package manager:
+                PaperUI is distributed via the standard npm registry. The package and its peer dependency (<PaperCode>solid-js</PaperCode>) can be installed using any standard JavaScript package manager:
             </PaperText>
 
             <PaperText id="npm" preset="title">
-                Using NPM
+                Using npm
             </PaperText>
             <PaperCode block language="bash">
                 npm install paperui solid-js
@@ -45,37 +45,37 @@ export default function f() {
                 Using Bun
             </PaperText>
             <PaperCode block language="bash">
-                bun add paperui solid-js
+                bun add @paperboard-dev/paperui solid-js
             </PaperCode>
 
             <PaperText id="pnpm" preset="title">
-                Using PNPM
+                Using pnpm
             </PaperText>
             <PaperCode block language="bash">
-                pnpm add paperui solid-js
+                pnpm add @paperboard-dev/paperui solid-js
             </PaperCode>
 
             <PaperSeparator />
 
             <PaperText id="stylesheet-integration" preset="subheader">
-                Stylesheet Integration
+                Stylesheet integration
             </PaperText>
             <PaperText preset="body">
                 PaperUI relies on global CSS custom properties for color theming, elevation, typography, and standard element resets. The stylesheet must be imported once in the application's root entrypoint (such as <PaperCode>index.tsx</PaperCode> or <PaperCode>main.tsx</PaperCode>):
             </PaperText>
 
             <PaperCode block language="tsx">
-                {`import "paperui/style.css";`}
+                {`import "@paperboard-dev/paperui/style.css";`}
             </PaperCode>
 
-            <PaperQuote variant="blue" icon="font_download" title="Integrated Fonts">
-                Importing <PaperCode>paperui/style.css</PaperCode> automatically declares and loads the requisite font assets: <strong>Nunito</strong> (display/rounded), <strong>Nunito Sans</strong> (body), <strong>SUSE Mono</strong> (code), and Google's <strong>Material Symbols Rounded</strong> icon font.
+            <PaperQuote variant="blue" icon="font_download" title="Integrated fonts">
+                Importing <PaperCode>@paperboard-dev/paperui/style.css</PaperCode> automatically declares and loads the requisite font assets: Nunito (display/rounded), Nunito Sans (body), SUSE Mono (code), and Google's Material Symbols Rounded icon font.
             </PaperQuote>
 
             <PaperSeparator />
 
             <PaperText id="root-provider-setup" preset="subheader">
-                Root Provider Setup
+                Root provider setup
             </PaperText>
             <PaperText preset="body">
                 The top-level component tree must be encapsulated within <PaperLink href="/paperui/paperprovider"><PaperCode>PaperProvider</PaperCode></PaperLink>. This component initializes the theme context, observes system color scheme preferences, applies the <PaperCode>data-paperui-theme</PaperCode> attribute, and provides standard viewport styling.
@@ -83,8 +83,8 @@ export default function f() {
 
             <PaperCode block language="tsx">
                 {`import { render } from "solid-js/web";
-import { PaperProvider, PaperFlex, PaperButton, PaperText } from "paperui";
-import "paperui/style.css";
+import { PaperProvider, PaperFlex, PaperButton, PaperText } from "@paperboard-dev/paperui";
+import "@paperboard-dev/paperui/style.css";
 
 function App() {
     return (
@@ -112,7 +112,7 @@ render(
 
             <PaperContainer>
                 <PaperFlex padding="full" gap="half" center>
-                    <PaperText preset="title">Live Bootstrap Preview</PaperText>
+                    <PaperText preset="title">Live bootstrap preview</PaperText>
                     <PaperText preset="body">
                         The container below exemplifies an initialized PaperUI application node:
                     </PaperText>
@@ -128,11 +128,11 @@ render(
             <PaperSeparator />
 
             <PaperText id="see-also" preset="subheader">
-                See Also
+                See also
             </PaperText>
             <PaperTextList>
                 <PaperText preset="body">
-                    <PaperLink href="/paperui/paperprovider">PaperProvider</PaperLink> — Full reference for provider properties and theme options.
+                    <PaperLink href="/paperui/paperprovider">PaperProvider</PaperLink> — Full reference for provider props and theme options.
                 </PaperText>
                 <PaperText preset="body">
                     <PaperLink href="/paperui/paperflex">PaperFlex</PaperLink> — Structural flex container and resizable layout engine.
