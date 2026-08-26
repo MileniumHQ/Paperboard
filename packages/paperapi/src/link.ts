@@ -2,6 +2,7 @@ import path from "path";
 import fs from "fs";
 import os from "os";
 import { PANEL_ID_REGEX } from "./pack";
+import { debugErr } from "./debug";
 
 function getPanelsDir(): string {
     const home = typeof os.homedir === "function" ? os.homedir() : "";
@@ -100,7 +101,7 @@ export function listLinkedPanels(): {
                     isBroken: !fs.existsSync(fullPath),
                 });
             }
-        } catch {}
+        } catch (err) { debugErr(`listLinkedPanels ${entry}`, err); }
     }
 
     return linked;
