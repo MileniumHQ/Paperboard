@@ -158,3 +158,9 @@
     align-items: center;
     gap: var(--paper-uigap-onefourth);
 }
+
+.cardGroup {
+    display: grid;
+    width: 100%;
+    gap: var(--paper-uigap);
+}

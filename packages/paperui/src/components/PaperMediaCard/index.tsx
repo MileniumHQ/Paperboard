@@ -194,7 +194,7 @@ export function PaperMediaCard(props: ParentProps<PaperMediaCardProps>) {
                     <div class={styles.contentArea}>{local.children}</div>
                 </Show>
 
-                <Show when={local.footerLeft || local.footerRight}>
+                <Show when={Boolean(local.footerLeft) || Boolean(local.footerRight)}>
                     <div class={styles.footer}>
                         <div class={styles.footerLeft}>{local.footerLeft}</div>
                         <div class={styles.footerRight}>
@@ -219,5 +219,37 @@ export function PaperMediaCard(props: ParentProps<PaperMediaCardProps>) {
                 {cardContent()}
             </PaperEffect>
         </Show>
+    );
+}
+
+export interface PaperMediaCardGroupProps extends JSX.HTMLAttributes<HTMLDivElement> {
+    /** Minimum card width before cards wrap to the next row. */
+    minCardWidth?: string;
+}
+
+// Lays out PaperMediaCards in a responsive grid: cards take full width
+// collectively and wrap to the next row once they'd shrink below the
+// minimum width, so there is never awkward leftover space.
+export function PaperMediaCardGroup(props: ParentProps<PaperMediaCardGroupProps>) {
+    const [local, rest] = splitProps(props, [
+        "minCardWidth",
+        "style",
+        "class",
+        "classList",
+        "children",
+    ]);
+
+    return (
+        <div
+            {...rest}
+            class={[styles.cardGroup, local.class].filter(Boolean).join(" ")}
+            classList={local.classList}
+            style={{
+                "grid-template-columns": `repeat(auto-fill, minmax(${local.minCardWidth ?? "16rem"}, 1fr))`,
+                ...(typeof local.style === "object" ? local.style : {}),
+            }}
+        >
+            {local.children}
+        </div>
     );
 }
