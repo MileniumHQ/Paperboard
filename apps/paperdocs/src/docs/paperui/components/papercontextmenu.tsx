@@ -14,7 +14,7 @@ import {
     PaperText,
     PaperTextList,
     useContextMenuState,
-} from "paperui";
+} from "@paperboard-dev/paperui";
 
 export default function f() {
     const buttonMenu = useContextMenuState();
@@ -32,13 +32,13 @@ export default function f() {
                 Overview
             </PaperText>
             <PaperText preset="body">
-                <strong>PaperContextMenu</strong> renders floating action sheets and dropdown command menus detached from parent scroll and overflow constraints via SolidJS <PaperCode>&lt;Portal&gt;</PaperCode>. It automatically computes viewport-bounded coordinates from pointer events or HTML DOM elements, avoids screen-edge clipping, manages keyboard navigation (<PaperCode>ArrowUp</PaperCode>, <PaperCode>ArrowDown</PaperCode>, <PaperCode>Enter</PaperCode>, <PaperCode>Space</PaperCode>), and closes upon backdrop clicks or <PaperCode>Escape</PaperCode> keypresses.
+                PaperContextMenu renders floating action sheets and dropdown command menus detached from parent scroll and overflow constraints via SolidJS <PaperCode>&lt;Portal&gt;</PaperCode>. It automatically computes viewport-bounded coordinates from pointer events or HTML DOM elements, avoids screen-edge clipping, manages keyboard navigation (<PaperCode>ArrowUp</PaperCode>, <PaperCode>ArrowDown</PaperCode>, <PaperCode>Enter</PaperCode>, <PaperCode>Space</PaperCode>), and closes upon backdrop clicks, outside scroll events, or <PaperCode>Escape</PaperCode> keypresses.
             </PaperText>
 
             <PaperSeparator />
 
             <PaperText id="usage-button" preset="subheader">
-                Button Dropdown Menu
+                Button dropdown menu
             </PaperText>
             <PaperText preset="body">
                 Anchor menus beneath buttons or interactive controls using <PaperCode>openBelow(event)</PaperCode>:
@@ -53,7 +53,7 @@ export default function f() {
     PaperContextMenuSub,
     PaperIcon,
     useContextMenuState,
-} from "paperui";
+} from "@paperboard-dev/paperui";
 
 function DropdownDemo() {
     const menu = useContextMenuState();
@@ -185,7 +185,7 @@ function DropdownDemo() {
             <PaperSeparator />
 
             <PaperText id="state-hook" preset="subheader">
-                State Hook API (<PaperCode>useContextMenuState</PaperCode>)
+                State hook API (<PaperCode>useContextMenuState</PaperCode>)
             </PaperText>
             <PaperTable>
                 <thead>
@@ -232,11 +232,11 @@ function DropdownDemo() {
             <PaperSeparator />
 
             <PaperText id="specification" preset="subheader">
-                Technical Specification
+                Technical specification
             </PaperText>
 
             <PaperText id="props-context-menu" preset="title">
-                PaperContextMenu Props
+                PaperContextMenu props
             </PaperText>
             <PaperTable>
                 <thead>
@@ -255,6 +255,12 @@ function DropdownDemo() {
                         <td>Controls visibility of the floating context menu.</td>
                     </tr>
                     <tr>
+                        <td><PaperCode>x</PaperCode> / <PaperCode>y</PaperCode></td>
+                        <td><PaperCode>number</PaperCode></td>
+                        <td><PaperCode>undefined</PaperCode></td>
+                        <td>Direct viewport coordinates for positioning the menu, bypassing <PaperCode>target</PaperCode> resolution.</td>
+                    </tr>
+                    <tr>
                         <td><PaperCode>target</PaperCode></td>
                         <td><PaperCode>MouseEvent | HTMLElement | object</PaperCode></td>
                         <td><PaperCode>null</PaperCode></td>
@@ -264,13 +270,13 @@ function DropdownDemo() {
                         <td><PaperCode>placement</PaperCode></td>
                         <td><PaperCode>"mouse" | "below" | "below-left" | "below-right" | "above" | "above-left" | "above-right"</PaperCode></td>
                         <td><PaperCode>"mouse"</PaperCode></td>
-                        <td>Anchor orientation relative to the target.</td>
+                        <td>Anchor orientation relative to the target. Without an explicit placement, element targets resolve to <PaperCode>"below"</PaperCode> while mouse targets follow the cursor.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>onClose</PaperCode></td>
                         <td><PaperCode>() =&gt; void</PaperCode></td>
                         <td><PaperCode>undefined</PaperCode></td>
-                        <td>Callback executed upon backdrop dismiss or Escape.</td>
+                        <td>Callback executed upon backdrop dismiss, outside scroll, or Escape.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>closeOnEsc</PaperCode></td>
@@ -288,7 +294,7 @@ function DropdownDemo() {
             </PaperTable>
 
             <PaperText id="props-menu-item" preset="title">
-                PaperContextMenuItem Props
+                PaperContextMenuItem props
             </PaperText>
             <PaperTable>
                 <thead>
@@ -301,10 +307,22 @@ function DropdownDemo() {
                 </thead>
                 <tbody>
                     <tr>
+                        <td><PaperCode>value</PaperCode></td>
+                        <td><PaperCode>string | number</PaperCode></td>
+                        <td><PaperCode>undefined</PaperCode></td>
+                        <td>Identifier used for keyboard highlight tracking; falls back to the item's text content when omitted.</td>
+                    </tr>
+                    <tr>
                         <td><PaperCode>icon</PaperCode></td>
                         <td><PaperCode>string | JSX.Element</PaperCode></td>
                         <td><PaperCode>undefined</PaperCode></td>
                         <td>Leading icon element or Material Symbol glyph name.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>description</PaperCode></td>
+                        <td><PaperCode>string | JSX.Element</PaperCode></td>
+                        <td><PaperCode>undefined</PaperCode></td>
+                        <td>Secondary text rendered beneath the item label.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>keybind</PaperCode> / <PaperCode>shortcut</PaperCode></td>
@@ -330,7 +348,7 @@ function DropdownDemo() {
             <PaperSeparator />
 
             <PaperText id="see-also" preset="subheader">
-                See Also
+                See also
             </PaperText>
             <PaperTextList>
                 <PaperText preset="body">

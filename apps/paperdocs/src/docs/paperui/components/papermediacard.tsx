@@ -5,11 +5,12 @@ import {
     PaperFlex,
     PaperLink,
     PaperMediaCard,
+    PaperMediaCardGroup,
     PaperSeparator,
     PaperTable,
     PaperText,
     PaperTextList,
-} from "paperui";
+} from "@paperboard-dev/paperui";
 
 export default function f() {
     return (
@@ -42,7 +43,7 @@ export default function f() {
             <PaperSeparator />
 
             <PaperText id="basic-usage" preset="subheader">
-                Basic Usage
+                Basic usage
             </PaperText>
             <PaperText preset="body">
                 At its simplest, <PaperCode>PaperMediaCard</PaperCode> renders a
@@ -54,10 +55,10 @@ export default function f() {
     banner="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&auto=format&fit=crop&q=80"
     icon="view_compact"
     title="Application Title"
-    subtitle="Category & Classification"
+    subtitle="Category and Classification"
     description="A concise overview describing the primary features, capabilities, and operational parameters of the target resource."
     footerLeft={<PaperBadge variant="blue">v1.0.0</PaperBadge>}
-    footerRight={<PaperText size={1} color="light">By Developer</PaperText>}
+    footerRight={<PaperText size={1} color="light-text">By Developer</PaperText>}
     onClick={() => {}}
 />`}
             </PaperCode>
@@ -72,13 +73,13 @@ export default function f() {
                         banner="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&auto=format&fit=crop&q=80"
                         icon="view_compact"
                         title="Application Title"
-                        subtitle="Category & Classification"
+                        subtitle="Category and Classification"
                         description="A concise overview describing the primary features, capabilities, and operational parameters of the target resource."
                         footerLeft={
                             <PaperBadge variant="blue">v1.0.0</PaperBadge>
                         }
                         footerRight={
-                            <PaperText size={1} color="light">
+                            <PaperText size={1} color="light-text">
                                 By Developer
                             </PaperText>
                         }
@@ -90,7 +91,7 @@ export default function f() {
             <PaperSeparator />
 
             <PaperText id="specification" preset="subheader">
-                Technical Specification
+                Technical specification
             </PaperText>
             <PaperTable>
                 <thead>
@@ -140,9 +141,14 @@ export default function f() {
                             <PaperCode>string</PaperCode>
                         </td>
                         <td>
-                            <PaperCode>"6em"</PaperCode>
+                            <PaperCode>calc(var(--paper-uigap) * 8)</PaperCode>
                         </td>
-                        <td>Custom CSS height for the top banner container.</td>
+                        <td>
+                            Sets the banner container height inline; when
+                            omitted the CSS default of{" "}
+                            <PaperCode>calc(var(--paper-uigap) * 8)</PaperCode>{" "}
+                            applies.
+                        </td>
                     </tr>
                     <tr>
                         <td>
@@ -247,17 +253,50 @@ export default function f() {
                     </tr>
                     <tr>
                         <td>
+                            <PaperCode>children</PaperCode>
+                        </td>
+                        <td>
+                            <PaperCode>JSX.Element</PaperCode>
+                        </td>
+                        <td>
+                            <PaperCode>undefined</PaperCode>
+                        </td>
+                        <td>
+                            Content-area slot rendered between the description
+                            and the footer, for arbitrary card body content.
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>
                             <PaperCode>interactive</PaperCode>
                         </td>
                         <td>
                             <PaperCode>boolean</PaperCode>
                         </td>
                         <td>
-                            <PaperCode>true when onClick is set</PaperCode>
+                            <PaperCode>!disabled &amp;&amp; onClick present</PaperCode>
                         </td>
                         <td>
                             Enables hover elevation, cursor pointer styling, and
-                            keyboard accessibility.
+                            keyboard accessibility. Defaults to true only when
+                            the card is not disabled and an onClick handler is
+                            supplied.
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>
+                            <PaperCode>disabled</PaperCode>
+                        </td>
+                        <td>
+                            <PaperCode>boolean</PaperCode>
+                        </td>
+                        <td>
+                            <PaperCode>false</PaperCode>
+                        </td>
+                        <td>
+                            Dims the card, blocks pointer events and click
+                            handling, and suppresses interactive behavior even
+                            when onClick is provided.
                         </td>
                     </tr>
                     <tr>
@@ -292,8 +331,64 @@ export default function f() {
 
             <PaperSeparator />
 
+            <PaperText id="card-groups" preset="subheader">
+                Card groups
+            </PaperText>
+            <PaperText preset="body">
+                <PaperCode>PaperMediaCardGroup</PaperCode> lays out cards in a
+                responsive grid. Cards collectively take the full available
+                width and wrap to the next row only when they would shrink
+                below <PaperCode>minCardWidth</PaperCode>, so there is never
+                awkward leftover space regardless of viewport size.
+            </PaperText>
+
+            <PaperCode block language="tsx">
+                {`<PaperMediaCardGroup minCardWidth="18rem">
+    <PaperMediaCard
+        icon="extension"
+        title="First Panel"
+        description="Rendered inside the responsive grid."
+        onClick={() => {}}
+    />
+    <PaperMediaCard
+        icon="extension"
+        title="Second Panel"
+        description="Wraps automatically on narrow viewports."
+        onClick={() => {}}
+    />
+</PaperMediaCardGroup>`}
+            </PaperCode>
+
+            <PaperContainer>
+                <PaperMediaCardGroup minCardWidth="14rem">
+                    <PaperMediaCard
+                        icon="view_compact"
+                        title="Application Title"
+                        subtitle="Category and Classification"
+                        description="Cards share the full width of the group and wrap responsively."
+                        onClick={() => {}}
+                    />
+                    <PaperMediaCard
+                        icon="deployed_code"
+                        title="Another Title"
+                        subtitle="Category and Classification"
+                        description="No fixed widths, no wasted space."
+                        onClick={() => {}}
+                    />
+                    <PaperMediaCard
+                        icon="extension"
+                        title="Third Title"
+                        subtitle="Category and Classification"
+                        description="The grid reflows as the viewport changes."
+                        onClick={() => {}}
+                    />
+                </PaperMediaCardGroup>
+            </PaperContainer>
+
+            <PaperSeparator />
+
             <PaperText id="see-also" preset="subheader">
-                See Also
+                See also
             </PaperText>
             <PaperTextList>
                 <PaperText preset="body">

@@ -8,7 +8,7 @@ import {
     PaperTable,
     PaperText,
     PaperTextList,
-} from "paperui";
+} from "@paperboard-dev/paperui";
 
 export default function f() {
     return (
@@ -23,13 +23,13 @@ export default function f() {
                 Overview
             </PaperText>
             <PaperText preset="body">
-                <strong>PaperIcon</strong> provides vector iconography and image emblem rendering across PaperUI. It integrates the Material Symbols Rounded font family, enforces standard dimension bounding boxes (small, medium, large, huge), and includes alignment modifiers such as <PaperCode>zeroHeight</PaperCode> for embedding inside button labels without perturbing baseline typography.
+                PaperIcon provides vector iconography and image emblem rendering across PaperUI. It integrates the Material Symbols Rounded font family and includes alignment modifiers such as <PaperCode>zeroHeight</PaperCode> for embedding inside button labels without perturbing baseline typography.
             </PaperText>
 
             <PaperSeparator />
 
             <PaperText id="glyph-icons" preset="subheader">
-                Material Glyph Rendering
+                Material glyph rendering
             </PaperText>
             <PaperText preset="body">
                 Glyphs are rendered by supplying the icon identifier string as the component child:
@@ -58,7 +58,7 @@ export default function f() {
             <PaperSeparator />
 
             <PaperText id="image-and-monogram" preset="subheader">
-                Images and Monograms
+                Images and monograms
             </PaperText>
             <PaperText preset="body">
                 Specifying the <PaperCode>src</PaperCode> prop renders an internal <PaperCode>&lt;img&gt;</PaperCode> element. The <PaperCode>monogram</PaperCode> prop enables a rounded circular badge style:
@@ -81,16 +81,25 @@ export default function f() {
             <PaperSeparator />
 
             <PaperText id="zero-height" preset="subheader">
-                Inline Alignment (<PaperCode>zeroHeight</PaperCode>)
+                Inline alignment (<PaperCode>zeroHeight</PaperCode>)
             </PaperText>
             <PaperText preset="body">
-                When icons are placed inside buttons or body text, default font line-heights can introduce vertical offset errors. The <PaperCode>zeroHeight</PaperCode> modifier removes extraneous bounding box height to align perfectly with text baselines.
+                When icons are placed inside buttons or body text, default font line-heights can introduce vertical offset. The <PaperCode>zeroHeight</PaperCode> modifier collapses the element height to the surrounding text size so the glyph sits on the text baseline.
+            </PaperText>
+
+            <PaperSeparator />
+
+            <PaperText id="sizing" preset="subheader">
+                Sizing and rendering
+            </PaperText>
+            <PaperText preset="body">
+                PaperIcon renders as an inline-flex <PaperCode>&lt;span&gt;</PaperCode> sized to 1 em; there is no built-in size system. Icon dimensions follow the inherited <PaperCode>font-size</PaperCode> of the surrounding context, and glyphs are drawn with the Material Symbols variation settings <PaperCode>"FILL" 1</PaperCode>, <PaperCode>"wght" 500</PaperCode>, <PaperCode>"GRAD" 0</PaperCode>, and <PaperCode>"opsz" 14</PaperCode>. Image assets set via <PaperCode>src</PaperCode> are likewise constrained to a 1 em square with contained object fit.
             </PaperText>
 
             <PaperSeparator />
 
             <PaperText id="specification" preset="subheader">
-                Technical Specification
+                Technical specification
             </PaperText>
             <PaperTable>
                 <thead>
@@ -138,14 +147,14 @@ export default function f() {
             <PaperSeparator />
 
             <PaperText id="see-also" preset="subheader">
-                See Also
+                See also
             </PaperText>
             <PaperTextList>
                 <PaperText preset="body">
                     <PaperLink href="/paperui/paperbutton">PaperButton</PaperLink> — Button primitive utilizing PaperIcon.
                 </PaperText>
                 <PaperText preset="body">
-                    <PaperLink href="/paperui/paperbadge">PaperBadge</PaperLink> — Status badge component supporting icon properties.
+                    <PaperLink href="/paperui/paperbadge">PaperBadge</PaperLink> — Status badge component supporting icon props.
                 </PaperText>
                 <PaperText preset="body">
                     <PaperLink href="/paperui/paperrail">PaperRail</PaperLink> — Navigation rail based on PaperIcon items.

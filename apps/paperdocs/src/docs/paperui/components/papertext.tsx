@@ -7,7 +7,7 @@ import {
     PaperTable,
     PaperText,
     PaperTextList,
-} from "paperui";
+} from "@paperboard-dev/paperui";
 
 export default function f() {
     return (
@@ -22,13 +22,17 @@ export default function f() {
                 Overview
             </PaperText>
             <PaperText preset="body">
-                <strong>PaperText</strong> is the primary typographical component in PaperUI. It maps sizing values to the <PaperCode>--paper-text-size-*</PaperCode> scale, supports polymorphic HTML rendering (via the <PaperCode>as</PaperCode> prop), renders rounded headings via <PaperCode>rounded</PaperCode>, and automatically generates an interactive anchor link copy button when an <PaperCode>id</PaperCode> is declared.
+                PaperText is the primary typographical component in PaperUI. It maps sizing values to the <PaperCode>--paper-text-size-*</PaperCode> scale, supports polymorphic HTML rendering (via the <PaperCode>as</PaperCode> prop), renders rounded headings via <PaperCode>rounded</PaperCode>, and automatically generates an interactive anchor link copy button when an <PaperCode>id</PaperCode> is declared.
+            </PaperText>
+
+            <PaperText preset="body">
+                The exported <PaperCode>textSizes</PaperCode> constant covers sizes 0 through 17, all of which have matching entries in the CSS size scale. The <PaperCode>"section"</PaperCode> preset applies uppercase text transformation with additional letter spacing.
             </PaperText>
 
             <PaperSeparator />
 
             <PaperText id="presets" preset="subheader">
-                Typographic Presets
+                Typographic presets
             </PaperText>
             <PaperText preset="body">
                 The component bundles standardized size and font-weight pairings into convenient preset strings:
@@ -59,10 +63,10 @@ export default function f() {
             <PaperSeparator />
 
             <PaperText id="rounded-and-anchor" preset="subheader">
-                Rounded Font & Anchor Generation
+                Rounded font and anchor generation
             </PaperText>
             <PaperText preset="body">
-                Specifying <PaperCode>rounded</PaperCode> applies the <strong>Nunito</strong> rounded typeface. Supplying an <PaperCode>id</PaperCode> automatically appends a subtle anchor link button:
+                Specifying <PaperCode>rounded</PaperCode> applies the <strong>Nunito</strong> rounded typeface. Supplying an <PaperCode>id</PaperCode> automatically appends a subtle anchor link button; activating it copies the section URL and pushes a history entry, so the address bar updates to the anchored URL:
             </PaperText>
 
             <PaperCode block language="tsx">
@@ -82,7 +86,7 @@ export default function f() {
             <PaperSeparator />
 
             <PaperText id="specification" preset="subheader">
-                Technical Specification
+                Technical specification
             </PaperText>
             <PaperTable>
                 <thead>
@@ -98,13 +102,13 @@ export default function f() {
                         <td><PaperCode>preset</PaperCode></td>
                         <td><PaperCode>"headline" | "header" | "subheader" | "title" | "subtitle" | "section" | "body" | "caption"</PaperCode></td>
                         <td><PaperCode>undefined</PaperCode></td>
-                        <td>Preconfigured font size and weight pairing preset.</td>
+                        <td>Preconfigured font size and weight pairing preset. The <PaperCode>"section"</PaperCode> preset additionally applies uppercase styling with letter spacing.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>size</PaperCode></td>
                         <td><PaperCode>number (0–17)</PaperCode></td>
                         <td><PaperCode>4 (18px)</PaperCode></td>
-                        <td>Direct index into the <PaperCode>--paper-text-size-*</PaperCode> scale.</td>
+                        <td>Direct index into the <PaperCode>--paper-text-size-*</PaperCode> scale. The exported <PaperCode>textSizes</PaperCode> constant enumerates 0 through 17, and the CSS scale defines all of these sizes (13 through 17 included).</td>
                     </tr>
                     <tr>
                         <td><PaperCode>weight</PaperCode></td>
@@ -134,7 +138,7 @@ export default function f() {
                         <td><PaperCode>id</PaperCode></td>
                         <td><PaperCode>string</PaperCode></td>
                         <td><PaperCode>undefined</PaperCode></td>
-                        <td>Element identifier that triggers automatic anchor button creation.</td>
+                        <td>Element identifier that triggers automatic anchor button creation. Activating the anchor button also pushes a history entry so the URL reflects the anchored section.</td>
                     </tr>
                 </tbody>
             </PaperTable>
@@ -142,11 +146,11 @@ export default function f() {
             <PaperSeparator />
 
             <PaperText id="see-also" preset="subheader">
-                See Also
+                See also
             </PaperText>
             <PaperTextList>
                 <PaperText preset="body">
-                    <PaperLink href="/paperui/typography">Typography & Fonts</PaperLink> — Comprehensive type scale and font token reference.
+                    <PaperLink href="/paperui/typography">Typography and Fonts</PaperLink> — Type scale and font token reference.
                 </PaperText>
                 <PaperText preset="body">
                     <PaperLink href="/paperui/papertextlist">PaperTextList</PaperLink> — List formatting component for typography.

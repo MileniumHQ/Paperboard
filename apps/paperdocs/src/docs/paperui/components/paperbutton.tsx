@@ -9,7 +9,7 @@ import {
     PaperTable,
     PaperText,
     PaperTextList,
-} from "paperui";
+} from "@paperboard-dev/paperui";
 
 export default function f() {
     return (
@@ -24,16 +24,16 @@ export default function f() {
                 Overview
             </PaperText>
             <PaperText preset="body">
-                <strong>PaperButton</strong> is an accessible clickable primitive extending native HTML <PaperCode>&lt;button&gt;</PaperCode> capabilities. It incorporates tactile elevation borders, active compression dynamics, focus management, and automatic accessibility labelling for icon buttons.
+                PaperButton is an accessible clickable primitive extending native HTML <PaperCode>&lt;button&gt;</PaperCode> capabilities. It incorporates tactile elevation borders, active compression dynamics, focus management, and automatic accessibility labelling for icon buttons.
             </PaperText>
 
             <PaperSeparator />
 
             <PaperText id="variants" preset="subheader">
-                Color and Style Variants
+                Color and style variants
             </PaperText>
             <PaperText preset="body">
-                Buttons support five chromatic styles alongside a borderless <PaperCode>"text"</PaperCode> variant:
+                Buttons support five chromatic styles alongside a borderless <PaperCode>"text"</PaperCode> variant. Note that the base stylesheet sets <PaperCode>--foreground</PaperCode> to <PaperCode>--paper-front-blue</PaperCode>, so a button without an explicit <PaperCode>variant</PaperCode> prop renders blue — visually identical to <PaperCode>variant="blue"</PaperCode>:
             </PaperText>
 
             <PaperCode block language="tsx">
@@ -63,10 +63,10 @@ export default function f() {
             <PaperSeparator />
 
             <PaperText id="sizing" preset="subheader">
-                Sizing Modifiers
+                Sizing modifiers
             </PaperText>
             <PaperText preset="body">
-                Density can be reduced using the <PaperCode>compact</PaperCode> and <PaperCode>tiny</PaperCode> boolean attributes for toolbars, inline actions, and data tables:
+                Density can be reduced using the <PaperCode>compact</PaperCode> and <PaperCode>tiny</PaperCode> boolean props for toolbars, inline actions, and data tables:
             </PaperText>
 
             <PaperCode block language="tsx">
@@ -88,7 +88,7 @@ export default function f() {
             <PaperSeparator />
 
             <PaperText id="icon-buttons" preset="subheader">
-                Icon Buttons
+                Icon buttons
             </PaperText>
             <PaperText preset="body">
                 Passing the <PaperCode>icon</PaperCode> boolean prop formats the button into an equal-ratio square container optimized for single icon glyphs. The button automatically copies plain text children into the <PaperCode>aria-label</PaperCode> attribute if a dedicated label is omitted.
@@ -125,7 +125,7 @@ export default function f() {
             <PaperSeparator />
 
             <PaperText id="specification" preset="subheader">
-                Technical Specification
+                Technical specification
             </PaperText>
             <PaperTable>
                 <thead>
@@ -173,13 +173,19 @@ export default function f() {
                         <td><PaperCode>"button"</PaperCode></td>
                         <td>HTML button execution type attribute.</td>
                     </tr>
+                    <tr>
+                        <td><PaperCode>ref</PaperCode></td>
+                        <td><PaperCode>HTMLButtonElement | ((el: HTMLButtonElement) =&gt; void)</PaperCode></td>
+                        <td><PaperCode>undefined</PaperCode></td>
+                        <td>Receives the underlying native <PaperCode>&lt;button&gt;</PaperCode> element.</td>
+                    </tr>
                 </tbody>
             </PaperTable>
 
             <PaperSeparator />
 
             <PaperText id="see-also" preset="subheader">
-                See Also
+                See also
             </PaperText>
             <PaperTextList>
                 <PaperText preset="body">

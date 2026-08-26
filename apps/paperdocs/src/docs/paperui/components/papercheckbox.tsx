@@ -8,7 +8,7 @@ import {
     PaperTable,
     PaperText,
     PaperTextList,
-} from "paperui";
+} from "@paperboard-dev/paperui";
 import { createSignal } from "solid-js";
 
 export default function f() {
@@ -20,7 +20,7 @@ export default function f() {
         <>
             <PaperText preset="header">PaperCheckbox</PaperText>
             <PaperText preset="body">
-                <strong>PaperCheckbox</strong> is a compact binary selection primitive providing tactile state elevation, keyboard navigation, integrated label and descriptive text slots, and reactive state synchronization.
+                PaperCheckbox is a compact binary selection primitive providing tactile state elevation, keyboard navigation, and integrated label and descriptive text slots.
             </PaperText>
             <PaperSeparator />
 
@@ -31,21 +31,21 @@ export default function f() {
                 <strong>PaperCheckbox</strong> implements an accessible binary input control (<PaperCode>role="checkbox"</PaperCode>). It serves as a compact, square-box alternative to <PaperLink href="/paperui/papertoggle">PaperToggle</PaperLink>, optimized for density in forms, settings lists, data tables, and modal dialogs.
             </PaperText>
             <PaperText preset="body">
-                The component encapsulates a hidden native <PaperCode>&lt;input type="checkbox"&gt;</PaperCode> to preserve native form submission capabilities and accessibility tree semantics while presenting a customized rounded box with centered check glyphs and crisp borders.
+                The component encapsulates a hidden native <PaperCode>&lt;input type="checkbox"&gt;</PaperCode> to preserve native form submission capabilities and accessibility tree semantics while presenting a customized rounded box with centered check glyphs.
             </PaperText>
 
             <PaperSeparator />
 
             <PaperText id="usage" preset="subheader">
-                Usage and Demonstration
+                Usage and demonstration
             </PaperText>
             <PaperText preset="body">
-                Checkboxes can be bound to reactive signals using the <PaperCode>checked</PaperCode> and <PaperCode>onChange</PaperCode> properties:
+                Checkboxes can be bound to reactive signals using the <PaperCode>checked</PaperCode> and <PaperCode>onChange</PaperCode> props:
             </PaperText>
 
             <PaperCode block language="tsx">
                 {`import { createSignal } from "solid-js";
-import { PaperCheckbox, PaperFlex } from "paperui";
+import { PaperCheckbox, PaperFlex } from "@paperboard-dev/paperui";
 
 function CheckboxExample() {
     const [agree, setAgree] = createSignal(true);
@@ -97,7 +97,7 @@ function CheckboxExample() {
             <PaperSeparator />
 
             <PaperText id="specification" preset="subheader">
-                Technical Specification
+                Technical specification
             </PaperText>
             <PaperTable>
                 <thead>
@@ -151,7 +151,7 @@ function CheckboxExample() {
             <PaperSeparator />
 
             <PaperText id="see-also" preset="subheader">
-                See Also
+                See also
             </PaperText>
             <PaperTextList>
                 <PaperText preset="body">

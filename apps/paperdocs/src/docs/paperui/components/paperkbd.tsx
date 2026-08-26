@@ -8,7 +8,7 @@ import {
     PaperTable,
     PaperText,
     PaperTextList,
-} from "paperui";
+} from "@paperboard-dev/paperui";
 
 export default function f() {
     return (
@@ -23,13 +23,13 @@ export default function f() {
                 Overview
             </PaperText>
             <PaperText preset="body">
-                <strong>PaperKbd</strong> encapsulates the HTML5 <PaperCode>&lt;kbd&gt;</PaperCode> element with PaperUI monospaced typography, rounded corner radii, and a subtle tactile lower border. It is frequently rendered in tooltips, search modals, and menu shortcuts to indicate hotkey combinations.
+                PaperKbd encapsulates the HTML5 <PaperCode>&lt;kbd&gt;</PaperCode> element with PaperUI monospaced typography, rounded corner radii, and a subtle tactile lower border. It is frequently rendered in tooltips, search modals, and menu shortcuts to indicate hotkey combinations.
             </PaperText>
 
             <PaperSeparator />
 
             <PaperText id="usage" preset="subheader">
-                Usage and Demonstration
+                Usage and demonstration
             </PaperText>
             <PaperText preset="body">
                 Keyboard chips can be rendered individually or chained together with text separators:
@@ -78,7 +78,7 @@ export default function f() {
             <PaperSeparator />
 
             <PaperText id="specification" preset="subheader">
-                Technical Specification
+                Technical specification
             </PaperText>
             <PaperTable>
                 <thead>
@@ -108,7 +108,7 @@ export default function f() {
             <PaperSeparator />
 
             <PaperText id="see-also" preset="subheader">
-                See Also
+                See also
             </PaperText>
             <PaperTextList>
                 <PaperText preset="body">

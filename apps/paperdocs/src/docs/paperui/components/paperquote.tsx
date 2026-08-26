@@ -8,7 +8,7 @@ import {
     PaperTable,
     PaperText,
     PaperTextList,
-} from "paperui";
+} from "@paperboard-dev/paperui";
 
 export default function f() {
     return (
@@ -23,13 +23,13 @@ export default function f() {
                 Overview
             </PaperText>
             <PaperText preset="body">
-                <strong>PaperQuote</strong> is utilized throughout documentation and user interfaces to draw attention to critical requirements, advisory notices, technical caveats, and informative context. It supports six semantic color variants with matched left-accent borders and background surface tints.
+                PaperQuote is used throughout documentation and user interfaces to draw attention to critical requirements, advisory notices, technical caveats, and informative context. It supports six color variants with matched left-accent borders and background surface tints.
             </PaperText>
 
             <PaperSeparator />
 
             <PaperText id="variants" preset="subheader">
-                Color Variants
+                Color variants
             </PaperText>
             <PaperText preset="body">
                 The component supports <PaperCode>"monochrome"</PaperCode>, <PaperCode>"blue"</PaperCode>, <PaperCode>"green"</PaperCode>, <PaperCode>"yellow"</PaperCode>, <PaperCode>"red"</PaperCode>, and <PaperCode>"brand"</PaperCode>:
@@ -75,7 +75,7 @@ export default function f() {
             <PaperSeparator />
 
             <PaperText id="specification" preset="subheader">
-                Technical Specification
+                Technical specification
             </PaperText>
             <PaperTable>
                 <thead>
@@ -101,7 +101,7 @@ export default function f() {
                     </tr>
                     <tr>
                         <td><PaperCode>title</PaperCode></td>
-                        <td><PaperCode>string</PaperCode></td>
+                        <td><PaperCode>JSX.Element | string</PaperCode></td>
                         <td><PaperCode>undefined</PaperCode></td>
                         <td>Bold title header rendered above the child prose.</td>
                     </tr>
@@ -117,7 +117,7 @@ export default function f() {
             <PaperSeparator />
 
             <PaperText id="see-also" preset="subheader">
-                See Also
+                See also
             </PaperText>
             <PaperTextList>
                 <PaperText preset="body">

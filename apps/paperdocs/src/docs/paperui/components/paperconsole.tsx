@@ -10,7 +10,7 @@ import {
     PaperText,
     PaperTextList,
     type PaperConsoleEntry,
-} from "paperui";
+} from "@paperboard-dev/paperui";
 import { createSignal } from "solid-js";
 
 export default function f() {
@@ -109,19 +109,16 @@ export default function f() {
                 Overview
             </PaperText>
             <PaperText preset="body">
-                <strong>PaperConsole</strong> is a stream-oriented terminal and
-                log viewer component. It formats log entries using semantic
-                types (<PaperCode>command</PaperCode>,{" "}
+                PaperConsole is a stream-oriented terminal and log viewer component. It formats log entries using semantic types (<PaperCode>command</PaperCode>,{" "}
                 <PaperCode>output</PaperCode>, <PaperCode>error</PaperCode>,{" "}
                 <PaperCode>warn</PaperCode>, <PaperCode>info</PaperCode>,{" "}
-                <PaperCode>return</PaperCode>) and includes an integrated
-                command input with command history navigation.
+                <PaperCode>return</PaperCode>) and includes an integrated command input with command history navigation.
             </PaperText>
 
             <PaperSeparator />
 
             <PaperText id="basic-usage" preset="subheader">
-                Basic Usage
+                Basic usage
             </PaperText>
             <PaperText preset="body">
                 The console receives an array of entries and dispatches
@@ -130,7 +127,7 @@ export default function f() {
             </PaperText>
 
             <PaperCode block language="tsx">
-                {`import { PaperConsole } from "paperui";
+                {`import { PaperConsole } from "@paperboard-dev/paperui";
 
 <PaperConsole
     banner="Session active"
@@ -188,7 +185,7 @@ export default function f() {
             <PaperSeparator />
 
             <PaperText id="entry-types" preset="subheader">
-                Entry Types
+                Entry types and content
             </PaperText>
             <PaperText preset="body">
                 The <PaperCode>type</PaperCode> property on each entry controls
@@ -261,6 +258,13 @@ export default function f() {
                 </tbody>
             </PaperTable>
 
+            <PaperText preset="body">
+                String entry <PaperCode>content</PaperCode> supports ANSI escape sequences: recognized SGR codes are parsed into styled segments and rendered as colored spans, so program output carrying color codes displays with its original coloring. Non-string content (JSX elements) is rendered as provided.
+            </PaperText>
+            <PaperText preset="body">
+                Each entry also accepts an optional <PaperCode>timestamp</PaperCode> field (<PaperCode>string | Date | number</PaperCode>); the value is accepted by the entry type but is not currently rendered.
+            </PaperText>
+
             <PaperSeparator />
 
             <PaperText id="features" preset="subheader">
@@ -268,27 +272,30 @@ export default function f() {
             </PaperText>
             <PaperTextList>
                 <PaperText preset="body">
-                    <strong>Auto-Scroll:</strong> The container automatically
+                    Auto-scroll: The container automatically
                     maintains bottom scroll position as entries are added.
                     Disable with <PaperCode>autoScroll={false}</PaperCode>.
                 </PaperText>
                 <PaperText preset="body">
-                    <strong>Dividers:</strong> Horizontal lines are rendered
+                    Dividers: Horizontal lines are rendered
                     between entries by default. Disable with{" "}
                     <PaperCode>divided={false}</PaperCode>.
                 </PaperText>
                 <PaperText preset="body">
-                    <strong>History Navigation:</strong> Pressing{" "}
+                    History navigation: Pressing{" "}
                     <PaperCode>ArrowUp</PaperCode> and{" "}
                     <PaperCode>ArrowDown</PaperCode> cycles through previous
                     command inputs.
+                </PaperText>
+                <PaperText preset="body">
+                    Static content: Optional <PaperCode>children</PaperCode> are rendered inside the output area after all entries, which is useful for appending fixed status lines or custom elements beneath the log buffer.
                 </PaperText>
             </PaperTextList>
 
             <PaperSeparator />
 
             <PaperText id="specification" preset="subheader">
-                Technical Specification
+                Technical specification
             </PaperText>
 
             <PaperText id="props-console" preset="title">
@@ -439,7 +446,7 @@ export default function f() {
             <PaperSeparator />
 
             <PaperText id="see-also" preset="subheader">
-                See Also
+                See also
             </PaperText>
             <PaperTextList>
                 <PaperText preset="body">

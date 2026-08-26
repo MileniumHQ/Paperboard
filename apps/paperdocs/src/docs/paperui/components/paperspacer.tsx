@@ -9,7 +9,7 @@ import {
     PaperTable,
     PaperText,
     PaperTextList,
-} from "paperui";
+} from "@paperboard-dev/paperui";
 
 export default function f() {
     return (
@@ -30,14 +30,14 @@ export default function f() {
             <PaperSeparator />
 
             <PaperText id="usage" preset="subheader">
-                Usage and Demonstration
+                Usage and demonstration
             </PaperText>
             <PaperText preset="body">
                 Inserting an unconstrained <PaperCode>&lt;PaperSpacer /&gt;</PaperCode> creates an expanding spring between elements:
             </PaperText>
 
             <PaperCode block language="tsx">
-                {`import { PaperFlex, PaperText, PaperSpacer, PaperButton } from "paperui";
+                {`import { PaperFlex, PaperText, PaperSpacer, PaperButton } from "@paperboard-dev/paperui";
 
 function TopbarLayout() {
     return (
@@ -73,7 +73,7 @@ function TopbarLayout() {
             <PaperSeparator />
 
             <PaperText id="specification" preset="subheader">
-                Technical Specification
+                Technical specification
             </PaperText>
             <PaperTable>
                 <thead>
@@ -89,7 +89,7 @@ function TopbarLayout() {
                         <td><PaperCode>size</PaperCode></td>
                         <td><PaperCode>string | number</PaperCode></td>
                         <td><PaperCode>undefined</PaperCode></td>
-                        <td>Fixed pixel size or CSS dimension string (disables auto flex expansion).</td>
+                        <td>Fixed size for the spacer (disables auto flex expansion). Numbers become pixel values. Named spacing tokens (<PaperCode>"none"</PaperCode>, <PaperCode>"onefourth"</PaperCode>, <PaperCode>"half"</PaperCode>, <PaperCode>"threefourths"</PaperCode>, <PaperCode>"full"</PaperCode>, <PaperCode>"sixfourths"</PaperCode>, <PaperCode>"double"</PaperCode>, <PaperCode>"triple"</PaperCode>, <PaperCode>"quadruple"</PaperCode>) map to the corresponding <PaperCode>--paper-uigap*</PaperCode> variables, and any other string resolves as <PaperCode>var(--paper-&lt;value&gt;)</PaperCode>.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>direction</PaperCode></td>
@@ -103,7 +103,7 @@ function TopbarLayout() {
             <PaperSeparator />
 
             <PaperText id="see-also" preset="subheader">
-                See Also
+                See also
             </PaperText>
             <PaperTextList>
                 <PaperText preset="body">

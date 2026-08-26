@@ -9,7 +9,7 @@ import {
     PaperTable,
     PaperText,
     PaperTextList,
-} from "paperui";
+} from "@paperboard-dev/paperui";
 import { createSignal } from "solid-js";
 
 export default function f() {
@@ -39,15 +39,15 @@ export default function f() {
             <PaperSeparator />
 
             <PaperText id="usage" preset="subheader">
-                Usage and Demonstration
+                Usage and demonstration
             </PaperText>
             <PaperText preset="body">
-                Modals are controlled via the <PaperCode>open</PaperCode> and <PaperCode>onClose</PaperCode> properties:
+                Modals are controlled via the <PaperCode>open</PaperCode> and <PaperCode>onClose</PaperCode> props:
             </PaperText>
 
             <PaperCode block language="tsx">
                 {`import { createSignal } from "solid-js";
-import { PaperModal, PaperButton, PaperText, PaperFlex } from "paperui";
+import { PaperModal, PaperButton, PaperText, PaperFlex } from "@paperboard-dev/paperui";
 
 function DialogDemo() {
     const [isOpen, setIsOpen] = createSignal(false);
@@ -121,7 +121,7 @@ function DialogDemo() {
             <PaperSeparator />
 
             <PaperText id="specification" preset="subheader">
-                Technical Specification
+                Technical specification
             </PaperText>
             <PaperTable>
                 <thead>
@@ -199,7 +199,7 @@ function DialogDemo() {
             <PaperSeparator />
 
             <PaperText id="see-also" preset="subheader">
-                See Also
+                See also
             </PaperText>
             <PaperTextList>
                 <PaperText preset="body">

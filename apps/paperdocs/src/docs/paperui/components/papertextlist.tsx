@@ -7,7 +7,7 @@ import {
     PaperTable,
     PaperText,
     PaperTextList,
-} from "paperui";
+} from "@paperboard-dev/paperui";
 
 export default function f() {
     return (
@@ -22,33 +22,33 @@ export default function f() {
                 Overview
             </PaperText>
             <PaperText preset="body">
-                <strong>PaperTextList</strong> and <strong>PaperTextList.Item</strong> render semantic HTML <PaperCode>&lt;ul&gt;</PaperCode> and <PaperCode>&lt;ol&gt;</PaperCode> lists formatted with PaperUI typography tokens, consistent indentation, and configurable spacing density (<PaperCode>"compact"</PaperCode>, <PaperCode>"normal"</PaperCode>, <PaperCode>"relaxed"</PaperCode>).
+                PaperTextList renders semantic HTML <PaperCode>&lt;ul&gt;</PaperCode> and <PaperCode>&lt;ol&gt;</PaperCode> lists formatted with PaperUI typography tokens, consistent indentation, and configurable spacing density (<PaperCode>"compact"</PaperCode>, <PaperCode>"normal"</PaperCode>, <PaperCode>"relaxed"</PaperCode>). The attached <PaperCode>PaperTextList.Item</PaperCode> primitive renders individual entries.
             </PaperText>
 
             <PaperSeparator />
 
             <PaperText id="usage" preset="subheader">
-                Usage and Demonstration
+                Usage and demonstration
             </PaperText>
             <PaperText preset="body">
-                Lists accept standard <PaperCode>PaperText</PaperCode> elements or <PaperCode>PaperTextList.Item</PaperCode> primitives:
+                Lists accept standard <PaperCode>PaperText</PaperCode> elements or the built-in <PaperCode>PaperTextList.Item</PaperCode> primitive, which renders a <PaperCode>PaperText</PaperCode> as an <PaperCode>&lt;li&gt;</PaperCode>:
             </PaperText>
 
             <PaperCode block language="tsx">
-                {`import { PaperTextList, PaperText } from "paperui";
+                {`import { PaperTextList } from "@paperboard-dev/paperui";
 
-function ListShowcase() {
+function FeatureList() {
     return (
-        <PaperTextList spacing="normal">
-            <PaperText preset="body">
+        <PaperTextList spacing="relaxed" weight={500}>
+            <PaperTextList.Item preset="body">
                 Fine-grained SolidJS reactive primitives.
-            </PaperText>
-            <PaperText preset="body">
-                Standardized CSS Custom Property tokens.
-            </PaperText>
-            <PaperText preset="body">
-                Tactile depth and physical elevation displacement.
-            </PaperText>
+            </PaperTextList.Item>
+            <PaperTextList.Item preset="body">
+                Standardized CSS custom property tokens.
+            </PaperTextList.Item>
+            <PaperTextList.Item preset="body" size={2}>
+                Per-item sizing and weight overrides.
+            </PaperTextList.Item>
         </PaperTextList>
     );
 }`}
@@ -81,7 +81,7 @@ function ListShowcase() {
             <PaperSeparator />
 
             <PaperText id="specification" preset="subheader">
-                Technical Specification
+                Technical specification
             </PaperText>
             <PaperTable>
                 <thead>
@@ -117,13 +117,19 @@ function ListShowcase() {
                         <td><PaperCode>3 (16px)</PaperCode></td>
                         <td>Text size scale token applied across list item children.</td>
                     </tr>
+                    <tr>
+                        <td><PaperCode>weight</PaperCode></td>
+                        <td><PaperCode>number (100–900)</PaperCode></td>
+                        <td><PaperCode>400</PaperCode></td>
+                        <td>Numeric font-weight declaration applied across list item children.</td>
+                    </tr>
                 </tbody>
             </PaperTable>
 
             <PaperSeparator />
 
             <PaperText id="see-also" preset="subheader">
-                See Also
+                See also
             </PaperText>
             <PaperTextList>
                 <PaperText preset="body">

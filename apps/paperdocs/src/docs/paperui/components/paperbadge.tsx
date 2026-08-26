@@ -8,7 +8,7 @@ import {
     PaperTable,
     PaperText,
     PaperTextList,
-} from "paperui";
+} from "@paperboard-dev/paperui";
 
 export default function f() {
     return (
@@ -23,7 +23,7 @@ export default function f() {
                 Overview
             </PaperText>
             <PaperText preset="body">
-                <strong>PaperBadge</strong> is an inline status and annotation component in PaperUI. It pairs chromatic background fills with rounded borders, optional iconography, and concise text labels. Badges are typically integrated alongside titles, table cells, list items, and summary cards to communicate operational state or categorization.
+                PaperBadge is an inline status and annotation component in PaperUI. It pairs chromatic background fills with rounded borders, optional iconography, and short text labels. Badges are commonly placed next to titles, table cells, list items, and summary cards to communicate operational state or categorization.
             </PaperText>
 
             <PaperSeparator />
@@ -95,7 +95,7 @@ export default function f() {
             <PaperSeparator />
 
             <PaperText id="icon-integration" preset="subheader">
-                Icon Integration
+                Icon integration
             </PaperText>
             <PaperText preset="body">
                 Badges accept leading icons via the <PaperCode>icon</PaperCode> prop. The value may be supplied either as a string corresponding to a Material Symbol glyph name or as an instantiated <PaperLink href="/paperui/papericon"><PaperCode>PaperIcon</PaperCode></PaperLink> element:
@@ -118,7 +118,7 @@ export default function f() {
             <PaperSeparator />
 
             <PaperText id="specification" preset="subheader">
-                Technical Specification
+                Technical specification
             </PaperText>
             <PaperTable>
                 <thead>
@@ -149,10 +149,16 @@ export default function f() {
                         <td>Badge text content or child elements.</td>
                     </tr>
                     <tr>
-                        <td><PaperCode>class</PaperCode> / <PaperCode>classList</PaperCode></td>
-                        <td><PaperCode>string | Record&lt;string, boolean&gt;</PaperCode></td>
+                        <td><PaperCode>class</PaperCode></td>
+                        <td><PaperCode>string</PaperCode></td>
                         <td><PaperCode>undefined</PaperCode></td>
-                        <td>Custom CSS class names or conditional class mapping.</td>
+                        <td>Custom CSS class name applied to the badge container.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>classList</PaperCode></td>
+                        <td><PaperCode>Record&lt;string, boolean&gt;</PaperCode></td>
+                        <td><PaperCode>undefined</PaperCode></td>
+                        <td>Conditional class name mapping.</td>
                     </tr>
                 </tbody>
             </PaperTable>
@@ -160,7 +166,7 @@ export default function f() {
             <PaperSeparator />
 
             <PaperText id="see-also" preset="subheader">
-                See Also
+                See also
             </PaperText>
             <PaperTextList>
                 <PaperText preset="body">

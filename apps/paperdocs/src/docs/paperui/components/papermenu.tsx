@@ -10,7 +10,7 @@ import {
     PaperTable,
     PaperText,
     PaperTextList,
-} from "paperui";
+} from "@paperboard-dev/paperui";
 import { createSignal } from "solid-js";
 
 export default function f() {
@@ -29,21 +29,21 @@ export default function f() {
                 Overview
             </PaperText>
             <PaperText preset="body">
-                The <strong>PaperMenu</strong> suite—comprising <strong>PaperMenu</strong>, <strong>PaperMenuSection</strong>, and <strong>PaperMenuItem</strong>—serves as the primary sidebar navigation structure in PaperUI applications. Sections provide animated collapsible hierarchies, while individual items coordinate selection highlights through a shared radio context.
+                The PaperMenu suite—PaperMenu, PaperMenuSection, and PaperMenuItem—serves as the primary sidebar navigation structure in PaperUI applications. Sections provide collapsible hierarchies with animated chevron indicators, while individual items coordinate selection highlights through a shared radio context. Arrow keys move focus between items and section headers, and <PaperCode>Home</PaperCode> / <PaperCode>End</PaperCode> jump to the first and last focusable element.
             </PaperText>
 
             <PaperSeparator />
 
             <PaperText id="usage" preset="subheader">
-                Usage and Demonstration
+                Usage and demonstration
             </PaperText>
             <PaperText preset="body">
-                Menus coordinate selection across nested sections using the <PaperCode>name</PaperCode> and <PaperCode>value</PaperCode> properties:
+                Menus coordinate selection across nested sections using the <PaperCode>name</PaperCode> and <PaperCode>value</PaperCode> props:
             </PaperText>
 
             <PaperCode block language="tsx">
                 {`import { createSignal } from "solid-js";
-import { PaperMenu, PaperMenuSection, PaperMenuItem } from "paperui";
+import { PaperMenu, PaperMenuSection, PaperMenuItem } from "@paperboard-dev/paperui";
 
 function AppSidebar() {
     const [currentRoute, setCurrentRoute] = createSignal("intro");
@@ -101,7 +101,7 @@ function AppSidebar() {
             <PaperSeparator />
 
             <PaperText id="spacing-option" preset="subheader">
-                Item Spacing Modifier
+                Item spacing modifier
             </PaperText>
             <PaperText preset="body">
                 The <PaperCode>spacing</PaperCode> prop accepts a boolean flag (which defaults to a 3px <PaperCode>"onefourth"</PaperCode> gap) or any standard <PaperCode>PaperSpacing</PaperCode> token (such as <PaperCode>"half"</PaperCode>, <PaperCode>"threefourths"</PaperCode>, or <PaperCode>"full"</PaperCode>) to apply vertical separation between adjacent navigation items and collapsible sections:
@@ -144,7 +144,7 @@ function AppSidebar() {
             <PaperSeparator />
 
             <PaperText id="specification" preset="subheader">
-                Technical Specification
+                Technical specification
             </PaperText>
 
             <PaperText id="props-menu" preset="title">
@@ -288,13 +288,19 @@ function AppSidebar() {
                         <td><PaperCode>false</PaperCode></td>
                         <td>Prevents item selection and applies muted visual styling.</td>
                     </tr>
+                    <tr>
+                        <td><PaperCode>level</PaperCode></td>
+                        <td><PaperCode>number</PaperCode></td>
+                        <td><PaperCode>section nesting depth (0 at the top level)</PaperCode></td>
+                        <td>Overrides the indent depth manually. Items inside a PaperMenuSection inherit that section's nesting level; setting level replaces it with an explicit value.</td>
+                    </tr>
                 </tbody>
             </PaperTable>
 
             <PaperSeparator />
 
             <PaperText id="see-also" preset="subheader">
-                See Also
+                See also
             </PaperText>
             <PaperTextList>
                 <PaperText preset="body">

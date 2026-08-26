@@ -9,7 +9,7 @@ import {
     PaperTable,
     PaperText,
     PaperTextList,
-} from "paperui";
+} from "@paperboard-dev/paperui";
 import { createSignal } from "solid-js";
 
 export default function f() {
@@ -20,7 +20,7 @@ export default function f() {
         <>
             <PaperText preset="header">PaperSelector</PaperText>
             <PaperText preset="body">
-                <strong>PaperSelector</strong> is a tactile segmented radio selection control component for choosing among mutually exclusive options, display modes, or configuration presets.
+                <strong>PaperSelector</strong> is a segmented radio selection control for choosing among mutually exclusive options, display modes, or configuration presets.
             </PaperText>
             <PaperSeparator />
 
@@ -28,13 +28,13 @@ export default function f() {
                 Overview
             </PaperText>
             <PaperText preset="body">
-                <strong>PaperSelector</strong> and <strong>PaperSelectorItem</strong> provide high-visibility segmented choice controls. Each item is backed by an interactive <PaperLink href="/paperui/papereffect"><PaperCode>PaperEffect</PaperCode></PaperLink> wrapper that elevates into an active brand-tinted tactile state upon selection.
+                PaperSelector renders a set of PaperSelectorItem options as a segmented control. Each item is wrapped in an interactive <PaperLink href="/paperui/papereffect"><PaperCode>PaperEffect</PaperCode></PaperLink> layer that elevates when selected.
             </PaperText>
 
             <PaperSeparator />
 
             <PaperText id="horizontal-mode" preset="subheader">
-                Horizontal Segmented Control
+                Horizontal segmented control
             </PaperText>
             <PaperText preset="body">
                 Setting <PaperCode>horizontal</PaperCode> aligns items in a row suitable for view switchers, layout pickers, and toolbars:
@@ -42,7 +42,7 @@ export default function f() {
 
             <PaperCode block language="tsx">
                 {`import { createSignal } from "solid-js";
-import { PaperSelector, PaperSelectorItem } from "paperui";
+import { PaperSelector, PaperSelectorItem } from "@paperboard-dev/paperui";
 
 function ViewModeSelector() {
     const [view, setView] = createSignal("grid");
@@ -80,7 +80,7 @@ function ViewModeSelector() {
             <PaperSeparator />
 
             <PaperText id="vertical-mode" preset="subheader">
-                Vertical Option Cards
+                Vertical option cards
             </PaperText>
             <PaperText preset="body">
                 In vertical mode, items can include detailed multi-line descriptions:
@@ -116,7 +116,7 @@ function ViewModeSelector() {
             <PaperSeparator />
 
             <PaperText id="specification" preset="subheader">
-                Technical Specification
+                Technical specification
             </PaperText>
 
             <PaperText id="props-selector" preset="title">
@@ -145,10 +145,22 @@ function ViewModeSelector() {
                         <td>Currently selected value identifier.</td>
                     </tr>
                     <tr>
+                        <td><PaperCode>defaultValue</PaperCode></td>
+                        <td><PaperCode>string | number</PaperCode></td>
+                        <td><PaperCode>undefined</PaperCode></td>
+                        <td>Initial uncontrolled selection value.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>direction</PaperCode></td>
+                        <td><PaperCode>"horizontal" | "vertical"</PaperCode></td>
+                        <td><PaperCode>"vertical"</PaperCode></td>
+                        <td>Layout direction of the selector container.</td>
+                    </tr>
+                    <tr>
                         <td><PaperCode>horizontal</PaperCode></td>
                         <td><PaperCode>boolean</PaperCode></td>
                         <td><PaperCode>false</PaperCode></td>
-                        <td>Lays out selector items in a horizontal row.</td>
+                        <td>Shorthand for <PaperCode>direction="horizontal"</PaperCode>; lays out selector items in a horizontal row.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>onValueChange</PaperCode></td>
@@ -186,9 +198,9 @@ function ViewModeSelector() {
                     </tr>
                     <tr>
                         <td><PaperCode>description</PaperCode></td>
-                        <td><PaperCode>string</PaperCode></td>
+                        <td><PaperCode>JSX.Element | string</PaperCode></td>
                         <td><PaperCode>undefined</PaperCode></td>
-                        <td>Secondary text rendered below the item title.</td>
+                        <td>Secondary content rendered below the item title.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>reverse</PaperCode></td>
@@ -196,13 +208,25 @@ function ViewModeSelector() {
                         <td><PaperCode>false</PaperCode></td>
                         <td>Places the icon on the trailing right edge.</td>
                     </tr>
+                    <tr>
+                        <td><PaperCode>disabled</PaperCode></td>
+                        <td><PaperCode>boolean</PaperCode></td>
+                        <td><PaperCode>false</PaperCode></td>
+                        <td>Prevents selection and disables hover elevation on the item.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>colorless</PaperCode></td>
+                        <td><PaperCode>boolean</PaperCode></td>
+                        <td><PaperCode>true when unselected</PaperCode></td>
+                        <td>Renders the item without the brand color accent; selected items are colored unless this is set.</td>
+                    </tr>
                 </tbody>
             </PaperTable>
 
             <PaperSeparator />
 
             <PaperText id="see-also" preset="subheader">
-                See Also
+                See also
             </PaperText>
             <PaperTextList>
                 <PaperText preset="body">

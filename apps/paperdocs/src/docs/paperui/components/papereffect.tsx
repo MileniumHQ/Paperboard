@@ -9,7 +9,7 @@ import {
     PaperTable,
     PaperText,
     PaperTextList,
-} from "paperui";
+} from "@paperboard-dev/paperui";
 
 export default function f() {
     return (
@@ -24,13 +24,13 @@ export default function f() {
                 Overview
             </PaperText>
             <PaperText preset="body">
-                <strong>PaperEffect</strong> implements the signature tactile interaction pattern of the Paperboard design system. When wrapped around an interactive element (such as a <PaperLink href="/paperui/paperbutton"><PaperCode>PaperButton</PaperCode></PaperLink> or container), it generates a solid drop shadow border offset and compresses downward during active pointer press events.
+                PaperEffect implements the signature tactile interaction pattern of the Paperboard design system. When wrapped around an interactive element (such as a <PaperLink href="/paperui/paperbutton"><PaperCode>PaperButton</PaperCode></PaperLink> or container), it generates a solid drop shadow border offset and compresses downward during active pointer press events.
             </PaperText>
 
             <PaperSeparator />
 
             <PaperText id="variants" preset="subheader">
-                Color Variants and Neutral State
+                Color variants and neutral state
             </PaperText>
             <PaperText preset="body">
                 The component supports chromatic brand themes alongside a neutral <PaperCode>colorless</PaperCode> mode:
@@ -72,8 +72,20 @@ export default function f() {
 
             <PaperSeparator />
 
+            <PaperText id="auto-matching" preset="subheader">
+                Automatic child matching
+            </PaperText>
+            <PaperText preset="body">
+                When no explicit <PaperCode>variant</PaperCode> or <PaperCode>colorless</PaperCode> prop is set, PaperEffect inspects its children and tints itself to match them. Using CSS <PaperCode>:has()</PaperCode> selectors, an effect wrapping a color-classed child adopts that child's shadow hue — for example, wrapping a <PaperCode>variant="green"</PaperCode> button turns the offset border green without any props on the effect itself.
+            </PaperText>
+            <PaperText preset="body">
+                Wrapping a text-variant child (such as <PaperCode>&lt;PaperButton variant="text"&gt;</PaperCode>) switches the effect to a different shadow mode: instead of a solid offset layer behind the element, hover displacement renders as an offset box-shadow while the underlying layer is hidden and margins collapse to zero. The same neutral treatment applies when the wrapped content is disabled.
+            </PaperText>
+
+            <PaperSeparator />
+
             <PaperText id="specification" preset="subheader">
-                Technical Specification
+                Technical specification
             </PaperText>
             <PaperTable>
                 <thead>
@@ -109,7 +121,7 @@ export default function f() {
             <PaperSeparator />
 
             <PaperText id="see-also" preset="subheader">
-                See Also
+                See also
             </PaperText>
             <PaperTextList>
                 <PaperText preset="body">

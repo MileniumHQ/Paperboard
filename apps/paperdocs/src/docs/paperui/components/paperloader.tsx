@@ -10,8 +10,8 @@ import {
     PaperTable,
     PaperText,
     PaperTextList,
-} from "paperui";
-import { type LoaderStatus } from "paperui";
+} from "@paperboard-dev/paperui";
+import { type LoaderStatus } from "@paperboard-dev/paperui";
 import { createSignal } from "solid-js";
 
 export default function f() {
@@ -32,7 +32,9 @@ export default function f() {
         <>
             <PaperText preset="header">PaperLoader</PaperText>
             <PaperText preset="body">
-                <strong>PaperLoader</strong> is a progress indicator and asynchronous task lifecycle monitor displaying percentage completion, status animations, and operational labels.
+                <strong>PaperLoader</strong> is a circular progress indicator
+                that renders a completion percentage as an SVG ring and
+                communicates task state through arc color and status overlays.
             </PaperText>
             <PaperSeparator />
 
@@ -40,20 +42,33 @@ export default function f() {
                 Overview
             </PaperText>
             <PaperText preset="body">
-                <strong>PaperLoader</strong> communicates the progression of background operations, build pipelines, and asynchronous network requests. It combines an animated horizontal progress track with four semantic lifecycle states: <PaperCode>"loading"</PaperCode>, <PaperCode>"waiting"</PaperCode>, <PaperCode>"success"</PaperCode>, and <PaperCode>"error"</PaperCode>.
+                The component draws a ring inside a square SVG with a{" "}
+                <PaperCode>viewBox</PaperCode> of{" "}
+                <PaperCode>0 0 40 40</PaperCode>. Two arc paths share the same
+                geometry: a background track stroked with{" "}
+                <PaperCode>--paper-background-definition</PaperCode>, and a
+                progress arc stroked with{" "}
+                <PaperCode>--paper-front-blue</PaperCode>. The progress arc uses{" "}
+                <PaperCode>stroke-dasharray</PaperCode> and{" "}
+                <PaperCode>stroke-dashoffset</PaperCode> so that the visible
+                portion of the ring corresponds to the percentage value, with
+                transitions applied when the offset changes. An optional label
+                is rendered beneath the ring through{" "}
+                <PaperLink href="/paperui/papertext">PaperText</PaperLink>.
             </PaperText>
 
             <PaperSeparator />
 
             <PaperText id="usage" preset="subheader">
-                Usage and Demonstration
+                Usage and demonstration
             </PaperText>
             <PaperText preset="body">
-                The component accepts a numerical percentage (0–100) and an active <PaperCode>loaderStatus</PaperCode>:
+                The component accepts a numerical percentage (clamped to the
+                range 0–100) and an active <PaperCode>loaderStatus</PaperCode>:
             </PaperText>
 
             <PaperCode block language="tsx">
-                {`import { PaperLoader } from "paperui";
+                {`import { PaperLoader } from "@paperboard-dev/paperui";
 
 function DeploymentTracker() {
     return (
@@ -101,13 +116,13 @@ function DeploymentTracker() {
             <PaperSeparator />
 
             <PaperText id="status-lifecycle" preset="subheader">
-                Status Lifecycle States
+                Status lifecycle states
             </PaperText>
             <PaperTable>
                 <thead>
                     <tr>
                         <th>Status</th>
-                        <th>Color Token</th>
+                        <th>Arc Color Token</th>
                         <th>Visual Behavior</th>
                     </tr>
                 </thead>
@@ -115,30 +130,65 @@ function DeploymentTracker() {
                     <tr>
                         <td><PaperCode>"loading"</PaperCode></td>
                         <td><PaperCode>--paper-front-blue</PaperCode></td>
-                        <td>Active progressing blue bar with continuous shimmer animation.</td>
+                        <td>Blue arc sized proportionally to the percentage value.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>"waiting"</PaperCode></td>
-                        <td><PaperCode>--paper-front-yellow</PaperCode></td>
-                        <td>Indeterminate pulsing state awaiting external dependencies.</td>
+                        <td><PaperCode>--paper-front-blue</PaperCode></td>
+                        <td>The ring keeps its blue color while the entire loader is dimmed to opacity 0.5. No color change or pulsing occurs.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>"success"</PaperCode></td>
                         <td><PaperCode>--paper-front-green</PaperCode></td>
-                        <td>Full-width green fill signaling operation completion.</td>
+                        <td>The arc turns green and a circular overlay covers the ring with a white "check" Material Symbols glyph, entering with a scale-in animation followed by an expanding ripple outline.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>"error"</PaperCode></td>
                         <td><PaperCode>--paper-front-red</PaperCode></td>
-                        <td>Full-width red fill indicating fatal pipeline exception.</td>
+                        <td>The arc turns red and a red circular overlay shows a white "close" glyph, entering with a bounce animation that briefly overshoots its final scale.</td>
                     </tr>
                 </tbody>
             </PaperTable>
 
             <PaperSeparator />
 
+            <PaperText id="loader-groups" preset="subheader">
+                Loader groups
+            </PaperText>
+            <PaperText preset="body">
+                <PaperCode>PaperLoaderGroup</PaperCode> arranges multiple loaders
+                in a vertical flex layout separated by{" "}
+                <PaperCode>--paper-uigap</PaperCode>. Its width follows the{" "}
+                <PaperCode>--paper-loader-width</PaperCode> CSS variable, which
+                lets several loaders share a common width:
+            </PaperText>
+
+            <PaperCode block language="tsx">
+                {`<PaperLoaderGroup>
+    <PaperLoader percent={80} loaderStatus="success" />
+    <PaperLoader percent={45} loaderStatus="loading" label="Compiling shaders" />
+</PaperLoaderGroup>`}
+            </PaperCode>
+
+            <PaperContainer>
+                <PaperFlex padding="full" center>
+                    <div style={{ width: "100%", "max-width": "420px" }}>
+                        <PaperLoaderGroup>
+                            <PaperLoader percent={80} loaderStatus="success" />
+                            <PaperLoader
+                                percent={45}
+                                loaderStatus="loading"
+                                label="Compiling shaders"
+                            />
+                        </PaperLoaderGroup>
+                    </div>
+                </PaperFlex>
+            </PaperContainer>
+
+            <PaperSeparator />
+
             <PaperText id="specification" preset="subheader">
-                Technical Specification
+                Technical specification
             </PaperText>
             <PaperTable>
                 <thead>
@@ -154,19 +204,19 @@ function DeploymentTracker() {
                         <td><PaperCode>percent</PaperCode></td>
                         <td><PaperCode>number</PaperCode></td>
                         <td><em>Required</em></td>
-                        <td>Progress percentage value between 0 and 100.</td>
+                        <td>Completion percentage. Values are clamped to the range 0–100 before rendering, and falsy values are treated as 0.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>loaderStatus</PaperCode></td>
                         <td><PaperCode>"loading" | "waiting" | "success" | "error"</PaperCode></td>
                         <td><em>Required</em></td>
-                        <td>Lifecycle state governing track colors and animation modes.</td>
+                        <td>Lifecycle state governing the arc color and any status overlay.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>label</PaperCode></td>
-                        <td><PaperCode>string</PaperCode></td>
+                        <td><PaperCode>string | JSX.Element</PaperCode></td>
                         <td><PaperCode>undefined</PaperCode></td>
-                        <td>Status message text rendered beneath the progress bar.</td>
+                        <td>Optional text or markup rendered beneath the ring as a size 4 PaperText element.</td>
                     </tr>
                 </tbody>
             </PaperTable>
@@ -174,11 +224,11 @@ function DeploymentTracker() {
             <PaperSeparator />
 
             <PaperText id="see-also" preset="subheader">
-                See Also
+                See also
             </PaperText>
             <PaperTextList>
                 <PaperText preset="body">
-                    <PaperLink href="/paperui/paperwizard">PaperWizard</PaperLink> — Sequential wizard template integrating progress tracking.
+                    <PaperLink href="/paperui/paperprogress">PaperProgress</PaperLink> — Linear progress bar without lifecycle states.
                 </PaperText>
                 <PaperText preset="body">
                     <PaperLink href="/paperui/paperbadge">PaperBadge</PaperLink> — Compact status label.

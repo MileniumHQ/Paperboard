@@ -7,7 +7,7 @@ import {
     PaperTable,
     PaperText,
     PaperTextList,
-} from "paperui";
+} from "@paperboard-dev/paperui";
 
 export default function f() {
     return (
@@ -22,13 +22,13 @@ export default function f() {
                 Overview
             </PaperText>
             <PaperText preset="body">
-                <strong>PaperLink</strong> wraps the HTML <PaperCode>&lt;a&gt;</PaperCode> anchor tag. It styles links with PaperUI brand accent colors (<PaperCode>--paper-front-blue</PaperCode>), subtle hover underlines, and automatic external URL processing.
+                PaperLink wraps the HTML <PaperCode>&lt;a&gt;</PaperCode> anchor tag. It styles links with PaperUI brand accent colors (<PaperCode>--paper-front-blue</PaperCode>), subtle hover underlines, and automatic external URL processing.
             </PaperText>
 
             <PaperSeparator />
 
             <PaperText id="external-detection" preset="subheader">
-                External Link Handling
+                External link handling
             </PaperText>
             <PaperText preset="body">
                 When the <PaperCode>href</PaperCode> begins with <PaperCode>http</PaperCode> (or when the <PaperCode>external</PaperCode> prop is explicitly set to <PaperCode>true</PaperCode>), <PaperCode>PaperLink</PaperCode> automatically appends <PaperCode>target="_blank"</PaperCode>, sets <PaperCode>rel="noopener noreferrer"</PaperCode> to mitigate tab-nabbing security risks, and renders a trailing <PaperCode>open_in_new</PaperCode> Material glyph:
@@ -60,7 +60,7 @@ export default function f() {
             <PaperSeparator />
 
             <PaperText id="specification" preset="subheader">
-                Technical Specification
+                Technical specification
             </PaperText>
             <PaperTable>
                 <thead>
@@ -108,7 +108,7 @@ export default function f() {
             <PaperSeparator />
 
             <PaperText id="see-also" preset="subheader">
-                See Also
+                See also
             </PaperText>
             <PaperTextList>
                 <PaperText preset="body">

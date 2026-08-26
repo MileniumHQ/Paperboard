@@ -8,7 +8,7 @@ import {
     PaperTable,
     PaperText,
     PaperTextList,
-} from "paperui";
+} from "@paperboard-dev/paperui";
 
 export default function f() {
     return (
@@ -29,14 +29,14 @@ export default function f() {
             <PaperSeparator />
 
             <PaperText id="usage" preset="subheader">
-                Usage and Demonstration
+                Usage and demonstration
             </PaperText>
             <PaperText preset="body">
                 The component accepts standard <PaperCode>&lt;thead&gt;</PaperCode>, <PaperCode>&lt;tbody&gt;</PaperCode>, <PaperCode>&lt;tr&gt;</PaperCode>, <PaperCode>&lt;th&gt;</PaperCode>, and <PaperCode>&lt;td&gt;</PaperCode> elements:
             </PaperText>
 
             <PaperCode block language="tsx">
-                {`import { PaperTable, PaperBadge, PaperCode } from "paperui";
+                {`import { PaperTable, PaperBadge, PaperCode } from "@paperboard-dev/paperui";
 
 function DatasetTable() {
     return (
@@ -99,7 +99,7 @@ function DatasetTable() {
             <PaperSeparator />
 
             <PaperText id="specification" preset="subheader">
-                Technical Specification
+                Technical specification
             </PaperText>
             <PaperTable>
                 <thead>
@@ -129,7 +129,7 @@ function DatasetTable() {
             <PaperSeparator />
 
             <PaperText id="see-also" preset="subheader">
-                See Also
+                See also
             </PaperText>
             <PaperTextList>
                 <PaperText preset="body">

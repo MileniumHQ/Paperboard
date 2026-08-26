@@ -8,7 +8,7 @@ import {
     PaperTable,
     PaperText,
     PaperTextList,
-} from "paperui";
+} from "@paperboard-dev/paperui";
 
 export default function f() {
     return (
@@ -29,14 +29,14 @@ export default function f() {
             <PaperSeparator />
 
             <PaperText id="usage" preset="subheader">
-                Usage and Demonstration
+                Usage and demonstration
             </PaperText>
             <PaperText preset="body">
                 Separators can divide stacked cards horizontally or separate inline toolbar actions vertically:
             </PaperText>
 
             <PaperCode block language="tsx">
-                {`import { PaperSeparator, PaperFlex, PaperText, PaperButton } from "paperui";
+                {`import { PaperSeparator, PaperFlex, PaperText, PaperButton } from "@paperboard-dev/paperui";
 
 function SeparatorShowcase() {
     return (
@@ -76,7 +76,7 @@ function SeparatorShowcase() {
             <PaperSeparator />
 
             <PaperText id="specification" preset="subheader">
-                Technical Specification
+                Technical specification
             </PaperText>
             <PaperTable>
                 <thead>
@@ -106,7 +106,7 @@ function SeparatorShowcase() {
             <PaperSeparator />
 
             <PaperText id="see-also" preset="subheader">
-                See Also
+                See also
             </PaperText>
             <PaperTextList>
                 <PaperText preset="body">

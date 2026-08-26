@@ -10,7 +10,7 @@ import {
     PaperTable,
     PaperText,
     PaperTextList,
-} from "paperui";
+} from "@paperboard-dev/paperui";
 import { createSignal } from "solid-js";
 
 export default function f() {
@@ -30,13 +30,13 @@ export default function f() {
                 Overview
             </PaperText>
             <PaperText preset="body">
-                <strong>PaperList</strong> and <strong>PaperListItem</strong> coordinate selectable lists, tab strips, and reorderable item collections. Items encapsulate accessible radio input semantics under the hood, support leading icons, subtitles, close buttons, and smooth physics-driven drag translation during reorder operations.
+                PaperList works with PaperListItem to render selectable lists, tab strips, and reorderable item collections. Items encapsulate accessible radio input semantics under the hood and support leading icons, descriptions, close buttons, and drag reordering. During a reorder gesture the dragged item follows the pointer through direct translate3d offsets, with sibling items shifting one slot at a time; no spring or physics interpolation is applied.
             </PaperText>
 
             <PaperSeparator />
 
             <PaperText id="vertical-list" preset="subheader">
-                Standard Vertical List
+                Standard vertical list
             </PaperText>
             <PaperText preset="body">
                 List items can include descriptions and icons, updating an active value via <PaperCode>onValueChange</PaperCode>:
@@ -44,7 +44,7 @@ export default function f() {
 
             <PaperCode block language="tsx">
                 {`import { createSignal } from "solid-js";
-import { PaperList, PaperListItem } from "paperui";
+import { PaperList, PaperListItem } from "@paperboard-dev/paperui";
 
 function ProjectSelector() {
     const [selected, setSelected] = createSignal("proj-1");
@@ -111,7 +111,7 @@ function ProjectSelector() {
             <PaperSeparator />
 
             <PaperText id="reorderable" preset="subheader">
-                Reorderable Horizontal Tabs
+                Reorderable horizontal tabs
             </PaperText>
             <PaperText preset="body">
                 Adding <PaperCode>reorderable</PaperCode> and <PaperCode>horizontal</PaperCode> enables interactive tab strip drag-and-drop reordering:
@@ -190,7 +190,7 @@ function ProjectSelector() {
                     </div>
 
                     <PaperText size={2} color="var(--paper-light-text)">
-                        Active selected tab: <strong>{activeTab()}</strong> | Drag tabs horizontally to reorder or click the close icon to dismiss.
+                        Active selected tab: <strong>{activeTab()}</strong> | Tabs can be dragged horizontally to reorder, and the close icon dismisses a tab.
                     </PaperText>
                 </PaperFlex>
             </PaperContainer>
@@ -198,7 +198,7 @@ function ProjectSelector() {
             <PaperSeparator />
 
             <PaperText id="specification" preset="subheader">
-                Technical Specification
+                Technical specification
             </PaperText>
 
             <PaperText id="props-list" preset="title">
@@ -227,10 +227,16 @@ function ProjectSelector() {
                         <td>Currently active/selected item value identifier.</td>
                     </tr>
                     <tr>
+                        <td><PaperCode>direction</PaperCode></td>
+                        <td><PaperCode>"horizontal" | "vertical"</PaperCode></td>
+                        <td><PaperCode>"vertical"</PaperCode></td>
+                        <td>Layout direction of the list container.</td>
+                    </tr>
+                    <tr>
                         <td><PaperCode>horizontal</PaperCode></td>
                         <td><PaperCode>boolean</PaperCode></td>
                         <td><PaperCode>false</PaperCode></td>
-                        <td>Renders items horizontally in a tab-strip row orientation.</td>
+                        <td>Shorthand for <PaperCode>direction="horizontal"</PaperCode>; renders items in a tab-strip row orientation.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>reorderable</PaperCode></td>
@@ -243,6 +249,24 @@ function ProjectSelector() {
                         <td><PaperCode>(values: (string | number)[]) =&gt; void</PaperCode></td>
                         <td><PaperCode>undefined</PaperCode></td>
                         <td>Callback executed upon completion of an item reordering gesture.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>onBeforeItemClose</PaperCode></td>
+                        <td><PaperCode>(event: PaperListItemCloseEvent) =&gt; boolean | Promise&lt;boolean&gt; | void</PaperCode></td>
+                        <td><PaperCode>undefined</PaperCode></td>
+                        <td>List-level guard invoked before an item closes. Returning <PaperCode>false</PaperCode>, or calling <PaperCode>event.preventDefault()</PaperCode>, cancels the close.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>onItemClose</PaperCode></td>
+                        <td><PaperCode>(event: PaperListItemCloseEvent) =&gt; void</PaperCode></td>
+                        <td><PaperCode>undefined</PaperCode></td>
+                        <td>List-level callback invoked for every close attempt, after the before-close guards run and regardless of whether the close is prevented.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>onItemClosed</PaperCode></td>
+                        <td><PaperCode>(value: string | number) =&gt; void</PaperCode></td>
+                        <td><PaperCode>undefined</PaperCode></td>
+                        <td>List-level callback invoked with the item value only when a close was not prevented.</td>
                     </tr>
                 </tbody>
             </PaperTable>
@@ -274,23 +298,51 @@ function ProjectSelector() {
                     </tr>
                     <tr>
                         <td><PaperCode>description</PaperCode></td>
-                        <td><PaperCode>string</PaperCode></td>
+                        <td><PaperCode>JSX.Element | string</PaperCode></td>
                         <td><PaperCode>undefined</PaperCode></td>
-                        <td>Secondary text rendered beneath the item label.</td>
+                        <td>Secondary content rendered beneath the item label.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>closeable</PaperCode></td>
                         <td><PaperCode>boolean</PaperCode></td>
                         <td><PaperCode>false</PaperCode></td>
-                        <td>Renders a trailing close button triggering dismiss lifecycle events.</td>
+                        <td>Renders a trailing close button triggering dismiss lifecycle events. The button also renders when any close callback is present on the item or the parent list.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>disabled</PaperCode></td>
+                        <td><PaperCode>boolean</PaperCode></td>
+                        <td><PaperCode>false</PaperCode></td>
+                        <td>Prevents item selection and dims the item icon and label.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>onBeforeClose</PaperCode></td>
+                        <td><PaperCode>(event: PaperListItemCloseEvent) =&gt; boolean | Promise&lt;boolean&gt; | void</PaperCode></td>
+                        <td><PaperCode>undefined</PaperCode></td>
+                        <td>Item-level guard invoked before this item closes. Returning <PaperCode>false</PaperCode>, or calling <PaperCode>event.preventDefault()</PaperCode>, cancels the close.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>onClose</PaperCode></td>
+                        <td><PaperCode>(event: PaperListItemCloseEvent) =&gt; void</PaperCode></td>
+                        <td><PaperCode>undefined</PaperCode></td>
+                        <td>Item-level callback invoked for every close attempt on this item, after the before-close guards run.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>onClosed</PaperCode></td>
+                        <td><PaperCode>(value: string | number) =&gt; void</PaperCode></td>
+                        <td><PaperCode>undefined</PaperCode></td>
+                        <td>Item-level callback invoked only when the close was not prevented.</td>
                     </tr>
                 </tbody>
             </PaperTable>
 
+            <PaperText preset="body">
+                The close event passed to the before-close and close handlers is a <PaperCode>PaperListItemCloseEvent</PaperCode> with four members: <PaperCode>value</PaperCode> (the item value), <PaperCode>nativeEvent</PaperCode> (the originating <PaperCode>MouseEvent</PaperCode>), <PaperCode>preventDefault()</PaperCode> (cancels the close when called), and <PaperCode>defaultPrevented</PaperCode> (whether <PaperCode>preventDefault()</PaperCode> has been called). Handlers run in order: item-level then list-level <PaperCode>onBeforeClose</PaperCode>/<PaperCode>onBeforeItemClose</PaperCode>, followed by <PaperCode>onClose</PaperCode>/<PaperCode>onItemClose</PaperCode>; the closed callbacks fire last, only if no handler prevented the close.
+            </PaperText>
+
             <PaperSeparator />
 
             <PaperText id="see-also" preset="subheader">
-                See Also
+                See also
             </PaperText>
             <PaperTextList>
                 <PaperText preset="body">

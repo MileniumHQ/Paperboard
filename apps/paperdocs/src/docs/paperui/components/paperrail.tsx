@@ -9,7 +9,7 @@ import {
     PaperTable,
     PaperText,
     PaperTextList,
-} from "paperui";
+} from "@paperboard-dev/paperui";
 import { createSignal } from "solid-js";
 
 export default function f() {
@@ -27,27 +27,26 @@ export default function f() {
                 Overview
             </PaperText>
             <PaperText preset="body">
-                <strong>PaperRail</strong> and <strong>PaperRailItem</strong>{" "}
-                provide an ultra-compact vertical action rail. It is typically
-                anchored to the extreme left viewport edge in desktop-class
-                applications to facilitate rapid context switching between major
-                workspaces, tool panels, or application modes.
+                PaperRail pairs with PaperRailItem to provide a narrow
+                vertical action rail. It is typically anchored to the left
+                viewport edge in desktop-class applications for switching
+                between major workspaces, tool panels, or application modes.
             </PaperText>
 
             <PaperSeparator />
 
             <PaperText id="usage" preset="subheader">
-                Usage and Demonstration
+                Usage and demonstration
             </PaperText>
             <PaperText preset="body">
                 The rail manages active selection state through the{" "}
                 <PaperCode>name</PaperCode> and <PaperCode>value</PaperCode>{" "}
-                properties:
+                props:
             </PaperText>
 
             <PaperCode block language="tsx">
                 {`import { createSignal } from "solid-js";
-import { PaperRail, PaperRailItem } from "paperui";
+import { PaperRail, PaperRailItem } from "@paperboard-dev/paperui";
 
 function AppNavigation() {
     const [workspace, setWorkspace] = createSignal("studio");
@@ -124,9 +123,9 @@ function AppNavigation() {
                                 {activeRail() === "studio"
                                     ? "Visual Studio Workspace"
                                     : activeRail() === "code"
-                                      ? "Terminal & Developer Console"
+                                      ? "Terminal and developer console"
                                       : activeRail() === "database"
-                                        ? "Database Schema & Query Inspector"
+                                        ? "Database schema and query inspector"
                                         : "Workspace Preferences"}
                             </PaperText>
                             <PaperCode>
@@ -138,12 +137,11 @@ function AppNavigation() {
 
                         <PaperText
                             preset="body"
-                            color="light"
+                            color="light-text"
                         >
-                            Click any icon on the left rail to switch workspace
-                            modes seamlessly. PaperRail docks neatly to the
-                            viewport boundary and manages single-selection
-                            context.
+                            Selecting an icon on the rail switches the active
+                            workspace. PaperRail docks to the viewport boundary
+                            and manages single-selection context.
                         </PaperText>
                     </div>
                 </div>
@@ -152,7 +150,7 @@ function AppNavigation() {
             <PaperSeparator />
 
             <PaperText id="specification" preset="subheader">
-                Technical Specification
+                Technical specification
             </PaperText>
 
             <PaperText id="props-rail" preset="title">
@@ -196,6 +194,35 @@ function AppNavigation() {
                         <td>
                             Active item identifier bound to an external reactive
                             signal.
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>
+                            <PaperCode>defaultValue</PaperCode>
+                        </td>
+                        <td>
+                            <PaperCode>string | number</PaperCode>
+                        </td>
+                        <td>
+                            <PaperCode>undefined</PaperCode>
+                        </td>
+                        <td>
+                            Initial uncontrolled selection value.
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>
+                            <PaperCode>onValueChange</PaperCode>
+                        </td>
+                        <td>
+                            <PaperCode>(value: string | number) =&gt; void</PaperCode>
+                        </td>
+                        <td>
+                            <PaperCode>undefined</PaperCode>
+                        </td>
+                        <td>
+                            Callback invoked whenever the active selection
+                            changes.
                         </td>
                     </tr>
                 </tbody>
@@ -246,7 +273,7 @@ function AppNavigation() {
                             <PaperCode>label</PaperCode>
                         </td>
                         <td>
-                            <PaperCode>string</PaperCode>
+                            <PaperCode>JSX.Element | string</PaperCode>
                         </td>
                         <td>
                             <PaperCode>undefined</PaperCode>
@@ -267,8 +294,7 @@ function AppNavigation() {
                             <PaperCode>false</PaperCode>
                         </td>
                         <td>
-                            Deactivates button interaction and applies muted
-                            opacity.
+                            Deactivates button interaction and dims the item icon.
                         </td>
                     </tr>
                 </tbody>
@@ -307,7 +333,7 @@ function AppNavigation() {
                             <PaperCode>label</PaperCode>
                         </td>
                         <td>
-                            <PaperCode>string</PaperCode>
+                            <PaperCode>JSX.Element | string</PaperCode>
                         </td>
                         <td>
                             <PaperCode>undefined</PaperCode>
@@ -337,7 +363,7 @@ function AppNavigation() {
             <PaperSeparator />
 
             <PaperText id="see-also" preset="subheader">
-                See Also
+                See also
             </PaperText>
             <PaperTextList>
                 <PaperText preset="body">

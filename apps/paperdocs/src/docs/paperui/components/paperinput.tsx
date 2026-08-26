@@ -8,7 +8,7 @@ import {
     PaperTable,
     PaperText,
     PaperTextList,
-} from "paperui";
+} from "@paperboard-dev/paperui";
 import { createSignal } from "solid-js";
 
 export default function f() {
@@ -26,20 +26,20 @@ export default function f() {
                 Overview
             </PaperText>
             <PaperText preset="body">
-                <strong>PaperInput</strong> provides an accessible text entry field conforming to PaperUI design tokens. It supports controlled and uncontrolled operation, leading iconography, real-time input validation predicates, focus states, and invalid boundary indication using <PaperCode>--paper-front-red</PaperCode> accents.
+                PaperInput provides an accessible text entry field conforming to PaperUI design tokens. It supports controlled and uncontrolled operation, leading iconography, real-time input validation predicates, focus states, and invalid boundary indication using <PaperCode>--paper-front-red</PaperCode> accents.
             </PaperText>
 
             <PaperSeparator />
 
             <PaperText id="usage" preset="subheader">
-                Usage and Demonstration
+                Usage and demonstration
             </PaperText>
             <PaperText preset="body">
                 Input fields can be customized with prefix icons, compact sizing, and full-width layouts:
             </PaperText>
 
             <PaperCode block language="tsx">
-                {`import { PaperInput, PaperFlex } from "paperui";
+                {`import { PaperInput, PaperFlex } from "@paperboard-dev/paperui";
 
 function InputShowcase() {
     return (
@@ -73,10 +73,10 @@ function InputShowcase() {
             <PaperSeparator />
 
             <PaperText id="validation" preset="subheader">
-                Real-Time Validation
+                Real-time validation
             </PaperText>
             <PaperText preset="body">
-                Supplying a <PaperCode>validate</PaperCode> predicate function automatically sets the input's invalid error visual state when evaluating to false:
+                Supplying a <PaperCode>validate</PaperCode> predicate function automatically sets the input's invalid error visual state when evaluating to false. An explicit <PaperCode>invalid</PaperCode> prop takes precedence: when set, it overrides the <PaperCode>validate</PaperCode> predicate entirely.
             </PaperText>
 
             <PaperCode block language="tsx">
@@ -105,7 +105,7 @@ function InputShowcase() {
             <PaperSeparator />
 
             <PaperText id="specification" preset="subheader">
-                Technical Specification
+                Technical specification
             </PaperText>
             <PaperTable>
                 <thead>
@@ -139,19 +139,19 @@ function InputShowcase() {
                         <td><PaperCode>invalid</PaperCode></td>
                         <td><PaperCode>boolean</PaperCode></td>
                         <td><PaperCode>false</PaperCode></td>
-                        <td>Explicitly sets the invalid error visual state and accent border color.</td>
+                        <td>Explicitly sets the invalid error visual state and accent border color. When set, overrides the <PaperCode>validate</PaperCode> predicate entirely.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>validate</PaperCode></td>
                         <td><PaperCode>(value: string) =&gt; boolean</PaperCode></td>
                         <td><PaperCode>undefined</PaperCode></td>
-                        <td>Predicate returning false when input text fails validation rules.</td>
+                        <td>Predicate returning false when input text fails validation rules. Ignored when <PaperCode>invalid</PaperCode> is explicitly set.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>defaultValue</PaperCode></td>
                         <td><PaperCode>string | number</PaperCode></td>
-                        <td><PaperCode>""</PaperCode></td>
-                        <td>Initial uncontrolled value.</td>
+                        <td><PaperCode>undefined</PaperCode></td>
+                        <td>Initial uncontrolled value. When omitted, the internal state falls back to an empty string.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>value</PaperCode></td>
@@ -171,13 +171,19 @@ function InputShowcase() {
                         <td><PaperCode>false</PaperCode></td>
                         <td>Disables user interaction and applies muted opacity.</td>
                     </tr>
+                    <tr>
+                        <td><PaperCode>ref</PaperCode></td>
+                        <td><PaperCode>HTMLInputElement | ((el: HTMLInputElement) =&gt; void)</PaperCode></td>
+                        <td><PaperCode>undefined</PaperCode></td>
+                        <td>Receives the underlying native <PaperCode>&lt;input&gt;</PaperCode> element.</td>
+                    </tr>
                 </tbody>
             </PaperTable>
 
             <PaperSeparator />
 
             <PaperText id="see-also" preset="subheader">
-                See Also
+                See also
             </PaperText>
             <PaperTextList>
                 <PaperText preset="body">

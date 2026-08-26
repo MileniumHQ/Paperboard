@@ -9,7 +9,7 @@ import {
     PaperTable,
     PaperText,
     PaperTextList,
-} from "paperui";
+} from "@paperboard-dev/paperui";
 import { createSignal } from "solid-js";
 
 export default function f() {
@@ -23,7 +23,7 @@ export default function f() {
         <>
             <PaperText preset="header">PaperProgress</PaperText>
             <PaperText preset="body">
-                <strong>PaperProgress</strong> is a linear progress bar component that mirrors the HTML <PaperCode>&lt;progress&gt;</PaperCode> interface while applying the Paper design system specifications, including borderless geometry, a double thick border height, and cubic-bezier percentage transitions.
+                <strong>PaperProgress</strong> is a linear progress bar component that mirrors the HTML <PaperCode>&lt;progress&gt;</PaperCode> interface while applying the Paper design system specifications, including borderless geometry, a track height of twice the thickest border width (<PaperCode>calc(var(--paper-thickest-border-width) * 2)</PaperCode>), and cubic-bezier percentage transitions.
             </PaperText>
             <PaperSeparator />
 
@@ -31,31 +31,33 @@ export default function f() {
                 Overview
             </PaperText>
             <PaperText preset="body">
-                <strong>PaperProgress</strong> visualizes the quantitative completion status of deterministic tasks or communicates active processing for indeterminate background workloads. The component implements the WAI-ARIA progressbar design pattern (<PaperCode>role="progressbar"</PaperCode>) with appropriate ARIA state attributes.
+                PaperProgress visualizes the quantitative completion status of deterministic tasks or communicates active processing for indeterminate background workloads. The component implements the WAI-ARIA progressbar design pattern (<PaperCode>role="progressbar"</PaperCode>) with matching ARIA state attributes.
             </PaperText>
             <PaperText preset="body">
-                Unlike complex status trackers with state lifecycle labels (such as <PaperLink href="/paperui/paperloader">PaperLoader</PaperLink>), <strong>PaperProgress</strong> functions as a minimalist, unadorned progress bar suitable for inline headers, dialog banners, taskbars, and updater overlays.
+                Unlike status trackers with lifecycle labels (such as <PaperLink href="/paperui/paperloader">PaperLoader</PaperLink>), PaperProgress functions as a plain progress bar suited to inline headers, dialog banners, taskbars, and updater overlays.
             </PaperText>
 
             <PaperSeparator />
 
             <PaperText id="usage" preset="subheader">
-                Usage and Demonstration
+                Usage and demonstration
             </PaperText>
             <PaperText preset="body">
-                The component accepts numerical <PaperCode>value</PaperCode> and optional <PaperCode>max</PaperCode> attributes for determinate progress, or operates in an indeterminate mode when <PaperCode>value</PaperCode> is omitted:
+                The component accepts the numerical props <PaperCode>value</PaperCode> and optional <PaperCode>max</PaperCode> for determinate progress, or operates in an indeterminate mode when <PaperCode>value</PaperCode> is omitted:
             </PaperText>
 
             <PaperCode block language="tsx">
-                {`import { PaperProgress } from "paperui";
+                {`import { PaperProgress } from "@paperboard-dev/paperui";
 
 function DownloadStatus() {
     return (
-        // Determinate progress
-        <PaperProgress value={70} max={100} />
+        <>
+            {/* Determinate progress */}
+            <PaperProgress value={70} max={100} />
 
-        // Indeterminate state
-        <PaperProgress />
+            {/* Indeterminate state */}
+            <PaperProgress />
+        </>
     );
 }`}
             </PaperCode>
@@ -120,7 +122,7 @@ function DownloadStatus() {
             <PaperSeparator />
 
             <PaperText id="specification" preset="subheader">
-                Technical Specification
+                Technical specification
             </PaperText>
             <PaperTable>
                 <thead>
@@ -162,7 +164,7 @@ function DownloadStatus() {
             <PaperSeparator />
 
             <PaperText id="see-also" preset="subheader">
-                See Also
+                See also
             </PaperText>
             <PaperTextList>
                 <PaperText preset="body">

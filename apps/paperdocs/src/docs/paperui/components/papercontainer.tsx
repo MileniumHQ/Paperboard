@@ -8,14 +8,14 @@ import {
     PaperTable,
     PaperText,
     PaperTextList,
-} from "paperui";
+} from "@paperboard-dev/paperui";
 
 export default function f() {
     return (
         <>
             <PaperText preset="header">PaperContainer</PaperText>
             <PaperText preset="body">
-                <strong>PaperContainer</strong> is a standardized framed container primitive providing visual separation, elevation shadows, background token binding, and rounded border geometry.
+                <strong>PaperContainer</strong> is a framed container primitive that provides visual separation, a bound background token, and rounded border geometry.
             </PaperText>
             <PaperSeparator />
 
@@ -23,13 +23,13 @@ export default function f() {
                 Overview
             </PaperText>
             <PaperText preset="body">
-                <strong>PaperContainer</strong> is the foundational structural frame in PaperUI. It establishes a distinct visual boundary by applying <PaperCode>--paper-background-front</PaperCode>, <PaperCode>--paper-medium-border</PaperCode>, standard border radii (12px), and subtle ambient shadows (<PaperCode>--paper-element-shadow</PaperCode>). It is ubiquitously utilized across Paperboard to encapsulate cards, code previews, and interactive modules.
+                PaperContainer renders a full-width frame that establishes a visual boundary by applying the <PaperCode>--paper-background-frontest</PaperCode> background, a <PaperCode>--paper-medium-border</PaperCode> border, and the standard border radius. It is used throughout Paperboard to enclose cards, code previews, and other grouped content.
             </PaperText>
 
             <PaperSeparator />
 
             <PaperText id="usage" preset="subheader">
-                Usage and Demonstration
+                Usage and demonstration
             </PaperText>
             <PaperText preset="body">
                 The component accepts arbitrary child elements, commonly combined with <PaperLink href="/paperui/paperflex"><PaperCode>PaperFlex</PaperCode></PaperLink> to organize content alignment:
@@ -64,7 +64,7 @@ export default function f() {
             <PaperSeparator />
 
             <PaperText id="specification" preset="subheader">
-                Technical Specification
+                Technical specification
             </PaperText>
             <PaperTable>
                 <thead>
@@ -107,7 +107,7 @@ export default function f() {
                     <PaperLink href="/paperui/paperflex">PaperFlex</PaperLink> — Layout primitive frequently wrapped inside PaperContainer.
                 </PaperText>
                 <PaperText preset="body">
-                    <PaperLink href="/paperui/variables">Variables & Spacing</PaperLink> — Elevation tokens and border radii reference.
+                    <PaperLink href="/paperui/variables">Variables and Spacing</PaperLink> — Border radius and background token reference.
                 </PaperText>
             </PaperTextList>
         </>

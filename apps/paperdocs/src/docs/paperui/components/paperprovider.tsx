@@ -10,7 +10,7 @@ import {
     PaperText,
     PaperTextList,
     usePaper,
-} from "paperui";
+} from "@paperboard-dev/paperui";
 
 export default function f() {
     return (
@@ -39,8 +39,8 @@ export default function f() {
 
             <PaperCode block language="tsx">
                 {`import { render } from "solid-js/web";
-import { PaperProvider } from "paperui";
-import "paperui/style.css";
+import { PaperProvider } from "@paperboard-dev/paperui";
+import "@paperboard-dev/paperui/style.css";
 import App from "./App";
 
 render(
@@ -72,7 +72,7 @@ render(
             </PaperText>
 
             <PaperCode block language="tsx">
-                {`import { usePaper, PaperButton } from "paperui";
+                {`import { usePaper, PaperButton } from "@paperboard-dev/paperui";
 
 function ThemeSwitcher() {
     const paper = usePaper();

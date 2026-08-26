@@ -8,7 +8,7 @@ import {
     PaperText,
     PaperTextList,
     PaperToggle,
-} from "paperui";
+} from "@paperboard-dev/paperui";
 import { createSignal } from "solid-js";
 
 export default function f() {
@@ -19,7 +19,7 @@ export default function f() {
         <>
             <PaperText preset="header">PaperToggle</PaperText>
             <PaperText preset="body">
-                <strong>PaperToggle</strong> is a binary switch input primitive featuring animated sliding knob physics, integrated status icons, keyboard accessibility, and reactive state synchronization.
+                <strong>PaperToggle</strong> is a binary switch input primitive featuring an animated sliding knob, integrated status icons, keyboard accessibility, and reactive state synchronization.
             </PaperText>
             <PaperSeparator />
 
@@ -27,21 +27,21 @@ export default function f() {
                 Overview
             </PaperText>
             <PaperText preset="body">
-                <strong>PaperToggle</strong> implements an accessible boolean switch control (<PaperCode>role="switch"</PaperCode>). It supports both controlled and uncontrolled states, sliding knob physics, keyboard toggling via <PaperCode>Space</PaperCode> and <PaperCode>Enter</PaperCode>, and embedded check/close icon glyphs.
+                PaperToggle implements an accessible boolean switch control (<PaperCode>role="switch"</PaperCode>). It supports both controlled and uncontrolled states, an animated sliding knob, keyboard toggling via <PaperCode>Space</PaperCode> and <PaperCode>Enter</PaperCode>, and embedded check/close icon glyphs.
             </PaperText>
 
             <PaperSeparator />
 
             <PaperText id="usage" preset="subheader">
-                Usage and Demonstration
+                Usage and demonstration
             </PaperText>
             <PaperText preset="body">
-                Toggles can be bound to reactive signals using the <PaperCode>checked</PaperCode> and <PaperCode>onChange</PaperCode> properties:
+                Toggles can be bound to reactive signals using the <PaperCode>checked</PaperCode> and <PaperCode>onChange</PaperCode> props:
             </PaperText>
 
             <PaperCode block language="tsx">
                 {`import { createSignal } from "solid-js";
-import { PaperToggle, PaperFlex, PaperText } from "paperui";
+import { PaperToggle, PaperFlex, PaperText } from "@paperboard-dev/paperui";
 
 function ToggleExample() {
     const [active, setActive] = createSignal(true);
@@ -91,7 +91,7 @@ function ToggleExample() {
             <PaperSeparator />
 
             <PaperText id="specification" preset="subheader">
-                Technical Specification
+                Technical specification
             </PaperText>
             <PaperTable>
                 <thead>
@@ -139,7 +139,7 @@ function ToggleExample() {
             <PaperSeparator />
 
             <PaperText id="see-also" preset="subheader">
-                See Also
+                See also
             </PaperText>
             <PaperTextList>
                 <PaperText preset="body">
