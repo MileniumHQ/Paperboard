@@ -9,7 +9,7 @@ import {
     PaperTable,
     PaperText,
     PaperTextList,
-} from "paperui";
+} from "@paperboard-dev/paperui";
 
 export default function f() {
     return (
@@ -24,13 +24,13 @@ export default function f() {
                 Overview
             </PaperText>
             <PaperText preset="body">
-                <strong>PaperFlex</strong> serves as the fundamental structural container for arranging components across horizontal and vertical axes. It bridges the PaperUI design token scale with CSS Flexbox properties, mapping named string literals (such as <PaperCode>"half"</PaperCode> or <PaperCode>"double"</PaperCode>) to computed values derived from <PaperCode>--paper-uigap</PaperCode>.
+                PaperFlex serves as the fundamental structural container for arranging components across horizontal and vertical axes. It bridges the PaperUI design token scale with CSS Flexbox properties, mapping named string literals (such as <PaperCode>"half"</PaperCode> or <PaperCode>"double"</PaperCode>) to computed values derived from <PaperCode>--paper-uigap</PaperCode>.
             </PaperText>
 
             <PaperSeparator />
 
             <PaperText id="basic-layout" preset="subheader">
-                Basic Layout and Direction
+                Basic layout and direction
             </PaperText>
             <PaperText preset="body">
                 By default, <PaperCode>PaperFlex</PaperCode> arranges child elements along a vertical column. Setting <PaperCode>direction="row"</PaperCode> switches the primary axis to horizontal. The <PaperCode>center</PaperCode> boolean prop concurrently sets both <PaperCode>align-items</PaperCode> and <PaperCode>justify-content</PaperCode> to <PaperCode>"center"</PaperCode>.
@@ -57,7 +57,7 @@ export default function f() {
             <PaperSeparator />
 
             <PaperText id="background-surfaces" preset="subheader">
-                Surface Layer Backgrounds
+                Surface layer backgrounds
             </PaperText>
             <PaperText preset="body">
                 The <PaperCode>background</PaperCode> prop automatically maps surface identifiers (<PaperCode>"frontest"</PaperCode>, <PaperCode>"front"</PaperCode>, <PaperCode>"back"</PaperCode>, <PaperCode>"backest"</PaperCode>, <PaperCode>"definition"</PaperCode>, <PaperCode>"element"</PaperCode>) to their corresponding CSS theme variables.
@@ -123,7 +123,7 @@ export default function f() {
             <PaperSeparator />
 
             <PaperText id="resizable" preset="subheader">
-                Resizable Panes
+                Resizable panes
             </PaperText>
             <PaperText preset="body">
                 Setting <PaperCode>resizable</PaperCode> attaches an interactive drag handle to the trailing edge of the container. Pointer events are captured and bounds are clamped against computed min/max dimensions.
@@ -165,7 +165,7 @@ export default function f() {
             <PaperSeparator />
 
             <PaperText id="specification" preset="subheader">
-                Technical Specification
+                Technical specification
             </PaperText>
             <PaperTable>
                 <thead>
@@ -226,6 +226,12 @@ export default function f() {
                         <td>Expands width or height to occupy 100% of parent dimensions.</td>
                     </tr>
                     <tr>
+                        <td><PaperCode>wrap</PaperCode></td>
+                        <td><PaperCode>boolean | JSX.CSSProperties["flex-wrap"]</PaperCode></td>
+                        <td><PaperCode>undefined</PaperCode></td>
+                        <td>Enables flex wrapping. A boolean value maps to <PaperCode>"wrap"</PaperCode> or <PaperCode>"nowrap"</PaperCode>; a string sets the CSS <PaperCode>flex-wrap</PaperCode> value directly (e.g. <PaperCode>"wrap-reverse"</PaperCode>).</td>
+                    </tr>
+                    <tr>
                         <td><PaperCode>background</PaperCode></td>
                         <td><PaperCode>PaperFlexBackground</PaperCode></td>
                         <td><PaperCode>undefined</PaperCode></td>
@@ -249,11 +255,11 @@ export default function f() {
             <PaperSeparator />
 
             <PaperText id="see-also" preset="subheader">
-                See Also
+                See also
             </PaperText>
             <PaperTextList>
                 <PaperText preset="body">
-                    <PaperLink href="/paperui/variables">Variables & Spacing</PaperLink> — Full reference for the UI gap spacing scale.
+                    <PaperLink href="/paperui/variables">Variables and spacing</PaperLink> — Full reference for the UI gap spacing scale.
                 </PaperText>
                 <PaperText preset="body">
                     <PaperLink href="/paperui/papercontainer">PaperContainer</PaperLink> — Visual frame wrapper often paired with PaperFlex.

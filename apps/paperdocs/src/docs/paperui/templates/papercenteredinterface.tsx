@@ -1,6 +1,7 @@
 import {
     PaperButton,
     PaperCode,
+    PaperCenteredInterface,
     PaperContainer,
     PaperFlex,
     PaperIcon,
@@ -9,8 +10,7 @@ import {
     PaperTable,
     PaperText,
     PaperTextList,
-} from "paperui";
-import { PaperCenteredInterface } from "paperui";
+} from "@paperboard-dev/paperui";
 
 export default function f() {
     return (
@@ -25,20 +25,20 @@ export default function f() {
                 Overview
             </PaperText>
             <PaperText preset="body">
-                <strong>PaperCenteredInterface</strong> is a higher-order layout template in PaperUI designed to constrain and horizontally/vertically center interactive interfaces within a designated viewport. It enforces standard dimensional limits defined by the <PaperCode>--paper-centered-width</PaperCode> and <PaperCode>--paper-centered-height</PaperCode> design tokens.
+                PaperCenteredInterface is a higher-order layout template in PaperUI designed to constrain and horizontally/vertically center interactive interfaces within a designated viewport. It enforces standard dimensional limits defined by the <PaperCode>--paper-centered-width</PaperCode> and <PaperCode>--paper-centered-height</PaperCode> design tokens.
             </PaperText>
 
             <PaperSeparator />
 
             <PaperText id="usage" preset="subheader">
-                Usage and Demonstration
+                Usage and demonstration
             </PaperText>
             <PaperText preset="body">
                 The component encapsulates child elements within an internal bounding wrapper, applying boundary isolation and elevation.
             </PaperText>
 
             <PaperCode block language="tsx">
-                {`import { PaperCenteredInterface, PaperFlex, PaperText, PaperButton } from "paperui";
+                {`import { PaperCenteredInterface, PaperFlex, PaperText, PaperButton } from "@paperboard-dev/paperui";
 
 function WelcomeScreen() {
     return (
@@ -77,7 +77,7 @@ function WelcomeScreen() {
             <PaperSeparator />
 
             <PaperText id="specification" preset="subheader">
-                Technical Specification
+                Technical specification
             </PaperText>
             <PaperTable>
                 <thead>
@@ -131,7 +131,7 @@ function WelcomeScreen() {
             <PaperSeparator />
 
             <PaperText id="see-also" preset="subheader">
-                See Also
+                See also
             </PaperText>
             <PaperTextList>
                 <PaperText preset="body">

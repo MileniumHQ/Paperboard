@@ -14,7 +14,7 @@ import {
     PaperWizard,
     PaperWizardStep,
     useWizard,
-} from "paperui";
+} from "@paperboard-dev/paperui";
 import { createSignal, Show } from "solid-js";
 
 function WizardCompletionSummary(props: { data: Record<string, any> | null }) {
@@ -54,7 +54,7 @@ export default function f() {
                 Overview
             </PaperText>
             <PaperText preset="body">
-                <strong>PaperWizard</strong> coordinates multi-stage onboarding,
+                PaperWizard coordinates multi-stage onboarding,
                 setup, and deployment procedures. It combines an animated step
                 container with built-in navigation controls (Back/Next/Finish),
                 progress bars, and reactive state management accessible to
@@ -65,7 +65,7 @@ export default function f() {
             <PaperSeparator />
 
             <PaperText id="usage" preset="subheader">
-                Usage and Demonstration
+                Usage and demonstration
             </PaperText>
             <PaperText preset="body">
                 Each child step is represented by a{" "}
@@ -76,7 +76,7 @@ export default function f() {
             </PaperText>
 
             <PaperCode block language="tsx">
-                {`import { PaperWizard, PaperWizardStep, PaperInput, PaperText, PaperFlex } from "paperui";
+                {`import { PaperWizard, PaperWizardStep, PaperInput, PaperText, PaperFlex } from "@paperboard-dev/paperui";
 
 function DeploymentWizard() {
     return (
@@ -164,7 +164,7 @@ function DeploymentWizard() {
             <PaperSeparator />
 
             <PaperText id="context-hook" preset="subheader">
-                Wizard Context API (<PaperCode>useWizard</PaperCode>)
+                Wizard context API (<PaperCode>useWizard</PaperCode>)
             </PaperText>
             <PaperText preset="body">
                 Step components can access the wizard's state machine via{" "}
@@ -201,6 +201,40 @@ function DeploymentWizard() {
                     </tr>
                     <tr>
                         <td>
+                            <PaperCode>setCurrentStep(index)</PaperCode>
+                        </td>
+                        <td>
+                            <PaperCode>(index: number) =&gt; void</PaperCode>
+                        </td>
+                        <td>
+                            Jumps directly to the zero-indexed step number
+                            without invoking <PaperCode>onStepChange</PaperCode>.
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>
+                            <PaperCode>nextStep()</PaperCode>
+                        </td>
+                        <td>
+                            <PaperCode>() =&gt; void</PaperCode>
+                        </td>
+                        <td>
+                            Advances to the next step, or invokes{" "}
+                            <PaperCode>onComplete</PaperCode> when on the final
+                            step. Blocked while progression is disabled.
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>
+                            <PaperCode>prevStep()</PaperCode>
+                        </td>
+                        <td>
+                            <PaperCode>() =&gt; void</PaperCode>
+                        </td>
+                        <td>Returns to the previous step when not on step 0.</td>
+                    </tr>
+                    <tr>
+                        <td>
                             <PaperCode>setCanProceed(canProceed)</PaperCode>
                         </td>
                         <td>
@@ -223,6 +257,18 @@ function DeploymentWizard() {
                         <td>
                             Toggles visibility of the bottom button navigation
                             bar.
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>
+                            <PaperCode>optionsShown()</PaperCode>
+                        </td>
+                        <td>
+                            <PaperCode>() =&gt; boolean</PaperCode>
+                        </td>
+                        <td>
+                            Returns whether the bottom navigation bar is
+                            currently visible.
                         </td>
                     </tr>
                     <tr>
@@ -251,17 +297,63 @@ function DeploymentWizard() {
                         </td>
                         <td>Returns the complete accumulated form payload.</td>
                     </tr>
+                    <tr>
+                        <td>
+                            <PaperCode>getStepData(key?)</PaperCode>
+                        </td>
+                        <td>
+                            <PaperCode>(key?: string) =&gt; any</PaperCode>
+                        </td>
+                        <td>
+                            Returns a single accumulated value by key, or the
+                            full payload when no key is supplied.
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>
+                            <PaperCode>isFirstStep()</PaperCode>
+                        </td>
+                        <td>
+                            <PaperCode>() =&gt; boolean</PaperCode>
+                        </td>
+                        <td>Returns whether the active step is step 0.</td>
+                    </tr>
+                    <tr>
+                        <td>
+                            <PaperCode>isLastStep()</PaperCode>
+                        </td>
+                        <td>
+                            <PaperCode>() =&gt; boolean</PaperCode>
+                        </td>
+                        <td>
+                            Returns whether the active step is the final
+                            registered step.
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>
+                            <PaperCode>registerStep(index)</PaperCode>
+                        </td>
+                        <td>
+                            <PaperCode>(index: number) =&gt; void</PaperCode>
+                        </td>
+                        <td>
+                            Registers a step position and grows the total step
+                            count. Called automatically by{" "}
+                            <PaperCode>PaperWizardStep</PaperCode>.
+                        </td>
+                    </tr>
                 </tbody>
             </PaperTable>
 
             <PaperSeparator />
 
             <PaperText id="specification" preset="subheader">
-                Technical Specification
+                Technical specification
             </PaperText>
 
             <PaperText id="props-wizard" preset="title">
-                PaperWizard Props
+                PaperWizard props
             </PaperText>
             <PaperTable>
                 <thead>
@@ -305,13 +397,57 @@ function DeploymentWizard() {
                             <PaperCode>finishLabel</PaperCode>
                         </td>
                         <td>
-                            <PaperCode>string</PaperCode>
+                            <PaperCode>JSX.Element | string</PaperCode>
                         </td>
                         <td>
                             <PaperCode>"Finish"</PaperCode>
                         </td>
                         <td>
                             Text label on the final step's confirmation button.
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>
+                            <PaperCode>nextLabel</PaperCode>
+                        </td>
+                        <td>
+                            <PaperCode>JSX.Element | string</PaperCode>
+                        </td>
+                        <td>
+                            <PaperCode>"Next"</PaperCode>
+                        </td>
+                        <td>
+                            Text label on the advancement button for
+                            non-final steps.
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>
+                            <PaperCode>backLabel</PaperCode>
+                        </td>
+                        <td>
+                            <PaperCode>JSX.Element | string</PaperCode>
+                        </td>
+                        <td>
+                            <PaperCode>"Back"</PaperCode>
+                        </td>
+                        <td>
+                            Text label on the back navigation button.
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>
+                            <PaperCode>hideBack</PaperCode>
+                        </td>
+                        <td>
+                            <PaperCode>boolean</PaperCode>
+                        </td>
+                        <td>
+                            <PaperCode>false</PaperCode>
+                        </td>
+                        <td>
+                            Hides the back navigation button, preventing
+                            return to previous steps.
                         </td>
                     </tr>
                     <tr>
@@ -369,7 +505,7 @@ function DeploymentWizard() {
             </PaperTable>
 
             <PaperText id="props-wizard-step" preset="title">
-                PaperWizardStep Props
+                PaperWizardStep props
             </PaperText>
             <PaperTable>
                 <thead>
@@ -429,7 +565,7 @@ function DeploymentWizard() {
             <PaperSeparator />
 
             <PaperText id="see-also" preset="subheader">
-                See Also
+                See also
             </PaperText>
             <PaperTextList>
                 <PaperText preset="body">

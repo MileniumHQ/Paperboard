@@ -13,7 +13,7 @@ import {
     PaperTable,
     PaperText,
     PaperTextList,
-} from "paperui";
+} from "@paperboard-dev/paperui";
 import { createSignal } from "solid-js";
 
 export default function f() {
@@ -33,9 +33,9 @@ export default function f() {
                 Overview
             </PaperText>
             <PaperText preset="body">
-                <strong>PaperInterfaceGroup</strong> coordinates the selective
-                visibility of nested <strong>PaperInterfaceItem</strong> (or{" "}
-                <strong>PaperInterfaceStep</strong>) children by comparing an
+                PaperInterfaceGroup coordinates the selective
+                visibility of nested <PaperCode>PaperInterfaceItem</PaperCode> (or{" "}
+                <PaperCode>PaperInterfaceStep</PaperCode>) children by comparing an
                 active controller value against item keys through SolidJS
                 context propagation.
             </PaperText>
@@ -43,7 +43,7 @@ export default function f() {
             <PaperSeparator />
 
             <PaperText id="usage" preset="subheader">
-                Usage and Demonstration
+                Usage and demonstration
             </PaperText>
             <PaperText preset="body">
                 The group coordinates with controllers such as{" "}
@@ -67,7 +67,7 @@ import {
     PaperSelectorItem,
     PaperFlex,
     PaperText,
-} from "paperui";
+} from "@paperboard-dev/paperui";
 
 function TabbedView() {
     const [activeTab, setActiveTab] = createSignal("overview");
@@ -161,11 +161,11 @@ function TabbedView() {
             <PaperSeparator />
 
             <PaperText id="specification" preset="subheader">
-                Technical Specification
+                Technical specification
             </PaperText>
 
             <PaperText id="props-group" preset="title">
-                PaperInterfaceGroup Props
+                PaperInterfaceGroup props
             </PaperText>
             <PaperTable>
                 <thead>
@@ -259,7 +259,7 @@ function TabbedView() {
             <PaperSeparator />
 
             <PaperText id="see-also" preset="subheader">
-                See Also
+                See also
             </PaperText>
             <PaperTextList>
                 <PaperText preset="body">

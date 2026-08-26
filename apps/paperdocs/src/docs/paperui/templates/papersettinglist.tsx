@@ -11,7 +11,7 @@ import {
     PaperText,
     PaperTextList,
     PaperToggle,
-} from "paperui";
+} from "@paperboard-dev/paperui";
 import { createSignal } from "solid-js";
 
 export default function f() {
@@ -33,13 +33,13 @@ export default function f() {
                 Overview
             </PaperText>
             <PaperText preset="body">
-                <strong>PaperSettingList</strong> and <strong>PaperSettingItem</strong> provide a unified two-column layout for application settings and configuration panels. By intercepting bubbling <PaperCode>input</PaperCode> and <PaperCode>change</PaperCode> events on the parent list, <PaperCode>PaperSettingList</PaperCode> automatically captures values from any child input element possessing a <PaperCode>name</PaperCode> attribute.
+                PaperSettingList and PaperSettingItem provide a unified two-column layout for application settings and configuration panels. By intercepting bubbling <PaperCode>input</PaperCode> and <PaperCode>change</PaperCode> events on the parent list, <PaperCode>PaperSettingList</PaperCode> automatically captures values from any child input element possessing a <PaperCode>name</PaperCode> attribute.
             </PaperText>
 
             <PaperSeparator />
 
             <PaperText id="usage" preset="subheader">
-                Usage and Demonstration
+                Usage and demonstration
             </PaperText>
             <PaperText preset="body">
                 Each child input control (<PaperLink href="/paperui/papertoggle"><PaperCode>PaperToggle</PaperCode></PaperLink>, <PaperLink href="/paperui/paperinput"><PaperCode>PaperInput</PaperCode></PaperLink>, etc.) specifies a <PaperCode>name</PaperCode> attribute matching the corresponding key in the data object:
@@ -47,7 +47,7 @@ export default function f() {
 
             <PaperCode block language="tsx">
                 {`import { createSignal } from "solid-js";
-import { PaperSettingList, PaperSettingItem, PaperToggle, PaperInput } from "paperui";
+import { PaperSettingList, PaperSettingItem, PaperToggle, PaperInput } from "@paperboard-dev/paperui";
 
 function ConfigurationPanel() {
     const [config, setConfig] = createSignal({
@@ -99,7 +99,7 @@ function ConfigurationPanel() {
                         </PaperSettingItem>
 
                         <PaperSettingItem
-                            title="Telemetry & Diagnostics"
+                            title="Telemetry and diagnostics"
                             description="Transmit anonymous performance diagnostics."
                         >
                             <PaperToggle name="telemetry" checked={settings().telemetry} />
@@ -120,7 +120,7 @@ function ConfigurationPanel() {
             <PaperSeparator />
 
             <PaperText id="specification" preset="subheader">
-                Technical Specification
+                Technical specification
             </PaperText>
 
             <PaperText id="props-list" preset="title">
@@ -158,7 +158,7 @@ function ConfigurationPanel() {
             </PaperTable>
 
             <PaperText id="props-item" preset="title">
-                PaperSettingItem Props
+                PaperSettingItem props
             </PaperText>
             <PaperTable>
                 <thead>
@@ -172,13 +172,13 @@ function ConfigurationPanel() {
                 <tbody>
                     <tr>
                         <td><PaperCode>title</PaperCode></td>
-                        <td><PaperCode>string</PaperCode></td>
+                        <td><PaperCode>JSX.Element | string</PaperCode></td>
                         <td><em>Required</em></td>
                         <td>Primary setting label rendered in bold text on the left column.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>description</PaperCode></td>
-                        <td><PaperCode>string</PaperCode></td>
+                        <td><PaperCode>JSX.Element | string</PaperCode></td>
                         <td><PaperCode>undefined</PaperCode></td>
                         <td>Secondary descriptive prose explaining the setting purpose.</td>
                     </tr>
@@ -200,7 +200,7 @@ function ConfigurationPanel() {
             <PaperSeparator />
 
             <PaperText id="see-also" preset="subheader">
-                See Also
+                See also
             </PaperText>
             <PaperTextList>
                 <PaperText preset="body">
