@@ -2,6 +2,12 @@ import semver from "semver";
 
 export type ServerSoftwareType = "vanilla" | "paper" | "fabric";
 
+export const SOFTWARE_NAMES: Record<ServerSoftwareType, string> = {
+    vanilla: "Vanilla",
+    paper: "Paper",
+    fabric: "Fabric",
+};
+
 export interface VersionItem {
     id: string;
     type: "release" | "snapshot" | "old_beta" | "old_alpha" | "beta" | "other";

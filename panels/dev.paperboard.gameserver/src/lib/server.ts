@@ -1,11 +1,26 @@
 import { createSignal } from "solid-js";
-import { fileApi, config, packageApi, processApi, computers } from "paperapi";
-import type { PaperConsoleEntry, PaperBadgeVariant } from "paperui";
+import { fileApi, config, packageApi, processApi, system } from "@paperboard-dev/paperapi";
+import type { PaperConsoleEntry, PaperBadgeVariant } from "@paperboard-dev/paperui";
 import stripAnsi from "strip-ansi";
 import properties from "dot-properties";
-import { getRequiredJavaVersion, type ServerSoftwareType } from "./software";
-import { SOFTWARE_NAMES } from "./Setup";
+import { getRequiredJavaVersion, SOFTWARE_NAMES, type ServerSoftwareType } from "./software";
 import { checkLogForIssues, clearActiveIssue } from "./diagnostics";
+import { parseChatMessage, parseLogLine } from "./logs";
+import {
+    forgetPlayerData,
+    getPlayerPlaytimeSeconds,
+    handleStatResponse,
+    onlinePlayerNames,
+    playerStats,
+    playerPlaytime,
+    queryOnlinePlayers,
+    queryPlayerStats,
+    restorePlayerStateFromLog,
+    seenPlayerNames,
+    setOnlinePlayerNames,
+    trackPlayerActivity,
+    type PlayerStatData,
+} from "./players";
 
 export type ServerStatus =
     | "offline"
@@ -19,34 +34,27 @@ export const SERVER_PROC_ID = "mc-server";
 // Re-export stripAnsi for usage across the panel
 export { stripAnsi };
 
-// Parses Java .properties files using dot-properties library
+// Maximum number of console entries / chat messages kept in memory
+const MAX_BUFFERED_ENTRIES = 1000;
+
+function appendCapped<T>(prev: T[], entry: T): T[] {
+    const next = [...prev, entry];
+    return next.length > MAX_BUFFERED_ENTRIES
+        ? next.slice(next.length - MAX_BUFFERED_ENTRIES)
+        : next;
+}
+
+// Validates Minecraft player names (letters, digits, underscores, 1-16 chars)
+export const PLAYER_NAME_PATTERN = /^[a-zA-Z0-9_]{1,16}$/;
+
+// Parses Java .properties files using dot-properties
 export function parseProperties(content: string): Record<string, string> {
     return (properties.parse(content) || {}) as Record<string, string>;
 }
 
-export async function getLocalNetworkIP(): Promise<string> {
-    try {
-        const active = await computers.getActive();
-        if (active?.host) return active.host;
-    } catch {}
-    return "127.0.0.1";
-}
-
-// Parses raw Minecraft console log lines into structured console entries
-export function parseLogLine(rawLine: string): PaperConsoleEntry {
-    const clean = stripAnsi(rawLine);
-    const upper = clean.toUpperCase();
-
-    if (upper.includes("/ERROR") || upper.includes("] ERROR") || upper.includes("EXCEPTION")) {
-        return { type: "error", content: clean };
-    }
-    if (upper.includes("/WARN") || upper.includes("] WARN") || upper.includes("WARNING")) {
-        return { type: "warn", content: clean };
-    }
-    if (upper.includes("/INFO") || upper.includes("] INFO")) {
-        return { type: "info", content: clean };
-    }
-    return { type: "output", content: clean };
+// LAN IP of the targeted computer, same source as the Computer Info panel
+export function getLocalNetworkIP(): Promise<string> {
+    return system.getLocalIP();
 }
 
 export interface ChatMessage {
@@ -55,37 +63,6 @@ export interface ChatMessage {
     timestamp: string;
 }
 
-// Extracts in-game player and server chat messages from log output
-export function parseChatMessage(rawLine: string): ChatMessage | null {
-    const clean = stripAnsi(rawLine).replace(/^[^[]*\[/, "[").trim();
-    if (!clean) return null;
-
-    const logMatch = clean.match(
-        /^\[(\d{2}:\d{2}:\d{2})(?:\]|\s+INFO\]?|\]\s*\[[^\]]*INFO[^\]]*\]):\s*(?:\[Not Secure\]\s*)?(.*)$/i,
-    );
-    if (!logMatch) return null;
-
-    const time = logMatch[1];
-    let text = logMatch[2].trim().replace(/^\[Not Secure\]\s*/, "").trim();
-    if (!text) return null;
-
-    const isChat =
-        /^<[a-zA-Z0-9_]{1,16}>\s+.+/i.test(text) ||
-        /^\[Server(?::\s*[^\]]+)?\]\s+.+/i.test(text) ||
-        /^[a-zA-Z0-9_]{1,16}\s+joined the game$/i.test(text) ||
-        /^[a-zA-Z0-9_]{1,16}\s+left the game$/i.test(text);
-
-    if (isChat) {
-        return {
-            id: `chat-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-            text,
-            timestamp: time,
-        };
-    }
-    return null;
-}
-
-// Server state signals
 export const [serverStatus, setServerStatus] = createSignal<ServerStatus>("offline");
 export const [serverEntries, setServerEntries] = createSignal<PaperConsoleEntry[]>([]);
 export const [chatMessages, setChatMessages] = createSignal<ChatMessage[]>([]);
@@ -94,11 +71,67 @@ export const [serverPort, setServerPort] = createSignal("25565");
 export const [serverMotd, setServerMotd] = createSignal("A Minecraft Server");
 export const [serverSoftware, setServerSoftware] = createSignal<ServerSoftwareType>("paper");
 export const [serverVersion, setServerVersion] = createSignal("1.21.4");
+// Java heap in GB, applied as -Xmx/-Xms at launch
+export const [ramAllocation, setRamAllocation] = createSignal(4);
+
+export const MIN_RAM_GB = 1;
+export const MAX_RAM_GB = 16;
+
+// Merges a patch into the panel's persisted config object.
+export async function updatePanelConfig(patch: Record<string, unknown>) {
+    let current: Record<string, unknown> = {};
+    try {
+        const saved = await config.get<Record<string, unknown>>();
+        if (saved && typeof saved === "object") current = saved;
+    } catch (err) {
+        console.error("[Server] Failed to read panel config before update:", err);
+    }
+    await config.set({ ...current, ...patch });
+}
+
+// Re-exported player tracking API so existing imports keep working
+export {
+    forgetPlayerData,
+    getPlayerPlaytimeSeconds,
+    onlinePlayerNames,
+    playerStats,
+    playerPlaytime,
+    queryOnlinePlayers,
+    queryPlayerStats,
+    seenPlayerNames,
+};
+export type { PlayerStatData };
 
 let isRestarting = false;
 let lineBuffer = "";
 let isInitialized = false;
 let stopTimeout: ReturnType<typeof setTimeout> | null = null;
+
+// Exit event may never arrive after force-kill; poll until gone and recover
+function watchForceKill() {
+    const startedAt = Date.now();
+    const poll = setInterval(async () => {
+        try {
+            const stillRunning = await processApi.exists(SERVER_PROC_ID);
+            if (!stillRunning || Date.now() - startedAt > 10000) {
+                clearInterval(poll);
+                isRestarting = false;
+                if (stopTimeout) {
+                    clearTimeout(stopTimeout);
+                    stopTimeout = null;
+                }
+                setServerStatus("offline");
+                setServerEntries((prev) => [
+                    ...prev,
+                    { type: "warn", content: "[Server] Process stopped." },
+                ]);
+            }
+        } catch (err) {
+            console.error("[Server] Failed to check server process existence during force-kill watch:", err);
+            clearInterval(poll);
+        }
+    }, 500);
+}
 let serverProcessStarted = false;
 
 // Loads server configuration and server.properties values
@@ -107,6 +140,14 @@ export async function loadServerConfig() {
         const saved = await config.get<any>();
         if (saved?.software) setServerSoftware(saved.software);
         if (saved?.version) setServerVersion(saved.version);
+        if (
+            typeof saved?.ramGB === "number" &&
+            Number.isInteger(saved.ramGB) &&
+            saved.ramGB >= MIN_RAM_GB &&
+            saved.ramGB <= MAX_RAM_GB
+        ) {
+            setRamAllocation(saved.ramGB);
+        }
 
         setLocalIp(await getLocalNetworkIP());
 
@@ -133,6 +174,8 @@ export async function initServerListeners() {
     if (isInitialized) return;
     isInitialized = true;
 
+    void restorePlayerStateFromLog();
+
     processApi.onData(SERVER_PROC_ID, (chunk: string) => {
         lineBuffer += chunk;
         const lines = lineBuffer.split("\n");
@@ -146,6 +189,12 @@ export async function initServerListeners() {
 
             const portMatch = clean.match(/Starting (?:Minecraft )?server on .*:(\d+)/i);
             if (portMatch?.[1] && portMatch[1] !== "0") setServerPort(portMatch[1]);
+
+            trackPlayerActivity(clean);
+
+            if (handleStatResponse(clean)) {
+                continue;
+            }
 
             checkLogForIssues(clean);
 
@@ -161,13 +210,14 @@ export async function initServerListeners() {
             }
 
             const chat = parseChatMessage(line);
-            if (chat) setChatMessages((prev) => [...prev, chat]);
+            if (chat) setChatMessages((prev) => appendCapped(prev, chat));
 
-            setServerEntries((prev) => [...prev, parseLogLine(line)]);
+            setServerEntries((prev) => appendCapped(prev, parseLogLine(line)));
         }
     });
 
     processApi.onExit(SERVER_PROC_ID, () => {
+        setOnlinePlayerNames(new Set<string>());
         if (stopTimeout) {
             clearTimeout(stopTimeout);
             stopTimeout = null;
@@ -175,8 +225,8 @@ export async function initServerListeners() {
 
         if (lineBuffer.trim()) {
             const lastChat = parseChatMessage(lineBuffer);
-            if (lastChat) setChatMessages((prev) => [...prev, lastChat]);
-            setServerEntries((prev) => [...prev, parseLogLine(lineBuffer)]);
+            if (lastChat) setChatMessages((prev) => appendCapped(prev, lastChat));
+            setServerEntries((prev) => appendCapped(prev, parseLogLine(lineBuffer)));
             lineBuffer = "";
         }
 
@@ -204,7 +254,9 @@ export async function initServerListeners() {
             setServerStatus("online");
             loadServerConfig();
         }
-    } catch {}
+    } catch (err) {
+        console.error("[Server] Failed to check whether the server process is already running:", err);
+    }
 }
 
 function setStatusOnline() {
@@ -222,8 +274,9 @@ async function startServerProcess() {
         const javaPkg = getRequiredJavaVersion(serverVersion());
         const javaPath = await packageApi.getPath(javaPkg);
         const serverDir = await fileApi.getPath("");
-        const activeComp = await computers.getActive().catch(() => null);
-        const isWin = activeComp?.os === "windows" || serverDir.includes("\\") || serverDir.includes(":");
+        // OS of the computer this panel targets — not the shell's active one.
+        const targetOs = (await system.getInfo()).os;
+        const isWin = targetOs === "windows" || serverDir.includes("\\") || serverDir.includes(":");
         const javaBin = `${javaPath}/bin/${isWin ? "java.exe" : "java"}`;
 
         setServerStatus("starting");
@@ -238,7 +291,13 @@ async function startServerProcess() {
         await processApi.start({
             id: SERVER_PROC_ID,
             command: javaBin,
-            args: ["-jar", "server.jar", "nogui"],
+            args: [
+                `-Xmx${ramAllocation()}G`,
+                `-Xms${ramAllocation()}G`,
+                "-jar",
+                "server.jar",
+                "nogui",
+            ],
             cwd: serverDir,
             env: { JAVA_HOME: javaPath },
         });
@@ -274,6 +333,7 @@ export function stopServer() {
         if (!stopTimeout) {
             stopTimeout = setTimeout(() => {
                 processApi.kill(SERVER_PROC_ID, "SIGKILL");
+                watchForceKill();
             }, 15000);
         }
     }
@@ -293,6 +353,7 @@ export function restartServer() {
     if (!stopTimeout) {
         stopTimeout = setTimeout(() => {
             processApi.kill(SERVER_PROC_ID, "SIGKILL");
+            watchForceKill();
         }, 15000);
     }
 }
@@ -306,7 +367,7 @@ export function sendServerCommand(cmd: string) {
         return;
     }
 
-    setServerEntries((prev) => [...prev, { type: "command", content: cmd }]);
+    setServerEntries((prev) => appendCapped(prev, { type: "command", content: cmd }));
 
     if (serverStatus() === "online" || serverStatus() === "starting") {
         const rawCmd = trimmed.startsWith("/") ? trimmed.slice(1) : trimmed;

@@ -1,5 +1,5 @@
 import { createSignal } from "solid-js";
-import { files as fileApi, terminal as terminalApi, computers } from "paperapi";
+import { files as fileApi, terminal as terminalApi, system } from "@paperboard-dev/paperapi";
 import { serverPort, startServer } from "./server";
 
 export interface ServerIssueAction {
@@ -30,16 +30,19 @@ export async function killConflictingProcess(port: string = serverPort()) {
         await terminalApi.create("kill-port-pty", { cols: 80, rows: 24 });
         terminalApi.write("kill-port-pty", `${killCmd}\nexit\n`);
         setTimeout(() => terminalApi.destroy("kill-port-pty"), 1000);
-    } catch {}
+    } catch (err) {
+        console.error(`[Diagnostics] Failed to kill conflicting process on port ${port} (kill -9):`, err);
+    }
 }
 
 // Resets world dimension folders to fix corrupted chunk generation
 export async function resetWorldFiles() {
     try {
         const serverDir = await fileApi.getPath("");
-        const activeComp = await computers.getActive().catch(() => null);
+        // OS of the computer this panel targets — not the shell's active one.
+        const targetOs = (await system.getInfo()).os;
         const isWin =
-            activeComp?.os === "windows" ||
+            targetOs === "windows" ||
             serverDir.includes("\\") ||
             serverDir.includes(":");
         const cleanCmd = isWin
@@ -49,7 +52,9 @@ export async function resetWorldFiles() {
         await terminalApi.create("clean-world-pty", { cwd: serverDir, cols: 80, rows: 24 });
         terminalApi.write("clean-world-pty", `${cleanCmd}\nexit\n`);
         setTimeout(() => terminalApi.destroy("clean-world-pty"), 1000);
-    } catch {}
+    } catch (err) {
+        console.error("[Diagnostics] Failed to reset world files (rm -rf world directories):", err);
+    }
 }
 
 export interface DiagnosticRule {
@@ -121,6 +126,28 @@ export const DIAGNOSTIC_RULES: DiagnosticRule[] = [
                         await fileApi.write("eula.txt", "eula=true\n");
                         clearActiveIssue();
                         setTimeout(() => startServer(), 400);
+                    },
+                },
+            ],
+        }),
+    },
+    {
+        id: "world-locked",
+        pattern: /DirectoryLock\$LockException|session\.lock.*already locked/i,
+        create: () => ({
+            id: "world-locked",
+            title: "World Already Locked",
+            description: `Another Minecraft server instance is already running this world (its session.lock is held). This usually happens after Paperboard restarts while the old server process kept living in the background. Kill it to free the world.`,
+            variant: "red",
+            actions: [
+                {
+                    label: "Kill Old Instance & Start",
+                    variant: "red",
+                    icon: "skull",
+                    action: async () => {
+                        await killConflictingProcess(serverPort());
+                        clearActiveIssue();
+                        setTimeout(() => startServer(), 600);
                     },
                 },
             ],
