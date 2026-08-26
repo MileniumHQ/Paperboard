@@ -30,6 +30,7 @@ export interface PaperFlexProps extends Omit<
     paddingX?: PaperFlexPadding;
     paddingY?: PaperFlexPadding;
     wrap?: boolean | JSX.CSSProperties["flex-wrap"];
+    overflow?: JSX.CSSProperties["overflow"];
     resizable?: boolean;
     onResize?: (size: { width?: number; height?: number }) => void;
 }
@@ -50,6 +51,7 @@ export function PaperFlex(props: ParentProps<PaperFlexProps>) {
         "paddingX",
         "paddingY",
         "wrap",
+        "overflow",
         "resizable",
         "onResize",
         "class",
@@ -144,6 +146,7 @@ export function PaperFlex(props: ParentProps<PaperFlexProps>) {
                     : local.wrap,
             gap: gapVal,
             padding: paddingVal,
+            overflow: local.overflow,
             "padding-left": paddingXVal,
             "padding-right": paddingXVal,
             "padding-top": paddingYVal,
