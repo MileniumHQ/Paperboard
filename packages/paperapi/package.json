@@ -1,6 +1,6 @@
 {
     "name": "@paperboard-dev/paperapi",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "type": "module",
     "main": "./dist/paperapi.cjs.js",
     "module": "./dist/paperapi.es.js",
@@ -24,6 +24,7 @@
         "dev": "vite",
         "build": "tsc --noEmit && vite build && bun build ./bin/cli.ts --outfile dist/cli.js --target=node --external tar",
         "pack": "bun run ./bin/cli.ts pack",
+        "test": "bun test",
         "prepublishOnly": "bun run build"
     },
     "devDependencies": {
