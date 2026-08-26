@@ -1,0 +1,91 @@
+import {
+    PaperSettingList,
+    PaperSettingItem,
+    PaperSelectMenu,
+    PaperSelectMenuItem,
+    PaperToggle,
+    PaperEffect,
+    PaperButton,
+    PaperIcon,
+} from "@paperboard-dev/paperui";
+
+export interface AppSettingsData {
+    darkMode: "system" | "light" | "dark";
+    reducedMotion: boolean;
+}
+
+export const APP_SETTINGS_DEFAULTS: AppSettingsData = {
+    darkMode: "system",
+    reducedMotion: false,
+};
+
+export const APP_SETTINGS_ID = "app-settings";
+
+export default function AppSettings(props: {
+    settings: AppSettingsData;
+    onChange: (next: AppSettingsData) => void;
+}) {
+    const handleChange = (next: Record<string, any>) => {
+        props.onChange({ ...props.settings, ...next });
+    };
+
+    return (
+        <PaperSettingList
+            value={{ ...props.settings } as Record<string, any>}
+            onValueChange={handleChange}
+            style={{
+                height: "100%"
+            }}
+        >
+            <PaperSettingItem
+                title="Dark mode"
+                description="Match the operating system appearance or force light or dark."
+            >
+                <PaperSelectMenu
+                    name="darkMode"
+                    value={props.settings.darkMode}
+                    fullWidth
+                >
+                    <PaperSelectMenuItem value="system" icon="contrast">
+                        System
+                    </PaperSelectMenuItem>
+                    <PaperSelectMenuItem value="light" icon="light_mode">
+                        Light
+                    </PaperSelectMenuItem>
+                    <PaperSelectMenuItem value="dark" icon="dark_mode">
+                        Dark
+                    </PaperSelectMenuItem>
+                </PaperSelectMenu>
+            </PaperSettingItem>
+
+            <PaperSettingItem
+                title="Reduce motion"
+                description="Disables animations, transitions, and blur effects for better performance and accessibility."
+            >
+                <PaperToggle
+                    name="reducedMotion"
+                    checked={props.settings.reducedMotion}
+                />
+            </PaperSettingItem>
+
+            <PaperSettingItem
+                title="Restart to Update"
+                description="Restarts Paperboard and checks for updates. If updates are available, all panels, packages, and PaperCrane instances are updated on every connected computer."
+            >
+                <PaperEffect variant="blue">
+                    <PaperButton
+                        compact
+                        onClick={() =>
+                            window.electron?.ipcRenderer?.send(
+                                "relaunch-for-update",
+                            )
+                        }
+                    >
+                        <PaperIcon>restart_alt</PaperIcon>
+                        Check for Updates
+                    </PaperButton>
+                </PaperEffect>
+            </PaperSettingItem>
+        </PaperSettingList>
+    );
+}
