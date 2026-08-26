@@ -16,7 +16,7 @@
 
 .variantMonochrome {
     background: var(--paper-background-back);
-    color: var(--paper-main-text);
+    color: var(--paper-light-text);
     border: var(--paper-border-width) solid var(--paper-medium-border);
 }
 
