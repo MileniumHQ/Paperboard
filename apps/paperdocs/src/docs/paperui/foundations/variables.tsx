@@ -7,7 +7,7 @@ import {
     PaperTable,
     PaperText,
     PaperTextList,
-} from "paperui";
+} from "@paperboard-dev/paperui";
 
 export default function f() {
     const gapScale = [
@@ -27,15 +27,21 @@ export default function f() {
     ];
 
     const dimensionTokens = [
-        { token: "--paper-sidebar-width", value: "250px", desc: "Standard fixed width for navigation sidebar menus." },
-        { token: "--paper-centered-width", value: "600px", desc: "Default width constraint for PaperCenteredInterface containers." },
-        { token: "--paper-centered-height", value: "400px", desc: "Default min-height constraint for centered dialog templates." },
+        { token: "--paper-sidebar-width", value: "190px", desc: "Standard fixed width for navigation sidebar menus." },
+        { token: "--paper-centered-width-small", value: "420px", desc: "Width for small centered dialog templates." },
+        { token: "--paper-centered-height-small", value: "300px", desc: "Height for small centered dialog templates." },
+        { token: "--paper-centered-width-medium / --paper-centered-width", value: "600px", desc: "Default width constraint for PaperCenteredInterface containers." },
+        { token: "--paper-centered-height-medium / --paper-centered-height", value: "400px", desc: "Default height constraint for centered dialog templates." },
+        { token: "--paper-centered-width-large", value: "760px", desc: "Width for large centered dialog templates." },
+        { token: "--paper-centered-height-large", value: "520px", desc: "Height for large centered dialog templates." },
+        { token: "--paper-centered-width-wide", value: "920px", desc: "Width for wide centered dialog templates." },
+        { token: "--paper-centered-height-wide", value: "580px", desc: "Height for wide centered dialog templates." },
         { token: "--paper-loader-width", value: "400px", desc: "Standard horizontal width for PaperLoader progress bars." },
     ];
 
     return (
         <>
-            <PaperText preset="header">Variables & Spacing</PaperText>
+            <PaperText preset="header">Variables and spacing</PaperText>
             <PaperText preset="body">
                 Specifications for the PaperUI geometric spacing scale, corner radii, border widths, elevation shadows, and standard component dimension constants.
             </PaperText>
@@ -45,13 +51,13 @@ export default function f() {
                 Overview
             </PaperText>
             <PaperText preset="body">
-                <strong>PaperUI spacing</strong> is calculated proportionally from a single baseline constant, <PaperCode>--paper-uigap</PaperCode> (12 pixels). By referencing derived mathematical fractions and multiples of this base token, layouts maintain consistent proportions across various viewport resolutions.
+                <strong>PaperUI spacing</strong> is calculated proportionally from a single baseline constant, <PaperCode>--paper-uigap</PaperCode> (12 pixels). Derived fractions and multiples of this base token keep layout proportions consistent between components.
             </PaperText>
 
             <PaperSeparator />
 
             <PaperText id="gap-scale" preset="subheader">
-                UI Gap & Spacing Multipliers
+                UI gap and spacing multipliers
             </PaperText>
             <PaperText preset="body">
                 Components such as <PaperLink href="/paperui/paperflex"><PaperCode>PaperFlex</PaperCode></PaperLink> accept named string literals (e.g. <PaperCode>gap="full"</PaperCode> or <PaperCode>padding="double"</PaperCode>) that map directly to the following scale:
@@ -79,10 +85,10 @@ export default function f() {
             <PaperSeparator />
 
             <PaperText id="border-geometry" preset="subheader">
-                Border Geometry & Radii
+                Border geometry and radii
             </PaperText>
             <PaperText preset="body">
-                PaperUI employs subtle rounded corners to preserve a soft, modern aesthetic across all interactive surfaces:
+                Interactive surfaces use rounded corners defined by two radius tokens and three border widths:
             </PaperText>
 
             <PaperTable>
@@ -111,16 +117,21 @@ export default function f() {
                         <td><PaperCode>2px</PaperCode></td>
                         <td>Focus rings, active selector outlines, and highlighted states.</td>
                     </tr>
+                    <tr>
+                        <td><PaperCode>--paper-thickest-border-width</PaperCode></td>
+                        <td><PaperCode>3px</PaperCode></td>
+                        <td>Strongest available outline weight for emphasized states.</td>
+                    </tr>
                 </tbody>
             </PaperTable>
 
             <PaperSeparator />
 
             <PaperText id="elevation-shadows" preset="subheader">
-                Elevation and Shadow Effects
+                Elevation and shadow effects
             </PaperText>
             <PaperText preset="body">
-                Subtle drop shadows and backdrop filters provide depth without obscuring contrast:
+                Drop shadows and backdrop filters provide depth without obscuring contrast:
             </PaperText>
 
             <PaperTextList>
@@ -137,11 +148,63 @@ export default function f() {
 
             <PaperSeparator />
 
-            <PaperText id="component-dimensions" preset="subheader">
-                Standard Component Dimensions
+            <PaperText id="icon-and-item-sizes" preset="subheader">
+                Icon and item sizes
             </PaperText>
             <PaperText preset="body">
-                Key structural templates enforce standard dimensions to guarantee layout predictability:
+                Icons and interactive list items resolve to fixed pixel sizes through the following tokens:
+            </PaperText>
+
+            <PaperTable>
+                <thead>
+                    <tr>
+                        <th>Icon Token</th>
+                        <th>Value</th>
+                        <th>Item Token</th>
+                        <th>Value</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><PaperCode>--paper-icon-size-small</PaperCode></td>
+                        <td><PaperCode>18px</PaperCode></td>
+                        <td><PaperCode>--paper-item-size-tiny</PaperCode></td>
+                        <td><PaperCode>28px</PaperCode></td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>--paper-icon-size-medium</PaperCode></td>
+                        <td><PaperCode>22px</PaperCode></td>
+                        <td><PaperCode>--paper-item-size-small</PaperCode></td>
+                        <td><PaperCode>36px</PaperCode></td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>--paper-icon-size-large</PaperCode></td>
+                        <td><PaperCode>26px</PaperCode></td>
+                        <td><PaperCode>--paper-item-size-medium</PaperCode></td>
+                        <td><PaperCode>48px</PaperCode></td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>--paper-icon-size-xlarge</PaperCode></td>
+                        <td><PaperCode>28px</PaperCode></td>
+                        <td><PaperCode>--paper-item-size-large</PaperCode></td>
+                        <td><PaperCode>64px</PaperCode></td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>--paper-icon-size-huge</PaperCode></td>
+                        <td><PaperCode>30px</PaperCode></td>
+                        <td></td>
+                        <td></td>
+                    </tr>
+                </tbody>
+            </PaperTable>
+
+            <PaperSeparator />
+
+            <PaperText id="component-dimensions" preset="subheader">
+                Standard component dimensions
+            </PaperText>
+            <PaperText preset="body">
+                Structural templates use fixed dimension constants so that dialogs and navigation elements render at consistent sizes:
             </PaperText>
 
             <PaperTable>
@@ -166,7 +229,7 @@ export default function f() {
             <PaperSeparator />
 
             <PaperText id="programmatic-access" preset="subheader">
-                Programmatic Access & Token Utilities
+                Programmatic access and token utilities
             </PaperText>
             <PaperText preset="body">
                 JavaScript and TypeScript consumers can read computed CSS variable values dynamically using <PaperCode>getVar()</PaperCode>, generate CSS variable references with <PaperCode>getVarCss()</PaperCode>, or resolve shorthand token names with dedicated resolution helpers:
@@ -182,7 +245,7 @@ export default function f() {
     spacingSizes,
     brandColors,
     backgroundSurfaces,
-} from "paperui";
+} from "@paperboard-dev/paperui";
 
 // Resolves computed CSS value from DOM at runtime:
 const brandBlue = getVar("front-blue"); // e.g. "rgb(41, 129, 229)"
@@ -200,7 +263,7 @@ const bgVal = resolveBackground("front"); // "var(--paper-background-front, var(
             <PaperSeparator />
 
             <PaperText id="see-also" preset="subheader">
-                See Also
+                See also
             </PaperText>
             <PaperTextList>
                 <PaperText preset="body">

@@ -7,14 +7,14 @@ import {
     PaperTable,
     PaperText,
     PaperTextList,
-} from "paperui";
+} from "@paperboard-dev/paperui";
 
 export default function f() {
     const frontColors = [
         {
             name: "--paper-front-blue",
             label: "Blue Surface",
-            hex: "#1677ff",
+            hex: "#2981e5",
             desc: "Interactive primary brand accent.",
         },
         {
@@ -68,38 +68,98 @@ export default function f() {
         {
             token: "--paper-background-frontest",
             light: "#ffffff",
-            dark: "#232323",
+            dark: "#222222",
             desc: "Elevated surfaces, dialog modals, dropdown menus, and popovers.",
         },
         {
             token: "--paper-background-front",
-            light: "#efefef",
-            dark: "#1d1d1d",
+            light: "#f6f8fa",
+            dark: "#191919",
             desc: "Container surfaces, cards, and primary grouped panels.",
         },
         {
             token: "--paper-background-back",
-            light: "#e4e4e4",
+            light: "#e2e6eb",
             dark: "#2a2a2a",
             desc: "Intermediate recess level and grouped list items.",
         },
         {
             token: "--paper-background-backest",
-            light: "#e1e1e1",
-            dark: "#303030",
+            light: "#d8dce2",
+            dark: "#323232",
             desc: "Application baseline canvas and viewport background.",
         },
         {
             token: "--paper-background-definition",
-            light: "#eaeaea",
-            dark: "#171717",
+            light: "#eceff3",
+            dark: "#131313",
             desc: "Subtle sectional contrast surfaces and header tracks.",
         },
         {
             token: "--paper-background-element",
-            light: "#bababa",
-            dark: "#404040",
+            light: "#cdd3db",
+            dark: "#3f3f3f",
             desc: "Disabled states, scrollbar tracks, and low-contrast borders.",
+        },
+    ];
+
+    const borderColors = [
+        {
+            token: "--paper-medium-border",
+            light: "#c4c9d2",
+            dark: "#3a3a3a",
+            desc: "Standard component borders, dividers, and container frames.",
+        },
+        {
+            token: "--paper-medium-dark-border",
+            light: "#adb3be",
+            dark: "#4c4c4c",
+            desc: "Emphasized borders on hoverable or pressed elements.",
+        },
+        {
+            token: "--paper-dark-border",
+            light: "#7d8492",
+            dark: "#636363",
+            desc: "High-contrast outlines for focused or selected elements.",
+        },
+    ];
+
+    const textColors = [
+        {
+            token: "--paper-main-text",
+            light: "#0f1319",
+            dark: "#f5f5f5",
+            desc: "Primary high-contrast text for headers, titles, and body content.",
+        },
+        {
+            token: "--paper-lightish-text",
+            light: "#2e3440",
+            dark: "#d4d4d4",
+            desc: "Secondary text for subheadings and active metadata.",
+        },
+        {
+            token: "--paper-light-text",
+            light: "#5b6371",
+            dark: "#a1a1a1",
+            desc: "Muted text for descriptive labels, placeholders, and captions.",
+        },
+        {
+            token: "--paper-lightest-text",
+            light: "#8b93a2",
+            dark: "#737373",
+            desc: "Low-emphasis text for inactive icons and disabled hints.",
+        },
+        {
+            token: "--paper-anti-background",
+            light: "#000000",
+            dark: "#ffffff",
+            desc: "Contrast inversion token (pure black in light mode, pure white in dark mode).",
+        },
+        {
+            token: "--paper-over-brand",
+            light: "#ffffff",
+            dark: "#ffffff",
+            desc: "Text and icon color placed over brand-colored surfaces (theme-independent white).",
         },
     ];
 
@@ -130,7 +190,7 @@ export default function f() {
             <PaperSeparator />
 
             <PaperText id="brand-palette" preset="subheader">
-                Brand Palette
+                Brand palette
             </PaperText>
             <PaperText preset="body">
                 Each chromatic hue provides a paired{" "}
@@ -140,7 +200,9 @@ export default function f() {
                 <PaperLink href="/paperui/papereffect">
                     <PaperCode>PaperEffect</PaperCode>
                 </PaperLink>
-                ).
+                ). A theme-independent <PaperCode>--paper-over-brand</PaperCode>{" "}
+                token supplies the foreground color used on top of these
+                brand-colored surfaces.
             </PaperText>
 
             <PaperContainer>
@@ -257,7 +319,7 @@ export default function f() {
             <PaperSeparator />
 
             <PaperText id="surface-tokens" preset="subheader">
-                Surface and Background Tokens
+                Surface and background tokens
             </PaperText>
             <PaperText preset="body">
                 PaperUI employs an inverted elevation hierarchy:{" "}
@@ -295,42 +357,83 @@ export default function f() {
 
             <PaperSeparator />
 
-            <PaperText id="typography-colors" preset="subheader">
-                Typography Contrast Hierarchy
+            <PaperText id="border-colors" preset="subheader">
+                Border color tokens
             </PaperText>
             <PaperText preset="body">
-                Text color tokens provide accessible contrast ratios across both
-                light and dark modes:
+                Three border tokens are used across components for outlines,
+                dividers, and separators. They invert alongside the surface
+                tokens:
             </PaperText>
 
-            <PaperTextList>
-                <PaperText preset="body">
-                    <PaperCode>--paper-main-text</PaperCode> — Primary
-                    high-contrast text for headers, titles, and body content.
-                </PaperText>
-                <PaperText preset="body">
-                    <PaperCode>--paper-lightish-text</PaperCode> — Secondary
-                    text for subheadings and active metadata.
-                </PaperText>
-                <PaperText preset="body">
-                    <PaperCode>--paper-light-text</PaperCode> — Muted text for
-                    descriptive labels, placeholders, and captions.
-                </PaperText>
-                <PaperText preset="body">
-                    <PaperCode>--paper-lightest-text</PaperCode> — Low-emphasis
-                    text for inactive icons and disabled hints.
-                </PaperText>
-                <PaperText preset="body">
-                    <PaperCode>--paper-anti-background</PaperCode> — Contrast
-                    inversion token (pure black in light mode, pure white in
-                    dark mode).
-                </PaperText>
-            </PaperTextList>
+            <PaperTable>
+                <thead>
+                    <tr>
+                        <th>Token</th>
+                        <th>Light Value</th>
+                        <th>Dark Value</th>
+                        <th>Application</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {borderColors.map((b) => (
+                        <tr>
+                            <td>
+                                <PaperCode>{b.token}</PaperCode>
+                            </td>
+                            <td>
+                                <PaperCode>{b.light}</PaperCode>
+                            </td>
+                            <td>
+                                <PaperCode>{b.dark}</PaperCode>
+                            </td>
+                            <td>{b.desc}</td>
+                        </tr>
+                    ))}
+                </tbody>
+            </PaperTable>
+
+            <PaperSeparator />
+
+            <PaperText id="typography-colors" preset="subheader">
+                Typography contrast hierarchy
+            </PaperText>
+            <PaperText preset="body">
+                Text color tokens step from full emphasis to low emphasis in
+                both light and dark modes:
+            </PaperText>
+
+            <PaperTable>
+                <thead>
+                    <tr>
+                        <th>Token</th>
+                        <th>Light Value</th>
+                        <th>Dark Value</th>
+                        <th>Application</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {textColors.map((t) => (
+                        <tr>
+                            <td>
+                                <PaperCode>{t.token}</PaperCode>
+                            </td>
+                            <td>
+                                <PaperCode>{t.light}</PaperCode>
+                            </td>
+                            <td>
+                                <PaperCode>{t.dark}</PaperCode>
+                            </td>
+                            <td>{t.desc}</td>
+                        </tr>
+                    ))}
+                </tbody>
+            </PaperTable>
 
             <PaperSeparator />
 
             <PaperText id="see-also" preset="subheader">
-                See Also
+                See also
             </PaperText>
             <PaperTextList>
                 <PaperText preset="body">

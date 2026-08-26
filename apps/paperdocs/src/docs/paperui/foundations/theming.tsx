@@ -10,7 +10,7 @@ import {
     PaperText,
     PaperTextList,
     usePaper,
-} from "paperui";
+} from "@paperboard-dev/paperui";
 import { createSignal } from "solid-js";
 
 export default function f() {
@@ -127,7 +127,7 @@ const [theme, setTheme] = createSignal<"dark" | "light">("dark");
             </PaperText>
 
             <PaperCode block language="tsx">
-                {`import { usePaper } from "paperui";
+                {`import { usePaper } from "@paperboard-dev/paperui";
 
 function ThemeController() {
     const paper = usePaper();

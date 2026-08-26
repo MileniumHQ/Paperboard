@@ -7,7 +7,7 @@ import {
     PaperTable,
     PaperText,
     PaperTextList,
-} from "paperui";
+} from "@paperboard-dev/paperui";
 
 export default function f() {
     const textPresets = [
@@ -23,7 +23,7 @@ export default function f() {
 
     return (
         <>
-            <PaperText preset="header">Typography & Fonts</PaperText>
+            <PaperText preset="header">Typography and fonts</PaperText>
             <PaperText preset="body">
                 The typography system of PaperUI, defining standard typefaces, numerical scale variables, preset configurations, and the PaperText primitive.
             </PaperText>
@@ -39,7 +39,7 @@ export default function f() {
             <PaperSeparator />
 
             <PaperText id="font-families" preset="subheader">
-                Font Family Tokens
+                Font family tokens
             </PaperText>
             <PaperText preset="body">
                 PaperUI exposes three primary font family variables on the root stylesheet:
@@ -58,19 +58,19 @@ export default function f() {
                     <tr>
                         <td><PaperCode>--paper-font-family</PaperCode></td>
                         <td>Nunito Sans</td>
-                        <td>-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif</td>
+                        <td>"Nunito Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif</td>
                         <td>Standard interface copy, input elements, buttons, and tables.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>--paper-font-family-rounded</PaperCode></td>
                         <td>Nunito</td>
-                        <td>-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif</td>
+                        <td>"Nunito", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif</td>
                         <td>Headers, brand marks, and rounded text components.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>--paper-font-family-code</PaperCode></td>
                         <td>SUSE Mono</td>
-                        <td>monospace</td>
+                        <td>"SUSE Mono", monospace</td>
                         <td>Code blocks, inline tokens, keyboard accelerators, and technical data.</td>
                     </tr>
                 </tbody>
@@ -79,10 +79,10 @@ export default function f() {
             <PaperSeparator />
 
             <PaperText id="typographic-scale" preset="subheader">
-                Typographic Scale
+                Typographic scale
             </PaperText>
             <PaperText preset="body">
-                Font sizes in PaperUI are structured into a 17-step numerical scale accessible through CSS Custom Properties:
+                Font sizes in PaperUI are structured into an 18-token numerical scale (<PaperCode>--paper-text-size-0</PaperCode> through <PaperCode>--paper-text-size-17</PaperCode>) accessible through CSS Custom Properties. The demo below renders steps 1 through 12; steps 13 through 17 are display sizes reserved for large-scale hero typography:
             </PaperText>
 
             <PaperContainer>
@@ -113,7 +113,7 @@ export default function f() {
             <PaperSeparator />
 
             <PaperText id="presets" preset="subheader">
-                PaperText Presets
+                PaperText presets
             </PaperText>
             <PaperText preset="body">
                 The <PaperLink href="/paperui/papertext"><PaperCode>PaperText</PaperCode></PaperLink> component simplifies typography by bundling standardized size and weight pairings into convenient presets:
@@ -143,7 +143,7 @@ export default function f() {
             <PaperSeparator />
 
             <PaperText id="see-also" preset="subheader">
-                See Also
+                See also
             </PaperText>
             <PaperTextList>
                 <PaperText preset="body">
