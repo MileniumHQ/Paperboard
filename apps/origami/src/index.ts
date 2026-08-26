@@ -597,7 +597,9 @@ export default {
                 }
 
                 // GET binary download
-                const dlMatch = sub.match(/^\/([a-zA-Z0-9_\-]+)\/download$/);
+                // /paperdl/:app/:target/download and /paperdl/:app/:target/download/<anything>
+                // — a trailing path segment is treated as the desired filename
+                const dlMatch = sub.match(/^\/([a-zA-Z0-9_\-]+)\/download(?:\/.*)?$/);
                 if (request.method === "GET" && dlMatch && dlMatch[1]) {
                     if (!dl) {
                         return jsonResponse(
@@ -614,10 +616,16 @@ export default {
                     headers.set("Cache-Control", "no-cache");
                     headers.set("Access-Control-Allow-Origin", "*");
                     const meta = obj.customMetadata || {};
-                    if (meta.filename) {
+                    // Trailing filename wins over stored metadata
+                    const trailingName =
+                        sub.match(/^\/[a-zA-Z0-9_\-]+\/download\/([^\r\n]+)$/)?.[1]?.split("/").pop() || "";
+                    const filename =
+                        (trailingName && decodeURIComponent(trailingName)) ||
+                        meta.filename;
+                    if (filename) {
                         headers.set(
                             "Content-Disposition",
-                            `attachment; filename="${meta.filename}"`,
+                            `attachment; filename="${filename.replace(/"/g, "")}"`,
                         );
                     }
                     return new Response(obj.body, { headers });
