@@ -11,8 +11,8 @@ import {
     useContextMenuState,
     PaperContextMenu,
     PaperContextMenuItem,
-} from "paperui";
-import "paperui/style.css";
+} from "@paperboard-dev/paperui";
+import "@paperboard-dev/paperui/style.css";
 import "@xterm/xterm/css/xterm.css";
 import "./style.css";
 import TerminalComponent, { copySelection, pasteClipboard } from "./Terminal";
