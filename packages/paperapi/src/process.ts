@@ -1,4 +1,5 @@
 import { invoke, send, on, unpackIpcPayload } from "./ipc";
+import { debugErr } from "./debug";
 
 export interface ProcessRunOptions {
     command: string;
@@ -50,9 +51,9 @@ export const processApi = {
         });
         invoke<boolean>("process-exists", { id })
             .then((exists) => {
-                if (exists) invoke("process-attach", { id }).catch(() => {});
+                if (exists) invoke("process-attach", { id }).catch((err) => debugErr(`process-attach ${id}`, err));
             })
-            .catch(() => {});
+            .catch((err) => debugErr(`process-exists ${id}`, err));
     },
 
     onStdout: (id: string, callback: (data: string) => void): void => {
@@ -78,32 +79,41 @@ export const processApi = {
 
     run: async (options: ProcessRunOptions): Promise<{ exitCode: number }> => {
         const id = `proc-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+        const unsubscribers: (() => void)[] = [];
 
         if (options.onData) {
-            on(`process-data:${id}`, (event: unknown, data: any) => {
+            const off = on(`process-data:${id}`, (event: unknown, data: any) => {
                 const text = unpackIpcPayload<string>(event, data) as string;
                 options.onData!(text);
             });
+            unsubscribers.push(off);
         }
         if (options.onStdout) {
-            on(`process-stdout:${id}`, (event: unknown, data: any) => {
+            const off = on(`process-stdout:${id}`, (event: unknown, data: any) => {
                 const text = unpackIpcPayload<string>(event, data) as string;
                 options.onStdout!(text);
             });
+            unsubscribers.push(off);
         }
         if (options.onStderr) {
-            on(`process-stderr:${id}`, (event: unknown, data: any) => {
+            const off = on(`process-stderr:${id}`, (event: unknown, data: any) => {
                 const text = unpackIpcPayload<string>(event, data) as string;
                 options.onStderr!(text);
             });
+            unsubscribers.push(off);
         }
 
-        return invoke("process-run", {
-            id,
-            command: options.command,
-            args: options.args || [],
-            cwd: options.cwd,
-            env: options.env,
-        });
+        try {
+            return await invoke<{ exitCode: number }>("process-run", {
+                id,
+                command: options.command,
+                args: options.args || [],
+                cwd: options.cwd,
+                env: options.env,
+            });
+        } finally {
+            // process-run resolves on exit; release the stream subscriptions.
+            for (const off of unsubscribers) off();
+        }
     },
 };

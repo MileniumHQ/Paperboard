@@ -1,34 +1,14 @@
-// WebSocket transport to a PaperCrane daemon.
-//
-// One connection serves every namespace. Frames are JSON-RPC-ish:
-//   → { id, action, params }
-//   ← { type:"response", id, result, error }
-//   ← { type:"event", event, payload }
-//
-// ARCHITECTURAL INVARIANT: a transport is bound to exactly one computer at
-// construction time (`computerId`) and can NEVER be retargeted. There is no
-// global "active computer" and no code path may fall back to local. A
-// remote-scoped transport wraps every frame in a tunnel envelope; if the
-// tunnel is not open, frames FAIL LOUDLY instead of executing on the wrong
-// machine. Multi-computer clients (the shell) hold one transport per
-// computer; panels get theirs from the ?comp= bootstrap parameter of their
-// iframe URL.
-//
-// Features the panel ecosystem relies on:
-//   - auto-reconnect with backoff, replaying stream subscriptions
-//   - tunneling through the local daemon for remote-scoped transports
-//   - token auth injected into every request
+// WebSocket transport to a PaperCrane daemon; bound to one computer forever,
+// remote frames ride a tunnel envelope or fail loudly
 
 import type * as fsType from "fs";
+
+import { debug, debugErr } from "./debug";
 
 export interface TransportOptions {
     port?: number;
     token?: string;
-    /**
-     * Immutable computer scope ("local" or a paired id). Defaults to the
-     * `comp` query parameter of the embedding page (panel iframes), else
-     * "local".
-     */
+    /** Immutable computer scope ("local" or a paired id); defaults ambient. */
     computerId?: string;
     /** Node-only: explicit handshake file instead of the default location. */
     craneJsonPath?: string;
@@ -45,22 +25,7 @@ interface Pending {
 const RECONNECT_BASE_MS = 400;
 const RECONNECT_MAX_MS = 5_000;
 
-// Frame-level tracing, off by default. Enable with PAPERBOARD_TRANSPORT_DEBUG=1
-// (node/shell) or localStorage["PAPERBOARD_TRANSPORT_DEBUG"]="1" (renderer).
-const DEBUG =
-    (typeof process !== "undefined" && process.env?.PAPERBOARD_TRANSPORT_DEBUG === "1") ||
-    (typeof localStorage !== "undefined" &&
-        (globalThis as any).localStorage?.getItem?.("PAPERBOARD_TRANSPORT_DEBUG") === "1");
-
-function debug(msg: string): void {
-    if (DEBUG) console.debug(`[transport] ${msg}`);
-}
-
-// The computer scope implied by the embedding document. Panel iframes are
-// loaded as panel://<computerId>.<panelId>/ — the scope is the first label of
-// the hostname, part of the origin itself. Hosts without a scope label (the
-// shell itself) are local. There are no legacy fallbacks: a malformed scope
-// fails loudly at the __crane check.
+// Computer scope implied by the hostname prefix of the embedding document
 export function ambientScope(): string {
     if (typeof location !== "undefined") {
         const host = location.hostname || "";
@@ -70,10 +35,7 @@ export function ambientScope(): string {
     return "local";
 }
 
-// Tunnel ids. Uses Web Crypto, which exists in Electron renderers, browsers,
-// Bun and modern Node — the node:crypto module is NOT importable here because
-// bundlers externalize it to an empty shim in browser builds (randomBytes
-// would be undefined at runtime). Legacy-Node fallback imports lazily.
+// Web Crypto first (bundlers shim node:crypto away in browser builds)
 async function randomTunnelId(): Promise<string> {
     const c = (globalThis as any).crypto;
     if (c?.getRandomValues) {
@@ -88,9 +50,7 @@ async function randomTunnelId(): Promise<string> {
     return `t-${mod.randomBytes(6).toString("hex")}`;
 }
 
-// Lazy Node builtins — resolved through a non-static specifier so bundlers
-// don't constant-fold it into a browser-incompatible import (the fallbacks
-// below are unreachable in browsers/Electron renderers anyway).
+// Non-static specifier so bundlers don't fold it into browser builds
 async function nodeBuiltin(name: string): Promise<any> {
     const specifier = ["nod", "e:"].join("") + name;
     return import(/* @vite-ignore */ specifier);
@@ -105,14 +65,11 @@ function defaultCraneJsonPath(pathMod: any): string {
     );
 }
 
-// Prefers the platform's native WebSocket (browsers, Bun, modern Node);
-// falls back to the ws package on older Node runtimes. The indirection keeps
-// bundlers from trying to resolve "ws" for browser builds.
+// Native WebSocket preferred; ws package fallback keeps bundlers uninvolved
 async function getWebSocketImpl(): Promise<any> {
     const g = globalThis as any;
     if (typeof g.WebSocket !== "undefined") {
-        // Native (browser/Electron/Bun) WebSocket speaks addEventListener;
-        // adapt it to the ws-package shape our transport expects.
+            // Adapt native events to the ws-package shape
         return class NativeAdapter {
             private _ws: WebSocket;
             constructor(url: string) {
@@ -144,16 +101,12 @@ async function getWebSocketImpl(): Promise<any> {
 }
 
 export class CraneTransport {
-    // Immutable computer binding. Everything downstream routes by this field
-    // and nothing may reassign it.
     public readonly computerId: string;
     private ws: any = null;
     private port: number | null = null;
     private token: string | null = null;
     private opts: TransportOptions = {};
-    // Set by embedders (e.g. the Electron shell) whose origin cannot reach
-    // the panel://__crane route directly. Supplies LOCAL daemon credentials
-    // (port/token) only — never a computer scope.
+    // Supplies LOCAL daemon credentials for embedders like the Electron shell
     public credentialProvider: (() => Promise<{
         port: number;
         token: string;
@@ -168,8 +121,7 @@ export class CraneTransport {
     // Subscriptions replayed after reconnects
     private attachedTerminals = new Set<string>();
     private attachedProcesses = new Set<string>();
-    // Live tunnel to this.computerId. Null whenever the tunnel is down; a
-    // remote-scoped transport with a null tunnelId refuses to send frames.
+    // Live tunnel to this.computerId; null means remote frames must fail
     private tunnelId: string | null = null;
     // Node runtime detection
     private isNode =
@@ -201,11 +153,19 @@ export class CraneTransport {
         }
 
         if (!this.isNode) {
-            // Browser (panel iframe): ask the host via the protocol route.
-            // The scope rides the origin (hostname prefix); the host MUST
-            // echo the same computer back — a mismatch means the bootstrap
-            // route ignored the scope, which historically silently executed
-            // panels on the wrong machine. Fail loudly instead.
+            // Browser: prefer credentials injected by the host at serve time
+            // (scoped to this document's computer); fall back to /__crane.
+            const injected = (globalThis as any).__PAPERBOARD_CRANE;
+            if (injected?.port && injected?.token) {
+                if (injected.computerId !== this.computerId) {
+                    throw new Error(
+                        `Paperboard host served credentials for "${injected.computerId}" but this panel is scoped to "${this.computerId}"`,
+                    );
+                }
+                this.port = injected.port;
+                this.token = injected.token;
+                return;
+            }
             const res = await fetch("/__crane");
             if (!res.ok) throw new Error(`Paperboard host unavailable (${res.status})`);
             const creds = await res.json();
@@ -219,9 +179,7 @@ export class CraneTransport {
             return;
         }
 
-        // Node (blocks/bots/headless): read the local handshake file. Node
-        // runtimes are always local-scoped; remote access goes through the
-        // daemon's own pairing, not this transport.
+        // Node reads the local handshake file; always local-scoped
         if (this.computerId !== "local") {
             throw new Error(
                 `Transport scoped to "${this.computerId}" requires explicit port/token credentials in Node`,
@@ -249,9 +207,7 @@ export class CraneTransport {
         return !!this.ws && this.ws.readyState === 1;
     }
 
-    // A live socket alone is not "connected" when scoped to a remote
-    // computer: frames sent without a tunnel would execute on the local
-    // daemon under this computer's name.
+    // Remote scope needs a live tunnel, not just a socket
     private isRoutingLive(): boolean {
         return this.computerId === "local" || !!this.tunnelId;
     }
@@ -268,9 +224,7 @@ export class CraneTransport {
     private async open(): Promise<void> {
         await this.resolveCredentials();
 
-        // Reuse a live socket when only the tunnel is missing. A failed
-        // tunnel open leaves the socket healthy; opening a second one here
-        // would orphan the first connection's event handlers.
+        // Reuse a live socket when only the tunnel is missing
         if (!this.isConnected()) {
             const Ws = await getWebSocketImpl();
             await new Promise<void>((resolve, reject) => {
@@ -298,14 +252,12 @@ export class CraneTransport {
                         const text =
                             typeof raw === "string" ? raw : raw.toString("utf8");
                         this.handleMessage(text);
-                    } catch {}
+                    } catch (err) { debugErr("message handler", err); }
                 });
 
                 ws.on("close", () => {
                     this.ws = null;
-                    // The tunnel lived on this socket; its id is dead now.
-                    // Clear it so frames can't be wrapped into a stale tunnel
-                    // while the socket is down — open() re-establishes it.
+                    // Tunnel died with the socket; open() re-establishes it
                     this.tunnelId = null;
                     this.emitStatus(false);
                     this.rejectAllPending("PaperCrane connection closed");
@@ -314,8 +266,7 @@ export class CraneTransport {
             });
         }
 
-        // Remote scope: the tunnel IS the routing. It must be live before
-        // this transport resolves as connected.
+        // Remote scope requires a live tunnel before "connected"
         if (this.computerId !== "local" && !this.tunnelId) {
             await this.openTunnel(this.computerId);
         }
@@ -339,10 +290,7 @@ export class CraneTransport {
         }, delay);
     }
 
-    /**
-     * Stops the transport for good: closes the socket and cancels any
-     * pending reconnect. Safe to call repeatedly.
-     */
+    /** Stops the transport for good; safe to call repeatedly. */
     public close(): void {
         this.closedByUser = true;
         if (this.reconnectTimer) {
@@ -384,7 +332,7 @@ export class CraneTransport {
                                 );
                             }
                         }
-                    } catch {}
+                    } catch (err) { debugErr("tunnel handshake listener", err); }
                 };
                 this.addRawListener(listener);
                 this.rawSend({
@@ -422,7 +370,7 @@ export class CraneTransport {
         for (const cb of this.rawListeners) {
             try {
                 cb(text);
-            } catch {}
+            } catch (err) { debugErr("raw listener", err); }
         }
 
         let msg: any;
@@ -442,8 +390,7 @@ export class CraneTransport {
             }
         }
 
-        // Upstream leg dropped while our own socket is fine: rebuild the
-        // tunnel and replay subscriptions, exactly like a full reconnect.
+        // Upstream leg dropped: rebuild tunnel and resubscribe
         if (msg.type === "tunnel-closed" && msg.id === this.tunnelId) {
             this.tunnelId = null;
             const reopen = async () => {
@@ -452,10 +399,7 @@ export class CraneTransport {
                 await this.resubscribe();
             };
             reopen().catch((err) => {
-                // Leave the tunnel down; the healthy socket stays up and the
-                // next ensureConnected() retries the tunnel on demand. Do NOT
-                // scheduleReconnect() here — that would discard a perfectly
-                // good socket.
+                // Leave tunnel down; socket is healthy, next ensureConnected retries
                 debug(`target=${this.computerId} tunnel reopen failed: ${err?.message}`);
             });
             return;
@@ -500,9 +444,7 @@ export class CraneTransport {
         const id = this.requestId++;
         const finalParams = { token: this.token, ...params };
         return new Promise((resolve, reject) => {
-            // timeoutMs === null means "wait indefinitely" — for long-running
-            // operations like package/file downloads whose reply only arrives
-            // when the whole operation completes.
+            // null timeoutMs waits indefinitely (long-running operations)
             const timer =
                 timeoutMs === null
                     ? undefined
@@ -514,8 +456,7 @@ export class CraneTransport {
             this.pending.set(id, entry);
             try {
                 if (this.isLocalOnlyChannel(action, finalParams)) {
-                    // Host-local state (e.g. shell settings) always executes
-                    // on the local daemon even for remote-scoped transports.
+                    // Host-local state always executes on the local daemon
                     this.ws.send(JSON.stringify({ id, action, params: finalParams }));
                 } else {
                     this.frame({ id, action, params: finalParams });
@@ -572,6 +513,20 @@ export class CraneTransport {
         };
     }
 
+    public unsubscribeSource(
+        source: string,
+        cb: Listener,
+    ): void {
+        const entry = this.sourceSubs.get(source);
+        if (!entry || !entry.cbs.has(cb)) return;
+        entry.cbs.delete(cb);
+        entry.count--;
+        if (entry.count <= 0) {
+            this.unsubscribeEvent(source);
+            this.sourceSubs.delete(source);
+        }
+    }
+
     public trackTerminal(id: string): void {
         this.attachedTerminals.add(id);
     }
@@ -591,10 +546,10 @@ export class CraneTransport {
     // Replays stream attachments after a reconnect
     private async resubscribe(): Promise<void> {
         for (const id of this.attachedTerminals) {
-            this.call("term:attach", { id }).catch(() => {});
+            this.call("term:attach", { id }).catch((err) => debugErr(`term:attach ${id}`, err));
         }
         for (const id of this.attachedProcesses) {
-            this.call("process:attach", { id }).catch(() => {});
+            this.call("process:attach", { id }).catch((err) => debugErr(`process:attach ${id}`, err));
         }
     }
 
@@ -606,17 +561,12 @@ export class CraneTransport {
         return false;
     }
 
-    // Wraps frames when scoped to a paired computer. tunnelId is the single
-    // source of routing truth: it is cleared on socket close and on tunnel
-    // loss, so a non-null id always means a live leg.
+    // Wraps frames when scoped to a paired computer
     private frame(payload: unknown): void {
         if (!this.ws) throw new Error("PaperCrane connection closed");
         const action = (payload as any)?.action ?? "";
         debug(`target=${this.computerId} wrapped=${!!this.tunnelId} action=${action}`);
-        // Hard stop: a remote-scoped frame without a live tunnel must never
-        // fall through to the local daemon unwrapped — that would run the
-        // operation on the wrong computer. Callers retry via ensureConnected,
-        // which re-establishes the tunnel first.
+        // Remote frames without a live tunnel must never hit the local daemon
         if (
             this.computerId !== "local" &&
             !this.tunnelId &&

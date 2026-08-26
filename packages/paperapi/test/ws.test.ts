@@ -1,12 +1,4 @@
-// CraneTransport regression tests (bun test).
-//
-// Mocks the WebSocket layer (globalThis.WebSocket is read lazily by
-// getWebSocketImpl()) and drives the transport's scope/tunnel logic:
-//   - remote-scoped transports wrap every frame in a tunnel envelope
-//   - local-scoped transports send plain frames
-//   - a failed tunnel open makes remote calls REJECT — frames must never
-//     leak to the local daemon unwrapped — and the tunnel stays retryable
-//   - reconnect reopens the tunnel and replays stream subscriptions
+// CraneTransport regression tests (bun test); mocks globalThis.WebSocket
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 
 type Listener = (e?: any) => void;
@@ -184,8 +176,7 @@ describe("CraneTransport computer scoping", () => {
             reason: "auth",
         });
 
-        // With the tunnel down, a call must NOT produce a plain frame — it
-        // triggers a tunnel attempt instead.
+        // Tunnel down: call must trigger a tunnel attempt, not a plain frame
         const probe = t.call("panel:list");
         await waitFor(
             () => countFrames((f) => f.type === "remote:open") > 2,
@@ -219,8 +210,7 @@ describe("CraneTransport computer scoping", () => {
         // Simulate the daemon socket dropping.
         LAST().close();
 
-        // Backoff is 400ms; wait for the replacement socket, then complete
-        // its connect + tunnel reopen.
+        // Backoff is 400ms; complete the replacement socket's connect + tunnel
         await waitFor(() => MockWebSocket.instances.length > 1);
         const second = LAST();
         second.open();

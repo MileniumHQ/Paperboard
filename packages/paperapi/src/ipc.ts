@@ -1,15 +1,8 @@
-// PaperAPI transport router.
-//
-// Public surface (invoke/send/on/unpackIpcPayload) is unchanged from the
-// original Electron-only bridge, so every namespace module works without
-// modification. Under the hood, ALL channels ride the PaperCrane WebSocket
-// transport. PaperAPI never touches Electron IPC — privileged shell
-// orchestration lives in the shell itself.
-//
-// Bootstrap resolves daemon credentials from the host (panel://__crane,
-// preload bridge) or the local handshake file (node builds).
+// PaperAPI transport router; every channel rides the PaperCrane WebSocket
 
 import { CraneTransport, ambientScope } from "./ws";
+import { debugErr } from "./debug";
+import { REGISTRY_URL } from "./config";
 
 export interface IpcRendererLike {
     invoke<T = unknown>(channel: string, ...args: unknown[]): Promise<T>;
@@ -18,7 +11,10 @@ export interface IpcRendererLike {
         channel: string,
         listener: (event: any, ...args: any[]) => void,
     ): (() => void) | void;
-    once?(channel: string, listener: (event: any, ...args: any[]) => void): void;
+    once?(
+        channel: string,
+        listener: (event: any, ...args: any[]) => void,
+    ): void;
     removeListener?(channel: string, listener: (...args: any[]) => void): void;
     removeAllListeners?(channel?: string): void;
 }
@@ -45,13 +41,18 @@ export function unpackIpcPayload<T>(event: unknown, data: T): T | unknown {
     return data !== undefined ? data : event;
 }
 
+// Panel id = hostname after the first dot (panel://<comp>.<panelId>)
+export function getPanelId(): string {
+    if (typeof window === "undefined") return "";
+    const host = window.location?.hostname || "";
+    const dot = host.indexOf(".");
+    if (dot < 0) return host;
+    return host.slice(dot + 1);
+}
+
 // ─── Transport registry ──────────────────────────────────────────────────────
-//
-// One transport PER COMPUTER, created on demand and bound to that computer
-// forever. There is deliberately no "active transport" and no retargeting:
-// code that talks to a computer names it, so data can never land on the
-// wrong machine. Panels resolve their scope from their iframe's ?comp=
-// bootstrap parameter (ambientScope()); the shell passes explicit scopes.
+
+// One transport per computer, bound at creation, never retargeted
 
 const transports = new Map<string, CraneTransport>();
 
@@ -76,11 +77,7 @@ export interface InitOptions {
     craneJsonPath?: string;
 }
 
-// Explicit initialization. Optional — without it the first API call triggers
-// automatic bootstrap appropriate for the runtime.
-//
-// The default transport is permanent: re-initialization reuses the existing
-// instance and only warns about ignored options.
+// Optional explicit init; re-init reuses the existing transport
 export function initPaperApi(opts: InitOptions = {}): Promise<void> {
     const scope = opts.computerId || ambientScope();
     if (!transports.has(scope)) {
@@ -89,7 +86,12 @@ export function initPaperApi(opts: InitOptions = {}): Promise<void> {
             transport.credentialProvider = createShellCredentialProvider();
         }
         transports.set(scope, transport);
-    } else if (opts.port || opts.token || opts.computerId || opts.craneJsonPath) {
+    } else if (
+        opts.port ||
+        opts.token ||
+        opts.computerId ||
+        opts.craneJsonPath
+    ) {
         console.warn(
             "[paperapi] initPaperApi called after bootstrap; transport options ignored",
         );
@@ -97,7 +99,9 @@ export function initPaperApi(opts: InitOptions = {}): Promise<void> {
     return getTransport(scope).ensureConnected();
 }
 
-function createShellCredentialProvider(): NonNullable<CraneTransport["credentialProvider"]> {
+function createShellCredentialProvider(): NonNullable<
+    CraneTransport["credentialProvider"]
+> {
     return async () =>
         await getElectronIpc()!.invoke<{
             port: number;
@@ -106,10 +110,6 @@ function createShellCredentialProvider(): NonNullable<CraneTransport["credential
 }
 
 // ─── Channel translation ─────────────────────────────────────────────────────
-
-const REGISTRY_URL =
-    (typeof process !== "undefined" && process.env?.ORIGAMI_REGISTRY_URL) ||
-    "https://origami.ariapis.com";
 
 interface WsRoute {
     action: string;
@@ -200,7 +200,11 @@ const WS_INVOKE: Record<string, WsRoute> = {
 // Channels needing bespoke logic (progress subscriptions, registry lookups)
 const LONG_TIMEOUT = null;
 
-async function invokeSpecial(channel: string, args: any[], scope?: string): Promise<any> {
+async function invokeSpecial(
+    channel: string,
+    args: any[],
+    scope?: string,
+): Promise<any> {
     const t = getTransport(scope);
 
     switch (channel) {
@@ -209,16 +213,18 @@ async function invokeSpecial(channel: string, args: any[], scope?: string): Prom
             const result = await t.call(
                 "file:download",
                 {
-                url: a.url,
-                targetPath: a.targetPath,
-                appId: a.appId,
-                downloadId: a.downloadId,
-                options: {
-                    sha1: a.sha1,
-                    sha256: a.sha256,
-                    checksum: a.checksum,
+                    url: a.url,
+                    targetPath: a.targetPath,
+                    appId: a.appId,
+                    downloadId: a.downloadId,
+                    options: {
+                        sha1: a.sha1,
+                        sha256: a.sha256,
+                        checksum: a.checksum,
+                    },
                 },
-            });
+                LONG_TIMEOUT,
+            );
             return result.path;
         }
 
@@ -245,7 +251,9 @@ async function invokeSpecial(channel: string, args: any[], scope?: string): Prom
                     signature = record?.signature;
                     version = record?.version;
                 }
-            } catch {}
+            } catch (err) {
+                debugErr("panel-install registry lookup", err);
+            }
             const result = await t.call(
                 "panel:install",
                 {
@@ -260,8 +268,7 @@ async function invokeSpecial(channel: string, args: any[], scope?: string): Prom
             return result.panel;
         }
 
-        case "process-start":
-        case "process-run": {
+        case "process-start": {
             const p = args[0] as any;
             await t.call("process:run", {
                 id: p.id,
@@ -272,6 +279,19 @@ async function invokeSpecial(channel: string, args: any[], scope?: string): Prom
             });
             t.trackProcess(p.id);
             return { success: true };
+        }
+
+        case "process-run": {
+            const p = args[0] as any;
+            const res = await t.call("process:run", {
+                id: p.id,
+                command: p.command,
+                args: p.args || [],
+                cwd: p.cwd,
+                env: p.env,
+            });
+            t.trackProcess(p.id);
+            return res;
         }
 
         case "process-attach": {
@@ -339,9 +359,7 @@ const WS_EVENTS: Record<string, EventRoute> = {
 
 // ─── Public router ───────────────────────────────────────────────────────────
 
-// Scoped invocation: routes the channel to the transport of the named
-// computer. `undefined` means the ambient scope (panel bootstrap param or
-// "local"). This is the ONLY way multi-computer clients address a computer.
+// Route to the named computer's transport; undefined = ambient scope
 export async function invokeIn<T = unknown>(
     scope: string | undefined,
     channel: string,
@@ -377,27 +395,37 @@ export function send(channel: string, ...args: unknown[]): void {
             t.ensureConnected()
                 .then(() => t.call("term:create", p))
                 .then(() => t.trackTerminal(p.id))
-                .catch(() => {});
+                .catch((err) => debugErr(`terminal-create ${p?.id}`, err));
             return;
         }
         case "terminal-write":
-            t.call("term:write", args[0] as any).catch(() => {});
+            t.call("term:write", args[0] as any).catch((err) =>
+                debugErr("terminal-write", err),
+            );
             return;
         case "terminal-resize":
-            t.call("term:resize", args[0] as any).catch(() => {});
+            t.call("term:resize", args[0] as any).catch((err) =>
+                debugErr("terminal-resize", err),
+            );
             return;
         case "terminal-destroy": {
             const { id } = args[0] as any;
-            t.call("term:destroy", { id }).catch(() => {});
+            t.call("term:destroy", { id }).catch((err) =>
+                debugErr(`terminal-destroy ${id}`, err),
+            );
             t.untrackTerminal(id);
             return;
         }
         case "process-write":
-            t.call("process:write", args[0] as any).catch(() => {});
+            t.call("process:write", args[0] as any).catch((err) =>
+                debugErr("process-write", err),
+            );
             return;
         case "process-kill": {
             const { id } = args[0] as any;
-            t.call("process:kill", args[0] as any).catch(() => {});
+            t.call("process:kill", args[0] as any).catch((err) =>
+                debugErr(`process-kill ${id}`, err),
+            );
             t.untrackProcess(id);
             return;
         }
@@ -409,7 +437,7 @@ export function send(channel: string, ...args: unknown[]): void {
 export function on(
     channel: string,
     listener: (event: any, ...args: any[]) => void,
-): (() => void) | void {
+): () => void {
     // Stream channels look like "<kind>:<resource-id>"
     const colonIndex = channel.indexOf(":");
     const kind = colonIndex === -1 ? channel : channel.slice(0, colonIndex);
@@ -424,25 +452,44 @@ export function on(
     const wrapped = (payload: any) => {
         try {
             if (route.match && !route.match(payload ?? {}, suffix)) return;
-            const cbArgs = route.transform ? route.transform(payload ?? {}) : [];
+            const cbArgs = route.transform
+                ? route.transform(payload ?? {})
+                : [];
             listener({} as any, ...cbArgs);
-        } catch {}
+        } catch (err) {
+            debugErr(`listener for ${channel}`, err);
+        }
     };
 
     t.subscribeSource(route.source, wrapped);
 
     // Eager connect so streams start flowing even before an invoke
-    t.ensureConnected().catch(() => {});
+    t.ensureConnected().catch((err) => debugErr("stream eager connect", err));
 
     // Best-effort replay for terminals/processes this client owns
+    let tracked: "terminal" | "process" | null = null;
     if (kind === "terminal-data") {
-        t.call("term:attach", { id: suffix }).catch(() => {});
+        t.call("term:attach", { id: suffix }).catch((err) =>
+            debugErr(`term:attach ${suffix}`, err),
+        );
         t.trackTerminal(suffix);
-    } else if (kind === "process-data" || kind === "process-stdout" || kind === "process-stderr") {
-        t.call("process:attach", { id: suffix }).catch(() => {});
+        tracked = "terminal";
+    } else if (
+        kind === "process-data" ||
+        kind === "process-stdout" ||
+        kind === "process-stderr"
+    ) {
+        t.call("process:attach", { id: suffix }).catch((err) =>
+            debugErr(`process:attach ${suffix}`, err),
+        );
         t.trackProcess(suffix);
+        tracked = "process";
     }
 
-    // No explicit off() in the legacy surface; subscriptions live for the
-    // page lifetime, and transport reconnects replay them automatically.
+    // Returns an unsubscribe function
+    return () => {
+        t.unsubscribeSource(route.source, wrapped);
+        if (tracked === "terminal") t.untrackTerminal(suffix);
+        else if (tracked === "process") t.untrackProcess(suffix);
+    };
 }
