@@ -5,19 +5,19 @@
                 "name": "PaperUI",
                 "icon": "palette",
                 "image": "/paperui.png",
-                "description": "Design beautiful interfaces."
+                "description": "Build interfaces with PaperUI components and templates."
             },
             "paperboard": {
                 "name": "Paperboard",
                 "icon": "grid_view",
                 "image": "/paperboard.png",
-                "description": "Do more with your computer."
+                "description": "Run extensions and panels on your desktop."
             },
             "paperapi": {
                 "name": "PaperAPI",
                 "icon": "api",
                 "image": "/paperapi.png",
-                "description": "Create memorable experiences."
+                "description": "Extend Paperboard with JavaScript APIs."
             }
         }
     },
@@ -50,12 +50,12 @@
                     },
                     "typography": {
                         "index": 1,
-                        "name": "Typography & Fonts",
+                        "name": "Typography and fonts",
                         "file": "typography"
                     },
                     "variables": {
                         "index": 2,
-                        "name": "Variables & Spacing",
+                        "name": "Variables and spacing",
                         "file": "variables"
                     },
                     "theming": {
@@ -158,6 +158,9 @@
                     "paperselector": {
                         "name": "PaperSelector"
                     },
+                    "paperselectmenu": {
+                        "name": "PaperSelectMenu"
+                    },
                     "paperseparator": {
                         "name": "PaperSeparator"
                     },
@@ -177,10 +180,66 @@
                         "name": "PaperToggle"
                     }
                 }
+            }
+        }
+    },
+    "paperapi": {
+        "subsections": {
+            "getting-started": {
+                "name": "Getting started",
+                "icon": "rocket_launch",
+                "pages": {
+                    "introduction": {
+                        "index": 0,
+                        "name": "Introduction",
+                        "file": "00-introduction"
+                    },
+                    "quick-start": {
+                        "index": 1,
+                        "name": "Quick start",
+                        "file": "01-quick-start"
+                    }
+                }
             },
-            "tutorials": {
-                "name": "Tutorials",
-                "icon": "school",
+            "api": {
+                "name": "APIs",
+                "icon": "api",
+                "pages": {
+                    "terminal": {
+                        "index": 0,
+                        "name": "Terminal API",
+                        "file": "terminal"
+                    },
+                    "process": {
+                        "index": 1,
+                        "name": "Process API",
+                        "file": "process"
+                    },
+                    "package": {
+                        "index": 2,
+                        "name": "Package API",
+                        "file": "package"
+                    },
+                    "files": {
+                        "index": 3,
+                        "name": "Files API",
+                        "file": "files"
+                    },
+                    "config": {
+                        "index": 4,
+                        "name": "Config API",
+                        "file": "config"
+                    },
+                    "system": {
+                        "index": 5,
+                        "name": "System API",
+                        "file": "system"
+                    }
+                }
+            },
+            "cli": {
+                "name": "CLI",
+                "icon": "terminal",
                 "pages": {
                     "overview": {
                         "index": 0,
