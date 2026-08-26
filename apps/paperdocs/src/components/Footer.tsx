@@ -1,4 +1,4 @@
-import { PaperFlex, PaperText } from "paperui";
+import { PaperFlex, PaperText } from "@paperboard-dev/paperui";
 import { sectionKey, sectionMeta } from "../utils/routeUtils";
 
 export function Footer() {

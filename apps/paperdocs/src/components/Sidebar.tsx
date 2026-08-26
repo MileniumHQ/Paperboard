@@ -1,4 +1,4 @@
-import { PaperMenu, PaperMenuItem, PaperMenuSection } from "paperui";
+import { PaperMenu, PaperMenuItem, PaperMenuSection } from "@paperboard-dev/paperui";
 import { For } from "solid-js";
 import { currentPage, sectionKey, subsections } from "../utils/routeUtils";
 

@@ -1,4 +1,4 @@
-import { PaperFlex, PaperLink, PaperText } from "paperui";
+import { PaperFlex, PaperLink, PaperText } from "@paperboard-dev/paperui";
 
 export function NotFound() {
     return (

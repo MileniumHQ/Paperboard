@@ -1,4 +1,4 @@
-import { PaperMenu, PaperMenuItem, PaperText } from "paperui";
+import { PaperMenu, PaperMenuItem, PaperText } from "@paperboard-dev/paperui";
 import { For } from "solid-js";
 import type { TocItem } from "../types/docs";
 

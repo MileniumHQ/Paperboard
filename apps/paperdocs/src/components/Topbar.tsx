@@ -8,7 +8,7 @@ import {
     PaperSpacer,
     PaperText,
     useContextMenuState,
-} from "paperui";
+} from "@paperboard-dev/paperui";
 import { For, Show } from "solid-js";
 import { metaSections, sectionKey, sectionMeta } from "../utils/routeUtils";
 

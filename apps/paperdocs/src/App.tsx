@@ -4,8 +4,8 @@ import {
     PaperSelector,
     PaperSelectorItem,
     PaperSeparator,
-} from "paperui";
-import "paperui/style.css";
+} from "@paperboard-dev/paperui";
+import "@paperboard-dev/paperui/style.css";
 import { createSignal, onCleanup, onMount, Show } from "solid-js";
 import { Footer } from "./components/Footer";
 import { NotFound } from "./components/NotFound";

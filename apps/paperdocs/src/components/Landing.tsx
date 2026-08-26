@@ -1,4 +1,4 @@
-import { PaperText } from "paperui";
+import { PaperText } from "@paperboard-dev/paperui";
 import styles from "./landing.module.css";
 import { createSignal, onMount, onCleanup, For } from "solid-js";
 
