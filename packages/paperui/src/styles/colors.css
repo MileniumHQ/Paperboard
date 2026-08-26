@@ -1,3 +1,6 @@
+/* Cascade order matters: :root defaults, then the OS media query, then the
+ * explicit theme attributes LAST so a forced light/dark always wins over
+ * whatever the OS prefers. */
 :root {
     /* Brand Colors */
     --paper-front-blue: #2981e5;
@@ -32,30 +35,6 @@
     --paper-anti-background: #000000;
 }
 
-[data-paperui-theme="light"],
-[data-theme="light"] {
-    /* Background Surfaces */
-    --paper-background-frontest: #ffffff;
-    --paper-background-front: #f6f8fa;
-    --paper-background-definition: #eceff3;
-    --paper-background-back: #e2e6eb;
-    --paper-background-backest: #d8dce2;
-    --paper-background-element: #cdd3db;
-
-    /* Borders */
-    --paper-medium-border: #c4c9d2;
-    --paper-medium-dark-border: #adb3be;
-    --paper-dark-border: #7d8492;
-
-    /* Text & Typography Colors */
-    --paper-main-text: #0f1319;
-    --paper-lightish-text: #2e3440;
-    --paper-light-text: #5b6371;
-    --paper-lightest-text: #8b93a2;
-
-    --paper-anti-background: #000000;
-}
-
 @media (prefers-color-scheme: dark) {
     :root {
         /* Background Surfaces */
@@ -79,6 +58,30 @@
 
         --paper-anti-background: #ffffff;
     }
+}
+
+[data-paperui-theme="light"],
+[data-theme="light"] {
+    /* Background Surfaces */
+    --paper-background-frontest: #ffffff;
+    --paper-background-front: #f6f8fa;
+    --paper-background-definition: #eceff3;
+    --paper-background-back: #e2e6eb;
+    --paper-background-backest: #d8dce2;
+    --paper-background-element: #cdd3db;
+
+    /* Borders */
+    --paper-medium-border: #c4c9d2;
+    --paper-medium-dark-border: #adb3be;
+    --paper-dark-border: #7d8492;
+
+    /* Text & Typography Colors */
+    --paper-main-text: #0f1319;
+    --paper-lightish-text: #2e3440;
+    --paper-light-text: #5b6371;
+    --paper-lightest-text: #8b93a2;
+
+    --paper-anti-background: #000000;
 }
 
 [data-paperui-theme="dark"],
