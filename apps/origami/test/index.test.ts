@@ -43,7 +43,7 @@ describe("Origami Worker", () => {
     const res = await worker.fetch(req, env, {} as any);
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.service).toBe("Origami Package Registry");
+    expect(body.service).toBe("Origami Package & Panel Registry");
   });
 
   it("returns individual package info for /package/java-26.json", async () => {
