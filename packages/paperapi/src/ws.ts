@@ -1,15 +1,18 @@
-// WebSocket transport to a PaperCrane daemon; bound to one computer forever,
-// remote frames ride a tunnel envelope or fail loudly
-
+// WebSocket transport bound to one computer; remote frames ride a tunnel or fail
 import type * as fsType from "fs";
 
 import { debug, debugErr } from "./debug";
+import { TransportRegistry } from "./transport/registry";
+
+const LOCAL_ONLY_APP_SETTINGS = "app-settings";
 
 export interface TransportOptions {
     port?: number;
     token?: string;
     /** Immutable computer scope ("local" or a paired id); defaults ambient. */
     computerId?: string;
+    /** Panel ID if running as a background service or specific panel context. */
+    panelId?: string;
     /** Node-only: explicit handshake file instead of the default location. */
     craneJsonPath?: string;
 }
@@ -35,7 +38,6 @@ export function ambientScope(): string {
     return "local";
 }
 
-// Web Crypto first (bundlers shim node:crypto away in browser builds)
 async function randomTunnelId(): Promise<string> {
     const c = (globalThis as any).crypto;
     if (c?.getRandomValues) {
@@ -45,15 +47,13 @@ async function randomTunnelId(): Promise<string> {
             b.toString(16).padStart(2, "0"),
         ).join("")}`;
     }
-    const specifier = ["n", "od", "e:c", "ryp", "t", "o"].join("");
-    const mod = await import(/* @vite-ignore */ specifier);
+    const mod = await import(/* @vite-ignore */ "node:crypto");
     return `t-${mod.randomBytes(6).toString("hex")}`;
 }
 
-// Non-static specifier so bundlers don't fold it into browser builds
+// @vite-ignore keeps node builtins out of browser builds
 async function nodeBuiltin(name: string): Promise<any> {
-    const specifier = ["nod", "e:"].join("") + name;
-    return import(/* @vite-ignore */ specifier);
+    return import(/* @vite-ignore */ `node:${name}`);
 }
 
 function defaultCraneJsonPath(pathMod: any): string {
@@ -65,13 +65,13 @@ function defaultCraneJsonPath(pathMod: any): string {
     );
 }
 
-// Native WebSocket preferred; ws package fallback keeps bundlers uninvolved
 async function getWebSocketImpl(): Promise<any> {
     const g = globalThis as any;
     if (typeof g.WebSocket !== "undefined") {
             // Adapt native events to the ws-package shape
         return class NativeAdapter {
             private _ws: WebSocket;
+            private _wrapped = new Map<(arg?: any) => void, { event: string; fn: EventListener }>();
             constructor(url: string) {
                 this._ws = new g.WebSocket(url);
             }
@@ -82,21 +82,59 @@ async function getWebSocketImpl(): Promise<any> {
                 this._ws.send(data);
             }
             close() {
+                // Detach every adapted listener so reconnects don't leak.
+                const remove = (this._ws as any).removeEventListener?.bind(this._ws);
+                if (remove) {
+                    for (const { event, fn } of this._wrapped.values()) {
+                        try {
+                            remove(event, fn);
+                        } catch {}
+                    }
+                }
+                this._wrapped.clear();
                 this._ws.close();
             }
             on(event: string, cb: (arg?: any) => void) {
-                if (event === "message") {
-                    this._ws.addEventListener("message", (e) =>
-                        cb((e as MessageEvent).data),
-                    );
-                } else {
-                    this._ws.addEventListener(event, () => cb());
+                const wrapped: EventListener =
+                    event === "message"
+                        ? (e) => cb((e as MessageEvent).data)
+                        : () => cb();
+                this._wrapped.set(cb, { event, fn: wrapped });
+                this._ws.addEventListener(event, wrapped);
+            }
+            off(event: string, cb?: (arg?: any) => void) {
+                const remove = (this._ws as any).removeEventListener?.bind(this._ws);
+                if (!remove) {
+                    if (cb) this._wrapped.delete(cb);
+                    else {
+                        for (const [orig, entry] of this._wrapped) {
+                            if (entry.event === event) this._wrapped.delete(orig);
+                        }
+                    }
+                    return;
+                }
+                if (cb) {
+                    const entry = this._wrapped.get(cb);
+                    if (entry && entry.event === event) {
+                        try {
+                            remove(event, entry.fn);
+                        } catch {}
+                        this._wrapped.delete(cb);
+                    }
+                    return;
+                }
+                for (const [orig, entry] of this._wrapped) {
+                    if (entry.event === event) {
+                        try {
+                            remove(event, entry.fn);
+                        } catch {}
+                        this._wrapped.delete(orig);
+                    }
                 }
             }
         };
     }
-    const specifier = ["w", "s"].join("");
-    const mod = await import(/* @vite-ignore */ specifier);
+    const mod = await import(/* @vite-ignore */ "ws");
     return mod.default ?? mod.WebSocket ?? mod;
 }
 
@@ -106,7 +144,7 @@ export class CraneTransport {
     private port: number | null = null;
     private token: string | null = null;
     private opts: TransportOptions = {};
-    // Supplies LOCAL daemon credentials for embedders like the Electron shell
+    // supplies local daemon credentials
     public credentialProvider: (() => Promise<{
         port: number;
         token: string;
@@ -118,12 +156,11 @@ export class CraneTransport {
     private reconnectAttempts = 0;
     private closedByUser = false;
     private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-    // Subscriptions replayed after reconnects
     private attachedTerminals = new Set<string>();
     private attachedProcesses = new Set<string>();
-    // Live tunnel to this.computerId; null means remote frames must fail
+    private registry = new TransportRegistry(() => this.resolveDefaultPanelId());
+    // null tunnel means remote frames must fail
     private tunnelId: string | null = null;
-    // Node runtime detection
     private isNode =
         typeof window === "undefined" &&
         typeof process !== "undefined" &&
@@ -153,29 +190,19 @@ export class CraneTransport {
         }
 
         if (!this.isNode) {
-            // Browser: prefer credentials injected by the host at serve time
-            // (scoped to this document's computer); fall back to /__crane.
+            // Browser: credentials are injected by the host at serve time
+            // (scoped to this document's computer). No fetch fallback.
             const injected = (globalThis as any).__PAPERBOARD_CRANE;
-            if (injected?.port && injected?.token) {
-                if (injected.computerId !== this.computerId) {
-                    throw new Error(
-                        `Paperboard host served credentials for "${injected.computerId}" but this panel is scoped to "${this.computerId}"`,
-                    );
-                }
-                this.port = injected.port;
-                this.token = injected.token;
-                return;
+            if (!injected?.port || !injected?.token) {
+                throw new Error("Paperboard host unavailable (no injected crane credentials)");
             }
-            const res = await fetch("/__crane");
-            if (!res.ok) throw new Error(`Paperboard host unavailable (${res.status})`);
-            const creds = await res.json();
-            if (creds.computerId !== this.computerId) {
+            if (injected.computerId !== this.computerId) {
                 throw new Error(
-                    `Paperboard host served credentials for "${creds.computerId}" but this panel is scoped to "${this.computerId}"`,
+                    `Paperboard host served credentials for "${injected.computerId}" but this panel is scoped to "${this.computerId}"`,
                 );
             }
-            this.port = creds.port;
-            this.token = creds.token;
+            this.port = injected.port;
+            this.token = injected.token;
             return;
         }
 
@@ -271,7 +298,6 @@ export class CraneTransport {
             await this.openTunnel(this.computerId);
         }
 
-        // Replay stream subscriptions owned by this client
         await this.resubscribe();
     }
 
@@ -410,6 +436,36 @@ export class CraneTransport {
             return;
         }
 
+        if (msg.type === "action_call") {
+            const { callId, action, args } = msg;
+            const handler = this.registry.getHandler(action);
+            if (!handler) {
+                this.rawSend({
+                    type: "action_reply",
+                    callId,
+                    error: `Handler for action '${action}' not found`,
+                });
+                return;
+            }
+            Promise.resolve()
+                .then(() => handler(...(Array.isArray(args) ? args : [])))
+                .then((result) => {
+                    this.rawSend({
+                        type: "action_reply",
+                        callId,
+                        result: result === undefined ? null : result,
+                    });
+                })
+                .catch((err: any) => {
+                    this.rawSend({
+                        type: "action_reply",
+                        callId,
+                        error: err?.message || String(err),
+                    });
+                });
+            return;
+        }
+
         if (msg.type === "response") {
             const p = this.pending.get(msg.id);
             if (p) {
@@ -456,7 +512,6 @@ export class CraneTransport {
             this.pending.set(id, entry);
             try {
                 if (this.isLocalOnlyChannel(action, finalParams)) {
-                    // Host-local state always executes on the local daemon
                     this.ws.send(JSON.stringify({ id, action, params: finalParams }));
                 } else {
                     this.frame({ id, action, params: finalParams });
@@ -483,45 +538,34 @@ export class CraneTransport {
         else this.listeners.get(event)?.delete(cb);
     }
 
-    // Fan-out registry for translated channels sharing one upstream event
-    private sourceSubs = new Map<
-        string,
-        { count: number; cbs: Set<Listener> }
-    >();
+    // fan-out for channels sharing one upstream event
+    private sourceSubs = new Map<string, Set<Listener>>();
 
     public subscribeSource(
         source: string,
         cb: Listener,
     ): () => void {
-        let entry = this.sourceSubs.get(source);
-        if (!entry) {
-            entry = { count: 0, cbs: new Set() };
-            this.sourceSubs.set(source, entry);
+        let set = this.sourceSubs.get(source);
+        if (!set) {
+            set = new Set();
+            this.sourceSubs.set(source, set);
+            const live = set;
             this.subscribeEvent(source, (payload) => {
-                for (const inner of entry!.cbs) inner(payload);
+                for (const inner of live) inner(payload);
             });
         }
-        entry.count++;
-        entry.cbs.add(cb);
-        return () => {
-            entry!.cbs.delete(cb);
-            entry!.count--;
-            if (entry!.count <= 0) {
-                this.unsubscribeEvent(source);
-                this.sourceSubs.delete(source);
-            }
-        };
+        set.add(cb);
+        return () => this.unsubscribeSource(source, cb);
     }
 
     public unsubscribeSource(
         source: string,
         cb: Listener,
     ): void {
-        const entry = this.sourceSubs.get(source);
-        if (!entry || !entry.cbs.has(cb)) return;
-        entry.cbs.delete(cb);
-        entry.count--;
-        if (entry.count <= 0) {
+        const set = this.sourceSubs.get(source);
+        if (!set || !set.has(cb)) return;
+        set.delete(cb);
+        if (set.size <= 0) {
             this.unsubscribeEvent(source);
             this.sourceSubs.delete(source);
         }
@@ -543,7 +587,72 @@ export class CraneTransport {
         this.attachedProcesses.delete(id);
     }
 
-    // Replays stream attachments after a reconnect
+    private resolveDefaultPanelId(): string {
+        if (this.opts.panelId) return this.opts.panelId;
+        if (typeof window !== "undefined" && window.location) {
+            const host = window.location.hostname || "";
+            const dot = host.indexOf(".");
+            if (dot >= 0) return host.slice(dot + 1);
+            if (host) return host;
+        }
+        if (typeof process !== "undefined" && process.env?.PAPERBOARD_PANEL_ID) {
+            return process.env.PAPERBOARD_PANEL_ID;
+        }
+        return "";
+    }
+
+    public setActionHandler(
+        actionName: string,
+        handler: (...args: any[]) => Promise<any> | any,
+        panelId?: string,
+        schema?: any,
+    ): void {
+        this.registry.setActionHandler(actionName, handler, panelId, schema);
+    }
+
+    public async registerAction(
+        panelId: string,
+        actionName: string,
+        handler: (...args: any[]) => Promise<any> | any,
+        schema?: any,
+    ): Promise<void> {
+        this.registry.addAction(panelId, actionName, handler, schema);
+        await this.ensureConnected();
+        await this.call("actions:register", { panelId, action: actionName, schema });
+    }
+
+    public async registerTrigger(
+        panelId: string,
+        triggerName: string,
+        schema?: any,
+    ): Promise<void> {
+        this.registry.addTrigger(panelId, triggerName, schema);
+        await this.ensureConnected();
+        await this.call("triggers:register", { panelId, trigger: triggerName, schema });
+    }
+
+    public async registerMultipleActions(
+        panelId: string,
+        actionsMap: Record<string, (...args: any[]) => Promise<any> | any>,
+    ): Promise<void> {
+        const names = this.registry.addActions(panelId, actionsMap);
+        await this.ensureConnected();
+        await this.call("actions:register", { panelId, actions: names });
+    }
+
+    public async unregisterAction(panelId: string, actionName: string): Promise<void> {
+        this.registry.removeAction(panelId, actionName);
+        await this.ensureConnected();
+        await this.call("actions:unregister", { panelId, action: actionName });
+    }
+
+    public async unregisterTrigger(panelId: string, triggerName: string): Promise<void> {
+        this.registry.removeTrigger(panelId, triggerName);
+        await this.ensureConnected();
+        await this.call("triggers:unregister", { panelId, trigger: triggerName });
+    }
+
+    // replays attachments and registrations after reconnect
     private async resubscribe(): Promise<void> {
         for (const id of this.attachedTerminals) {
             this.call("term:attach", { id }).catch((err) => debugErr(`term:attach ${id}`, err));
@@ -551,17 +660,21 @@ export class CraneTransport {
         for (const id of this.attachedProcesses) {
             this.call("process:attach", { id }).catch((err) => debugErr(`process:attach ${id}`, err));
         }
+
+        await this.registry.resubscribe(
+            (action, params) => this.call(action, params),
+            (label, err) => debugErr(label, err),
+        );
     }
 
     /** True when frames should bypass an active tunnel (host-local state). */
     private isLocalOnlyChannel(action: string, params: any): boolean {
         if (action === "config:get" || action === "config:set") {
-            return params?.id === "app-settings";
+            return params?.id === LOCAL_ONLY_APP_SETTINGS;
         }
         return false;
     }
 
-    // Wraps frames when scoped to a paired computer
     private frame(payload: unknown): void {
         if (!this.ws) throw new Error("PaperCrane connection closed");
         const action = (payload as any)?.action ?? "";

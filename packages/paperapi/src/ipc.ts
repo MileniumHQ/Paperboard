@@ -1,5 +1,4 @@
-// PaperAPI transport router; every channel rides the PaperCrane WebSocket
-
+// transport router, every channel rides the WebSocket
 import { CraneTransport, ambientScope } from "./ws";
 import { debugErr } from "./debug";
 import { REGISTRY_URL } from "./config";
@@ -41,19 +40,23 @@ export function unpackIpcPayload<T>(event: unknown, data: T): T | unknown {
     return data !== undefined ? data : event;
 }
 
-// Panel id = hostname after the first dot (panel://<comp>.<panelId>)
+// panel id is hostname after first dot, or env in Node/service runtimes
 export function getPanelId(): string {
-    if (typeof window === "undefined") return "";
-    const host = window.location?.hostname || "";
-    const dot = host.indexOf(".");
-    if (dot < 0) return host;
-    return host.slice(dot + 1);
+    if (typeof window !== "undefined" && window.location) {
+        const host = window.location.hostname || "";
+        const dot = host.indexOf(".");
+        if (dot < 0) return host;
+        return host.slice(dot + 1);
+    }
+    if (typeof process !== "undefined" && process.env?.PAPERBOARD_PANEL_ID) {
+        return process.env.PAPERBOARD_PANEL_ID;
+    }
+    return "";
 }
 
 // ─── Transport registry ──────────────────────────────────────────────────────
 
-// One transport per computer, bound at creation, never retargeted
-
+// one transport per computer, bound at creation
 const transports = new Map<string, CraneTransport>();
 
 export function getTransport(scope?: string): CraneTransport {
@@ -77,7 +80,7 @@ export interface InitOptions {
     craneJsonPath?: string;
 }
 
-// Optional explicit init; re-init reuses the existing transport
+// re-init reuses the existing transport
 export function initPaperApi(opts: InitOptions = {}): Promise<void> {
     const scope = opts.computerId || ambientScope();
     if (!transports.has(scope)) {
@@ -115,7 +118,6 @@ interface WsRoute {
     action: string;
     params?: (args: any[]) => Record<string, unknown>;
     unwrap?: (result: any) => any;
-    /** null = no timeout (long-running operations) */
     timeoutMs?: number | null;
 }
 
@@ -149,7 +151,7 @@ const WS_INVOKE: Record<string, WsRoute> = {
         unwrap: (r) => r.success,
     },
     "config-get": {
-        // Legacy signature: invoke("config-get", id)
+        // Bare-string invoke: invoke("config-get", id)
         action: "config:get",
         params: (args) => ({ id: args[0] }),
         unwrap: (r) => r.data,
@@ -167,7 +169,7 @@ const WS_INVOKE: Record<string, WsRoute> = {
         unwrap: (r) => r.index,
     },
     "package-get-path": {
-        // Legacy signature: invoke("package-get-path", packageName)
+        // Bare-string invoke: invoke("package-get-path", packageName)
         action: "package:getPath",
         params: (args) => ({ packageName: args[0] }),
         unwrap: (r) => r.path,
@@ -177,7 +179,7 @@ const WS_INVOKE: Record<string, WsRoute> = {
         unwrap: (r) => r.panels ?? [],
     },
     "panel-uninstall": {
-        // Legacy signature: invoke("panel-uninstall", panelId)
+        // Bare-string invoke: invoke("panel-uninstall", panelId)
         action: "panel:uninstall",
         params: (args) => ({ panelId: args[0] }),
         unwrap: (r) => r.success ?? true,
@@ -195,9 +197,29 @@ const WS_INVOKE: Record<string, WsRoute> = {
         action: "system:info",
         unwrap: (r) => r,
     },
+    "system-notify": {
+        action: "system:notify",
+        unwrap: (r) => r,
+    },
+    "system-screenshot": {
+        action: "system:screenshot",
+        unwrap: (r) => r?.savePath ?? r,
+    },
+    "system-set-volume": {
+        action: "system:set-volume",
+        unwrap: (r) => r?.volume ?? r,
+    },
+    "system-set-muted": {
+        action: "system:set-muted",
+        unwrap: (r) => r?.muted ?? r,
+    },
+    "system-beep": {
+        action: "system:beep",
+        unwrap: (r) => r,
+    },
 };
 
-// Channels needing bespoke logic (progress subscriptions, registry lookups)
+// bespoke channels (progress subscriptions, registry lookups)
 const LONG_TIMEOUT = null;
 
 async function invokeSpecial(
@@ -359,7 +381,7 @@ const WS_EVENTS: Record<string, EventRoute> = {
 
 // ─── Public router ───────────────────────────────────────────────────────────
 
-// Route to the named computer's transport; undefined = ambient scope
+// route to the named computer, undefined = ambient
 export async function invokeIn<T = unknown>(
     scope: string | undefined,
     channel: string,
@@ -463,10 +485,10 @@ export function on(
 
     t.subscribeSource(route.source, wrapped);
 
-    // Eager connect so streams start flowing even before an invoke
+    // eager connect so streams flow before first invoke
     t.ensureConnected().catch((err) => debugErr("stream eager connect", err));
 
-    // Best-effort replay for terminals/processes this client owns
+    // replay attachments this client owns
     let tracked: "terminal" | "process" | null = null;
     if (kind === "terminal-data") {
         t.call("term:attach", { id: suffix }).catch((err) =>
@@ -486,7 +508,6 @@ export function on(
         tracked = "process";
     }
 
-    // Returns an unsubscribe function
     return () => {
         t.unsubscribeSource(route.source, wrapped);
         if (tracked === "terminal") t.untrackTerminal(suffix);
