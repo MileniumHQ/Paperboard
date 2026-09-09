@@ -1,0 +1,10 @@
+{
+    "name": "Bot Creator",
+    "id": "dev.paperboard.botcreator",
+    "version": "1.0.0",
+    "description": "Bot Creator for Discord",
+    "publisher": "Paperboard",
+    "base": "./dist/index.html",
+    "service": "./dist/service.js",
+    "icon": "./branding/icon.png"
+}
