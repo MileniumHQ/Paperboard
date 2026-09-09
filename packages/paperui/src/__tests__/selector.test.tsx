@@ -17,7 +17,6 @@ describe("PaperSelector & SelectionRadioInput Accessibility Tests", () => {
         expect(radios[0].checked).toBe(true);
         expect(radios[1].checked).toBe(false);
 
-        // Verify style does NOT use display: none
         expect(radios[0].style.display).not.toBe("none");
     });
 
