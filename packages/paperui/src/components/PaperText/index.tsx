@@ -13,6 +13,8 @@ export interface PaperTextProps extends JSX.HTMLAttributes<HTMLElement> {
     preset?: PaperTextPreset;
     as?: string;
     color?: PaperColor;
+    breakWord?: boolean;
+    truncate?: boolean | number;
 }
 
 const PRESETS: Record<string, { size: number; weight: number }> = {
@@ -34,6 +36,8 @@ export function PaperText(props: PaperTextProps) {
         "preset",
         "as",
         "color",
+        "breakWord",
+        "truncate",
         "class",
         "classList",
         "children",
@@ -71,10 +75,43 @@ export function PaperText(props: PaperTextProps) {
             styles.PaperText,
             local.rounded ? styles.rounded : "",
             local.preset ? styles[local.preset] : "",
+            local.breakWord ? styles.breakWord : "",
+            local.truncate ? styles.truncate : "",
             local.class,
         ]
             .filter(Boolean)
             .join(" ");
+
+    const dynamicStyle = () => {
+        const extra: JSX.CSSProperties = {};
+
+        if (local.breakWord) {
+            extra["word-break"] = "break-word";
+            extra["overflow-wrap"] = "break-word";
+        }
+
+        if (local.truncate) {
+            if (typeof local.truncate === "number" && local.truncate > 1) {
+                extra.display = "-webkit-box";
+                extra["-webkit-line-clamp"] = local.truncate;
+                extra["-webkit-box-orient"] = "vertical";
+                extra.overflow = "hidden";
+                extra["text-overflow"] = "ellipsis";
+            } else {
+                extra.overflow = "hidden";
+                extra["text-overflow"] = "ellipsis";
+                extra["white-space"] = "nowrap";
+            }
+        }
+
+        return {
+            "font-weight": effectiveWeight(),
+            "font-size": fontSizeVar(),
+            color: resolvedColor(),
+            ...extra,
+            ...(typeof local.style === "object" ? local.style : {}),
+        };
+    };
 
     return (
         <Dynamic
@@ -83,12 +120,7 @@ export function PaperText(props: PaperTextProps) {
             {...rest}
             class={className()}
             classList={local.classList}
-            style={{
-                "font-weight": effectiveWeight(),
-                "font-size": fontSizeVar(),
-                color: resolvedColor(),
-                ...(typeof local.style === "object" ? local.style : {}),
-            }}
+            style={dynamicStyle()}
         >
             {local.children}
             <Show when={rest.id}>
