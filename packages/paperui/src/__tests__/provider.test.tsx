@@ -15,7 +15,6 @@ describe("PaperProvider - Dynamic System Theme Tests", () => {
     });
 
     test("dynamically resolves system theme mode using matchMedia", () => {
-        // Mock matchMedia for dark mode
         window.matchMedia = vi.fn().mockImplementation((query) => ({
             matches: query.includes("dark"),
             media: query,

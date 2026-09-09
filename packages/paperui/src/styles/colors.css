@@ -1,8 +1,5 @@
-/* Cascade order matters: :root defaults, then the OS media query, then the
- * explicit theme attributes LAST so a forced light/dark always wins over
- * whatever the OS prefers. */
+/* forced theme wins over OS preference */
 :root {
-    /* Brand Colors */
     --paper-front-blue: #2981e5;
     --paper-back-blue: #0f63c8;
     --paper-front-green: #0d9d0d;
@@ -13,7 +10,6 @@
     --paper-back-yellow: #a17e0d;
     --paper-over-brand: #ffffff;
 
-    /* Background Surfaces (Light Mode) */
     --paper-background-frontest: #ffffff;
     --paper-background-front: #f6f8fa;
     --paper-background-definition: #eceff3;
@@ -21,12 +17,10 @@
     --paper-background-backest: #d8dce2;
     --paper-background-element: #cdd3db;
 
-    /* Borders (Light Mode) */
     --paper-medium-border: #c4c9d2;
     --paper-medium-dark-border: #adb3be;
     --paper-dark-border: #7d8492;
 
-    /* Text & Typography Colors (Light Mode) */
     --paper-main-text: #0f1319;
     --paper-lightish-text: #2e3440;
     --paper-light-text: #5b6371;
@@ -37,21 +31,18 @@
 
 @media (prefers-color-scheme: dark) {
     :root {
-        /* Background Surfaces */
-        --paper-background-frontest: #222222;
+            --paper-background-frontest: #222222;
         --paper-background-front: #191919;
         --paper-background-back: #2a2a2a;
         --paper-background-backest: #323232;
         --paper-background-definition: #131313;
         --paper-background-element: #3f3f3f;
 
-        /* Borders */
-        --paper-medium-border: #3a3a3a;
+            --paper-medium-border: #3a3a3a;
         --paper-medium-dark-border: #4c4c4c;
         --paper-dark-border: #636363;
 
-        /* Text & Typography Colors */
-        --paper-main-text: #f5f5f5;
+            --paper-main-text: #f5f5f5;
         --paper-lightish-text: #d4d4d4;
         --paper-light-text: #a1a1a1;
         --paper-lightest-text: #737373;
@@ -62,7 +53,6 @@
 
 [data-paperui-theme="light"],
 [data-theme="light"] {
-    /* Background Surfaces */
     --paper-background-frontest: #ffffff;
     --paper-background-front: #f6f8fa;
     --paper-background-definition: #eceff3;
@@ -70,12 +60,10 @@
     --paper-background-backest: #d8dce2;
     --paper-background-element: #cdd3db;
 
-    /* Borders */
     --paper-medium-border: #c4c9d2;
     --paper-medium-dark-border: #adb3be;
     --paper-dark-border: #7d8492;
 
-    /* Text & Typography Colors */
     --paper-main-text: #0f1319;
     --paper-lightish-text: #2e3440;
     --paper-light-text: #5b6371;
@@ -86,7 +74,6 @@
 
 [data-paperui-theme="dark"],
 [data-theme="dark"] {
-    /* Background Surfaces */
     --paper-background-frontest: #222222;
     --paper-background-front: #191919;
     --paper-background-back: #2a2a2a;
@@ -94,12 +81,10 @@
     --paper-background-definition: #131313;
     --paper-background-element: #3f3f3f;
 
-    /* Borders */
     --paper-medium-border: #3a3a3a;
     --paper-medium-dark-border: #4c4c4c;
     --paper-dark-border: #636363;
 
-    /* Text & Typography Colors */
     --paper-main-text: #f5f5f5;
     --paper-lightish-text: #d4d4d4;
     --paper-light-text: #a1a1a1;

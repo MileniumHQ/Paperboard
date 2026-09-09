@@ -86,8 +86,7 @@
     --transition-color: var(--paper-medium-dark-border) !important;
 }
 
-/* Disabled effects must not play the hover displacement animation —
-   movement reads as "this is interactive". */
+/* no hover motion when disabled, reads as interactive */
 .PaperEffect.disabled,
 .PaperEffect:has(:disabled),
 .PaperEffect:has([class*="disabled"]) {
@@ -124,11 +123,6 @@
     box-shadow: var(--transform-size) var(--transform-size) 0 var(--transition-color);
     transform: translate3d(calc(var(--transform-size) * -1), calc(var(--transform-size) * -1), 0);
 }
-
-/* ─── Reduced motion / performance mode ────────────────────────────────────
-   Displacement IS motion. Anchored effects give feedback through the shadow
-   layer alone: hover keeps the resting offset, pressing fades the offset
-   shadow away instead of sliding the element onto it. */
 
 :global([data-paperui-motion="reduced"]) .PaperEffect:hover:not(:active),
 :global([data-paperui-motion="reduced"]) .PaperEffect:active {

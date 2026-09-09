@@ -90,7 +90,6 @@ samp,
 }
 
 :root {
-    /* Radii & Borders */
     --paper-border-radius: 12px;
     --paper-border-radius-half: 6px;
 
@@ -98,7 +97,6 @@ samp,
     --paper-thick-border-width: 2px;
     --paper-thickest-border-width: 3px;
 
-    /* Spacing & UI Gap Scale */
     --paper-uigap: 12px;
     --paper-uigap-onefourth: calc(var(--paper-uigap) * 0.25);
     --paper-uigap-half: calc(var(--paper-uigap) * 0.5);
@@ -108,14 +106,12 @@ samp,
     --paper-uigap-triple: calc(var(--paper-uigap) * 3);
     --paper-uigap-quadruple: calc(var(--paper-uigap) * 4);
 
-    /* Shadows & Blurs */
     --paper-element-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
     --paper-heavy-element-shadow: 0 2px 6px 1px rgba(0, 0, 0, 0.2);
     --paper-blur-light: blur(5px);
     --paper-blur-medium: blur(10px);
     --paper-blur-heavy: blur(15px);
 
-    /* Typography Scale */
     --paper-text-size-0: 0px;
     --paper-text-size-1: 12px;
     --paper-text-size-2: 14px;
@@ -135,14 +131,12 @@ samp,
     --paper-text-size-16: 74px;
     --paper-text-size-17: 82px;
 
-    /* Icon Sizes */
     --paper-icon-size-small: 18px;
     --paper-icon-size-medium: 22px;
     --paper-icon-size-large: 26px;
     --paper-icon-size-xlarge: 28px;
     --paper-icon-size-huge: 30px;
 
-    /* Component Dimensions */
     --paper-sidebar-width: 190px;
     --paper-centered-width: 600px;
     --paper-centered-height: 400px;
@@ -156,7 +150,6 @@ samp,
     --paper-centered-height-wide: 580px;
     --paper-loader-width: 400px;
 
-    /* Item Sizes */
     --paper-item-size-tiny: 28px;
     --paper-item-size-small: 36px;
     --paper-item-size-medium: 48px;

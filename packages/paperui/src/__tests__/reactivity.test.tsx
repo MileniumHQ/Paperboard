@@ -37,13 +37,11 @@ describe("SelectionProvider - O(1) Fine-Grained Reactivity Tests", () => {
 
         renderTracker.mockClear();
 
-        // Change selection from "1" to "3"
         await fireEvent.click(getByTestId("item-3"));
 
         expect(getByTestId("item-1").getAttribute("data-selected")).toBe("false");
         expect(getByTestId("item-3").getAttribute("data-selected")).toBe("true");
 
-        // Verify that unselected items 2 and 4 were NOT re-evaluated or re-rendered!
         const renderedItems = renderTracker.mock.calls.map((call) => call[0]);
         expect(renderedItems).not.toContain("2");
         expect(renderedItems).not.toContain("4");

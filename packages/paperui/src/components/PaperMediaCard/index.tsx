@@ -227,9 +227,6 @@ export interface PaperMediaCardGroupProps extends JSX.HTMLAttributes<HTMLDivElem
     minCardWidth?: string;
 }
 
-// Lays out PaperMediaCards in a responsive grid: cards take full width
-// collectively and wrap to the next row once they'd shrink below the
-// minimum width, so there is never awkward leftover space.
 export function PaperMediaCardGroup(props: ParentProps<PaperMediaCardGroupProps>) {
     const [local, rest] = splitProps(props, [
         "minCardWidth",

@@ -24,11 +24,9 @@ describe("PaperMenu & PaperMenuSection Tests", () => {
         expect(screen.getByText("Item 1")).toBeDefined();
         expect(screen.queryByText("Item 3")).toBeNull();
 
-        // Click Section 2 header to expand it
         await fireEvent.click(screen.getByText("Section 2"));
         expect(screen.getByText("Item 3")).toBeDefined();
 
-        // Click Section 1 header to collapse it
         await fireEvent.click(screen.getByText("Section 1"));
         expect(screen.queryByText("Item 1")).toBeNull();
     });

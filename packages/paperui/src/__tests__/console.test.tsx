@@ -43,7 +43,6 @@ describe("PaperConsole Component Tests", () => {
         expect(onCommand).toHaveBeenCalledWith("say Hello world");
         expect(input.value).toBe("");
 
-        // Test ArrowUp history navigation
         fireEvent.keyDown(input, { key: "ArrowUp" });
         expect(input.value).toBe("say Hello world");
     });

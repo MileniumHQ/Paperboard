@@ -1,12 +1,10 @@
 :root {
-    /* Transition Durations */
     --paper-tiny-transition: 0.15s;
     --paper-short-transition: 0.2s;
     --paper-mid-transition: 0.3s;
     --paper-medium-transition: 0.4s;
     --paper-long-transition: 0.6s;
 
-    /* Easing Curves */
     --paper-ease-standard: cubic-bezier(0.2, 0, 0, 1);
     --paper-ease-emphasized: cubic-bezier(0.16, 1, 0.3, 1);
     --paper-ease-symmetric: cubic-bezier(0.2, 0, 0.2, 1);
@@ -14,7 +12,6 @@
     --paper-ease-indeterminate: cubic-bezier(0.4, 0, 0.6, 1);
 }
 
-/* Reduced motion / performance mode. */
 [data-paperui-motion="reduced"] {
     --paper-tiny-transition: 0s;
     --paper-short-transition: 0s;
@@ -59,7 +56,6 @@
     backdrop-filter: none !important;
 }
 
-/* Keyframe Animations */
 @keyframes PaperTemplateLeave {
     to {
         transform: translateX(-25%);

@@ -8,8 +8,7 @@ export interface AnsiSegment {
 
 export function cleanTerminalLine(rawLine: string): string {
     if (!rawLine) return "";
-    // In terminal emulation, \r (carriage return) moves the cursor back to the start of the line.
-    // When JLine/Minecraft prints `> \r[16:00:00 INFO]: ...`, taking the last \r segment preserves the overwritten line.
+    // \r overwrites the line, keep last segment
     const carriageParts = rawLine.split("\r");
     const line = carriageParts[carriageParts.length - 1] ?? rawLine;
     return line;
