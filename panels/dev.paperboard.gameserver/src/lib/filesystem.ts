@@ -1,6 +1,8 @@
 import { fileApi, processApi, system } from "@paperboard-dev/paperapi";
+import { PANEL_ID } from "../service/types";
+import { isWindowsTarget } from "./platform";
 
-// Only these characters may reach a path or shell command
+// only these characters may reach a path or shell command
 const ENTRY_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._ ()-]*$/;
 
 export function isValidEntryName(name: string): boolean {
@@ -19,16 +21,11 @@ export interface DirectoryListing {
     error?: string;
 }
 
-// Directory enumeration goes through a short-lived child process
 export async function tryListDirectory(dir: string): Promise<DirectoryListing> {
     try {
-        const serverDir = await fileApi.getPath("");
-        // OS of the computer this panel targets — not the shell's active one.
+        const serverDir = await fileApi.getPath("", PANEL_ID);
         const targetOs = (await system.getInfo()).os;
-        const isWin =
-            targetOs === "windows" ||
-            serverDir.includes("\\") ||
-            serverDir.includes(":");
+        const isWin = isWindowsTarget(serverDir, targetOs);
         const separator = isWin ? "\\" : "/";
         const absoluteDir = `${serverDir.replace(/[\\/]+$/, "")}${separator}${dir}`;
 
@@ -37,7 +34,7 @@ export async function tryListDirectory(dir: string): Promise<DirectoryListing> {
             output += chunk;
         };
 
-        // run resolves when the child exits — do NOT also subscribe via onExit
+        // run resolves on exit, do not also subscribe via onExit
         let result: { exitCode?: number };
         if (isWin) {
             result = await processApi.run({
@@ -55,7 +52,7 @@ export async function tryListDirectory(dir: string): Promise<DirectoryListing> {
             });
         }
 
-        // Only an explicit non-zero numeric exit code counts as failure
+        // only an explicit non-zero exit code counts as failure
         const exitCode = (result as any).exitCode;
         if (typeof exitCode === "number" && exitCode !== 0) {
             console.error(
@@ -75,7 +72,7 @@ export async function tryListDirectory(dir: string): Promise<DirectoryListing> {
             .filter((line) => line.length > 0);
 
         if (entries.length === 0 && typeof exitCode !== "number") {
-            // Listing may be unreliable without an exit code
+            // unreliable listing without an exit code
             console.warn(`[FileSystem] Listing "${dir}" produced no output and no exit code.`);
         }
 
@@ -89,7 +86,6 @@ export async function tryListDirectory(dir: string): Promise<DirectoryListing> {
     }
 }
 
-// Convenience wrapper for callers that treat a failed listing as empty.
 export async function listDirectory(dir: string): Promise<string[]> {
     return (await tryListDirectory(dir)).entries;
 }

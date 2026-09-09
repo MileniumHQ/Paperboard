@@ -14,10 +14,10 @@ export interface VersionItem {
     releaseTime?: string;
 }
 
-// Determines required Java runtime package via semver comparison
-export function getRequiredJavaVersion(mcVersion: string): string {
+// null when version missing or unparseable
+export function getRequiredJavaVersion(mcVersion: string): string | null {
     const v = semver.coerce(mcVersion);
-    if (!v) return "java-8";
+    if (!v) return null;
 
     if (semver.gte(v, "26.0.0")) return "java-25";
     if (semver.gte(v, "1.20.5")) return "java-21";
@@ -30,10 +30,19 @@ const PISTON_META_URL = "https://piston-meta.mojang.com/mc/game/version_manifest
 const PAPER_API_URL = "https://fill.papermc.io/v3/projects/paper";
 const FABRIC_META_URL = "https://meta.fabricmc.net/v2/versions";
 
-// Mojang official vanilla version resolvers
+// manifest cached in-memory per session
+let pistonManifestCache: any | null = null;
+
+async function getPistonManifest(): Promise<any> {
+    if (!pistonManifestCache) {
+        const res = await fetch(PISTON_META_URL);
+        pistonManifestCache = await res.json();
+    }
+    return pistonManifestCache;
+}
+
 export async function getDetailedVanillaVersions(): Promise<VersionItem[]> {
-    const res = await fetch(PISTON_META_URL);
-    const data = await res.json();
+    const data = await getPistonManifest();
     return (data.versions || []).map((v: any) => ({
         id: v.id,
         type: v.type,
@@ -42,8 +51,7 @@ export async function getDetailedVanillaVersions(): Promise<VersionItem[]> {
 }
 
 export async function getVanillaDownload(versionId: string): Promise<{ url: string; sha1: string; filename: string }> {
-    const res = await fetch(PISTON_META_URL);
-    const data = await res.json();
+    const data = await getPistonManifest();
     const version = data.versions.find((v: any) => v.id === versionId);
     if (!version) throw new Error(`Version ${versionId} not found`);
 
@@ -55,7 +63,6 @@ export async function getVanillaDownload(versionId: string): Promise<{ url: stri
     return { url: server.url, sha1: server.sha1, filename: `vanilla-${versionId}.jar` };
 }
 
-// PaperMC version resolvers
 export async function getPaperVersions(): Promise<string[]> {
     const res = await fetch(PAPER_API_URL);
     const data = await res.json();
@@ -85,7 +92,6 @@ export async function getPaperDownload(version: string, build?: number | string)
     };
 }
 
-// FabricMC version resolvers
 export async function getFabricLoaderVersions(gameVersion?: string): Promise<string[]> {
     const endpoint = gameVersion ? `${FABRIC_META_URL}/loader/${gameVersion}` : `${FABRIC_META_URL}/loader`;
     const res = await fetch(endpoint);
@@ -107,7 +113,6 @@ export async function getFabricDownload(
     };
 }
 
-// Unified version and server JAR downloader for any supported software type
 export async function getDetailedVersionsForSoftware(software: ServerSoftwareType): Promise<VersionItem[]> {
     switch (software) {
         case "vanilla":
@@ -134,7 +139,7 @@ export async function getDetailedVersionsForSoftware(software: ServerSoftwareTyp
 
 export async function getSoftwareDownload(
     software: ServerSoftwareType,
-    version = "1.21.4",
+    version: string,
 ): Promise<{ url: string; sha1?: string; sha256?: string; filename: string }> {
     switch (software) {
         case "vanilla": {

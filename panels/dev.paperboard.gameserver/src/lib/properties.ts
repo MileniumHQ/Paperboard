@@ -1,9 +1,10 @@
 import { fileApi } from "@paperboard-dev/paperapi";
 import properties from "dot-properties";
-import { parseProperties } from "./server";
+import { parseProperties } from "../core/properties";
 import { supports, type CapabilityName } from "./capabilities";
 
-// Editable server.properties fields, version-gated via capabilities
+export type { CapabilityName };
+
 export interface PropertyField {
     key: string;
     title: string;
@@ -14,7 +15,7 @@ export interface PropertyField {
     max?: number;
     options?: () => { value: string; label: string }[];
     capability?: CapabilityName;
-    // Shown instead of the control when unsupported; fields without a hint are hidden
+    // shown instead of the control when unsupported, else hidden
     unsupportedHint?: string;
 }
 
@@ -83,7 +84,6 @@ export const SERVER_PROPERTY_FIELDS: PropertyField[] = [
     },
 ];
 
-// Ungated, supported, or carrying an "unsupported" hint worth showing
 export function visiblePropertyFields(): PropertyField[] {
     return SERVER_PROPERTY_FIELDS.filter((field) => {
         if (!field.capability || supports(field.capability)) return true;

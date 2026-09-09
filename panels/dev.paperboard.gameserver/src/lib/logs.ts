@@ -1,7 +1,6 @@
 import type { PaperConsoleEntry } from "@paperboard-dev/paperui";
 import stripAnsi from "strip-ansi";
 
-// Parses raw Minecraft console log lines into structured console entries
 export function parseLogLine(rawLine: string): PaperConsoleEntry {
     const clean = stripAnsi(rawLine);
     const upper = clean.toUpperCase();
@@ -20,11 +19,12 @@ export function parseLogLine(rawLine: string): PaperConsoleEntry {
 
 export interface ChatMessage {
     id: string;
+    sender?: string;
+    content?: string;
     text: string;
     timestamp: string;
 }
 
-// Extracts in-game player and server chat messages from log output
 export function parseChatMessage(rawLine: string): ChatMessage | null {
     const clean = stripAnsi(rawLine).replace(/^[^[]*\[/, "[").trim();
     if (!clean) return null;
@@ -38,13 +38,23 @@ export function parseChatMessage(rawLine: string): ChatMessage | null {
     let text = logMatch[2].trim().replace(/^\[Not Secure\]\s*/, "").trim();
     if (!text) return null;
 
-    const isChat =
-        /^<[a-zA-Z0-9_]{1,16}>\s+.+/i.test(text) ||
+    const playerChatMatch = text.match(/^<([a-zA-Z0-9_]{1,16})>\s+(.+)$/);
+    if (playerChatMatch) {
+        return {
+            id: `chat-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            sender: playerChatMatch[1],
+            content: playerChatMatch[2].trim(),
+            text,
+            timestamp: time,
+        };
+    }
+
+    const isSystemChat =
         /^\[Server(?::\s*[^\]]+)?\]\s+.+/i.test(text) ||
         /^[a-zA-Z0-9_]{1,16}\s+joined the game$/i.test(text) ||
         /^[a-zA-Z0-9_]{1,16}\s+left the game$/i.test(text);
 
-    if (isChat) {
+    if (isSystemChat) {
         return {
             id: `chat-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
             text,

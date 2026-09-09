@@ -2,52 +2,26 @@ import { fileApi, config } from "@paperboard-dev/paperapi";
 import { serverSoftware, serverVersion, updatePanelConfig } from "./server";
 import type { ServerSoftwareType } from "./software";
 import { sanitizeFileName, tryListDirectory } from "./filesystem";
+import {
+    INSTALL_RECORDS_KEY,
+    collectInstalledPlugins,
+    isInstallRecord,
+    parseInstallRecords,
+    pluginDirName,
+    validatePluginFilename,
+} from "../core/plugins";
+import type { InstalledPlugin, InstalledRecord } from "../core/plugins";
+
+export type { InstalledPlugin, InstalledRecord };
+export { INSTALL_RECORDS_KEY, isInstallRecord, pluginDirName, validatePluginFilename };
 
 const MODRINTH_API = "https://api.modrinth.com/v2";
 const SEARCH_LIMIT = 24;
 
-// Fabric mods live in mods/, everything else (Paper plugins) in plugins/.
-export function pluginDirName(software: ServerSoftwareType): string {
-    return software === "fabric" ? "mods" : "plugins";
-}
-
-export interface InstalledRecord {
-    projectId: string;
-    slug: string;
-    version: string;
-    iconUrl?: string;
-}
-
-export interface InstalledPlugin {
-    filename: string;
-    record?: InstalledRecord;
-}
-
-// ─── Local installation state ───────────────────────────────────────────────
-
-const INSTALL_RECORDS_KEY = "pluginInstalls";
-
-function isInstallRecord(value: unknown): value is InstalledRecord {
-    if (typeof value !== "object" || value === null) return false;
-    const rec = value as Record<string, unknown>;
-    return (
-        typeof rec.projectId === "string" &&
-        typeof rec.slug === "string" &&
-        typeof rec.version === "string" &&
-        (rec.iconUrl === undefined || typeof rec.iconUrl === "string")
-    );
-}
-
 export async function getInstallRecords(): Promise<Record<string, InstalledRecord>> {
     try {
         const saved = await config.get<Record<string, unknown>>();
-        const raw = saved?.[INSTALL_RECORDS_KEY];
-        if (typeof raw !== "object" || raw === null) return {};
-        const records: Record<string, InstalledRecord> = {};
-        for (const [filename, value] of Object.entries(raw)) {
-            if (isInstallRecord(value)) records[filename] = value;
-        }
-        return records;
+        return parseInstallRecords(saved?.[INSTALL_RECORDS_KEY]);
     } catch (err) {
         console.error("[Plugins] Failed to read install records:", err);
         return {};
@@ -60,7 +34,6 @@ async function writeInstallRecords(
     await updatePanelConfig({ [INSTALL_RECORDS_KEY]: records });
 }
 
-// Install records are the primary source of truth; the listing only finds untracked jars
 export async function listInstalledPlugins(): Promise<{
     plugins: InstalledPlugin[];
     warning?: string;
@@ -71,45 +44,24 @@ export async function listInstalledPlugins(): Promise<{
         tryListDirectory(dirName),
     ]);
 
-    const byFile = new Map<string, InstalledPlugin>();
-
-    for (const [filename, record] of Object.entries(records)) {
-        let exists = false;
-        try {
-            exists = await fileApi.exists(`${dirName}/${filename}`);
-        } catch (err) {
-            console.error(
-                `[Plugins] Failed to verify "${dirName}/${filename}":`,
-                err,
-            );
-        }
-        if (!exists) continue;
-        byFile.set(filename, { filename, record });
-    }
+    const plugins = await collectInstalledPlugins({
+        records,
+        listingEntries: listing.entries,
+        exists: (path) => fileApi.exists(path),
+        sanitize: sanitizeFileName,
+        dirName,
+        onVerifyError: (filename, err) =>
+            console.error(`[Plugins] Failed to verify "${dirName}/${filename}":`, err),
+    });
 
     if (listing.error) {
         console.warn(`[Plugins] ${listing.error} Raw entries: none available.`);
     }
-    for (const entry of listing.entries) {
-        if (!entry.toLowerCase().endsWith(".jar")) continue;
-        const safe = sanitizeFileName(entry);
-        if (!safe || byFile.has(safe)) continue;
-        byFile.set(safe, { filename: safe, record: records[safe] });
-    }
-
-    return {
-        plugins: [...byFile.values()].sort((a, b) =>
-            a.filename.localeCompare(b.filename),
-        ),
-        warning: listing.error,
-    };
+    return { plugins, warning: listing.error };
 }
 
 export async function deletePlugin(filename: string): Promise<void> {
-    const safe = sanitizeFileName(filename);
-    if (!safe || !safe.toLowerCase().endsWith(".jar")) {
-        throw new Error(`Refusing to delete unsafe path: "${filename}"`);
-    }
+    const safe = validatePluginFilename(sanitizeFileName(filename) ?? filename);
     await fileApi.delete(`${pluginDirName(serverSoftware())}/${safe}`);
     const records = await getInstallRecords();
     if (records[safe]) {
@@ -117,8 +69,6 @@ export async function deletePlugin(filename: string): Promise<void> {
         await writeInstallRecords(records);
     }
 }
-
-// ─── Modrinth API ───────────────────────────────────────────────────────────
 
 export interface ModrinthHit {
     projectId: string;
@@ -179,7 +129,7 @@ interface RawVersion {
     files?: { url?: string; filename?: string; primary?: boolean }[];
 }
 
-// Read the body as text first so non-JSON answers fail with a clear message
+// text first so non-JSON answers fail with a clear message
 async function modrinthFetch<T>(
     path: string,
     params?: Record<string, string>,
@@ -219,7 +169,6 @@ export interface EcosystemInfo {
     kind: "plugin" | "mod";
 }
 
-// Paper consumes plugins ("paper" loader), Fabric consumes mods ("fabric")
 export function getEcosystem(software: ServerSoftwareType): EcosystemInfo | null {
     switch (software) {
         case "paper":
@@ -231,7 +180,6 @@ export function getEcosystem(software: ServerSoftwareType): EcosystemInfo | null
     }
 }
 
-// Search restricted to the installed loader; facets are raw JSON strings
 export async function searchModrinth(query: string): Promise<ModrinthHit[]> {
     const eco = getEcosystem(serverSoftware());
     if (!eco) return [];
@@ -292,7 +240,7 @@ export async function getProject(projectIdOrSlug: string): Promise<ModrinthProje
     };
 }
 
-// Newest file matching the MC version, falling back to any loader build
+// newest file matching the game version, else any loader build
 async function resolveLatestFile(projectId: string): Promise<ResolvedDownload> {
     const software = serverSoftware();
     const loader = software === "fabric" ? "fabric" : "paper";
@@ -345,7 +293,7 @@ export async function installProject(
         targetPath: `${pluginDirName(serverSoftware())}/${safe}`,
     });
 
-    // Remember which project this jar belongs to for icons and versions
+    // record project for icons and versions
     try {
         const project = await getProject(projectId);
         const records = await getInstallRecords();
