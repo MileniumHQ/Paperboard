@@ -1,13 +1,14 @@
-import { onMount, onCleanup } from "solid-js";
+import { onMount, onCleanup, createEffect, on } from "solid-js";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { getVar, getVarCss } from "@paperboard-dev/paperui";
-import { terminalApi } from "@paperboard-dev/paperapi";
+import { terminalApi, actions as actionsApi } from "@paperboard-dev/paperapi";
 import "@xterm/xterm/css/xterm.css";
+
+const TERMINAL_PANEL_ID = "dev.paperboard.terminal";
 
 export const activeTerminals = new Map<string, Terminal>();
 
-// Copy terminal or window selection to the system clipboard
 export async function copySelection(id: string) {
     const term = activeTerminals.get(id);
     const selection = term?.getSelection() || window.getSelection()?.toString();
@@ -16,7 +17,6 @@ export async function copySelection(id: string) {
     }
 }
 
-// Pastes system clipboard content into terminal input
 export async function pasteClipboard(id: string) {
     const text = await navigator.clipboard.readText();
     if (text) terminalApi.write(id, text);
@@ -73,7 +73,31 @@ export function TerminalComponent(props: TerminalComponentProps) {
         term.open(containerRef);
         activeTerminals.set(props.id, term);
 
-        // Keyboard copy / paste shortcuts (Ctrl+Shift+C / Ctrl+Shift+V)
+        // fit before attach so the pty starts at real size, not 80x24
+        let lastCols = -1;
+        let lastRows = -1;
+        const sendResize = () => {
+            if (!term) return;
+            if (term.cols === lastCols && term.rows === lastRows) return;
+            lastCols = term.cols;
+            lastRows = term.rows;
+            terminalApi.resize(props.id, term.cols, term.rows);
+        };
+        const safeFit = () => {
+            if (
+                fitAddon &&
+                containerRef &&
+                containerRef.clientWidth > 50 &&
+                containerRef.clientHeight > 50
+            ) {
+                try {
+                    fitAddon.fit();
+                    sendResize();
+                } catch {}
+            }
+        };
+        safeFit();
+
         term.attachCustomKeyEventHandler((arg) => {
             if (arg.ctrlKey && arg.shiftKey && arg.type === "keydown") {
                 if (arg.code === "KeyC") {
@@ -88,27 +112,34 @@ export function TerminalComponent(props: TerminalComponentProps) {
             return true;
         });
 
-        terminalApi.onData(props.id, (data) => term?.write(data));
+        let disconnectData: (() => void) | null = null;
         term.onData((data) => terminalApi.write(props.id, data));
-
-        terminalApi.create(props.id, {
-            cols: term.cols,
-            rows: term.rows,
-        });
-
-        const safeFit = () => {
-            if (
-                fitAddon &&
-                containerRef &&
-                containerRef.clientWidth > 50 &&
-                containerRef.clientHeight > 50
-            ) {
-                try {
-                    fitAddon.fit();
-                    if (term) terminalApi.resize(props.id, term.cols, term.rows);
-                } catch {}
-            }
+        const connect = (id: string) => {
+            disconnectData?.();
+            term?.clear();
+            disconnectData = terminalApi.onData(id, (data) => term?.write(data));
+            actionsApi
+                .call<string>(TERMINAL_PANEL_ID, "open-tab", {
+                    id,
+                    cols: term?.cols,
+                    rows: term?.rows,
+                })
+                .then((scrollback) => {
+                    if (scrollback) term?.write(scrollback);
+                })
+                .catch(() => {
+                    terminalApi.create(id, {
+                        cols: term?.cols,
+                        rows: term?.rows,
+                    });
+                });
         };
+        createEffect(
+            on(
+                () => props.id,
+                (id) => connect(id),
+            ),
+        );
 
         requestAnimationFrame(() => safeFit());
         setTimeout(safeFit, 100);
@@ -118,8 +149,10 @@ export function TerminalComponent(props: TerminalComponentProps) {
 
         onCleanup(() => {
             if (resizeObserver) resizeObserver.disconnect();
+            disconnectData?.();
             activeTerminals.delete(props.id);
-            terminalApi.destroy(props.id);
+            // Sessions are service-owned and survive UI reloads; only the
+            // local renderer is disposed here.
             if (term) term.dispose();
         });
     });

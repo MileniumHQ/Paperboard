@@ -16,14 +16,47 @@ import "@paperboard-dev/paperui/style.css";
 import "@xterm/xterm/css/xterm.css";
 import "./style.css";
 import TerminalComponent, { copySelection, pasteClipboard } from "./Terminal";
+import { actions as actionsApi } from "@paperboard-dev/paperapi";
+import { onMount } from "solid-js";
+
+const TERMINAL_PANEL_ID = "dev.paperboard.terminal";
+
+export interface TerminalTab {
+    id: string;
+    label: string;
+}
 
 export default function App() {
-    const [activeTab, setActiveTab] = createSignal("tab1");
-    const [tabs, setTabs] = createSignal([{ id: "tab1", label: "Tab 1" }]);
+    const [activeTab, setActiveTab] = createSignal("");
+    const [tabs, setTabs] = createSignal<TerminalTab[]>([]);
     const [isRenameOpen, setIsRenameOpen] = createSignal(false);
     const [contextTabId, setContextTabId] = createSignal<string | null>(null);
     const [renameValue, setRenameValue] = createSignal("");
-    let counter = 1;
+
+    onMount(async () => {
+        try {
+            const listed = await actionsApi.call<TerminalTab[]>(
+                TERMINAL_PANEL_ID,
+                "list-tabs",
+            );
+            if (listed && listed.length > 0) {
+                setTabs(listed);
+                setActiveTab(listed[0].id);
+                return;
+            }
+        } catch {}
+        try {
+            const id = await actionsApi.call<string>(
+                TERMINAL_PANEL_ID,
+                "create-tab",
+                { label: "Tab 1" },
+            );
+            if (id) {
+                setTabs([{ id, label: "Tab 1" }]);
+                setActiveTab(id);
+            }
+        } catch {}
+    });
 
     const handleCloseTab = (closedId: string) => {
         const current = tabs();
@@ -39,13 +72,30 @@ export default function App() {
         }
 
         setTabs(current.filter((item) => item.id !== closedId));
+        actionsApi.call(TERMINAL_PANEL_ID, "close-tab", { id: closedId }).catch(() => {});
     };
 
-    const addTab = () => {
-        counter++;
-        const newId = `tab${counter}`;
-        setTabs((prev) => [...prev, { id: newId, label: `Tab ${counter}` }]);
-        setActiveTab(newId);
+    const addTab = async () => {
+        try {
+            const id = await actionsApi.call<string>(
+                TERMINAL_PANEL_ID,
+                "create-tab",
+                {},
+            );
+            if (!id) return;
+            const listed = await actionsApi
+                .call<TerminalTab[]>(TERMINAL_PANEL_ID, "list-tabs")
+                .catch(() => [] as TerminalTab[]);
+            const label =
+                listed.find((t) => t.id === id)?.label || `Tab ${tabs().length + 1}`;
+            setTabs((prev) => [...prev, { id, label }]);
+            setActiveTab(id);
+        } catch {}
+    };
+
+    const handleSwitchTab = (id: string) => {
+        setActiveTab(id);
+        actionsApi.call(TERMINAL_PANEL_ID, "touch-tab", { id }).catch(() => {});
     };
 
     const terminalMenu = useContextMenuState();
@@ -67,6 +117,9 @@ export default function App() {
             setTabs((prev) =>
                 prev.map((t) => (t.id === tid ? { ...t, label: newName } : t)),
             );
+            actionsApi
+                .call(TERMINAL_PANEL_ID, "rename-tab", { id: tid, label: newName })
+                .catch(() => {});
         }
         setIsRenameOpen(false);
         setContextTabId(null);
@@ -88,7 +141,7 @@ export default function App() {
                     direction="horizontal"
                     name="terminal-tabs"
                     value={activeTab()}
-                    onValueChange={(val) => setActiveTab(String(val))}
+                    onValueChange={(val) => handleSwitchTab(String(val))}
                     onReorder={(newOrder) => {
                         const current = tabs();
                         const reordered = newOrder
