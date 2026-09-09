@@ -77,6 +77,15 @@ process.kill(id); // SIGTERM by default`}
             <PaperText id="one-shot" preset="subheader">
                 One-shot commands
             </PaperText>
+            <PaperText preset="body">
+                The <PaperCode>process.run()</PaperCode> method launches an anonymous command and streams output as it arrives, resolving with the exit code upon termination. For synchronous script execution with automatic stdout/stderr buffering, use <PaperCode>process.exec()</PaperCode>:
+            </PaperText>
+            <PaperCode block language="tsx">
+                {`const { stdout, stderr, exitCode } = await process.exec("git", ["status", "--short"]);
+if (exitCode === 0) {
+    console.log("Status:\\n" + stdout);
+}`}
+            </PaperCode>
             <PaperCode block language="tsx">
                 {`const { exitCode } = await process.run({
     command: "git",
@@ -107,8 +116,13 @@ process.kill(id); // SIGTERM by default`}
                     </tr>
                     <tr>
                         <td><PaperCode>run</PaperCode></td>
-                        <td><PaperCode>(options: ProcessRunOptions) =&gt; Promise&lt;{"{ exitCode }"}&gt;</PaperCode></td>
-                        <td>Runs an anonymous one-shot command; resolves on exit.</td>
+                        <td><PaperCode>(options: ProcessRunOptions, timeoutMs?) =&gt; Promise&lt;{"{ exitCode }"}&gt;</PaperCode></td>
+                        <td>Runs an anonymous command; streams data and resolves on exit.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>exec</PaperCode></td>
+                        <td><PaperCode>(command: string, args?: string[], options?) =&gt; Promise&lt;{"{ stdout, stderr, exitCode }"}&gt;</PaperCode></td>
+                        <td>Executes a command to termination, buffering and returning stdout, stderr, and exit code.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>write</PaperCode></td>

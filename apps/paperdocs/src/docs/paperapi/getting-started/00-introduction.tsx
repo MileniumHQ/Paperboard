@@ -50,6 +50,10 @@ export default function f() {
                 </thead>
                 <tbody>
                     <tr>
+                        <td><PaperCode>actions</PaperCode></td>
+                        <td>Cross-panel RPC, background service definition, and reactive state sync.</td>
+                    </tr>
+                    <tr>
                         <td><PaperCode>terminal</PaperCode></td>
                         <td>Create interactive pseudo-terminal sessions and stream their output.</td>
                     </tr>

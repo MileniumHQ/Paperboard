@@ -205,33 +205,38 @@
                 "name": "APIs",
                 "icon": "api",
                 "pages": {
-                    "terminal": {
+                    "actions": {
                         "index": 0,
+                        "name": "Actions API",
+                        "file": "actions"
+                    },
+                    "terminal": {
+                        "index": 1,
                         "name": "Terminal API",
                         "file": "terminal"
                     },
                     "process": {
-                        "index": 1,
+                        "index": 2,
                         "name": "Process API",
                         "file": "process"
                     },
                     "package": {
-                        "index": 2,
+                        "index": 3,
                         "name": "Package API",
                         "file": "package"
                     },
                     "files": {
-                        "index": 3,
+                        "index": 4,
                         "name": "Files API",
                         "file": "files"
                     },
                     "config": {
-                        "index": 4,
+                        "index": 5,
                         "name": "Config API",
                         "file": "config"
                     },
                     "system": {
-                        "index": 5,
+                        "index": 6,
                         "name": "System API",
                         "file": "system"
                     }
