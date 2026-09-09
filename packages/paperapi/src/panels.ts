@@ -15,12 +15,12 @@ export interface PanelItem {
     isInstalled?: boolean;
 }
 
-// Panel store and lifecycle API; scope omitted = ambient
+// panel store and lifecycle, scope omitted = ambient
 export const panelsApi = {
     list: (scope?: string): Promise<PanelItem[]> =>
         invokeIn<PanelItem[]>(scope, "panels-list"),
 
-    /** Fetches the registry index and merges it with installed panels. */
+    /** merges registry index with installed panels */
     registry: async (scope?: string): Promise<PanelItem[]> => {
         let installed: PanelItem[] = [];
         try {
@@ -83,7 +83,7 @@ export const panelsApi = {
                 });
             }
 
-            // Include locally installed panels absent from the registry
+            // include installed panels missing from registry
             for (const local of installed) {
                 if (!panels.some((p) => p.id === local.id)) {
                     panels.push(local);
@@ -92,7 +92,7 @@ export const panelsApi = {
 
             return panels;
         } catch {
-            // Registry unreachable — degrade to the installed set
+            // registry unreachable, use installed set
             return installed;
         }
     },
