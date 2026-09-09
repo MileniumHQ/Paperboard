@@ -31,35 +31,16 @@ const PANELS_INDEX_KEY = "panels:index";
 const BOARD_KEY_PREFIX = "board:";
 const BOARDS_INDEX_KEY = "boards:index";
 
-export async function getPanelsIndex(
+async function listRecordsByPrefix(
     kv: KVNamespace,
-): Promise<Record<string, PanelRecord>> {
-    try {
-        const cached = await kv.get<Record<string, PanelRecord>>(
-            PANELS_INDEX_KEY,
-            { type: "json" },
-        );
-        if (cached && typeof cached === "object") {
-            return cached;
-        }
-    } catch {}
-
-    try {
-        const cachedBoard = await kv.get<Record<string, PanelRecord>>(
-            BOARDS_INDEX_KEY,
-            { type: "json" },
-        );
-        if (cachedBoard && typeof cachedBoard === "object") {
-            return cachedBoard;
-        }
-    } catch {}
-
-    const index: Record<string, PanelRecord> = {};
+    prefix: string,
+    index: Record<string, PanelRecord>,
+): Promise<void> {
     let cursor: string | undefined = undefined;
 
     do {
         const listResult: KVNamespaceListResult<unknown> = await kv.list({
-            prefix: PANEL_KEY_PREFIX,
+            prefix,
             cursor,
         });
 
@@ -86,38 +67,36 @@ export async function getPanelsIndex(
 
         cursor = listResult.list_complete ? undefined : listResult.cursor;
     } while (cursor);
+}
+
+export async function getPanelsIndex(
+    kv: KVNamespace,
+): Promise<Record<string, PanelRecord>> {
+    try {
+        const cached = await kv.get<Record<string, PanelRecord>>(
+            PANELS_INDEX_KEY,
+            { type: "json" },
+        );
+        if (cached && typeof cached === "object") {
+            return cached;
+        }
+    } catch {}
+
+    try {
+        const cachedBoard = await kv.get<Record<string, PanelRecord>>(
+            BOARDS_INDEX_KEY,
+            { type: "json" },
+        );
+        if (cachedBoard && typeof cachedBoard === "object") {
+            return cachedBoard;
+        }
+    } catch {}
+
+    const index: Record<string, PanelRecord> = {};
+    await listRecordsByPrefix(kv, PANEL_KEY_PREFIX, index);
 
     if (Object.keys(index).length === 0) {
-        cursor = undefined;
-        do {
-            const listResult: KVNamespaceListResult<unknown> = await kv.list({
-                prefix: BOARD_KEY_PREFIX,
-                cursor,
-            });
-
-            const keys: string[] = listResult.keys.map(
-                (k: { name: string }) => k.name,
-            );
-            const records = await Promise.all(
-                keys.map(async (k: string) => {
-                    try {
-                        return (await kv.get(k, {
-                            type: "json",
-                        })) as PanelRecord | null;
-                    } catch {
-                        return null;
-                    }
-                }),
-            );
-
-            for (const record of records) {
-                if (record && record.id) {
-                    index[record.id] = record;
-                }
-            }
-
-            cursor = listResult.list_complete ? undefined : listResult.cursor;
-        } while (cursor);
+        await listRecordsByPrefix(kv, BOARD_KEY_PREFIX, index);
     }
 
     return index;
