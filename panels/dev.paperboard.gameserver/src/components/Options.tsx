@@ -38,7 +38,6 @@ export default function Options() {
     const currentValue = (field: PropertyField) =>
         values()?.[field.key] ?? field.defaultValue;
 
-    // Invalid input (empty, non-numeric, out of range) is ignored entirely.
     const updateValue = (field: PropertyField, value: string) => {
         if (field.control === "number") {
             if (value.trim() === "") return;

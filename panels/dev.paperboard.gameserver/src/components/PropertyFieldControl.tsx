@@ -63,7 +63,6 @@ export function FieldControl(props: {
     }
 }
 
-// True when an "unsupported" note should replace the control
 export function hasUnsupportedHint(field: PropertyField): boolean {
     return Boolean(
         field.unsupportedHint &&

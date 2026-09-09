@@ -174,7 +174,6 @@ const ADVANCED_PROPERTY_FIELDS: PropertyField[] = [
     },
 ];
 
-// Ungated, supported, or carrying a hint worth showing
 function visibleAdvancedFields(): PropertyField[] {
     return ADVANCED_PROPERTY_FIELDS.filter((field) => {
         if (!field.capability || supports(field.capability)) return true;
@@ -207,8 +206,6 @@ export default function Advanced() {
         if (ramSavedTimer) clearTimeout(ramSavedTimer);
     });
 
-    // ─── Memory allocation ──────────────────────────────────────────────────
-
     const changeRam = async (value: string) => {
         const gb = Number(value);
         if (!Number.isInteger(gb) || gb < MIN_RAM_GB || gb > MAX_RAM_GB) return;
@@ -226,8 +223,6 @@ export default function Advanced() {
             setRamError(true);
         }
     };
-
-    // ─── Extra properties ───────────────────────────────────────────────────
 
     const currentValue = (field: PropertyField) =>
         values()?.[field.key] ?? field.defaultValue;

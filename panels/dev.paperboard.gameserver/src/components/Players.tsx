@@ -67,8 +67,6 @@ function formatPlaytime(seconds: number | undefined): string {
     return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
 }
 
-// ─── Player list menu ───────────────────────────────────────────────────────
-
 export default function Players() {
     const [players, setPlayers] = createSignal<PlayerInfo[]>([]);
     const [bannedNames, setBannedNames] = createSignal<Set<string>>(new Set());
@@ -208,7 +206,6 @@ export default function Players() {
         }
 
         try {
-            // Wipe every per-player file across world subfolders
             const dataFiles = [
                 `world/playerdata/${player.uuid}.dat`,
                 `world/playerdata/${player.uuid}.dat_old`,
@@ -367,8 +364,6 @@ export default function Players() {
     );
 }
 
-// ─── Player management modal ────────────────────────────────────────────────
-
 function PlayerModal(props: {
     player?: PlayerInfo;
     banned: boolean;
@@ -524,8 +519,6 @@ function PlayerModal(props: {
         </PaperModal>
     );
 }
-
-// ─── Reason prompt (kick / ban) ─────────────────────────────────────────────
 
 function ReasonActionModal(props: {
     open: boolean;

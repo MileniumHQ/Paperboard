@@ -44,7 +44,6 @@ interface VersionStepProps {
     onSelectVersion: (version: string) => void;
 }
 
-// Version selection step with filtering and search
 function VersionStep(props: VersionStepProps) {
     const [searchQuery, setSearchQuery] = createSignal("");
     const [allVersions, setAllVersions] = createSignal<VersionItem[]>([]);
@@ -216,7 +215,6 @@ interface InstallStepProps {
     version: string;
 }
 
-// Download and initial setup installation step
 function InstallStep(props: InstallStepProps) {
     const wizard = useWizard();
 
@@ -237,6 +235,11 @@ function InstallStep(props: InstallStepProps) {
         wizard?.setCanProceed(false);
 
         const javaPkg = getRequiredJavaVersion(props.version);
+        if (!javaPkg) {
+            throw new Error(
+                `Could not determine the Minecraft version (got ${JSON.stringify(props.version)}) — pick a version before installing.`,
+            );
+        }
 
         try {
             const alreadyInstalled = await packageApi.isInstalled(javaPkg);

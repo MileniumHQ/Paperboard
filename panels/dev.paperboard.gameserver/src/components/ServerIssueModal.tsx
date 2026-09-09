@@ -1,8 +1,32 @@
 import { type Component, For, Show } from "solid-js";
 import { PaperFlex, PaperModal, PaperButton, PaperText, PaperIcon } from "@paperboard-dev/paperui";
-import { activeIssue, clearActiveIssue } from "../lib/diagnostics";
+import { files as fileApi } from "@paperboard-dev/paperapi";
+import { activeIssue, clearActiveIssue, killConflictingProcess, resetWorldFiles } from "../lib/diagnostics";
+import { serverPort, startServer } from "../lib/server";
 
 const ServerIssueModal: Component = () => {
+    const handleActionClick = async (action: any) => {
+        if (typeof action.action === "function") {
+            await action.action();
+            return;
+        }
+        if (action.actionKey === "killPortAndRetry") {
+            await killConflictingProcess(serverPort());
+            clearActiveIssue();
+            setTimeout(() => startServer(), 600);
+        } else if (action.actionKey === "acceptEula") {
+            await fileApi.write("eula.txt", "eula=true\n");
+            clearActiveIssue();
+            setTimeout(() => startServer(), 400);
+        } else if (action.actionKey === "resetWorldAndStart") {
+            await resetWorldFiles();
+            clearActiveIssue();
+            setTimeout(() => startServer(), 500);
+        } else {
+            clearActiveIssue();
+        }
+    };
+
     return (
         <Show when={activeIssue()}>
             {(issue) => (
@@ -26,7 +50,7 @@ const ServerIssueModal: Component = () => {
                                     <PaperButton
                                         compact
                                         variant={action.variant || "brand"}
-                                        onClick={() => action.action()}
+                                        onClick={() => handleActionClick(action)}
                                     >
                                         <Show when={action.icon}>
                                             <PaperIcon>{action.icon}</PaperIcon>

@@ -23,7 +23,6 @@ import {
 } from "../lib/server";
 import "../style.css";
 
-// Player head avatar with Steve fallback
 export function PlayerAvatar(props: { name: string }) {
     return (
         <img
@@ -44,7 +43,6 @@ export function PlayerAvatar(props: { name: string }) {
     );
 }
 
-// Renders chat messages with player avatars
 function renderChatMessageContent(text: string): JSX.Element {
     const chatMatch = text.match(/^<([a-zA-Z0-9_]{1,16})>\s*(.*)$/);
     if (chatMatch) {

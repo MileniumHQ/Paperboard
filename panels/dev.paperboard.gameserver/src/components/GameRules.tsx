@@ -15,12 +15,10 @@ import { GAMERULES } from "../generated/gamerules.generated";
 
 const WIKI_URL = "https://minecraft.wiki/w/Game_rule";
 
-// Rules the running server version actually has.
 function availableGamerules() {
     return GAMERULES.filter((rule) => !rule.addedIn || mcVersionAtLeast(rule.addedIn));
 }
 
-// Component so the DOM node persists across value changes
 function RuleControl(props: {
     valueType: string;
     value: () => string;

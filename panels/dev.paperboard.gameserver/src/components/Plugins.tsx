@@ -141,7 +141,6 @@ export default function Plugins() {
         void reloadInstalled();
     });
 
-    // Load full project details whenever the detail modal opens
     createEffect(() => {
         const target = detail();
         setProject(null);
@@ -184,7 +183,6 @@ export default function Plugins() {
         }
     };
 
-    // Matches an installed jar to a Modrinth project by id or slug.
     const findInstalled = (target: DetailTarget): InstalledPlugin | null =>
         installed()?.find(
             (entry) =>
@@ -417,7 +415,6 @@ export default function Plugins() {
                 </PaperFlex>
             </PaperSettingList>
 
-            {/* Detail modal — mirrors the Panel Library listing modal */}
             <PaperModal
                 open={detail() !== null}
                 onClose={() => setDetail(null)}
@@ -565,7 +562,6 @@ export default function Plugins() {
                 </Show>
             </PaperModal>
 
-            {/* Uninstall confirmation */}
             <PaperModal
                 open={pendingDelete() !== null}
                 onClose={() => setPendingDelete(null)}
