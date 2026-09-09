@@ -24,7 +24,7 @@ export interface PackResult {
     manifest: any;
 }
 
-// Packages a panel project into a release archive (.tar.gz) using pure tar package
+// packages a panel project into a release archive
 export function packPanel(options: PackOptions = {}): PackResult {
     const panelDir = path.resolve(options.targetDir || process.cwd());
     const manifestPath = path.join(panelDir, "manifest.json");
@@ -48,7 +48,7 @@ export function packPanel(options: PackOptions = {}): PackResult {
     const base = manifest.base || "./dist/index.html";
     const baseAbsolutePath = path.resolve(panelDir, base);
 
-    // Auto-build if entry file is missing
+    // auto-build when entry is missing
     if (!fs.existsSync(baseAbsolutePath)) {
         if (options.autoBuild !== false) {
             console.log(`[Packager] Building panel in ${panelDir}...`);

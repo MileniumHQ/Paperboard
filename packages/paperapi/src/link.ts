@@ -14,7 +14,7 @@ export interface LinkOptions {
     force?: boolean;
 }
 
-// Links a local panel folder into ~/.paperboard/panels for live development
+// links a local panel folder into ~/.paperboard/panels for live dev
 export function linkPanel(options: LinkOptions = {}): {
     id: string;
     name: string;
@@ -63,7 +63,7 @@ export function linkPanel(options: LinkOptions = {}): {
     };
 }
 
-// Removes a symlinked panel from ~/.paperboard/panels
+// removes a symlinked panel
 export function unlinkPanel(panelId: string): boolean {
     const panelsDir = getPanelsDir();
     const linkPath = path.join(panelsDir, panelId);
@@ -77,7 +77,7 @@ export function unlinkPanel(panelId: string): boolean {
     throw new Error(`${linkPath} is a physical directory, not a dev link.`);
 }
 
-// Lists active symlinked panels in ~/.paperboard/panels
+// lists active symlinked panels
 export function listLinkedPanels(): {
     id: string;
     targetPath: string;
