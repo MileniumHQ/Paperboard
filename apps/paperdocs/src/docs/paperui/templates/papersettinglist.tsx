@@ -154,6 +154,18 @@ function ConfigurationPanel() {
                         <td><PaperCode>undefined</PaperCode></td>
                         <td>Callback executed whenever any nested named input dispatches change/input.</td>
                     </tr>
+                    <tr>
+                        <td><PaperCode>autoHeight</PaperCode></td>
+                        <td><PaperCode>boolean</PaperCode></td>
+                        <td><PaperCode>false</PaperCode></td>
+                        <td>Disables the default <PaperCode>flex: 1</PaperCode> expansion and internal scroll behavior, allowing the list to size to its content.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>flex</PaperCode></td>
+                        <td><PaperCode>boolean | number | string</PaperCode></td>
+                        <td><PaperCode>1 1 0%</PaperCode></td>
+                        <td>Custom flex rule applied to the setting list container.</td>
+                    </tr>
                 </tbody>
             </PaperTable>
 

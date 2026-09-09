@@ -135,6 +135,18 @@ export default function f() {
                         <td>Text color token name (e.g. <PaperCode>"light-text"</PaperCode>), CSS variable, or hex/rgb color string.</td>
                     </tr>
                     <tr>
+                        <td><PaperCode>breakWord</PaperCode></td>
+                        <td><PaperCode>boolean</PaperCode></td>
+                        <td><PaperCode>false</PaperCode></td>
+                        <td>Applies <PaperCode>word-break: break-word</PaperCode> and <PaperCode>overflow-wrap: break-word</PaperCode> to wrap overflowing strings.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>truncate</PaperCode></td>
+                        <td><PaperCode>boolean | number</PaperCode></td>
+                        <td><PaperCode>false</PaperCode></td>
+                        <td>Truncates overflowing text with an ellipsis. A boolean or <PaperCode>1</PaperCode> truncates to a single line; a number greater than 1 line-clamps to that number of lines.</td>
+                    </tr>
+                    <tr>
                         <td><PaperCode>id</PaperCode></td>
                         <td><PaperCode>string</PaperCode></td>
                         <td><PaperCode>undefined</PaperCode></td>

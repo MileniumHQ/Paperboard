@@ -239,6 +239,30 @@ function ProjectSelector() {
                         <td>Shorthand for <PaperCode>direction="horizontal"</PaperCode>; renders items in a tab-strip row orientation.</td>
                     </tr>
                     <tr>
+                        <td><PaperCode>borderless</PaperCode></td>
+                        <td><PaperCode>boolean</PaperCode></td>
+                        <td><PaperCode>false</PaperCode></td>
+                        <td>Removes the default right container border.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>fullWidth</PaperCode> / <PaperCode>fullHeight</PaperCode></td>
+                        <td><PaperCode>boolean</PaperCode></td>
+                        <td><PaperCode>false</PaperCode></td>
+                        <td>Expands list dimensions to occupy 100% width or height.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>flex</PaperCode></td>
+                        <td><PaperCode>boolean | number | string</PaperCode></td>
+                        <td><PaperCode>undefined</PaperCode></td>
+                        <td>Flex item sizing rule for flex child contexts.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>scrollable</PaperCode></td>
+                        <td><PaperCode>boolean | "x" | "y"</PaperCode></td>
+                        <td><PaperCode>undefined</PaperCode></td>
+                        <td>Enables vertical, horizontal, or bidirectional overflow scrolling.</td>
+                    </tr>
+                    <tr>
                         <td><PaperCode>reorderable</PaperCode></td>
                         <td><PaperCode>boolean</PaperCode></td>
                         <td><PaperCode>false</PaperCode></td>

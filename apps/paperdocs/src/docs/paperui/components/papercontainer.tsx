@@ -83,6 +83,30 @@ export default function f() {
                         <td>Content nodes rendered within the container frame.</td>
                     </tr>
                     <tr>
+                        <td><PaperCode>flex</PaperCode></td>
+                        <td><PaperCode>boolean | number | string</PaperCode></td>
+                        <td><PaperCode>undefined</PaperCode></td>
+                        <td>Flex item sizing rule. Shares layout context with <PaperCode>PaperFlex</PaperCode> to automatically guard min-height/min-width in scrollable containers.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>shrink</PaperCode> / <PaperCode>grow</PaperCode></td>
+                        <td><PaperCode>boolean | number</PaperCode></td>
+                        <td><PaperCode>undefined</PaperCode></td>
+                        <td>Explicit flex shrink or grow constraints (<PaperCode>shrink=&#123;0&#125;</PaperCode> prevents compression).</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>fullWidth</PaperCode> / <PaperCode>fullHeight</PaperCode></td>
+                        <td><PaperCode>boolean</PaperCode></td>
+                        <td><PaperCode>false</PaperCode></td>
+                        <td>Expands width or height to occupy 100% of parent dimensions.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>scrollable</PaperCode></td>
+                        <td><PaperCode>boolean | "x" | "y"</PaperCode></td>
+                        <td><PaperCode>undefined</PaperCode></td>
+                        <td>Enables content overflow scrolling along horizontal, vertical, or both axes.</td>
+                    </tr>
+                    <tr>
                         <td><PaperCode>class</PaperCode> / <PaperCode>classList</PaperCode></td>
                         <td><PaperCode>string | Record&lt;string, boolean&gt;</PaperCode></td>
                         <td><PaperCode>undefined</PaperCode></td>

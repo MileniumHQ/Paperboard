@@ -232,6 +232,30 @@ export default function f() {
                         <td>Enables flex wrapping. A boolean value maps to <PaperCode>"wrap"</PaperCode> or <PaperCode>"nowrap"</PaperCode>; a string sets the CSS <PaperCode>flex-wrap</PaperCode> value directly (e.g. <PaperCode>"wrap-reverse"</PaperCode>).</td>
                     </tr>
                     <tr>
+                        <td><PaperCode>flex</PaperCode></td>
+                        <td><PaperCode>boolean | number | string</PaperCode></td>
+                        <td><PaperCode>undefined</PaperCode></td>
+                        <td>Flex item sizing. A boolean <PaperCode>true</PaperCode> applies <PaperCode>1 1 0%</PaperCode> with automatic <PaperCode>min-height: 0</PaperCode> (or <PaperCode>min-width: 0</PaperCode>) when nested in a flex parent.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>shrink</PaperCode> / <PaperCode>grow</PaperCode></td>
+                        <td><PaperCode>boolean | number</PaperCode></td>
+                        <td><PaperCode>undefined</PaperCode></td>
+                        <td>Explicit flex shrink or grow factor (<PaperCode>shrink=&#123;0&#125;</PaperCode> prevents shrinking).</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>minWidth</PaperCode> / <PaperCode>minHeight</PaperCode></td>
+                        <td><PaperCode>number | string</PaperCode></td>
+                        <td><PaperCode>undefined</PaperCode></td>
+                        <td>Minimum dimension constraints (numbers map to pixel values).</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>scrollable</PaperCode></td>
+                        <td><PaperCode>boolean | "x" | "y"</PaperCode></td>
+                        <td><PaperCode>undefined</PaperCode></td>
+                        <td>Enables overflow scrolling with automatic flex minimum dimensions.</td>
+                    </tr>
+                    <tr>
                         <td><PaperCode>background</PaperCode></td>
                         <td><PaperCode>PaperFlexBackground</PaperCode></td>
                         <td><PaperCode>undefined</PaperCode></td>
