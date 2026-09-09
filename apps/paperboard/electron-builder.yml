@@ -32,7 +32,7 @@ win:
           url: https://origami.ariapis.com/paperdl/paperboard
           channel: latest
 nsis:
-    artifactName: ${name}-${version}-setup.${ext}
+    artifactName: ${name}-${version}-windows-x64-setup.${ext}
     shortcutName: ${productName}
     uninstallDisplayName: ${productName}
     createDesktopShortcut: always
@@ -61,7 +61,10 @@ mac:
 linux:
     icon: resources/icon.png
     target:
-        - AppImage
+        - target: AppImage
+          arch:
+              - x64
+              - arm64
     publish:
         - provider: generic
           url: https://origami.ariapis.com/paperdl/paperboard
@@ -71,5 +74,5 @@ linux:
     synopsis: Run and manage tools locally.
     description: Run and manage tools locally.
 appImage:
-    artifactName: ${name}-${version}.${ext}
+    artifactName: ${name}-${version}-linux-${arch}.${ext}
 npmRebuild: false
