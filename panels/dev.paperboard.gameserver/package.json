@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "tsc && vite build && bun build ./src/service.ts --outfile ./dist/service.js --target=node --external @paperboard-dev/paperui",
     "pack": "bunx paperapi pack",
     "preview": "vite preview",
     "postinstall": "rm -rf node_modules/@paperboard-dev/paperapi node_modules/@paperboard-dev/paperui && mkdir -p node_modules/@paperboard-dev && ln -sfn ../../../PaperAPI node_modules/@paperboard-dev/paperapi && ln -sfn ../../../PaperUI node_modules/@paperboard-dev/paperui"
