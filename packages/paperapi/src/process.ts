@@ -1,5 +1,6 @@
 import { invoke, send, on, unpackIpcPayload } from "./ipc";
 import { debugErr } from "./debug";
+import { newClientId } from "./channels";
 
 export interface ProcessRunOptions {
     command: string;
@@ -19,7 +20,7 @@ export interface ProcessStartOptions {
     env?: Record<string, string>;
 }
 
-// Background supervised process management API
+// supervised background processes
 export const processApi = {
     start: async (options: ProcessStartOptions): Promise<{ success: boolean }> =>
         invoke("process-start", {
@@ -77,43 +78,89 @@ export const processApi = {
         });
     },
 
-    run: async (options: ProcessRunOptions): Promise<{ exitCode: number }> => {
-        const id = `proc-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+    run: async (options: ProcessRunOptions, timeoutMs = 30_000): Promise<{ exitCode: number }> => {
+        const id = newClientId("proc");
         const unsubscribers: (() => void)[] = [];
 
         if (options.onData) {
             const off = on(`process-data:${id}`, (event: unknown, data: any) => {
                 const text = unpackIpcPayload<string>(event, data) as string;
-                options.onData!(text);
+                if (text) options.onData!(text);
             });
-            unsubscribers.push(off);
+            if (off) unsubscribers.push(off);
         }
         if (options.onStdout) {
             const off = on(`process-stdout:${id}`, (event: unknown, data: any) => {
                 const text = unpackIpcPayload<string>(event, data) as string;
-                options.onStdout!(text);
+                if (text) options.onStdout!(text);
             });
-            unsubscribers.push(off);
+            if (off) unsubscribers.push(off);
         }
         if (options.onStderr) {
             const off = on(`process-stderr:${id}`, (event: unknown, data: any) => {
                 const text = unpackIpcPayload<string>(event, data) as string;
-                options.onStderr!(text);
+                if (text) options.onStderr!(text);
             });
-            unsubscribers.push(off);
+            if (off) unsubscribers.push(off);
         }
 
+        const exitPromise = new Promise<{ exitCode: number }>((resolve) => {
+            const timer = setTimeout(() => {
+                resolve({ exitCode: -1 });
+            }, timeoutMs);
+
+            const off = on(`process-exit:${id}`, (_event: unknown, payload: any) => {
+                clearTimeout(timer);
+                const raw = payload !== undefined ? payload : _event;
+                const code = typeof raw === "number" ? raw : raw?.exitCode ?? 0;
+                resolve({ exitCode: code });
+            });
+            if (off) unsubscribers.push(off);
+        });
+
         try {
-            return await invoke<{ exitCode: number }>("process-run", {
+            await invoke<{ success: boolean }>("process-run", {
                 id,
                 command: options.command,
                 args: options.args || [],
                 cwd: options.cwd,
                 env: options.env,
             });
+
+            return await exitPromise;
         } finally {
-            // process-run resolves on exit; release the stream subscriptions.
             for (const off of unsubscribers) off();
         }
     },
+
+    exec: async (
+        command: string,
+        args: string[] = [],
+        options?: { cwd?: string; env?: Record<string, string>; timeoutMs?: number },
+    ): Promise<{ stdout: string; stderr: string; exitCode: number }> => {
+        let stdout = "";
+        let stderr = "";
+        const res = await processApi.run(
+            {
+                command,
+                args,
+                cwd: options?.cwd,
+                env: options?.env,
+                onStdout: (text) => {
+                    stdout += text;
+                },
+                onStderr: (text) => {
+                    stderr += text;
+                },
+            },
+            options?.timeoutMs ?? 30_000,
+        );
+        return {
+            stdout: stdout.trim(),
+            stderr: stderr.trim(),
+            exitCode: res.exitCode,
+        };
+    },
 };
+
+export const process = processApi;

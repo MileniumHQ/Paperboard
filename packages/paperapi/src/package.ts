@@ -1,4 +1,5 @@
 import { invoke, on } from "./ipc";
+import { newClientId } from "./channels";
 
 export interface PackageProgress {
     stage: "checking" | "downloading" | "verifying" | "extracting" | "completed" | "error";
@@ -15,13 +16,13 @@ export interface InstalledPackageRecord {
     [key: string]: unknown;
 }
 
-// System tool & runtime packages manager (e.g. Java, Python, Node)
+// system tool and runtime packages
 export const packageApi = {
     download: async (
         packageName: string,
         onProgress?: (progress: PackageProgress) => void,
     ): Promise<string> => {
-        const downloadId = `${packageName}-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+        const downloadId = newClientId(packageName);
         if (onProgress) {
             on(`package-progress:${downloadId}`, (event: any, payload: any) => {
                 const data = payload !== undefined ? payload : event;

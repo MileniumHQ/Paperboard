@@ -1,6 +1,6 @@
 import { invoke } from "./ipc";
 
-// System information of whichever computer the transport is scoped to.
+// system info of whichever computer the transport is scoped to
 export interface SystemInfo {
     service: string;
     version: string;
@@ -15,11 +15,30 @@ export interface SystemInfo {
 }
 
 export const systemApi = {
-    /** Resolves the primary LAN IPv4 address of the target computer. */
+    /** primary LAN IPv4 address */
     getLocalIP: (): Promise<string> => invoke<string>("system-get-ip"),
 
-    /** Full system info of the target computer (same source as the IP). */
+    /** full system info */
     getInfo: (): Promise<SystemInfo> => invoke<SystemInfo>("system-info"),
+
+    /** OS notification with fallback */
+    notify: (title: string, message: string): Promise<unknown> =>
+        invoke<unknown>("system-notify", { title, message }),
+
+    /** screenshot, resolves the path written */
+    screenshot: (savePath: string): Promise<string> =>
+        invoke<string>("system-screenshot", { savePath }),
+
+    /** output volume (0-100) */
+    setVolume: (volume: number): Promise<number> =>
+        invoke<number>("system-set-volume", { volume }),
+
+    /** mute/unmute */
+    setMuted: (muted: boolean): Promise<boolean> =>
+        invoke<boolean>("system-set-muted", { muted }),
+
+    /** short alert sound */
+    beep: (): Promise<unknown> => invoke<unknown>("system-beep"),
 };
 
 export const system = systemApi;

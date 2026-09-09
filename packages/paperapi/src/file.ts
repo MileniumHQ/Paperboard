@@ -1,6 +1,6 @@
 import { invoke, on, getPanelId } from "./ipc";
+import { newClientId } from "./channels";
 
-// Resolves current panel id (hostname minus the computer scope prefix)
 const getHost = () => getPanelId();
 
 export interface FileDownloadProgress {
@@ -25,7 +25,7 @@ export interface FileDownloadOptions {
     onProgress?: (progress: FileDownloadProgress) => void;
 }
 
-// Panel isolated file storage and download API
+// panel file storage and downloads
 export const fileApi = {
     download: async (
         optionsOrUrl: FileDownloadOptions | string,
@@ -44,7 +44,7 @@ export const fileApi = {
                   }
                 : optionsOrUrl;
 
-        const downloadId = `file-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+        const downloadId = newClientId("file");
 
         if (opts.onProgress) {
             on(`file-progress:${downloadId}`, (event: unknown, data: any) => {
