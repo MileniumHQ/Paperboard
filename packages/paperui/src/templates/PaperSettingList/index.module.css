@@ -5,6 +5,11 @@
     overflow-y: auto;
 }
 
+.PaperSettingList.autoHeight {
+    height: auto;
+    overflow-y: visible;
+}
+
 .PaperSettingItem:nth-child(odd) {
     background: var(--paper-background-frontest);
 }

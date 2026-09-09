@@ -36,6 +36,11 @@ export type PaperListProps = SelectionProviderProps &
         ) => boolean | Promise<boolean> | void;
         onItemClose?: (event: PaperListItemCloseEvent) => void;
         onItemClosed?: (value: string | number) => void;
+        borderless?: boolean;
+        fullWidth?: boolean;
+        fullHeight?: boolean;
+        flex?: boolean | number | JSX.CSSProperties["flex"];
+        scrollable?: boolean | "x" | "y";
     };
 
 interface DragState {
@@ -86,8 +91,14 @@ export function PaperList(props: ParentProps<PaperListProps>) {
         "onBeforeItemClose",
         "onItemClose",
         "onItemClosed",
+        "borderless",
+        "fullWidth",
+        "fullHeight",
+        "flex",
+        "scrollable",
         "class",
         "classList",
+        "style",
         "children",
     ]);
 
@@ -283,10 +294,37 @@ export function PaperList(props: ParentProps<PaperListProps>) {
             styles.PaperList,
             isHorizontal() ? styles.horizontal : "",
             isReorderable() ? styles.reorderable : "",
+            local.borderless ? styles.borderless : "",
+            local.fullWidth ? styles.fullWidth : "",
+            local.fullHeight ? styles.fullHeight : "",
+            local.scrollable ? styles.scrollable : "",
             local.class,
         ]
             .filter(Boolean)
             .join(" ");
+
+    const dynamicStyle = () => {
+        const extra: JSX.CSSProperties = {};
+        if (local.flex !== undefined) {
+            extra.flex =
+                local.flex === true
+                    ? "1 1 0%"
+                    : local.flex === false
+                      ? "none"
+                      : typeof local.flex === "number"
+                        ? `${local.flex} ${local.flex} 0%`
+                        : local.flex;
+        }
+        if (local.fullWidth) extra.width = "100%";
+        if (local.fullHeight) extra.height = "100%";
+        if (local.scrollable) {
+            extra.overflow = typeof local.scrollable === "string" ? (local.scrollable === "x" ? "hidden auto" : "auto hidden") : "auto";
+        }
+        return {
+            ...extra,
+            ...(typeof local.style === "object" ? local.style : {}),
+        };
+    };
 
     return (
         <SelectionProvider
@@ -302,6 +340,7 @@ export function PaperList(props: ParentProps<PaperListProps>) {
                     {...rest}
                     class={className()}
                     classList={local.classList}
+                    style={dynamicStyle()}
                 >
                     {local.children}
                 </div>

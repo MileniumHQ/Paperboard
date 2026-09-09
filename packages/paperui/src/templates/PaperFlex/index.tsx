@@ -8,35 +8,39 @@ import {
 } from "solid-js";
 import type { PaperSpacing, PaperBackgroundSurface } from "../../types";
 import { resolveSpacing, resolveBackground } from "../../utils/theme";
+import {
+    PaperLayoutContext,
+    usePaperLayout,
+    resolveLayoutStyles,
+    type PaperLayoutProps,
+    type PaperLayoutContextValue,
+} from "../../contexts/layout";
 
 export type PaperFlexSpacing = PaperSpacing;
 export type PaperFlexGap = PaperFlexSpacing;
 export type PaperFlexPadding = PaperFlexSpacing;
 export type PaperFlexBackground = PaperBackgroundSurface | (string & {});
 
-export interface PaperFlexProps extends Omit<
-    JSX.HTMLAttributes<HTMLDivElement>,
-    "onResize"
-> {
+export interface PaperFlexProps
+    extends Omit<JSX.HTMLAttributes<HTMLDivElement>, "onResize">,
+        PaperLayoutProps {
     direction?: "row" | "column" | "row-reverse" | "column-reverse";
     align?: JSX.CSSProperties["align-items"];
     justify?: JSX.CSSProperties["justify-content"];
     center?: boolean;
-    fullWidth?: boolean;
-    fullHeight?: boolean;
     background?: PaperFlexBackground;
     gap?: PaperFlexGap;
     padding?: PaperFlexPadding;
     paddingX?: PaperFlexPadding;
     paddingY?: PaperFlexPadding;
     wrap?: boolean | JSX.CSSProperties["flex-wrap"];
-    overflow?: JSX.CSSProperties["overflow"];
     resizable?: boolean;
     onResize?: (size: { width?: number; height?: number }) => void;
 }
 
 export function PaperFlex(props: ParentProps<PaperFlexProps>) {
     let containerRef: HTMLDivElement | undefined;
+    const parentLayoutCtx = usePaperLayout();
 
     const [local, rest] = splitProps(props, [
         "direction",
@@ -52,6 +56,16 @@ export function PaperFlex(props: ParentProps<PaperFlexProps>) {
         "paddingY",
         "wrap",
         "overflow",
+        "overflowX",
+        "overflowY",
+        "scrollable",
+        "flex",
+        "shrink",
+        "grow",
+        "minWidth",
+        "minHeight",
+        "maxWidth",
+        "maxHeight",
         "resizable",
         "onResize",
         "class",
@@ -99,38 +113,47 @@ export function PaperFlex(props: ParentProps<PaperFlexProps>) {
                     local.direction === "row-reverse"
                         ? startX - moveEv.clientX
                         : moveEv.clientX - startX;
-                const nextW = Math.max(minW, Math.min(maxW, startW + deltaX));
-                setResizedWidth(nextW);
-                local.onResize?.({ width: nextW });
+                const newW = Math.max(minW, Math.min(maxW, startW + deltaX));
+                setResizedWidth(newW);
+                local.onResize?.({ width: newW });
             } else {
                 const deltaY =
                     local.direction === "column-reverse"
                         ? startY - moveEv.clientY
                         : moveEv.clientY - startY;
-                const nextH = Math.max(minH, Math.min(maxH, startH + deltaY));
-                setResizedHeight(nextH);
-                local.onResize?.({ height: nextH });
+                const newH = Math.max(minH, Math.min(maxH, startH + deltaY));
+                setResizedHeight(newH);
+                local.onResize?.({ height: newH });
             }
         };
 
         const handlePointerUp = (upEv: PointerEvent) => {
             handleEl.releasePointerCapture(upEv.pointerId);
             setIsDragging(false);
-            handleEl.removeEventListener("pointermove", handlePointerMove);
-            handleEl.removeEventListener("pointerup", handlePointerUp);
+            window.removeEventListener("pointermove", handlePointerMove);
+            window.removeEventListener("pointerup", handlePointerUp);
         };
 
-        handleEl.addEventListener("pointermove", handlePointerMove);
-        handleEl.addEventListener("pointerup", handlePointerUp);
+        window.addEventListener("pointermove", handlePointerMove);
+        window.addEventListener("pointerup", handlePointerUp);
     };
 
     const style = () => {
-        const gapVal = resolveSpacing(local.gap);
-        const paddingVal = resolveSpacing(local.padding);
-        const paddingXVal = resolveSpacing(local.paddingX);
-        const paddingYVal = resolveSpacing(local.paddingY);
+        const gapVal = local.gap ? resolveSpacing(local.gap) : undefined;
+        const paddingVal = local.padding
+            ? resolveSpacing(local.padding)
+            : undefined;
+        const paddingXVal = local.paddingX
+            ? resolveSpacing(local.paddingX)
+            : undefined;
+        const paddingYVal = local.paddingY
+            ? resolveSpacing(local.paddingY)
+            : undefined;
+        const bgVal = local.background
+            ? resolveBackground(local.background)
+            : undefined;
 
-        const bgVal = resolveBackground(local.background);
+        const layoutStyle = resolveLayoutStyles(local, parentLayoutCtx);
 
         const base: JSX.CSSProperties = {
             display: "flex",
@@ -146,7 +169,6 @@ export function PaperFlex(props: ParentProps<PaperFlexProps>) {
                     : local.wrap,
             gap: gapVal,
             padding: paddingVal,
-            overflow: local.overflow,
             "padding-left": paddingXVal,
             "padding-right": paddingXVal,
             "padding-top": paddingYVal,
@@ -154,16 +176,13 @@ export function PaperFlex(props: ParentProps<PaperFlexProps>) {
             width:
                 resizedWidth() !== null
                     ? `${resizedWidth()}px`
-                    : local.fullWidth
-                      ? "100%"
-                      : undefined,
+                    : layoutStyle.width,
             height:
                 resizedHeight() !== null
                     ? `${resizedHeight()}px`
-                    : local.fullHeight
-                      ? "100%"
-                      : undefined,
+                    : layoutStyle.height,
             background: bgVal,
+            ...layoutStyle,
         };
 
         return typeof local.style === "object"
@@ -185,26 +204,33 @@ export function PaperFlex(props: ParentProps<PaperFlexProps>) {
         }
     };
 
+    const layoutContextValue: PaperLayoutContextValue = {
+        direction: local.direction || "column",
+        parentIsFlex: true,
+    };
+
     return (
-        <div
-            ref={containerRef}
-            {...rest}
-            class={[styles.PaperFlex, local.class].filter(Boolean).join(" ")}
-            classList={local.classList}
-            style={style()}
-        >
-            {local.children}
-            <Show when={local.resizable}>
-                <div
-                    class={[
-                        handleClass(),
-                        isDragging() ? styles.isDragging : "",
-                    ]
-                        .filter(Boolean)
-                        .join(" ")}
-                    onPointerDown={handlePointerDown}
-                />
-            </Show>
-        </div>
+        <PaperLayoutContext.Provider value={layoutContextValue}>
+            <div
+                ref={containerRef}
+                {...rest}
+                class={[styles.PaperFlex, local.class].filter(Boolean).join(" ")}
+                classList={local.classList}
+                style={style()}
+            >
+                {local.children}
+                <Show when={local.resizable}>
+                    <div
+                        class={[
+                            handleClass(),
+                            isDragging() ? styles.isDragging : "",
+                        ]
+                            .filter(Boolean)
+                            .join(" ")}
+                        onPointerDown={handlePointerDown}
+                    />
+                </Show>
+            </div>
+        </PaperLayoutContext.Provider>
     );
 }

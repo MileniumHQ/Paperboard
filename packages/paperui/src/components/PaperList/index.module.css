@@ -10,6 +10,23 @@
     touch-action: pan-y;
 }
 
+.PaperList.borderless {
+    border: 0 !important;
+    border-right: 0 !important;
+}
+
+.PaperList.fullWidth {
+    width: 100% !important;
+}
+
+.PaperList.fullHeight {
+    height: 100% !important;
+}
+
+.PaperList.scrollable {
+    overflow-y: auto;
+}
+
 .PaperList.horizontal {
     flex-direction: row;
     align-items: center;

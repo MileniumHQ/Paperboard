@@ -15,6 +15,8 @@ export interface PaperSettingListProps
     value?: Record<string, any>;
     defaultValue?: Record<string, any>;
     onValueChange?: (values: Record<string, any>) => void;
+    autoHeight?: boolean;
+    flex?: boolean | number | JSX.CSSProperties["flex"];
 }
 
 export function PaperSettingList(props: ParentProps<PaperSettingListProps>) {
@@ -24,8 +26,11 @@ export function PaperSettingList(props: ParentProps<PaperSettingListProps>) {
         "value",
         "defaultValue",
         "onValueChange",
+        "autoHeight",
+        "flex",
         "class",
         "classList",
+        "style",
         "children",
     ]);
 
@@ -57,12 +62,40 @@ export function PaperSettingList(props: ParentProps<PaperSettingListProps>) {
         local.onValueChange?.(nextData);
     };
 
+    const className = () =>
+        [
+            styles.PaperSettingList,
+            local.autoHeight ? styles.autoHeight : "",
+            local.class,
+        ]
+            .filter(Boolean)
+            .join(" ");
+
+    const dynamicStyle = () => {
+        const extra: JSX.CSSProperties = {};
+        if (local.flex !== undefined) {
+            extra.flex =
+                local.flex === true
+                    ? "1 1 0%"
+                    : local.flex === false
+                      ? "none"
+                      : typeof local.flex === "number"
+                        ? `${local.flex} ${local.flex} 0%`
+                        : local.flex;
+        }
+        return {
+            ...extra,
+            ...(typeof local.style === "object" ? local.style : {}),
+        };
+    };
+
     return (
         <div
             ref={containerRef}
             {...rest}
-            class={[styles.PaperSettingList, local.class].filter(Boolean).join(" ")}
+            class={className()}
             classList={local.classList}
+            style={dynamicStyle()}
             onInput={handleFormEvent}
             onChange={handleFormEvent}
         >
