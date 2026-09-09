@@ -18,6 +18,7 @@ interface ComputerRailProps {
     value: string;
     onSelect: (val: string) => void;
     onAdd: () => void;
+    onComputerContextMenu?: (compId: string, e: MouseEvent) => void;
 }
 
 // Left rail: computers, add-computer action, settings entry ("__settings")
@@ -45,6 +46,9 @@ const ComputerRail = (props: ComputerRailProps): JSX.Element => {
                             )
                         }
                         label={`${comp.name} (${comp.host})`}
+                        onContextMenu={(e: MouseEvent) => {
+                            if (!comp.isLocal) props.onComputerContextMenu?.(comp.id, e);
+                        }}
                     />
                 )}
             </For>

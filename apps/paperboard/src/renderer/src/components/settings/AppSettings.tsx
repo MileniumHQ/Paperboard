@@ -8,15 +8,20 @@ import {
     PaperButton,
     PaperIcon,
 } from "@paperboard-dev/paperui";
+import { For } from "solid-js";
 
 export interface AppSettingsData {
     darkMode: "system" | "light" | "dark";
     reducedMotion: boolean;
+    runOnStartup: boolean;
+    defaultPanel: string;
 }
 
 export const APP_SETTINGS_DEFAULTS: AppSettingsData = {
     darkMode: "system",
     reducedMotion: false,
+    runOnStartup: false,
+    defaultPanel: "last",
 };
 
 export const APP_SETTINGS_ID = "app-settings";
@@ -24,6 +29,7 @@ export const APP_SETTINGS_ID = "app-settings";
 export default function AppSettings(props: {
     settings: AppSettingsData;
     onChange: (next: AppSettingsData) => void;
+    panels?: { id: string; name: string }[];
 }) {
     const handleChange = (next: Record<string, any>) => {
         props.onChange({ ...props.settings, ...next });
@@ -66,6 +72,38 @@ export default function AppSettings(props: {
                     name="reducedMotion"
                     checked={props.settings.reducedMotion}
                 />
+            </PaperSettingItem>
+
+            <PaperSettingItem
+                title="Run on startup"
+                description="Launch Paperboard automatically when you log in."
+            >
+                <PaperToggle
+                    name="runOnStartup"
+                    checked={props.settings.runOnStartup}
+                />
+            </PaperSettingItem>
+
+            <PaperSettingItem
+                title="Default panel"
+                description="Choose which panel opens on launch or default to the last opened panel"
+            >
+                <PaperSelectMenu
+                    name="defaultPanel"
+                    value={props.settings.defaultPanel}
+                    fullWidth
+                >
+                    <PaperSelectMenuItem value="last">
+                        Last opened
+                    </PaperSelectMenuItem>
+                    <For each={props.panels ?? []}>
+                        {(panel) => (
+                            <PaperSelectMenuItem value={panel.id}>
+                                {panel.name}
+                            </PaperSelectMenuItem>
+                        )}
+                    </For>
+                </PaperSelectMenu>
             </PaperSettingItem>
 
             <PaperSettingItem

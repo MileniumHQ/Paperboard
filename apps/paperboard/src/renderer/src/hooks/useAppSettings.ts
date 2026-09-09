@@ -34,7 +34,11 @@ export function useAppSettings() {
             const stored = await config.get<Partial<AppSettingsData>>(
                 APP_SETTINGS_ID,
             );
-            if (stored) setAppSettings({ ...APP_SETTINGS_DEFAULTS, ...stored });
+            if (stored) {
+                const merged = { ...APP_SETTINGS_DEFAULTS, ...stored };
+                if (!merged.defaultPanel) merged.defaultPanel = "last";
+                setAppSettings(merged);
+            }
         } catch {}
     };
 

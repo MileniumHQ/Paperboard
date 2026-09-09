@@ -1,15 +1,18 @@
-import { type Component, createSignal, onMount, For, Show } from "solid-js";
+import { type Component, createSignal, createEffect, onMount, For, Show } from "solid-js";
 import {
     PaperProvider,
     PaperFlex,
     PaperList,
     PaperListItem,
     PaperModal,
+    PaperButton,
+    PaperText,
     useContextMenuState,
     getVarCss,
 } from "@paperboard-dev/paperui";
 import {
     panelsApi,
+    config,
     type PanelItem,
 } from "@paperboard-dev/paperapi";
 import {
@@ -31,48 +34,51 @@ import ComputerSettings from "./components/computer/ComputerSettings";
 import ConnectionLostOverlay from "./components/computer/ConnectionLostOverlay";
 import OfflineComputerModal from "./components/computer/OfflineComputerModal";
 import ComputerRail from "./components/computer/ComputerRail";
+import ComputerContextMenu from "./components/computer/ComputerContextMenu";
 import TopBar from "./components/layout/TopBar";
 import { useAppSettings } from "./hooks/useAppSettings";
+import { useComputers } from "./hooks/useComputers";
+import { usePanels, LAST_OPENED_ID } from "./hooks/usePanels";
 
 export type { ComputerItem };
 const App: Component = () => {
-    const [computers, setComputers] = createSignal<ComputerItem[]>([
-        {
-            id: "local",
-            name: "This Computer",
-            host: "127.0.0.1",
-            port: 45464,
-            isLocal: true,
-            // Unknown until refreshComputers() probes the daemon
-            status: {
-                connected: false,
-                isRemote: false,
-                host: "127.0.0.1",
-                port: 45464,
-            },
-        },
-    ]);
-    const [activeComputerId, setActiveComputerId] =
-        createSignal<string>("local");
-    const [panelsByComputer, setPanelsByComputer] = createSignal<
-        Record<string, PanelItem[]>
-    >({});
-    const [activeTabByComputer, setActiveTabByComputer] = createSignal<
-        Record<string, string>
-    >({
-        local: "landing",
-    });
-    const [storePanels, setStorePanels] = createSignal<PanelItem[]>([]);
+    const {
+        computers,
+        activeComputerId,
+        setActiveComputerId,
+        offlineTarget,
+        setOfflineTarget,
+        refreshComputers,
+        activeComputer,
+        subscribeComputerChanges,
+    } = useComputers();
+    const {
+        panelsByComputer,
+        setPanelsByComputer,
+        activeTabByComputer,
+        setActiveTabByComputer,
+        openedPanels,
+        setOpenedPanels,
+        reloadTokens,
+        setReloadTokens,
+        storeLoadFailed,
+        panelsLoadFailed,
+        getSelectedTab,
+        setComputerTab,
+        refreshPanelsForComputer,
+        refreshStorePanels,
+        activePanelsList,
+    } = usePanels();
     const [isSetupOpen, setIsSetupOpen] = createSignal<boolean>(false);
-    const [openedPanels, setOpenedPanels] = createSignal<string[]>([]);
-    const [reloadTokens, setReloadTokens] = createSignal<
-        Record<string, number>
-    >({});
     const panelContextMenu = useContextMenuState();
     const [contextMenuPanel, setContextMenuPanel] = createSignal<{
         compId: string;
         panel: PanelItem;
     } | null>(null);
+    const computerContextMenu = useContextMenuState();
+    const [contextMenuComputerId, setContextMenuComputerId] = createSignal<string | null>(null);
+    const [isForgetConfirmOpen, setIsForgetConfirmOpen] = createSignal(false);
+    const [isForgetting, setIsForgetting] = createSignal(false);
     const [isUninstallModalOpen, setIsUninstallModalOpen] =
         createSignal<boolean>(false);
     const [uninstallTarget, setUninstallTarget] =
@@ -81,14 +87,9 @@ const App: Component = () => {
     const [uninstallError, setUninstallError] = createSignal<string | null>(
         null,
     );
-    const [storeLoadFailed, setStoreLoadFailed] =
-        createSignal<boolean>(false);
     const { appSettings, loadAppSettings, handleAppSettingsChange } =
         useAppSettings();
     const [showAppSettings, setShowAppSettings] = createSignal<boolean>(false);
-    const [offlineTarget, setOfflineTarget] = createSignal<ComputerItem | null>(
-        null,
-    );
 
     const handleRailSelect = (val: string) => {
         if (val === "__settings") {
@@ -150,82 +151,25 @@ const App: Component = () => {
         }
     };
 
-    const getSelectedTab = (compId: string) => {
-        return activeTabByComputer()[compId] || "landing";
-    };
-
-    const setComputerTab = (compId: string, tab: string) => {
-        setActiveTabByComputer((prev) => ({
-            ...prev,
-            [compId]: tab,
-        }));
-        if (tab !== "landing" && tab !== "library" && tab !== "settings") {
-            const key = `${compId}::${tab}`;
-            setOpenedPanels((prev) =>
-                prev.includes(key) ? prev : [...prev, key],
-            );
-        }
-    };
-
-    const refreshComputers = async () => {
-        try {
-            const data = await computersApi.list();
-            if (data && Array.isArray(data.computers)) {
-                setComputers(data.computers);
-                if (data.activeId) {
-                    setActiveComputerId(data.activeId);
-                }
-            }
-        } catch {}
-    };
-
-    // Fetches always name their computer explicitly — no active-connection races
-    const refreshPanelsForComputer = async (compId: string) => {
-        try {
-            const installed = await panelsApi.list(compId);
-            if (Array.isArray(installed)) {
-                setPanelsByComputer((prev) => ({
-                    ...prev,
-                    [compId]: installed,
-                }));
-            }
-        } catch (err) {
-            logToMain("error", "Failed to load installed panels for", compId, err);
-        }
-    };
-
-    const refreshStorePanels = async (compId: string) => {
-        try {
-            const registry = await panelsApi.registry(compId);
-            if (Array.isArray(registry)) {
-                setStorePanels(registry);
-                setStoreLoadFailed(false);
-            }
-        } catch (err) {
-            logToMain("error", "Failed to load panel store:", err);
-            // Library shows a retry affordance instead of an empty grid
-            setStoreLoadFailed(true);
-        }
-    };
-
-    const activePanelsList = () => {
-        const installed = panelsByComputer()[activeComputerId()] || [];
-        const installedIds = new Set(installed.map((p) => p.id));
-        return storePanels().map((panel) => ({
-            ...panel,
-            isInstalled: installedIds.has(panel.id),
-        }));
-    };
-
-    const activeComputer = () =>
-        computers().find((c) => c.id === activeComputerId()) || computers()[0];
-
     const handleReconnectSuccess = async () => {
         const compId = activeComputerId();
         await refreshComputers();
         await refreshPanelsForComputer(compId);
         await refreshStorePanels(compId);
     };
+
+    // re-fetch failed panel list on reconnect
+    const wasConnected: Record<string, boolean | undefined> = {};
+    createEffect(() => {
+        const id = activeComputerId();
+        const comp = computers().find((c) => c.id === id);
+        const connected = comp?.status?.connected === true;
+        const was = wasConnected[id];
+        wasConnected[id] = connected;
+        if (was === false && connected && panelsLoadFailed()[id]) {
+            void refreshPanelsForComputer(id);
+        }
+    });
 
     onMount(async () => {
         // Restores the active computer over privileged IPC
@@ -238,14 +182,36 @@ const App: Component = () => {
         // Load application-wide settings before anything depends on them
         await loadAppSettings();
 
-        computersApi.onChanged((data) => {
-            if (data && Array.isArray(data.computers)) {
-                setComputers(data.computers);
-                if (data.activeId) {
-                    setActiveComputerId(data.activeId);
+        // Honor the default panel on local: a pinned panel, else the
+        // persisted last-opened panel, else the first installed panel.
+        const localPanels = panelsByComputer()["local"] || [];
+        const def =
+            appSettings().defaultPanel &&
+            appSettings().defaultPanel !== "last"
+                ? appSettings().defaultPanel
+                : null;
+        if (def && localPanels.some((p) => p.id === def)) {
+            setComputerTab("local", def);
+        } else {
+            let target: string | null = null;
+            try {
+                const last = await config.get<{ panelId?: string }>(
+                    LAST_OPENED_ID,
+                );
+                if (
+                    last?.panelId &&
+                    localPanels.some((p) => p.id === last.panelId)
+                ) {
+                    target = last.panelId;
                 }
+            } catch {}
+            if (!target && localPanels.length > 0) {
+                target = localPanels[0].id;
             }
-        });
+            if (target) setComputerTab("local", target);
+        }
+
+        subscribeComputerChanges();
     });
 
     const finishComputerSelect = (compId: string) => {
@@ -333,6 +299,35 @@ const App: Component = () => {
         }
     };
 
+    const handleComputerContextMenu = (compId: string, e: MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setContextMenuComputerId(compId);
+        computerContextMenu.openAtMouse(e);
+    };
+
+    const handleForgetFromMenu = () => {
+        computerContextMenu.close();
+        setIsForgetConfirmOpen(true);
+    };
+
+    const handleConfirmForget = async () => {
+        const compId = contextMenuComputerId();
+        if (!compId) return;
+        setIsForgetting(true);
+        try {
+            await handleRemoveComputer(compId);
+        } finally {
+            setIsForgetting(false);
+            setIsForgetConfirmOpen(false);
+            setContextMenuComputerId(null);
+        }
+    };
+
+    const forgetTargetName = () =>
+        computers().find((c) => c.id === contextMenuComputerId())?.name ||
+        "this computer";
+
     const handleDownload = async (panelId: string) => {
         const compId = activeComputerId();
         await panelsApi.install(panelId, compId);
@@ -372,7 +367,10 @@ const App: Component = () => {
                 direction="column"
                 style={{ width: "100vw", height: "100vh", overflow: "hidden" }}
             >
-                <TopBar />
+                <TopBar
+                    getComputerId={activeComputerId}
+                    getSelectedTab={() => getSelectedTab(activeComputerId())}
+                />
                 <PaperFlex
                     direction="row"
                     style={{
@@ -390,6 +388,7 @@ const App: Component = () => {
                         }
                         onSelect={(val) => handleRailSelect(val)}
                         onAdd={() => setIsSetupOpen(true)}
+                        onComputerContextMenu={handleComputerContextMenu}
                     />
 
                     <Show
@@ -403,6 +402,9 @@ const App: Component = () => {
                                 <AppSettings
                                     settings={appSettings()}
                                     onChange={handleAppSettingsChange}
+                                    panels={(panelsByComputer()["local"] || []).map(
+                                        (p) => ({ id: p.id, name: p.name }),
+                                    )}
                                 />
                             </PaperFlex>
                         }
@@ -517,6 +519,37 @@ const App: Component = () => {
                                                         </PaperListItem>
                                                     )}
                                                 </For>
+                                                <Show
+                                                    when={
+                                                        panelsLoadFailed()[comp.id] &&
+                                                        compPanels().length === 0
+                                                    }
+                                                >
+                                                    <PaperFlex
+                                                        direction="column"
+                                                        gap="half"
+                                                        style={{
+                                                            padding: "12px",
+                                                            "align-items": "flex-start",
+                                                        }}
+                                                    >
+                                                        <PaperText size={1} color="light-text">
+                                                            Couldn't load panels for this computer.
+                                                        </PaperText>
+                                                        <PaperButton
+                                                            compact
+                                                            tiny
+                                                            variant="text"
+                                                            onClick={() =>
+                                                                void refreshPanelsForComputer(
+                                                                    comp.id,
+                                                                )
+                                                            }
+                                                        >
+                                                            Retry
+                                                        </PaperButton>
+                                                    </PaperFlex>
+                                                </Show>
                                             </PaperList>
                                         </PaperFlex>
                                     );
@@ -569,7 +602,7 @@ const App: Component = () => {
                                 }}
                             >
                                 <PanelLibrary
-                                    panels={activePanelsList()}
+                                    panels={activePanelsList(activeComputerId())}
                                     computerId={activeComputerId()}
                                     loadFailed={storeLoadFailed()}
                                     onRetryLoad={() =>
@@ -686,6 +719,56 @@ const App: Component = () => {
                 onReload={handleReloadPanel}
                 onUninstall={handleRequestUninstall}
             />
+
+            <ComputerContextMenu
+                menu={computerContextMenu}
+                onForget={handleForgetFromMenu}
+            />
+
+            <PaperModal
+                open={isForgetConfirmOpen()}
+                onClose={() => {
+                    if (!isForgetting()) {
+                        setIsForgetConfirmOpen(false);
+                        setContextMenuComputerId(null);
+                    }
+                }}
+                title="Forget Computer"
+                size="small"
+                footer={
+                    <PaperFlex
+                        direction="row"
+                        justify="flex-end"
+                        gap="half"
+                        fullWidth
+                    >
+                        <PaperButton
+                            compact
+                            onClick={() => {
+                                setIsForgetConfirmOpen(false);
+                                setContextMenuComputerId(null);
+                            }}
+                            disabled={isForgetting()}
+                        >
+                            Cancel
+                        </PaperButton>
+                        <PaperButton
+                            compact
+                            variant="red"
+                            disabled={isForgetting()}
+                            onClick={handleConfirmForget}
+                        >
+                            {isForgetting() ? "Removing..." : "Forget Computer"}
+                        </PaperButton>
+                    </PaperFlex>
+                }
+            >
+                <PaperText preset="body">
+                    Are you sure you want to forget{" "}
+                    <strong>{forgetTargetName()}</strong>?
+                    This will disconnect all boards on this machine.
+                </PaperText>
+            </PaperModal>
 
             <UninstallPanelModal
                 open={isUninstallModalOpen()}

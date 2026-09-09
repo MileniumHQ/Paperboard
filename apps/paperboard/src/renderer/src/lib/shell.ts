@@ -107,7 +107,17 @@ export const discoveryApi = {
     },
 };
 
-// Main applies side effects of freshly persisted settings (theme, title bars)
+// Opens the local data dir (or a panel's files dir) in the OS file manager
+export const shellApi = {
+    openPanelFolder: (computerId: string, panelId?: string): Promise<boolean> =>
+        requireIpc().invoke<boolean>("open-panel-folder", {
+            computerId,
+            panelId,
+        }),
+    getAppVersion: (): Promise<string> =>
+        requireIpc().invoke<string>("app-version"),
+};
+// Main applies side effects of freshly persisted settings (theme, title bars, login item)
 export function notifyAppSettingsChanged(): void {
     requireIpc().send("app-settings-changed");
 }

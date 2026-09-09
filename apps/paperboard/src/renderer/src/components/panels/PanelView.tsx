@@ -46,8 +46,8 @@ const PanelView: Component<PanelViewProps> = (props) => {
                             data-panel-id={panelId}
                             data-computer-id={frameCompId}
                             src={`panel://${frameCompId}.${panelId}/${reloadToken() ? `?_r=${reloadToken()}` : ""}`}
-                            // Panels need scripts + same-origin storage; popups omitted
-                            sandbox="allow-scripts allow-same-origin allow-forms"
+                            // Popups route through setWindowOpenHandler to the browser
+                            sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
                             onLoad={() => handleLoad(key)}
                             style={{
                                 width: "100%",
