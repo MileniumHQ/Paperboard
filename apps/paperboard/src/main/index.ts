@@ -6,6 +6,7 @@ import {
     Menu,
     protocol,
     nativeTheme,
+    nativeImage,
     session,
 } from "electron";
 import * as crypto from "crypto";
@@ -23,10 +24,8 @@ import icon from "../../resources/icon.png?asset";
 
 const log = logger;
 
-// Track the main window for single-instance focus
 let mainWindowRef: BrowserWindow | null = null;
 
-// Enforce a single app instance
 if (!app.requestSingleInstanceLock()) {
     app.quit();
 } else {
@@ -38,7 +37,6 @@ if (!app.requestSingleInstanceLock()) {
     });
 }
 
-// Crash handlers first
 process.on("uncaughtException", (err) => {
     log.error("[Main] Uncaught exception:", err);
 });
@@ -69,26 +67,32 @@ function getTitleBarOverlayOptions() {
     };
 }
 
-// Per-launch nonce for panel script tags
+// per-launch nonce for panel script tags
 const PANEL_CSP_NONCE = crypto.randomBytes(16).toString("base64");
 
-// Baseline CSP for panel:// documents
 const buildPanelCsp = () =>
     [
-        "default-src 'self' data: blob:",
+        "default-src 'self' panel: data: blob:",
         `script-src 'self' 'nonce-${PANEL_CSP_NONCE}'`,
         "style-src 'self' 'unsafe-inline'",
-        "img-src 'self' data: blob: https: http:",
+        "img-src 'self' panel: data: blob: https: http:",
         "font-src 'self' data:",
-        "connect-src 'self' ws://127.0.0.1:* ws://localhost:* https:",
-        "media-src 'self' blob: https: http:",
+        "connect-src 'self' panel: ws://127.0.0.1:* ws://localhost:* https:",
+        "media-src 'self' panel: blob: https: http:",
     ].join("; ");
 
-// Tag every inline/classic script with the launch nonce
 const injectCspNonce = (html: string) =>
     html.replaceAll("<script", `<script nonce="${PANEL_CSP_NONCE}"`);
 
-// Read crane handshake credentials; returns null when not ready
+// panels render outside shell styles; keep the same no-select baseline
+const injectUnselectable = (html: string): string => {
+    const style = `<style>html{-webkit-user-select:none;user-select:none}input,textarea,select,[contenteditable="true"],[contenteditable=""]{-webkit-user-select:text;user-select:text}code,pre,kbd,samp,[data-selectable="true"]{-webkit-user-select:text;user-select:text}</style>`;
+    if (/<head[^>]*>/i.test(html)) {
+        return html.replace(/<head[^>]*>/i, (m) => `${m}${style}`);
+    }
+    return `${style}${html}`;
+};
+
 const readCraneCreds = (): { port: number; token: string } | null => {
     try {
         const handshakeFile = path.join(getPaperboardDir(), "local", "crane.json");
@@ -99,9 +103,7 @@ const readCraneCreds = (): { port: number; token: string } | null => {
     }
 };
 
-// Inject computer-scoped crane credentials directly into panel HTML.
-// The serving URL already determines the scope, so no origin headers
-// (unreliable for custom schemes inside sandboxed frames) are needed.
+// inject computer-scoped creds; scope comes from serving URL
 const injectCraneCreds = (
     html: string,
     comp: string,
@@ -114,24 +116,11 @@ const injectCraneCreds = (
     if (/<head[^>]*>/i.test(html)) {
         return html.replace(/<head[^>]*>/i, (m) => `${m}${bootstrap}`);
     }
-    // No <head> — prepend; scripts run before body content anyway
+    // no <head> — prepend; scripts run before body anyway
     return `${bootstrap}${html}`;
 };
 
-const MIME_TYPES: Record<string, string> = {
-    ".html": "text/html; charset=utf-8",
-    ".js": "application/javascript; charset=utf-8",
-    ".mjs": "application/javascript; charset=utf-8",
-    ".css": "text/css; charset=utf-8",
-    ".json": "application/json; charset=utf-8",
-    ".png": "image/png",
-    ".jpg": "image/jpeg",
-    ".jpeg": "image/jpeg",
-    ".svg": "image/svg+xml",
-    ".woff": "font/woff",
-    ".woff2": "font/woff2",
-    ".ttf": "font/ttf",
-};
+import { lookupMime as lookupMimeType } from "../../papercrane/mime";
 
 function commonWebPreferences() {
     return {
@@ -139,7 +128,7 @@ function commonWebPreferences() {
         sandbox: true,
         contextIsolation: true,
         nodeIntegration: false,
-        // Panels get no Electron surface
+        // no Electron surface in panels
         nodeIntegrationInSubFrames: false,
         webSecurity: true,
         allowRunningInsecureContent: false,
@@ -173,18 +162,24 @@ function createWindow(): void {
     });
 
     mainWindow.webContents.setWindowOpenHandler((details) => {
-        if (
-            details.url.startsWith("https://") ||
-            details.url.startsWith("http://")
-        ) {
+        if (details.url.startsWith("https://")) {
             shell.openExternal(details.url);
         } else {
-            log.warn(
-                "[Main] Blocked openExternal for non-http(s) url:",
-                details.url,
-            );
+            log.warn("[Main] Blocked openExternal for non-https url:", details.url);
         }
         return { action: "deny" };
+    });
+
+    // no menu bar, so longish shortcuts toggle devtools
+    mainWindow.webContents.on("before-input-event", (_event, input) => {
+        if (input.type !== "keyDown" || input.key.toLowerCase() !== "i") {
+            return;
+        }
+        const combo =
+            process.platform === "darwin"
+                ? input.meta && !input.control && (input.shift || input.alt)
+                : input.control && input.shift && !input.meta;
+        if (combo) mainWindow.webContents.toggleDevTools();
     });
 
     if (is.dev && process.env["ELECTRON_RENDERER_URL"]) {
@@ -225,9 +220,28 @@ function createUpdaterWindow(): BrowserWindow {
 }
 
 app.whenReady().then(async () => {
+    // icon unpacked in prod, resources/ in dev
+    if (process.platform === "darwin") {
+        const iconCandidates = [
+            path.join(process.resourcesPath, "app.asar.unpacked", "resources", "icon.png"),
+            path.join(__dirname, "../../resources/icon.png"),
+        ];
+        const iconPath = iconCandidates.find((p) => {
+            try {
+                return fs.existsSync(p);
+            } catch {
+                return false;
+            }
+        });
+        app.setAboutPanelOptions({
+            applicationName: "Paperboard",
+            applicationVersion: app.getVersion(),
+            copyright: "2026 Milenium",
+            ...(iconPath ? { icon: nativeImage.createFromPath(iconPath) } : {}),
+        });
+    }
     electronApp.setAppUserModelId("dev.paperboard.paperboard");
 
-    // Minimal menu; mac requires an app menu, others use custom titlebars
     if (process.platform === "darwin") {
         const template: Electron.MenuItemConstructorOptions[] = [
             {
@@ -244,7 +258,7 @@ app.whenReady().then(async () => {
         Menu.setApplicationMenu(null);
     }
 
-    // Clipboard access granted to panel origins only
+    // clipboard granted to panel origins only
     const isPanelOrigin = (origin: string) =>
         origin.startsWith("panel://") || origin === "panel://";
     for (const ses of [session.defaultSession]) {
@@ -291,8 +305,7 @@ app.whenReady().then(async () => {
     startCommunicator(ipcMain);
     initAppSettingsSync();
 
-    // Custom protocol for loading panel web applications
-    // panel://<computerId>.<panelId>/<path> — scope is part of the origin
+    // panel://<computerId>.<panelId>/<path> — scope is part of origin
     const parsePanelHost = (
         hostname: string,
     ): { comp: string; panelId: string } | null => {
@@ -313,57 +326,12 @@ app.whenReady().then(async () => {
             }
             const { comp: urlComp, panelId } = parsedHost;
 
-            // Deliberately no fallback to the shell's active computer
+            // deliberately no fallback to active computer
             const comp = urlComp === "local" || connectionPool.getComputer(urlComp) ? urlComp : null;
             if (!comp) {
                 return new Response(`Unknown computer: ${urlComp}`, {
                     status: 404,
                 });
-            }
-
-            if (parsedUrl.pathname === "/__crane") {
-                // Legacy endpoint: credentials are scoped to the requesting
-                // panel's computer. Origin headers are unreliable for custom
-                // schemes, so only enforce the check when they are present;
-                // panels should prefer injected __PAPERBOARD_CRANE.
-                const requesterOrigin =
-                    request.headers.get("origin") ||
-                    request.headers.get("referer") ||
-                    request.referrer;
-                const requesterComp = (() => {
-                    if (!requesterOrigin) return null;
-                    try {
-                        return (
-                            parsePanelHost(
-                                new URL(requesterOrigin).hostname,
-                            )?.comp ?? null
-                        );
-                    } catch {
-                        return null;
-                    }
-                })();
-                if (requesterComp && requesterComp !== comp) {
-                    return new Response(`Forbidden`, { status: 403 });
-                }
-                const creds = readCraneCreds();
-                if (!creds) {
-                    return new Response("Crane not ready", { status: 503 });
-                }
-                return new Response(
-                    JSON.stringify({
-                        port: creds.port,
-                        token: creds.token,
-                        // Lets panels verify the binding end-to-end
-                        computerId: comp,
-                    }),
-                    {
-                        status: 200,
-                        headers: {
-                            "Content-Type": "application/json",
-                            "Cache-Control": "no-store",
-                        },
-                    },
-                );
             }
 
             let subpath = parsedUrl.pathname.replace(/^\/+/, "");
@@ -382,7 +350,7 @@ app.whenReady().then(async () => {
                 const panelDir = path.join(panelsDir, cleanPanelId);
 
                 if (fs.existsSync(panelDir)) {
-                    // Containment check before touching disk
+                    // containment check before touching disk
                     const normalized = path.normalize(
                         subpath.replace(/^[/\\]+/, ""),
                     );
@@ -397,7 +365,7 @@ app.whenReady().then(async () => {
                     ) {
                         return new Response(`Forbidden`, { status: 403 });
                     }
-                    // Dist build wins over loose dev files
+                    // dist build wins over loose files
                     const distCandidate = path.join(panelDir, "dist", normalized);
                     let targetFile: string | null = null;
                     if (fs.existsSync(distCandidate)) {
@@ -415,20 +383,23 @@ app.whenReady().then(async () => {
                                 targetFile,
                             );
                             const ext = path.extname(targetFile).toLowerCase();
-                            const contentType =
-                                MIME_TYPES[ext] || "application/octet-stream";
+                            const contentType = lookupMimeType(ext);
                             const headers: Record<string, string> = {
                                 "Content-Type": contentType,
                                 "X-Content-Type-Options": "nosniff",
+                                "Access-Control-Allow-Origin": "*",
+                                "Cache-Control": "no-store",
                             };
                             if (ext === ".html") {
                                 headers["Content-Security-Policy"] =
                                     buildPanelCsp();
                                 headers["Cache-Control"] = "no-store";
                                 const html = injectCspNonce(
-                                    injectCraneCreds(
-                                        buffer.toString("utf8"),
-                                        comp,
+                                    injectUnselectable(
+                                        injectCraneCreds(
+                                            buffer.toString("utf8"),
+                                            comp,
+                                        ),
                                     ),
                                 );
                                 return new Response(html, { headers });
@@ -436,7 +407,7 @@ app.whenReady().then(async () => {
                             return new Response(buffer, { headers });
                         }
                     } catch {
-                        // Lost a race with deletion — fall through to 404.
+                        // lost race with deletion — fall through to 404
                     }
                 }
                 return new Response(
@@ -445,7 +416,6 @@ app.whenReady().then(async () => {
                 );
             }
 
-            // Otherwise, proxy from the owning computer's PaperCrane HTTP endpoint
             const client = connectionPool.getClient(assetComp);
             const httpUrl = client.getHttpUrl(`panel/${cleanPanelId}/${subpath}`);
             const res = await fetch(httpUrl).catch(() => null);
@@ -457,21 +427,22 @@ app.whenReady().then(async () => {
             const buffer = await res.arrayBuffer();
             const remoteExt = path.extname(subpath).toLowerCase();
             const contentType =
-                res.headers.get("content-type") ||
-                MIME_TYPES[remoteExt] ||
-                "application/octet-stream";
+                res.headers.get("content-type") || lookupMimeType(remoteExt);
             const headers: Record<string, string> = {
                 "Content-Type": contentType,
                 "X-Content-Type-Options": "nosniff",
+                "Access-Control-Allow-Origin": "*",
             };
             let responseBody: BodyInit = buffer;
             if (remoteExt === ".html") {
                 headers["Content-Security-Policy"] = buildPanelCsp();
                 headers["Cache-Control"] = "no-store";
                 responseBody = injectCspNonce(
-                    injectCraneCreds(
-                        new TextDecoder().decode(buffer),
-                        comp,
+                    injectUnselectable(
+                        injectCraneCreds(
+                            new TextDecoder().decode(buffer),
+                            comp,
+                        ),
                     ),
                 );
             }
@@ -485,10 +456,7 @@ app.whenReady().then(async () => {
 
     protocol.handle("panel", handlePanelProtocol);
 
-    // ── Updater ──────────────────────────────────────────────────────────────
-
     if (shouldSkipUpdate(process.argv)) {
-        // No update needed — go straight to main window
         createWindow();
     } else {
         const updaterWindow = createUpdaterWindow();
@@ -506,7 +474,7 @@ app.whenReady().then(async () => {
             if (!launched) launchMain();
         });
 
-        // Run once visible; hard timeout so a stalled network can't block launch
+        // hard timeout so stalled network can't block launch
         updaterWindow.once("ready-to-show", () => {
             runUpdateOrchestrator(updaterWindow)
                 .catch((err) => {
@@ -528,7 +496,7 @@ app.on("window-all-closed", () => {
     }
 });
 
-// Kill local processes and disconnect clients on quit
+// kill local processes and disconnect clients on quit
 app.on("before-quit", () => {
     log.info("[Main] quitting — cleaning up local processes and connections");
     try {
@@ -536,4 +504,8 @@ app.on("before-quit", () => {
     } catch (err: any) {
         log.warn("[Paperboard] cleanup warning:", err?.message);
     }
+    // best-effort remote teardown; server expiry is backstop
+    try {
+        void import("./remoteFolder").then((m) => m.closeAllRemoteFolders());
+    } catch {}
 });

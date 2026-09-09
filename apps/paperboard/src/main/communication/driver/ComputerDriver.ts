@@ -24,12 +24,10 @@ export interface SystemInfo {
 }
 
 export interface ComputerDriver {
-    // Lifecycle & Identification
     getId(): string;
     getSystemInfo(): Promise<SystemInfo>;
     getIP(): Promise<string>;
 
-    // Terminal (PTY)
     createTerminal(
         id: string,
         cols: number,
@@ -44,7 +42,6 @@ export interface ComputerDriver {
     destroyTerminal(id: string): void;
     isTerminalRunning(id: string): Promise<boolean>;
 
-    // Background Supervised Processes
     startProcess(
         id: string,
         command: string,
@@ -67,7 +64,6 @@ export interface ComputerDriver {
         onExit?: (exitCode: number) => void,
     ): Promise<boolean>;
 
-    // Filesystem (App-Scoped)
     getFilePath(targetPath: string, appId?: string): Promise<string>;
     fileExists(targetPath: string, appId?: string): Promise<boolean>;
     writeFile(targetPath: string, content: string, appId?: string): Promise<string>;
@@ -86,7 +82,6 @@ export interface ComputerDriver {
         onProgress: ProgressCallback,
     ): Promise<string>;
 
-    // Packages (Java, Runtimes, Tools)
     isPackageInstalled(packageName: string, version?: string): Promise<boolean>;
     getPackageIndex(): Promise<Record<string, any>>;
     getPackagePath(packageName: string): Promise<string>;
@@ -96,7 +91,6 @@ export interface ComputerDriver {
         onProgress: ProgressCallback,
     ): Promise<string>;
 
-    // Panels (App Registry)
     listPanels(): Promise<PanelManifest[]>;
     installPanel(
         panelId: string,
@@ -105,7 +99,6 @@ export interface ComputerDriver {
     ): Promise<PanelManifest>;
     uninstallPanel(panelId: string): Promise<boolean>;
 
-    // Config Storage
     getConfig(id: string): Promise<any>;
     setConfig(id: string, data: any): Promise<boolean>;
 }

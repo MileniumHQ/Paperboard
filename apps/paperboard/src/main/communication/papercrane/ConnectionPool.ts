@@ -1,14 +1,13 @@
 import { EventEmitter } from "events";
 import * as os from "os";
 import * as path from "path";
-import { DEFAULT_PORT } from "../../../../papercrane";
+import { DEFAULT_PORT, getDetailedOsInfo } from "../../../../papercrane";
 import {
     readJsonFileSync,
     writeJsonAtomicSync,
     sanitizeId,
 } from "../../../../papercrane/storage";
 import { getLocalDir } from "../../../../papercrane/paths";
-import { getLinuxDistroInfo } from "../../../../papercrane/util";
 import { logger } from "../../../../papercrane/logger";
 import { PaperCraneClient } from "./PaperCraneClient";
 import type { ComputerDriver } from "../driver/ComputerDriver";
@@ -28,7 +27,26 @@ export interface StoredComputer {
     isLocal?: boolean;
 }
 
-// Every computer, including "local", is served by a PaperCrane daemon
+// timeout = lost in transit, refusal = nothing listening there
+export function classifyProbeError(err: any): string {
+    const msg = String(err?.message || "");
+    if (err?.name === "TimeoutError" || /aborted|timeout/i.test(msg)) {
+        return "Timed out with no response — the computer may be offline, on a different network, or its firewall is blocking PaperCrane";
+    }
+    const code = (err as any)?.cause?.code || (err as any)?.code;
+    if (code === "ECONNREFUSED") {
+        return "Connection refused — PaperCrane isn't running on that computer";
+    }
+    if (code === "ENOTFOUND" || code === "EAI_AGAIN") {
+        return "Host not found — check the address";
+    }
+    if (code === "EHOSTUNREACH" || code === "ENETUNREACH") {
+        return "Network unreachable — is this device on the same network?";
+    }
+    return msg || "Unreachable";
+}
+
+// every computer, including local, is served by a daemon
 export class ConnectionPool extends EventEmitter {
     private computers: Map<string, StoredComputer> = new Map();
     private clients: Map<string, PaperCraneClient> = new Map();
@@ -45,7 +63,7 @@ export class ConnectionPool extends EventEmitter {
 
     public async init(): Promise<void> {
         this.ensureLocalComputer();
-        // Warm the local daemon so panels find a live endpoint immediately
+        // warm local daemon so panels find a live endpoint
         try {
             await this.getClient("local").connect("127.0.0.1");
         } catch {}
@@ -59,8 +77,7 @@ export class ConnectionPool extends EventEmitter {
         this.activeId = raw.activeId || "local";
         if (Array.isArray(raw.computers)) {
             for (const c of raw.computers) {
-                // Skip entries with unsafe ids or missing host/port so a
-                // corrupt record can't poison the pool
+                // skip corrupt records so one bad entry can't poison the pool
                 if (!c || typeof c !== "object") continue;
                 const id = sanitizeId(c.id);
                 if (!id) continue;
@@ -84,31 +101,28 @@ export class ConnectionPool extends EventEmitter {
     }
 
     private ensureLocalComputer() {
-        const plat = process.platform === "win32" ? "windows" : process.platform === "darwin" ? "macos" : "linux";
-        const distro = getLinuxDistroInfo();
+        const info = getDetailedOsInfo();
         const localComp: StoredComputer = {
             id: "local",
             name: "This Computer",
             host: "127.0.0.1",
             port: DEFAULT_PORT,
             isLocal: true,
-            os: plat,
-            osVersion: os.release(),
-            distroId: distro.distroId,
-            distroName: distro.distroName,
+            os: info.os,
+            osVersion: info.osVersion,
+            distroId: info.distroId,
+            distroName: info.distroName,
             arch: os.arch(),
         };
 
         this.computers.set("local", localComp);
     }
 
-    // Returns active driver (always crane-backed)
     public getActiveDriver(): ComputerDriver {
         return this.getDriver(this.activeId);
     }
 
-    // Never default to the active computer — operations must not land on
-    // the wrong machine.
+    // never default id — operations must not land on wrong machine
     public getDriver(id: string): ComputerDriver {
         let remoteDriver = this.remoteDrivers.get(id);
         if (!remoteDriver) {
@@ -128,7 +142,7 @@ export class ConnectionPool extends EventEmitter {
             client.on("status", () => this.emit("change"));
             this.clients.set(id, client);
             if (id === "local") {
-                // Credentials resolved internally via crane.json/embedded
+                // credentials resolved internally via handshake/embedded
                 client.connect("127.0.0.1", undefined as never).catch(() => {});
             } else {
                 client.connect(comp.host, comp.port, comp.token).catch(() => {});
@@ -167,7 +181,7 @@ export class ConnectionPool extends EventEmitter {
         });
     }
 
-    /** Returns all known computers as plain { id, name } entries — used by the updater. */
+    // plain {id,name} list for updater
     public listAll(): { id: string; name: string }[] {
         return Array.from(this.computers.values()).map(({ id, name }) => ({ id, name }));
     }
@@ -185,7 +199,7 @@ export class ConnectionPool extends EventEmitter {
             }
             return { reachable: false, error: `HTTP ${res.status}` };
         } catch (err: any) {
-            return { reachable: false, error: err.message || "Unreachable" };
+            return { reachable: false, error: classifyProbeError(err) };
         }
     }
 
@@ -198,7 +212,8 @@ export class ConnectionPool extends EventEmitter {
         const tempClient = new PaperCraneClient();
         try {
             await tempClient.connect(host, port);
-            const pairRes = await tempClient.pair(code, customName || `Paperboard App`);
+            // send our hostname, never the server name; customName stays local-only
+            const pairRes = await tempClient.pair(code, os.hostname().replace(/\.local$/i, "") || "Paperboard App");
             if (!pairRes.success || !pairRes.token) {
                 throw new Error("Pairing rejected: invalid code or daemon refused");
             }
@@ -239,12 +254,23 @@ export class ConnectionPool extends EventEmitter {
         return true;
     }
 
-    public removeComputer(id: string): boolean {
+    public async removeComputer(id: string): Promise<boolean> {
         return this.unpairComputer(id);
     }
 
-    public unpairComputer(id: string): boolean {
+    public async unpairComputer(id: string): Promise<boolean> {
         if (id === "local") return false;
+        const comp = this.computers.get(id);
+        // best-effort remote forget; local forget always proceeds
+        if (comp?.token) {
+            try {
+                const client = this.clients.get(id);
+                if (client) {
+                    await client.call("auth:revoke-self", {}, 5000);
+                }
+            } catch {
+            }
+        }
         const client = this.clients.get(id);
         if (client) {
             client.disconnect();
@@ -266,10 +292,10 @@ export class ConnectionPool extends EventEmitter {
         return this.computers.get(id);
     }
 
-    // Remote supervised processes intentionally survive
+    // remote supervised processes intentionally survive
     public dispose(): void {
         for (const client of this.clients.values()) {
-            // Stop embedded daemons so their supervised children terminate
+            // stop embedded daemons so supervised children terminate
             client.stopEmbeddedServer();
             client.disconnect();
         }

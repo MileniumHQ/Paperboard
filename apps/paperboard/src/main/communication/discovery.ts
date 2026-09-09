@@ -1,13 +1,11 @@
-// mDNS discovery of PaperCrane daemons, deduped by machine id.
-// All mDNS interaction fails soft — never crashes the app.
-
+// mDNS discovery, deduped by machine id + port; fails soft
 import { EventEmitter } from "events";
 import { Bonjour, type Browser } from "bonjour-service";
 import { logger } from "../../../papercrane/logger";
 import { PAPERCRANE_MDNS_TYPE } from "../../../papercrane/discovery";
 
 export interface DiscoveredComputer {
-    /** Stable service identity (TXT id or fqdn) — dedupe key. */
+    /** stable service identity — dedupe key */
     id: string;
     name: string;
     host: string;
@@ -52,7 +50,7 @@ export class DiscoveryService extends EventEmitter {
                     );
                 }
             });
-            // Not part of the package's typed events; listen defensively
+            // error event untyped; listen defensively
             (this.browser as any).on("error", (err: unknown) => {
                 logger.warn("[Discovery] mDNS browser error:", err);
             });
@@ -83,7 +81,12 @@ export class DiscoveryService extends EventEmitter {
             service?.txt && typeof service.txt.id === "string"
                 ? service.txt.id
                 : null;
-        return txtId || (typeof service?.fqdn === "string" ? service.fqdn : null);
+        const base =
+            txtId || (typeof service?.fqdn === "string" ? service.fqdn : null);
+        if (!base) return null;
+        // include port: same host can run two daemons under one id
+        const port = Number(service?.port) || 0;
+        return port ? `${base}:${port}` : base;
     }
 
     private resolveHost(service: any): string {
@@ -99,7 +102,7 @@ export class DiscoveryService extends EventEmitter {
                 return addr;
             }
         }
-        // Multicast responses usually carry the sender's address here.
+        // sender address usually carried here
         return (
             service?.referer?.address ||
             service?.host?.replace(/\.$/, "") ||
@@ -144,13 +147,16 @@ export class DiscoveryService extends EventEmitter {
     private handleDown(service: any): void {
         const key = this.serviceKey(service);
         if (!key) return;
-        // Match by fqdn too — some stacks announce goodbye with a partial record.
+        // match by fqdn too — goodbye can arrive with a partial record
         let removedKey: string | null = null;
         if (this.services.has(key)) {
             removedKey = key;
         } else if (typeof service?.fqdn === "string") {
+            const port = Number(service?.port) || 0;
             for (const [k, v] of this.services) {
-                if (v.fqdn === service.fqdn) {
+                if (v.fqdn !== service.fqdn) continue;
+                // shared fqdn — only remove the matching port
+                if (!port || v.port === port) {
                     removedKey = k;
                     break;
                 }
@@ -169,7 +175,7 @@ export class DiscoveryService extends EventEmitter {
         this.emit("update", this.list());
     }
 
-    /** Currently online PaperCrane machines, sorted by display name. */
+    // online machines, sorted by name
     public list(): DiscoveredComputer[] {
         return Array.from(this.services.values())
             .map(({ id, name, host, port, version, os }) => ({

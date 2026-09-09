@@ -1,4 +1,4 @@
-// Retained IPC channels; the preload allowlist must be built from these.
+// retained channels; preload allowlist must be built from these
 
 export const SHELL_INVOKE_CHANNELS = [
     "crane-credentials",
@@ -11,6 +11,8 @@ export const SHELL_INVOKE_CHANNELS = [
     "computer-remove",
     "computer-switch",
     "discovery-list",
+    "open-panel-folder",
+    "app-version",
 ] as const;
 
 export const SHELL_SEND_CHANNELS = [
@@ -18,12 +20,16 @@ export const SHELL_SEND_CHANNELS = [
     "updater-finish",
     "app-settings-changed",
     "relaunch-for-update",
+    "quit-and-install",
     "renderer-log",
 ] as const;
 
 export const SHELL_ON_CHANNELS = [
     "pong",
     "updater-progress",
+    "app-update-available",
+    "app-update-progress",
+    "app-update-downloaded",
     "computers-changed",
     "discovery-changed",
 ] as const;

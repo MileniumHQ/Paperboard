@@ -11,10 +11,8 @@ import {
 } from "../../../../papercrane";
 import { getLocalDir } from "../../../../papercrane/paths";
 
-// Shape of an RPC params record sent over the WebSocket protocol.
 export type RpcParams = Record<string, unknown>;
 
-// Progress payload pushed via the "progress" event during downloads.
 export interface ProgressPayload {
     stage:
         | "starting"
@@ -30,7 +28,6 @@ export interface ProgressPayload {
     message?: string;
 }
 
-// System information reported by the PaperCrane daemon (system:info).
 export interface CraneSystemInfo {
     service?: string;
     version?: string;
@@ -45,14 +42,12 @@ export interface CraneSystemInfo {
     username?: string;
 }
 
-// Per-package entry of the daemon's installed-package index.
 export interface PackageInstallInfo {
     name?: string;
     version?: string;
     installedAt?: string;
 }
 
-// Local daemon discovery record written by every crane instance.
 interface CraneHandshake {
     port: number;
     token: string;
@@ -89,7 +84,6 @@ export interface TargetStatus {
 
 const DEFAULT_RPC_TIMEOUT_MS = 30_000;
 
-// WebSocket client connecting to a local or remote PaperCrane agent daemon
 export class PaperCraneClient extends EventEmitter {
     private ws: WebSocket | null = null;
     private host: string = "localhost";
@@ -106,7 +100,7 @@ export class PaperCraneClient extends EventEmitter {
             timer: NodeJS.Timeout;
         }
     >();
-    // Single-flight guard so concurrent calls don't race reentrant connects
+    // single-flight guard so concurrent calls don't race reentrant connects
     private connectingPromise: Promise<TargetStatus> | null = null;
 
     public getEmbeddedServer(): ServerInstance | null {
@@ -161,7 +155,6 @@ export class PaperCraneClient extends EventEmitter {
         port?: number,
         token?: string,
     ): Promise<TargetStatus> {
-        // Single-flight: concurrent callers share one connect attempt
         if (this.connectingPromise) return this.connectingPromise;
 
         const doConnect = async (): Promise<TargetStatus> => {
@@ -172,8 +165,7 @@ export class PaperCraneClient extends EventEmitter {
 
             const isLocal = host === "localhost" || host === "127.0.0.1";
 
-            // Trust crane.json only after a health probe; otherwise restart
-            // the embedded instance
+            // trust handshake only after health probe, else restart embedded
             if (isLocal && !token) {
                 const stored = readCraneJson();
                 if (stored && (await probeAlive(stored.port))) {
@@ -185,8 +177,7 @@ export class PaperCraneClient extends EventEmitter {
                             this.embeddedServer.stop();
                             this.embeddedServer = null;
                         }
-                        // Reuse previous token so the authorized-token store
-                        // stays stable across launches
+                        // reuse previous token so authorized-token store stays stable
                         const freshToken =
                             stored?.token ??
                             "pc_" + crypto.randomBytes(24).toString("hex");
@@ -234,8 +225,7 @@ export class PaperCraneClient extends EventEmitter {
                         ...this.getStatus(),
                         error: err?.message || "Connection failed",
                     });
-                    // Reject pre-open so callers see real failures instead
-                    // of a resolved-but-disconnected status
+                    // reject pre-open so callers see real failures
                     if (!hasResolved) {
                         hasResolved = true;
                         this.isConnected = false;
@@ -309,8 +299,7 @@ export class PaperCraneClient extends EventEmitter {
         this.isConnected = false;
     }
 
-    // Separate from disconnect() so transient reconnects never kill running
-    // game servers
+    // separate from disconnect so reconnects never kill long-running children
     public stopEmbeddedServer(): void {
         try {
             this.embeddedServer?.stop?.();
@@ -318,7 +307,6 @@ export class PaperCraneClient extends EventEmitter {
         this.embeddedServer = null;
     }
 
-    // Handles pushed streaming and progress events from PaperCrane
     private handlePushEvent(
         event: string,
         payload: Record<string, unknown>,
@@ -346,7 +334,6 @@ export class PaperCraneClient extends EventEmitter {
         }
     }
 
-    // Sends an RPC request to the PaperCrane WebSocket server with a timeout
     public async call<T = unknown>(
         action: string,
         params: RpcParams = {},
@@ -375,7 +362,6 @@ export class PaperCraneClient extends EventEmitter {
         });
     }
 
-    // Authenticates and pairs with a remote PaperCrane instance
     public async pair(
         code: string,
         clientName?: string,
@@ -639,7 +625,6 @@ export class PaperCraneClient extends EventEmitter {
 
     // System info
     public async getIP(): Promise<string> {
-        // The daemon reports its own LAN IP — same source as system:info.
         const res = await this.call<{ ip: string }>("system:ip");
         return res.ip;
     }

@@ -1,17 +1,17 @@
-// Shell-only IPC; data operations flow through PaperCrane
-import { type IpcMain, app, clipboard } from "electron";
+// shell-only IPC; data operations flow through daemon
+import { type IpcMain, app, clipboard, shell } from "electron";
 import connectionPool from "./papercrane/ConnectionPool";
 import discovery from "./discovery";
-import { broadcastAppSettings, syncTitleBarOverlays, applyNativeTheme } from "../appSettings";
+import { broadcastAppSettings, syncTitleBarOverlays, applyNativeTheme, applyRunOnStartup } from "../appSettings";
 import * as fs from "fs";
 import * as path from "path";
-import { getLocalDir, getPaperboardDir } from "../../../papercrane/paths";
+import { getLocalDir, getPaperboardDir, getFilesDir, ensureDir } from "../../../papercrane/paths";
+import { sanitizeId } from "../../../papercrane/storage";
 import { logger } from "../../../papercrane/logger";
+import { openRemoteFolder } from "../remoteFolder";
 
 export default function registerShellIpc(ipcMain: IpcMain) {
-    // Throws retryable CRANE_NOT_READY while crane.json is missing or
-    // corrupt (null would corrupt the ws URL); callers retry cleanly
-    // once the embedded daemon is up.
+    // throws retryable CRANE_NOT_READY until embedded daemon is up
     ipcMain.handle("crane-credentials", () => {
         const file = path.join(getPaperboardDir(), "local", "crane.json");
         let creds: Record<string, unknown>;
@@ -29,9 +29,10 @@ export default function registerShellIpc(ipcMain: IpcMain) {
         return true;
     });
 
-    // Settings saved over WS still need main-side side effects
+    // settings saved over WS still need main-side side effects
     ipcMain.on("app-settings-changed", async () => {
         applyNativeTheme();
+        applyRunOnStartup();
         await broadcastAppSettings().catch(() => {});
         syncTitleBarOverlays();
     });
@@ -80,6 +81,34 @@ export default function registerShellIpc(ipcMain: IpcMain) {
         return connectionPool.setActive(id);
     });
 
+    // local dir or panel files dir; remotes mount an ephemeral session
+    ipcMain.handle(
+        "open-panel-folder",
+        async (_, { computerId, panelId }: { computerId: string; panelId?: string }) => {
+            if (computerId !== "local") {
+                const res = await openRemoteFolder(computerId, panelId);
+                if (!res.ok) {
+                    logger.warn(`[Shell] open-panel-folder (remote ${computerId}) failed:`, res.error);
+                }
+                return res.ok;
+            }
+            let dir = getPaperboardDir();
+            const clean = panelId ? sanitizeId(panelId) : null;
+            if (clean) dir = path.join(getFilesDir(), clean);
+            try {
+                ensureDir(dir);
+                shell.openPath(dir);
+                return true;
+            } catch (err: any) {
+                logger.warn("[Shell] open-panel-folder failed:", err?.message ?? err);
+                return false;
+            }
+        },
+    );
+
+    // app version for shell label
+    ipcMain.handle("app-version", () => app.getVersion());
+
     // ── Network discovery of nearby PaperCrane machines ──────────────────────
 
     ipcMain.handle("discovery-list", () => {
@@ -87,7 +116,17 @@ export default function registerShellIpc(ipcMain: IpcMain) {
         return discovery.list();
     });
 
-    // Clears the update cooldown so the orchestrator runs on the next launch
+    // restart into staged update; no-op without a download
+    ipcMain.on("quit-and-install", () => {
+        try {
+            const { autoUpdater } = require("electron-updater");
+            autoUpdater.quitAndInstall(false, true);
+        } catch (err: any) {
+            logger.warn("[Shell] quit-and-install failed:", err?.message ?? err);
+        }
+    });
+
+    // clear update cooldown so orchestrator runs next launch
     ipcMain.on("relaunch-for-update", () => {
         try {
             fs.rmSync(path.join(getLocalDir(), "last_update.json"), {
@@ -100,10 +139,7 @@ export default function registerShellIpc(ipcMain: IpcMain) {
             );
         }
         const args = process.argv.slice(1).filter((a) => a !== "--update");
-        // Inside an AppImage, process.execPath lives in a temporary squashfs
-        // mount that dies with this process; relaunching it directly yields a
-        // window that can't load its files (chrome-error). Launch through the
-        // AppImage itself instead.
+        // AppImage execPath dies with the process; relaunch via APPIMAGE env
         if (process.platform === "linux" && process.env.APPIMAGE) {
             app.relaunch({ execPath: process.env.APPIMAGE, args });
         } else {

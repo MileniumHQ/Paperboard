@@ -4,30 +4,45 @@ import * as fs from "fs";
 import type { WebFrameMain } from "electron";
 import { logger } from "../../papercrane/logger";
 
-// Theme flows through nativeTheme (prefers-color-scheme in every renderer);
-// reduced motion is injected into panel frames as an attribute.
-
+// theme via nativeTheme; reduced motion injected into panel frames
 export interface AppSettings {
     darkMode: "system" | "light" | "dark";
     reducedMotion: boolean;
+    runOnStartup: boolean;
+    defaultPanel: string;
 }
 
-const DEFAULTS: AppSettings = { darkMode: "system", reducedMotion: false };
+const DEFAULTS: AppSettings = {
+    darkMode: "system",
+    reducedMotion: false,
+    runOnStartup: false,
+    defaultPanel: "last",
+};
+
+function paperboardDir(): string {
+    return process.env.PAPERBOARD_DIR || path.join(process.env.HOME || "", ".paperboard");
+}
 
 export function appSettingsPath(): string {
-    return path.join(process.env.PAPERBOARD_DIR || path.join(process.env.HOME || "", ".paperboard"), "configs", "app-settings.json");
+    return path.join(paperboardDir(), "local", "app-settings.json");
+}
+
+function legacyAppSettingsPath(): string {
+    return path.join(paperboardDir(), "configs", "app-settings.json");
 }
 
 export function readAppSettings(): AppSettings {
-    try {
-        const raw = JSON.parse(fs.readFileSync(appSettingsPath(), "utf8"));
-        return { ...DEFAULTS, ...raw };
-    } catch {
-        return { ...DEFAULTS };
+    for (const file of [appSettingsPath(), legacyAppSettingsPath()]) {
+        try {
+            const raw = JSON.parse(fs.readFileSync(file, "utf8"));
+            return { ...DEFAULTS, ...raw };
+        } catch {
+            // missing or corrupt — try next location, else defaults
+        }
     }
+    return { ...DEFAULTS };
 }
 
-// Makes every renderer's prefers-color-scheme match
 export function applyNativeTheme(): void {
     const { darkMode } = readAppSettings();
     try {
@@ -37,7 +52,16 @@ export function applyNativeTheme(): void {
     }
 }
 
-// Applies reduced-motion to a single panel frame. Safe no-op for non-panel frames.
+export function applyRunOnStartup(): void {
+    const { runOnStartup } = readAppSettings();
+    try {
+        app.setLoginItemSettings({ openAtLogin: runOnStartup });
+    } catch (err: any) {
+        logger.warn("[AppSettings] failed to set login item:", err?.message ?? err);
+    }
+}
+
+// safe no-op for non-panel frames
 async function applyToFrame(frame: WebFrameMain): Promise<void> {
     try {
         if (!frame.url.startsWith("panel://")) return;
@@ -51,7 +75,7 @@ async function applyToFrame(frame: WebFrameMain): Promise<void> {
         `;
         await frame.executeJavaScript(js, false);
     } catch (err: any) {
-        // Frames navigate/destroy constantly mid-execution — that's routine.
+        // frames navigate/destroy mid-execution — routine
         if (!frame.isDestroyed()) {
             logger.warn(
                 "[AppSettings] applyToFrame failed:",
@@ -72,7 +96,7 @@ export async function broadcastAppSettings(): Promise<void> {
     }
 }
 
-// themeSource is already applied, so shouldUseDarkColors is authoritative.
+// shouldUseDarkColors is authoritative after themeSource applies
 export function syncTitleBarOverlays(): void {
     const isDark = nativeTheme.shouldUseDarkColors;
     for (const win of BrowserWindow.getAllWindows()) {
@@ -85,9 +109,9 @@ export function syncTitleBarOverlays(): void {
     }
 }
 
-// Freshly loaded panel frames pick up settings automatically
 export function initAppSettingsSync(): void {
     applyNativeTheme();
+    applyRunOnStartup();
 
     app.on("web-contents-created", (_event, wc) => {
         wc.on("did-frame-finish-load", async (_e, _isMainFrame, processId, routingId) => {
@@ -98,7 +122,7 @@ export function initAppSettingsSync(): void {
         });
     });
 
-    // Fires on OS flips too (system mode)
+    // fires on OS flips too
     nativeTheme.on("updated", () => {
         syncTitleBarOverlays();
     });

@@ -4,7 +4,7 @@ import discovery from "./discovery";
 import connectionPool from "./papercrane/ConnectionPool";
 import { logger } from "../../../papercrane/logger";
 
-// Privileged/host-coupled channels only; data flows through PaperCrane
+// privileged/host-coupled channels only; data flows through daemon
 export function startCommunicator(ipcMain: IpcMain) {
     ipcMain.on("ping", (event) => {
         const frame = (event as any).senderFrame;
@@ -15,15 +15,13 @@ export function startCommunicator(ipcMain: IpcMain) {
         }
     });
 
-    // Renderer errors land in the main file logger for bug reports
+    // renderer errors land in main log; call as logger.log() to preserve this
     ipcMain.on("renderer-log", (_event, level, message) => {
         if (level !== "error" && level !== "warn" && level !== "info") return;
-        const write = logger[level] ?? logger.info;
-        write("[Renderer]", message);
+        logger.log(level, "[Renderer]", message);
     });
     shelldata(ipcMain);
 
-    // Failures inside start() are contained there
     try {
         discovery.start();
         discovery.on("update", (services) => {
@@ -37,7 +35,7 @@ export function startCommunicator(ipcMain: IpcMain) {
         logger.warn("[Discovery] failed to start network browsing:", err);
     }
 
-    // Mirror pool changes to the renderer; payload matches computers-list
+    // mirror pool changes; payload matches computers-list
     const onPoolChange = () => {
         const payload = {
             computers: connectionPool.listComputers(),
@@ -51,7 +49,7 @@ export function startCommunicator(ipcMain: IpcMain) {
     };
     connectionPool.on("change", onPoolChange);
 
-    // Stops forwarding so a restart never double-subscribes
+    // stop forwarding so restart never double-subscribes
     return () => {
         connectionPool.off("change", onPoolChange);
     };
