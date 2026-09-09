@@ -3,6 +3,7 @@ import {
     splitProps,
     createSignal,
     createContext,
+    createEffect,
     useContext,
     onMount,
     onCleanup,
@@ -11,6 +12,7 @@ import {
     type JSX,
     type Accessor,
 } from "solid-js";
+import { Portal } from "solid-js/web";
 import { PaperIcon } from "../PaperIcon";
 import {
     SelectionProvider,
@@ -85,8 +87,6 @@ export function PaperSelectMenu(props: ParentProps<PaperSelectMenuProps>) {
     );
 }
 
-// Inner layer: sits inside the SelectionProvider so it can read and drive the
-// current value, while owning the popup UI and keyboard behavior.
 function SelectMenuInner(
     props: ParentProps<
         JSX.HTMLAttributes<HTMLDivElement> & {
@@ -130,6 +130,37 @@ function SelectMenuInner(
     };
 
     let hiddenInputRef: HTMLInputElement | undefined;
+    let triggerEl: HTMLButtonElement | undefined;
+    let menuEl: HTMLDivElement | undefined;
+
+    // portal floats above everything without a scroll parent
+    const [menuPos, setMenuPos] = createSignal({ left: 0, top: 0, width: 0 });
+
+    const positionMenu = () => {
+        if (!triggerEl || !menuEl || !open()) return;
+        const rect = triggerEl.getBoundingClientRect();
+        const gap = 4;
+        const margin = 8;
+        const menuRect = menuEl.getBoundingClientRect();
+        let top = rect.bottom + gap;
+        if (top + menuRect.height > window.innerHeight - margin) {
+            top = Math.max(margin, rect.top - gap - menuRect.height);
+        }
+        let left = Math.min(
+            Math.max(margin, rect.left),
+            Math.max(margin, window.innerWidth - menuRect.width - margin),
+        );
+        setMenuPos({ left: Math.round(left), top: Math.round(top), width: Math.round(rect.width) });
+    };
+
+    const scrollActiveIntoView = () => {
+        const value = highlighted();
+        if (value === null || !menuEl) return;
+        const target = menuEl.querySelector(
+            `[data-select-value="${CSS.escape(String(value))}"]`,
+        ) as HTMLElement | null;
+        target?.scrollIntoView?.({ block: "nearest" });
+    };
 
     const currentValue = () => selection.currentValue();
     const selectedLabel = () => {
@@ -157,7 +188,7 @@ function SelectMenuInner(
         if (local.disabled) return;
         const willOpen = !open();
         setOpen(willOpen);
-        // Signals update synchronously, so capture intent before flipping state
+        // signals fire synchronously, capture intent first
         if (willOpen) {
             setHighlighted(currentValue() ?? options()[0]?.value ?? null);
         }
@@ -174,6 +205,7 @@ function SelectMenuInner(
                     : values.length - 1
                 : Math.min(values.length - 1, Math.max(0, index + delta));
         setHighlighted(values[next]);
+        scrollActiveIntoView();
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -225,13 +257,27 @@ function SelectMenuInner(
         }
     };
 
+    // menu needs a frame to measure before positioning
+    createEffect(() => {
+        if (!open()) return;
+        requestAnimationFrame(positionMenu);
+        const reposition = (e: Event) => {
+            if (menuEl && menuEl.contains(e.target as Node)) return;
+            positionMenu();
+        };
+        window.addEventListener("scroll", reposition, true);
+        window.addEventListener("resize", positionMenu);
+        onCleanup(() => {
+            window.removeEventListener("scroll", reposition, true);
+            window.removeEventListener("resize", positionMenu);
+        });
+    });
+
     onMount(() => {
         const handleOutsidePointer = (e: PointerEvent) => {
-            if (
-                open() &&
-                containerEl &&
-                !containerEl.contains(e.target as Node)
-            ) {
+            if (!open()) return;
+            const target = e.target as Node;
+            if (containerEl && !containerEl.contains(target) && !menuEl?.contains(target)) {
                 setOpen(false);
             }
         };
@@ -285,6 +331,7 @@ function SelectMenuInner(
 
             <button
                 type="button"
+                ref={triggerEl}
                 class={styles.trigger}
                 disabled={local.disabled}
                 onClick={() => toggleOpen()}
@@ -308,17 +355,24 @@ function SelectMenuInner(
                 </PaperIcon>
             </button>
 
-            {/* Always mounted so option labels register for the trigger;
-                merely hidden when closed. */}
-            <div
-                class={[styles.menu, open() ? "" : styles.menuClosed]
-                    .filter(Boolean)
-                    .join(" ")}
-                role="listbox"
-                aria-hidden={!open()}
-            >
-                {local.children}
-            </div>
+            {/* always mounted so labels register for the trigger */}
+            <Portal>
+                <div
+                    ref={menuEl}
+                    class={[styles.menu, open() ? "" : styles.menuClosed]
+                        .filter(Boolean)
+                        .join(" ")}
+                    role="listbox"
+                    aria-hidden={!open()}
+                    style={{
+                        left: `${menuPos().left}px`,
+                        top: `${menuPos().top}px`,
+                        width: `${Math.max(menuPos().width, 160)}px`,
+                    }}
+                >
+                    {local.children}
+                </div>
+            </Portal>
         </div>
         </SelectMenuContext.Provider>
     );
@@ -371,6 +425,7 @@ export function PaperSelectMenuItem(
             ref={optionEl}
             role="option"
             aria-selected={isSelected()}
+            data-select-value={local.value}
             class={className()}
             classList={local.classList}
             onClick={() => {

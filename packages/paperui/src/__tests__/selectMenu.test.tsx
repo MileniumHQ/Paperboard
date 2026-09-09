@@ -15,7 +15,6 @@ function getTrigger() {
 }
 
 function getListbox() {
-    // Only visible while open (aria-hidden otherwise)
     return screen.getByRole("listbox", { hidden: false });
 }
 
@@ -56,7 +55,7 @@ describe("PaperSelectMenu", () => {
             </PaperSelectMenu>
         ));
 
-        fireEvent.click(getTrigger()); // opens the popup
+        fireEvent.click(getTrigger());
         fireEvent.click(within(getListbox()).getByText("Dark"));
 
         expect(received).toBe("dark");
@@ -99,9 +98,9 @@ describe("PaperSelectMenu", () => {
         ));
 
         const wrapper = container.firstElementChild as HTMLElement;
-        fireEvent.keyDown(wrapper, { key: "Enter" }); // open
-        fireEvent.keyDown(wrapper, { key: "ArrowDown" }); // highlight "dark"
-        fireEvent.keyDown(wrapper, { key: "Enter" }); // commit
+        fireEvent.keyDown(wrapper, { key: "Enter" });
+        fireEvent.keyDown(wrapper, { key: "ArrowDown" });
+        fireEvent.keyDown(wrapper, { key: "Enter" });
 
         expect(received).toBe("dark");
     });
@@ -121,9 +120,9 @@ describe("PaperSelectMenu", () => {
         ));
 
         const wrapper = container.firstElementChild as HTMLElement;
-        fireEvent.keyDown(wrapper, { key: "ArrowDown" }); // open, highlight "light"
-        fireEvent.keyDown(wrapper, { key: "ArrowDown" }); // highlight "dark"
-        fireEvent.keyDown(wrapper, { key: "Enter" }); // commit
+        fireEvent.keyDown(wrapper, { key: "ArrowDown" });
+        fireEvent.keyDown(wrapper, { key: "ArrowDown" });
+        fireEvent.keyDown(wrapper, { key: "Enter" });
 
         expect(received).toBe("dark");
     });
@@ -138,7 +137,7 @@ describe("PaperSelectMenu", () => {
         ));
 
         const wrapper = container.firstElementChild as HTMLElement;
-        fireEvent.keyDown(wrapper, { key: "ArrowDown" }); // open
+        fireEvent.keyDown(wrapper, { key: "ArrowDown" });
         expect(getTrigger().getAttribute("aria-expanded")).toBe("true");
 
         fireEvent.keyDown(wrapper, { key: "Escape" });
