@@ -1,6 +1,6 @@
 {
     "name": "@paperboard-dev/paperui",
-    "version": "0.1.1",
+    "version": "1.1.0",
     "type": "module",
     "main": "./dist/paperui.cjs.js",
     "module": "./dist/paperui.es.js",
