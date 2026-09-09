@@ -55,7 +55,7 @@ describe("atomic writes", () => {
 
 describe("sanitizeId", () => {
     it("accepts normal ids", () => {
-        expect(sanitizeId("dev.paperboard.terminal")).toBe("dev.paperboard.terminal");
+        expect(sanitizeId("com.example.terminal")).toBe("com.example.terminal");
         expect(sanitizeId("game-server_2")).toBe("game-server_2");
     });
 
@@ -91,8 +91,7 @@ describe("resolveSecureTargetPath", () => {
         expect(() => resolveSecureTargetPath(baseDir, "..", "myapp")).toThrow();
     });
 
-    it("rejects sibling directories that share the prefix (<base>-evil)", () => {
-        // The classic startsWith() bug: "<base>-evil" passes a naive prefix check.
+    it("rejects sibling directories that share the prefix", () => {
         expect(() =>
             resolveSecureTargetPath(baseDir, "../myapp-evilest/x.txt", "myapp"),
         ).toThrow();
@@ -111,8 +110,8 @@ describe("resolveSecureTargetPath", () => {
 
 describe("validatePanelManifest", () => {
     it("accepts a valid manifest and fills fallback id", () => {
-        const m = validatePanelManifest({ name: "Terminal" }, "dev.paperboard.terminal");
-        expect(m.id).toBe("dev.paperboard.terminal");
+        const m = validatePanelManifest({ name: "Terminal" }, "com.example.terminal");
+        expect(m.id).toBe("com.example.terminal");
         expect(m.name).toBe("Terminal");
     });
 

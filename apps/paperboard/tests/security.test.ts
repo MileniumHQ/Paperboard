@@ -83,14 +83,14 @@ describe("isAllowedOrigin", () => {
         expect(isAllowedOrigin("http://127.0.0.1:3000")).toBe(true);
     });
 
-    it("rejects lookalike hosts (the old substring bug)", () => {
+    it("rejects lookalike hosts", () => {
         expect(isAllowedOrigin("http://evil-localhost.attacker.com")).toBe(false);
         expect(isAllowedOrigin("http://127.0.0.1.evil.com")).toBe(false);
         expect(isAllowedOrigin("https://localhost.evil.io")).toBe(false);
     });
 
     it("allows app custom schemes", () => {
-        expect(isAllowedOrigin("panel://dev.paperboard.terminal")).toBe(true);
+        expect(isAllowedOrigin("panel://com.example.terminal")).toBe(true);
         expect(isAllowedOrigin("file://")).toBe(true);
         expect(isAllowedOrigin("vscode-webview://webview")).toBe(true);
     });
