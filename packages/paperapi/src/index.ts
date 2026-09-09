@@ -8,8 +8,12 @@ export * from "./file";
 export * from "./process";
 export * from "./panels";
 export * from "./system";
+export * from "./actions";
+export * from "./service";
+export * from "./bridge";
+export * from "./channels";
 
-// Terminal management API
+// terminal management
 export const terminalApi = {
     create: (
         id: string,
@@ -31,15 +35,15 @@ export const terminalApi = {
     exists: async (id: string): Promise<boolean> =>
         invoke<boolean>("terminal-exists", { id }),
 
-    onData: (id: string, callback: (data: string) => void) => {
-        on(`terminal-data:${id}`, (event: unknown, data: any) => {
+    onData: (id: string, callback: (data: string) => void): (() => void) => {
+        return on(`terminal-data:${id}`, (event: unknown, data: any) => {
             const str = unpackIpcPayload<string>(event, data) as string;
             if (str) callback(str);
         });
     },
 
-    onExit: (id: string, callback: (exitCode?: number) => void) => {
-        on(`terminal-exit:${id}`, (event: unknown, payload: any) => {
+    onExit: (id: string, callback: (exitCode?: number) => void): (() => void) => {
+        return on(`terminal-exit:${id}`, (event: unknown, payload: any) => {
             const raw = payload !== undefined ? payload : event;
             callback(typeof raw === "number" ? raw : raw?.exitCode);
         });
