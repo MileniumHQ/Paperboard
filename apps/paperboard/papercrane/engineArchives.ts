@@ -1,9 +1,8 @@
-// Archive extraction helpers for PaperCraneEngine.
-
+// archive extraction via bundled libs, no system tools
 import path from "path";
 import fs from "fs";
-import { spawnSync } from "child_process";
 import * as tar from "tar";
+import AdmZip from "adm-zip";
 import { moveFileSafe, makeSafeTarFilter } from "./storage";
 
 // Extracts .tar.gz, .tgz, .zip or single files
@@ -27,30 +26,34 @@ export async function extractArchive(
             filter: makeSafeTarFilter(path.resolve(destDir)),
         });
     } else if (isZip) {
-        if (process.platform === "win32") {
-            // EncodedCommand avoids any quoting/injection issues with paths
-            const psScript = `Expand-Archive -LiteralPath '${archivePath.replace(/'/g, "''")}' -DestinationPath '${destDir.replace(/'/g, "''")}' -Force`;
-            const encoded = Buffer.from(psScript, "utf16le").toString(
-                "base64",
-            );
-            spawnSync("powershell.exe", ["-NoProfile", "-EncodedCommand", encoded], {
-                stdio: "pipe",
-            });
-        } else {
-            spawnSync("unzip", ["-q", "-o", archivePath, "-d", destDir], {
-                stdio: "pipe",
-            });
+        // pure-JS unzip with zip-slip guard
+        const dest = path.resolve(destDir);
+        const destWithSep = dest.endsWith(path.sep) ? dest : dest + path.sep;
+        const zip = new AdmZip(archivePath);
+        for (const entry of zip.getEntries()) {
+            const name = entry.entryName;
+            if (!name || typeof name !== "string") {
+                throw new Error(`Unsafe zip entry name in ${path.basename(archivePath)}`);
+            }
+            const normalized = path.normalize(name);
+            if (path.isAbsolute(normalized)) {
+                throw new Error(`Zip entry escapes archive: ${name}`);
+            }
+            const resolved = path.resolve(dest, normalized);
+            if (resolved !== dest && !resolved.startsWith(destWithSep)) {
+                throw new Error(`Zip entry escapes archive: ${name}`);
+            }
         }
+        zip.extractAllTo(dest, true);
     } else {
-        // Raw binary
+        // raw binary
         const destFile = path.join(destDir, path.basename(archivePath));
         await moveFileSafe(archivePath, destFile);
         if (process.platform !== "win32") fs.chmodSync(destFile, 0o755);
     }
 }
 
-// Recursively searches for a directory containing a bin/ subdirectory,
-// up to maxDepth levels.
+// find a dir containing bin/, up to maxDepth levels
 export function findBinDir(dir: string, maxDepth: number): string | null {
     if (!fs.existsSync(dir) || maxDepth < 0) return null;
     if (fs.existsSync(path.join(dir, "bin"))) return dir;

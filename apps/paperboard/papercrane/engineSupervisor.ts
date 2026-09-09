@@ -1,7 +1,4 @@
-// Supervisor spawn helper for PaperCraneEngine: spawns a detached supervisor
-// background process, registers listeners BEFORE connecting so no initial
-// output is ever missed, then connects to the socket.
-
+// spawn helper for detached supervisors
 import { spawn } from "child_process";
 import { SupervisedProcessClient } from "./supervisor";
 import { EmbeddedSupervisor, isEmbeddedHost } from "./embeddedSupervisor";
@@ -25,8 +22,7 @@ export async function spawnSupervisedClient(
         clientsMap.delete(id);
     }
 
-    // Embedded host (inside Electron): supervise in-process. The detached
-    // model would spawn the Electron binary, which cannot act as a supervisor.
+    // embedded host supervises in-process, it cannot spawn itself
     if (isEmbeddedHost()) {
         const embedded = new EmbeddedSupervisor(id, supervisorConfig);
         clientsMap.set(id, embedded);
@@ -49,6 +45,7 @@ export async function spawnSupervisedClient(
     const supervisorProc = spawn(execPath, ["--supervise", id], {
         detached: true,
         stdio: ["pipe", "ignore", "ignore"],
+        windowsHide: true,
         env: { ...process.env, SUPERVISOR_TARGET_ID: id },
     });
 
@@ -61,8 +58,7 @@ export async function spawnSupervisedClient(
     const client = new SupervisedProcessClient(id);
     clientsMap.set(id, client);
 
-    // Register all listeners BEFORE connecting so the initial PTY prompt,
-    // status message and history replay are never missed due to a timing race.
+    // listeners first so initial output is never missed
     if (preListeners?.onData) client.on("data", preListeners.onData);
     if (preListeners?.onStdout) client.on("stdout", preListeners.onStdout);
     if (preListeners?.onStderr) client.on("stderr", preListeners.onStderr);

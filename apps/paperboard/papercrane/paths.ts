@@ -1,8 +1,8 @@
+import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 
-// Single source of truth for the Paperboard data directory.
-// Defaults to ~/.paperboard; override with PAPERBOARD_DIR or via setPaperboardDir().
+// data directory, override with PAPERBOARD_DIR
 let overrideDir: string | null = null;
 
 export function setPaperboardDir(dir: string): void {
@@ -45,4 +45,12 @@ export function getLogsDir(): string {
 
 export function getSocketsDir(): string {
     return path.join(getPaperboardDir(), "sockets");
+}
+
+// ensure a directory exists, no-op on failure
+export function ensureDir(dir: string): string {
+    try {
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    } catch {}
+    return dir;
 }

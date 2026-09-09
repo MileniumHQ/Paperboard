@@ -1,7 +1,4 @@
-// Core execution engine for PaperCrane (terminals, processes, files,
-// packages, panels, configs). Storage/download/manifest logic lives in
-// ./storage so it stays byte-identical with the Electron-side drivers.
-
+// Core execution engine (terminals, processes, files, packages, panels, configs)
 import path from "path";
 import fs from "fs";
 import os from "os";
@@ -15,6 +12,7 @@ import {
     makeSafeTarFilter,
     resolveSecureTargetPath,
     sanitizeId,
+    panelFilesDirName,
     validatePanelManifest,
     writeJsonAtomicSync,
     writeFileAtomic,
@@ -22,18 +20,20 @@ import {
 import { getSocketsDir, getPaperboardDir } from "./paths";
 import { logger } from "./logger";
 import { spawnSupervisedClient } from "./engineSupervisor";
+import { getDefaultShell } from "./pty";
 import { extractArchive, findBinDir } from "./engineArchives";
+import { panelServices } from "./panelServices";
 
 export const REGISTRY_URL =
     process.env.ORIGAMI_REGISTRY_URL || "https://origami.ariapis.com";
 
-// Core execution engine for PaperCrane (terminals, processes, files, packages, panels, configs)
 export class PaperCraneEngine {
     private appDataDir: string;
     private packagesDir: string;
     private filesDir: string;
     private panelsDir: string;
     private configsDir: string;
+    private localDir: string;
     private clients = new Map<string, SupervisedProcessClient>();
 
     constructor(baseDir?: string) {
@@ -42,6 +42,7 @@ export class PaperCraneEngine {
         this.filesDir = path.join(this.appDataDir, "files");
         this.panelsDir = path.join(this.appDataDir, "panels");
         this.configsDir = path.join(this.appDataDir, "configs");
+        this.localDir = path.join(this.appDataDir, "local");
 
         for (const dir of [
             this.appDataDir,
@@ -49,6 +50,7 @@ export class PaperCraneEngine {
             this.filesDir,
             this.panelsDir,
             this.configsDir,
+            this.localDir,
         ]) {
             if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
         }
@@ -91,10 +93,7 @@ export class PaperCraneEngine {
 
     // Resolves isolated files directory for a panel
     public resolveAppFilesDir(appId?: string): string {
-        const cleanAppId = appId
-            ? appId.replace(/[^a-zA-Z0-9_.-]/g, "_")
-            : "default";
-        const dir = path.join(this.filesDir, cleanAppId);
+        const dir = path.join(this.filesDir, panelFilesDirName(appId));
         if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
         return dir;
     }
@@ -102,6 +101,122 @@ export class PaperCraneEngine {
     // Resolves path inside panel isolated storage preventing path traversal
     public resolveSecureTargetPath(targetPath: string, appId?: string): string {
         return resolveSecureTargetPath(this.filesDir, targetPath, appId);
+    }
+
+    // Shared spawn cwd: explicit cwd wins, else home, else process cwd.
+    private resolveSpawnCwd(cwd?: string): string {
+        if (cwd) {
+            const resolved = path.resolve(cwd);
+            // explicit but missing cwd must fail, never fall back silently
+            if (!fs.existsSync(resolved)) {
+                throw new Error(`spawn cwd does not exist: ${resolved}`);
+            }
+            return resolved;
+        }
+        return typeof os.homedir === "function" ? os.homedir() : process.cwd();
+    }
+
+    // re-attach replaces listeners instead of stacking duplicates
+    private attachedStreamCallbacks = new WeakMap<
+        object,
+        Record<string, ((...args: any[]) => void) | undefined>
+    >();
+
+    private replaceStreamListeners(
+        client: SupervisedProcessClient,
+        listeners: Record<string, ((...args: any[]) => void) | undefined>,
+    ): void {
+        const prev = this.attachedStreamCallbacks.get(client);
+        if (prev) {
+            for (const [event, fn] of Object.entries(prev)) {
+                if (fn) client.off(event, fn);
+            }
+        }
+        this.attachedStreamCallbacks.set(client, listeners);
+        for (const [event, fn] of Object.entries(listeners)) {
+            if (fn) client.on(event, fn);
+        }
+    }
+
+    // lookup with reconnect, shared by attach/isRunning
+    private async getOrConnectClient(
+        id: string,
+    ): Promise<SupervisedProcessClient | null> {
+        let client = this.clients.get(id);
+        if (!client) {
+            if (!fs.existsSync(getSupervisorSocketPath(id))) return null;
+            client = new SupervisedProcessClient(id);
+            if (!(await client.connect())) return null;
+            this.clients.set(id, client);
+        }
+        return client;
+    }
+
+    // Manifest hunt: root manifest.json, else one level of subdirectories
+    private findManifestFile(dir: string): string | null {
+        const root = path.join(dir, "manifest.json");
+        if (fs.existsSync(root)) return root;
+        try {
+            for (const sub of fs.readdirSync(dir)) {
+                const candidate = path.join(dir, sub, "manifest.json");
+                if (fs.existsSync(candidate)) return candidate;
+            }
+        } catch {}
+        return null;
+    }
+
+    private sanitizeIdOrThrow(id: string, what: string): string {
+        const clean = sanitizeId(id);
+        if (!clean) throw new Error(`Invalid ${what} id: ${id}`);
+        return clean;
+    }
+
+    public getAppDataDir(): string {
+        return this.appDataDir;
+    }
+
+    // Config filenames keep the historical `sanitizeId(id) || id` fallback
+    // (existing installs may carry unsanitized names); new panel/package
+    // installs go through sanitizeIdOrThrow instead.
+    private configFileName(id: string): string {
+        return `${sanitizeId(id) || id}.json`;
+    }
+
+    // globals in local/, panel working data in files/<id>/data.json
+    private isAppGlobalConfig(id: string): boolean {
+        return id === "app-settings" || id.startsWith("shell-");
+    }
+
+    private configFileFor(id: string): string {
+        if (this.isAppGlobalConfig(id)) {
+            return path.join(this.localDir, this.configFileName(id));
+        }
+        if (id === "crane_version") {
+            return path.join(this.configsDir, this.configFileName(id));
+        }
+        return path.join(this.filesDir, panelFilesDirName(id), "data.json");
+    }
+
+    private legacyConfigPaths(id: string): string[] {
+        const current = this.configFileFor(id);
+        const name = this.configFileName(id);
+        const dir = panelFilesDirName(id);
+        const paths: string[] = [];
+        // Pre-move locations, newest scheme first — read through once.
+        // tabs.json / workspace.json are retired per-panel names from before
+        // the filename was unified; they migrate to data.json on next write.
+        const candidates = [
+            path.join(this.filesDir, dir, "tabs.json"),
+            path.join(this.filesDir, dir, "workspace.json"),
+            path.join(this.filesDir, dir, "config.json"),
+            path.join(this.filesDir, name),
+            path.join(this.configsDir, name),
+            path.join(this.localDir, name),
+        ];
+        for (const p of candidates) {
+            if (p !== current && !paths.includes(p)) paths.push(p);
+        }
+        return paths;
     }
 
     // Terminal management
@@ -114,14 +229,11 @@ export class PaperCraneEngine {
         onData?: (data: string) => void,
         onExit?: (exitCode: number) => void,
     ): Promise<void> {
+        // platform-aware shell, don't trust $SHELL in GUI apps
         const shell =
-            process.env.SHELL ||
-            (process.platform === "win32" ? "powershell.exe" : "bash");
-        const resolvedCwd = cwd
-            ? path.resolve(cwd)
-            : typeof os.homedir === "function"
-              ? os.homedir()
-              : process.cwd();
+            process.platform === "win32" ? "powershell.exe" : getDefaultShell();
+        const resolvedCwd = this.resolveSpawnCwd(cwd);
+        logger.debug(`[PaperCrane] creating terminal ${id} (shell=${shell} cwd=${resolvedCwd})`);
 
         await spawnSupervisedClient(
             id,
@@ -158,49 +270,20 @@ export class PaperCraneEngine {
         }
     }
 
-    private attachedTerminalCallbacks = new WeakMap<
-        object,
-        {
-            onData?: (data: string) => void;
-            onExit?: (code: number) => void;
-        }
-    >();
-
-    // Reattaches event streaming for a terminal owned by a previous session
-    // (used by clients reconnecting after daemon/app restarts).
+    // Reattaches streaming for a terminal owned by a previous session
     public async attachTerminal(
         id: string,
         onData?: (data: string) => void,
         onExit?: (code: number) => void,
     ): Promise<boolean> {
-        let client = this.clients.get(id);
-        if (!client) {
-            if (!fs.existsSync(getSupervisorSocketPath(id))) return false;
-            client = new SupervisedProcessClient(id);
-            const ok = await client.connect();
-            if (!ok) return false;
-            this.clients.set(id, client);
-        }
-
-        const prev = this.attachedTerminalCallbacks.get(client);
-        if (prev) {
-            if (prev.onData) client.off("data", prev.onData);
-            if (prev.onExit) client.off("exit", prev.onExit);
-        }
-        const current = { onData, onExit };
-        this.attachedTerminalCallbacks.set(client, current);
-
-        if (onData) client.on("data", onData);
-        if (onExit) client.on("exit", onExit);
+        const client = await this.getOrConnectClient(id);
+        if (!client) return false;
+        this.replaceStreamListeners(client, { data: onData, exit: onExit });
         return true;
     }
 
     public async isTerminalRunning(id: string): Promise<boolean> {
-        let client = this.clients.get(id);
-        if (!client && fs.existsSync(getSupervisorSocketPath(id))) {
-            client = new SupervisedProcessClient(id);
-            if (await client.connect()) this.clients.set(id, client);
-        }
+        const client = await this.getOrConnectClient(id);
         return client?.isConnected() ?? false;
     }
 
@@ -215,11 +298,10 @@ export class PaperCraneEngine {
         onStdout?: (data: string) => void,
         onStderr?: (data: string) => void,
     ): Promise<{ exitCode: number }> {
-        const resolvedCwd = cwd
-            ? path.resolve(cwd)
-            : typeof os.homedir === "function"
-              ? os.homedir()
-              : process.cwd();
+        if (!id || typeof id !== "string") {
+            throw new Error("process id is required");
+        }
+        const resolvedCwd = this.resolveSpawnCwd(cwd);
 
         const exitPromise = new Promise<{ exitCode: number }>((resolve) => {
             spawnSupervisedClient(
@@ -259,33 +341,16 @@ export class PaperCraneEngine {
 
         client.kill(signal);
 
-        // destroy() clears listeners, which would swallow the exit event and
-        // leave clients waiting for it forever. Let the exit fire first.
+        // destroy() clears listeners, drop it after exit fires
         const teardown = () => client.destroy();
         client.on("exit", teardown);
         setTimeout(teardown, 5000);
     }
 
     public async isProcessRunning(id: string): Promise<boolean> {
-        let client = this.clients.get(id);
-        if (!client && fs.existsSync(getSupervisorSocketPath(id))) {
-            client = new SupervisedProcessClient(id);
-            if (await client.connect()) this.clients.set(id, client);
-        }
+        const client = await this.getOrConnectClient(id);
         return client?.isConnected() ?? false;
     }
-
-    // Last attach listeners per client, so a re-attach (panel reload,
-    // transport reconnect) REPLACES them instead of stacking duplicates.
-    private attachedProcessCallbacks = new WeakMap<
-        object,
-        {
-            onData?: (data: string) => void;
-            onStdout?: (data: string) => void;
-            onStderr?: (data: string) => void;
-            onExit?: (exitCode: number) => void;
-        }
-    >();
 
     public async attachProcess(
         id: string,
@@ -294,29 +359,14 @@ export class PaperCraneEngine {
         onStderr?: (data: string) => void,
         onExit?: (exitCode: number) => void,
     ): Promise<boolean> {
-        let client = this.clients.get(id);
-        if (!client) {
-            client = new SupervisedProcessClient(id);
-            const ok = await client.connect();
-            if (!ok) return false;
-            this.clients.set(id, client);
-        }
-
-        const prev = this.attachedProcessCallbacks.get(client);
-        if (prev) {
-            if (prev.onData) client.off("data", prev.onData);
-            if (prev.onStdout) client.off("stdout", prev.onStdout);
-            if (prev.onStderr) client.off("stderr", prev.onStderr);
-            if (prev.onExit) client.off("exit", prev.onExit);
-        }
-        const current = { onData, onStdout, onStderr, onExit };
-        this.attachedProcessCallbacks.set(client, current);
-
-        if (onData) client.on("data", onData);
-        if (onStdout) client.on("stdout", onStdout);
-        if (onStderr) client.on("stderr", onStderr);
-        if (onExit) client.on("exit", onExit);
-
+        const client = await this.getOrConnectClient(id);
+        if (!client) return false;
+        this.replaceStreamListeners(client, {
+            data: onData,
+            stdout: onStdout,
+            stderr: onStderr,
+            exit: onExit,
+        });
         return true;
     }
 
@@ -325,8 +375,7 @@ export class PaperCraneEngine {
         return this.resolveSecureTargetPath(targetPath, appId);
     }
 
-    // Deletes a file inside a panel's isolated storage. Refuses directories
-    // and missing paths so a bad target can't escape or destroy broadly.
+    // Deletes a file inside isolated storage, files only
     public async deleteFile(
         targetPath: string,
         appId?: string,
@@ -369,7 +418,6 @@ export class PaperCraneEngine {
     }
 
     public async clearFiles(appId?: string): Promise<boolean> {
-        // The directory itself is removed too — callers expect a clean slate.
         const base = this.resolveAppFilesDir(appId);
         if (fs.existsSync(base)) {
             await fs.promises.rm(base, { recursive: true, force: true });
@@ -377,7 +425,7 @@ export class PaperCraneEngine {
         return true;
     }
 
-    // Recovers running supervisor clients from previous daemon sessions
+    // Recovers running supervisor clients from previous sessions
     public async recoverRunningSupervisors(): Promise<void> {
         const socketsDir = getSocketsDir();
         if (!fs.existsSync(socketsDir)) return;
@@ -402,10 +450,7 @@ export class PaperCraneEngine {
         }
     }
 
-    // Shuts down every supervised client (background processes and PTYs)
-    // owned by this daemon: SIGTERM first, escalating to SIGKILL after the
-    // grace period. Prevents orphaned children outliving the daemon — e.g.
-    // a Minecraft server holding its world lock while the app restarted.
+    // shutdown all clients: SIGTERM, then SIGKILL after grace
     public async disposeClients(graceMs = 5000): Promise<void> {
         const entries = [...this.clients.entries()];
         if (entries.length === 0) return;
@@ -425,8 +470,7 @@ export class PaperCraneEngine {
         this.killAllClients();
     }
 
-    // Synchronous last-resort teardown for process exit handlers where
-    // waiting is not an option.
+    // last-resort sync teardown for exit handlers
     public killAllClients(): void {
         for (const [id, client] of [...this.clients.entries()]) {
             try {
@@ -510,7 +554,7 @@ export class PaperCraneEngine {
         return found || base;
     }
 
-    // Recursively searches for a directory containing a bin/ subdirectory, up to maxDepth levels
+    // Recursively searches for a bin/ dir, up to maxDepth levels
     private findBinDir(dir: string, maxDepth: number): string | null {
         return findBinDir(dir, maxDepth);
     }
@@ -520,22 +564,23 @@ export class PaperCraneEngine {
         _downloadId: string,
         onProgress?: ProgressCallback,
     ): Promise<string> {
-        const cleanName = sanitizeId(packageName);
-        if (!cleanName) {
-            throw new Error(`Invalid package name: ${packageName}`);
-        }
-        packageName = cleanName;
+        packageName = this.sanitizeIdOrThrow(packageName, "package");
         const log = (msg: string) =>
             logger.info(`[package:${packageName}] ${msg}`);
 
         const pkgDir = path.join(this.packagesDir, packageName);
+        // leftover dir without bin/ is a failed install, wipe and retry
         if (fs.existsSync(pkgDir)) {
-            onProgress?.({
-                stage: "completed",
-                percent: 100,
-                message: "Already installed",
-            });
-            return pkgDir;
+            if (this.findBinDir(pkgDir, 4)) {
+                onProgress?.({
+                    stage: "completed",
+                    percent: 100,
+                    message: "Already installed",
+                });
+                return pkgDir;
+            }
+            log("found incomplete previous install, removing and reinstalling...");
+            await fs.promises.rm(pkgDir, { recursive: true, force: true });
         }
 
         const metaUrl = `${REGISTRY_URL}/package/${encodeURIComponent(packageName)}.json`;
@@ -573,16 +618,24 @@ export class PaperCraneEngine {
         }
         log(`source: ${downloadInfo.url}`);
 
+        // keep the URL extension so extraction dispatches on format
+        let urlExt = "";
+        try {
+            const urlBase = path.basename(new URL(downloadInfo.url).pathname).toLowerCase();
+            if (urlBase.endsWith(".zip")) urlExt = ".zip";
+            else if (urlBase.endsWith(".tgz")) urlExt = ".tgz";
+            else if (urlBase.endsWith(".tar.gz")) urlExt = ".tar.gz";
+            else if (urlBase.endsWith(".tar")) urlExt = ".tar";
+        } catch {}
         const tempArchive = path.join(
             this.packagesDir,
-            `${packageName}-archive.tmp-${Date.now()}`,
+            `${packageName}-archive.tmp-${Date.now()}${urlExt}`,
         );
         try {
             log("downloading...");
             let lastMilestone = 0;
             const milestoneProgress: ProgressCallback = (payload) => {
-                // Log every 10% milestone with real byte counts so the log
-                // file shows the true download curve.
+                // log every 10% with byte counts
                 if (
                     payload.stage === "downloading" &&
                     payload.bytesTotal &&
@@ -618,18 +671,34 @@ export class PaperCraneEngine {
 
             if (!fs.existsSync(pkgDir)) fs.mkdirSync(pkgDir, { recursive: true });
 
-            // Runtime archives (Adoptium, Node, …) wrap everything in a single
-            // top-level folder; strip it so <pkgDir>/bin/java holds. Archives
-            // without a wrapper fall back to strip: 0.
-            try {
-                await tar.extract({
-                    file: tempArchive,
-                    cwd: pkgDir,
-                    strip: 1,
-                    filter: makeSafeTarFilter(path.resolve(pkgDir)),
-                });
-                if (!fs.existsSync(path.join(pkgDir, "bin"))) {
-                    // No bin at top level — archive had no wrapper; re-extract flat
+            // zips via bundled unzipper, tarballs keep strip handling
+            if (urlExt === ".zip") {
+                await extractArchive(tempArchive, pkgDir);
+            } else {
+                // strip a single top-level wrapper dir, fallback to flat
+                try {
+                    await tar.extract({
+                        file: tempArchive,
+                        cwd: pkgDir,
+                        strip: 1,
+                        filter: makeSafeTarFilter(path.resolve(pkgDir)),
+                    });
+                    if (!fs.existsSync(path.join(pkgDir, "bin"))) {
+                        // no wrapper at top level, re-extract flat
+                        await fs.promises.rm(pkgDir, { recursive: true, force: true });
+                        fs.mkdirSync(pkgDir, { recursive: true });
+                        await tar.extract({
+                            file: tempArchive,
+                            cwd: pkgDir,
+                            strip: 0,
+                            filter: makeSafeTarFilter(path.resolve(pkgDir)),
+                        });
+                    }
+                } catch (err) {
+                    logger.debug(
+                        `[package:${packageName}] initial tar extraction failed; retrying flat:`,
+                        err,
+                    );
                     await fs.promises.rm(pkgDir, { recursive: true, force: true });
                     fs.mkdirSync(pkgDir, { recursive: true });
                     await tar.extract({
@@ -639,21 +708,18 @@ export class PaperCraneEngine {
                         filter: makeSafeTarFilter(path.resolve(pkgDir)),
                     });
                 }
-            } catch (err) {
-                logger.debug(
-                    `[package:${packageName}] initial tar extraction failed; retrying flat:`,
-                    err,
-                );
-                await fs.promises.rm(pkgDir, { recursive: true, force: true });
-                fs.mkdirSync(pkgDir, { recursive: true });
-                await tar.extract({
-                    file: tempArchive,
-                    cwd: pkgDir,
-                    strip: 0,
-                    filter: makeSafeTarFilter(path.resolve(pkgDir)),
-                });
             }
-            log(`extraction complete; bin present: ${fs.existsSync(path.join(pkgDir, "bin"))}`);
+            log(
+                `extraction complete; bin present: ${this.findBinDir(pkgDir, 4) !== null}`,
+            );
+
+            // require bin/ before indexing, else remove and fail
+            if (!this.findBinDir(pkgDir, 4)) {
+                await fs.promises.rm(pkgDir, { recursive: true, force: true });
+                throw new Error(
+                    `Package ${packageName} extracted but no usable binary directory was found — removed partial install`,
+                );
+            }
 
             const index = this.getPackageIndex();
             index[packageName] = {
@@ -671,6 +737,10 @@ export class PaperCraneEngine {
             return pkgDir;
         } catch (err: any) {
             log(`FAILED: ${err?.message || err}`);
+            if (fs.existsSync(pkgDir) && !this.findBinDir(pkgDir, 4)) {
+                await fs.promises.rm(pkgDir, { recursive: true, force: true }).catch(() => {});
+                log("removed partial install");
+            }
             throw err;
         } finally {
             if (fs.existsSync(tempArchive)) {
@@ -679,7 +749,6 @@ export class PaperCraneEngine {
         }
     }
 
-    // Extracts .tar.gz, .tgz, .zip or single files
     public async extractArchive(
         archivePath: string,
         destDir: string,
@@ -687,7 +756,6 @@ export class PaperCraneEngine {
         return extractArchive(archivePath, destDir);
     }
 
-    // Panel installation and store operations
     public async listPanels(): Promise<PanelManifest[]> {
         if (!fs.existsSync(this.panelsDir)) return [];
         const entries = await fs.promises.readdir(this.panelsDir);
@@ -695,35 +763,24 @@ export class PaperCraneEngine {
 
         for (const entry of entries) {
             const panelPath = path.join(this.panelsDir, entry);
-            let manifestPath = path.join(panelPath, "manifest.json");
+            const manifestPath = this.findManifestFile(panelPath);
 
-            if (!fs.existsSync(manifestPath)) {
-                try {
-                    const subEntries = await fs.promises.readdir(panelPath);
-                    for (const sub of subEntries) {
-                        const subCandidate = path.join(
-                            panelPath,
-                            sub,
-                            "manifest.json",
-                        );
-                        if (fs.existsSync(subCandidate)) {
-                            manifestPath = subCandidate;
-                            break;
-                        }
-                    }
-                } catch {}
-            }
-
-            if (fs.existsSync(manifestPath)) {
+            if (manifestPath) {
                 try {
                     const raw = JSON.parse(
                         await fs.promises.readFile(manifestPath, "utf-8"),
                     );
                     const validated = validatePanelManifest(raw, entry);
+                    let isDevLink = false;
+                    try {
+                        isDevLink = fs.lstatSync(panelPath).isSymbolicLink();
+                    } catch {}
                     panels.push({
                         ...validated,
                         base: validated.base || "./dist/index.html",
                         isInstalled: true,
+                        isDevLink,
+                        isLinked: isDevLink,
                     } as PanelManifest);
                 } catch (err) {
                     logger.debug(
@@ -741,11 +798,20 @@ export class PaperCraneEngine {
         downloadUrl: string,
         expectedSha256?: string,
     ): Promise<PanelManifest> {
-        const cleanId = sanitizeId(panelId);
-        if (!cleanId) {
-            throw new Error(`Invalid panel id: ${panelId}`);
-        }
+        const cleanId = this.sanitizeIdOrThrow(panelId, "panel");
         const targetDir = path.join(this.panelsDir, cleanId);
+
+        if (fs.existsSync(targetDir)) {
+            try {
+                if (fs.lstatSync(targetDir).isSymbolicLink()) {
+                    throw new Error(
+                        `Panel "${cleanId}" is currently symlinked for development. Remove the dev link before installing from registry.`,
+                    );
+                }
+            } catch (err: any) {
+                if (err?.message?.includes("symlinked for development")) throw err;
+            }
+        }
         const stagingDir = `${targetDir}.staging-${Date.now()}`;
         const tempArchive = path.join(
             this.panelsDir,
@@ -770,8 +836,7 @@ export class PaperCraneEngine {
             fs.mkdirSync(stagingDir, { recursive: true });
             await this.extractArchive(tempArchive, stagingDir);
 
-            // If the archive wrapped everything in a single top-level folder,
-            // collapse it so the panel content sits at the root.
+            // collapse a single top-level wrapper folder to the root
             let contentDir = stagingDir;
             const stagingEntries = fs.readdirSync(stagingDir);
             if (
@@ -781,26 +846,16 @@ export class PaperCraneEngine {
                 contentDir = path.join(stagingDir, stagingEntries[0]);
             }
 
-            let manifestFile = path.join(contentDir, "manifest.json");
-            if (!fs.existsSync(manifestFile)) {
-                const subEntries = fs.readdirSync(contentDir);
-                for (const sub of subEntries) {
-                    const subCandidate = path.join(contentDir, sub, "manifest.json");
-                    if (fs.existsSync(subCandidate)) {
-                        manifestFile = subCandidate;
-                        break;
-                    }
-                }
-            }
+            const manifestFile = this.findManifestFile(contentDir);
 
-            const rawManifest = fs.existsSync(manifestFile)
+            const rawManifest = manifestFile && fs.existsSync(manifestFile)
                 ? JSON.parse(await fs.promises.readFile(manifestFile, "utf-8"))
                 : null;
             const manifest = rawManifest
                 ? validatePanelManifest(rawManifest, cleanId)
                 : { id: cleanId, name: cleanId, version: "1.0.0" };
 
-            // Atomic swap: remove old install, move staged content into place
+            // atomic swap into place
             if (fs.existsSync(targetDir)) {
                 await fs.promises.rm(targetDir, {
                     recursive: true,
@@ -811,6 +866,12 @@ export class PaperCraneEngine {
             await fs.promises
                 .rm(stagingDir, { recursive: true, force: true })
                 .catch(() => {});
+
+            try {
+                panelServices.startService(cleanId);
+            } catch (err: any) {
+                logger.warn(`[PaperCrane] Failed to start service for newly installed panel ${cleanId}:`, err?.message || err);
+            }
 
             return {
                 ...(manifest as PanelManifest),
@@ -836,7 +897,10 @@ export class PaperCraneEngine {
         const cleanId = sanitizeId(panelId);
         if (!cleanId) return false;
 
-        // Stop any active terminals or processes for this panel
+        try {
+            panelServices.stopService(cleanId);
+        } catch {}
+
         for (const [id, client] of this.clients.entries()) {
             if (id.startsWith(cleanId) || id.includes(cleanId)) {
                 client.kill("SIGTERM");
@@ -851,33 +915,44 @@ export class PaperCraneEngine {
         }
         await this.clearFiles(cleanId);
 
-        const configFile = path.join(this.configsDir, `${cleanId}.json`);
-        if (fs.existsSync(configFile)) {
-            await fs.promises.unlink(configFile).catch(() => {});
+        // Panel working data lives at files/<panel>/data.json (removed
+        // with the files dir above); sweep current + legacy spots anyway.
+        for (const configFile of [this.configFileFor(cleanId), ...this.legacyConfigPaths(cleanId)]) {
+            if (fs.existsSync(configFile)) {
+                await fs.promises.unlink(configFile).catch(() => {});
+            }
         }
 
         return true;
     }
 
-    // Panel config persistence
     public async getConfig(id: string): Promise<any> {
-        const file = path.join(this.configsDir, `${sanitizeId(id) || id}.json`);
-        if (fs.existsSync(file)) {
-            try {
-                return JSON.parse(await fs.promises.readFile(file, "utf-8"));
-            } catch (err) {
-                logger.debug(
-                    `[PaperCrane] config file for ${id} is corrupt, returning null:`,
-                    err,
-                );
+        const files = [
+            this.configFileFor(id),
+            ...this.legacyConfigPaths(id),
+        ];
+        for (const file of files) {
+            if (fs.existsSync(file)) {
+                try {
+                    return JSON.parse(await fs.promises.readFile(file, "utf-8"));
+                } catch (err) {
+                    logger.debug(
+                        `[PaperCrane] config file for ${id} is corrupt, returning null:`,
+                        err,
+                    );
+                }
             }
         }
         return null;
     }
 
     public async setConfig(id: string, data: any): Promise<boolean> {
-        const file = path.join(this.configsDir, `${sanitizeId(id) || id}.json`);
+        const file = this.configFileFor(id);
+        await fs.promises.mkdir(path.dirname(file), { recursive: true });
         await writeFileAtomic(file, JSON.stringify(data, null, 2));
+        for (const legacy of this.legacyConfigPaths(id)) {
+            await fs.promises.unlink(legacy).catch(() => {});
+        }
         return true;
     }
 }

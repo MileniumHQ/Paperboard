@@ -1,4 +1,4 @@
-// Paired-computer registry access for remote tunneling.
+// paired-computer registry for remote tunneling
 import * as fs from "fs";
 
 export interface RemoteEntry {
@@ -12,13 +12,23 @@ export interface RemoteEntry {
 
 export function readRemotes(file: string | undefined): RemoteEntry[] {
     if (!file) return [];
+    let raw: any;
     try {
-        const raw = JSON.parse(fs.readFileSync(file, "utf8"));
-        const list: RemoteEntry[] = Array.isArray(raw?.computers)
-            ? raw.computers
-            : [];
-        return list.filter((c) => c && !c.isLocal && c.host && c.port);
+        raw = JSON.parse(fs.readFileSync(file, "utf8"));
     } catch {
         return [];
     }
+    const list: unknown[] = Array.isArray(raw?.computers) ? raw.computers : [];
+    return (list as RemoteEntry[]).filter(
+        (c) =>
+            !!c &&
+            !c.isLocal &&
+            typeof c.host === "string" &&
+            c.host.length > 0 &&
+            typeof c.port === "number" &&
+            Number.isInteger(c.port) &&
+            c.port > 0 &&
+            c.port <= 65535 &&
+            (typeof c.id === "string" || typeof c.name === "string"),
+    );
 }

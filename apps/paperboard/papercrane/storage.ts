@@ -4,24 +4,40 @@ import * as crypto from "crypto";
 
 // ─── Atomic JSON persistence ─────────────────────────────────────────────────
 
-// Writes a file atomically: data lands in a temp file first, then is renamed
-// over the target so a crash mid-write can never corrupt existing state.
-export async function writeFileAtomic(
+// Serializes concurrent writes to the same path
+const writeQueues = new Map<string, Promise<void>>();
+
+// Writes a file atomically via temp plus rename
+export function writeFileAtomic(
     filePath: string,
     data: string,
 ): Promise<void> {
-    const dir = path.dirname(filePath);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    const tmp = `${filePath}.tmp-${process.pid}-${Date.now()}`;
-    try {
-        await fs.promises.writeFile(tmp, data, "utf8");
-        await fs.promises.rename(tmp, filePath);
-    } catch (err) {
-        try {
-            if (fs.existsSync(tmp)) await fs.promises.unlink(tmp);
-        } catch {}
-        throw err;
-    }
+    const prev = writeQueues.get(filePath) || Promise.resolve();
+    const current = prev
+        .catch(() => {})
+        .then(async () => {
+            const dir = path.dirname(filePath);
+            if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+            const nonce = crypto.randomBytes(6).toString("hex");
+            const tmp = `${filePath}.tmp-${process.pid}-${Date.now()}-${nonce}`;
+            try {
+                await fs.promises.writeFile(tmp, data, "utf8");
+                await fs.promises.rename(tmp, filePath);
+            } catch (err) {
+                try {
+                    if (fs.existsSync(tmp)) await fs.promises.unlink(tmp);
+                } catch {}
+                throw err;
+            }
+        })
+        .finally(() => {
+            if (writeQueues.get(filePath) === current) {
+                writeQueues.delete(filePath);
+            }
+        });
+
+    writeQueues.set(filePath, current);
+    return current;
 }
 
 export function writeJsonAtomicSync(
@@ -37,7 +53,8 @@ export function writeFileAtomicSync(
 ): void {
     const dir = path.dirname(filePath);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    const tmp = `${filePath}.tmp-${process.pid}-${Date.now()}`;
+    const nonce = crypto.randomBytes(6).toString("hex");
+    const tmp = `${filePath}.tmp-${process.pid}-${Date.now()}-${nonce}`;
     try {
         fs.writeFileSync(tmp, data, "utf8");
         fs.renameSync(tmp, filePath);
@@ -69,8 +86,7 @@ export function readJsonFileSync<T>(filePath: string, fallback: T): T {
 
 const SAFE_ID_RE = /^[a-zA-Z0-9._-]+$/;
 
-// Sanitizes a panel/package/app id so it can never escape its base directory.
-// Returns null for ids that contain traversal or unsafe characters.
+// Sanitizes an id so it can never escape its base directory
 export function sanitizeId(id: string | undefined | null): string | null {
     if (!id || typeof id !== "string") return null;
     if (!SAFE_ID_RE.test(id)) return null;
@@ -78,9 +94,13 @@ export function sanitizeId(id: string | undefined | null): string | null {
     return id;
 }
 
-// Resolves a relative target path inside an isolated per-app directory,
-// rejecting any traversal outside it. The separator is included in the prefix
-// check so sibling directories like `<base>-evil` are rejected too.
+// Directory name for a panel home under files/, dots preserved
+export function panelFilesDirName(id: string | undefined | null): string {
+    if (!id || typeof id !== "string") return "default";
+    return id.replace(/[^a-zA-Z0-9_.-]/g, "_") || "default";
+}
+
+// Resolve a relative path inside an isolated dir, rejecting traversal
 export function resolveSecureTargetPath(
     baseDir: string,
     targetPath: string,
@@ -118,9 +138,7 @@ function str(v: unknown, maxLen = 512): string | undefined {
     return v.slice(0, maxLen);
 }
 
-// Validates and normalizes a panel manifest coming from disk or the registry.
-// Throws on structurally invalid input; the returned manifest only contains
-// known-safe fields with bounded lengths.
+// Validates a panel manifest, returning only known-safe bounded fields
 export function validatePanelManifest(
     raw: unknown,
     fallbackId: string,
@@ -155,8 +173,7 @@ export function validatePanelManifest(
     const icon = str(record.icon, 256);
     if (icon) manifest.icon = icon;
 
-    // `base` must be a relative path — absolute paths would let a manifest
-    // point the panel origin at arbitrary filesystem locations.
+    // `base` must stay relative, never an absolute or parent escape
     const base = str(record.base, 256);
     if (base) {
         if (path.isAbsolute(base) || base.split(/[\\/]/).includes("..")) {
@@ -165,11 +182,22 @@ export function validatePanelManifest(
         manifest.base = base;
     }
 
+    const service = str(record.service, 256);
+    if (service) {
+        if (path.isAbsolute(service) || service.split(/[\\/]/).includes("..")) {
+            throw new Error(`Invalid service path in manifest for ${id}`);
+        }
+        manifest.service = service;
+    }
+
+    if (typeof record.autostart === "boolean") {
+        manifest.autostart = record.autostart;
+    }
+
     return manifest;
 }
 
-// Lenient validation for registry index records where most fields are optional
-// and untrusted values simply fall back to safe defaults instead of throwing.
+// Lenient registry validation, bad values fall back to defaults
 export function coerceRegistryRecord(
     raw: unknown,
     fallbackId: string,
@@ -196,9 +224,7 @@ export function coerceRegistryRecord(
 
 // ─── Archive safety ──────────────────────────────────────────────────────────
 
-// Filter factory for tar extraction: rejects absolute paths and traversal
-// members so a malicious archive cannot write outside destDir even if the
-// underlying library's own protections ever change.
+// Tar filter rejecting absolute paths and traversal members
 export function makeSafeTarFilter(destDir: string): (entryPath: string) => boolean {
     return (entryPath: string) => {
         if (typeof entryPath !== "string") return false;
@@ -231,8 +257,7 @@ export interface DownloadProgressPayload {
 
 export type ProgressCallback = (payload: DownloadProgressPayload) => void;
 
-// Streams a URL to a file with progress callbacks and optional SHA verification.
-// Writes to tempFilePath; caller moves it into place after this resolves.
+// Streams a URL to a file with progress and optional SHA check
 export async function streamToFileWithProgress(
     url: string,
     tempFilePath: string,
@@ -263,8 +288,7 @@ export async function streamToFileWithProgress(
     const reader = res.body.getReader();
     const IDLE_TIMEOUT_MS = 45_000;
     while (true) {
-        // Idle guard: a stalled connection must fail loudly instead of
-        // hanging an unnamed download forever.
+        // stalled connections fail loudly instead of hanging forever
         const readResult = await Promise.race([
             reader.read(),
             new Promise<never>((_, reject) =>

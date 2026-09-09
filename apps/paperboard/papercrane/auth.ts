@@ -19,7 +19,7 @@ const BASE_LOCKOUT_MS = 5_000;
 const ESCALATED_LOCKOUT_MS = 30_000;
 const LOCKOUT_ESCALATION_THRESHOLD = 3;
 
-// Pairing authentication and authorized access token store
+// pairing auth and token store
 export class PaperCraneAuth extends EventEmitter {
     private tokensFile: string;
     private pairingCode: string | null = null;
@@ -29,7 +29,7 @@ export class PaperCraneAuth extends EventEmitter {
     private authorizedTokens: Map<string, AuthorizedToken> = new Map();
     public noAuth: boolean = false;
 
-    // Injectable clock so lockout windows are testable.
+    // injectable clock for testable lockouts
     private now: () => number;
 
     constructor(noAuth = false, dataDir?: string, now?: () => number) {
@@ -41,13 +41,12 @@ export class PaperCraneAuth extends EventEmitter {
         this.loadTokens();
     }
 
-    // Cryptographically random 6-digit code — never Math.random()
+    // random 6-digit code via crypto
     private generatePairingCode(): string {
         return crypto.randomInt(100000, 1000000).toString();
     }
 
-    // Registers a known token programmatically (used by the embedded daemon,
-    // which provisions a single token for the local app instead of pairing).
+    // registers a known token programmatically for the local host
     public injectToken(token: string, clientName = "local"): void {
         if (this.authorizedTokens.has(token)) return;
         const entry: AuthorizedToken = {
@@ -63,8 +62,7 @@ export class PaperCraneAuth extends EventEmitter {
     public startPairing(): string {
         this.pairingCode = this.generatePairingCode();
         this.pairingActive = true;
-        // Deliberately do NOT reset failedAttempts here — restarting a
-        // pairing session must not reset the brute-force lockout.
+        // restarting pairing never resets the brute-force lockout
         this.emit("pairingStarted", this.pairingCode);
         return this.pairingCode;
     }
@@ -98,13 +96,12 @@ export class PaperCraneAuth extends EventEmitter {
 
     private saveTokens() {
         try {
-            // Embedded daemons inject one host token per boot; keep the file
-            // bounded by retaining only the newest entries.
+            // keep the file bounded to the newest entries
             const list = Array.from(this.authorizedTokens.values())
                 .sort((a, b) => (b.pairedAt || "").localeCompare(a.pairedAt || ""))
                 .slice(0, 25);
             writeFileAtomicSync(this.tokensFile, JSON.stringify(list, null, 2));
-            // Best-effort: restrict to owner on platforms with POSIX perms
+            // best-effort owner-only perms where supported
             try {
                 fs.chmodSync(this.tokensFile, 0o600);
             } catch {}
@@ -152,8 +149,7 @@ export class PaperCraneAuth extends EventEmitter {
         const cleanInput = String(code ?? "").replace(/\s+/g, "").trim();
         if (cleanInput !== this.pairingCode) {
             this.failedAttempts++;
-            // Escalating lockout: short penalty at first, long once someone
-            // is clearly brute-forcing the 6-digit space.
+            // short penalty first, long on clear brute-forcing
             const lockoutMs =
                 this.failedAttempts >= LOCKOUT_ESCALATION_THRESHOLD
                     ? ESCALATED_LOCKOUT_MS

@@ -1,5 +1,4 @@
-// Structural type shared by SupervisedProcessClient and EmbeddedSupervisor
-// so the engine can consume either without caring which runtime it is on.
+// client surface shared by both supervisor runtimes
 export interface PaperCraneClientLike {
     id: string;
     pid: number;

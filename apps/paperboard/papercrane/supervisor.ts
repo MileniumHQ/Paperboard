@@ -5,6 +5,7 @@ import * as os from "os";
 import * as cp from "child_process";
 import { spawnPty, getDefaultShell } from "./pty";
 import { IPtyProcess } from "./types";
+import { logger } from "./logger";
 
 export interface SupervisorSpawnConfig {
     command?: string;
@@ -26,30 +27,32 @@ export interface SupervisorMetadata {
     config: SupervisorSpawnConfig;
 }
 
-export function getPaperboardDir(): string {
-    const custom = process.env.PAPERBOARD_DIR;
-    if (custom) return path.resolve(custom);
-    return path.join(os.homedir(), ".paperboard");
+export { getPaperboardDir } from "./paths";
+import { ensureDir, getSocketsDir } from "./paths";
+
+function sanitizeSocketId(procId: string): string {
+    if (!procId || typeof procId !== "string") {
+        throw new Error("supervisor id is required");
+    }
+    return procId.replace(/[^a-zA-Z0-9_-]/g, "_");
 }
 
 export function getSupervisorSocketPath(procId: string): string {
-    const safeId = procId.replace(/[^a-zA-Z0-9_-]/g, "_");
+    const safeId = sanitizeSocketId(procId);
     if (process.platform === "win32") {
         return `\\\\.\\pipe\\papercrane-${safeId}`;
     }
-    const socketsDir = path.join(getPaperboardDir(), "sockets");
-    if (!fs.existsSync(socketsDir)) fs.mkdirSync(socketsDir, { recursive: true });
+    const socketsDir = ensureDir(getSocketsDir());
     return path.join(socketsDir, `${safeId}.sock`);
 }
 
 export function getSupervisorMetadataPath(procId: string): string {
-    const safeId = procId.replace(/[^a-zA-Z0-9_-]/g, "_");
-    const socketsDir = path.join(getPaperboardDir(), "sockets");
-    if (!fs.existsSync(socketsDir)) fs.mkdirSync(socketsDir, { recursive: true });
+    const safeId = sanitizeSocketId(procId);
+    const socketsDir = ensureDir(getSocketsDir());
     return path.join(socketsDir, `${safeId}.json`);
 }
 
-// Client connecting to a detached background supervisor process over IPC socket
+// client for a detached supervisor over IPC socket
 export class SupervisedProcessClient {
     private socket: net.Socket | null = null;
     private buffer = "";
@@ -201,7 +204,7 @@ export class SupervisedProcessClient {
     }
 }
 
-// Circular ring buffer preserving recent output lines for reconnect replay
+// ring buffer for reconnect replay
 class CircularBuffer {
     private buffer: string[] = [];
     private currentSize = 0;
@@ -222,7 +225,7 @@ class CircularBuffer {
     }
 }
 
-// Detached background supervisor daemon serving process output over Unix socket / Named pipe
+// detached supervisor serving output over socket/pipe
 export async function runSupervisor(procId: string): Promise<void> {
     const socketPath = getSupervisorSocketPath(procId);
     const metadataPath = getSupervisorMetadataPath(procId);
@@ -325,7 +328,24 @@ export async function runSupervisor(procId: string): Promise<void> {
     });
 
     server.listen(socketPath, () => {
-        const finalCwd = config.cwd && fs.existsSync(config.cwd) ? config.cwd : os.homedir();
+        // explicit but missing cwd must fail with its path attached
+        let finalCwd: string;
+        if (config.cwd) {
+            if (!fs.existsSync(config.cwd)) {
+                const msg = `[supervisor:${procId}] configured cwd does not exist: ${config.cwd}`;
+                try {
+                    fs.writeFileSync(metadataPath, JSON.stringify({ id: procId, error: msg }, null, 2), "utf8");
+                } catch {}
+                console.error(msg);
+                process.exit(1);
+            }
+            finalCwd = config.cwd;
+        } else {
+            finalCwd = os.homedir();
+        }
+        try {
+            logger.debug(`[supervisor:${procId}] spawning ${config.command || "sh"} in ${finalCwd}`);
+        } catch {}
         const isPtyMode = Boolean(config.isPty || (config as any).type === "pty");
 
         if (isPtyMode) {
@@ -355,7 +375,7 @@ export async function runSupervisor(procId: string): Promise<void> {
                 mergedEnv.PATH = `${config.env.JAVA_HOME}/bin${delim}${mergedEnv.PATH || ""}`;
             }
 
-            childProcess = cp.spawn(command, args, { cwd: finalCwd, env: mergedEnv });
+            childProcess = cp.spawn(command, args, { cwd: finalCwd, env: mergedEnv, windowsHide: true });
             childPid = childProcess.pid || 0;
 
             childProcess.stdout?.on("data", (chunk) => {
@@ -394,7 +414,7 @@ export async function runSupervisor(procId: string): Promise<void> {
     process.on("SIGINT", () => cleanupAndExit(0));
 }
 
-// Auto-run supervisor if started with flag
+// auto-run when started with the flag
 if (process.argv.includes("--run-supervisor")) {
     const targetId = process.env.SUPERVISOR_TARGET_ID || "default";
     runSupervisor(targetId);

@@ -17,26 +17,27 @@ const MAX_FILES = 3;
 interface LoggerOptions {
     name?: string;
     logDir?: string;
+    // file keeps everything
     minLevel?: LogLevel;
+    // console stays quiet, warnings and errors only
+    consoleLevel?: LogLevel;
     mirrorConsole?: boolean;
 }
 
-// Leveled logger writing to a rotating file under <baseDir>/logs and
-// mirroring to the console. Safe no-op when the filesystem is unavailable.
+// leveled logger to a rotating file, warn+ mirrored to console
 export class PaperboardLogger {
     private name: string;
     private logDir: string;
     private minLevel: LogLevel;
+    private consoleLevel: LogLevel;
     private mirrorConsole: boolean;
     private currentFile: string | null = null;
 
     constructor(options: LoggerOptions = {}) {
         this.name = options.name || "paperboard";
         this.logDir = options.logDir || getLogsDir();
-        this.minLevel =
-            options.minLevel ||
-            (process.env.PAPERBOARD_LOG_LEVEL as LogLevel) ||
-            "info";
+        this.minLevel = options.minLevel || "debug";
+        this.consoleLevel = options.consoleLevel || "warn";
         this.mirrorConsole = options.mirrorConsole ?? true;
     }
 
@@ -53,11 +54,9 @@ export class PaperboardLogger {
         this.log("error", msg, ...args);
     }
 
-    // Formats and writes one entry; never throws into caller code.
+    // formats and writes one entry, never throws
     log(level: LogLevel, msg: string, ...args: unknown[]): void {
         try {
-            if (LEVEL_ORDER[level] < LEVEL_ORDER[this.minLevel]) return;
-
             const time = new Date().toISOString();
             const rest =
                 args.length > 0
@@ -70,14 +69,14 @@ export class PaperboardLogger {
                                       return JSON.stringify(a);
                                   } catch {
                                       return String(a);
-                              }
+                                  }
                               return String(a);
                           })
                           .join(" ")
                     : "";
             const line = `${time} [${level.toUpperCase()}]${this.name ? ` [${this.name}]` : ""} ${msg}${rest}\n`;
 
-            if (this.mirrorConsole) {
+            if (this.mirrorConsole && LEVEL_ORDER[level] >= LEVEL_ORDER[this.consoleLevel]) {
                 const fn =
                     level === "error"
                         ? console.error
@@ -87,7 +86,9 @@ export class PaperboardLogger {
                 fn(line.trimEnd());
             }
 
-            this.writeLine(line);
+            if (LEVEL_ORDER[level] >= LEVEL_ORDER[this.minLevel]) {
+                this.writeLine(line);
+            }
         } catch {}
     }
 
@@ -139,10 +140,10 @@ export class PaperboardLogger {
     }
 }
 
-// Default shared instance used across the app.
+// shared instance used across the app
 export const logger = new PaperboardLogger({ name: "paperboard" });
 
-// Named child logger, e.g. getLogger("papercrane").
+// named child logger
 export function getLogger(name: string): PaperboardLogger {
     return new PaperboardLogger({ name });
 }

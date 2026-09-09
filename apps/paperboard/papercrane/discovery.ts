@@ -1,17 +1,11 @@
-// mDNS/Bonjour advertisement for PaperCrane daemons.
-//
-// Daemons publish a `_papercrane._tcp` service so Paperboard (and other
-// clients) can discover them on the local network without manual host/port
-// entry. Everything here fails soft: an unavailable mDNS stack, firewall
-// blocks, or multicast hiccups degrade to a log line — never a crash.
-//
-// Loopback-bound daemons (the embedded instance inside Electron) are NOT
-// advertised: they are unreachable from other machines, and advertising them
-// would produce dead entries in remote discovery lists.
-
+// mDNS advertisement, fails soft, loopback never advertised
 import * as os from "os";
+import * as fs from "fs";
+import * as path from "path";
+import * as crypto from "crypto";
 import { Bonjour } from "bonjour-service";
 import { logger } from "./logger";
+import { getPaperboardDir } from "./paths";
 
 export const PAPERCRANE_MDNS_TYPE = "papercrane";
 export const PAPERCRANE_VERSION = "1.0.0";
@@ -36,12 +30,21 @@ function isLoopbackHost(host?: string): boolean {
     );
 }
 
-// Stable per-machine identifier carried in TXT records so browsers can
-// dedupe re-announcements across restarts and address changes.
+// stable machine id for dedupe, never derive from hostname
 export function paperCraneMachineId(): string {
-    const hostname = os.hostname().toLowerCase();
-    const sanitized = hostname.replace(/[^a-z0-9_-]/g, "-");
-    return sanitized || "papercrane";
+    const file = path.join(getPaperboardDir(), "local", "machine-id.json");
+    try {
+        const raw = JSON.parse(fs.readFileSync(file, "utf8")) as { id?: unknown };
+        if (typeof raw?.id === "string" && raw.id.length >= 8) return raw.id;
+    } catch {}
+    const id = crypto.randomUUID();
+    try {
+        fs.mkdirSync(path.dirname(file), { recursive: true });
+        fs.writeFileSync(file, JSON.stringify({ id }, null, 2));
+    } catch (err) {
+        logger.warn("[PaperCrane] cannot persist machine id, using ephemeral one:", err);
+    }
+    return id;
 }
 
 export function advertisePaperCrane(
@@ -54,52 +57,126 @@ export function advertisePaperCrane(
         return null;
     }
 
-    try {
-        const bonjour = new Bonjour();
-        const hostname = os.hostname();
-        const name = options.name || hostname;
-        // bonjour-service throws synchronously on invalid config — covered
-        // by the try/catch above; anything after this point is runtime-level.
-        const service = bonjour.publish({
-            name,
-            type: PAPERCRANE_MDNS_TYPE,
-            port: options.port,
-            txt: {
-                id: paperCraneMachineId(),
-                name: hostname,
-                ver: PAPERCRANE_VERSION,
-                os: process.platform,
-            },
-        });
+    // colliding hostnames rename with a suffix, dedupe by TXT id
+    const MAX_ATTEMPTS = 5;
+    const RETRY_MS = 2000;
+    // probe conflicts are silent, so watchdog a missing 'up'
+    const UP_TIMEOUT_MS = 4000;
+    const baseName = options.name || os.hostname();
 
-        service.on("error", (err: unknown) => {
-            logger.warn("[PaperCrane] mDNS advertisement error:", err);
-        });
+    let attempt = 0;
+    let stopped = false;
+    let current: { stop: () => void } | null = null;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let upTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const clearRetry = () => {
+        if (retryTimer) {
+            clearTimeout(retryTimer);
+            retryTimer = null;
+        }
+        if (upTimer) {
+            clearTimeout(upTimer);
+            upTimer = null;
+        }
+    };
+
+    const handle: AdvertisementHandle = {
+        stop: () => {
+            stopped = true;
+            clearRetry();
+            try {
+                current?.stop();
+            } catch {}
+            current = null;
+        },
+    };
+
+    const publishAttempt = () => {
+        if (stopped) return;
+        attempt += 1;
+        const name = attempt === 1 ? baseName : `${baseName} (${attempt})`;
+        let bonjour: Bonjour;
+        try {
+            bonjour = new Bonjour();
+        } catch (err) {
+            logger.warn("[PaperCrane] failed to start mDNS advertisement:", err);
+            return;
+        }
+        // publish throws synchronously on invalid config
+        let service;
+        try {
+            service = bonjour.publish({
+                name,
+                type: PAPERCRANE_MDNS_TYPE,
+                port: options.port,
+                txt: {
+                    id: paperCraneMachineId(),
+                    name: os.hostname(),
+                    ver: PAPERCRANE_VERSION,
+                    os: process.platform,
+                },
+            });
+        } catch (err) {
+            logger.warn("[PaperCrane] failed to start mDNS advertisement:", err);
+            try {
+                bonjour.destroy();
+            } catch {}
+            return;
+        }
+
+        const stopService = () => {
+            try {
+                service.stop();
+            } catch (err) {
+                logger.debug("[PaperCrane] mDNS unpublish failed:", err);
+            }
+            try {
+                bonjour.destroy();
+            } catch (err) {
+                logger.debug("[PaperCrane] mDNS shutdown failed:", err);
+            }
+        };
+        current = { stop: stopService };
+
+        let isUp = false;
         service.on("up", () => {
-            logger.debug(
-                `[PaperCrane] mDNS service "${name}" announced on port ${options.port}`,
+            isUp = true;
+            clearRetry();
+            logger.info(
+                `[PaperCrane] advertising via mDNS as "${name}" (_${PAPERCRANE_MDNS_TYPE}._tcp, port ${options.port})`,
             );
         });
-        logger.info(
-            `[PaperCrane] advertising via mDNS as "${name}" (_${PAPERCRANE_MDNS_TYPE}._tcp, port ${options.port})`,
-        );
+        // no 'up' in time means name clash, try the next suffix
+        upTimer = setTimeout(() => {
+            upTimer = null;
+            if (stopped || isUp) return;
+            if (attempt < MAX_ATTEMPTS) {
+                logger.warn(
+                    `[PaperCrane] mDNS name "${name}" produced no announcement — retrying as "${baseName} (${attempt + 1})"`,
+                );
+                stopService();
+                retryTimer = setTimeout(publishAttempt, RETRY_MS);
+            } else {
+                logger.warn(
+                    `[PaperCrane] mDNS advertisement failed for "${name}" after ${MAX_ATTEMPTS} attempts — continuing undiscovered (manual IP:port still works)`,
+                );
+            }
+        }, UP_TIMEOUT_MS);
+        service.on("error", (err: unknown) => {
+            const msg = err instanceof Error ? err.message : String(err);
+            if (!isUp && /already in use/i.test(msg) && attempt < MAX_ATTEMPTS && !stopped) {
+                logger.warn(
+                    `[PaperCrane] mDNS name "${name}" is taken — retrying as "${baseName} (${attempt + 1})"`,
+                );
+                stopService();
+                retryTimer = setTimeout(publishAttempt, RETRY_MS);
+                return;
+            }
+            logger.warn("[PaperCrane] mDNS advertisement error:", err);
+        });
+    };
 
-        return {
-            stop: () => {
-                try {
-                    service.stop();
-                } catch (err) {
-                    logger.debug("[PaperCrane] mDNS unpublish failed:", err);
-                }
-                try {
-                    bonjour.destroy();
-                } catch (err) {
-                    logger.debug("[PaperCrane] mDNS shutdown failed:", err);
-                }
-            },
-        };
-    } catch (err) {
-        logger.warn("[PaperCrane] failed to start mDNS advertisement:", err);
-        return null;
-    }
+    publishAttempt();
+    return handle;
 }

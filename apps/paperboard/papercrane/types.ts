@@ -11,6 +11,10 @@ export interface PanelManifest {
     size?: string;
     updatedAt?: string;
     isInstalled?: boolean;
+    isDevLink?: boolean;
+    isLinked?: boolean;
+    service?: string;
+    autostart?: boolean;
 }
 
 export type BoardManifest = PanelManifest;

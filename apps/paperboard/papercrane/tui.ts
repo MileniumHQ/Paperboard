@@ -1,5 +1,6 @@
 import * as readline from "readline";
 import { PaperCraneAuth, type AuthorizedToken } from "./auth";
+import { readBanner } from "./branding";
 
 export interface TuiOptions {
     host: string;
@@ -23,13 +24,24 @@ export class PaperCraneTui {
 
         this.auth.on("paired", (client: AuthorizedToken) => {
             this.render();
-            console.log(`\n  [✓] Successfully paired with: ${client.clientName || "Computer"}\n`);
+            if (client.clientName && client.clientName !== "host") {
+                console.log(`\n  [✓] Successfully paired with: ${client.clientName}\n`);
+            }
         });
 
         this.auth.on("revoked", (client: AuthorizedToken) => {
             this.render();
-            console.log(`\n  [x] Revoked access for: ${client.clientName || "Computer"}\n`);
+            if (client.clientName && client.clientName !== "host") {
+                console.log(`\n  [x] Revoked access for: ${client.clientName}\n`);
+            }
         });
+    }
+
+    // "host" token is infrastructure, hidden from every list
+    private visibleClients(): AuthorizedToken[] {
+        return this.auth
+            .getAuthorizedClients()
+            .filter((c) => c.clientName !== "host");
     }
 
     public start() {
@@ -54,7 +66,7 @@ export class PaperCraneTui {
 
             if (this.isPromptingRevoke) {
                 const num = parseInt(str, 10);
-                const clients = this.auth.getAuthorizedClients();
+                const clients = this.visibleClients();
                 if (!isNaN(num) && num >= 1 && num <= clients.length) {
                     const toRevoke = clients[num - 1];
                     this.auth.revokeToken(toRevoke.token);
@@ -76,7 +88,7 @@ export class PaperCraneTui {
                     this.auth.startPairing();
                     this.render();
                 } else if (key.name === "r") {
-                    const clients = this.auth.getAuthorizedClients();
+                    const clients = this.visibleClients();
                     if (clients.length === 0) {
                         this.render();
                         console.log("\n  No paired computers to revoke.");
@@ -107,7 +119,7 @@ export class PaperCraneTui {
         }
 
         this.clear();
-        console.log("PaperCrane");
+        console.log(readBanner() ?? "PaperCrane");
         console.log(`Listening on http://${this.host}:${this.port}\n`);
 
         if (this.auth.isPairingActive()) {
@@ -116,7 +128,7 @@ export class PaperCraneTui {
             console.log(`Pairing Code: ${formattedCode}\n`);
             console.log("[c] Cancel pairing    [s] Stop server");
         } else {
-            const clients = this.auth.getAuthorizedClients();
+            const clients = this.visibleClients();
             console.log(`Paired Computers (${clients.length}):`);
             if (clients.length === 0) {
                 console.log("  (None)");

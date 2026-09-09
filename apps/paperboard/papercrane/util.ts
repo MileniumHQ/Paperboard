@@ -1,8 +1,13 @@
-// Small pure utilities shared between Paperboard main and PaperCrane.
+// small pure utilities shared by both sides
+import semver from "semver";
 
-// Compares dotted semantic-ish version strings ("1.2.3", "v1.2", "0.1.0").
-// Unparseable segments are treated as 0.
+// version compare with coerce, numeric fallback for garbage
 export function semverGt(a: string, b: string): boolean {
+    try {
+        const ca = semver.coerce(a ?? "");
+        const cb = semver.coerce(b ?? "");
+        if (ca && cb) return semver.gt(ca, cb);
+    } catch {}
     const parse = (v: string) =>
         (v || "")
             .replace(/^[^0-9]*/, "")
@@ -18,8 +23,7 @@ export function semverGt(a: string, b: string): boolean {
     return aPat > bPat;
 }
 
-// In-memory bounded replay buffer for terminal / process output.
-// Keeps roughly maxSize characters of the most recent output.
+// bounded in-memory replay buffer, keeps the most recent output
 export class RingBuffer {
     private buffer: string[] = [];
     private currentSize = 0;
@@ -46,7 +50,7 @@ export class RingBuffer {
 
 import * as fs from "fs";
 
-// Parses Linux distribution info from /etc/os-release
+// linux distro info from /etc/os-release
 export function getLinuxDistroInfo(): { distroId: string; distroName: string } {
     if (process.platform !== "linux") {
         const plat = process.platform === "win32" ? "windows" : "macos";

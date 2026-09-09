@@ -1,15 +1,5 @@
-// In-process supervision for embedded PaperCrane (running inside Electron).
-//
-// The detached supervisor model spawns process.execPath --supervise, which
-// requires a Bun/Node runtime. Inside Electron, execPath is the Electron
-// binary itself, so we supervise directly here instead: node-pty for
-// terminals, child_process for background processes. Behavior parity with
-// the detached supervisor is limited to a single daemon lifetime — embedded
-// sessions do not survive app restarts (by design; dispose() kills them).
-//
-// NOTE: node-pty is resolved lazily via require because papercrane must not
-// hard-depend on it (standalone daemons use the Bun FFI pty instead).
-
+// in-process supervision for embedded hosts, single daemon lifetime
+// node-pty resolved lazily, standalone daemons use FFI instead
 import * as cp from "child_process";
 import * as os from "os";
 import type { PaperCraneClientLike } from "./supervisorTypes";
@@ -43,7 +33,7 @@ function buildEnv(config: SupervisorConfig): Record<string, string> {
     return merged;
 }
 
-// Mirrors the SupervisedProcessClient surface consumed by the engine.
+// mirrors the client surface consumed by the engine
 export class EmbeddedSupervisor implements PaperCraneClientLike {
     public pid = 0;
     public childPid = 0;
@@ -81,9 +71,7 @@ export class EmbeddedSupervisor implements PaperCraneClientLike {
     public async connect(): Promise<boolean> {
         if (this.alive) return true;
 
-        // Resolve the working directory defensively: panels often point at
-        // directories that do not exist yet (first boot of a server). A
-        // missing cwd makes child_process fail instantly with ENOENT.
+        // missing cwd fails fast, create it
         let cwd = this.config.cwd;
         if (cwd && !require("fs").existsSync(cwd)) {
             try {
@@ -113,6 +101,7 @@ export class EmbeddedSupervisor implements PaperCraneClientLike {
                         cwd: cwd || os.homedir(),
                         env: buildEnv(this.config),
                         stdio: ["pipe", "pipe", "pipe"],
+                        windowsHide: true,
                     },
                 );
             }
@@ -143,8 +132,7 @@ export class EmbeddedSupervisor implements PaperCraneClientLike {
                     this.emit("exit", code ?? 0);
                 });
                 this.proc.on("error", (err: Error) => {
-                    // Surface spawn failures (missing binary, bad cwd, …) on
-                    // every stream so consoles actually show WHY it died.
+                    // surface spawn failures on every stream
                     const msg = `[Process Error] ${err.message}`;
                     this.emit("data", msg);
                     this.emit("stderr", msg);
@@ -167,7 +155,7 @@ export class EmbeddedSupervisor implements PaperCraneClientLike {
     }
 
     public write(data: string): void {
-        // PTY processes expose write(); child_process pipes go through stdin.
+        // pty uses write(), pipes use stdin
         if (this.isPty) this.proc?.write?.(data);
         else this.proc?.stdin?.write(data);
     }

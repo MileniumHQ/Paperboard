@@ -6,31 +6,51 @@ import { PaperCraneEngine } from "./engine";
 import { getDetailedOsInfo } from "./index";
 import pkg from "../package.json";
 
-const MIME_TYPES: Record<string, string> = {
-    ".html": "text/html; charset=utf-8",
-    ".js": "text/javascript; charset=utf-8",
-    ".mjs": "text/javascript; charset=utf-8",
-    ".css": "text/css; charset=utf-8",
-    ".json": "application/json; charset=utf-8",
-    ".png": "image/png",
-    ".jpg": "image/jpeg",
-    ".jpeg": "image/jpeg",
-    ".svg": "image/svg+xml",
-    ".ico": "image/x-icon",
-    ".woff2": "font/woff2",
-    ".woff": "font/woff",
-    ".ttf": "font/ttf",
-    ".wasm": "application/wasm",
-};
+import { lookupMime } from "./mime";
+import {
+    DAV_PREFIX,
+    DavSessionStore,
+    handleDavRequest,
+    handleDavSessionIssue,
+    handleDavSessionRevoke,
+} from "./dav";
+import type { PaperCraneAuth } from "./auth";
 
-// HTTP router handling health check, graceful shutdown, and panel static asset serving
+export interface HttpContext {
+    auth?: PaperCraneAuth;
+    sessions?: DavSessionStore;
+}
+
+// HTTP router for health, shutdown, and panel assets
 export function handleHttpRequest(
     engine: PaperCraneEngine,
     req: http.IncomingMessage,
     res: http.ServerResponse,
+    ctx: HttpContext = {},
 ) {
-    // No CORS by default: all first-party consumers are non-browser clients
-    // or same-origin panel:// loads. Cross-origin browser reads are denied.
+    // no CORS by default, cross-origin browser reads denied
+
+    const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
+    const pathname = url.pathname;
+    const sessions = ctx.sessions ?? new DavSessionStore();
+
+    // WebDAV access plus session minting, matched before the prefix
+    if (pathname === "/dav/session") {
+        if ((req.method || "GET").toUpperCase() === "DELETE") {
+            void handleDavSessionRevoke(sessions, ctx.auth, req, res);
+        } else {
+            void handleDavSessionIssue(sessions, ctx.auth, req, res);
+        }
+        return;
+    }
+    if (
+        pathname === DAV_PREFIX ||
+        pathname === `${DAV_PREFIX}/` ||
+        pathname.startsWith(`${DAV_PREFIX}/`)
+    ) {
+        void handleDavRequest(engine, sessions, ctx.auth, req, res);
+        return;
+    }
 
     if (req.method === "OPTIONS") {
         res.writeHead(204);
@@ -38,12 +58,7 @@ export function handleHttpRequest(
         return;
     }
 
-    const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
-    const pathname = url.pathname;
-
-    // Shutdown endpoint — localhost only AND requires the custom header so
-    // a malicious website cannot CSRF it (custom headers require preflight,
-    // which this server never grants).
+    // shutdown needs localhost plus custom header (blocks CSRF)
     if (pathname === "/shutdown" && req.method === "POST") {
         const ip = req.socket.remoteAddress || "";
         const isLocal =
@@ -67,7 +82,7 @@ export function handleHttpRequest(
         return;
     }
 
-    // Health probe endpoint — deliberately minimal: no username, no LAN IP
+    // minimal health probe, no sensitive data
     if (pathname === "/health") {
         const osInfo = getDetailedOsInfo();
         res.writeHead(200, { "Content-Type": "application/json" });
@@ -88,7 +103,6 @@ export function handleHttpRequest(
         return;
     }
 
-    // Panel asset serving
     if (pathname.startsWith("/panel/")) {
         const parts = pathname.slice("/panel/".length).split("/");
         const panelId = parts[0];
@@ -124,15 +138,13 @@ export function handleHttpRequest(
         }
 
         const ext = path.extname(filePath).toLowerCase();
-        const contentType = MIME_TYPES[ext] || "application/octet-stream";
+        const contentType = lookupMime(ext);
 
         const headers: Record<string, string> = {
             "Content-Type": contentType,
             "X-Content-Type-Options": "nosniff",
         };
-        // Baseline CSP for panel documents: scripts may only come from the
-        // panel's own origin (inline allowed — panels are vite-built apps).
-        // Remote script injection is blocked; API calls remain possible.
+        // baseline CSP: own origin plus inline, no remote scripts
         if (ext === ".html") {
             headers["Content-Security-Policy"] = [
                 "default-src 'self' data: blob:",
