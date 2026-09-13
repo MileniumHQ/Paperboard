@@ -57,7 +57,6 @@ body,
     border: var(--paper-border-width) solid var(--paper-medium-border);
     border-radius: var(--paper-border-radius);
     padding: var(--paper-uigap-threefourths) var(--paper-uigap);
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
     user-select: none;
     -webkit-user-select: none;
     cursor: grab;
@@ -66,14 +65,13 @@ body,
     box-sizing: border-box;
     display: flex;
     gap: var(--paper-uigap-half);
-    transition: box-shadow var(--paper-tiny-transition) var(--paper-ease-standard), border-color var(--paper-tiny-transition) var(--paper-ease-standard);
+    transition: border-color var(--paper-tiny-transition) var(--paper-ease-standard);
 }
 
 .action.dragging {
     cursor: grabbing;
     z-index: 100;
     border-color: var(--paper-front-blue);
-    box-shadow: 0 16px 32px rgba(0, 0, 0, 0.55), 0 2px 6px rgba(0, 0, 0, 0.3);
 }
 
 .actionHeaderRow {
@@ -162,7 +160,6 @@ body,
     transform: none;
     width: 100%;
     max-width: 100%;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
 }
 
 .actionText {
@@ -192,8 +189,7 @@ body,
 }
 
 .action.runningFlow {
-    box-shadow: 0 0 24px var(--paper-front-blue) !important;
-    transition: box-shadow var(--paper-short-transition) var(--paper-ease-standard);
+    border-color: var(--paper-front-blue);
 }
 
 .actionInput {
@@ -250,7 +246,7 @@ body,
     font-size: inherit;
     border: none;
     box-sizing: border-box;
-    transition: background 0.1s ease, color 0.1s ease, box-shadow 0.1s ease;
+    transition: background 0.1s ease, color 0.1s ease;
 }
 
 .action:has(.actionEditableMultiline) {
@@ -291,7 +287,8 @@ body,
 .actionInput.actionEditable:focus {
     background: var(--paper-background-frontest);
     color: var(--paper-main-text);
-    box-shadow: 0 0 0 1.5px var(--paper-front-blue);
+    outline: var(--paper-focus-ring);
+    outline-offset: var(--paper-focus-offset);
 }
 
 .actionInput.actionEditable[data-placeholder]:empty::before {
@@ -305,7 +302,7 @@ body,
     align-items: center;
     gap: 3px;
     background: var(--paper-front-blue);
-    color: var(--paper-over-brand, #ffffff);
+    color: var(--paper-over-brand);
     padding: 0 4px;
     border-radius: var(--paper-border-radius-half);
     margin: 0;
@@ -352,7 +349,6 @@ body,
     background: var(--paper-background-front);
     border: var(--paper-border-width) solid var(--paper-medium-border);
     border-radius: var(--paper-border-radius);
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
     min-width: 250px;
     max-width: 340px;
     max-height: 300px;
@@ -569,7 +565,8 @@ body,
 }
 
 .actionInput.actionVariableOnly:focus {
-    box-shadow: 0 0 0 1.5px var(--paper-front-blue);
+    outline: var(--paper-focus-ring);
+    outline-offset: var(--paper-focus-offset);
 }
 
 .actionInput.actionVariableOnly[data-has-value="false"]:empty::before {
@@ -663,7 +660,7 @@ body,
     margin: calc(var(--paper-uigap-half) * -0.5) 0;
     position: relative;
     z-index: 10;
-    transition: background-color var(--paper-tiny-transition) var(--paper-ease-standard), box-shadow var(--paper-tiny-transition) var(--paper-ease-standard);
+    transition: background-color var(--paper-tiny-transition) var(--paper-ease-standard);
 }
 
 .actionInsertLine.activeHover {
@@ -710,7 +707,6 @@ body,
     z-index: 50;
     background: var(--paper-background-front);
     border-right: var(--paper-border-width) solid var(--paper-medium-border);
-    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.35);
     display: flex;
     flex-direction: row;
     overflow: hidden;
@@ -870,7 +866,6 @@ body,
     top: 0;
     left: 0;
     transform: none;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
 }
 
 .library-toggle-collapsed {
@@ -942,7 +937,6 @@ body,
     backdrop-filter: var(--paper-blur-heavy);
     -webkit-backdrop-filter: var(--paper-blur-heavy);
     border: var(--paper-border-width) solid var(--paper-medium-border);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -1015,24 +1009,22 @@ body,
     pointer-events: auto;
     background: var(--paper-background-back);
     border: var(--paper-border-width) solid var(--paper-medium-border);
-    border-top: 3px solid var(--paper-front-yellow, #e5a93b);
+    border-top: 3px solid var(--paper-front-yellow);
     border-radius: var(--paper-border-radius);
     width: 260px;
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
     user-select: none;
     -webkit-user-select: none;
     cursor: grab;
     display: flex;
     flex-direction: column;
     box-sizing: border-box;
-    transition: box-shadow var(--paper-tiny-transition) var(--paper-ease-standard), border-color var(--paper-tiny-transition) var(--paper-ease-standard);
+    transition: border-color var(--paper-tiny-transition) var(--paper-ease-standard);
 }
 
 .canvas-note.dragging {
     cursor: grabbing;
     z-index: 100;
-    border-color: var(--paper-front-yellow, #e5a93b);
-    box-shadow: 0 16px 32px rgba(0, 0, 0, 0.55), 0 2px 6px rgba(0, 0, 0, 0.3);
+    border-color: var(--paper-front-yellow);
 }
 
 .canvas-note-header {
@@ -1047,7 +1039,7 @@ body,
     display: flex;
     align-items: center;
     gap: var(--paper-uigap-half);
-    color: var(--paper-front-yellow, #e5a93b);
+    color: var(--paper-front-yellow);
 }
 
 .canvas-note-icon {
