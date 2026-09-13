@@ -20,7 +20,7 @@ export interface PanelItem {
     // daemon-recorded install provenance: "registry" (reviewed), "direct"
     // (checksummed URL, not reviewed), "dev" (symlinked dev build). Absent
     // for panels installed before provenance shipped.
-    installSource?: string;
+    installSource?: "registry" | "direct" | "dev";
     isLinked?: boolean;
 }
 

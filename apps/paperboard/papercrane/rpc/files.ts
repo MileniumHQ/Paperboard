@@ -34,11 +34,15 @@ export async function handleFiles(action: string, id: unknown, params: any, ctx:
     const { engine, reply, sendEvent } = ctx;
     switch (action) {
         case "file:getPath": {
-            reply(id, { path: engine.getFilePath(assertStr(params?.targetPath, "targetPath", 1024), effectiveAppId(params, action, ctx)) });
+            // empty targetPath is the panel root convention (getServerDir
+            // and friends pass ""): resolveSecureTargetPath maps it to the
+            // panel base, so the validator must allow it here. read/write/
+            // delete stay strict — an empty path is meaningless there.
+            reply(id, { path: engine.getFilePath(assertStr(params?.targetPath, "targetPath", 1024, true), effectiveAppId(params, action, ctx)) });
             return true;
         }
         case "file:exists": {
-            reply(id, { exists: await engine.fileExists(assertStr(params?.targetPath, "targetPath", 1024), effectiveAppId(params, action, ctx)) });
+            reply(id, { exists: await engine.fileExists(assertStr(params?.targetPath, "targetPath", 1024, true), effectiveAppId(params, action, ctx)) });
             return true;
         }
         case "file:write": {
