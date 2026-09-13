@@ -5,6 +5,8 @@
     user-select: none;
     position: relative;
     outline: none;
+    /* never let a flex row squash the switch below its size */
+    flex-shrink: 0;
 }
 
 .PaperToggle:focus-visible .track {
@@ -18,6 +20,9 @@
     width: calc(var(--paper-item-size-tiny) * 2);
     border-radius: var(--paper-border-radius-half);
     background: var(--paper-background-element);
+    /* an inner edge so the track reads as a switch even when the fill
+       blends with the surface (and after the disabled grayscale) */
+    box-shadow: inset 0 0 0 var(--paper-border-width) var(--paper-medium-dark-border);
     display: flex;
     align-items: center;
     transition: background var(--paper-mid-transition) ease;

@@ -42,6 +42,10 @@
     --paper-background-backest: #d8dce2;
     --paper-background-element: #cdd3db;
 
+    /* low: nested/subtle separators; medium: the standard divider; dark:
+       strong edges (drop targets, table rules). All three must be readable
+       against the surfaces they sit on. */
+    --paper-low-border: #d2d6dd;
     --paper-medium-border: #c4c9d2;
     --paper-medium-dark-border: #adb3be;
     --paper-dark-border: #7d8492;
@@ -56,18 +60,26 @@
 
 @media (prefers-color-scheme: dark) {
     :root {
-            --paper-background-frontest: #222222;
-        --paper-background-front: #191919;
-        --paper-background-back: #2a2a2a;
-        --paper-background-backest: #323232;
-        --paper-background-definition: #131313;
-        --paper-background-element: #3f3f3f;
+        /* dark ramp: near-black, very slightly cool. The blue is a whisper —
+           each step's B-R delta is 2-6, so it still reads as grey, just not
+           dead concrete. Elevation comes from luminance, not shadow:
+           backest (canvas) < back < front < frontest; definition is recessed
+           below the canvas (wells), element is an interactive fill. */
+        --paper-background-backest: #141517;
+        --paper-background-back: #1a1b1e;
+        --paper-background-front: #202124;
+        --paper-background-frontest: #27282b;
+        --paper-background-definition: #0f1011;
+        --paper-background-element: #323337;
 
-            --paper-medium-border: #3a3a3a;
-        --paper-medium-dark-border: #4c4c4c;
-        --paper-dark-border: #636363;
+        /* dividers must clear the surfaces above them (front #202124,
+           frontest #27282b), so these sit well above the background ramp */
+        --paper-low-border: #33353a;
+        --paper-medium-border: #3a3c40;
+        --paper-medium-dark-border: #4d5055;
+        --paper-dark-border: #676a70;
 
-            --paper-main-text: #f5f5f5;
+        --paper-main-text: #f5f5f5;
         --paper-lightish-text: #d4d4d4;
         --paper-light-text: #a1a1a1;
         --paper-lightest-text: #737373;
@@ -87,6 +99,7 @@
     --paper-background-backest: #d8dce2;
     --paper-background-element: #cdd3db;
 
+    --paper-low-border: #d2d6dd;
     --paper-medium-border: #c4c9d2;
     --paper-medium-dark-border: #adb3be;
     --paper-dark-border: #7d8492;
@@ -101,16 +114,18 @@
 
 [data-paperui-theme="dark"],
 [data-theme="dark"] {
-    --paper-background-frontest: #222222;
-    --paper-background-front: #191919;
-    --paper-background-back: #2a2a2a;
-    --paper-background-backest: #323232;
-    --paper-background-definition: #131313;
-    --paper-background-element: #3f3f3f;
+    /* keep in step with the prefers-color-scheme dark ramp above */
+    --paper-background-backest: #141517;
+    --paper-background-back: #1a1b1e;
+    --paper-background-front: #202124;
+    --paper-background-frontest: #27282b;
+    --paper-background-definition: #0f1011;
+    --paper-background-element: #323337;
 
-    --paper-medium-border: #3a3a3a;
-    --paper-medium-dark-border: #4c4c4c;
-    --paper-dark-border: #636363;
+    --paper-low-border: #33353a;
+    --paper-medium-border: #3a3c40;
+    --paper-medium-dark-border: #4d5055;
+    --paper-dark-border: #676a70;
 
     --paper-main-text: #f5f5f5;
     --paper-lightish-text: #d4d4d4;

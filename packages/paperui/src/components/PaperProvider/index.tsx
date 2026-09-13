@@ -52,6 +52,31 @@ export function PaperProvider(props: ParentProps<PaperProviderProps>) {
     const [internalTheme, setInternalTheme] = createSignal<ThemeMode>("system");
     const [systemPrefersDark, setSystemPrefersDark] = createSignal(false);
 
+    // host-injected theme: the shell writes data-paperui-theme on the panel
+    // document's <html> root (alongside data-paperui-motion). When the
+    // caller gives no explicit theme, that resolved choice wins over the OS
+    // media query — a panel must match the window it lives in, not the OS.
+    const readHostTheme = (): "dark" | "light" | null => {
+        if (typeof document === "undefined") return null;
+        const value = document.documentElement?.getAttribute("data-paperui-theme");
+        return value === "dark" || value === "light" ? value : null;
+    };
+    const [hostTheme, setHostTheme] = createSignal<"dark" | "light" | null>(
+        readHostTheme(),
+    );
+
+    createEffect(() => {
+        if (typeof document === "undefined" || typeof MutationObserver === "undefined") {
+            return;
+        }
+        const observer = new MutationObserver(() => setHostTheme(readHostTheme()));
+        observer.observe(document.documentElement, {
+            attributes: true,
+            attributeFilter: ["data-paperui-theme"],
+        });
+        onCleanup(() => observer.disconnect());
+    });
+
     createEffect(() => {
         if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
         const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
@@ -68,10 +93,15 @@ export function PaperProvider(props: ParentProps<PaperProviderProps>) {
     const currentThemeMode = createMemo(() => local.theme ?? internalTheme());
     const resolvedTheme = createMemo(() => {
         const mode = currentThemeMode();
-        if (mode === "system") {
-            return systemPrefersDark() ? "dark" : "light";
+        if (mode !== "system") {
+            return mode;
         }
-        return mode;
+        // no explicit mode from the caller: a host-injected theme wins
+        if (local.theme === undefined) {
+            const host = hostTheme();
+            if (host) return host;
+        }
+        return systemPrefersDark() ? "dark" : "light";
     });
 
     createEffect(() => {

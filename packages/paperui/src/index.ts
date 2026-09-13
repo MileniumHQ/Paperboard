@@ -17,6 +17,7 @@ export * from "./components/PaperLoader";
 export * from "./components/PaperMediaCard";
 export * from "./components/PaperMenu";
 export * from "./components/PaperModal";
+export * from "./components/PaperPageHeader";
 export * from "./components/PaperProgress";
 export * from "./components/PaperProvider";
 export * from "./components/PaperQuote";

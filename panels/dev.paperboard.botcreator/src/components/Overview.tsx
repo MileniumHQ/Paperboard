@@ -173,7 +173,7 @@ export default function Overview() {
                                 height: "72px",
                                 "border-radius": "50%",
                                 "object-fit": "cover",
-                                border: "1px solid var(--paper-border)",
+                                border: "1px solid var(--paper-medium-border)",
                             }}
                         />
 

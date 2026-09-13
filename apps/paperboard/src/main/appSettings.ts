@@ -8,7 +8,9 @@ import {
     TITLEBAR_SYMBOL_COLORS,
 } from "../../papercrane/themeConstants";
 
-// theme via nativeTheme; reduced motion injected into panel frames
+// theme via nativeTheme; reduced motion AND the resolved theme are injected
+// into panel frames. <html data-paperui-theme> is what PaperProvider reads
+// when it has no explicit theme, and it also applies CSS tokens immediately.
 export interface AppSettings {
     darkMode: "system" | "light" | "dark";
     reducedMotion: boolean;
@@ -73,10 +75,18 @@ async function applyToFrame(frame: WebFrameMain): Promise<void> {
     try {
         if (!frame.url.startsWith("panel://")) return;
         const settings = readAppSettings();
+        // the OS media query is not a contract: Paperboard's forced theme
+        // may disagree with the OS, and nativeTheme propagation to custom
+        // protocol frames is implicit. Inject the resolved theme explicitly
+        // so a panel always matches the window it lives in.
+        const resolvedTheme = nativeTheme.shouldUseDarkColors ? "dark" : "light";
         const js = `
             (() => {
                 document.documentElement.setAttribute('data-paperui-motion', ${JSON.stringify(
                     settings.reducedMotion ? "reduced" : "auto",
+                )});
+                document.documentElement.setAttribute('data-paperui-theme', ${JSON.stringify(
+                    resolvedTheme,
                 )});
             })();
         `;

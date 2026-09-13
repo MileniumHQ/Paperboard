@@ -1,0 +1,51 @@
+.PaperPageHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--paper-uigap);
+    width: 100%;
+    box-sizing: border-box;
+    padding: var(--paper-uigap);
+    background: var(--paper-background-frontest);
+    border: var(--paper-border-width) solid var(--paper-medium-border);
+    border-radius: var(--paper-border-radius);
+}
+
+.heading {
+    display: flex;
+    align-items: center;
+    gap: var(--paper-uigap-threefourths);
+    min-width: 0;
+    flex: 1;
+}
+
+.iconChip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--paper-item-size-medium);
+    height: var(--paper-item-size-medium);
+    border-radius: var(--paper-border-radius);
+    background: color-mix(in srgb, var(--paper-front-blue) 14%, transparent);
+    color: var(--paper-back-blue);
+    font-size: var(--paper-icon-size-large);
+    flex-shrink: 0;
+}
+
+.text {
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap-onefourth);
+    min-width: 0;
+}
+
+.title {
+    overflow-wrap: anywhere;
+}
+
+.actions {
+    display: flex;
+    align-items: center;
+    gap: var(--paper-uigap-half);
+    flex-shrink: 0;
+}
