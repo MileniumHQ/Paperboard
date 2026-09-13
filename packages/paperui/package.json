@@ -23,9 +23,7 @@
         "./package.json": "./package.json"
     },
     "scripts": {
-        "dev": "vite",
         "build": "tsc --noEmit && vite build",
-        "preview": "vite preview",
         "test": "bash scripts/check-styling.sh && vitest run"
     },
     "devDependencies": {

@@ -4,7 +4,7 @@
     --paper-back-blue: #0f63c8;
     --paper-front-green: #0d9d0d;
     --paper-back-green: #0b720b;
-    /* plain-green convenience alias (workbench + panels reference it) */
+    /* plain-green convenience alias (panels reference it) */
     --paper-green: #0d9d0d;
     --paper-front-red: #e73648;
     --paper-back-red: #ae1414;

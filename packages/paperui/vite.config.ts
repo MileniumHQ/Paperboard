@@ -10,9 +10,9 @@ export default defineConfig({
             insertTypesEntry: true,
             tsconfigPath: "./tsconfig.json",
             rollupTypes: true,
-            // the workbench (App/main) and tests are dev-only: their types
-            // and assets must never ship inside the published package
-            exclude: ["src/App.tsx", "src/main.tsx", "src/__tests__", "**/*.test.*"],
+            // tests are dev-only: their types and assets must never ship
+            // inside the published package
+            exclude: ["src/__tests__", "**/*.test.*"],
         }),
     ],
     build: {
