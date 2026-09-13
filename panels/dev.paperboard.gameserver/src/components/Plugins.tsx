@@ -159,8 +159,11 @@ export default function Plugins(props: { updateRequest?: number }) {
         try {
             const checks = await checkPluginUpdates();
             const available = checks.filter((c) => c.status === "update-available");
+            // "incompatible" (no compatible build) AND "error" (no record /
+            // lookup failed) both mean "we could not update this" — drop
+            // neither silently
             const failed: PluginUpdateCheck[] = checks.filter(
-                (c) => c.status === "incompatible",
+                (c) => c.status === "incompatible" || c.status === "error",
             );
             for (const check of available) {
                 try {

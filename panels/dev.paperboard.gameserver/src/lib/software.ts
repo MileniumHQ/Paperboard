@@ -59,6 +59,11 @@ export async function getVanillaDownload(versionId: string): Promise<{ url: stri
     const versionData = await versionRes.json();
     const server = versionData.downloads?.server;
     if (!server) throw new Error(`No server jar for ${versionId}`);
+    // no checksum from the manifest means no install — never proceed with
+    // an undefined sha1 (same rule as the registry and Modrinth paths)
+    if (typeof server.sha1 !== "string" || !server.sha1) {
+        throw new Error(`Mojang published no sha1 for ${versionId}; refusing to download unverified`);
+    }
 
     return { url: server.url, sha1: server.sha1, filename: `vanilla-${versionId}.jar` };
 }
@@ -83,10 +88,17 @@ export async function getPaperDownload(version: string, build?: number | string)
     const data = await res.json();
     const server = data.downloads?.["server:default"];
     if (!server) throw new Error(`No server download for Paper ${version} build ${targetBuild}`);
+    // Paper's sha256 is the trust anchor; a build without one is refused
+    const sha256 = server.checksums?.sha256;
+    if (typeof sha256 !== "string" || !sha256) {
+        throw new Error(
+            `Paper published no sha256 for ${version} build ${targetBuild}; refusing to download unverified`,
+        );
+    }
 
     return {
         url: server.url,
-        sha256: server.checksums?.sha256,
+        sha256,
         filename: server.name || `paper-${version}-${targetBuild}.jar`,
         build: targetBuild,
     };

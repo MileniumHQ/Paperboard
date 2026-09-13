@@ -117,6 +117,9 @@ export default function Players() {
     const [feedback, setFeedback] = createSignal("");
     const [sortBy, setSortBy] = createSignal<SortKey>("playtime");
 
+    // re-verify ban state after a written command; tracked so unmount clears it
+    let banRecheckTimer: ReturnType<typeof setTimeout> | null = null;
+
     onMount(async () => {
         queryOnlinePlayers();
         loadPlayerStats();
@@ -125,6 +128,7 @@ export default function Players() {
         onCleanup(() => {
             clearInterval(poll);
             clearInterval(statsPoll);
+            if (banRecheckTimer) clearTimeout(banRecheckTimer);
         });
 
         const [whitelisted, ops, cached, banned] = await Promise.all([
@@ -308,7 +312,8 @@ export default function Players() {
         // a written console command is not ban-truth: re-verify from the
         // ban file after a delay so the UI's ban state converges on what
         // the server actually recorded
-        setTimeout(() => {
+        if (banRecheckTimer) clearTimeout(banRecheckTimer);
+        banRecheckTimer = setTimeout(() => {
             void loadJsonEntries("banned-players.json").then((bannedEntries) => {
                 setBannedNames(new Set(bannedEntries.map((n) => n.name.toLowerCase())));
             });
@@ -358,7 +363,9 @@ export default function Players() {
                 uuid: player.uuid,
             });
         } catch (err) {
-            console.error("[Players] Failed to delete player data:", err);
+            const message = err instanceof Error ? err.message : String(err);
+            console.error("[Players] Failed to delete player data:", message);
+            setFeedback(message);
             return;
         }
 

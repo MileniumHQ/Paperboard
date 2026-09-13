@@ -12,6 +12,7 @@ import {
     PaperSelectMenu,
     PaperSelectMenuItem,
     PaperText,
+    getVarCss,
 } from "@paperboard-dev/paperui";
 import {
     listMapRegions,
@@ -173,6 +174,11 @@ export default function MapView() {
         const s = scale();
         const dim = dimension();
         const size = Math.max(18, Math.min(30, 22 * Math.max(0.8, s)));
+        // colors come from the token set, not hardcoded hex
+        const strokeColor = getVarCss("over-brand");
+        const markerColor = getVarCss("front-red");
+        const labelBg = getVarCss("overlay");
+        const labelText = getVarCss("over-brand");
         for (const [key, pos] of playerPositions()) {
             if (pos.dimension !== `minecraft:${dim}`) continue;
             const screenX = pos.x * s + offsetX();
@@ -181,23 +187,23 @@ export default function MapView() {
             if (head) {
                 ctx.drawImage(head, screenX - size / 2, screenY - size / 2, size, size);
                 ctx.lineWidth = 2;
-                ctx.strokeStyle = "#ffffff";
+                ctx.strokeStyle = strokeColor;
                 ctx.strokeRect(screenX - size / 2, screenY - size / 2, size, size);
             } else {
                 ctx.beginPath();
                 ctx.arc(screenX, screenY, Math.max(4, size / 3), 0, Math.PI * 2);
-                ctx.fillStyle = "#e73648";
+                ctx.fillStyle = markerColor;
                 ctx.fill();
                 ctx.lineWidth = 2;
-                ctx.strokeStyle = "#ffffff";
+                ctx.strokeStyle = strokeColor;
                 ctx.stroke();
             }
             const label = key;
             ctx.font = "600 12px system-ui, sans-serif";
             const textWidth = ctx.measureText(label).width;
-            ctx.fillStyle = "rgba(0,0,0,0.55)";
+            ctx.fillStyle = labelBg;
             ctx.fillRect(screenX + size / 2 + 3, screenY - 9, textWidth + 8, 18);
-            ctx.fillStyle = "#ffffff";
+            ctx.fillStyle = labelText;
             ctx.fillText(label, screenX + size / 2 + 7, screenY + 4);
         }
     };

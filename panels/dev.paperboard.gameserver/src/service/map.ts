@@ -31,6 +31,11 @@ const DIMENSION_MIN_BUILD: Record<MapDimension, number> = {
     the_end: 0,
 };
 
+// a region file is a few MB in practice; cap before reading it and cap each
+// chunk's decompressed size so a crafted .mca cannot exhaust the daemon
+const MAX_REGION_BYTES = 64 * 1024 * 1024;
+const MAX_CHUNK_BYTES = 16 * 1024 * 1024;
+
 export interface MapDimensionRegions {
     dimension: MapDimension;
     regions: RegionCoord[];
@@ -208,6 +213,12 @@ export async function renderMapTile(
     if (!(await fileApi.exists(relative, PANEL_ID))) return null;
     const absolute = await fileApi.getPath(relative, PANEL_ID);
     const mtimeMs = fs.statSync(absolute).mtimeMs;
+    const size = fs.statSync(absolute).size;
+    if (size > MAX_REGION_BYTES) {
+        throw new Error(
+            `Region file too large to map (${Math.round(size / 1024 / 1024)} MB)`,
+        );
+    }
 
     const cached = tileCache.get(absolute);
     if (cached && cached.mtimeMs === mtimeMs) {
@@ -238,8 +249,10 @@ function readChunkBuffer(region: Buffer, cx: number, cz: number): Buffer | null 
     const compression = region[offset + 4];
     const payload = region.subarray(offset + 5, offset + 4 + length);
     try {
-        if (compression === 1) return gunzipSync(payload);
-        if (compression === 2) return inflateSync(payload);
+        if (compression === 1)
+            return gunzipSync(payload, { maxOutputLength: MAX_CHUNK_BYTES });
+        if (compression === 2)
+            return inflateSync(payload, { maxOutputLength: MAX_CHUNK_BYTES });
         if (compression === 3) return Buffer.from(payload);
     } catch (err) {
         console.debug("[Service:Map] chunk decompress failed:", String(err));

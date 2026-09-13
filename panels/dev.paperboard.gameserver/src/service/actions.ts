@@ -28,7 +28,6 @@ import {
 } from "./diagnostics";
 import { listInstalledPlugins, deletePlugin, uninstallAllPlugins } from "./plugins";
 import {
-    assertServerOffline,
     listWorldDirs,
     listWorlds,
     setActiveWorld,
@@ -569,7 +568,6 @@ export const panelActions: ActionDefinition[] = [
             inputs: { levelName: string },
         ) => {
             if (!inputs?.levelName) throw new Error("World name is required");
-            assertServerOffline(ctx);
             await deleteActiveWorldDirs(ctx, inputs.levelName);
             return true;
         },

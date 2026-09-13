@@ -98,6 +98,20 @@ describe("pickVersionFile (pure)", () => {
         expect(() => pickVersionFile([], [])).toThrow();
         expect(() => pickVersionFile([{ version_number: "x", files: [] }], [])).toThrow();
     });
+
+    it("refuses a build whose only file carries no checksum", () => {
+        expect(() =>
+            pickVersionFile(
+                [
+                    {
+                        version_number: "1.0",
+                        files: [{ url: "https://x/nohash.jar", filename: "nohash.jar", primary: true }],
+                    },
+                ],
+                [],
+            ),
+        ).toThrow(/checksummed/);
+    });
 });
 
 describe("installProject (mocked network + fileApi)", () => {

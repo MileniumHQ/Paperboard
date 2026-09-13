@@ -101,7 +101,3 @@ export function queryPlayerPositions() {
         console.debug("[players] queryPlayerPositions failed:", String(err)),
     );
 }
-
-export async function restorePlayerStateFromLog() {
-    await serverBridge.refreshState();
-}

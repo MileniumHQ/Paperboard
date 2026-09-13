@@ -8,6 +8,7 @@ import { type GameServerState, PANEL_ID } from "./types";
 // the log viewer is bounded twice: a compressed archive we will not expand,
 // and a character cap on what is returned over the bridge
 const MAX_COMPRESSED_BYTES = 8 * 1024 * 1024;
+const MAX_DECOMPRESSED_BYTES = 64 * 1024 * 1024;
 const MAX_PLAIN_READ_BYTES = 4 * 1024 * 1024;
 const MAX_LOG_CHARS = 400_000;
 
@@ -79,7 +80,11 @@ export async function readLogFile(
                 `Log archive too large to open (${Math.round(size / 1024 / 1024)} MB compressed)`,
             );
         }
-        raw = gunzipSync(fs.readFileSync(absolute)).toString("utf8");
+        // bound the DECOMPRESSED output too: a crafted archive can expand
+        // far past its compressed size and exhaust the daemon
+        raw = gunzipSync(fs.readFileSync(absolute), {
+            maxOutputLength: MAX_DECOMPRESSED_BYTES,
+        }).toString("utf8");
     } else {
         raw = readTail(absolute, MAX_PLAIN_READ_BYTES).toString("utf8");
     }

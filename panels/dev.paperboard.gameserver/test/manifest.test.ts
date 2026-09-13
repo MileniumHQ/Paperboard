@@ -11,6 +11,7 @@ const REQUIRED_HOSTS = [
     "piston-meta.mojang.com",
     "piston-data.mojang.com",
     "fill.papermc.io",
+    "fill-data.papermc.io",
     "meta.fabricmc.net",
     "api.modrinth.com",
     "cdn.modrinth.com",

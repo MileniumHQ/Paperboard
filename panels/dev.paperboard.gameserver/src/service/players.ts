@@ -51,6 +51,19 @@ export const __playersTest = {
     clearJoins: () => lastJoinAt.clear(),
 };
 
+// per-player records grow with unique players; keep them bounded the same
+// way every other buffer in the panel is (evict oldest insertion first)
+function capEntries<T>(
+    record: Record<string, T>,
+    max = MAX_BUFFERED_ENTRIES,
+): Record<string, T> {
+    const keys = Object.keys(record);
+    if (keys.length <= max) return record;
+    const next: Record<string, T> = {};
+    for (const key of keys.slice(keys.length - max)) next[key] = record[key];
+    return next;
+}
+
 export function trackPlayerActivity(
     ctx: ServiceContext<GameServerState>,
     clean: string,
@@ -91,7 +104,7 @@ export function trackPlayerActivity(
             const online = prev.onlinePlayers.filter((p) => p !== key);
             const playtime = { ...prev.playerPlaytime };
             playtime[key] = (playtime[key] ?? 0) + sessionSeconds;
-            return { onlinePlayers: online, playerPlaytime: playtime };
+            return { onlinePlayers: online, playerPlaytime: capEntries(playtime) };
         });
         ctx.emitTrigger(TRIGGER_IDS.playerLeft, left);
         return;
@@ -126,7 +139,7 @@ export function handleStatResponse(
         const data = { ...(stats[pending.player] ?? {}) };
         data[pending.field] = value;
         stats[pending.player] = data;
-        return { playerStats: stats };
+        return { playerStats: capEntries(stats) };
     });
     return true;
 }

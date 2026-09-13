@@ -1,6 +1,6 @@
 import { PANEL_ID, ACTION_IDS } from "../service/contract";
 import { createSignal } from "solid-js";
-import { createPanelBridge, system } from "@paperboard-dev/paperapi";
+import { createPanelBridge } from "@paperboard-dev/paperapi";
 import type { PaperConsoleEntry, PaperBadgeVariant } from "@paperboard-dev/paperui";
 import stripAnsi from "strip-ansi";
 import { SOFTWARE_NAMES, type ServerSoftwareType } from "./software";
@@ -55,10 +55,6 @@ export const [serverActionError, setServerActionError] = createSignal("");
 
 export const MIN_RAM_GB = 1;
 export const MAX_RAM_GB = 16;
-
-export function getLocalNetworkIP(): Promise<string> {
-    return system.getLocalIP();
-}
 
 export const serverBridge = createPanelBridge({
     panelId: PANEL_ID,

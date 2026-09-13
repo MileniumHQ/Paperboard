@@ -27,9 +27,11 @@ export async function listWorldDirs(): Promise<string[]> {
 }
 
 export async function deleteActiveWorldDirs(
-    _ctx: ServiceContext<GameServerState>,
+    ctx: ServiceContext<GameServerState>,
     levelName: string,
 ): Promise<void> {
+    // enforce offline here, at the owner, not only in the action that calls it
+    assertServerOffline(ctx);
     await deleteWorldDirs(levelName, makeTrashRemoveDeps("Service:Worlds"));
 }
 

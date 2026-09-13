@@ -10,7 +10,7 @@ import {
     resetWorldFilesWith,
 } from "../core/diagnostics";
 import { makeTrashRemoveDeps } from "./trashDeps";
-import { resolveLevelName } from "./worlds";
+import { resolveLevelName, assertServerOffline } from "./worlds";
 
 export { detectServerIssue };
 
@@ -56,6 +56,8 @@ export async function killConflictingProcess(
 export async function resetWorldFiles(
     ctx: ServiceContext<GameServerState>,
 ): Promise<boolean> {
+    // reset deletes live world dirs: same offline rule as the world manager
+    assertServerOffline(ctx);
     // the reset follows the server's actual level-name, read fresh — a
     // renamed world must reset the renamed dirs, not hardcoded "world*"
     const levelName = await resolveLevelName();
