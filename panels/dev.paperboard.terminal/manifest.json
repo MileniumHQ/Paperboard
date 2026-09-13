@@ -1,0 +1,19 @@
+{
+    "name": "Terminal",
+    "id": "dev.paperboard.terminal",
+    "version": "3.0.0-alpha",
+    "description": "Interactive shell & multi-tab terminal console",
+    "publisher": "Paperboard",
+    "base": "./dist/index.html",
+    "service": "./dist/service.js",
+    "icon": "./branding/icon.png",
+    "permissions": [
+        "terminal.create",
+        "process.exec",
+        "shell.run",
+        "config.readWrite",
+        "files.readWrite",
+        "actions.registry",
+        "triggers.registry"
+    ]
+}

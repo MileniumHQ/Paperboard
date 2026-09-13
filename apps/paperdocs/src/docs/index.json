@@ -1,0 +1,252 @@
+{
+    "meta": {
+        "sections": {
+            "paperui": {
+                "name": "PaperUI",
+                "icon": "palette",
+                "image": "/paperui.png",
+                "description": "Build interfaces with PaperUI components and templates."
+            },
+            "paperapi": {
+                "name": "PaperAPI",
+                "icon": "api",
+                "image": "/paperapi.png",
+                "description": "Extend Paperboard with JavaScript APIs."
+            }
+        }
+    },
+    "paperui": {
+        "subsections": {
+            "getting-started": {
+                "name": "Getting started",
+                "icon": "rocket_launch",
+                "pages": {
+                    "introduction": {
+                        "index": 0,
+                        "name": "Introduction",
+                        "file": "00-introduction"
+                    },
+                    "quick-start": {
+                        "index": 1,
+                        "name": "Quick start",
+                        "file": "01-quick-start"
+                    }
+                }
+            },
+            "foundations": {
+                "name": "Foundations",
+                "icon": "format_paint",
+                "pages": {
+                    "colors": {
+                        "index": 0,
+                        "name": "Colors",
+                        "file": "colors"
+                    },
+                    "typography": {
+                        "index": 1,
+                        "name": "Typography and fonts",
+                        "file": "typography"
+                    },
+                    "variables": {
+                        "index": 2,
+                        "name": "Variables and spacing",
+                        "file": "variables"
+                    },
+                    "theming": {
+                        "index": 3,
+                        "name": "Theming",
+                        "file": "theming"
+                    }
+                }
+            },
+            "templates": {
+                "name": "Templates",
+                "icon": "dashboard_customize",
+                "sort": "alphabetical",
+                "pages": {
+                    "papercenteredinterface": {
+                        "name": "PaperCenteredInterface"
+                    },
+                    "paperflex": {
+                        "name": "PaperFlex"
+                    },
+                    "paperinterfacegroup": {
+                        "name": "PaperInterfaceGroup"
+                    },
+                    "papersettinglist": {
+                        "name": "PaperSettingList"
+                    },
+                    "paperwizard": {
+                        "name": "PaperWizard"
+                    }
+                }
+            },
+            "components": {
+                "name": "Components",
+                "icon": "widgets",
+                "sort": "alphabetical",
+                "pages": {
+                    "paperbadge": {
+                        "name": "PaperBadge"
+                    },
+                    "paperbutton": {
+                        "name": "PaperButton"
+                    },
+                    "papercheckbox": {
+                        "name": "PaperCheckbox"
+                    },
+                    "papercode": {
+                        "name": "PaperCode"
+                    },
+                    "paperconsole": {
+                        "name": "PaperConsole"
+                    },
+                    "papercontainer": {
+                        "name": "PaperContainer"
+                    },
+                    "papercontextmenu": {
+                        "name": "PaperContextMenu"
+                    },
+                    "papereffect": {
+                        "name": "PaperEffect"
+                    },
+                    "papericon": {
+                        "name": "PaperIcon"
+                    },
+                    "paperinput": {
+                        "name": "PaperInput"
+                    },
+                    "paperkbd": {
+                        "name": "PaperKbd"
+                    },
+                    "paperlink": {
+                        "name": "PaperLink"
+                    },
+                    "paperlist": {
+                        "name": "PaperList"
+                    },
+                    "paperloader": {
+                        "name": "PaperLoader"
+                    },
+                    "papermediacard": {
+                        "name": "PaperMediaCard"
+                    },
+                    "papermenu": {
+                        "name": "PaperMenu"
+                    },
+                    "papermodal": {
+                        "name": "PaperModal"
+                    },
+                    "paperprogress": {
+                        "name": "PaperProgress"
+                    },
+                    "paperprovider": {
+                        "name": "PaperProvider"
+                    },
+                    "paperquote": {
+                        "name": "PaperQuote"
+                    },
+                    "paperrail": {
+                        "name": "PaperRail"
+                    },
+                    "paperselector": {
+                        "name": "PaperSelector"
+                    },
+                    "paperselectmenu": {
+                        "name": "PaperSelectMenu"
+                    },
+                    "paperseparator": {
+                        "name": "PaperSeparator"
+                    },
+                    "paperspacer": {
+                        "name": "PaperSpacer"
+                    },
+                    "papertable": {
+                        "name": "PaperTable"
+                    },
+                    "papertext": {
+                        "name": "PaperText"
+                    },
+                    "papertextlist": {
+                        "name": "PaperTextList"
+                    },
+                    "papertoggle": {
+                        "name": "PaperToggle"
+                    }
+                }
+            }
+        }
+    },
+    "paperapi": {
+        "subsections": {
+            "getting-started": {
+                "name": "Getting started",
+                "icon": "rocket_launch",
+                "pages": {
+                    "introduction": {
+                        "index": 0,
+                        "name": "Introduction",
+                        "file": "00-introduction"
+                    },
+                    "quick-start": {
+                        "index": 1,
+                        "name": "Quick start",
+                        "file": "01-quick-start"
+                    }
+                }
+            },
+            "api": {
+                "name": "APIs",
+                "icon": "api",
+                "pages": {
+                    "actions": {
+                        "index": 0,
+                        "name": "Actions API",
+                        "file": "actions"
+                    },
+                    "terminal": {
+                        "index": 1,
+                        "name": "Terminal API",
+                        "file": "terminal"
+                    },
+                    "process": {
+                        "index": 2,
+                        "name": "Process API",
+                        "file": "process"
+                    },
+                    "package": {
+                        "index": 3,
+                        "name": "Package API",
+                        "file": "package"
+                    },
+                    "files": {
+                        "index": 4,
+                        "name": "Files API",
+                        "file": "files"
+                    },
+                    "config": {
+                        "index": 5,
+                        "name": "Config API",
+                        "file": "config"
+                    },
+                    "system": {
+                        "index": 6,
+                        "name": "System API",
+                        "file": "system"
+                    }
+                }
+            },
+            "cli": {
+                "name": "CLI",
+                "icon": "terminal",
+                "pages": {
+                    "overview": {
+                        "index": 0,
+                        "name": "Overview",
+                        "file": "overview"
+                    }
+                }
+            }
+        }
+    }
+}

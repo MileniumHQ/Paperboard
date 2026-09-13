@@ -1,0 +1,19 @@
+.PaperKbd {
+    font-family: var(--paper-font-family-code);
+    font-size: var(--paper-text-size-1);
+    font-weight: 700;
+    padding: var(--paper-uigap-onefourth) var(--paper-uigap-half);
+    border-radius: var(--paper-border-radius-half);
+    background: var(--paper-background-front);
+    border: var(--paper-border-width) solid var(--paper-medium-dark-border);
+    box-shadow: 0 var(--paper-thick-border-width) 0
+        var(--paper-medium-dark-border);
+    color: var(--paper-main-text);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.6em;
+    line-height: 1;
+    text-align: center;
+    margin: 0 var(--paper-uigap-onefourth);
+}

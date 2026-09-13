@@ -1,0 +1,162 @@
+.PaperButton {
+    font-family: var(--paper-font-family-rounded);
+    --foreground: var(--paper-front-blue);
+    --background: var(--paper-back-blue);
+    background: var(--foreground);
+    padding: var(--paper-uigap-threefourths) var(--paper-uigap-double);
+    color: var(--paper-over-brand);
+    font-size: var(--paper-text-size-4);
+    border: none;
+    border-radius: var(--paper-border-radius);
+    cursor: pointer;
+    outline: none;
+    transition:
+        transform var(--paper-tiny-transition),
+        box-shadow var(--paper-tiny-transition),
+        opacity var(--paper-short-transition),
+        filter var(--paper-long-transition);
+    width: fit-content;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--paper-uigap-half);
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.PaperButton:focus-visible {
+    outline: var(--paper-focus-ring);
+    outline-offset: var(--paper-focus-offset);
+}
+
+.PaperButton.compact {
+    padding: var(--paper-uigap-half) var(--paper-uigap-sixfourths);
+    font-size: var(--paper-text-size-3);
+    gap: var(--paper-uigap-half);
+}
+
+.PaperButton.compact [class*="PaperIcon"] {
+    font-size: var(--paper-icon-size-medium);
+}
+
+.PaperButton.green {
+    --foreground: var(--paper-front-green);
+    --background: var(--paper-back-green);
+}
+.PaperButton.yellow {
+    --foreground: var(--paper-front-yellow);
+    --background: var(--paper-back-yellow);
+}
+.PaperButton.red {
+    --foreground: var(--paper-front-red);
+    --background: var(--paper-back-red);
+}
+.PaperButton.text {
+    --foreground: transparent;
+    --background: transparent;
+    color: var(--paper-main-text);
+    background: transparent;
+    transition:
+        background var(--paper-short-transition),
+        color var(--paper-short-transition),
+        transform var(--paper-tiny-transition);
+}
+.PaperButton.text:hover {
+    color: var(--paper-main-text);
+    background: color-mix(
+        in srgb,
+        var(--paper-anti-background) 8%,
+        transparent
+    );
+    opacity: 1;
+}
+.PaperButton.text:active {
+    background: color-mix(
+        in srgb,
+        var(--paper-anti-background) 14%,
+        transparent
+    );
+    transform: scale(0.98);
+}
+.PaperButton.icon {
+    height: var(--paper-item-size-large);
+    width: var(--paper-item-size-large);
+    padding: 0;
+    font-family: "Material Symbols Rounded";
+    font-size: var(--paper-icon-size-huge);
+    font-variation-settings: "FILL" 1;
+}
+
+.PaperButton.compact.icon {
+    height: var(--paper-item-size-small);
+    width: var(--paper-item-size-small);
+    padding: 0;
+    font-size: var(--paper-icon-size-medium);
+}
+
+.PaperButton.tiny {
+    padding: var(--paper-uigap-onefourth) var(--paper-uigap-threefourths);
+    font-size: var(--paper-text-size-2);
+    border-radius: var(--paper-border-radius-half);
+    gap: var(--paper-uigap-onefourth);
+    color: var(--paper-light-text);
+    background: transparent;
+    transition: var(--paper-tiny-transition) background;
+}
+
+.PaperButton.tiny:hover {
+    background: color-mix(
+        in srgb,
+        var(--paper-anti-background) 8%,
+        var(--paper-background-frontest)
+    );
+}
+.PaperButton.tiny:active {
+    background: color-mix(
+        in srgb,
+        var(--paper-anti-background) 12%,
+        var(--paper-background-frontest)
+    );
+}
+
+.PaperButton.tiny [class*="PaperIcon"] {
+    font-size: var(--paper-icon-size-small);
+}
+
+.PaperButton.tiny.icon {
+    height: var(--paper-item-size-tiny);
+    width: var(--paper-item-size-tiny);
+    padding: 0;
+    font-size: var(--paper-icon-size-small);
+    border-radius: var(--paper-border-radius-half);
+}
+
+.PaperButton:not(.tiny):not(.text):hover {
+    opacity: 0.8;
+}
+:global([class*="PaperEffect"]) .PaperButton:hover {
+    opacity: 1 !important;
+}
+.PaperButton:not(.tiny):not(.text):active {
+    transform: scale(0.95);
+    opacity: 1;
+}
+:global([class*="PaperEffect"]) .PaperButton:active {
+    transform: none;
+}
+
+.PaperButton.disabled,
+.PaperButton:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+.PaperButton.disabled:hover,
+.PaperButton:disabled:hover {
+    opacity: 0.45;
+}
+.PaperButton.text.disabled:hover,
+.PaperButton.text:disabled:hover {
+    background: transparent;
+    color: var(--paper-main-text);
+}

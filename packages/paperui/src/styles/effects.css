@@ -1,0 +1,65 @@
+:root {
+    --paper-tiny-transition: 0.15s;
+    --paper-short-transition: 0.2s;
+    --paper-mid-transition: 0.3s;
+    --paper-medium-transition: 0.4s;
+    --paper-long-transition: 0.6s;
+
+    --paper-ease-standard: cubic-bezier(0.2, 0, 0, 1);
+    --paper-ease-emphasized: cubic-bezier(0.16, 1, 0.3, 1);
+    --paper-ease-symmetric: cubic-bezier(0.2, 0, 0.2, 1);
+    --paper-ease-slide: cubic-bezier(0.7, 0, 0.2, 1);
+    --paper-ease-indeterminate: cubic-bezier(0.4, 0, 0.6, 1);
+}
+
+[data-paperui-motion="reduced"] {
+    --paper-tiny-transition: 0s;
+    --paper-short-transition: 0s;
+    --paper-mid-transition: 0s;
+    --paper-medium-transition: 0s;
+    --paper-long-transition: 0s;
+    --paper-blur-light: blur(0);
+    --paper-blur-medium: blur(0);
+    --paper-blur-heavy: blur(0);
+    backdrop-filter: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    :root {
+        --paper-tiny-transition: 0s;
+        --paper-short-transition: 0s;
+        --paper-mid-transition: 0s;
+        --paper-medium-transition: 0s;
+        --paper-long-transition: 0s;
+        --paper-blur-light: blur(0);
+        --paper-blur-medium: blur(0);
+        --paper-blur-heavy: blur(0);
+        /* no global * selector here: it escapes .paperui-root and mutates
+           the host document — components zero their own animations under
+           their own classes; doc-level opt-out rides the scoped variant */
+    }
+}
+
+
+[data-paperui-motion="reduced"] *,
+[data-paperui-motion="reduced"] *::before,
+[data-paperui-motion="reduced"] *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    backdrop-filter: none !important;
+}
+
+@keyframes PaperTemplateLeave {
+    to {
+        transform: translateX(-25%);
+        opacity: 0;
+    }
+}
+
+@keyframes PaperTemplateEnter {
+    from {
+        transform: translateX(25%);
+        opacity: 0;
+    }
+}

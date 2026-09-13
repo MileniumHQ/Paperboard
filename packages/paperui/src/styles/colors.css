@@ -1,0 +1,121 @@
+/* forced theme wins over OS preference */
+:root {
+    --paper-front-blue: #2981e5;
+    --paper-back-blue: #0f63c8;
+    --paper-front-green: #0d9d0d;
+    --paper-back-green: #0b720b;
+    /* plain-green convenience alias (workbench + panels reference it) */
+    --paper-green: #0d9d0d;
+    --paper-front-red: #e73648;
+    --paper-back-red: #ae1414;
+    --paper-front-yellow: #d7a51d;
+    --paper-back-yellow: #a17e0d;
+    --paper-over-brand: #ffffff;
+    /* scrim resting behind modal surfaces; dark/light resolve below */
+    --paper-overlay: rgba(0, 0, 0, 0.45);
+    /* inverted scrim for dark surfaces (light dim behind overlays) */
+    --paper-overlay-invert: rgba(255, 255, 255, 0.7);
+
+    /* OS brand colors — semantic identities, not theme colors (an OS is
+       its color); they survive theming by design */
+    --paper-brand-os-macos: #ffffff;
+    --paper-brand-os-windows: #0078d4;
+    --paper-brand-os-ubuntu: #e95420;
+    --paper-brand-os-arch: #1793d1;
+    --paper-brand-os-debian: #a80030;
+    --paper-brand-os-fedora: #3c6eb4;
+    --paper-brand-os-linuxmint: #86be43;
+    --paper-brand-os-zorin: #0cc1e8;
+    --paper-brand-os-steamos: #1a9fff;
+    --paper-brand-os-pop: #48b9c7;
+    --paper-brand-os-manjaro: #35bf5c;
+    --paper-brand-os-elementary: #64baff;
+    --paper-brand-os-nixos: #5277c3;
+    --paper-brand-os-raspbian: #c51a4a;
+    --paper-brand-os-linux: #fcc624;
+    --paper-brand-os-unknown: #888888;
+
+    --paper-background-frontest: #ffffff;
+    --paper-background-front: #f6f8fa;
+    --paper-background-definition: #eceff3;
+    --paper-background-back: #e2e6eb;
+    --paper-background-backest: #d8dce2;
+    --paper-background-element: #cdd3db;
+
+    --paper-medium-border: #c4c9d2;
+    --paper-medium-dark-border: #adb3be;
+    --paper-dark-border: #7d8492;
+
+    --paper-main-text: #0f1319;
+    --paper-lightish-text: #2e3440;
+    --paper-light-text: #5b6371;
+    --paper-lightest-text: #8b93a2;
+
+    --paper-anti-background: #000000;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+            --paper-background-frontest: #222222;
+        --paper-background-front: #191919;
+        --paper-background-back: #2a2a2a;
+        --paper-background-backest: #323232;
+        --paper-background-definition: #131313;
+        --paper-background-element: #3f3f3f;
+
+            --paper-medium-border: #3a3a3a;
+        --paper-medium-dark-border: #4c4c4c;
+        --paper-dark-border: #636363;
+
+            --paper-main-text: #f5f5f5;
+        --paper-lightish-text: #d4d4d4;
+        --paper-light-text: #a1a1a1;
+        --paper-lightest-text: #737373;
+
+        --paper-anti-background: #ffffff;
+
+        --paper-overlay: rgba(0, 0, 0, 0.6);
+    }
+}
+
+[data-paperui-theme="light"],
+[data-theme="light"] {
+    --paper-background-frontest: #ffffff;
+    --paper-background-front: #f6f8fa;
+    --paper-background-definition: #eceff3;
+    --paper-background-back: #e2e6eb;
+    --paper-background-backest: #d8dce2;
+    --paper-background-element: #cdd3db;
+
+    --paper-medium-border: #c4c9d2;
+    --paper-medium-dark-border: #adb3be;
+    --paper-dark-border: #7d8492;
+
+    --paper-main-text: #0f1319;
+    --paper-lightish-text: #2e3440;
+    --paper-light-text: #5b6371;
+    --paper-lightest-text: #8b93a2;
+
+    --paper-anti-background: #000000;
+}
+
+[data-paperui-theme="dark"],
+[data-theme="dark"] {
+    --paper-background-frontest: #222222;
+    --paper-background-front: #191919;
+    --paper-background-back: #2a2a2a;
+    --paper-background-backest: #323232;
+    --paper-background-definition: #131313;
+    --paper-background-element: #3f3f3f;
+
+    --paper-medium-border: #3a3a3a;
+    --paper-medium-dark-border: #4c4c4c;
+    --paper-dark-border: #636363;
+
+    --paper-main-text: #f5f5f5;
+    --paper-lightish-text: #d4d4d4;
+    --paper-light-text: #a1a1a1;
+    --paper-lightest-text: #737373;
+
+    --paper-anti-background: #ffffff;
+}

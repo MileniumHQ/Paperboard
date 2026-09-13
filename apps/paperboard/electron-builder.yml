@@ -1,0 +1,78 @@
+appId: dev.paperboard.paperboard
+productName: Paperboard
+copyright: 2026 Milenium
+directories:
+    buildResources: build
+files:
+    - "!**/.vscode/*"
+    - "!src/*"
+    - "!papercrane/*"
+    - "!electron.vite.config.{js,ts,mjs,cjs}"
+    - "!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}"
+    - "!{.env,.env.*,.npmrc,pnpm-lock.yaml}"
+    - "!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}"
+    - "!**/*.ts"
+    - "!**/*.map"
+asarUnpack:
+    - resources/**
+    - "**/*.node"
+    - "**/node-pty/**"
+    - "**/node-notifier/**"
+    - "**/screenshot-desktop/**"
+    - "**/loudness/**"
+win:
+    executableName: paperboard
+    icon: build/icon.ico
+    target:
+        - target: nsis
+          arch:
+              - x64
+    publish:
+        - provider: generic
+          url: https://origami.ariapis.com/paperdl/paperboard
+          channel: latest
+nsis:
+    artifactName: ${name}-${version}-windows-x64-setup.${ext}
+    shortcutName: ${productName}
+    uninstallDisplayName: ${productName}
+    createDesktopShortcut: always
+    installerIcon: build/icon.ico
+    uninstallerIcon: build/icon.ico
+mac:
+    entitlementsInherit: build/entitlements.mac.plist
+    icon: build/icon.icns
+    category: public.app-category.utilities
+    target:
+        - target: zip
+          arch:
+              - x64
+              - arm64
+    publish:
+        - provider: generic
+          url: https://origami.ariapis.com/paperdl/paperboard
+          channel: latest
+    extendInfo:
+        - NSCameraUsageDescription: Application requests access to the device's camera.
+        - NSMicrophoneUsageDescription: Application requests access to the device's microphone.
+        - NSDocumentsFolderUsageDescription: Application requests access to the user's Documents folder.
+        - NSDownloadsFolderUsageDescription: Application requests access to the user's Downloads folder.
+    notarize: false
+    artifactName: ${name}-${version}-${arch}.${ext}
+linux:
+    icon: resources/icon.png
+    target:
+        - target: AppImage
+          arch:
+              - x64
+              - arm64
+    publish:
+        - provider: generic
+          url: https://origami.ariapis.com/paperdl/paperboard
+          channel: latest
+    maintainer: Milenium <contact@paperboard.dev>
+    category: Utility
+    synopsis: Run and manage tools locally.
+    description: Run and manage tools locally.
+appImage:
+    artifactName: ${name}-${version}-linux-${arch}.${ext}
+npmRebuild: false

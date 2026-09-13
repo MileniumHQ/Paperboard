@@ -1,0 +1,171 @@
+.PaperList {
+    gap: 0;
+    padding: 0;
+    width: var(--paper-sidebar-width);
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    border-right: var(--paper-border-width) solid var(--paper-medium-border);
+    background: var(--paper-background-definition);
+    touch-action: pan-y;
+}
+
+.PaperList.borderless {
+    border: 0 !important;
+    border-right: 0 !important;
+}
+
+.PaperList.fullWidth {
+    width: 100% !important;
+}
+
+.PaperList.fullHeight {
+    height: 100% !important;
+}
+
+.PaperList.scrollable {
+    overflow-y: auto;
+}
+
+.PaperList.horizontal {
+    flex-direction: row;
+    align-items: center;
+    width: 100%;
+    height: auto;
+    border-right: 0;
+    padding: var(--paper-border-width);
+    touch-action: pan-x;
+}
+
+.PaperList > :not(.PaperListItem) {
+    flex-shrink: 0;
+}
+
+.PaperList.reorderable .PaperListItem {
+    touch-action: none;
+    user-select: none;
+}
+
+.PaperListItem {
+    position: relative;
+    background: var(--paper-background-frontest);
+    padding: var(--paper-uigap-threefourths);
+    outline: var(--paper-border-width) solid var(--paper-medium-border);
+    border-radius: 0;
+    border: 0;
+    gap: var(--paper-uigap-half);
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    overflow: hidden;
+    transition:
+        background var(--paper-short-transition),
+        color var(--paper-short-transition);
+}
+
+.PaperListItem::before {
+    content: "";
+    position: absolute;
+    background: var(--paper-front-blue);
+    z-index: 5;
+    pointer-events: none;
+    transition: width var(--paper-short-transition), height var(--paper-short-transition);
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 0;
+}
+
+.PaperList.horizontal .PaperListItem::before {
+    left: 0;
+    right: 0;
+    top: auto;
+    bottom: 0;
+    width: 100%;
+    height: 0;
+}
+
+.PaperListItem.selected::before {
+    width: var(--paper-thickest-border-width);
+}
+.PaperList.horizontal .PaperListItem.selected::before {
+    height: var(--paper-thickest-border-width);
+}
+
+.PaperList.horizontal .PaperListItem {
+    outline: none;
+    outline: var(--paper-border-width) solid var(--paper-medium-border);
+    padding-right: var(--paper-uigap-double);
+}
+
+.PaperListItem:has([class*="PaperButton"]) {
+    padding-right: var(--paper-uigap-half) !important;
+    padding-top: var(--paper-uigap-half);
+}
+
+.listIcon {
+    font-size: var(--paper-icon-size-large);
+    color: var(--paper-back-blue);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.itemText {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+}
+
+.listTitle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    gap: var(--paper-uigap-half);
+}
+
+.PaperListItem :global([class*="PaperButton"]) {
+    margin-left: auto;
+    flex-shrink: 0;
+    z-index: 6;
+}
+
+.listDescription {
+    color: var(--paper-light-text);
+}
+
+.PaperListItem:hover {
+    background: color-mix(in srgb, var(--paper-anti-background) 3%, var(--paper-background-frontest));
+}
+
+.PaperListItem.selected {
+    background: var(--paper-background-frontest);
+}
+
+.reorderable .PaperListItem {
+    cursor: pointer;
+    user-select: none;
+    touch-action: none;
+}
+
+.PaperListItem.dragging {
+    z-index: 50;
+    cursor: grabbing !important;
+    opacity: 0.96;
+}
+
+.PaperListItem.isSibling {
+    transition:
+        transform 0.22s var(--paper-ease-standard),
+        background var(--paper-short-transition) ease,
+        color var(--paper-short-transition) ease;
+}
+
+.PaperListItem.dropping {
+    transition:
+        transform 0s,
+        background var(--paper-short-transition) ease,
+        color var(--paper-short-transition) ease;
+}

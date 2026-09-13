@@ -1,0 +1,39 @@
+{
+    "$schema": "node_modules/wrangler/config-schema.json",
+    "name": "origami",
+    "main": "src/index.ts",
+    "account_id": "355f97d9a981bff4cd52aa362ae577c7",
+    "compatibility_date": "2026-08-18",
+    "routes": [
+        {
+            "pattern": "origami.ariapis.com",
+            "custom_domain": true
+        }
+    ],
+    "kv_namespaces": [
+        {
+            "binding": "PACKAGES",
+            "id": "89764cd39f114ba18e25945504982bf0"
+        }
+    ],
+    "r2_buckets": [
+        {
+            "binding": "PANELS_BUCKET",
+            "bucket_name": "paperboard-boards"
+        },
+        {
+            "binding": "PAPERDL_BUCKET",
+            "bucket_name": "paperboard-paperdl"
+        }
+    ],
+    "vars": {
+        // canonical public origin for record URLs. Derived-at-publish
+        // request origins are a Host-header poisoning vector (O10): the
+        // stored downloadUrl/iconUrl must come from configuration, not
+        // from whoever sent the publish request.
+        "PANEL_BASE_URL": "https://origami.ariapis.com"
+    },
+    "observability": {
+        "enabled": true
+    }
+}

@@ -1,0 +1,70 @@
+{
+    "name": "@paperboard-dev/paperui",
+    "version": "3.0.0-alpha",
+    "type": "module",
+    "main": "./dist/paperui.cjs.js",
+    "module": "./dist/paperui.es.js",
+    "types": "./dist/index.d.ts",
+    "solid": "./src/index.ts",
+    "sideEffects": [
+        "**/*.css"
+    ],
+    "files": [
+        "dist"
+    ],
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "solid": "./src/index.ts",
+            "import": "./dist/paperui.es.js",
+            "require": "./dist/paperui.cjs.js"
+        },
+        "./style.css": "./dist/paperui.css",
+        "./package.json": "./package.json"
+    },
+    "scripts": {
+        "dev": "vite",
+        "build": "tsc --noEmit && vite build",
+        "preview": "vite preview",
+        "test": "bash scripts/check-styling.sh && vitest run"
+    },
+    "devDependencies": {
+        "@solidjs/testing-library": "^0.8.10",
+        "@types/prismjs": "^1.26.6",
+        "jsdom": "^30.0.1",
+        "solid-js": "^1.9.13",
+        "typescript": "~6.0.2",
+        "vite": "^8.1.0",
+        "vite-plugin-dts": "^5.0.3",
+        "vite-plugin-solid": "^2.11.12",
+        "vitest": "^4.1.10"
+    },
+    "peerDependencies": {
+        "solid-js": "^1.9.0"
+    },
+    "dependencies": {
+        "anser": "^2.3.5",
+        "prismjs": "^1.30.0",
+        "solid-transition-group": "^0.3.0"
+    },
+    "description": "SolidJS component library and design system for Paperboard panels and desktop-class web apps.",
+    "keywords": [
+        "solidjs",
+        "solid",
+        "components",
+        "ui",
+        "design-system",
+        "paperboard",
+        "desktop"
+    ],
+    "author": "Paperboard <https://paperboard.dev>",
+    "homepage": "https://paperboard.dev",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/paperboard-dev/PaperUI.git"
+    },
+    "license": "MIT",
+    "publishConfig": {
+        "access": "public"
+    }
+}

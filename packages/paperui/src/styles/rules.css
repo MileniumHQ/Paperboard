@@ -1,0 +1,12 @@
+/* scoped under .paperui-root: no global selector may escape the library.
+   data-paperui-theme keeps the rules alive for mounts outside the root */
+.paperui-root :disabled,
+.paperui-root .disabled,
+.paperui-root [disabled],
+[data-paperui-theme] :disabled,
+[data-paperui-theme] .disabled,
+[data-paperui-theme] [disabled] {
+    opacity: 0.6;
+    filter: grayscale(1);
+    pointer-events: none;
+}

@@ -1,0 +1,65 @@
+.PaperFlex {
+    display: flex;
+    box-sizing: border-box;
+    position: relative;
+}
+
+.resizeHandleRow {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    right: calc(var(--paper-uigap-onefourth) * -1);
+    width: var(--paper-uigap-half);
+    cursor: col-resize;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    user-select: none;
+    touch-action: none;
+}
+
+.resizeHandleRowReverse {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: calc(var(--paper-uigap-onefourth) * -1);
+    width: var(--paper-uigap-half);
+    cursor: col-resize;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    user-select: none;
+    touch-action: none;
+}
+
+.resizeHandleColumn {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: calc(var(--paper-uigap-onefourth) * -1);
+    height: var(--paper-uigap-half);
+    cursor: row-resize;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    user-select: none;
+    touch-action: none;
+}
+
+.resizeHandleColumnReverse {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: calc(var(--paper-uigap-onefourth) * -1);
+    height: var(--paper-uigap-half);
+    cursor: row-resize;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    user-select: none;
+    touch-action: none;
+}

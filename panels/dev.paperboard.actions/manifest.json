@@ -1,0 +1,21 @@
+{
+    "name": "Actions",
+    "id": "dev.paperboard.actions",
+    "version": "3.0.0-alpha",
+    "description": "Visual automation and workflow builder",
+    "publisher": "Paperboard",
+    "base": "./dist/index.html",
+    "service": "./dist/service.js",
+    "icon": "./branding/icon.png",
+    "permissions": [
+        "process.exec",
+        "shell.run",
+        "files.readWrite",
+        "config.readWrite",
+        "actions.registry",
+        "triggers.registry"
+    ],
+    "network": {
+        "mode": "any-https"
+    }
+}

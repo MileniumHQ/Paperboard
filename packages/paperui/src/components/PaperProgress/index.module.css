@@ -1,0 +1,46 @@
+.PaperProgress {
+    display: block;
+    width: 100%;
+    height: calc(var(--paper-thickest-border-width) * 2);
+    background: var(--paper-background-definition);
+    border: none;
+    border-radius: var(--paper-thickest-border-width);
+    overflow: hidden;
+    position: relative;
+    box-sizing: border-box;
+}
+
+.bar {
+    height: 100%;
+    background: var(--paper-front-blue);
+    border-radius: var(--paper-thick-border-width);
+    transition: width var(--paper-mid-transition) var(--paper-ease-symmetric);
+}
+
+.indeterminate .bar {
+    width: 35%;
+    position: absolute;
+    top: 0;
+    left: 0;
+    transition: none;
+    animation: indeterminateSweep 1.1s var(--paper-ease-indeterminate) infinite;
+}
+
+@keyframes indeterminateSweep {
+    0% {
+        transform: translateX(-100%);
+    }
+    100% {
+        transform: translateX(300%);
+    }
+}
+
+/* reduced motion zeroes within THIS component only — an infinite sweep
+   must not keep animating for OS-level reduced-motion users */
+@media (prefers-reduced-motion: reduce) {
+    .indeterminate .bar {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+}

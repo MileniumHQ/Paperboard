@@ -1,0 +1,23 @@
+.PaperTextList {
+    font-family: var(--paper-font-family);
+    color: var(--paper-main-text);
+    margin: 0 0 var(--paper-uigap-half) 0;
+    padding-left: calc(var(--paper-uigap) * 1.5);
+    list-style-position: outside;
+}
+
+.PaperTextList > * {
+    display: list-item;
+}
+
+.PaperTextList.compact > * + * {
+    margin-top: var(--paper-uigap-onefourth);
+}
+
+.PaperTextList.normal > * + * {
+    margin-top: var(--paper-uigap-half);
+}
+
+.PaperTextList.relaxed > * + * {
+    margin-top: var(--paper-uigap);
+}

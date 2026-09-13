@@ -1,0 +1,23 @@
+{
+    "name": "dev.paperboard.botcreator",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "dev": "vite",
+        "build": "tsc && vite build && bun build ./src/service.ts --outfile ./dist/service.js --target=node --external @paperboard-dev/paperui",
+        "pack": "bunx paperapi pack",
+        "preview": "vite preview",
+        "test": "bun test"
+    },
+    "dependencies": {
+        "@paperboard-dev/paperapi": "workspace:*",
+        "@paperboard-dev/paperui": "workspace:*",
+        "discord.js": "^14.27.0",
+        "solid-js": "^1.9.13"
+    },
+    "devDependencies": {
+        "typescript": "~6.0.2",
+        "vite": "^8.1.0",
+        "vite-plugin-solid": "^2.11.14"
+    }
+}

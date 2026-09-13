@@ -1,0 +1,21 @@
+.PaperSeparator {
+    display: inline-block;
+    flex-shrink: 0;
+    background: var(--paper-medium-border);
+    border: 0;
+    margin: 0;
+}
+
+.PaperSeparator.horizontal {
+    display: block;
+    width: 100%;
+    height: var(--paper-border-width);
+    margin: var(--paper-uigap-half) 0;
+}
+
+.PaperSeparator.vertical {
+    width: var(--paper-border-width);
+    height: var(--paper-icon-size-small);
+    align-self: center;
+    margin: 0 var(--paper-uigap-half);
+}

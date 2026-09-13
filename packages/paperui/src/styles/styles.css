@@ -1,0 +1,249 @@
+@import "./colors.css";
+@import "./effects.css";
+@import "./fonts.css";
+@import "./rules.css";
+
+:root {
+    --paper-font-family:
+        "Nunito Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+        Helvetica, Arial, sans-serif;
+    --paper-font-family-rounded:
+        "Nunito", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+        Helvetica, Arial, sans-serif;
+    --paper-font-family-code: "SUSE Mono", monospace;
+    --paper-focus-ring: 2px solid var(--paper-front-blue);
+    --paper-focus-offset: 2px;
+}
+
+/* NOTE: this library styles nothing outside .paperui-root /
+ * [data-paperui-theme]. Document-level resets (html/body margin) belong to
+ * the consuming app, not the library — see the shell's own shell.css. */
+
+.paperui-root,
+[data-paperui-theme] {
+    margin: 0;
+    padding: 0;
+    font-family: var(--paper-font-family);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+.paperui-root,
+[data-paperui-theme] {
+    font-family: var(--paper-font-family);
+    box-sizing: border-box;
+    color: var(--paper-main-text);
+    background-color: var(--paper-background-backest);
+}
+
+/* body-level unselectable is the provider's explicit opt-in contract
+ * (PaperProvider writes data-unselectable + class on document.body);
+ * everything else stays inside the root */
+body.unselectable,
+body[data-unselectable="true"],
+.paperui-root .unselectable,
+.paperui-root.unselectable,
+.paperui-root [data-unselectable="true"],
+.paperui-root .no-select {
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+.paperui-root input,
+.paperui-root textarea,
+.paperui-root select,
+.paperui-root [contenteditable="true"],
+.paperui-root [contenteditable=""],
+[data-paperui-theme] input,
+[data-paperui-theme] textarea,
+[data-paperui-theme] select,
+[data-paperui-theme] [contenteditable="true"],
+[data-paperui-theme] [contenteditable=""] {
+    -webkit-user-select: text;
+    user-select: text;
+}
+
+.paperui-root code,
+.paperui-root pre,
+.paperui-root kbd,
+.paperui-root samp,
+.paperui-root .selectable,
+.paperui-root .selectable-text,
+.paperui-root [data-selectable="true"],
+[data-paperui-theme] code,
+[data-paperui-theme] pre,
+[data-paperui-theme] kbd,
+[data-paperui-theme] samp,
+[data-paperui-theme] .selectable,
+[data-paperui-theme] .selectable-text,
+[data-paperui-theme] [data-selectable="true"] {
+    -webkit-user-select: text;
+    user-select: text;
+}
+
+.paperui-root.fullScreen {
+    width: 100vw;
+    height: 100vh;
+}
+
+.paperui-root.fullWidth {
+    width: 100vw;
+}
+
+.paperui-root.fullHeight {
+    height: 100vh;
+}
+
+.paperui-root.scrollable {
+    overflow-y: auto;
+}
+
+.paperui-root.fullScreen.scrollable {
+    min-height: 100vh;
+    height: auto;
+    overflow-y: auto;
+}
+
+.paperui-root.fullHeight.scrollable {
+    min-height: 100vh;
+    height: auto;
+    overflow-y: auto;
+}
+
+:root {
+    --paper-border-radius: 12px;
+    --paper-border-radius-half: 6px;
+
+    --paper-border-width: 1px;
+    --paper-thick-border-width: 2px;
+    --paper-thickest-border-width: 3px;
+
+    --paper-uigap: 12px;
+    --paper-uigap-onefourth: calc(var(--paper-uigap) * 0.25);
+    --paper-uigap-half: calc(var(--paper-uigap) * 0.5);
+    --paper-uigap-threefourths: calc(var(--paper-uigap) * 0.75);
+    --paper-uigap-sixfourths: calc(var(--paper-uigap) * 1.5);
+    --paper-uigap-double: calc(var(--paper-uigap) * 2);
+    --paper-uigap-triple: calc(var(--paper-uigap) * 3);
+    --paper-uigap-quadruple: calc(var(--paper-uigap) * 4);
+
+    --paper-element-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    --paper-heavy-element-shadow: 0 2px 6px 1px rgba(0, 0, 0, 0.2);
+    --paper-blur-light: blur(5px);
+    --paper-blur-medium: blur(10px);
+    --paper-blur-heavy: blur(15px);
+
+    --paper-text-size-0: 0px;
+    --paper-text-size-1: 12px;
+    --paper-text-size-2: 14px;
+    --paper-text-size-3: 16px;
+    --paper-text-size-4: 18px;
+    --paper-text-size-5: 20px;
+    --paper-text-size-6: 22px;
+    --paper-text-size-7: 24px;
+    --paper-text-size-8: 26px;
+    --paper-text-size-9: 30px;
+    --paper-text-size-10: 34px;
+    --paper-text-size-11: 38px;
+    --paper-text-size-12: 42px;
+    --paper-text-size-13: 50px;
+    --paper-text-size-14: 58px;
+    --paper-text-size-15: 66px;
+    --paper-text-size-16: 74px;
+    --paper-text-size-17: 82px;
+
+    --paper-icon-size-small: 18px;
+    --paper-icon-size-medium: 22px;
+    --paper-icon-size-large: 26px;
+    --paper-icon-size-xlarge: 28px;
+    --paper-icon-size-huge: 30px;
+
+    --paper-sidebar-width: 190px;
+    --paper-centered-width: 600px;
+    --paper-centered-height: 400px;
+    --paper-centered-width-small: 420px;
+    --paper-centered-height-small: 300px;
+    --paper-centered-width-medium: 600px;
+    --paper-centered-height-medium: 400px;
+    --paper-centered-width-large: 760px;
+    --paper-centered-height-large: 520px;
+    --paper-centered-width-wide: 920px;
+    --paper-centered-height-wide: 580px;
+    --paper-loader-width: 400px;
+
+    --paper-item-size-tiny: 28px;
+    --paper-item-size-small: 36px;
+    --paper-item-size-medium: 48px;
+    --paper-item-size-large: 64px;
+}
+
+/* scoped scrollbar styling — the bare ::-webkit-scrollbar selectors that
+ * used to live here restyled every scrollbar in the host document */
+.paperui-root,
+[data-paperui-theme] {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(
+            in srgb,
+            var(--paper-anti-background) 20%,
+            transparent
+        )
+        transparent;
+}
+
+.paperui-root::-webkit-scrollbar,
+.paperui-root ::-webkit-scrollbar,
+[data-paperui-theme]::-webkit-scrollbar,
+[data-paperui-theme] ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+.paperui-root::-webkit-scrollbar-track,
+.paperui-root ::-webkit-scrollbar-track,
+[data-paperui-theme]::-webkit-scrollbar-track,
+[data-paperui-theme] ::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.paperui-root::-webkit-scrollbar-thumb,
+.paperui-root ::-webkit-scrollbar-thumb,
+[data-paperui-theme]::-webkit-scrollbar-thumb,
+[data-paperui-theme] ::-webkit-scrollbar-thumb {
+    background: color-mix(
+        in srgb,
+        var(--paper-anti-background) 18%,
+        transparent
+    );
+    border-radius: var(--paper-border-radius);
+    border: 2px solid transparent;
+    background-clip: padding-box;
+}
+
+.paperui-root::-webkit-scrollbar-thumb:hover,
+.paperui-root ::-webkit-scrollbar-thumb:hover,
+[data-paperui-theme]::-webkit-scrollbar-thumb:hover,
+[data-paperui-theme] ::-webkit-scrollbar-thumb:hover {
+    background: color-mix(
+        in srgb,
+        var(--paper-anti-background) 32%,
+        transparent
+    );
+    border: 2px solid transparent;
+    background-clip: padding-box;
+}
+
+.paperui-root::-webkit-scrollbar-thumb:active,
+.paperui-root ::-webkit-scrollbar-thumb:active,
+[data-paperui-theme]::-webkit-scrollbar-thumb:active,
+[data-paperui-theme] ::-webkit-scrollbar-thumb:active {
+    background: var(--paper-front-blue);
+    border: 2px solid transparent;
+    background-clip: padding-box;
+}
+
+.paperui-root::-webkit-scrollbar-corner,
+.paperui-root ::-webkit-scrollbar-corner,
+[data-paperui-theme]::-webkit-scrollbar-corner,
+[data-paperui-theme] ::-webkit-scrollbar-corner {
+    background: transparent;
+}

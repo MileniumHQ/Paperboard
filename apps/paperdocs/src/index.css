@@ -1,0 +1,49 @@
+.logo {
+    width: 30px;
+}
+
+html,
+body {
+    background-color: var(--paper-background-frontest);
+}
+
+.paperui-root {
+    overflow: visible;
+}
+
+body[data-paperui-theme],
+.paperui-root[data-paperui-theme] {
+    background-color: var(--paper-background-frontest);
+}
+
+.paperui-root .topbar {
+    border-bottom: var(--paper-border-width) solid var(--paper-medium-border);
+    padding: var(--paper-uigap-half);
+    padding-left: var(--paper-uigap);
+    padding-right: var(--paper-uigap);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background-color: var(--paper-background-frontest);
+}
+
+.paperui-root .sticky-sidebar {
+    position: sticky;
+    top: 45px;
+    align-self: flex-start;
+    height: calc(100vh - 45px);
+    max-height: calc(100vh - 45px);
+    overflow-y: auto;
+    flex-shrink: 0;
+}
+
+.docs-footer {
+    width: 100%;
+    background-color: var(--paper-background-frontest);
+    z-index: 10;
+    flex-shrink: 0;
+}
+
+[id] {
+    scroll-margin-top: 75px;
+}

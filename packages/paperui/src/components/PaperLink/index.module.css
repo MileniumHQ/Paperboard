@@ -1,0 +1,22 @@
+.PaperLink {
+    color: var(--paper-front-blue);
+    text-decoration: none;
+    font-weight: 600;
+    transition:
+        color var(--paper-short-transition),
+        text-decoration var(--paper-short-transition);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--paper-uigap-onefourth);
+}
+
+.PaperLink:hover {
+    color: var(--paper-back-blue);
+    text-decoration: underline;
+}
+
+.externalIcon {
+    font-size: 0.85em;
+    color: var(--paper-lightest-text);
+}

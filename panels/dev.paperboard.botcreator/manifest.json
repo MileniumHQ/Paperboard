@@ -1,0 +1,23 @@
+{
+    "name": "Bot Creator",
+    "id": "dev.paperboard.botcreator",
+    "version": "3.0.0-alpha",
+    "description": "Bot Creator for Discord",
+    "publisher": "Paperboard",
+    "base": "./dist/index.html",
+    "service": "./dist/service.js",
+    "icon": "./branding/icon.png",
+    "permissions": [
+        "config.readWrite",
+        "actions.registry",
+        "triggers.registry",
+        "secrets.readWrite"
+    ],
+    "network": {
+        "hosts": [
+            "cdn.discordapp.com",
+            "discord.com",
+            "gateway.discord.gg"
+        ]
+    }
+}

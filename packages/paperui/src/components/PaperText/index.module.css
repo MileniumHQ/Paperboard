@@ -1,0 +1,46 @@
+.PaperText {
+    font-family: var(--paper-font-family);
+}
+.PaperText.rounded {
+    font-family: var(--paper-font-family-rounded);
+}
+.PaperText.headline {
+}
+.PaperText.header {
+}
+.PaperText.subheader {
+}
+.PaperText.title {
+}
+.PaperText.subtitle {
+}
+.PaperText.section {
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--paper-light-text);
+}
+.PaperText.body {
+    line-height: 1.75;
+}
+.PaperText.caption {
+}
+.PaperText.breakWord {
+    word-break: break-word;
+    overflow-wrap: break-word;
+}
+.PaperText.truncate {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.anchorLink {
+    margin-left: var(--paper-uigap-half);
+    vertical-align: middle;
+    display: inline-flex;
+    align-items: center;
+    opacity: 0.6;
+    transition: opacity var(--paper-tiny-transition) ease;
+}
+.anchorLink:hover {
+    opacity: 1;
+}

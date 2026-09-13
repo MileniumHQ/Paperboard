@@ -1,0 +1,65 @@
+.PaperSelector {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    gap: var(--paper-uigap-half);
+    padding: calc(var(--paper-border-width) * 2);
+}
+
+.PaperSelector.horizontal {
+    flex-direction: row;
+    flex-wrap: wrap;
+    width: auto;
+}
+
+.PaperSelector.horizontal .PaperSelectorItem {
+    width: auto;
+    flex: 1;
+}
+
+.PaperSelectorItem {
+    width: 100%;
+}
+
+.itemInner {
+    padding: var(--paper-uigap);
+    border: var(--paper-border-width) solid var(--paper-medium-dark-border);
+    border-radius: var(--paper-border-radius);
+    display: flex;
+    align-items: center;
+    gap: var(--paper-uigap-threefourths);
+    cursor: pointer;
+    width: 100%;
+    background: var(--paper-background-frontest);
+    transition: border-color var(--paper-short-transition);
+}
+
+.PaperSelectorItem.reverse .itemInner {
+    flex-direction: row-reverse;
+    justify-content: space-between;
+}
+
+.PaperSelectorItem.reverse .itemText {
+    align-items: flex-end;
+    text-align: right;
+}
+
+.itemIcon {
+    color: var(--paper-back-blue);
+    font-size: var(--paper-icon-size-huge);
+}
+
+.itemText {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+}
+
+.itemDescription {
+    color: var(--paper-light-text);
+}
+
+.PaperSelectorItem.selected .itemInner {
+    outline: var(--paper-border-width) solid var(--paper-back-blue);
+    border: var(--paper-border-width) solid var(--paper-back-blue);
+}

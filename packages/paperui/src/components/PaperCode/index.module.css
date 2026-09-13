@@ -1,0 +1,101 @@
+.PaperCodeInline {
+    font-family: var(--paper-font-family-code);
+    font-size: 0.88em;
+    padding: 0.15em 0.35em;
+    border-radius: var(--paper-border-radius-half);
+    background: var(--paper-background-front);
+    border: var(--paper-border-width) solid var(--paper-medium-border);
+    color: var(--paper-light-text);
+    display: inline;
+    font-weight: 600;
+    margin: 0;
+    white-space: nowrap;
+    -webkit-user-select: text;
+    user-select: text;
+}
+
+.PaperCodeWrapper {
+    position: relative;
+    width: 100%;
+    border-radius: var(--paper-border-radius);
+    overflow: hidden;
+    border: var(--paper-border-width) solid var(--paper-medium-border);
+    background: var(--paper-background-front);
+}
+
+.copyButton {
+    position: absolute;
+    top: var(--paper-uigap-half);
+    right: var(--paper-uigap-half);
+    z-index: 2;
+}
+
+.PaperCodeBlock {
+    font-family: var(--paper-font-family-code);
+    font-size: var(--paper-text-size-2);
+    padding: var(--paper-uigap-threefourths) var(--paper-uigap);
+    background: var(--paper-background-front);
+    color: var(--paper-main-text);
+    display: block;
+    width: 100%;
+    overflow-x: auto;
+    margin: 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-weight: 500;
+    border: 0;
+    border-radius: 0;
+    -webkit-user-select: text;
+    user-select: text;
+}
+
+.PaperCodeBlock :global(.token.keyword),
+.PaperCodeInline :global(.token.keyword) {
+    color: var(--paper-front-blue);
+    font-weight: 700;
+}
+
+.PaperCodeBlock :global(.token.string),
+.PaperCodeBlock :global(.token.attr-value),
+.PaperCodeInline :global(.token.string) {
+    color: var(--paper-front-green);
+}
+
+.PaperCodeBlock :global(.token.comment),
+.PaperCodeBlock :global(.token.prolog),
+.PaperCodeBlock :global(.token.doctype),
+.PaperCodeBlock :global(.token.cdata),
+.PaperCodeInline :global(.token.comment) {
+    color: var(--paper-lightest-text);
+    font-style: italic;
+}
+
+.PaperCodeBlock :global(.token.number),
+.PaperCodeBlock :global(.token.boolean),
+.PaperCodeBlock :global(.token.constant),
+.PaperCodeInline :global(.token.number) {
+    color: var(--paper-front-yellow);
+}
+
+.PaperCodeBlock :global(.token.function),
+.PaperCodeBlock :global(.token.class-name),
+.PaperCodeInline :global(.token.function) {
+    color: var(--paper-front-blue);
+}
+
+.PaperCodeBlock :global(.token.tag),
+.PaperCodeInline :global(.token.tag) {
+    color: var(--paper-front-red);
+    font-weight: 600;
+}
+
+.PaperCodeBlock :global(.token.attr-name),
+.PaperCodeInline :global(.token.attr-name) {
+    color: var(--paper-front-yellow);
+}
+
+.PaperCodeBlock :global(.token.operator),
+.PaperCodeBlock :global(.token.punctuation),
+.PaperCodeInline :global(.token.punctuation) {
+    color: var(--paper-light-text);
+}

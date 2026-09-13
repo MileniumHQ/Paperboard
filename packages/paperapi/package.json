@@ -1,0 +1,61 @@
+{
+    "name": "@paperboard-dev/paperapi",
+    "version": "3.0.0-alpha",
+    "type": "module",
+    "main": "./dist/paperapi.cjs.js",
+    "module": "./dist/paperapi.es.js",
+    "types": "./dist/index.d.ts",
+    "files": [
+        "dist",
+        "bin"
+    ],
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": "./dist/paperapi.es.js",
+            "require": "./dist/paperapi.cjs.js"
+        },
+        "./package.json": "./package.json"
+    },
+    "bin": {
+        "paperapi": "./dist/cli.js"
+    },
+    "scripts": {
+        "dev": "vite",
+        "build": "tsc --noEmit && vite build && bun build ./bin/cli.ts --outfile dist/cli.js --target=node --external tar",
+        "pack": "bun run ./bin/cli.ts pack",
+        "test": "bun test",
+        "prepublishOnly": "bun run build"
+    },
+    "devDependencies": {
+        "@types/node": "^22.19.1",
+        "@types/tar": "^7.0.87",
+        "@types/ws": "^8.18.1",
+        "typescript": "~6.0.2",
+        "vite": "^8.1.0",
+        "vite-plugin-dts": "^5.0.3"
+    },
+    "dependencies": {
+        "commander": "^15.0.0",
+        "tar": "^7.5.22",
+        "ws": "^8.21.3"
+    },
+    "description": "Runtime bridge between Paperboard panels and the host: terminals, processes, packages, files, and config.",
+    "keywords": [
+        "paperboard",
+        "panel",
+        "terminal",
+        "process",
+        "pty"
+    ],
+    "author": "Paperboard <https://paperboard.dev>",
+    "homepage": "https://paperboard.dev",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/paperboard-dev/PaperAPI.git"
+    },
+    "license": "MIT",
+    "publishConfig": {
+        "access": "public"
+    }
+}

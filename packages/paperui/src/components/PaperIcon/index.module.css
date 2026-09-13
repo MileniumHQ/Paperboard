@@ -1,0 +1,47 @@
+.PaperIcon {
+    font-family: "Material Symbols Rounded", sans-serif;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    user-select: none;
+
+    font-variation-settings:
+        "FILL" 1,
+        "wght" 500,
+        "GRAD" 0,
+        "opsz" 14;
+}
+
+.zeroHeight {
+    height: var(--paper-text-size-0);
+}
+
+.monogram {
+    font-family: var(--paper-font-family-rounded);
+    font-weight: 700;
+    font-size: 0.72em;
+    letter-spacing: -0.02em;
+    font-variation-settings: normal;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    aspect-ratio: 1;
+    padding: var(--paper-uigap-onefourth) var(--paper-uigap-half);
+    line-height: 1;
+    text-align: center;
+}
+
+button .PaperIcon {
+    margin-left: calc(var(--paper-uigap-onefourth) * -1);
+    margin-right: calc(var(--paper-uigap-onefourth) * -1);
+}
+
+.PaperIcon img,
+.iconImage {
+    width: 1em;
+    height: 1em;
+    object-fit: contain;
+    flex-shrink: 0;
+    display: inline-block;
+    vertical-align: middle;
+}

@@ -1,0 +1,95 @@
+.PaperToggle {
+    display: inline-flex;
+    align-items: center;
+    cursor: pointer;
+    user-select: none;
+    position: relative;
+    outline: none;
+}
+
+.PaperToggle:focus-visible .track {
+    outline: var(--paper-focus-ring);
+    outline-offset: var(--paper-focus-offset);
+}
+
+.track {
+    position: relative;
+    height: var(--paper-item-size-tiny);
+    width: calc(var(--paper-item-size-tiny) * 2);
+    border-radius: var(--paper-border-radius-half);
+    background: var(--paper-background-element);
+    display: flex;
+    align-items: center;
+    transition: background var(--paper-mid-transition) ease;
+}
+
+.checked .track {
+    background: var(--paper-front-blue);
+}
+
+.knob {
+    position: absolute;
+    top: 50%;
+    left: 0%;
+    height: 100%;
+    aspect-ratio: 1 / 1;
+    border-radius: var(--paper-border-radius-half);
+    background: var(--paper-over-brand);
+    border: var(--paper-thick-border-width) solid var(--paper-medium-dark-border);
+    box-shadow: 0 var(--paper-thick-border-width) 0 var(--paper-medium-dark-border);
+    transform: translate3d(0, calc(-50% - var(--paper-thick-border-width)), 0);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    transition:
+        left 0.38s var(--paper-ease-slide),
+        transform var(--paper-short-transition) ease,
+        box-shadow var(--paper-short-transition) ease,
+        border-color var(--paper-mid-transition) ease;
+}
+
+.checked .knob {
+    left: 50%;
+    border-color: var(--paper-back-blue);
+    box-shadow: 0 var(--paper-thick-border-width) 0 var(--paper-back-blue);
+}
+
+.PaperToggle:hover:not(:active):not(.animating) .knob {
+    transform: translate3d(0, calc(-50% - var(--paper-thickest-border-width)), 0);
+    box-shadow: 0 var(--paper-thickest-border-width) 0 var(--paper-medium-dark-border);
+}
+
+.PaperToggle.checked:hover:not(:active):not(.animating) .knob {
+    box-shadow: 0 var(--paper-thickest-border-width) 0 var(--paper-back-blue);
+}
+
+.PaperToggle:active .knob,
+.PaperToggle.animating .knob {
+    transform: translate3d(0, -50%, 0) !important;
+    box-shadow: 0 0 0 transparent !important;
+}
+
+.iconCheck,
+.iconClose {
+    font-size: var(--paper-icon-size-small);
+    font-weight: 800;
+    transition: color var(--paper-short-transition);
+}
+
+.iconCheck {
+    color: var(--paper-front-green);
+}
+
+.iconClose {
+    color: var(--paper-lightest-text);
+}
+
+.hiddenInput {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+    margin: 0;
+    pointer-events: none;
+}

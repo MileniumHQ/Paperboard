@@ -1,0 +1,154 @@
+.PaperLoader {
+    width: var(--size);
+    height: var(--size);
+    border-radius: 50%;
+    --size: var(--paper-item-size-small);
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.loaderSvg {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+.loaderTrack {
+    stroke: var(--paper-background-definition);
+}
+
+.loaderProgress {
+    stroke: var(--paper-front-blue);
+    transition:
+        stroke-dashoffset 0.35s var(--paper-ease-symmetric),
+        stroke var(--paper-short-transition),
+        opacity var(--paper-tiny-transition) ease;
+}
+
+.loaderProgress.error {
+    stroke: var(--paper-front-red);
+}
+
+.loaderProgress.success {
+    stroke: var(--paper-front-green);
+}
+
+.statusFinisher {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+}
+
+.statusFinisher.full:after {
+    content: "check";
+    font-family: "Material Symbols Rounded";
+    color: var(--paper-over-brand);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    font-size: calc(var(--size) * 0.75);
+    position: absolute;
+    top: 0;
+    left: 0;
+    background: var(--paper-front-green);
+    border-radius: 50%;
+    animation: fullenter var(--paper-mid-transition) var(--paper-ease-emphasized);
+    z-index: 5;
+}
+
+.statusFinisher.full.error:after {
+    content: "close";
+    background: var(--paper-front-red);
+    border-radius: 50%;
+    animation: fullentererror var(--paper-mid-transition) var(--paper-ease-emphasized);
+}
+
+.statusFinisher.full:not(.error):before {
+    content: "";
+    animation: fullripple 0.8s ease-out var(--paper-short-transition);
+    border-radius: 50%;
+    width: 100%;
+    height: 100%;
+    position: absolute;
+    top: 0;
+    left: 0;
+    box-sizing: border-box;
+}
+
+.waiting {
+    opacity: 0.5;
+}
+
+@keyframes fullenter {
+    from {
+        opacity: 0;
+        transform: scale(0);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+@keyframes fullentererror {
+    from {
+        opacity: 0;
+        transform: scale(0);
+    }
+    50% {
+        transform: scale(1.15);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+@keyframes fullripple {
+    from {
+        outline: 0 solid var(--paper-front-green);
+        opacity: 1;
+    }
+    to {
+        outline: var(--paper-thick-border-width) solid var(--paper-front-green);
+        opacity: 0;
+        transform: scale(1.6);
+    }
+}
+
+.elWrapper {
+    display: flex;
+    align-items: center;
+    gap: var(--paper-uigap);
+    transition: opacity var(--paper-mid-transition) ease;
+}
+
+.PaperLoaderGroup {
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap);
+    width: var(--paper-loader-width);
+}
+
+/* reduced motion zeroes within THIS component only — the global media
+   selector is banned (it escapes .paperui-root); tokens carry zeroing for
+   durations, but the infinite ripple must be scoped here */
+@media (prefers-reduced-motion: reduce) {
+    .statusFinisher,
+    .statusFinisher.full,
+    .statusFinisher.full.error,
+    .statusFinisher.full:not(.error):before,
+    .statusFinisher.full.error:after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+}
