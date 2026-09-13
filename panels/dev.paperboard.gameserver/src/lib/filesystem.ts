@@ -1,13 +1,10 @@
 import { fileApi, processApi, system } from "@paperboard-dev/paperapi";
 import { PANEL_ID } from "../service/types";
 import { isWindowsTarget } from "./platform";
+import { isValidEntryName, isListableDirArg } from "../core/dirs";
 
-// only these characters may reach a path or shell command
-const ENTRY_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._ ()-]*$/;
-
-export function isValidEntryName(name: string): boolean {
-    return ENTRY_NAME_PATTERN.test(name) && !name.includes("..");
-}
+// entry-name + directory-arg validation lives in core/dirs.ts (pure, tested)
+export { isValidEntryName, isListableDirArg } from "../core/dirs";
 
 export function sanitizeFileName(name: string): string | null {
     const trimmed = name.trim();
@@ -23,16 +20,19 @@ export interface DirectoryListing {
 
 export async function tryListDirectory(dir: string): Promise<DirectoryListing> {
     try {
-        // boundary: dir must itself be a safe segment before it reaches a
-        // shell-adjacent command — never rely on the caller remembering
-        if (typeof dir !== "string" || !isValidEntryName(dir) || dir.includes("/")) {
+        // boundary: "" is the panel root, anything else must be one safe
+        // segment — never rely on the caller remembering
+        if (!isListableDirArg(dir)) {
             throw new Error(`Unsafe directory name: ${JSON.stringify(dir)}`);
         }
         const serverDir = await fileApi.getPath("", PANEL_ID);
         const targetOs = (await system.getInfo()).os;
         const isWin = isWindowsTarget(serverDir, targetOs);
         const separator = isWin ? "\\" : "/";
-        const absoluteDir = `${serverDir.replace(/[\\/]+$/, "")}${separator}${dir}`;
+        const base = serverDir.replace(/[\\/]+$/, "");
+        const relative = dir === "" ? "" : dir.split("/").join(separator);
+        const absoluteDir =
+            relative === "" ? base || serverDir : `${base}${separator}${relative}`;
 
         let output = "";
         const collect = (chunk: string) => {

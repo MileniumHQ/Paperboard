@@ -21,6 +21,7 @@ const initialState: GameServerState = {
     seenPlayers: [],
     playerStats: {},
     playerPlaytime: {},
+    playerPositions: {},
     gamerules: {},
     activeIssue: null,
 };

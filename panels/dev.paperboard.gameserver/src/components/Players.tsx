@@ -1,16 +1,21 @@
 import { PANEL_ID } from "../service/types";
-import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
+import { createSignal, createEffect, For, onCleanup, onMount, Show, type JSX } from "solid-js";
 import {
     PaperBadge,
     PaperButton,
     PaperCheckbox,
-    PaperContainer,
     PaperFlex,
     PaperIcon,
     PaperInput,
     PaperMediaCard,
     PaperMediaCardGroup,
     PaperModal,
+    PaperSelectMenu,
+    PaperSelectMenuItem,
+    PaperSeparator,
+    PaperSettingItem,
+    PaperSettingList,
+    PaperTable,
     PaperText,
     PaperToggle,
 } from "@paperboard-dev/paperui";
@@ -18,15 +23,21 @@ import {   fileApi } from "@paperboard-dev/paperapi";
 import {
     forgetPlayerData,
     getPlayerPlaytimeSeconds,
+    loadPlayerStats,
     onlinePlayerNames,
+    playerStats,
+    playerStatSummaries,
     queryOnlinePlayers,
+    queryPlayerStats,
     seenPlayerNames,
     serverBridge,
     serverStatus,
 } from "../lib/server";
 import { ACTION_IDS, type ActionId } from "../service/contract";
+import { PaperPageHeader } from "@paperboard-dev/paperui";
 
 const LIST_POLL_MS = 15000;
+const STATS_POLL_MS = 30000;
 
 interface PlayerInfo {
     name: string;
@@ -68,6 +79,31 @@ function formatPlaytime(seconds: number | undefined): string {
     return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
 }
 
+function formatDistance(cm: number): string {
+    const meters = cm / 100;
+    if (meters >= 1000) return `${(meters / 1000).toFixed(1)} km`;
+    return `${Math.round(meters)} m`;
+}
+
+type SortKey =
+    | "name"
+    | "playtime"
+    | "deaths"
+    | "mobKills"
+    | "playerKills"
+    | "blocksMined"
+    | "distance";
+
+const SORT_LABELS: Record<SortKey, string> = {
+    name: "Name",
+    playtime: "Playtime",
+    deaths: "Deaths",
+    mobKills: "Mob kills",
+    playerKills: "Player kills",
+    blocksMined: "Blocks mined",
+    distance: "Distance",
+};
+
 export default function Players() {
     const [players, setPlayers] = createSignal<PlayerInfo[]>([]);
     const [bannedNames, setBannedNames] = createSignal<Set<string>>(new Set());
@@ -79,11 +115,17 @@ export default function Players() {
     const [actionModal, setActionModal] = createSignal<"kick" | "ban" | null>(null);
     const [deleteConfirmOpen, setDeleteConfirmOpen] = createSignal(false);
     const [feedback, setFeedback] = createSignal("");
+    const [sortBy, setSortBy] = createSignal<SortKey>("playtime");
 
     onMount(async () => {
         queryOnlinePlayers();
+        loadPlayerStats();
         const poll = setInterval(queryOnlinePlayers, LIST_POLL_MS);
-        onCleanup(() => clearInterval(poll));
+        const statsPoll = setInterval(loadPlayerStats, STATS_POLL_MS);
+        onCleanup(() => {
+            clearInterval(poll);
+            clearInterval(statsPoll);
+        });
 
         const [whitelisted, ops, cached, banned] = await Promise.all([
             loadJsonEntries("whitelist.json"),
@@ -118,7 +160,22 @@ export default function Players() {
         const known = players().slice();
         const listed = new Set(players().map((p) => p.name.toLowerCase()));
         for (const name of [...seenPlayerNames(), ...onlinePlayerNames()]) {
-            if (!listed.has(name)) known.push({ name, whitelisted: false, op: false });
+            if (listed.has(name)) continue;
+            listed.add(name);
+            known.push({ name, whitelisted: false, op: false });
+        }
+        // players discovered only from their stats files (e.g. an expired
+        // usercache entry) still belong on the leaderboard
+        for (const summary of playerStatSummaries().values()) {
+            const key = summary.name.toLowerCase();
+            if (listed.has(key)) continue;
+            listed.add(key);
+            known.push({
+                name: summary.name,
+                uuid: summary.uuid,
+                whitelisted: false,
+                op: false,
+            });
         }
         return known;
     };
@@ -134,6 +191,69 @@ export default function Players() {
             if (player.op && showOp()) return true;
             return !isOn && !player.whitelisted && !player.op;
         });
+    };
+
+    // offline stats come from the world's stats/<uuid>.json (loaded on mount
+    // and by a slow poll); a missing entry is just "no data", never a zero
+    const offlineStats = (player: PlayerInfo) =>
+        player.uuid ? playerStatSummaries().get(player.uuid.toLowerCase()) : undefined;
+
+    const statNumber = (player: PlayerInfo, key: SortKey): number => {
+        const stats = offlineStats(player);
+        switch (key) {
+            case "playtime":
+                return stats
+                    ? stats.playTimeTicks
+                    : (getPlayerPlaytimeSeconds(player.name) ?? 0) * 20;
+            case "deaths":
+                return stats?.deaths ?? 0;
+            case "mobKills":
+                return stats?.mobKills ?? 0;
+            case "playerKills":
+                return stats?.playerKills ?? 0;
+            case "blocksMined":
+                return stats?.blocksMined ?? 0;
+            case "distance":
+                return stats?.distanceCm ?? 0;
+            default:
+                return 0;
+        }
+    };
+
+    const statText = (player: PlayerInfo, key: SortKey): string => {
+        const stats = offlineStats(player);
+        switch (key) {
+            case "playtime":
+                return formatPlaytime(
+                    stats
+                        ? Math.floor(stats.playTimeTicks / 20)
+                        : getPlayerPlaytimeSeconds(player.name),
+                );
+            case "deaths":
+                return `${stats?.deaths ?? 0}`;
+            case "mobKills":
+                return `${stats?.mobKills ?? 0}`;
+            case "playerKills":
+                return `${stats?.playerKills ?? 0}`;
+            case "blocksMined":
+                return `${stats?.blocksMined ?? 0}`;
+            case "distance":
+                return formatDistance(stats?.distanceCm ?? 0);
+            default:
+                return "";
+        }
+    };
+
+    // leaderboard: highest first for stats, alphabetical for names
+    const sortedPlayers = () => {
+        const key = sortBy();
+        const list = visiblePlayers().slice();
+        if (key === "name") {
+            list.sort((a, b) => a.name.localeCompare(b.name));
+            return list;
+        }
+        list.sort((a, b) => statNumber(b, key) - statNumber(a, key));
+        return list;
     };
 
     const openPlayer = () => allPlayers().find((p) => p.name === openPlayerName());
@@ -250,87 +370,110 @@ export default function Players() {
     };
 
     return (
-        <PaperFlex direction="column" fullWidth fullHeight padding="double" gap="threefourths">
-            <PaperContainer style={{ "flex-shrink": 0 }}>
-                <PaperFlex direction="row" gap="threefourths" padding="full" align="center">
-                    <PaperCheckbox
-                        checked={showOnline()}
-                        onChange={setShowOnline}
-                        label="Online"
-                    />
-                    <PaperCheckbox
-                        checked={showWhitelisted()}
-                        onChange={setShowWhitelisted}
-                        label="Whitelisted"
-                    />
-                    <PaperCheckbox
-                        checked={showOp()}
-                        onChange={setShowOp}
-                        label="OP"
-                    />
-                </PaperFlex>
-                <Show when={feedback()}>
-                    <PaperText size={3} style={{ color: "red", padding: "0 var(--paper-uigap-full)" }}>
-                        {feedback()}
-                    </PaperText>
-                </Show>
-            </PaperContainer>
-
-            <div
-                style={{
-                    flex: 1,
-                    "min-height": 0,
-                    "overflow-y": "auto",
-                    padding: "var(--paper-uigap-half)",
-                }}
-            >
-                <Show
-                    when={visiblePlayers().length > 0}
-                    fallback={
-                        <PaperFlex padding="full" center>
-                            <PaperText size={3}>No players match these filters.</PaperText>
+        <PaperFlex direction="column" fullWidth fullHeight style={{ "min-height": 0 }}>
+            <div class="gs-scroll">
+                <div class="gs-page">
+                    <PaperPageHeader icon="group" title="Players">
+                        <div style={{ "min-width": "10rem" }}>
+                            <PaperSelectMenu
+                                name="playersSort"
+                                value={sortBy()}
+                                onValueChange={(val) => setSortBy(String(val) as SortKey)}
+                            >
+                                <For each={Object.keys(SORT_LABELS) as SortKey[]}>
+                                    {(key) => (
+                                        <PaperSelectMenuItem value={key}>
+                                            {SORT_LABELS[key]}
+                                        </PaperSelectMenuItem>
+                                    )}
+                                </For>
+                            </PaperSelectMenu>
+                        </div>
+                    </PaperPageHeader>
+                    <div class="gs-surface">
+                        <PaperFlex direction="row" gap="threefourths" padding="full" align="center" wrap>
+                            <PaperCheckbox
+                                checked={showOnline()}
+                                onChange={setShowOnline}
+                                label="Online"
+                            />
+                            <PaperCheckbox
+                                checked={showWhitelisted()}
+                                onChange={setShowWhitelisted}
+                                label="Whitelisted"
+                            />
+                            <PaperCheckbox
+                                checked={showOp()}
+                                onChange={setShowOp}
+                                label="OP"
+                            />
                         </PaperFlex>
-                    }
-                >
-                    <PaperMediaCardGroup minCardWidth="15rem">
-                        <For each={visiblePlayers()}>
-                            {(player) => {
-                                const isOn = () =>
-                                    onlinePlayerNames().has(player.name.toLowerCase());
-                                return (
-                                    <PaperMediaCard
-                                        icon={`https://mc-heads.net/avatar/${encodeURIComponent(player.name)}/64`}
-                                        title={player.name}
-                                        subtitle={`Played for ${formatPlaytime(
-                                            getPlayerPlaytimeSeconds(player.name),
-                                        )}`}
-                                        onClick={() => setOpenPlayerName(player.name)}
-                                        badge={
-                                            <Show
-                                                when={!bannedNames().has(player.name.toLowerCase())}
-                                                fallback={<PaperBadge variant="red">Banned</PaperBadge>}
-                                            >
-                                                <PaperBadge variant={isOn() ? "green" : "monochrome"}>
-                                                    {isOn() ? "Online" : "Offline"}
-                                                </PaperBadge>
-                                            </Show>
-                                        }
-                                        footerLeft={
-                                            player.op ? (
-                                                <PaperBadge variant="blue">OP</PaperBadge>
-                                            ) : undefined
-                                        }
-                                        footerRight={
-                                            player.whitelisted ? (
-                                                <PaperBadge>Whitelisted</PaperBadge>
-                                            ) : undefined
-                                        }
-                                    />
-                                );
-                            }}
-                        </For>
-                    </PaperMediaCardGroup>
-                </Show>
+                        <Show when={feedback()}>
+                            <PaperText
+                                size={3}
+                                style={{
+                                    color: "var(--paper-front-red)",
+                                    padding: "0 var(--paper-uigap) var(--paper-uigap)",
+                                }}
+                            >
+                                {feedback()}
+                            </PaperText>
+                        </Show>
+                    </div>
+
+                    <Show
+                        when={sortedPlayers().length > 0}
+                        fallback={
+                            <div class="gs-surface">
+                                <PaperFlex padding="full" center>
+                                    <PaperText size={3}>No players match these filters.</PaperText>
+                                </PaperFlex>
+                            </div>
+                        }
+                    >
+                        <PaperMediaCardGroup minCardWidth="15rem">
+                            <For each={sortedPlayers()}>
+                                {(player) => {
+                                    const isOn = () =>
+                                        onlinePlayerNames().has(player.name.toLowerCase());
+                                    return (
+                                        <PaperMediaCard
+                                            icon={`https://mc-heads.net/avatar/${encodeURIComponent(player.name)}/64`}
+                                            title={player.name}
+                                            subtitle={`Played ${statText(player, "playtime")}`}
+                                            description={
+                                                sortBy() !== "name" && sortBy() !== "playtime"
+                                                    ? `${SORT_LABELS[sortBy()]}: ${statText(player, sortBy())}`
+                                                    : undefined
+                                            }
+                                            onClick={() => setOpenPlayerName(player.name)}
+                                            badge={
+                                                <Show
+                                                    when={!bannedNames().has(player.name.toLowerCase())}
+                                                    fallback={<PaperBadge variant="red">Banned</PaperBadge>}
+                                                >
+                                                    <PaperBadge variant={isOn() ? "green" : "monochrome"}>
+                                                        {isOn() ? "Online" : "Offline"}
+                                                    </PaperBadge>
+                                                </Show>
+                                            }
+                                            footerLeft={
+                                                player.op ? (
+                                                    <PaperBadge variant="blue">OP</PaperBadge>
+                                                ) : undefined
+                                            }
+                                            footerRight={
+                                                player.whitelisted ? (
+                                                    <PaperBadge>Whitelisted</PaperBadge>
+                                                ) : undefined
+                                            }
+                                        />
+                                    );
+                                }}
+                            </For>
+                        </PaperMediaCardGroup>
+                    </Show>
+                </div>
             </div>
 
             <PlayerModal
@@ -408,7 +551,20 @@ function PlayerModal(props: {
     const [copied, setCopied] = createSignal(false);
 
     const name = () => props.player?.name ?? "";
-    const isPlayerOnline = () => onlinePlayerNames().has(name().toLowerCase());
+    const key = () => name().toLowerCase();
+    const isPlayerOnline = () => onlinePlayerNames().has(key());
+    const stats = () => playerStats().get(key());
+    const summary = () =>
+        props.player?.uuid
+            ? playerStatSummaries().get(props.player.uuid.toLowerCase())
+            : undefined;
+
+    // refresh live stats while the modal is open and the player is online
+    createEffect(() => {
+        if (props.open && props.player && isPlayerOnline()) {
+            queryPlayerStats(name());
+        }
+    });
 
     const handleCopyUuid = async () => {
         const id = props.player?.uuid;
@@ -434,121 +590,239 @@ function PlayerModal(props: {
         <PaperModal
             open={props.open && props.player !== undefined}
             onClose={props.onClose}
-            title={name()}
             size="medium"
+            noHeader
         >
-            <PaperFlex direction="row" gap="double" align="stretch">
-                <PaperFlex direction="column" gap="half" align="center" justify="space-between" style={{ "flex-shrink": 0 }}>
+            <PaperFlex direction="column" gap="full">
+                {/* identity */}
+                <PaperFlex direction="row" gap="threefourths" align="center">
                     <img
-                        src={`https://mc-heads.net/body/${encodeURIComponent(name())}`}
-                        alt={`${name()} skin`}
+                        src={`https://mc-heads.net/avatar/${encodeURIComponent(name())}/64`}
+                        alt=""
                         style={{
-                            height: "12rem",
-                            width: "auto",
-                            "max-width": "none",
+                            width: "3.5rem",
+                            height: "3.5rem",
+                            "border-radius": "var(--paper-border-radius)",
                             "image-rendering": "pixelated",
-                            display: "block",
+                            "flex-shrink": 0,
                         }}
                     />
-                    <PaperFlex direction="row" gap="half" align="center">
-                        <PaperIcon>schedule</PaperIcon>
-                        <PaperText size={3}>
-                            Played for{" "}
-                            <strong>{formatPlaytime(getPlayerPlaytimeSeconds(name()))}</strong>
+                    <PaperFlex direction="column" gap="onefourth" style={{ "min-width": 0 }}>
+                        <PaperText size={7} weight={700}>
+                            {name()}
                         </PaperText>
+                        <PaperFlex direction="row" gap="half" align="center" wrap>
+                            <PaperBadge variant={isPlayerOnline() ? "green" : "monochrome"}>
+                                {isPlayerOnline() ? "Online" : "Offline"}
+                            </PaperBadge>
+                            <Show when={props.player?.op}>
+                                <PaperBadge variant="blue">OP</PaperBadge>
+                            </Show>
+                            <Show when={props.player?.whitelisted}>
+                                <PaperBadge>Whitelisted</PaperBadge>
+                            </Show>
+                            <Show when={props.banned}>
+                                <PaperBadge variant="red">Banned</PaperBadge>
+                            </Show>
+                        </PaperFlex>
                     </PaperFlex>
-                </PaperFlex>
-
-                <PaperFlex direction="column" gap="threefourths" fullWidth justify="space-between">
-                    <PaperFlex direction="column" gap="threefourths" fullWidth>
+                    <PaperFlex
+                        direction="row"
+                        gap="half"
+                        align="center"
+                        style={{ "margin-left": "auto", "flex-shrink": 0 }}
+                    >
                         <Show when={props.player?.uuid}>
                             <PaperButton
                                 tiny
+                                icon
                                 onClick={handleCopyUuid}
                                 title={copied() ? "Copied!" : props.player!.uuid}
                             >
                                 <PaperIcon>{copied() ? "check" : "content_copy"}</PaperIcon>
-                                {copied() ? "Copied!" : "Copy UUID"}
                             </PaperButton>
                         </Show>
-
-                        <PaperFlex direction="column" gap="half" fullWidth>
-                            <PaperFlex direction="row" justify="space-between" align="center" fullWidth>
-                                <PaperText size={3}>OP</PaperText>
-                                <PaperToggle
-                                    checked={props.player?.op ?? false}
-                                    disabled={!isOnline()}
-                                    onChange={(checked) => props.onToggleFlag(name(), "op", checked)}
-                                />
-                            </PaperFlex>
-                            <PaperFlex direction="row" justify="space-between" align="center" fullWidth>
-                                <PaperText size={3}>Whitelist</PaperText>
-                                <PaperToggle
-                                    checked={props.player?.whitelisted ?? false}
-                                    disabled={!isOnline()}
-                                    onChange={(checked) =>
-                                        props.onToggleFlag(name(), "whitelisted", checked)
-                                    }
-                                />
-                            </PaperFlex>
-                        </PaperFlex>
                     </PaperFlex>
+                </PaperFlex>
 
-                    <PaperFlex direction="row" gap="half" fullWidth>
-                        <PaperButton
-                            compact
-                            style={{ flex: 1 }}
-                            disabled={!isOnline() || !isPlayerOnline()}
-                            onClick={() => props.onAction("kick")}
+                {/* stats */}
+                <div class="gs-surface">
+                    <PaperTable>
+                        <tbody>
+                            <tr>
+                                <th>Playtime</th>
+                                <td>
+                                    {summary()
+                                        ? formatPlaytime(
+                                              Math.floor(summary()!.playTimeTicks / 20),
+                                          )
+                                        : formatPlaytime(
+                                              getPlayerPlaytimeSeconds(name()),
+                                          )}
+                                </td>
+                            </tr>
+                            <tr>
+                                <th>Health</th>
+                                <td>{stats()?.health !== undefined ? stats()!.health : "—"}</td>
+                            </tr>
+                            <tr>
+                                <th>Food</th>
+                                <td>{stats()?.food !== undefined ? stats()!.food : "—"}</td>
+                            </tr>
+                            <tr>
+                                <th>XP Level</th>
+                                <td>{stats()?.xpLevel !== undefined ? stats()!.xpLevel : "—"}</td>
+                            </tr>
+                            <tr>
+                                <th>Deaths</th>
+                                <td>{summary()?.deaths ?? "—"}</td>
+                            </tr>
+                            <tr>
+                                <th>Mob Kills</th>
+                                <td>{summary()?.mobKills ?? "—"}</td>
+                            </tr>
+                            <tr>
+                                <th>Player Kills</th>
+                                <td>{summary()?.playerKills ?? "—"}</td>
+                            </tr>
+                            <tr>
+                                <th>Blocks Mined</th>
+                                <td>{summary()?.blocksMined ?? "—"}</td>
+                            </tr>
+                            <tr>
+                                <th>Distance</th>
+                                <td>
+                                    {summary()
+                                        ? formatDistance(summary()!.distanceCm)
+                                        : "—"}
+                                </td>
+                            </tr>
+                        </tbody>
+                    </PaperTable>
+                </div>
+
+                {/* permissions */}
+                <SectionLabel>Permissions</SectionLabel>
+                <div class="gs-surface">
+                    <PaperSettingList autoHeight>
+                        <PaperSettingItem
+                            title="Operator"
+                            description="Full command and administration access."
                         >
-                            Kick
-                        </PaperButton>
-                        <Show
-                            when={!props.banned}
-                            fallback={
-                                <PaperButton
-                                    compact
-                                    variant="blue"
-                                    style={{ flex: 1 }}
-                                    disabled={!isOnline()}
-                                    onClick={() => void props.onPardon()}
-                                >
-                                    Pardon
-                                </PaperButton>
-                            }
+                            <PaperToggle
+                                checked={props.player?.op ?? false}
+                                disabled={!isOnline()}
+                                onChange={(checked) => props.onToggleFlag(name(), "op", checked)}
+                            />
+                        </PaperSettingItem>
+                        <PaperSettingItem
+                            title="Whitelisted"
+                            description="May join while the whitelist is enabled."
                         >
+                            <PaperToggle
+                                checked={props.player?.whitelisted ?? false}
+                                disabled={!isOnline()}
+                                onChange={(checked) =>
+                                    props.onToggleFlag(name(), "whitelisted", checked)
+                                }
+                            />
+                        </PaperSettingItem>
+                    </PaperSettingList>
+                </div>
+
+                {/* moderation */}
+                <SectionLabel>Moderation</SectionLabel>
+                <PaperFlex direction="row" gap="half" wrap>
+                    <PaperButton
+                        compact
+                        disabled={!isOnline() || !isPlayerOnline()}
+                        onClick={() => props.onAction("kick")}
+                    >
+                        Kick
+                    </PaperButton>
+                    <Show
+                        when={!props.banned}
+                        fallback={
                             <PaperButton
                                 compact
-                                variant="red"
-                                style={{ flex: 1 }}
+                                variant="blue"
                                 disabled={!isOnline()}
-                                onClick={() => props.onAction("ban")}
+                                onClick={() => void props.onPardon()}
                             >
-                                Ban
+                                Pardon
                             </PaperButton>
-                        </Show>
+                        }
+                    >
                         <PaperButton
                             compact
                             variant="red"
-                            style={{ flex: 1 }}
-                            onClick={props.onDeleteRequest}
+                            disabled={!isOnline()}
+                            onClick={() => props.onAction("ban")}
                         >
-                            <PaperIcon>delete</PaperIcon>
-                            Delete Data
+                            Ban
                         </PaperButton>
-                        <PaperButton
-                            compact
-                            variant="yellow"
-                            style={{ flex: 1 }}
-                            disabled={!isOnline() || !isPlayerOnline()}
-                            onClick={() => props.onKill()}
-                        >
-                            Kill
+                    </Show>
+                    <PaperButton
+                        compact
+                        variant="yellow"
+                        disabled={!isOnline() || !isPlayerOnline()}
+                        onClick={() => props.onKill()}
+                    >
+                        Kill
+                    </PaperButton>
+                </PaperFlex>
+
+                {/* danger */}
+                <PaperSeparator />
+                <SectionLabel danger>Danger</SectionLabel>
+                <div
+                    class="gs-surface"
+                    style={{
+                        "border-color":
+                            "color-mix(in srgb, var(--paper-front-red) 40%, var(--paper-medium-border))",
+                    }}
+                >
+                    <PaperFlex
+                        direction="row"
+                        justify="space-between"
+                        align="center"
+                        gap="full"
+                        padding="full"
+                    >
+                        <PaperFlex direction="column" gap="onefourth" style={{ "min-width": 0 }}>
+                            <PaperText size={3} weight={600}>
+                                Delete player data
+                            </PaperText>
+                            <PaperText size={2} color="light-text">
+                                Inventory, position and progress. This cannot be undone.
+                            </PaperText>
+                        </PaperFlex>
+                        <PaperButton compact variant="red" onClick={props.onDeleteRequest}>
+                            <PaperIcon>delete</PaperIcon>
+                            Delete
                         </PaperButton>
                     </PaperFlex>
-                </PaperFlex>
+                </div>
             </PaperFlex>
         </PaperModal>
+    );
+}
+
+function SectionLabel(props: { children: JSX.Element; danger?: boolean }) {
+    return (
+        <PaperText
+            size={2}
+            weight={700}
+            style={{
+                "text-transform": "uppercase",
+                "letter-spacing": "0.04em",
+                color: props.danger
+                    ? "var(--paper-front-red)"
+                    : "var(--paper-light-text)",
+            }}
+        >
+            {props.children}
+        </PaperText>
     );
 }
 

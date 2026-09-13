@@ -3,7 +3,7 @@ import {
     config,
     type ServiceContext,
 } from "@paperboard-dev/paperapi";
-import { sanitizeFileName, tryListDirectory } from "../lib/filesystem";
+import { sanitizeFileName, tryListDirectory, listDirectory } from "../lib/filesystem";
 import {
     INSTALL_RECORDS_KEY,
     collectInstalledPlugins,
@@ -46,6 +46,11 @@ export async function listInstalledPlugins(
     ctx: ServiceContext<GameServerState>,
 ): Promise<{ plugins: InstalledPlugin[]; warning?: string }> {
     const dirName = pluginDirName(ctx.state.serverSoftware);
+    // a missing directory means "nothing installed yet", not an error: the
+    // folder is only created on first install, and a warning here taught
+    // users to ignore the warning bar
+    const dirExists = await fileApi.exists(dirName, PANEL_ID).catch(() => false);
+    if (!dirExists) return { plugins: [] };
     const records = await getInstallRecords();
     const listing = await tryListDirectory(dirName);
     const plugins = await collectInstalledPlugins({
@@ -79,4 +84,36 @@ export async function deletePlugin(
         delete records[safe];
         await writeInstallRecords(records);
     }
+}
+
+// every plugin dir regardless of software: switching Paper<->Fabric changes
+// which folder is "active", so "uninstall everything" must clear both
+const ALL_PLUGIN_DIRS = ["plugins", "mods"];
+
+export async function uninstallAllPlugins(
+    _ctx: ServiceContext<GameServerState>,
+): Promise<number> {
+    const paths: string[] = [];
+    for (const dir of ALL_PLUGIN_DIRS) {
+        const exists = await fileApi.exists(dir, PANEL_ID).catch(() => false);
+        if (!exists) continue;
+        for (const entry of await listDirectory(dir)) {
+            const safe = sanitizeFileName(entry);
+            if (!safe || !safe.toLowerCase().endsWith(".jar")) continue;
+            try {
+                paths.push(`${dir}/${validatePluginFilename(safe)}`);
+            } catch (err) {
+                console.debug(`[Service:Plugins] skipping unsafe entry "${entry}":`, String(err));
+            }
+        }
+    }
+    if (paths.length > 0) {
+        await trashRemovePathsWith(
+            makeTrashRemoveDeps("Service:Plugins"),
+            paths,
+            "uninstall-all-plugins-pty",
+        );
+    }
+    await writeInstallRecords({});
+    return paths.length;
 }

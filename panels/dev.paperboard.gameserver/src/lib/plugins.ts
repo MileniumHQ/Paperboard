@@ -6,11 +6,13 @@ import type { ServerSoftwareType } from "./software";
 import { sanitizeFileName } from "./filesystem";
 import {
     INSTALL_RECORDS_KEY,
+    classifyPluginUpdate,
     isInstallRecord,
     parseInstallRecords,
     pickVersionFile,
     pluginDirName,
     validatePluginFilename,
+    type PluginUpdateStatus as CoreUpdateStatus,
 } from "../core/plugins";
 import type { InstalledPlugin, InstalledRecord } from "../core/plugins";
 
@@ -301,7 +303,9 @@ export async function installProject(
     }
     const safe = sanitizeFileName(file.filename);
     if (!safe || !safe.toLowerCase().endsWith(".jar")) {
-        throw new Error(`Unsafe download filename: "${file.filename}"`);
+        throw new Error(
+            `Can't save Modrinth's file name "${file.filename}" — it contains characters that aren't allowed in a jar name.`,
+        );
     }
 
     await fileApi.download({
@@ -331,4 +335,114 @@ export async function installProject(
     }
 
     return { filename: safe, version: file.versionNumber };
+}
+
+export type PluginUpdateStatus = CoreUpdateStatus | "error";
+
+export interface PluginUpdateCheck {
+    filename: string;
+    title: string;
+    record?: InstalledRecord;
+    latest?: ResolvedDownload;
+    status: PluginUpdateStatus;
+    error?: string;
+}
+
+// For every installed plugin, resolve the newest build for this server's
+// software + Minecraft version. "incompatible" means no build matches (the
+// UI offers to uninstall); "error" means the lookup itself failed.
+export async function checkPluginUpdates(): Promise<PluginUpdateCheck[]> {
+    const { plugins } = await listInstalledPlugins();
+    const results: PluginUpdateCheck[] = [];
+    for (const plugin of plugins) {
+        const title =
+            plugin.record?.slug ?? plugin.filename.replace(/\.jar$/i, "");
+        if (!plugin.record?.projectId) {
+            results.push({
+                filename: plugin.filename,
+                title,
+                status: "error",
+                error: "No Modrinth record — cannot check for updates.",
+            });
+            continue;
+        }
+        try {
+            const latest = await resolveLatestFile(plugin.record.projectId);
+            const status = classifyPluginUpdate(
+                plugin.record.version,
+                latest.versionNumber,
+                latest.exactMatch,
+            );
+            results.push({
+                filename: plugin.filename,
+                title,
+                record: plugin.record,
+                latest,
+                status,
+            });
+        } catch (err) {
+            results.push({
+                filename: plugin.filename,
+                title,
+                record: plugin.record,
+                status: "error",
+                error: err instanceof Error ? err.message : String(err),
+            });
+        }
+    }
+    return results;
+}
+
+// Download the new jar (checksum-verified), then trash the old one if the
+// filename changed, and retarget the install record. Trash-first keeps an
+// interrupted update recoverable.
+export async function updatePlugin(check: PluginUpdateCheck): Promise<void> {
+    if (check.status !== "update-available" || !check.latest || !check.record) {
+        return;
+    }
+    const file = check.latest;
+    const safe = sanitizeFileName(file.filename);
+    if (!safe || !safe.toLowerCase().endsWith(".jar")) {
+        throw new Error(
+            `Can't save Modrinth's file name "${file.filename}" — it contains characters that aren't allowed in a jar name.`,
+        );
+    }
+
+    await fileApi.download({
+        url: file.url,
+        targetPath: `${pluginDirName(serverSoftware())}/${safe}`,
+        appId: PANEL_ID,
+        ...(file.sha1 ? { sha1: file.sha1 } : {}),
+        ...(file.sha512 ? { checksum: { algorithm: "sha512", value: file.sha512 } } : {}),
+    });
+
+    if (safe !== check.filename) {
+        await deletePlugin(check.filename);
+    }
+
+    // read after any delete so a service-side record removal is respected
+    const records = await getInstallRecords();
+    delete records[check.filename];
+    records[safe] = {
+        projectId: check.record.projectId,
+        slug: check.record.slug,
+        version: file.versionNumber || "latest",
+        iconUrl: check.record.iconUrl,
+    };
+    await writeInstallRecords(records);
+}
+
+export async function uninstallPlugin(filename: string): Promise<void> {
+    await deletePlugin(filename);
+    const records = await getInstallRecords();
+    if (records[filename]) {
+        delete records[filename];
+        await writeInstallRecords(records);
+    }
+}
+
+// trash-first removal of every jar under both plugins/ and mods/, plus the
+// install records — used when switching server software invalidates them all
+export async function uninstallAllPlugins(): Promise<void> {
+    await serverBridge.call(ACTION_IDS.uninstallAllPlugins);
 }

@@ -6,6 +6,7 @@ import {
     SERVER_PROC_ID as CORE_SERVER_PROC_ID,
 } from "../core/players";
 import type { PlayerStatData as CorePlayerStatData } from "../core/players";
+import type { PlayerPosition as CorePlayerPosition } from "../core/players";
 import type { ServerIssue as CoreServerIssue, ServerIssueAction as CoreServerIssueAction } from "../core/diagnostics";
 import { WORLD_NAME_PATTERN as CORE_WORLD_NAME_PATTERN } from "../core/worlds";
 import type { InstalledRecord as CoreInstalledRecord, InstalledPlugin as CoreInstalledPlugin } from "../core/plugins";
@@ -14,6 +15,7 @@ import { PANEL_ID } from "./contract";
 export type ServerStatus = CoreServerStatus;
 export type ChatMessage = CoreChatMessage;
 export type PlayerStatData = CorePlayerStatData;
+export type PlayerPosition = CorePlayerPosition;
 export type ServerIssue = CoreServerIssue;
 export type ServerIssueAction = CoreServerIssueAction;
 export type InstalledRecord = CoreInstalledRecord;
@@ -36,6 +38,9 @@ export interface GameServerState {
     seenPlayers: string[];
     playerStats: Record<string, PlayerStatData>;
     playerPlaytime: Record<string, number>;
+    // latest known x/y/z + dimension per player key, read from the running
+    // server for the map; empty when offline
+    playerPositions: Record<string, PlayerPosition>;
     // live gamerule values read from the running server (and optimistic
     // offline edits); synced to the Game Rules tab through the bridge
     gamerules: Record<string, string>;

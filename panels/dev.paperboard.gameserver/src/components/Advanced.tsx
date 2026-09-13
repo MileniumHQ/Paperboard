@@ -9,7 +9,8 @@ import {
     PaperSettingList,
     PaperText,
 } from "@paperboard-dev/paperui";
-import { FieldControl, hasUnsupportedHint } from "./PropertyFieldControl";
+import { FieldControl } from "./PropertyFieldControl";
+import { PaperPageHeader } from "@paperboard-dev/paperui";
 import { supports } from "../lib/capabilities";
 import {
     MAX_RAM_GB,
@@ -60,7 +61,6 @@ const ADVANCED_PROPERTY_FIELDS: PropertyField[] = [
         control: "toggle",
         defaultValue: "false",
         capability: "propertyEnableCommandBlock",
-        unsupportedHint: "Moved to Game Rules",
     },
     {
         key: "function-permission-level",
@@ -174,11 +174,12 @@ const ADVANCED_PROPERTY_FIELDS: PropertyField[] = [
     },
 ];
 
+// a field whose capability this Minecraft version lacks is hidden, not
+// shown with an apology
 function visibleAdvancedFields(): PropertyField[] {
-    return ADVANCED_PROPERTY_FIELDS.filter((field) => {
-        if (!field.capability || supports(field.capability)) return true;
-        return Boolean(field.unsupportedHint);
-    });
+    return ADVANCED_PROPERTY_FIELDS.filter(
+        (field) => !field.capability || supports(field.capability),
+    );
 }
 
 export default function Advanced() {
@@ -257,20 +258,11 @@ export default function Advanced() {
     };
 
     const renderControl = (field: PropertyField) => (
-        <Show
-            when={!hasUnsupportedHint(field)}
-            fallback={
-                <PaperText size={3} weight={500} color="light-text">
-                    {field.unsupportedHint}
-                </PaperText>
-            }
-        >
-            <FieldControl
-                field={field}
-                value={() => currentValue(field)}
-                onUpdate={(value) => updateValue(field, value)}
-            />
-        </Show>
+        <FieldControl
+            field={field}
+            value={() => currentValue(field)}
+            onUpdate={(value) => updateValue(field, value)}
+        />
     );
 
     const visibleFields = () => {
@@ -285,80 +277,79 @@ export default function Advanced() {
     };
 
     return (
-        <PaperFlex direction="column" fullWidth fullHeight gap="half">
-            <PaperFlex
-                direction="column"
-                gap="half"
-                fullWidth
-                padding="full"
-                style={{ "flex-shrink": 0 }}
-            >
-                <Show when={ramSaved()}>
-                    <PaperQuote variant="green" icon="check" title="Saved">
-                        Memory allocation saved. It applies the next time the server starts.
-                    </PaperQuote>
-                </Show>
-                <Show
-                    when={ramError() || saveError()}
-                    fallback={
-                        <PaperQuote variant="yellow" icon="info" title="Note">
-                            Changes won't be applied until the server is restarted.
-                        </PaperQuote>
-                    }
-                >
-                    <PaperQuote variant="red" icon="warning" title="Error">
-                        {ramError()
-                            ? "Failed to save the memory allocation. Check the console for details."
-                            : "Failed to save changes. Check the console for details."}
-                    </PaperQuote>
-                </Show>
-                <Show when={!values()}>
-                    <PaperText size={3} color="light-text">
-                        Loading settings...
-                    </PaperText>
-                </Show>
-                <PaperInput
-                    fullWidth
-                    icon="search"
-                    placeholder="Search advanced settings..."
-                    value={search()}
-                    onInput={(e) => setSearch(e.currentTarget.value)}
-                />
-            </PaperFlex>
-
-            <PaperSettingList style={{ flex: 1, "min-height": 0 }}>
-                <PaperSettingItem
-                    title="Memory Allocation"
-                    description={`Java heap size (-Xmx/-Xms) for the server process, from ${MIN_RAM_GB} GB to ${MAX_RAM_GB} GB.`}
-                >
-                    <PaperSelectMenu
-                        name="ramAllocation"
-                        value={String(ramAllocation())}
-                        onValueChange={(val) => void changeRam(String(val))}
-                    >
-                        <For each={RAM_CHOICES}>
-                            {(gb) => (
-                                <PaperSelectMenuItem value={String(gb)}>
-                                    {gb} GB
-                                </PaperSelectMenuItem>
-                            )}
-                        </For>
-                    </PaperSelectMenu>
-                </PaperSettingItem>
-
-                <Show when={values()}>
-                    <For each={visibleFields()}>
-                        {(field) => (
+        <PaperFlex direction="column" fullWidth fullHeight style={{ "min-height": 0 }}>
+            <div class="gs-scroll">
+                <div class="gs-page">
+                    <PaperPageHeader icon="settings" title="Advanced" />
+                    <div class="gs-surface">
+                        <PaperFlex padding="full">
+                            <PaperInput
+                                fullWidth
+                                icon="search"
+                                placeholder="Search advanced settings..."
+                                value={search()}
+                                onInput={(e) => setSearch(e.currentTarget.value)}
+                            />
+                        </PaperFlex>
+                    </div>
+                    <div class="gs-surface">
+                        <PaperSettingList autoHeight>
+                            <PaperFlex direction="column" gap="half" padding="full">
+                                <Show when={ramSaved()}>
+                                    <PaperQuote variant="green" icon="check" title="Saved">
+                                        Memory allocation saved. It applies the next time the server starts.
+                                    </PaperQuote>
+                                </Show>
+                                <Show
+                                    when={ramError() || saveError()}
+                                    fallback={
+                                        <PaperQuote variant="yellow" icon="info" title="Note">
+                                            Changes won't be applied until the server is restarted.
+                                        </PaperQuote>
+                                    }
+                                >
+                                    <PaperQuote variant="red" icon="warning" title="Error">
+                                        {ramError()
+                                            ? "Failed to save the memory allocation. Check the console for details."
+                                            : "Failed to save changes. Check the console for details."}
+                                    </PaperQuote>
+                                </Show>
+                            </PaperFlex>
                             <PaperSettingItem
-                                title={field.title}
-                                description={field.description}
+                                title="Memory Allocation"
+                                description={`Java heap size (-Xmx/-Xms) for the server process, from ${MIN_RAM_GB} GB to ${MAX_RAM_GB} GB.`}
                             >
-                                {renderControl(field)}
+                                <PaperSelectMenu
+                                    name="ramAllocation"
+                                    value={String(ramAllocation())}
+                                    onValueChange={(val) => void changeRam(String(val))}
+                                >
+                                    <For each={RAM_CHOICES}>
+                                        {(gb) => (
+                                            <PaperSelectMenuItem value={String(gb)}>
+                                                {gb} GB
+                                            </PaperSelectMenuItem>
+                                        )}
+                                    </For>
+                                </PaperSelectMenu>
                             </PaperSettingItem>
-                        )}
-                    </For>
-                </Show>
-            </PaperSettingList>
+
+                            <Show when={values()}>
+                                <For each={visibleFields()}>
+                                    {(field) => (
+                                        <PaperSettingItem
+                                            title={field.title}
+                                            description={field.description}
+                                        >
+                                            {renderControl(field)}
+                                        </PaperSettingItem>
+                                    )}
+                                </For>
+                            </Show>
+                        </PaperSettingList>
+                    </div>
+                </div>
+            </div>
         </PaperFlex>
     );
 }

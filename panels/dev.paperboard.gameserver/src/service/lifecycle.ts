@@ -12,7 +12,7 @@ import { isWindowsTarget } from "../lib/platform";
 import { parseChatMessage, parseLogLine } from "../lib/logs";
 import { parseGameruleValue } from "../core/gamerules";
 import { loadConfigAndProperties } from "./config";
-import { trackPlayerActivity, handleStatResponse } from "./players";
+import { trackPlayerActivity, handleStatResponse, handlePositionResponse } from "./players";
 import { assertSingleLine } from "../core/players";
 import { checkLogForIssues } from "./diagnostics";
 import { onServerOnline } from "./gamerules";
@@ -284,6 +284,7 @@ export function handleProcessData(
 
         trackPlayerActivity(ctx, clean);
         handleStatResponse(ctx, clean);
+        handlePositionResponse(ctx, clean);
         handleGameruleResponse(ctx, clean);
         checkLogForIssues(ctx, clean);
 

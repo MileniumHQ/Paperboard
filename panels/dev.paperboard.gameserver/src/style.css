@@ -11,6 +11,64 @@ body,
     font-family: var(--paper-font-family);
 }
 
+/* Shared panel scaffolding: one scroll region per tab, header included, so
+   the whole page scrolls together instead of the header pinning while a
+   nested box scrolls. */
+.gs-page {
+    width: 100%;
+    max-width: 62rem;
+    margin: 0 auto;
+    box-sizing: border-box;
+    padding: var(--paper-uigap);
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap);
+}
+
+.gs-scroll {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+/* Plugin/mod cards: keep the icon proportionate to the grid instead of
+   the 4.5rem media-card default, which dominates a narrow panel. */
+.gs-plugin-icon {
+    width: 3rem;
+    height: 3rem;
+    border-radius: var(--paper-border-radius-half);
+    object-fit: contain;
+    display: block;
+    background: color-mix(in srgb, var(--paper-anti-background) 8%, transparent);
+}
+
+/* Surface language borrowed from the Actions panel: content sits in
+   rounded, elevated cards with real gaps, never edge-to-edge. This is what
+   made the gameserver read as flat next to the rest of Paperboard. */
+.gs-surface {
+    width: 100%;
+    box-sizing: border-box;
+    background: var(--paper-background-front);
+    border: var(--paper-border-width) solid var(--paper-medium-border);
+    border-radius: var(--paper-border-radius);
+    overflow: hidden;
+}
+
+.log-view {
+    margin: 0;
+    height: 100%;
+    overflow: auto;
+    padding: var(--paper-uigap);
+    box-sizing: border-box;
+    font-family: var(--paper-font-family-code);
+    font-size: var(--paper-text-size-2);
+    line-height: 1.5;
+    color: var(--paper-main-text);
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
 .modrinth-description {
     font-size: 0.9rem;
     line-height: 1.55;
@@ -30,7 +88,7 @@ body,
 .modrinth-description h1 { font-size: 1.5rem; }
 .modrinth-description h2 {
     padding-bottom: 0.2em;
-    border-bottom: 1px solid var(--paper-border);
+    border-bottom: 1px solid var(--paper-medium-border);
 }
 .modrinth-description h3 { font-size: 1.17rem; }
 .modrinth-description h4,
@@ -52,7 +110,7 @@ body,
 }
 
 .modrinth-description a {
-    color: var(--paper-accent, #3b82f6);
+    color: var(--paper-front-blue);
 }
 
 .modrinth-description code {
@@ -84,7 +142,7 @@ body,
 .modrinth-description blockquote {
     margin: 0.8em 0;
     padding: 0.2em 1em;
-    border-left: 4px solid var(--paper-border, rgba(128, 128, 128, 0.4));
+    border-left: 4px solid var(--paper-medium-border);
     color: var(--paper-light-text, inherit);
 }
 
@@ -98,7 +156,7 @@ body,
 
 .modrinth-description th,
 .modrinth-description td {
-    border: 1px solid var(--paper-border, rgba(128, 128, 128, 0.4));
+    border: 1px solid var(--paper-medium-border);
     padding: 0.35em 0.6em;
     text-align: left;
 }
@@ -115,6 +173,6 @@ body,
 
 .modrinth-description hr {
     border: none;
-    border-top: 1px solid var(--paper-border, rgba(128, 128, 128, 0.4));
+    border-top: 1px solid var(--paper-medium-border);
     margin: 1.2em 0;
 }

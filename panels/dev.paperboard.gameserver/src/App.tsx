@@ -1,4 +1,4 @@
-import { createSignal, onMount, Show } from "solid-js";
+import { createEffect, createSignal, onMount, Show } from "solid-js";
 import {
     PaperFlex,
     PaperMenu,
@@ -8,6 +8,7 @@ import {
 } from "@paperboard-dev/paperui";
 import { config } from "@paperboard-dev/paperapi";
 import { PANEL_ID } from "./service/contract";
+import { serverSoftware } from "./lib/server";
 import Setup from "./components/Setup";
 import Overview from "./components/Overview";
 import Chat from "./components/Chat";
@@ -16,13 +17,28 @@ import GameRules from "./components/GameRules";
 import Players from "./components/Players";
 import Plugins from "./components/Plugins";
 import Worlds from "./components/Worlds";
+import MapView from "./components/Map";
 import Advanced from "./components/Advanced";
+import Logs from "./components/Logs";
+import Versions from "./components/Versions";
 import "@paperboard-dev/paperui/style.css";
 import "./style.css";
 
 export default function App() {
     const [configured, setConfigured] = createSignal<boolean | null>(null);
     const [activeTab, setActiveTab] = createSignal("overview");
+    // bumped when the Versions tab asks the Plugins tab to check for updates
+    const [pluginUpdateRequest, setPluginUpdateRequest] = createSignal(0);
+
+    // Fabric calls them mods; Vanilla has no plugin system at all
+    const pluginKind = () => (serverSoftware() === "fabric" ? "Mods" : "Plugins");
+    const hasPluginTab = () => serverSoftware() !== "vanilla";
+
+    createEffect(() => {
+        if (!hasPluginTab() && activeTab() === "plugins") {
+            setActiveTab("worlds");
+        }
+    });
 
     const checkConfig = async () => {
         try {
@@ -67,11 +83,22 @@ export default function App() {
                         <PaperMenuItem value="gamerules" icon="list_alt_check">
                             Game Rules
                         </PaperMenuItem>
+                        <PaperMenuItem value="map" icon="map">
+                            Map
+                        </PaperMenuItem>
                         <PaperMenuItem value="players" icon="group">
                             Players
                         </PaperMenuItem>
-                        <PaperMenuItem value="plugins" icon="extension">
-                            Plugins
+                        <PaperMenuItem value="versions" icon="deployed_code">
+                            Versions
+                        </PaperMenuItem>
+                        <Show when={hasPluginTab()}>
+                            <PaperMenuItem value="plugins" icon="extension">
+                                {pluginKind()}
+                            </PaperMenuItem>
+                        </Show>
+                        <PaperMenuItem value="logs" icon="description">
+                            Logs
                         </PaperMenuItem>
                         <PaperMenuItem value="worlds" icon="public">
                             Worlds
@@ -97,11 +124,27 @@ export default function App() {
                         <PaperInterfaceItem value="gamerules">
                             <GameRules />
                         </PaperInterfaceItem>
+                        <PaperInterfaceItem value="map">
+                            <MapView />
+                        </PaperInterfaceItem>
                         <PaperInterfaceItem value="players">
                             <Players />
                         </PaperInterfaceItem>
-                        <PaperInterfaceItem value="plugins">
-                            <Plugins />
+                        <PaperInterfaceItem value="versions">
+                            <Versions
+                                onRequestPluginUpdate={() => {
+                                    setActiveTab("plugins");
+                                    setPluginUpdateRequest((n) => n + 1);
+                                }}
+                            />
+                        </PaperInterfaceItem>
+                        <Show when={hasPluginTab()}>
+                            <PaperInterfaceItem value="plugins">
+                                <Plugins updateRequest={pluginUpdateRequest()} />
+                            </PaperInterfaceItem>
+                        </Show>
+                        <PaperInterfaceItem value="logs">
+                            <Logs />
                         </PaperInterfaceItem>
                         <PaperInterfaceItem value="worlds">
                             <Worlds />

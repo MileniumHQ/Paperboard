@@ -7,17 +7,24 @@ import { SOFTWARE_NAMES, type ServerSoftwareType } from "./software";
 import {
     forgetPlayerData,
     getPlayerPlaytimeSeconds,
+    loadPlayerStats,
     onlinePlayerNames,
     playerStats,
+    playerPositions,
+    playerStatSummaries,
     playerPlaytime,
     queryOnlinePlayers,
     queryPlayerStats,
+    queryPlayerPositions,
     seenPlayerNames,
     setOnlinePlayerNames,
     setSeenPlayerNames,
     setPlayerStats,
+    setPlayerPositions,
     setPlayerPlaytime,
     type PlayerStatData,
+    type PlayerPosition,
+    type PlayerStatSummary,
 } from "./players";
 import { setActiveIssue, type ServerIssue } from "./diagnostics";
 import { applyStatePatch } from "../core/state";
@@ -41,6 +48,10 @@ export const [serverSoftware, setServerSoftware] = createSignal<ServerSoftwareTy
 export const [serverVersion, setServerVersion] = createSignal("");
 export const [ramAllocation, setRamAllocation] = createSignal(4);
 export const [gamerules, setGamerules] = createSignal<Record<string, string>>({});
+// last lifecycle (start/stop/restart) failure, surfaced on the Overview
+// tab — bridge-call rejections otherwise land in console.error only, and
+// a button that does nothing is a silent failure with a click handler.
+export const [serverActionError, setServerActionError] = createSignal("");
 
 export const MIN_RAM_GB = 1;
 export const MAX_RAM_GB = 16;
@@ -68,6 +79,7 @@ function currentSetters() {
         setOnlinePlayerNames,
         setSeenPlayerNames,
         setPlayerStats,
+        setPlayerPositions,
         setPlayerPlaytime,
         setGamerules,
     };
@@ -110,28 +122,31 @@ export async function initServerListeners() {
     await serverBridge.refreshState();
 }
 
+function reportActionError(action: string, err: unknown): void {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`[ServerBridge] ${action} failed:`, message);
+    setServerActionError(message);
+}
+
 export function startServer() {
+    setServerActionError("");
     serverBridge
         .call(ACTION_IDS.startServer)
-        .catch((err) =>
-            console.error("[ServerBridge] start-server failed:", String(err)),
-        );
+        .catch((err) => reportActionError("start-server", err));
 }
 
 export function stopServer() {
+    setServerActionError("");
     serverBridge
         .call(ACTION_IDS.stopServer)
-        .catch((err) =>
-            console.error("[ServerBridge] stop-server failed:", String(err)),
-        );
+        .catch((err) => reportActionError("stop-server", err));
 }
 
 export function restartServer() {
+    setServerActionError("");
     serverBridge
         .call(ACTION_IDS.restartServer)
-        .catch((err) =>
-            console.error("[ServerBridge] restart-server failed:", String(err)),
-        );
+        .catch((err) => reportActionError("restart-server", err));
 }
 
 export function sendServerCommand(cmd: string) {
@@ -168,11 +183,15 @@ export function getStatusBadge(status: ServerStatus): {
 export {
     forgetPlayerData,
     getPlayerPlaytimeSeconds,
+    loadPlayerStats,
     onlinePlayerNames,
     playerStats,
+    playerPositions,
+    playerStatSummaries,
     playerPlaytime,
     queryOnlinePlayers,
+    queryPlayerPositions,
     queryPlayerStats,
     seenPlayerNames,
 };
-export type { PlayerStatData };
+export type { PlayerStatData, PlayerPosition, PlayerStatSummary };

@@ -17,6 +17,7 @@ import {
 import {
     queryOnlinePlayers,
     queryPlayerStats,
+    queryPlayerPositions,
     forgetPlayerData,
     deletePlayerData,
 } from "./players";
@@ -25,9 +26,19 @@ import {
     killConflictingProcess,
     resetWorldFiles,
 } from "./diagnostics";
-import { listInstalledPlugins, deletePlugin } from "./plugins";
-import { listWorldDirs, deleteActiveWorldDirs } from "./worlds";
+import { listInstalledPlugins, deletePlugin, uninstallAllPlugins } from "./plugins";
+import {
+    assertServerOffline,
+    listWorldDirs,
+    listWorlds,
+    setActiveWorld,
+    deleteActiveWorldDirs,
+} from "./worlds";
 import { loadConfigAndProperties, updatePanelConfig } from "./config";
+import { listMapRegions, renderMapTile } from "./map";
+import type { MapDimension } from "../core/map";
+import { listPlayerStats } from "./playerStats";
+import { listLogFiles, readLogFile } from "./logs";
 import { queryGamerules, setGamerule } from "./gamerules";
 import { assertPlayerName, assertSingleLine } from "../core/players";
 import type { GameServerState } from "./types";
@@ -508,9 +519,44 @@ export const panelActions: ActionDefinition[] = [
     }),
 
     defineAction({
+        id: ACTION_IDS.listWorlds,
+        name: "List Worlds",
+        description: "Lists on-disk worlds with active flag and generated dimensions",
+        template: "List worlds",
+        inputs: {},
+        output: { type: "object", label: "Worlds" },
+        quick: false,
+        icon: "public",
+        run: async () => {
+            return listWorlds();
+        },
+    }),
+
+    defineAction({
+        id: ACTION_IDS.setActiveWorld,
+        name: "Set Active World",
+        description: "Makes a world the boot target (offline only, trash-safe)",
+        template: "Set active world {levelName}",
+        inputs: {
+            levelName: { type: "string", label: "World Name", required: true },
+            seed: { type: "string", label: "Seed (new worlds only)", required: false },
+        },
+        output: { type: "object", label: "Active World" },
+        quick: false,
+        icon: "public",
+        run: async (
+            ctx: ServiceContext<GameServerState>,
+            inputs: { levelName: string; seed?: string },
+        ) => {
+            if (!inputs?.levelName) throw new Error("World name is required");
+            return setActiveWorld(ctx, inputs.levelName, inputs.seed);
+        },
+    }),
+
+    defineAction({
         id: ACTION_IDS.deleteWorld,
         name: "Delete World",
-        description: "Deletes a world's directories (trash-first, recoverable on crash)",
+        description: "Deletes a world's directories (offline only, trash-first, recoverable on crash)",
         template: "Delete world {levelName}",
         inputs: {
             levelName: { type: "string", label: "World Name", required: true },
@@ -523,8 +569,49 @@ export const panelActions: ActionDefinition[] = [
             inputs: { levelName: string },
         ) => {
             if (!inputs?.levelName) throw new Error("World name is required");
+            assertServerOffline(ctx);
             await deleteActiveWorldDirs(ctx, inputs.levelName);
             return true;
+        },
+    }),
+
+    defineAction({
+        id: ACTION_IDS.listMapRegions,
+        name: "List Map Regions",
+        description: "Lists generated overworld region files for the active world",
+        template: "List map regions",
+        inputs: {},
+        output: { type: "object", label: "Map Regions" },
+        quick: false,
+        icon: "map",
+        run: async (ctx: ServiceContext<GameServerState>) => {
+            return listMapRegions(ctx);
+        },
+    }),
+
+    defineAction({
+        id: ACTION_IDS.renderMapTile,
+        name: "Render Map Tile",
+        description: "Renders one 512x512 top-down map tile for a dimension and region coordinate",
+        template: "Render map tile {dimension} {rx} {rz}",
+        inputs: {
+            dimension: { type: "string", label: "Dimension", required: true },
+            rx: { type: "number", label: "Region X", required: true },
+            rz: { type: "number", label: "Region Z", required: true },
+        },
+        output: { type: "object", label: "Tile" },
+        quick: false,
+        icon: "map",
+        run: async (
+            ctx: ServiceContext<GameServerState>,
+            inputs: { dimension: string; rx: number; rz: number },
+        ) => {
+            return renderMapTile(
+                ctx,
+                inputs?.dimension as MapDimension,
+                Number(inputs?.rx),
+                Number(inputs?.rz),
+            );
         },
     }),
 
@@ -560,6 +647,20 @@ export const panelActions: ActionDefinition[] = [
             if (!inputs?.filename) throw new Error("Filename is required");
             await deletePlugin(ctx, inputs.filename);
             return true;
+        },
+    }),
+
+    defineAction({
+        id: ACTION_IDS.uninstallAllPlugins,
+        name: "Uninstall All Plugins",
+        description: "Trash-first removes every jar in plugins/ and mods/",
+        template: "Uninstall all plugins",
+        inputs: {},
+        output: { type: "number", label: "Removed" },
+        quick: false,
+        icon: "delete_sweep",
+        run: async (ctx: ServiceContext<GameServerState>) => {
+            return uninstallAllPlugins(ctx);
         },
     }),
 
@@ -636,6 +737,69 @@ export const panelActions: ActionDefinition[] = [
         run: async (ctx: ServiceContext<GameServerState>) => {
             queryOnlinePlayers(ctx);
             return true;
+        },
+    }),
+
+    defineAction({
+        id: ACTION_IDS.queryPlayerPositions,
+        name: "Query Player Positions",
+        description: "Reads online players' coordinates and dimension for the map",
+        template: "Query player positions",
+        inputs: {},
+        output: { type: "boolean", label: "Success" },
+        quick: false,
+        icon: "map",
+        run: async (ctx: ServiceContext<GameServerState>) => {
+            queryPlayerPositions(ctx);
+            return true;
+        },
+    }),
+
+    defineAction({
+        id: ACTION_IDS.listPlayerStats,
+        name: "List Player Statistics",
+        description: "Reads every player's offline statistics from the world's stats files",
+        template: "List player statistics",
+        inputs: {},
+        output: { type: "object", label: "Player Statistics" },
+        quick: false,
+        icon: "leaderboard",
+        run: async (ctx: ServiceContext<GameServerState>) => {
+            return listPlayerStats(ctx);
+        },
+    }),
+
+    defineAction({
+        id: ACTION_IDS.listLogFiles,
+        name: "List Log Files",
+        description: "Lists the server's log files, newest first",
+        template: "List log files",
+        inputs: {},
+        output: { type: "object", label: "Log Files" },
+        quick: false,
+        icon: "description",
+        run: async (ctx: ServiceContext<GameServerState>) => {
+            return listLogFiles(ctx);
+        },
+    }),
+
+    defineAction({
+        id: ACTION_IDS.readLogFile,
+        name: "Read Log File",
+        description: "Reads a server log file (tail for plain logs, full for archives)",
+        template: "Read log file {name}",
+        inputs: {
+            name: { type: "string", label: "File Name", required: true },
+        },
+        output: { type: "object", label: "Log" },
+        quick: false,
+        icon: "description",
+        run: async (
+            ctx: ServiceContext<GameServerState>,
+            inputs: { name: string },
+        ) => {
+            if (!inputs?.name) throw new Error("Log file name is required");
+            return readLogFile(ctx, inputs.name);
         },
     }),
 

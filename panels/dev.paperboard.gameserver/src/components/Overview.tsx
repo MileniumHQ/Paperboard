@@ -9,8 +9,10 @@ import {
     PaperConsole,
     PaperBadge,
     PaperEffect,
+    PaperQuote,
 } from "@paperboard-dev/paperui";
 import {
+    serverActionError,
     serverStatus,
     serverEntries,
     localIp,
@@ -134,6 +136,12 @@ export default function Overview() {
                     </PaperBadge>
                 </PaperFlex>
             </PaperFlex>
+
+            <Show when={serverActionError()}>
+                <PaperQuote variant="red" icon="warning" title="Server action failed">
+                    {serverActionError()}
+                </PaperQuote>
+            </Show>
 
             <PaperSeparator />
 

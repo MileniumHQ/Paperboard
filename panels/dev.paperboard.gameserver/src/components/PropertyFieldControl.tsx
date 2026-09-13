@@ -3,10 +3,9 @@ import {
     PaperInput,
     PaperSelectMenu,
     PaperSelectMenuItem,
-    PaperText,
     PaperToggle,
 } from "@paperboard-dev/paperui";
-import { supports, hasKnownMcVersion } from "../lib/capabilities";
+import { hasKnownMcVersion } from "../lib/capabilities";
 import type { PropertyField } from "../lib/properties";
 
 // Component so the DOM node persists across value changes and transitions play
@@ -61,12 +60,4 @@ export function FieldControl(props: {
                 />
             );
     }
-}
-
-export function hasUnsupportedHint(field: PropertyField): boolean {
-    return Boolean(
-        field.unsupportedHint &&
-            field.capability &&
-            !supports(field.capability),
-    );
 }

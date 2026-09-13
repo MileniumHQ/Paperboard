@@ -2,6 +2,7 @@ import {
     createEffect,
     createSignal,
     For,
+    on,
     onMount,
     Show,
     type JSX,
@@ -18,14 +19,15 @@ import {
     PaperMediaCardGroup,
     PaperModal,
     PaperQuote,
-    PaperSettingList,
     PaperTable,
     PaperText,
 } from "@paperboard-dev/paperui";
 import DOMPurify from "dompurify";
 import { marked } from "marked";
 import { serverSoftware } from "../lib/server";
+import { PaperPageHeader } from "@paperboard-dev/paperui";
 import {
+    checkPluginUpdates,
     deletePlugin,
     getEcosystem,
     getProject,
@@ -34,9 +36,12 @@ import {
     pluginDirName,
     PluginVersionMismatchError,
     searchModrinth,
+    uninstallPlugin,
+    updatePlugin,
     type InstalledPlugin,
     type ModrinthHit,
     type ModrinthProject,
+    type PluginUpdateCheck,
 } from "../lib/plugins";
 
 // Third-party markdown is rendered with marked, then sanitized before touching the DOM
@@ -94,7 +99,7 @@ function ProjectIcon(props: { iconUrl?: string; glyph?: string }): JSX.Element {
         <Show
             when={props.iconUrl}
             fallback={
-                <span style={{ "font-size": "4.5rem" }}>
+                <span style={{ "font-size": "3rem" }}>
                     {props.glyph ?? "extension"}
                 </span>
             }
@@ -102,19 +107,14 @@ function ProjectIcon(props: { iconUrl?: string; glyph?: string }): JSX.Element {
             <img
                 src={props.iconUrl}
                 alt=""
-                style={{
-                    width: "4.5rem",
-                    height: "4.5rem",
-                    "border-radius": "var(--paper-border-radius)",
-                    "object-fit": "contain",
-                    background: "rgba(128,128,128,0.12)",
-                }}
+                class="gs-plugin-icon"
+                style={{ "border-radius": "var(--paper-border-radius)" }}
             />
         </Show>
     );
 }
 
-export default function Plugins() {
+export default function Plugins(props: { updateRequest?: number }) {
     const [installed, setInstalled] = createSignal<InstalledPlugin[] | null>(null);
     const [listWarning, setListWarning] = createSignal("");
     const [query, setQuery] = createSignal("");
@@ -137,6 +137,12 @@ export default function Plugins() {
     const [projectLoading, setProjectLoading] = createSignal(false);
     const [error, setError] = createSignal("");
 
+    const [updating, setUpdating] = createSignal(false);
+    const [updateError, setUpdateError] = createSignal("");
+    const [failures, setFailures] = createSignal<PluginUpdateCheck[] | null>(null);
+    const [uninstallingFailure, setUninstallingFailure] =
+        createSignal<string | null>(null);
+
     const eco = () => getEcosystem(serverSoftware());
     const kindLabel = () => eco()?.kind ?? "plugin";
     const searchTitle = () => (eco()?.kind === "mod" ? "Search Mods" : "Search Plugins");
@@ -145,6 +151,72 @@ export default function Plugins() {
     onMount(() => {
         void reloadInstalled();
     });
+
+    const runUpdateCheck = async () => {
+        if (updating()) return;
+        setUpdating(true);
+        setUpdateError("");
+        try {
+            const checks = await checkPluginUpdates();
+            const available = checks.filter((c) => c.status === "update-available");
+            const failed: PluginUpdateCheck[] = checks.filter(
+                (c) => c.status === "incompatible",
+            );
+            for (const check of available) {
+                try {
+                    await updatePlugin(check);
+                } catch (err) {
+                    console.error(`[Plugins] Failed to update "${check.filename}":`, err);
+                    failed.push({
+                        ...check,
+                        status: "error",
+                        error: err instanceof Error ? err.message : String(err),
+                    });
+                }
+            }
+            await reloadInstalled();
+            if (failed.length > 0) setFailures(failed);
+        } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            console.error("[Plugins] Update check failed:", err);
+            setUpdateError(message);
+        } finally {
+            setUpdating(false);
+        }
+    };
+
+    const uninstallFailure = async (filename: string) => {
+        setUninstallingFailure(filename);
+        try {
+            await uninstallPlugin(filename);
+            setFailures((prev) =>
+                (prev ?? []).filter((f) => f.filename !== filename),
+            );
+            await reloadInstalled();
+        } catch (err) {
+            console.error(`[Plugins] Failed to uninstall "${filename}":`, err);
+            setUpdateError(err instanceof Error ? err.message : String(err));
+        } finally {
+            setUninstallingFailure(null);
+        }
+    };
+
+    // the Versions tab hands off here after switching the server jar
+    createEffect(
+        on(
+            () => props.updateRequest,
+            (value) => {
+                if (value && value > 0) void runUpdateCheck();
+            },
+        ),
+    );
+
+    const uninstallAllFailures = async () => {
+        for (const failure of failures() ?? []) {
+            await uninstallFailure(failure.filename);
+        }
+        setFailures(null);
+    };
 
     createEffect(() => {
         const target = detail();
@@ -263,66 +335,68 @@ export default function Plugins() {
     };
 
     const renderCardIcon = (iconUrl?: string): JSX.Element => (
-        <img
-            src={iconUrl}
-            alt=""
-            style={{
-                width: "4.5rem",
-                height: "4.5rem",
-                "border-radius": "var(--paper-border-radius)",
-                "object-fit": "contain",
-                background: "rgba(128,128,128,0.12)",
-            }}
-        />
+        <img src={iconUrl} alt="" class="gs-plugin-icon" />
     );
 
     return (
-        <PaperFlex direction="column" fullWidth fullHeight gap="half">
-            <PaperFlex
-                direction="column"
-                gap="half"
-                fullWidth
-                padding="full"
-                style={{ "flex-shrink": 0 }}
-            >
-                <PaperText size={7} weight={700}>
-                    {kindLabel() === "mod" ? "Mods" : "Plugins"}
-                </PaperText>
-                <PaperText size={4} color="light-text">
-                    Manage the jars in your server's{" "}
-                    {pluginDirName(serverSoftware())}/ folder and discover more
-                    on Modrinth.
-                </PaperText>
-                <PaperInput
-                    fullWidth
-                    icon="search"
-                    placeholder={searchTitle()}
-                    value={query()}
-                    onInput={(e) => setQuery(e.currentTarget.value)}
-                    onKeyDown={(e) => {
-                        if (e.key === "Enter") void runSearch();
-                    }}
-                />
-                <Show when={error()}>
-                    <PaperQuote variant="red" icon="warning" title="Error">
-                        {error()}
-                    </PaperQuote>
-                </Show>
-                <Show when={listWarning()}>
-                    <PaperQuote variant="yellow" icon="warning" title="Warning">
-                        {listWarning()}
-                    </PaperQuote>
-                </Show>
-            </PaperFlex>
+        <PaperFlex direction="column" fullWidth fullHeight style={{ "min-height": 0 }}>
+            <div class="gs-scroll">
+                <div class="gs-page">
+                    <PaperPageHeader
+                        icon="extension"
+                        title={kindLabel() === "mod" ? "Mods" : "Plugins"}
+                    >
+                        <PaperButton
+                            compact
+                            disabled={updating()}
+                            onClick={() => void runUpdateCheck()}
+                        >
+                            <PaperIcon>sync</PaperIcon>
+                            {updating() ? "Checking…" : "Check for updates"}
+                        </PaperButton>
+                    </PaperPageHeader>
+                    <div class="gs-surface">
+                        <PaperFlex direction="column" gap="half" padding="full">
+                            <PaperInput
+                                fullWidth
+                                icon="search"
+                                placeholder={searchTitle()}
+                                value={query()}
+                                onInput={(e) => setQuery(e.currentTarget.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === "Enter") void runSearch();
+                                }}
+                            />
+                            <PaperText size={2} color="light-text">
+                                Projects provided by{" "}
+                                <PaperLink href="https://modrinth.com" target="_blank">Modrinth</PaperLink>.
+                            </PaperText>
+                            <Show when={error()}>
+                                <PaperQuote variant="red" icon="warning" title="Error">
+                                    {error()}
+                                </PaperQuote>
+                            </Show>
+                            <Show when={listWarning()}>
+                                <PaperQuote variant="yellow" icon="warning" title="Warning">
+                                    {listWarning()}
+                                </PaperQuote>
+                            </Show>
+                            <Show when={updateError()}>
+                                <PaperQuote variant="red" icon="warning" title="Update error">
+                                    {updateError()}
+                                </PaperQuote>
+                            </Show>
+                        </PaperFlex>
+                    </div>
 
-            <PaperSettingList style={{ flex: 1, "min-height": 0 }}>
-                <PaperFlex direction="column" gap="full" paddingY="half">
+                    <PaperFlex direction="column" gap="full">
                     <Show when={installed() !== null && installed()!.length > 0}>
+                        <div class="gs-surface">
                         <PaperFlex direction="column" gap="half" padding="full">
                             <PaperText size={5} weight={700}>
                                 Installed {kindLabel() === "mod" ? "Mods" : "Plugins"}
                             </PaperText>
-                            <PaperMediaCardGroup minCardWidth="20rem">
+                            <PaperMediaCardGroup minCardWidth="13rem">
                                 <For each={installed()}>
                                     {(entry) => (
                                         <PaperMediaCard
@@ -378,29 +452,35 @@ export default function Plugins() {
                                 </For>
                             </PaperMediaCardGroup>
                         </PaperFlex>
+                        </div>
                     </Show>
 
                     <Show when={searching()}>
+                        <div class="gs-surface">
                         <PaperFlex padding="full" center>
                             <PaperText size={3} color="light-text">
                                 Searching Modrinth...
                             </PaperText>
                         </PaperFlex>
+                        </div>
                     </Show>
 
                     <Show when={!searching() && searched()}>
                         <Show
                             when={results().length > 0}
                             fallback={
+                                <div class="gs-surface">
                                 <PaperFlex padding="full" center>
                                     <PaperText size={3} color="light-text">
                                         No {kindLabel()}s matched your search.
                                     </PaperText>
                                 </PaperFlex>
+                                </div>
                             }
                         >
+                            <div class="gs-surface">
                             <PaperFlex padding="full">
-                                <PaperMediaCardGroup minCardWidth="20rem">
+                            <PaperMediaCardGroup minCardWidth="13rem">
                                     <For each={results()}>
                                         {(hit) => (
                                             <PaperMediaCard
@@ -410,11 +490,6 @@ export default function Plugins() {
                                                 footerLeft={
                                                     <PaperText size={2} color="light">
                                                         {formatCount(hit.downloads)} downloads
-                                                    </PaperText>
-                                                }
-                                                footerRight={
-                                                    <PaperText size={2} color="light">
-                                                        ♥ {formatCount(hit.follows)}
                                                     </PaperText>
                                                 }
                                                 onClick={() =>
@@ -431,10 +506,12 @@ export default function Plugins() {
                                     </For>
                                 </PaperMediaCardGroup>
                             </PaperFlex>
+                            </div>
                         </Show>
                     </Show>
                 </PaperFlex>
-            </PaperSettingList>
+                </div>
+            </div>
 
             <PaperModal
                 open={detail() !== null}
@@ -633,6 +710,76 @@ export default function Plugins() {
                     {pluginDirName(serverSoftware())}/ folder. The change takes
                     effect after a restart. This cannot be undone.
                 </PaperText>
+            </PaperModal>
+
+            <PaperModal
+                open={failures() !== null && failures()!.length > 0}
+                onClose={() => setFailures(null)}
+                title="Couldn't update these plugins"
+                size="medium"
+                footer={
+                    <PaperFlex direction="row" justify="flex-end" gap="half" fullWidth>
+                        <PaperButton
+                            compact
+                            variant="red"
+                            disabled={uninstallingFailure() !== null}
+                            onClick={() => void uninstallAllFailures()}
+                        >
+                            Uninstall all
+                        </PaperButton>
+                        <PaperButton compact onClick={() => setFailures(null)}>
+                            Close
+                        </PaperButton>
+                    </PaperFlex>
+                }
+            >
+                <PaperFlex direction="column" gap="half">
+                    <PaperText preset="body">
+                        These plugins have no build for your server's software and
+                        Minecraft version. They may crash the server on startup —
+                        uninstall the ones you no longer need.
+                    </PaperText>
+                    <For each={failures() ?? []}>
+                        {(failure) => (
+                            <PaperFlex
+                                direction="row"
+                                justify="space-between"
+                                align="center"
+                                gap="half"
+                                fullWidth
+                            >
+                                <PaperFlex
+                                    direction="column"
+                                    gap="onefourth"
+                                    style={{ "min-width": 0 }}
+                                >
+                                    <PaperText size={3} weight={600}>
+                                        {failure.title}
+                                    </PaperText>
+                                    <PaperText size={2} color="light-text">
+                                        {failure.status === "incompatible"
+                                            ? `No compatible build (latest targets ${
+                                                  failure.latest?.gameVersions.join(", ") ||
+                                                  "another version"
+                                              })`
+                                            : (failure.error ?? "Update failed")}
+                                    </PaperText>
+                                </PaperFlex>
+                                <PaperButton
+                                    compact
+                                    variant="red"
+                                    disabled={
+                                        uninstallingFailure() === failure.filename
+                                    }
+                                    onClick={() => void uninstallFailure(failure.filename)}
+                                >
+                                    <PaperIcon>delete</PaperIcon>
+                                    Uninstall
+                                </PaperButton>
+                            </PaperFlex>
+                        )}
+                    </For>
+                </PaperFlex>
             </PaperModal>
         </PaperFlex>
     );

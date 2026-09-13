@@ -40,9 +40,11 @@ export function parseInstallRecords(raw: unknown): Record<string, InstalledRecor
 
 export function validatePluginFilename(filename: string): string {
     const trimmed = filename.trim();
-    // strict jar names only, without importing filesystem
+    // strict jar names only, without importing filesystem. `+` is allowed:
+    // Modrinth build metadata uses it in filenames and nothing here is
+    // shell-interpolated.
     const ok =
-        /^[A-Za-z0-9][A-Za-z0-9._ ()-]*$/.test(trimmed) &&
+        /^[A-Za-z0-9][A-Za-z0-9._ ()+-]*$/.test(trimmed) &&
         !trimmed.includes("..") &&
         trimmed.toLowerCase().endsWith(".jar");
     if (!ok) {
@@ -143,4 +145,25 @@ export function pickVersionFile(
     const fallback = firstDownloadable(fallbackVersions);
     if (fallback) return { ...fallback, exactMatch: false };
     throw new Error("No downloadable file on the latest version");
+}
+
+export type PluginUpdateStatus =
+    | "up-to-date"
+    | "update-available"
+    | "incompatible";
+
+// What "Check for updates" should do with one installed plugin, given the
+// latest build resolved for the server's software + Minecraft version.
+// No compatible build (exactMatch false) is "incompatible", never silently
+// treated as up to date.
+export function classifyPluginUpdate(
+    installedVersion: string | undefined,
+    latestVersion: string | undefined,
+    exactMatch: boolean,
+): PluginUpdateStatus {
+    if (!exactMatch) return "incompatible";
+    if ((latestVersion ?? "") !== (installedVersion ?? "")) {
+        return "update-available";
+    }
+    return "up-to-date";
 }

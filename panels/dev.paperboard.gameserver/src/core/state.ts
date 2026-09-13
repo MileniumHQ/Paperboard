@@ -1,6 +1,6 @@
 import type { PaperConsoleEntry } from "@paperboard-dev/paperui";
 import type { ServerSoftwareType } from "../lib/software";
-import type { PlayerStatData } from "./players";
+import type { PlayerStatData, PlayerPosition } from "./players";
 import type { ServerIssue } from "./diagnostics";
 
 export type ServerStatus =
@@ -32,6 +32,7 @@ export interface StateSetters {
     setOnlinePlayerNames: (v: Set<string>) => void;
     setSeenPlayerNames: (v: Set<string>) => void;
     setPlayerStats: (v: Map<string, PlayerStatData>) => void;
+    setPlayerPositions: (v: Map<string, PlayerPosition>) => void;
     setPlayerPlaytime: (v: Map<string, number>) => void;
     setGamerules: (v: Record<string, string>) => void;
 }
@@ -84,6 +85,15 @@ export function applyStatePatch(
             apply: (v) =>
                 setters.setPlayerPlaytime(
                     new Map<string, number>(Object.entries(v as Record<string, number>)),
+                ),
+        },
+        {
+            key: "playerPositions",
+            apply: (v) =>
+                setters.setPlayerPositions(
+                    new Map<string, PlayerPosition>(
+                        Object.entries(v as Record<string, PlayerPosition>),
+                    ),
                 ),
         },
         {

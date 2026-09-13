@@ -16,10 +16,7 @@ export interface PropertyField {
     max?: number;
     options?: () => { value: string; label: string }[];
     capability?: CapabilityName;
-    // shown instead of the control when unsupported, else hidden
-    unsupportedHint?: string;
 }
-
 export const SERVER_PROPERTY_FIELDS: PropertyField[] = [
     {
         key: "server-port",
@@ -67,7 +64,6 @@ export const SERVER_PROPERTY_FIELDS: PropertyField[] = [
         control: "toggle",
         defaultValue: "true",
         capability: "propertyAllowNether",
-        unsupportedHint: "Moved to Game Rules",
     },
     {
         key: "pvp",
@@ -75,7 +71,6 @@ export const SERVER_PROPERTY_FIELDS: PropertyField[] = [
         control: "toggle",
         defaultValue: "true",
         capability: "propertyPvp",
-        unsupportedHint: "Moved to Game Rules",
     },
     {
         key: "force-gamemode",
@@ -85,11 +80,13 @@ export const SERVER_PROPERTY_FIELDS: PropertyField[] = [
     },
 ];
 
+// a field whose capability this Minecraft version lacks is hidden, not
+// shown with an apology: "Moved to Game Rules" text is noise the Game
+// Rules tab already owns.
 export function visiblePropertyFields(): PropertyField[] {
-    return SERVER_PROPERTY_FIELDS.filter((field) => {
-        if (!field.capability || supports(field.capability)) return true;
-        return Boolean(field.unsupportedHint);
-    });
+    return SERVER_PROPERTY_FIELDS.filter(
+        (field) => !field.capability || supports(field.capability),
+    );
 }
 
 export async function readServerProperties(): Promise<Record<string, string>> {

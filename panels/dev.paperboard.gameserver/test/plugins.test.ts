@@ -2,7 +2,40 @@
 // fileApi.download, and a version-filtered miss surfaces the explicit
 // confirm state instead of a silent cross-version install.
 import { describe, it, expect, mock, beforeEach } from "bun:test";
-import { pickVersionFile } from "../src/core/plugins";
+import {
+    classifyPluginUpdate,
+    pickVersionFile,
+    validatePluginFilename,
+} from "../src/core/plugins";
+
+describe("validatePluginFilename", () => {
+    it("accepts Modrinth jar names containing '+'", () => {
+        expect(validatePluginFilename("voicechat-fabric-2.6.23+26.2.jar")).toBe(
+            "voicechat-fabric-2.6.23+26.2.jar",
+        );
+    });
+
+    it("still refuses traversal and non-jars", () => {
+        expect(() => validatePluginFilename("../evil.jar")).toThrow();
+        expect(() => validatePluginFilename("notajar.txt")).toThrow();
+    });
+});
+
+describe("classifyPluginUpdate", () => {
+    it("flags an exact build with a different version as update-available", () => {
+        expect(classifyPluginUpdate("1.2", "1.3", true)).toBe("update-available");
+    });
+
+    it("treats the same version as up to date", () => {
+        expect(classifyPluginUpdate("1.3", "1.3", true)).toBe("up-to-date");
+    });
+
+    it("is incompatible when no build matches the server version", () => {
+        expect(classifyPluginUpdate("1.3", "2.0", false)).toBe("incompatible");
+        // even a version-number match is incompatible without an exact build
+        expect(classifyPluginUpdate("2.0", "2.0", false)).toBe("incompatible");
+    });
+});
 
 describe("pickVersionFile (pure)", () => {
     it("picks the primary file from the exact list with hashes intact", () => {

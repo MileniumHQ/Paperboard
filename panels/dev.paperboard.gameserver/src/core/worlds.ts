@@ -64,3 +64,102 @@ export async function deleteWorldDirs(
     const dirs = getWorldDirsToDelete(levelName);
     await trashRemovePathsWith(deps, dirs, "delete-world-pty");
 }
+
+// ─── World manager model ─────────────────────────────────────────────
+// Pure data + decisions for the Worlds tab. IO (exists checks,
+// server.properties reads) lives in service/worlds.ts; the component
+// renders WorldInfo[] and calls back with validated names.
+
+export interface WorldInfo {
+    name: string;
+    active: boolean;
+    // level.dat present on disk. A configured-but-never-started world is
+    // listed with generated=false instead of being hidden.
+    generated: boolean;
+    hasNether: boolean;
+    hasEnd: boolean;
+}
+
+export interface WorldCandidate {
+    name: string;
+    generated: boolean;
+}
+
+// creation names must survive as fresh directories AND future shell
+// commands, so creation stays on the strict pattern (no spaces, no dots,
+// no leading dash). Switching to an existing directory only needs the
+// shell-safe check — a world created elsewhere may contain spaces.
+export function assertCreatableWorldName(name: unknown): string {
+    const clean = String(name ?? "").trim();
+    if (!WORLD_NAME_PATTERN.test(clean)) {
+        throw new Error(
+            `Refusing to create world with unsafe name: ${JSON.stringify(name)}`,
+        );
+    }
+    return clean;
+}
+
+export type ActivationKind = "noop-active" | "switch" | "create";
+
+export interface ActivationPlan {
+    kind: ActivationKind;
+    name: string;
+}
+
+// one decision point for "make this world active": already active is a
+// noop (no restart prompt), an existing directory is a switch, anything
+// else is a fresh generation on next boot. Case-insensitive — the server
+// resolves level-name against a case-insensitive filesystem on some
+// platforms, so "World" vs "world" must not fork two generations.
+export function planWorldActivation(
+    requested: string,
+    existing: string[],
+    active: string,
+): ActivationPlan {
+    const name = String(requested ?? "").trim();
+    if (!name) throw new Error("World name is required");
+    const lower = name.toLowerCase();
+    if (lower === active.toLowerCase()) return { kind: "noop-active", name };
+    const match = existing.find((e) => e.toLowerCase() === lower);
+    if (match) return { kind: "switch", name: match };
+    return { kind: "create", name: assertCreatableWorldName(name) };
+}
+
+// merges on-disk worlds with the active level-name into renderable cards.
+// A configured world that has not generated yet (no directory / no
+// level.dat) still appears, flagged generated:false, so "I made a world
+// and nothing showed up" cannot happen. Active sorts first, then
+// alphabetically.
+export function buildWorldInfos(
+    candidates: WorldCandidate[],
+    active: string,
+): WorldInfo[] {
+    const seen = new Set<string>();
+    const infos: WorldInfo[] = [];
+    for (const candidate of candidates) {
+        const key = candidate.name.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        infos.push({
+            name: candidate.name,
+            active: key === active.toLowerCase(),
+            generated: candidate.generated,
+            hasNether: false,
+            hasEnd: false,
+        });
+    }
+    const activeKey = active.toLowerCase();
+    if (active && !seen.has(activeKey)) {
+        infos.push({
+            name: active,
+            active: true,
+            generated: false,
+            hasNether: false,
+            hasEnd: false,
+        });
+    }
+    return infos.sort((a, b) => {
+        if (a.active !== b.active) return a.active ? -1 : 1;
+        return a.name.localeCompare(b.name);
+    });
+}

@@ -6,7 +6,8 @@ import {
     PaperSettingList,
     PaperText,
 } from "@paperboard-dev/paperui";
-import { FieldControl, hasUnsupportedHint } from "./PropertyFieldControl";
+import { FieldControl } from "./PropertyFieldControl";
+import { PaperPageHeader } from "@paperboard-dev/paperui";
 import {
     readServerProperties,
     visiblePropertyFields,
@@ -68,50 +69,50 @@ export default function Options() {
     };
 
     const renderControl = (field: PropertyField) => (
-        <Show
-            when={hasUnsupportedHint(field)}
-            fallback={
-                <FieldControl
-                    field={field}
-                    value={() => currentValue(field)}
-                    onUpdate={(value) => updateValue(field, value)}
-                />
-            }
-        >
-            <PaperText size={3} weight={500} color="light-text">
-                {field.unsupportedHint}
-            </PaperText>
-        </Show>
+        <FieldControl
+            field={field}
+            value={() => currentValue(field)}
+            onUpdate={(value) => updateValue(field, value)}
+        />
     );
 
     return (
-        <PaperSettingList style={{ height: "auto" }}>
-            <PaperFlex padding="full" gap="half">
-                <PaperQuote variant="yellow" icon="warning" title="Note">
-                    Changes won't be applied until the server is restarted.
-                </PaperQuote>
-                <Show when={saveError()}>
-                    <PaperQuote variant="red" icon="warning" title="Error">
-                        Failed to save changes. Check the console for details.
-                    </PaperQuote>
-                </Show>
-            </PaperFlex>
-            <Show when={values()} fallback={
-                <PaperSettingItem title="Loading settings...">
-                    <span />
-                </PaperSettingItem>
-            }>
-                <For each={visiblePropertyFields()}>
-                    {(field) => (
-                        <PaperSettingItem
-                            title={field.title}
-                            description={field.description}
-                        >
-                            {renderControl(field)}
-                        </PaperSettingItem>
-                    )}
-                </For>
-            </Show>
-        </PaperSettingList>
+        <PaperFlex direction="column" fullWidth fullHeight style={{ "min-height": 0 }}>
+            <div class="gs-scroll">
+                <div class="gs-page">
+                    <PaperPageHeader icon="tune" title="Options" />
+                    <div class="gs-surface">
+                        <PaperSettingList autoHeight>
+                            <PaperFlex padding="full" gap="half">
+                                <PaperQuote variant="yellow" icon="warning" title="Note">
+                                    Changes won't be applied until the server is restarted.
+                                </PaperQuote>
+                                <Show when={saveError()}>
+                                    <PaperQuote variant="red" icon="warning" title="Error">
+                                        Failed to save changes. Check the console for details.
+                                    </PaperQuote>
+                                </Show>
+                            </PaperFlex>
+                            <Show when={values()} fallback={
+                                <PaperSettingItem title="Loading settings...">
+                                    <span />
+                                </PaperSettingItem>
+                            }>
+                                <For each={visiblePropertyFields()}>
+                                    {(field) => (
+                                        <PaperSettingItem
+                                            title={field.title}
+                                            description={field.description}
+                                        >
+                                            {renderControl(field)}
+                                        </PaperSettingItem>
+                                    )}
+                                </For>
+                            </Show>
+                        </PaperSettingList>
+                    </div>
+                </div>
+            </div>
+        </PaperFlex>
     );
 }

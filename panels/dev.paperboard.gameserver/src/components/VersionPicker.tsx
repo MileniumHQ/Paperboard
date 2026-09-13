@@ -1,0 +1,197 @@
+import { createEffect, createSignal, For, Show } from "solid-js";
+import {
+    PaperCheckbox,
+    PaperContainer,
+    PaperFlex,
+    PaperInput,
+    PaperList,
+    PaperListItem,
+    PaperText,
+    getVarCss,
+} from "@paperboard-dev/paperui";
+import {
+    getDetailedVersionsForSoftware,
+    type ServerSoftwareType,
+    type VersionItem,
+} from "../lib/software";
+
+// Shared Minecraft version picker: search, release-channel filters and the
+// version list. Used by onboarding (Setup) and the Versions tab so there is
+// one implementation of "which versions does this software offer".
+export default function VersionPicker(props: {
+    software: ServerSoftwareType;
+    selectedVersion: string;
+    onSelectVersion: (version: string) => void;
+    /** Fill the parent instead of a fixed list height. */
+    fill?: boolean;
+}) {
+    const [searchQuery, setSearchQuery] = createSignal("");
+    const [allVersions, setAllVersions] = createSignal<VersionItem[]>([]);
+    const [loading, setLoading] = createSignal(true);
+
+    const [includeReleases, setIncludeReleases] = createSignal(true);
+    const [includeSnapshots, setIncludeSnapshots] = createSignal(false);
+    const [includeBetas, setIncludeBetas] = createSignal(false);
+    const [includeAlphas, setIncludeAlphas] = createSignal(false);
+
+    const loadVersions = async () => {
+        setLoading(true);
+        try {
+            const versions = await getDetailedVersionsForSoftware(props.software);
+            setAllVersions(versions);
+            if (versions.length > 0) {
+                const currentExists = versions.some((v) => v.id === props.selectedVersion);
+                if (!currentExists) {
+                    const firstRelease =
+                        versions.find((v) => v.type === "release") || versions[0];
+                    if (firstRelease) props.onSelectVersion(firstRelease.id);
+                }
+            }
+        } catch (err) {
+            console.error("[VersionPicker] Failed to load versions:", err);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    createEffect(() => {
+        if (props.software) loadVersions();
+    });
+
+    const filteredVersions = () => {
+        const query = searchQuery().toLowerCase().trim();
+        const releases = includeReleases();
+        const snapshots = includeSnapshots();
+        const betas = includeBetas();
+        const alphas = includeAlphas();
+
+        return allVersions().filter((item) => {
+            if (item.type === "release" && !releases) return false;
+            if (item.type === "snapshot" && !snapshots) return false;
+            if ((item.type === "old_beta" || item.type === "beta") && !betas) return false;
+            if (item.type === "old_alpha" && !alphas) return false;
+            if (query && !item.id.toLowerCase().includes(query)) return false;
+            return true;
+        });
+    };
+
+    return (
+        <PaperFlex
+            direction="row"
+            gap="full"
+            align="stretch"
+            fullWidth
+            style={
+                props.fill
+                    ? { flex: 1, "min-height": 0 }
+                    : { height: "18rem", "min-height": 0 }
+            }
+        >
+            <PaperFlex
+                direction="column"
+                gap="half"
+                fullWidth
+                style={{ flex: 1, "min-width": 0, "min-height": 0 }}
+            >
+                <PaperInput
+                    fullWidth
+                    icon="search"
+                    placeholder="Search versions..."
+                    value={searchQuery()}
+                    onInput={(e) => setSearchQuery(e.currentTarget.value)}
+                />
+
+                <PaperContainer style={{ flex: 1, "min-height": 0, "overflow-y": "auto" }}>
+                    <Show
+                        when={!loading()}
+                        fallback={
+                            <PaperFlex padding="full" center>
+                                <PaperText preset="body" color={getVarCss("light-text")}>
+                                    Loading versions...
+                                </PaperText>
+                            </PaperFlex>
+                        }
+                    >
+                        <Show
+                            when={filteredVersions().length > 0}
+                            fallback={
+                                <PaperFlex padding="full" center>
+                                    <PaperText preset="body" color={getVarCss("light-text")}>
+                                        No versions matching your filters.
+                                    </PaperText>
+                                </PaperFlex>
+                            }
+                        >
+                            <PaperList
+                                name="minecraftVersion"
+                                value={props.selectedVersion}
+                                onValueChange={(val) => props.onSelectVersion(String(val))}
+                                style={{
+                                    width: "100%",
+                                    height: "auto",
+                                    border: "none",
+                                    background: "transparent",
+                                }}
+                            >
+                                <For each={filteredVersions()}>
+                                    {(item) => (
+                                        <PaperListItem
+                                            value={item.id}
+                                            description={
+                                                item.type && item.type !== "release"
+                                                    ? item.type.replace("old_", "")
+                                                    : undefined
+                                            }
+                                        >
+                                            {item.id}
+                                        </PaperListItem>
+                                    )}
+                                </For>
+                            </PaperList>
+                        </Show>
+                    </Show>
+                </PaperContainer>
+            </PaperFlex>
+
+            <div
+                style={{
+                    "flex-shrink": 0,
+                    display: "flex",
+                    "flex-direction": "column",
+                    "min-height": 0,
+                }}
+            >
+                <PaperContainer style={{ height: "100%", "overflow-y": "auto" }}>
+                    <PaperFlex direction="column" gap="full" padding="full">
+                        <PaperText preset="title">Version Types</PaperText>
+                        <PaperFlex direction="column" gap="threefourths">
+                            <PaperCheckbox
+                                checked={includeReleases()}
+                                onChange={setIncludeReleases}
+                                label="Releases"
+                                description="Full releases"
+                            />
+                            <PaperCheckbox
+                                checked={includeSnapshots()}
+                                onChange={setIncludeSnapshots}
+                                label="Snapshots"
+                            />
+                            <Show when={props.software === "vanilla"}>
+                                <PaperCheckbox
+                                    checked={includeBetas()}
+                                    onChange={setIncludeBetas}
+                                    label="Beta Versions"
+                                />
+                                <PaperCheckbox
+                                    checked={includeAlphas()}
+                                    onChange={setIncludeAlphas}
+                                    label="Alpha Versions"
+                                />
+                            </Show>
+                        </PaperFlex>
+                    </PaperFlex>
+                </PaperContainer>
+            </div>
+        </PaperFlex>
+    );
+}

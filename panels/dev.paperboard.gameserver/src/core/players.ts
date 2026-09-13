@@ -69,3 +69,32 @@ export function extractStatValue(clean: string): number | undefined {
     if (!match) return undefined;
     return Number(match[1]);
 }
+
+export interface PlayerPosition {
+    x: number;
+    y: number;
+    z: number;
+    dimension: string;
+}
+
+// `data get entity <name> Pos` → "<name> has the following entity data: [x, y, z]"
+// (doubles carry a trailing d/f). Returns undefined for any other line so it
+// never steals a stat or gamerule response.
+export function extractPosition(
+    clean: string,
+): { x: number; y: number; z: number } | undefined {
+    const match = clean.match(/has the following entity data:\s*\[([^\]]+)\]/i);
+    if (!match) return undefined;
+    const parts = match[1]
+        .split(",")
+        .map((p) => Number(p.trim().replace(/[dDfF]$/, "")));
+    if (parts.length < 3 || parts.some((n) => !Number.isFinite(n))) {
+        return undefined;
+    }
+    return { x: parts[0], y: parts[1], z: parts[2] };
+}
+
+// `data get entity <name> Dimension` → "... entity data: \"minecraft:overworld\""
+export function extractDimension(clean: string): string | undefined {
+    return clean.match(/has the following entity data:\s*"([^"]+)"/i)?.[1];
+}

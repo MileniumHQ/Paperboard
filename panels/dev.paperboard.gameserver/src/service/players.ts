@@ -11,11 +11,14 @@ import {
     STAT_QUERIES,
     assertPlayerName,
     consoleTimeToSeconds,
+    extractDimension,
     extractJoinedName,
     extractLeftName,
     extractListedNames,
+    extractPosition,
     extractStatValue,
     normalizePlayerKey,
+    type PlayerPosition,
 } from "../core/players";
 import { trashRemovePathsWith } from "../core/trash";
 import { resolveLevelName } from "./worlds";
@@ -151,6 +154,98 @@ export function queryPlayerStats(
     while (pendingStatFields.length > MAX_BUFFERED_ENTRIES) {
         pendingStatFields.shift();
     }
+}
+
+// ─── Map positions ───────────────────────────────────────────────────
+// `data get entity <name> Pos` / `Dimension`, matched to responses in the
+// same FIFO order the commands were written. Results land in state so the
+// map updates through the normal bridge sync.
+type PendingPositionQuery = { player: string; kind: "pos" | "dim" };
+let pendingPositionQueries: PendingPositionQuery[] = [];
+
+export function queryPlayerPositions(ctx: ServiceContext<GameServerState>): void {
+    if (ctx.state.serverStatus !== "online") return;
+    const players = ctx.state.onlinePlayers;
+    if (players.length === 0) {
+        // refresh presence first; positions follow on the next poll
+        queryOnlinePlayers(ctx);
+        return;
+    }
+    const queried = new Set(players.map(normalizePlayerKey));
+    pendingPositionQueries = pendingPositionQueries.filter(
+        (p) => !queried.has(p.player),
+    );
+    for (const name of players) {
+        let safe: string;
+        try {
+            safe = assertPlayerName(name);
+        } catch (err) {
+            console.debug("[Service:Players] skipping unsafe player key:", String(err));
+            continue;
+        }
+        const key = normalizePlayerKey(safe);
+        pendingPositionQueries.push({ player: key, kind: "pos" });
+        pendingPositionQueries.push({ player: key, kind: "dim" });
+        processApi.write(SERVER_PROC_ID, `data get entity ${safe} Pos\n`);
+        processApi.write(SERVER_PROC_ID, `data get entity ${safe} Dimension\n`);
+    }
+    while (pendingPositionQueries.length > MAX_BUFFERED_ENTRIES) {
+        pendingPositionQueries.shift();
+    }
+    // drop markers for players who left since the last poll
+    ctx.setState((prev) => {
+        const next: Record<string, PlayerPosition> = {};
+        for (const [key, value] of Object.entries(prev.playerPositions)) {
+            if (queried.has(key)) next[key] = value;
+        }
+        return { playerPositions: next };
+    });
+}
+
+export function handlePositionResponse(
+    ctx: ServiceContext<GameServerState>,
+    clean: string,
+): boolean {
+    const pending = pendingPositionQueries[0];
+    if (!pending) return false;
+
+    if (pending.kind === "pos") {
+        const pos = extractPosition(clean);
+        if (!pos) return false;
+        pendingPositionQueries.shift();
+        ctx.setState((prev) => {
+            const existing = prev.playerPositions[pending.player];
+            return {
+                playerPositions: {
+                    ...prev.playerPositions,
+                    [pending.player]: {
+                        ...pos,
+                        dimension: existing?.dimension ?? "minecraft:overworld",
+                    },
+                },
+            };
+        });
+        return true;
+    }
+
+    const dimension = extractDimension(clean);
+    if (!dimension) return false;
+    pendingPositionQueries.shift();
+    ctx.setState((prev) => {
+        const existing = prev.playerPositions[pending.player];
+        return {
+            playerPositions: {
+                ...prev.playerPositions,
+                [pending.player]: {
+                    x: existing?.x ?? 0,
+                    y: existing?.y ?? 0,
+                    z: existing?.z ?? 0,
+                    dimension,
+                },
+            },
+        };
+    });
+    return true;
 }
 
 export function forgetPlayerData(

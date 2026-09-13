@@ -15,11 +15,14 @@
         "dompurify": "^3.4.14",
         "dot-properties": "^1.1.1",
         "marked": "^18.0.11",
+        "pngjs": "^7.0.0",
+        "prismarine-nbt": "^2.8.0",
         "semver": "^7.8.5",
         "solid-js": "^1.9.13",
         "strip-ansi": "^7.2.0"
     },
     "devDependencies": {
+        "@types/pngjs": "^6.0.5",
         "@types/semver": "^7.8.0",
         "typescript": "~6.0.2",
         "vite": "^8.1.0",

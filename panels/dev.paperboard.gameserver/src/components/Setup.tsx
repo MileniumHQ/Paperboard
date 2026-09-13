@@ -1,5 +1,5 @@
 import { PANEL_ID } from "../service/types";
-import { createSignal, createEffect, Show, For } from "solid-js";
+import { createSignal, createEffect, Show } from "solid-js";
 import {
     PaperFlex,
     PaperButton,
@@ -10,34 +10,27 @@ import {
     PaperCenteredInterface,
     PaperSelector,
     PaperSelectorItem,
-    PaperContainer,
     PaperLoader,
     PaperLoaderGroup,
     PaperModal,
     PaperLink,
     PaperQuote,
-    PaperCheckbox,
-    PaperInput,
-    PaperList,
-    PaperListItem,
     useWizard,
-    getVarCss,
     type LoaderStatus,
 } from "@paperboard-dev/paperui";
 import {
     fileApi,
-    config,
     packageApi,
     type PackageProgress,
 } from "@paperboard-dev/paperapi";
 import {
     getSoftwareDownload,
-    getDetailedVersionsForSoftware,
     getRequiredJavaVersion,
     SOFTWARE_NAMES,
     type ServerSoftwareType,
-    type VersionItem,
 } from "../lib/software";
+import VersionPicker from "./VersionPicker";
+import { updatePanelConfig } from "../lib/server";
 
 interface VersionStepProps {
     software: ServerSoftwareType;
@@ -46,55 +39,6 @@ interface VersionStepProps {
 }
 
 function VersionStep(props: VersionStepProps) {
-    const [searchQuery, setSearchQuery] = createSignal("");
-    const [allVersions, setAllVersions] = createSignal<VersionItem[]>([]);
-    const [loading, setLoading] = createSignal(true);
-
-    const [includeReleases, setIncludeReleases] = createSignal(true);
-    const [includeSnapshots, setIncludeSnapshots] = createSignal(false);
-    const [includeBetas, setIncludeBetas] = createSignal(false);
-    const [includeAlphas, setIncludeAlphas] = createSignal(false);
-
-    const loadVersions = async () => {
-        setLoading(true);
-        try {
-            const versions = await getDetailedVersionsForSoftware(props.software);
-            setAllVersions(versions);
-            if (versions.length > 0) {
-                const currentExists = versions.some((v) => v.id === props.selectedVersion);
-                if (!currentExists) {
-                    const firstRelease = versions.find((v) => v.type === "release") || versions[0];
-                    if (firstRelease) props.onSelectVersion(firstRelease.id);
-                }
-            }
-        } catch (err) {
-            console.error("[VersionStep] Failed to load versions:", err);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    createEffect(() => {
-        if (props.software) loadVersions();
-    });
-
-    const filteredVersions = () => {
-        const query = searchQuery().toLowerCase().trim();
-        const rel = includeReleases();
-        const snap = includeSnapshots();
-        const beta = includeBetas();
-        const alpha = includeAlphas();
-
-        return allVersions().filter((item) => {
-            if (item.type === "release" && !rel) return false;
-            if (item.type === "snapshot" && !snap) return false;
-            if ((item.type === "old_beta" || item.type === "beta") && !beta) return false;
-            if (item.type === "old_alpha" && !alpha) return false;
-            if (query && !item.id.toLowerCase().includes(query)) return false;
-            return true;
-        });
-    };
-
     return (
         <PaperCenteredInterface size="large">
             <PaperFlex direction="column" gap="full" fullWidth fullHeight>
@@ -104,108 +48,12 @@ function VersionStep(props: VersionStepProps) {
                         Select a Minecraft version for your {SOFTWARE_NAMES[props.software]} server.
                     </PaperText>
                 </PaperFlex>
-
-                <PaperFlex
-                    direction="row"
-                    gap="full"
-                    align="stretch"
-                    fullWidth
-                    style={{ flex: 1, "min-height": 0 }}
-                >
-                    <PaperFlex
-                        direction="column"
-                        gap="half"
-                        fullWidth
-                        style={{ flex: 1, "min-width": 0, "min-height": 0 }}
-                    >
-                        <PaperInput
-                            fullWidth
-                            icon="search"
-                            placeholder="Search versions..."
-                            value={searchQuery()}
-                            onInput={(e) => setSearchQuery(e.currentTarget.value)}
-                        />
-
-                        <PaperContainer style={{ flex: 1, "min-height": 0, "overflow-y": "auto" }}>
-                            <Show
-                                when={!loading()}
-                                fallback={
-                                    <PaperFlex padding="full" center>
-                                        <PaperText preset="body" color={getVarCss("light-text")}>
-                                            Loading versions...
-                                        </PaperText>
-                                    </PaperFlex>
-                                }
-                            >
-                                <Show
-                                    when={filteredVersions().length > 0}
-                                    fallback={
-                                        <PaperFlex padding="full" center>
-                                            <PaperText preset="body" color={getVarCss("light-text")}>
-                                                No versions matching your filters.
-                                            </PaperText>
-                                        </PaperFlex>
-                                    }
-                                >
-                                    <PaperList
-                                        name="minecraftVersion"
-                                        value={props.selectedVersion}
-                                        onValueChange={(val) => props.onSelectVersion(String(val))}
-                                        style={{ width: "100%", height: "auto", border: "none", background: "transparent" }}
-                                    >
-                                        <For each={filteredVersions()}>
-                                            {(item) => (
-                                                <PaperListItem
-                                                    value={item.id}
-                                                    description={
-                                                        item.type && item.type !== "release"
-                                                            ? item.type.replace("old_", "")
-                                                            : undefined
-                                                    }
-                                                >
-                                                    {item.id}
-                                                </PaperListItem>
-                                            )}
-                                        </For>
-                                    </PaperList>
-                                </Show>
-                            </Show>
-                        </PaperContainer>
-                    </PaperFlex>
-
-                    <div style={{ "flex-shrink": 0, display: "flex", "flex-direction": "column", "min-height": 0 }}>
-                        <PaperContainer style={{ height: "100%", "overflow-y": "auto" }}>
-                            <PaperFlex direction="column" gap="full" padding="full">
-                                <PaperText preset="title">Version Types</PaperText>
-                                <PaperFlex direction="column" gap="threefourths">
-                                    <PaperCheckbox
-                                        checked={includeReleases()}
-                                        onChange={setIncludeReleases}
-                                        label="Releases"
-                                        description="Full releases"
-                                    />
-                                    <PaperCheckbox
-                                        checked={includeSnapshots()}
-                                        onChange={setIncludeSnapshots}
-                                        label="Snapshots"
-                                    />
-                                    <Show when={props.software === "vanilla"}>
-                                        <PaperCheckbox
-                                            checked={includeBetas()}
-                                            onChange={setIncludeBetas}
-                                            label="Beta Versions"
-                                        />
-                                        <PaperCheckbox
-                                            checked={includeAlphas()}
-                                            onChange={setIncludeAlphas}
-                                            label="Alpha Versions"
-                                        />
-                                    </Show>
-                                </PaperFlex>
-                            </PaperFlex>
-                        </PaperContainer>
-                    </div>
-                </PaperFlex>
+                <VersionPicker
+                    software={props.software}
+                    selectedVersion={props.selectedVersion}
+                    onSelectVersion={props.onSelectVersion}
+                    fill
+                />
             </PaperFlex>
         </PaperCenteredInterface>
     );
@@ -458,11 +306,13 @@ export default function Setup(props: SetupProps) {
 
     const handleFinishSetup = async () => {
         try {
-            await config.set({
+            // through the service so panel state (and the sidebar's Mods/Plugins
+            // label) is live, not just the config file
+            await updatePanelConfig({
                 configured: true,
                 software: serverSoftware(),
                 version: serverVersion(),
-            }, PANEL_ID);
+            });
             props.onComplete?.();
         } catch (err) {
             console.error("[Setup] Failed to save configuration:", err);

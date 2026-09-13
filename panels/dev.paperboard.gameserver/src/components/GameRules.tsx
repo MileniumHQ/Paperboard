@@ -12,7 +12,9 @@ import {
 import { serverStatus, serverBridge, gamerules } from "../lib/server";
 import { ACTION_IDS } from "../service/contract";
 import { mcVersionAtLeast } from "../lib/capabilities";
+import { humanizeIdentifier } from "../core/format";
 import { GAMERULES } from "../generated/gamerules.generated";
+import { PaperPageHeader } from "@paperboard-dev/paperui";
 
 const WIKI_URL = "https://minecraft.wiki/w/Game_rule";
 
@@ -77,61 +79,66 @@ export default function GameRules() {
         return availableGamerules().filter(
             (rule) =>
                 rule.name.toLowerCase().includes(query) ||
+                humanizeIdentifier(rule.name).toLowerCase().includes(query) ||
                 rule.description.toLowerCase().includes(query),
         );
     };
 
     return (
-        <PaperFlex direction="column" fullWidth fullHeight gap="half">
-            <PaperFlex
-                direction="column"
-                gap="half"
-                fullWidth
-                padding="full"
-                style={{ "flex-shrink": 0 }}
-            >
-                <PaperInput
-                    fullWidth
-                    icon="search"
-                    placeholder="Search game rules..."
-                    value={search()}
-                    onInput={(e) => setSearch(e.currentTarget.value)}
-                />
-                <Show
-                    when={isOnline()}
-                    fallback={
-                        <PaperQuote variant="yellow" icon="info" title="Server offline">
-                            Edits are saved and applied the next time the server starts. Values
-                            load live once it is online.
-                        </PaperQuote>
-                    }
-                >
-                    <PaperText size={2} color="light-text">
-                        Values are read live from the running server.
-                    </PaperText>
-                </Show>
-                <PaperText size={2} color="light-text">
-                    Descriptions provided by{" "}
-                    <PaperLink href={WIKI_URL} target="_blank">Minecraft Wiki</PaperLink>.
-                </PaperText>
-            </PaperFlex>
-
-            <PaperSettingList style={{ flex: 1, "min-height": 0 }}>
-                <For each={visibleGamerules()}>
-                    {(rule) => (
-                        <PaperSettingItem
-                            title={rule.name}
-                            description={rule.description}
-                        >
-                            <RuleControl
-                                valueType={rule.valueType}
-                                value={() => gamerules()[rule.name] ?? rule.defaultValue}
-                                onUpdate={(value) => updateRule(rule.name, value)}
+        <PaperFlex direction="column" fullWidth fullHeight style={{ "min-height": 0 }}>
+            <div class="gs-scroll">
+                <div class="gs-page">
+                    <PaperPageHeader icon="list_alt_check" title="Game Rules" />
+                    <div class="gs-surface">
+                        <PaperFlex padding="full">
+                            <PaperInput
+                                fullWidth
+                                icon="search"
+                                placeholder="Search game rules..."
+                                value={search()}
+                                onInput={(e) => setSearch(e.currentTarget.value)}
                             />
-                        </PaperSettingItem>
-                    )}
-                </For>
-            </PaperSettingList>
+                        </PaperFlex>
+                    </div>
+                    <div class="gs-surface">
+                        <PaperSettingList autoHeight>
+                            <PaperFlex direction="column" gap="half" padding="full">
+                                <Show
+                                    when={isOnline()}
+                                    fallback={
+                                        <PaperQuote variant="yellow" icon="info" title="Server offline">
+                                            Edits are saved and applied the next time the server starts. Values
+                                            load live once it is online.
+                                        </PaperQuote>
+                                    }
+                                >
+                                    <PaperText size={2} color="light-text">
+                                        Values are read live from the running server.
+                                    </PaperText>
+                                </Show>
+                                <PaperText size={2} color="light-text">
+                                    Descriptions provided by{" "}
+                                    <PaperLink href={WIKI_URL} target="_blank">Minecraft Wiki</PaperLink>.
+                                </PaperText>
+                            </PaperFlex>
+                            <For each={visibleGamerules()}>
+                                {(rule) => (
+                                    <PaperSettingItem
+                                        title={humanizeIdentifier(rule.name)}
+                                        description={rule.description}
+                                    >
+                                        <RuleControl
+                                            valueType={rule.valueType}
+                                            value={() => gamerules()[rule.name] ?? rule.defaultValue}
+                                            onUpdate={(value) => updateRule(rule.name, value)}
+                                        />
+                                    </PaperSettingItem>
+                                )}
+                            </For>
+                        </PaperSettingList>
+                    </div>
+                </div>
+            </div>
         </PaperFlex>
     );
 }
