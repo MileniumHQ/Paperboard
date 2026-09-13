@@ -33,6 +33,7 @@ export const ACTION_IDS = {
     listWorldDirs: "list-world-dirs",
     listWorlds: "list-worlds",
     setActiveWorld: "set-active-world",
+    installServerVersion: "install-server-version",
     deleteWorld: "delete-world",
     listMapRegions: "list-map-regions",
     renderMapTile: "render-map-tile",

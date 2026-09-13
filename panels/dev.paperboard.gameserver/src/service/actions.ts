@@ -2,6 +2,8 @@ import {
     defineType,
     defineAction,
     defineTrigger,
+    files as fileApi,
+    packages as packageApi,
     type ActionDefinition,
     type TriggerDefinition,
     type CustomTypeDefinition,
@@ -41,7 +43,8 @@ import { listLogFiles, readLogFile } from "./logs";
 import { queryGamerules, setGamerule } from "./gamerules";
 import { assertPlayerName, assertSingleLine } from "../core/players";
 import type { GameServerState } from "./types";
-import { ACTION_IDS, TRIGGER_IDS } from "./contract";
+import { ACTION_IDS, TRIGGER_IDS, PANEL_ID } from "./contract";
+import { getRequiredJavaVersion, getSoftwareDownload } from "../lib/software";
 
 export const playerType = defineType({
     id: "player",
@@ -549,6 +552,52 @@ export const panelActions: ActionDefinition[] = [
         ) => {
             if (!inputs?.levelName) throw new Error("World name is required");
             return setActiveWorld(ctx, inputs.levelName, inputs.seed);
+        },
+    }),
+
+    defineAction({
+        id: ACTION_IDS.installServerVersion,
+        name: "Install Server Version",
+        description: "Downloads and replaces server.jar for a software/version (offline only)",
+        template: "Install server {software} {version}",
+        inputs: {
+            software: { type: "string", label: "Software", required: true },
+            version: { type: "string", label: "Version", required: true },
+        },
+        output: { type: "object", label: "Installed" },
+        quick: false,
+        icon: "deployed_code",
+        run: async (
+            ctx: ServiceContext<GameServerState>,
+            inputs: { software: string; version: string },
+        ) => {
+            const software = String(inputs?.software ?? "");
+            if (software !== "vanilla" && software !== "paper" && software !== "fabric") {
+                throw new Error(`Unknown server software: ${JSON.stringify(inputs?.software)}`);
+            }
+            const version = assertSingleLine(inputs?.version, "version", 64);
+            // the owner enforces offline, not just the button
+            if (ctx.state.serverStatus !== "offline") {
+                throw new Error("Stop the server before switching versions");
+            }
+            const javaPkg = getRequiredJavaVersion(version);
+            if (!javaPkg) {
+                throw new Error(`Could not determine the Java runtime for ${version}`);
+            }
+            if (!(await packageApi.isInstalled(javaPkg))) {
+                await packageApi.download(javaPkg);
+            }
+            // throws when the upstream record has no checksum (never undefined)
+            const download = await getSoftwareDownload(software, version);
+            await fileApi.download({
+                url: download.url,
+                targetPath: "server.jar",
+                appId: PANEL_ID,
+                sha1: download.sha1,
+                sha256: download.sha256,
+            });
+            await updatePanelConfig(ctx, { software, version });
+            return { software, version };
         },
     }),
 

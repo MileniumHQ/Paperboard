@@ -10,15 +10,11 @@ import {
     PaperSelectorItem,
     PaperText,
 } from "@paperboard-dev/paperui";
-import { config, fileApi, packageApi } from "@paperboard-dev/paperapi";
+import { config } from "@paperboard-dev/paperapi";
 import { PANEL_ID } from "../service/types";
-import { serverStatus, updatePanelConfig } from "../lib/server";
-import {
-    getRequiredJavaVersion,
-    getSoftwareDownload,
-    SOFTWARE_NAMES,
-    type ServerSoftwareType,
-} from "../lib/software";
+import { ACTION_IDS } from "../service/contract";
+import { serverBridge, serverStatus } from "../lib/server";
+import { SOFTWARE_NAMES, type ServerSoftwareType } from "../lib/software";
 import { listInstalledPlugins, uninstallAllPlugins } from "../lib/plugins";
 import VersionPicker from "./VersionPicker";
 
@@ -70,39 +66,20 @@ export default function Versions(props: { onRequestPluginUpdate?: () => void }) 
         }
         setSwitching(true);
         try {
-            // Java first: a newer Minecraft version can need a newer runtime
-            const javaPkg = getRequiredJavaVersion(selectedVersion());
-            if (!javaPkg) {
-                throw new Error(
-                    `Could not determine the Java runtime for ${selectedVersion()}.`,
-                );
-            }
-            const hasJava = await packageApi.isInstalled(javaPkg);
-            if (!hasJava) {
-                await packageApi.download(javaPkg);
-            }
-
             // count the OLD software's jars before the switch changes which
             // folder is active — that is what the uninstall prompt is about
             const previousCount = await listInstalledPlugins()
                 .then((r) => r.plugins.length)
                 .catch(() => 0);
 
-            const download = await getSoftwareDownload(software(), selectedVersion());
-            await fileApi.download({
-                url: download.url,
-                targetPath: "server.jar",
-                appId: PANEL_ID,
-                sha1: download.sha1,
-                sha256: download.sha256,
-            });
-
-            // go through the service so panel state updates: a bare config.set
-            // left serverSoftware stale, so the sidebar label went dead
-            await updatePanelConfig({
+            // the service owns the download: it enforces offline, installs
+            // the required Java runtime, verifies the jar checksum, and
+            // updates panel state (so the sidebar reacts)
+            await serverBridge.call(ACTION_IDS.installServerVersion, {
                 software: software(),
                 version: selectedVersion(),
             });
+
             setInstalledSoftware(software());
             setInstalledVersion(selectedVersion());
             setPostSwitchCount(previousCount);
