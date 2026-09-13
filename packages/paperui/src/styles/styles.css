@@ -15,8 +15,12 @@
     --paper-focus-offset: 2px;
 }
 
-html,
-body {
+/* NOTE: this library styles nothing outside .paperui-root /
+ * [data-paperui-theme]. Document-level resets (html/body margin) belong to
+ * the consuming app, not the library — see the shell's own shell.css. */
+
+.paperui-root,
+[data-paperui-theme] {
     margin: 0;
     padding: 0;
     font-family: var(--paper-font-family);
@@ -32,30 +36,47 @@ body {
     background-color: var(--paper-background-backest);
 }
 
-.unselectable,
+/* body-level unselectable is the provider's explicit opt-in contract
+ * (PaperProvider writes data-unselectable + class on document.body);
+ * everything else stays inside the root */
+body.unselectable,
+body[data-unselectable="true"],
+.paperui-root .unselectable,
 .paperui-root.unselectable,
-[data-unselectable="true"],
-.no-select {
+.paperui-root [data-unselectable="true"],
+.paperui-root .no-select {
     -webkit-user-select: none;
     user-select: none;
 }
 
-input,
-textarea,
-select,
-[contenteditable="true"],
-[contenteditable=""] {
+.paperui-root input,
+.paperui-root textarea,
+.paperui-root select,
+.paperui-root [contenteditable="true"],
+.paperui-root [contenteditable=""],
+[data-paperui-theme] input,
+[data-paperui-theme] textarea,
+[data-paperui-theme] select,
+[data-paperui-theme] [contenteditable="true"],
+[data-paperui-theme] [contenteditable=""] {
     -webkit-user-select: text;
     user-select: text;
 }
 
-code,
-pre,
-kbd,
-samp,
-.selectable,
-.selectable-text,
-[data-selectable="true"] {
+.paperui-root code,
+.paperui-root pre,
+.paperui-root kbd,
+.paperui-root samp,
+.paperui-root .selectable,
+.paperui-root .selectable-text,
+.paperui-root [data-selectable="true"],
+[data-paperui-theme] code,
+[data-paperui-theme] pre,
+[data-paperui-theme] kbd,
+[data-paperui-theme] samp,
+[data-paperui-theme] .selectable,
+[data-paperui-theme] .selectable-text,
+[data-paperui-theme] [data-selectable="true"] {
     -webkit-user-select: text;
     user-select: text;
 }
@@ -156,7 +177,10 @@ samp,
     --paper-item-size-large: 64px;
 }
 
-* {
+/* scoped scrollbar styling — the bare ::-webkit-scrollbar selectors that
+ * used to live here restyled every scrollbar in the host document */
+.paperui-root,
+[data-paperui-theme] {
     scrollbar-width: thin;
     scrollbar-color: color-mix(
             in srgb,
@@ -166,16 +190,25 @@ samp,
         transparent;
 }
 
-::-webkit-scrollbar {
+.paperui-root::-webkit-scrollbar,
+.paperui-root ::-webkit-scrollbar,
+[data-paperui-theme]::-webkit-scrollbar,
+[data-paperui-theme] ::-webkit-scrollbar {
     width: 8px;
     height: 8px;
 }
 
-::-webkit-scrollbar-track {
+.paperui-root::-webkit-scrollbar-track,
+.paperui-root ::-webkit-scrollbar-track,
+[data-paperui-theme]::-webkit-scrollbar-track,
+[data-paperui-theme] ::-webkit-scrollbar-track {
     background: transparent;
 }
 
-::-webkit-scrollbar-thumb {
+.paperui-root::-webkit-scrollbar-thumb,
+.paperui-root ::-webkit-scrollbar-thumb,
+[data-paperui-theme]::-webkit-scrollbar-thumb,
+[data-paperui-theme] ::-webkit-scrollbar-thumb {
     background: color-mix(
         in srgb,
         var(--paper-anti-background) 18%,
@@ -186,7 +219,10 @@ samp,
     background-clip: padding-box;
 }
 
-::-webkit-scrollbar-thumb:hover {
+.paperui-root::-webkit-scrollbar-thumb:hover,
+.paperui-root ::-webkit-scrollbar-thumb:hover,
+[data-paperui-theme]::-webkit-scrollbar-thumb:hover,
+[data-paperui-theme] ::-webkit-scrollbar-thumb:hover {
     background: color-mix(
         in srgb,
         var(--paper-anti-background) 32%,
@@ -196,12 +232,18 @@ samp,
     background-clip: padding-box;
 }
 
-::-webkit-scrollbar-thumb:active {
+.paperui-root::-webkit-scrollbar-thumb:active,
+.paperui-root ::-webkit-scrollbar-thumb:active,
+[data-paperui-theme]::-webkit-scrollbar-thumb:active,
+[data-paperui-theme] ::-webkit-scrollbar-thumb:active {
     background: var(--paper-front-blue);
     border: 2px solid transparent;
     background-clip: padding-box;
 }
 
-::-webkit-scrollbar-corner {
+.paperui-root::-webkit-scrollbar-corner,
+.paperui-root ::-webkit-scrollbar-corner,
+[data-paperui-theme]::-webkit-scrollbar-corner,
+[data-paperui-theme] ::-webkit-scrollbar-corner {
     background: transparent;
 }

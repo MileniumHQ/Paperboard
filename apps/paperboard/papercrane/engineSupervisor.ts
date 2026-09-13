@@ -46,7 +46,6 @@ export async function spawnSupervisedClient(
         detached: true,
         stdio: ["pipe", "ignore", "ignore"],
         windowsHide: true,
-        env: { ...process.env, SUPERVISOR_TARGET_ID: id },
     });
 
     if (supervisorProc.stdin) {

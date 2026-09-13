@@ -1,6 +1,38 @@
 import * as fs from "fs";
+import { logger } from "./logger";
 import * as path from "path";
 import * as crypto from "crypto";
+
+// one-shot timers must never hold the process open: unref and move on.
+// (bun and node both expose unref on Timeout handles)
+export function unrefTimer(timer: ReturnType<typeof setTimeout>): void {
+    (timer as unknown as { unref?: () => void }).unref?.();
+}
+
+// supervisor metadata lands on disk beside the socket: env values whose
+// names look like secrets never land with their values
+const SECRET_ENV_RE = /TOKEN|SECRET|KEY/i;
+const REDACTED = "[redacted]";
+export function redactEnvValues(
+    env: Record<string, string | undefined> | undefined,
+): Record<string, string> {
+    const out: Record<string, string> = {};
+    for (const [k, v] of Object.entries(env ?? {})) {
+        out[k] = SECRET_ENV_RE.test(k) ? REDACTED : String(v ?? "");
+    }
+    return out;
+}
+
+// size-limit refusal thrown by engine-level code (file reads, config
+// writes). Carries a wire code so the RPC layer maps it without
+// message-text matching — see rpcErrorCode in rpc/params.ts.
+export class LimitError extends Error {
+    readonly code = "INVALID_PARAMS";
+    constructor(message: string) {
+        super(message);
+        this.name = "LimitError";
+    }
+}
 
 // ─── Atomic JSON persistence ─────────────────────────────────────────────────
 
@@ -14,7 +46,7 @@ export function writeFileAtomic(
 ): Promise<void> {
     const prev = writeQueues.get(filePath) || Promise.resolve();
     const current = prev
-        .catch(() => {})
+        .catch((err) => logger.debug("[storage] previous queued write failed:", err))
         .then(async () => {
             const dir = path.dirname(filePath);
             if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -26,7 +58,7 @@ export function writeFileAtomic(
             } catch (err) {
                 try {
                     if (fs.existsSync(tmp)) await fs.promises.unlink(tmp);
-                } catch {}
+                } catch (err) { logger.debug("[storage.ts] op failed:", err) }
                 throw err;
             }
         })
@@ -43,13 +75,15 @@ export function writeFileAtomic(
 export function writeJsonAtomicSync(
     filePath: string,
     value: unknown,
+    options?: { mode?: number },
 ): void {
-    writeFileAtomicSync(filePath, JSON.stringify(value, null, 2));
+    writeFileAtomicSync(filePath, JSON.stringify(value, null, 2), options);
 }
 
 export function writeFileAtomicSync(
     filePath: string,
     data: string,
+    options?: { mode?: number },
 ): void {
     const dir = path.dirname(filePath);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -57,11 +91,15 @@ export function writeFileAtomicSync(
     const tmp = `${filePath}.tmp-${process.pid}-${Date.now()}-${nonce}`;
     try {
         fs.writeFileSync(tmp, data, "utf8");
+        // the temp becomes the file, so requested mode applies at birth
+        if (options?.mode !== undefined) fs.chmodSync(tmp, options.mode);
         fs.renameSync(tmp, filePath);
     } catch (err) {
         try {
             if (fs.existsSync(tmp)) fs.unlinkSync(tmp);
-        } catch {}
+        } catch (cleanupErr) {
+            console.error(`[storage] failed to clean tmp artifact ${tmp}:`, cleanupErr);
+        }
         throw err;
     }
 }
@@ -78,7 +116,7 @@ export function readJsonFileSync<T>(filePath: string, fallback: T): T {
         if (fs.existsSync(filePath)) {
             return JSON.parse(fs.readFileSync(filePath, "utf8")) as T;
         }
-    } catch {}
+    } catch (err) { logger.debug("[storage.ts] op failed:", err) }
     return fallback;
 }
 
@@ -130,6 +168,7 @@ export interface PanelManifestLike {
     publisher?: string;
     icon?: string;
     base?: string;
+    permissions?: string[];
     [key: string]: unknown;
 }
 
@@ -192,6 +231,26 @@ export function validatePanelManifest(
 
     if (typeof record.autostart === "boolean") {
         manifest.autostart = record.autostart;
+    }
+
+    // network egress declaration: bounded host list or any-https mode.
+    // factual clip here; interpretation lives in panelNet
+    if (record.network && typeof record.network === "object" && !Array.isArray(record.network)) {
+        // TODO(remove after v3.1): legacy unpackaged panels may surface raw
+        // network shapes; importing keeps manifests reviewable via one path
+        manifest.network = record.network;
+    }
+
+    // declared capability labels: factual clip here (bounded count and
+    // length); review reads them, the install dialog surfaces them, and
+    // registry-open enforcement will dispatch on them. Nothing here
+    // grants anything — it only preserves what the manifest declares.
+    if (Array.isArray(record.permissions)) {
+        const perms = record.permissions
+            .filter((p): p is string => typeof p === "string")
+            .map((p) => p.slice(0, 64))
+            .slice(0, 64);
+        if (perms.length > 0) manifest.permissions = perms;
     }
 
     return manifest;
@@ -287,25 +346,34 @@ export async function streamToFileWithProgress(
 
     const reader = res.body.getReader();
     const IDLE_TIMEOUT_MS = 45_000;
+    const MAX_DOWNLOAD_BYTES = 2048 * 1024 * 1024; // per-download cap
+    let idleTick: ReturnType<typeof setTimeout>;
     while (true) {
-        // stalled connections fail loudly instead of hanging forever
+        // stalled connections fail loudly instead of hanging forever; the
+        // timer is cleared per iteration, not stacked per chunk
         const readResult = await Promise.race([
             reader.read(),
-            new Promise<never>((_, reject) =>
-                setTimeout(
+            new Promise<never>((_, reject) => {
+                idleTick = setTimeout(
                     () => reject(new Error("Download stalled: no data for 45s")),
                     IDLE_TIMEOUT_MS,
-                ),
-            ),
-        ]);
+                );
+            }),
+        ]).finally(() => clearTimeout(idleTick));
         const { done, value } = readResult as any;
         if (done) break;
         if (!value) continue;
 
+        // cap total bytes even when the host lies about content-length
+        loadedBytes += value.length;
+        if (loadedBytes > MAX_DOWNLOAD_BYTES) {
+            fs.rmSync(tempFilePath, { force: true });
+            throw new Error(`Download exceeds ${MAX_DOWNLOAD_BYTES} byte cap`);
+        }
+
         fileStream.write(value);
         sha1Hash.update(value);
         sha256Hash.update(value);
-        loadedBytes += value.length;
 
         const percent =
             totalBytes > 0 ? Math.min(99, Math.round((loadedBytes / totalBytes) * 100)) : 50;

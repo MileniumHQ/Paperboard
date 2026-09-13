@@ -13,13 +13,23 @@ export async function copySelection(id: string) {
     const term = activeTerminals.get(id);
     const selection = term?.getSelection() || window.getSelection()?.toString();
     if (selection) {
-        await navigator.clipboard.writeText(selection);
+        try {
+            await navigator.clipboard.writeText(selection);
+        } catch (err) {
+            // a denied clipboard must not become an unhandled rejection
+            console.error(`[Terminal] copy failed for ${id}:`, err);
+        }
     }
 }
 
 export async function pasteClipboard(id: string) {
-    const text = await navigator.clipboard.readText();
-    if (text) terminalApi.write(id, text);
+    try {
+        const text = await navigator.clipboard.readText();
+        if (text) terminalApi.write(id, text);
+    } catch (err) {
+        // a denied clipboard must not become an unhandled rejection
+        console.error(`[Terminal] paste failed for ${id}:`, err);
+    }
 }
 
 export interface TerminalComponentProps {
@@ -34,7 +44,9 @@ export function TerminalComponent(props: TerminalComponentProps) {
     let resizeObserver: ResizeObserver | null = null;
 
     onMount(() => {
-        document.fonts?.ready?.then(() => safeFit()).catch(() => {});
+        document.fonts?.ready?.then(() => safeFit()).catch((err) => {
+            console.debug("[terminal] font-ready fit failed:", String(err));
+        });
 
         const bg = getVar("background-backest", "#0d0e12");
         const fg = getVar("main-text", "#ffffff");
@@ -93,7 +105,9 @@ export function TerminalComponent(props: TerminalComponentProps) {
                 try {
                     fitAddon.fit();
                     sendResize();
-                } catch {}
+                } catch (err) {
+                    console.debug("[terminal] fit/resize failed:", String(err));
+                }
             }
         };
         safeFit();
@@ -127,7 +141,10 @@ export function TerminalComponent(props: TerminalComponentProps) {
                 .then((scrollback) => {
                     if (scrollback) term?.write(scrollback);
                 })
-                .catch(() => {
+                .catch((err) => {
+                    // open-tab failed (no such tab yet) — creating fresh is
+                    // the recovery, logged so a real outage stays visible
+                    console.debug("[terminal] open-tab failed, creating fresh session:", String(err));
                     terminalApi.create(id, {
                         cols: term?.cols,
                         rows: term?.rows,

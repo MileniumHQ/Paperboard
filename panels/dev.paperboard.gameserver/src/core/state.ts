@@ -33,6 +33,7 @@ export interface StateSetters {
     setSeenPlayerNames: (v: Set<string>) => void;
     setPlayerStats: (v: Map<string, PlayerStatData>) => void;
     setPlayerPlaytime: (v: Map<string, number>) => void;
+    setGamerules: (v: Record<string, string>) => void;
 }
 
 // serverVersion applies only when truthy, rest when defined
@@ -84,6 +85,10 @@ export function applyStatePatch(
                 setters.setPlayerPlaytime(
                     new Map<string, number>(Object.entries(v as Record<string, number>)),
                 ),
+        },
+        {
+            key: "gamerules",
+            apply: (v) => setters.setGamerules(v as Record<string, string>),
         },
     ];
 

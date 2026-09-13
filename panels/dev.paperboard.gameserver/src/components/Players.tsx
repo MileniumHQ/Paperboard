@@ -1,3 +1,4 @@
+import { PANEL_ID } from "../service/types";
 import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import {
     PaperBadge,
@@ -13,17 +14,17 @@ import {
     PaperText,
     PaperToggle,
 } from "@paperboard-dev/paperui";
-import { fileApi } from "@paperboard-dev/paperapi";
+import {   fileApi } from "@paperboard-dev/paperapi";
 import {
     forgetPlayerData,
     getPlayerPlaytimeSeconds,
     onlinePlayerNames,
-    PLAYER_NAME_PATTERN,
     queryOnlinePlayers,
     seenPlayerNames,
-    sendServerCommand,
+    serverBridge,
     serverStatus,
 } from "../lib/server";
+import { ACTION_IDS, type ActionId } from "../service/contract";
 
 const LIST_POLL_MS = 15000;
 
@@ -40,7 +41,7 @@ function isOnline(): boolean {
 
 async function loadJsonEntries(path: string): Promise<{ name: string; uuid?: string }[]> {
     try {
-        const content = await fileApi.read(path);
+        const content = await fileApi.read(path, PANEL_ID);
         if (!content) return [];
         const parsed: unknown = JSON.parse(content);
         if (!Array.isArray(parsed)) return [];
@@ -139,34 +140,38 @@ export default function Players() {
     const openIsBanned = () =>
         bannedNames().has((openPlayer()?.name ?? "").toLowerCase());
 
-    const run = (cmd: string) => {
-        if (isOnline()) sendServerCommand(cmd);
-    };
-
-    // Names go into console commands raw, so validate against injection
-    const runForPlayer = (playerName: string, cmd: string) => {
-        if (!PLAYER_NAME_PATTERN.test(playerName)) {
-            console.error(
-                `[Players] Blocked command with invalid player name "${playerName}": ${cmd}`,
-            );
-            setFeedback(`Blocked command: "${playerName}" is not a valid player name.`);
-            return;
+    // Player name validation is UI feedback only — the real boundary is the
+    // service (assertPlayerName on every player action). The UI never
+    // composes console commands from raw values anymore; every player
+    // mutation is a named, validated service action.
+    const callPlayerAction = async (
+        actionId: ActionId,
+        playerName: string,
+        extra?: Record<string, unknown>,
+    ): Promise<boolean> => {
+        try {
+            await serverBridge.call(actionId, { player: playerName, ...extra });
+            setFeedback("");
+            return true;
+        } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            console.error(`[Players] ${actionId} failed for "${playerName}":`, message);
+            setFeedback(message);
+            return false;
         }
-        setFeedback("");
-        run(cmd);
     };
 
-    const togglePlayerFlag = (
+    const togglePlayerFlag = async (
         playerName: string,
         field: "op" | "whitelisted",
         value: boolean,
     ) => {
-        runForPlayer(
-            playerName,
+        const actionId: ActionId =
             field === "op"
-                ? value ? `op ${playerName}` : `deop ${playerName}`
-                : value ? `whitelist add ${playerName}` : `whitelist remove ${playerName}`,
-        );
+                ? value ? ACTION_IDS.opPlayer : ACTION_IDS.deopPlayer
+                : value ? ACTION_IDS.whitelistPlayer : ACTION_IDS.unwhitelistPlayer;
+        const ok = await callPlayerAction(actionId, playerName);
+        if (!ok) return; // state stays as the server reports it
         setPlayers((prev) =>
             prev.map((p) =>
                 p.name.toLowerCase() === playerName.toLowerCase()
@@ -176,24 +181,42 @@ export default function Players() {
         );
     };
 
-    // Optimistic update, then re-verify from the ban file after a delay
-    const setPlayerBanned = async (playerName: string, banned: boolean, reason?: string) => {
-        runForPlayer(
-            playerName,
-            banned
-                ? `ban ${playerName}${reason ? ` ${reason}` : ""}`
-                : `pardon ${playerName}`,
-        );
-        setBannedNames((prev) => {
-            const next = new Set(prev);
-            if (banned) next.add(playerName.toLowerCase());
-            else next.delete(playerName.toLowerCase());
-            return next;
-        });
-        setTimeout(async () => {
-            const bannedEntries = await loadJsonEntries("banned-players.json");
-            setBannedNames(new Set(bannedEntries.map((n) => n.name.toLowerCase())));
+    const setPlayerBanned = (playerName: string, banned: boolean, reason?: string): Promise<boolean> => {
+        const result = banned
+            ? callPlayerAction(ACTION_IDS.banPlayer, playerName, { reason })
+            : callPlayerAction(ACTION_IDS.pardonPlayer, playerName);
+        // a written console command is not ban-truth: re-verify from the
+        // ban file after a delay so the UI's ban state converges on what
+        // the server actually recorded
+        setTimeout(() => {
+            void loadJsonEntries("banned-players.json").then((bannedEntries) => {
+                setBannedNames(new Set(bannedEntries.map((n) => n.name.toLowerCase())));
+            });
         }, 1500);
+        return result;
+    };
+
+    const kickPlayer = (playerName: string, reason?: string): Promise<boolean> =>
+        callPlayerAction(ACTION_IDS.kickPlayer, playerName, { reason });
+
+    const killPlayer = (playerName: string): Promise<boolean> =>
+        callPlayerAction(ACTION_IDS.killPlayer, playerName);
+
+    const pardonOpenPlayer = async () => {
+        const player = openPlayer();
+        if (!player) return;
+        if (await setPlayerBanned(player.name, false)) {
+            setBannedNames((prev) => {
+                const next = new Set(prev);
+                next.delete(player.name.toLowerCase());
+                return next;
+            });
+        }
+    };
+
+    const killOpenPlayer = () => {
+        const player = openPlayer();
+        if (player) void killPlayer(player.name);
     };
 
     const deleteOpenPlayer = async () => {
@@ -202,19 +225,18 @@ export default function Players() {
         if (!player?.uuid) return;
 
         if (onlinePlayerNames().has(player.name.toLowerCase())) {
-            runForPlayer(player.name, `kick ${player.name} Your data was deleted`);
+            // best effort: an online player is kicked first; a kick failure
+            // is logged, it must not block the (trash-first) data delete
+            await kickPlayer(player.name, "Your data was deleted");
         }
 
+        // service-owned: trash-first delete under the actual level-name,
+        // never hardcoded "world/..." paths from the component
         try {
-            const dataFiles = [
-                `world/playerdata/${player.uuid}.dat`,
-                `world/playerdata/${player.uuid}.dat_old`,
-                `world/advancements/${player.uuid}.json`,
-                `world/stats/${player.uuid}.json`,
-            ];
-            for (const dataFile of dataFiles) {
-                await fileApi.delete(dataFile);
-            }
+            await serverBridge.call(ACTION_IDS.deletePlayerData, {
+                player: player.name,
+                uuid: player.uuid,
+            });
         } catch (err) {
             console.error("[Players] Failed to delete player data:", err);
             return;
@@ -319,7 +341,8 @@ export default function Players() {
                 onToggleFlag={togglePlayerFlag}
                 onAction={(action) => setActionModal(action)}
                 onDeleteRequest={() => setDeleteConfirmOpen(true)}
-                onCommand={runForPlayer}
+                onPardon={pardonOpenPlayer}
+                onKill={killOpenPlayer}
             />
 
             <ReasonActionModal
@@ -331,9 +354,16 @@ export default function Players() {
                     const player = openPlayer();
                     if (!player) return;
                     if (actionModal() === "ban") {
-                        await setPlayerBanned(player.name, true, reason);
+                        const ok = await setPlayerBanned(player.name, true, reason);
+                        if (ok) {
+                            setBannedNames((prev) => {
+                                const next = new Set(prev);
+                                next.add(player.name.toLowerCase());
+                                return next;
+                            });
+                        }
                     } else {
-                        runForPlayer(player.name, `kick ${player.name}${reason ? ` ${reason}` : ""}`);
+                        await kickPlayer(player.name, reason);
                     }
                     setActionModal(null);
                 }}
@@ -372,7 +402,8 @@ function PlayerModal(props: {
     onToggleFlag: (name: string, field: "op" | "whitelisted", value: boolean) => void;
     onAction: (action: "kick" | "ban") => void;
     onDeleteRequest: () => void;
-    onCommand: (name: string, cmd: string) => void;
+    onPardon: () => void | Promise<void>;
+    onKill: () => void;
 }) {
     const [copied, setCopied] = createSignal(false);
 
@@ -384,7 +415,8 @@ function PlayerModal(props: {
         if (!id) return;
         try {
             await navigator.clipboard?.writeText(id);
-        } catch {
+        } catch (err) {
+            console.debug("[players] clipboard write failed, falling back:", String(err));
             const textarea = document.createElement("textarea");
             textarea.value = id;
             textarea.style.position = "fixed";
@@ -479,7 +511,7 @@ function PlayerModal(props: {
                                     variant="blue"
                                     style={{ flex: 1 }}
                                     disabled={!isOnline()}
-                                    onClick={() => props.onCommand(name(), `pardon ${name()}`)}
+                                    onClick={() => void props.onPardon()}
                                 >
                                     Pardon
                                 </PaperButton>
@@ -509,7 +541,7 @@ function PlayerModal(props: {
                             variant="yellow"
                             style={{ flex: 1 }}
                             disabled={!isOnline() || !isPlayerOnline()}
-                            onClick={() => props.onCommand(name(), `kill ${name()}`)}
+                            onClick={() => props.onKill()}
                         >
                             Kill
                         </PaperButton>

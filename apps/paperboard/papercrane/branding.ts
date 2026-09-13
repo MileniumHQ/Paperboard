@@ -1,4 +1,5 @@
 import * as fs from "fs";
+import { logger } from "./logger";
 import * as path from "path";
 
 // optional branding files, callers fall back to defaults
@@ -7,17 +8,17 @@ const brandingDirCandidates = (): string[] => {
     try {
         // standalone binary: <exedir>/branding/
         dirs.push(path.join(path.dirname(process.execPath), "branding"));
-    } catch {}
+    } catch (err) { logger.debug("[branding.ts] op failed:", err) }
     try {
         // dev run: ./papercrane/branding/
         dirs.push(path.join(process.cwd(), "papercrane", "branding"));
-    } catch {}
+    } catch (err) { logger.debug("[branding.ts] op failed:", err) }
     try {
         // bundled CJS: <this-module-dir>/branding/
         if (typeof __dirname === "string" && __dirname) {
             dirs.push(path.join(__dirname, "branding"));
         }
-    } catch {}
+    } catch (err) { logger.debug("[branding.ts] op failed:", err) }
     return dirs;
 };
 
@@ -34,7 +35,7 @@ export function findBrandingFile(name: string): string | null {
                 brandingCache.set(name, candidate);
                 return candidate;
             }
-        } catch {}
+        } catch (err) { logger.debug("[branding.ts] op failed:", err) }
     }
     brandingCache.set(name, null);
     return null;
@@ -47,7 +48,8 @@ export function readBanner(): string | null {
     try {
         const text = fs.readFileSync(file, "utf8").replace(/\s+$/, "");
         return text || null;
-    } catch {
+    } catch (err) {
+        logger.debug("[branding] banner unreadable, continuing without one:", err);
         return null;
     }
 }

@@ -1,6 +1,7 @@
 import "@paperboard-dev/paperui/style.css";
+import "./shell.css";
 import { render } from "solid-js/web";
-import { createSignal, onMount, onCleanup } from "solid-js";
+import { createSignal, onMount, onCleanup, Show } from "solid-js";
 import {
     PaperProvider,
     PaperContainer,
@@ -13,6 +14,8 @@ import {
 function PaperUpdater() {
     const [progress, setProgress] = createSignal<number | null>(null);
     const [label, setLabel] = createSignal("Checking for updates…");
+    const [failed, setFailed] = createSignal(false);
+    const pendingFinishes: ReturnType<typeof setTimeout>[] = [];
     let finished = false;
 
     // Single fire-and-forget exit path shared by progress completion and the skip button
@@ -33,19 +36,31 @@ function PaperUpdater() {
 
         const handler = (
             _: any,
-            data: { progress: number | null; label: string },
+            data: { progress: number | null; label: string; failed?: boolean },
         ) => {
             setProgress(data.progress);
             setLabel(data.label);
+            // R7: main reports `failed: true` on autoUpdater error. The
+            // window renders a terminal error state — no fake progress,
+            // no hang — and Skip remains the only control.
+            if (data.failed) {
+                setFailed(true);
+                setProgress(null);
+                return;
+            }
 
             if (data.progress === 100) {
                 // Small pause so "Done!" is visible before the window closes
-                setTimeout(finish, 800);
+                const t = setTimeout(finish, 800);
+                pendingFinishes.push(t);
             }
         };
 
         ipc.on("updater-progress", handler);
-        onCleanup(() => ipc.removeListener?.("updater-progress", handler));
+        onCleanup(() => {
+            ipc.removeListener?.("updater-progress", handler);
+            for (const t of pendingFinishes) clearTimeout(t);
+        });
     });
 
     return (
@@ -72,7 +87,9 @@ function PaperUpdater() {
                     <PaperText weight={700} size={4}>
                         {label()}
                     </PaperText>
-                    <PaperProgress value={progress() ?? undefined} max={100} />
+                    <Show when={!failed()}>
+                        <PaperProgress value={progress() ?? undefined} max={100} />
+                    </Show>
                     <PaperButton variant="text" compact onClick={finish}>
                         Skip
                     </PaperButton>

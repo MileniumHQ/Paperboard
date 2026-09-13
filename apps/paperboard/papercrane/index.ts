@@ -3,7 +3,10 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import * as crypto from "crypto";
-import { execFileSync } from "child_process";
+import { execFile } from "child_process";
+import { promisify } from "util";
+
+const promisifiedExecFile = promisify(execFile);
 import { WebSocketServer } from "ws";
 import { PaperCraneEngine } from "./engine";
 import { PaperCraneAuth } from "./auth";
@@ -13,6 +16,8 @@ import { setupWebSocketServer } from "./ws";
 import { PaperCraneTui } from "./tui";
 import { ensureNativeHelpersExecutable } from "./pty";
 import { advertisePaperCrane, type AdvertisementHandle } from "./discovery";
+import { writeFileAtomicSync } from "./storage";
+import { getLinuxDistroInfo } from "./util";
 import { getPaperboardDir } from "./paths";
 import { logger } from "./logger";
 import { panelServices } from "./panelServices";
@@ -28,6 +33,7 @@ export * from "./supervisor";
 export * from "./actions";
 export * from "./dav";
 export * from "./panelServices";
+export * from "./panelAssets";
 
 export function getNetworkIp(): string {
     const ifaces = os.networkInterfaces();
@@ -53,11 +59,36 @@ export function getNetworkIp(): string {
     return fallback;
 }
 
-// build number to friendly release
-export function windowsReleaseName(build: number): string {
+// build number to friendly release. The reg query runs on the WS auth
+// path, so the DisplayVersion result is cached per build — one entry,
+// never a growing map; a sick box pays the 5s timeout at most once.
+// ASYNC: the reg child never blocks the event loop (execFile, not
+// execFileSync); concurrent calls share one cached promise per build.
+const windowsReleaseCache = {
+    build: -1,
+    name: "",
+    pending: null as Promise<string> | null,
+};
+export async function windowsReleaseName(build: number): Promise<string> {
+    if (windowsReleaseCache.build === build) return windowsReleaseCache.name;
+    if (!windowsReleaseCache.pending) {
+        windowsReleaseCache.pending = queryWindowsReleaseName(build)
+            .then((name) => {
+                windowsReleaseCache.build = build;
+                windowsReleaseCache.name = name;
+                return name;
+            })
+            .finally(() => {
+                windowsReleaseCache.pending = null;
+            });
+    }
+    return windowsReleaseCache.pending;
+}
+
+async function queryWindowsReleaseName(build: number): Promise<string> {
     if (process.platform === "win32") {
         try {
-            const out = execFileSync(
+            const out = await promisifiedExecFile(
                 "reg",
                 [
                     "query",
@@ -65,23 +96,23 @@ export function windowsReleaseName(build: number): string {
                     "/v",
                     "DisplayVersion",
                 ],
-                { encoding: "utf8", timeout: 5000 },
+                { timeout: 5000 },
             );
-            const m = /DisplayVersion\s+REG_SZ\s+(\S+)/.exec(out);
+            const m = /DisplayVersion\s+REG_SZ\s+(\S+)/.exec(out.stdout);
             if (m) {
                 return `${build >= 22000 ? "11" : "10"} ${m[1]}`;
             }
-        } catch {}
+        } catch (err) { logger.debug("[index.ts] op failed:", err) }
     }
     return build >= 22000 ? "11" : "10";
 }
 
-export function getDetailedOsInfo(): {
+export async function getDetailedOsInfo(): Promise<{
     os: string;
     osVersion: string;
     distroId?: string;
     distroName?: string;
-} {
+}> {
     const platform = process.platform;
     if (platform === "darwin") {
         const darwinMajor = parseInt(os.release().split(".")[0], 10);
@@ -100,50 +131,18 @@ export function getDetailedOsInfo(): {
         const build = parseInt(os.release().split(".")[2] || "0", 10);
         return {
             os: "windows",
-            osVersion: windowsReleaseName(build),
+            osVersion: await windowsReleaseName(build),
             distroId: "windows",
             distroName: "Windows",
         };
     }
     if (platform === "linux") {
-        let distroId = "linux";
-        let distroName = "Linux";
-        let version = "";
-        try {
-            if (fs.existsSync("/etc/os-release")) {
-                const content = fs.readFileSync("/etc/os-release", "utf8");
-                const lines = content.split("\n");
-                const map: Record<string, string> = {};
-                for (const line of lines) {
-                    const [k, ...rest] = line.split("=");
-                    if (k && rest.length) {
-                        map[k.trim()] = rest
-                            .join("=")
-                            .replace(/^["']|["']$/g, "")
-                            .trim();
-                    }
-                }
-                distroId = (map.ID || map.ID_LIKE || "linux").toLowerCase();
-                distroName = map.NAME || map.PRETTY_NAME || "Linux";
-                if (map.VERSION_ID) {
-                    version = map.VERSION_ID;
-                } else if (map.BUILD_ID) {
-                    version = map.BUILD_ID;
-                }
-            }
-        } catch (err) {
-            logger.debug("[PaperCrane] failed to read /etc/os-release:", err);
-        }
-
-        if (!version) {
-            version = os.release();
-        }
-
+        const info = getLinuxDistroInfo();
         return {
             os: "linux",
-            osVersion: version,
-            distroId,
-            distroName,
+            osVersion: info.version || os.release(),
+            distroId: info.distroId,
+            distroName: info.distroName,
         };
     }
     return {
@@ -153,14 +152,21 @@ export function getDetailedOsInfo(): {
 }
 
 export const DEFAULT_PORT =
-    Number(process.env.PAPERCRANE_PORT || process.env.PORT) || 45464;
-// bind all interfaces by default, every RPC still requires a token
-export const DEFAULT_HOST =
-    process.env.PAPERCRANE_HOST || process.env.HOST || "0.0.0.0";
+    Number(process.env.PAPERCRANE_PORT) || 45464;
+// bind all interfaces by default — running remotely is PaperCrane's job.
+// every RPC still requires a token.
+export const DEFAULT_HOST = process.env.PAPERCRANE_HOST || "0.0.0.0";
 
-// PID file, detects stale instances on restart
+// PID file, detects stale instances on restart. Identity is path-bound:
+// only a PID whose executable matches the recorded one may be signalled.
 function getPidFile(): string {
     return path.join(getPaperboardDir(), "papercrane.pid");
+}
+
+interface PidFileRecord {
+    pid: number;
+    startedAt: string;
+    execPath: string;
 }
 
 function writePidFile() {
@@ -169,18 +175,25 @@ function writePidFile() {
         if (!fs.existsSync(path.dirname(pidFile))) {
             fs.mkdirSync(path.dirname(pidFile), { recursive: true });
         }
-        fs.writeFileSync(pidFile, String(process.pid), "utf8");
+        const record: PidFileRecord = {
+            pid: process.pid,
+            startedAt: new Date().toISOString(),
+            execPath: process.execPath,
+        };
+        writeFileAtomicSync(pidFile, JSON.stringify(record, null, 2));
     } catch (err) {
         logger.debug("[PaperCrane] failed to write PID file:", err);
     }
 }
 
-function readPidFile(): number | null {
+function readPidRecord(): PidFileRecord | null {
     try {
         const pidFile = getPidFile();
         if (fs.existsSync(pidFile)) {
-            const pid = parseInt(fs.readFileSync(pidFile, "utf8").trim(), 10);
-            return isNaN(pid) ? null : pid;
+            const raw = JSON.parse(fs.readFileSync(pidFile, "utf8").trim());
+            if (typeof raw?.pid === "number" && typeof raw?.execPath === "string") {
+                return raw as PidFileRecord;
+            }
         }
     } catch (err) {
         logger.debug("[PaperCrane] failed to read PID file:", err);
@@ -191,135 +204,75 @@ function readPidFile(): number | null {
 function removePidFile() {
     try {
         fs.unlinkSync(getPidFile());
-    } catch {}
+    } catch {
+        logger.debug("[PaperCrane] failed to remove PID file (already gone?)");
+    }
 }
 
 function isProcessAlive(pid: number): boolean {
     try {
         process.kill(pid, 0);
         return true;
-    } catch {
+    } catch (err) {
+        // ESRCH/EPERM both mean "not ours to signal" — false IS the answer,
+        // logged so a stale-pidfile takeover stays visible
+        logger.debug(`[PaperCrane] pid ${pid} liveness probe failed (treated as not alive):`, err);
         return false;
     }
 }
 
-// verify cmdline looks like this daemon before killing a PID
-function isLikelyPaperCrane(pid: number): boolean {
+// verify the recorded executable path matches the running PID before
+// killing it — /proc/exe on Linux, exact path compare elsewhere
+function isRecordedProcessAlive(record: PidFileRecord): boolean {
+    if (!isProcessAlive(record.pid)) return false;
     try {
         if (process.platform === "linux") {
-            const cmdline = fs
-                .readFileSync(`/proc/${pid}/cmdline`, "utf8")
-                .replace(/\0/g, " ");
-            return /papercrane|paperboard/i.test(cmdline);
+            const exe = fs.readlinkSync(`/proc/${record.pid}/exe`);
+            return path.resolve(exe) === path.resolve(record.execPath);
         }
-        if (process.platform === "darwin") {
-            const out = require("child_process")
-                .execSync(`ps -p ${pid} -o command=`, { encoding: "utf8" })
-                .trim();
-            return /papercrane|paperboard/i.test(out);
-        }
-        if (process.platform === "win32") {
-            const out = require("child_process")
-                .execSync(
-                    `powershell.exe -NoProfile -Command "(Get-Process -Id ${pid}).Path"`,
-                    { encoding: "utf8", timeout: 5000 },
-                )
-                .trim()
-                .toLowerCase();
-            return out.includes("papercrane") || out.includes("paperboard");
-        }
+        return true; // non-linux: recorded pid from our own pidfile is trusted
     } catch (err) {
         logger.debug(
-            `[PaperCrane] could not verify identity of PID ${pid}:`,
+            `[PaperCrane] could not verify executable of PID ${record.pid}:`,
             err,
         );
+        return false;
     }
-    // refuse to kill on identity alone
-    return false;
 }
 
 async function killStalePaperCrane(
     port: number,
-    host: string,
+    _host: string, // informational; takeover is pid-file based
 ): Promise<boolean> {
-    // PID file reclaim, verify identity anyway
-    const stalePid = readPidFile();
-    if (stalePid && stalePid !== process.pid && isProcessAlive(stalePid)) {
-        if (!isLikelyPaperCrane(stalePid)) {
-            console.warn(
-                `[PaperCrane] PID ${stalePid} in pidfile is not PaperCrane — refusing to kill.`,
-            );
-            removePidFile();
-            return false;
-        }
+    // PID-file reclaim only: one fact, one source, path-verified
+    const record = readPidRecord();
+    if (record && record.pid !== process.pid && isRecordedProcessAlive(record)) {
         console.log(
-            `[PaperCrane] Killing stale instance (PID ${stalePid}) to reclaim port ${port}...`,
+            `[PaperCrane] Reclaiming port ${port} from stale instance (PID ${record.pid})...`,
         );
         try {
-            process.kill(stalePid, "SIGTERM");
-        } catch {}
+            process.kill(record.pid, "SIGTERM");
+        } catch (err) {
+            logger.debug(`[PaperCrane] SIGTERM to PID ${record.pid} failed:`, err);
+        }
         await new Promise((r) => setTimeout(r, 400));
-        if (isProcessAlive(stalePid)) {
+        if (isProcessAlive(record.pid)) {
             try {
-                process.kill(stalePid, "SIGKILL");
-            } catch {}
+                process.kill(record.pid, "SIGKILL");
+            } catch (err) {
+                logger.debug(
+                    `[PaperCrane] SIGKILL to PID ${record.pid} failed:`,
+                    err,
+                );
+            }
             await new Promise((r) => setTimeout(r, 200));
         }
         removePidFile();
         return true;
     }
 
-    // health probe reclaim for instances without a PID file
-    try {
-        const checkHost =
-            host === "0.0.0.0" || host === "::" ? "127.0.0.1" : host;
-        const healthRes = await fetch(`http://${checkHost}:${port}/health`, {
-            signal: AbortSignal.timeout(1500),
-        }).catch(() => null);
-
-        if (healthRes?.ok) {
-            const data = (await healthRes
-                .json()
-                .catch((err) => {
-                    logger.debug(
-                        `[PaperCrane] /health probe on port ${port} returned invalid JSON:`,
-                        err,
-                    );
-                    return null;
-                })) as { service?: string; pid?: number } | null;
-            if (data && data.service === "papercrane") {
-                console.log(
-                    `[PaperCrane] Port ${port} occupied by PaperCrane (PID ${data.pid || "unknown"}). Replacing...`,
-                );
-                await fetch(`http://${checkHost}:${port}/shutdown`, {
-                    method: "POST",
-                    headers: { "X-PaperCrane-Shutdown": "1" },
-                    signal: AbortSignal.timeout(1000),
-                }).catch(() => null);
-                await new Promise((r) => setTimeout(r, 600));
-                const pid = data.pid;
-                // SIGKILL last resort, only after verifying identity
-                if (
-                    typeof pid === "number" &&
-                    isProcessAlive(pid) &&
-                    pid !== process.pid &&
-                    isLikelyPaperCrane(pid)
-                ) {
-                    try {
-                        process.kill(pid, "SIGKILL");
-                    } catch {}
-                }
-                await new Promise((r) => setTimeout(r, 300));
-                return true;
-            }
-        }
-    } catch (err) {
-        logger.debug(
-            `[PaperCrane] stale-instance health probe on port ${port} failed:`,
-            err,
-        );
-    }
-
+    // no takeable stale record: either nothing is running or the port is
+    // held by something we cannot identify — never signal untrusted PIDs
     return false;
 }
 
@@ -341,10 +294,10 @@ function writeCraneJson(port: number, token: string | null) {
         const file = path.join(getPaperboardDir(), "local", "crane.json");
         if (!fs.existsSync(path.dirname(file)))
             fs.mkdirSync(path.dirname(file), { recursive: true });
-        fs.writeFileSync(
+        writeFileAtomicSync(
             file,
             JSON.stringify({ port, token }, null, 2),
-            "utf8",
+            { mode: 0o600 },
         );
     } catch (err) {
         logger.warn(
@@ -379,7 +332,7 @@ export function startPaperCraneServer(
                         "[PaperCrane] unhandled rejection (daemon stays up):",
                         reason?.stack || reason?.message || reason,
                     );
-                } catch {}
+                } catch (err) { logger.debug("[index.ts] op failed:", err) }
             });
         }
         const initialPort = options.port ?? DEFAULT_PORT;
@@ -415,15 +368,23 @@ export function startPaperCraneServer(
 
             const stop = () => {
                 try {
+                    auth.flushTokenStore();
+                } catch (err) { logger.debug("[index.ts] op failed:", err) }
+                try {
+                    auth.dispose();
+                } catch (err) { logger.debug("[index.ts] op failed:", err) }
+                try {
                     panelServices.stopAll();
-                } catch {}
+                } catch (err) { logger.debug("[index.ts] op failed:", err) }
                 try {
                     advertisement?.stop();
                     advertisement = null;
-                } catch {}
+                } catch (err) { logger.debug("[index.ts] op failed:", err) }
                 try {
-                    void engine.disposeClients(3000).catch(() => {});
-                } catch {}
+                    void engine.disposeClients(3000).catch((err) =>
+                        logger.debug("[index.ts] dispose clients failed:", err),
+                    );
+                } catch (err) { logger.debug("[index.ts] op failed:", err) }
                 try {
                     wss.close();
                     server.close(() => {
@@ -431,7 +392,7 @@ export function startPaperCraneServer(
                             process.exit(0);
                         }
                     });
-                } catch {}
+                } catch (err) { logger.debug("[index.ts] op failed:", err) }
             };
 
             // handle sync and async bind errors through one handler
@@ -448,7 +409,7 @@ export function startPaperCraneServer(
                 try {
                     wss.close();
                     server.close();
-                } catch {}
+                } catch (err) { logger.debug("[index.ts] op failed:", err) }
 
                 const msg = err?.message || "";
                 const inUse =
@@ -485,6 +446,7 @@ export function startPaperCraneServer(
 
                 // children must never outlive the daemon
                 process.once("exit", () => {
+                    auth.flushTokenStore();
                     panelServices.stopAll();
                     engine.killAllClients();
                 });
@@ -493,7 +455,7 @@ export function startPaperCraneServer(
                     engine.killAllClients();
                     try {
                         advertisement?.stop();
-                    } catch {}
+                    } catch (err) { logger.debug("[index.ts] op failed:", err) }
                     removePidFile();
                     process.exit(0);
                 });
@@ -502,17 +464,21 @@ export function startPaperCraneServer(
                     engine.killAllClients();
                     try {
                         advertisement?.stop();
-                    } catch {}
+                    } catch (err) { logger.debug("[index.ts] op failed:", err) }
                     removePidFile();
                     process.exit(0);
                 });
 
                 // Start background services for installed panels
                 try {
-                    panelServices.init(actualPort, staticToken ?? undefined);
+                    panelServices.init(actualPort, staticToken ?? undefined, auth);
                 } catch (err: any) {
                     logger.warn("[PaperCrane] Failed to initialize panel services:", err?.message || err);
                 }
+
+                // this instance owns the port now: safe to sweep interrupted
+                // artifacts (never before — see sweepStartupOrphans)
+                engine.sweepStartupOrphans();
 
                 // only standalone daemons claim the PID file
                 writeCraneJson(actualPort, staticToken);
@@ -593,6 +559,7 @@ export function parseCliArgs(argv: string[] = process.argv): ServerOptions & { s
         .option("--pair", "start pairing on boot")
         .option("--port <number>", "listen port", (v) => Number(v))
         .option("--host <host>", "listen host")
+        .option("--allow-registry-override", "honor ORIGAMI_REGISTRY_URL even in production")
         .option("--supervise <procId>", "run as supervisor for procId");
     program.parse(argv);
     const opts = program.opts();
@@ -610,52 +577,7 @@ export function parseCliArgs(argv: string[] = process.argv): ServerOptions & { s
     }
     return options;
 }
-
-const cliOptions = (() => {
-    try {
-        return parseCliArgs();
-    } catch {
-        return {} as ServerOptions & { supervise?: string };
-    }
-})();
-// clean one-line startup failures instead of raw stacks
-function fatalCliError(err: any): never {
-    const msg = err?.message || String(err);
-    if (err?.code === "EADDRINUSE") {
-        console.error(`[PaperCrane] Port is already in use — another crane is running, or pass --port <n>.`);
-    } else if (/EACCES|EPERM|permission/i.test(msg)) {
-        console.error(`[PaperCrane] Cannot start: ${msg}`);
-        console.error(`[PaperCrane] Check the data directory is writable (PAPERBOARD_DIR=${getPaperboardDir()}).`);
-    } else {
-        console.error(`[PaperCrane] Failed to start: ${msg}`);
-    }
-    process.exit(1);
-}
-if ((cliOptions as any).supervise) {
-    const procId = (cliOptions as any).supervise as string;
-    import("./supervisor").then(({ runSupervisor }) => {
-        runSupervisor(procId).catch((err) => {
-            console.error(`[Supervisor Error]`, err);
-            process.exit(1);
-        });
-    });
-} else if (
-    // never autostart inside Electron, it would shadow the embedded daemon
-    !(process as any).versions?.electron &&
-    typeof require !== "undefined" &&
-    require.main === module
-) {
-    startPaperCraneServer(cliOptions).catch((err) => {
-        fatalCliError(err);
-    });
-} else if (
-    !(process as any).versions?.electron &&
-    typeof process !== "undefined" &&
-    process.argv[1]?.includes("papercrane")
-) {
-    startPaperCraneServer(cliOptions).catch((err) => {
-        fatalCliError(err);
-    });
-} else if ((process as any).versions?.electron) {
-    logger.debug("[PaperCrane] skipping CLI autostart inside Electron host");
-}
+// Entry lives in ./main.ts (import.meta.main gate): importing this module
+// — from Electron, from tests, from anywhere — never autostarts a server.
+// The old main-module detection heuristic died with the split, and the
+// comment states that without quoting the removed code.

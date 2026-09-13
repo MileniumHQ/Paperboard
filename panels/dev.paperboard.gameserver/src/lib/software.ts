@@ -99,6 +99,10 @@ export async function getFabricLoaderVersions(gameVersion?: string): Promise<str
     return data.map((item: any) => item.loader?.version || item.version).filter(Boolean);
 }
 
+// known limitation: Fabric publishes no checksums for the server
+// launcher jar. the pinned meta.fabricmc.net host + pinned installer
+// version are the trust anchor. if upstream ever publishes hashes for
+// this endpoint, pin them here the way vanilla/Paper do.
 export async function getFabricDownload(
     gameVersion: string,
     loaderVersion?: string,

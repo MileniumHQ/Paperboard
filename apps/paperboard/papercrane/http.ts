@@ -1,18 +1,19 @@
 import * as http from "http";
 import * as fs from "fs";
 import * as path from "path";
-import * as os from "os";
 import { PaperCraneEngine } from "./engine";
-import { getDetailedOsInfo } from "./index";
 import pkg from "../package.json";
 
 import { lookupMime } from "./mime";
+import { buildPanelCsp } from "./panelNet";
+import { resolveLocalPanelFile } from "./panelAssets";
 import {
     DAV_PREFIX,
     DavSessionStore,
     handleDavRequest,
     handleDavSessionIssue,
     handleDavSessionRevoke,
+    isMainBearer,
 } from "./dav";
 import type { PaperCraneAuth } from "./auth";
 
@@ -58,7 +59,11 @@ export function handleHttpRequest(
         return;
     }
 
-    // shutdown needs localhost plus custom header (blocks CSRF)
+    // shutdown needs localhost plus custom header (blocks CSRF) plus a
+    // valid bearer token: killing the daemon (and every supervised child
+    // via the exit hooks) is irreversible destruction on a single RPC, and
+    // a one-byte magic header is not a credential. Same main-token Bearer
+    // check as the /panel/ surface.
     if (pathname === "/shutdown" && req.method === "POST") {
         const ip = req.socket.remoteAddress || "";
         const isLocal =
@@ -70,7 +75,7 @@ export function handleHttpRequest(
         const hasGuard =
             req.headers["x-papercrane-shutdown"] === "1";
 
-        if (!isLocal || !hasGuard) {
+        if (!isLocal || !hasGuard || !isMainBearer(ctx.auth, req)) {
             res.writeHead(403, { "Content-Type": "application/json" });
             res.end(JSON.stringify({ error: "Shutdown not allowed" }));
             return;
@@ -82,60 +87,60 @@ export function handleHttpRequest(
         return;
     }
 
-    // minimal health probe, no sensitive data
+    // minimal health probe: liveness + version only. every other fact
+    // (pid, hostname, OS) goes through authenticated RPC (system:info)
     if (pathname === "/health") {
-        const osInfo = getDetailedOsInfo();
         res.writeHead(200, { "Content-Type": "application/json" });
         res.end(
             JSON.stringify({
                 status: "ok",
                 service: "papercrane",
                 version: pkg.version || "1.0.0",
-                pid: process.pid,
-                hostname: os.hostname().replace(/\.local$/i, ""),
-                os: osInfo.os,
-                osVersion: osInfo.osVersion,
-                distroId: osInfo.distroId,
-                distroName: osInfo.distroName,
-                arch: process.arch,
             }),
         );
         return;
     }
 
     if (pathname.startsWith("/panel/")) {
+        // panel assets are authenticated-only: same main-token Bearer check
+        // as the DAV surface, so a LAN peer without the token learns
+        // nothing about installed panels or their contents
+        if (!isMainBearer(ctx.auth, req)) {
+            res.writeHead(401, {
+                "Content-Type": "text/plain",
+                "WWW-Authenticate": 'Bearer realm="PaperCrane"',
+            });
+            res.end("Unauthorized");
+            return;
+        }
         const parts = pathname.slice("/panel/".length).split("/");
         const panelId = parts[0];
         const subPath = parts.slice(1).join("/") || "index.html";
 
-        const panelDir = engine.resolvePath("panels", panelId);
-        if (!fs.existsSync(panelDir)) {
-            res.writeHead(404, { "Content-Type": "text/plain" });
-            res.end("Panel Not Found");
+        // one resolver for every panel-asset surface: the same function
+        // the local panel:// protocol handler serves from
+        // (papercrane/panelAssets.ts). No mirror, no drift.
+        const resolution = resolveLocalPanelFile(
+            engine.resolvePath("panels"),
+            panelId,
+            subPath,
+        );
+        if (resolution.kind === "invalid") {
+            res.writeHead(400, { "Content-Type": "text/plain" });
+            res.end("Invalid panel id");
             return;
         }
-
-        const realPanelDir = path.resolve(panelDir);
-        let filePath = path.resolve(path.join(realPanelDir, "dist", subPath));
-        if (!fs.existsSync(filePath)) {
-            filePath = path.resolve(path.join(realPanelDir, subPath));
-        }
-        if (!fs.existsSync(filePath) && subPath === "index.html") {
-            filePath = path.resolve(path.join(realPanelDir, "dist", "index.html"));
-        }
-
-        const rel = path.relative(realPanelDir, filePath);
-        if (rel.startsWith("..") || path.isAbsolute(rel)) {
-            res.writeHead(403, { "Content-Type": "text/plain" });
-            res.end("Forbidden: Path traversal outside panel directory");
-            return;
-        }
-
-        if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
+        if (resolution.kind === "not-found") {
             res.writeHead(404, { "Content-Type": "text/plain" });
             res.end("File Not Found");
             return;
         }
+        if (resolution.kind === "forbidden") {
+            res.writeHead(403, { "Content-Type": "text/plain" });
+            res.end("Forbidden: Path traversal outside panel directory");
+            return;
+        }
+        const filePath = resolution.file;
 
         const ext = path.extname(filePath).toLowerCase();
         const contentType = lookupMime(ext);
@@ -144,16 +149,11 @@ export function handleHttpRequest(
             "Content-Type": contentType,
             "X-Content-Type-Options": "nosniff",
         };
-        // baseline CSP: own origin plus inline, no remote scripts
+        // panel CSP derives from the panel's declared network egress
+        // (panelNet) — same builder electron uses, one source of truth
         if (ext === ".html") {
             headers["Content-Security-Policy"] = [
-                "default-src 'self' data: blob:",
-                "script-src 'self' 'unsafe-inline'",
-                "style-src 'self' 'unsafe-inline'",
-                "img-src 'self' data: blob: https: http:",
-                "font-src 'self' data:",
-                "connect-src *",
-                "media-src 'self' blob: https: http:",
+                buildPanelCsp(panelId),
                 "frame-ancestors 'none'",
             ].join("; ");
         }

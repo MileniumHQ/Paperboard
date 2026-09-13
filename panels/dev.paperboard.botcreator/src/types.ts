@@ -1,20 +1,3 @@
-export type BotStatus = "offline" | "connecting" | "online" | "error";
-
-export interface BotCreatorState {
-    configured: boolean;
-    botStatus: BotStatus;
-    botName: string;
-    botTag: string;
-    botAvatar: string;
-    applicationId: string;
-    token: string;
-    errorMessage: string | null;
-    selectedPermissions: string[];
-    inviteUrl: string;
-    permissionsBitfield: string;
-    guildCount: number;
-}
-
 export interface PermissionDefinition {
     id: string;
     name: string;
@@ -150,12 +133,6 @@ export const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
         description: "Allows deleting and pinning messages from others.",
         category: "text",
     },
-    {
-        id: "UseApplicationCommands",
-        name: "Use Slash Commands",
-        description: "Allows members to use bot slash commands in the server.",
-        category: "text",
-    },
 
     {
         id: "Connect",
@@ -213,6 +190,21 @@ export const DEFAULT_SELECTED_PERMISSIONS = [
 
 export const DEFAULT_DISCORD_AVATAR = "https://cdn.discordapp.com/embed/avatars/0.png";
 
+// shared with the service's ring buffer so the UI subscription caps
+// recent messages with the exact same bound (one invariant, one number)
+export const RECENT_MESSAGE_CAP = 10;
+
+// chronological append that drops the oldest entry past the cap — the
+// same semantics as the service-side recent-message buffer
+export function appendCapped<T>(list: T[], item: T, cap: number = RECENT_MESSAGE_CAP): T[] {
+    const next = [...list, item];
+    return next.length > cap ? next.slice(next.length - cap) : next;
+}
+
+export function errorToMessage(err: unknown): string {
+    return err instanceof Error ? err.message : String(err);
+}
+
 export function extractApplicationIdFromToken(token: string): string | null {
     if (!token) return null;
     const clean = token.trim().replace(/^Bot\s+/i, "");
@@ -235,7 +227,8 @@ export function extractApplicationIdFromToken(token: string): string | null {
         if (decoded && /^\d{17,21}$/.test(decoded)) {
             return decoded;
         }
-    } catch {
+    } catch (err) {
+        console.debug("[botcreator] token application-id decode failed:", err);
         return null;
     }
     return null;

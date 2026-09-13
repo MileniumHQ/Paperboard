@@ -60,11 +60,11 @@ export const ConnectionLostOverlay: Component<ConnectionLostOverlayProps> = (
                 // Reduced motion removes blur; fall back opaque to stay legible
                 "background-color": reducedMotion()
                     ? isDark()
-                        ? "#000000"
-                        : "#ffffff"
+                        ? getVarCss("background-definition")
+                        : getVarCss("background-frontest")
                     : isDark()
-                      ? "rgba(0, 0, 0, 0.65)"
-                      : "rgba(255, 255, 255, 0.7)",
+                      ? getVarCss("overlay")
+                      : getVarCss("overlay-invert"),
                 "backdrop-filter": reducedMotion()
                     ? "none"
                     : getVarCss("blur-medium"),

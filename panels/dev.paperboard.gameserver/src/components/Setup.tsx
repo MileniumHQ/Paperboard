@@ -1,3 +1,4 @@
+import { PANEL_ID } from "../service/types";
 import { createSignal, createEffect, Show, For } from "solid-js";
 import {
     PaperFlex,
@@ -227,6 +228,7 @@ function InstallStep(props: InstallStepProps) {
     const [setupPercent, setSetupPercent] = createSignal(0);
     const [setupStatus, setSetupStatus] = createSignal<LoaderStatus>("waiting");
     const [showEulaModal, setShowEulaModal] = createSignal(false);
+    const [declineNotice, setDeclineNotice] = createSignal("");
 
     let started = false;
 
@@ -284,6 +286,7 @@ function InstallStep(props: InstallStepProps) {
             await fileApi.download({
                 url: downloadInfo.url,
                 targetPath: "server.jar",
+                appId: PANEL_ID,
                 sha1: downloadInfo.sha1,
                 sha256: downloadInfo.sha256,
                 onProgress: (p) => {
@@ -307,7 +310,7 @@ function InstallStep(props: InstallStepProps) {
         }
 
         try {
-            const eulaContent = await fileApi.read("eula.txt").catch(() => "");
+            const eulaContent = await fileApi.read("eula.txt", PANEL_ID).catch(() => "");
             if (eulaContent && eulaContent.includes("eula=true")) {
                 setSetupPercent(100);
                 setSetupStatus("success");
@@ -331,6 +334,7 @@ function InstallStep(props: InstallStepProps) {
             await fileApi.write(
                 "eula.txt",
                 "#By changing the setting below to TRUE you are indicating your agreement to our EULA (https://aka.ms/MinecraftEULA).\neula=true\n",
+                PANEL_ID,
             );
             setShowEulaModal(false);
             setSetupPercent(100);
@@ -344,11 +348,15 @@ function InstallStep(props: InstallStepProps) {
 
     const handleDeclineEula = async () => {
         setShowEulaModal(false);
-        try {
-            await fileApi.clear();
-        } catch (err) {
-            console.error("[Setup] Failed to clear server files after EULA decline:", err);
-        }
+        // the EULA decision is honored, not punished: nothing is deleted.
+        // (This used to be fileApi.clear(PANEL_ID) — an irreversible wipe
+        // of the whole install folder from a single click, the panel's only
+        // destructive path that skipped the trash-first discipline. The
+        // files do no work until the server starts, and they are exactly
+        // what a later accept-and-start reuses.)
+        setDeclineNotice(
+            "EULA declined — the downloaded files stay in place. The server cannot start until the EULA is accepted; you can accept it any time by running setup again or agreeing when the server prompts.",
+        );
 
         setJavaDownloadPercent(0);
         setJavaDownloadStatus("loading");
@@ -376,9 +384,14 @@ function InstallStep(props: InstallStepProps) {
 
     return (
         <>
-            <PaperCenteredInterface>
-                <PaperFlex direction="column" gap="full" center fullWidth>
-                    <PaperLoaderGroup>
+        <PaperCenteredInterface>
+            <PaperFlex direction="column" gap="full" center fullWidth>
+                <Show when={declineNotice()}>
+                    <PaperQuote variant="yellow" icon="info" title="Setup cancelled">
+                        {declineNotice()}
+                    </PaperQuote>
+                </Show>
+                <PaperLoaderGroup>
                         <PaperLoader
                             percent={javaDownloadPercent()}
                             loaderStatus={javaDownloadStatus()}
@@ -402,7 +415,6 @@ function InstallStep(props: InstallStepProps) {
                     </PaperLoaderGroup>
                 </PaperFlex>
             </PaperCenteredInterface>
-
             <PaperModal
                 open={showEulaModal()}
                 onClose={handleDeclineEula}
@@ -450,7 +462,7 @@ export default function Setup(props: SetupProps) {
                 configured: true,
                 software: serverSoftware(),
                 version: serverVersion(),
-            });
+            }, PANEL_ID);
             props.onComplete?.();
         } catch (err) {
             console.error("[Setup] Failed to save configuration:", err);

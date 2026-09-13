@@ -21,6 +21,7 @@ const initialState: GameServerState = {
     seenPlayers: [],
     playerStats: {},
     playerPlaytime: {},
+    gamerules: {},
     activeIssue: null,
 };
 
@@ -38,7 +39,9 @@ export const gameServerService = definePanelService({
             if (isRunning) {
                 ctx.setState({ serverStatus: "online" });
             }
-        } catch {}
+        } catch (err) {
+            console.error("[gameserver] process-exists probe failed:", String(err));
+        }
 
         processApi.onData(SERVER_PROC_ID, (chunk: string) =>
             handleProcessData(ctx, chunk),

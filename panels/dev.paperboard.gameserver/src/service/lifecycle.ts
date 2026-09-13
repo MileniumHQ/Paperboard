@@ -10,14 +10,49 @@ import stripAnsi from "strip-ansi";
 import { getRequiredJavaVersion, SOFTWARE_NAMES } from "../lib/software";
 import { isWindowsTarget } from "../lib/platform";
 import { parseChatMessage, parseLogLine } from "../lib/logs";
+import { parseGameruleValue } from "../core/gamerules";
 import { loadConfigAndProperties } from "./config";
 import { trackPlayerActivity, handleStatResponse } from "./players";
+import { assertSingleLine } from "../core/players";
 import { checkLogForIssues } from "./diagnostics";
+import { onServerOnline } from "./gamerules";
 import { type GameServerState, SERVER_PROC_ID, appendCapped, PANEL_ID } from "./types";
+import { TRIGGER_IDS } from "./contract";
 
 let lineBuffer = "";
 let isRestarting = false;
 let stopTimeout: ReturnType<typeof setTimeout> | null = null;
+
+function cancelStopForceKill(): void {
+    if (stopTimeout) {
+        clearTimeout(stopTimeout);
+        stopTimeout = null;
+    }
+}
+
+// exactly one pending force-kill at a time: a stop/restart issued while a
+// previous force-kill is pending cancels and reschedules instead of
+// stacking a second timer on the same module-level handle. The timer is
+// unref'd so a pending kill never holds the service process open.
+function scheduleStopForceKill(
+    ctx: ServiceContext<GameServerState>,
+    delayMs: number = 15000,
+): void {
+    cancelStopForceKill();
+    stopTimeout = setTimeout(() => {
+        stopTimeout = null;
+        processApi.kill(SERVER_PROC_ID, "SIGKILL");
+        watchForceKill(ctx);
+    }, delayMs);
+    (stopTimeout as unknown as { unref?: () => void }).unref?.();
+}
+
+// test seam: the force-kill is time-based, so tests drive it with short
+// delays instead of waiting out the real 15s window
+export const __lifecycleTest = {
+    scheduleStopForceKill,
+    isStopForceKillPending: () => stopTimeout !== null,
+};
 
 export async function startServerInstance(
     ctx: ServiceContext<GameServerState>,
@@ -124,12 +159,7 @@ export async function stopServerInstance(
         });
         processApi.write(SERVER_PROC_ID, "stop\n");
 
-        if (!stopTimeout) {
-            stopTimeout = setTimeout(() => {
-                processApi.kill(SERVER_PROC_ID, "SIGKILL");
-                watchForceKill(ctx);
-            }, 15000);
-        }
+        scheduleStopForceKill(ctx);
     }
 }
 
@@ -153,18 +183,19 @@ export async function restartServerInstance(
     });
     processApi.write(SERVER_PROC_ID, "stop\n");
 
-    if (!stopTimeout) {
-        stopTimeout = setTimeout(() => {
-            processApi.kill(SERVER_PROC_ID, "SIGKILL");
-            watchForceKill(ctx);
-        }, 15000);
-    }
+    scheduleStopForceKill(ctx);
 }
 
 export async function sendServerCommand(
     ctx: ServiceContext<GameServerState>,
     cmd: string,
 ): Promise<void> {
+    // every console write passes this boundary: a multi-line value is a
+    // second console command injected through the same write. call-site
+    // validation (kick/ban reasons) does not replace this check — it is
+    // the last line of defense for raw-command callers too, matching
+    // sendChatMessage's discipline one action over.
+    assertSingleLine(String(cmd), "console command", 500);
     const trimmed = cmd.trim();
     if (!trimmed) return;
 
@@ -221,11 +252,24 @@ export async function sendChatMessage(
     }
 }
 
+// gamerule readouts ride the same log stream as every other server line:
+// query responses keep the UI honest, write confirmations converge an
+// online edit on server truth
+function handleGameruleResponse(
+    ctx: ServiceContext<GameServerState>,
+    clean: string,
+): void {
+    const parsed = parseGameruleValue(clean);
+    if (!parsed) return;
+    ctx.setState((prev) => ({
+        gamerules: { ...prev.gamerules, [parsed.name]: parsed.value },
+    }));
+}
+
 export function handleProcessData(
     ctx: ServiceContext<GameServerState>,
     chunk: string,
-): void {
-    lineBuffer += chunk;
+): void {    lineBuffer += chunk;
     const lines = lineBuffer.split("\n");
     lineBuffer = lines.pop() ?? "";
 
@@ -240,6 +284,7 @@ export function handleProcessData(
 
         trackPlayerActivity(ctx, clean);
         handleStatResponse(ctx, clean);
+        handleGameruleResponse(ctx, clean);
         checkLogForIssues(ctx, clean);
 
         if (
@@ -250,7 +295,12 @@ export function handleProcessData(
         ) {
             if (ctx.state.serverStatus !== "online") {
                 ctx.setState({ serverStatus: "online" });
-                ctx.emitTrigger("server-started", true);
+                ctx.emitTrigger(TRIGGER_IDS.serverStarted, true);
+                // boot-time truth: offline gamerule edits re-apply, then
+                // every rule is queried so the UI reads live values
+                onServerOnline(ctx).catch((err) =>
+                    console.error("[Service:Lifecycle] gamerule boot sync failed:", err),
+                );
             }
         } else if (clean.includes("Stopping server") || clean.includes("Saving players")) {
             ctx.setState({ serverStatus: "stopping" });
@@ -261,9 +311,9 @@ export function handleProcessData(
             ctx.setState({
                 chatMessages: appendCapped(ctx.state.chatMessages, chat),
             });
-            // only player messages emit "chat-message"
+            // only player messages emit the chat-message trigger
             if (chat.sender) {
-                ctx.emitTrigger("chat-message", chat);
+                ctx.emitTrigger(TRIGGER_IDS.chatMessage, chat);
             }
         }
 
@@ -274,10 +324,7 @@ export function handleProcessData(
 }
 
 export function handleProcessExit(ctx: ServiceContext<GameServerState>): void {
-    if (stopTimeout) {
-        clearTimeout(stopTimeout);
-        stopTimeout = null;
-    }
+    cancelStopForceKill();
 
     if (lineBuffer.trim()) {
         const lastChat = parseChatMessage(lineBuffer);
@@ -315,7 +362,7 @@ export function handleProcessExit(ctx: ServiceContext<GameServerState>): void {
                 content: "[Server] Process stopped.",
             }),
         });
-        ctx.emitTrigger("server-stopped", true);
+        ctx.emitTrigger(TRIGGER_IDS.serverStopped, true);
     }
 }
 
@@ -327,10 +374,7 @@ function watchForceKill(ctx: ServiceContext<GameServerState>): void {
             if (!stillRunning || Date.now() - startedAt > 10000) {
                 clearInterval(poll);
                 isRestarting = false;
-                if (stopTimeout) {
-                    clearTimeout(stopTimeout);
-                    stopTimeout = null;
-                }
+                cancelStopForceKill();
                 ctx.setState({
                     serverStatus: "offline",
                     serverEntries: appendCapped(ctx.state.serverEntries, {
@@ -339,8 +383,10 @@ function watchForceKill(ctx: ServiceContext<GameServerState>): void {
                     }),
                 });
             }
-        } catch {
+        } catch (err) {
             clearInterval(poll);
+            cancelStopForceKill();
+            console.error("[gameserver] server-poll iteration failed:", String(err));
         }
     }, 500);
 }

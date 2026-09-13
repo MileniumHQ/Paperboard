@@ -1,4 +1,6 @@
 import { isWindowsTarget } from "../lib/platform";
+import { getWorldDirsToDelete } from "./worlds";
+import { trashRemovePathsWith, runPtyCommandWith, type TrashRemoveDeps } from "./trash";
 
 export interface ServerIssueAction {
     label: string;
@@ -85,45 +87,58 @@ export function checkLogForIssues(deps: IssueCheckDeps, cleanLine: string): void
     const issue = detectServerIssue(cleanLine, deps.serverPort);
     if (issue) deps.setIssue(issue);
 }
-
-export function buildKillPortCommand(port: string): string {
-    return `lsof -ti :${port} | xargs kill -9 2>/dev/null || killall -9 java 2>/dev/null || true`;
+export function buildKillPortCommand(port: string, isWin: boolean): string {
+    // the port is asserted numeric before it ever reaches this
+    // interpolation (see assertPort): a UI-supplied string must never
+    // become shell syntax
+    if (isWin) {
+        return `powershell -NoProfile -Command "Get-NetTCPConnection -LocalPort ${port} -State Listen | Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object { Stop-Process -Id $_ -Force }"`;
+    }
+    return `lsof -ti :${port} | xargs -r kill -9 || true`;
 }
 
-export function buildResetWorldCommand(isWin: boolean): string {
-    return isWin
-        ? `rmdir /s /q world world_nether world_the_end 2>nul || exit 0`
-        : `rm -rf world world_nether world_the_end`;
+// ports reach shell commands: numeric-only at the boundary, UI checks
+// don't count. Throws instead of coercing — "8080;" is not 8080.
+export function assertPort(port: unknown, what = "port"): string {
+    const s = String(port ?? "").trim();
+    if (!/^\d+$/.test(s)) {
+        throw new Error(`Refusing unsafe ${what} value: ${JSON.stringify(port)}`);
+    }
+    const n = Number(s);
+    if (n < 1 || n > 65535) {
+        throw new Error(`Refusing out-of-range ${what} value: ${JSON.stringify(port)}`);
+    }
+    return String(n);
 }
 
-export interface KillProcessDeps {
-    createPty: (id: string, opts: { cols: number; rows: number; cwd?: string }) => unknown;
-    writePty: (id: string, data: string) => void;
-    scheduleDestroy: (id: string) => void;
+export interface ResetWorldDeps extends TrashRemoveDeps {}
+
+// world reset deletes the live world dirs — trash first, then remove
+// (see core/trash.ts), and for the server's actual level-name, never a
+// hardcoded "world"
+export async function resetWorldFilesWith(deps: ResetWorldDeps, levelName: string): Promise<void> {
+    await trashRemovePathsWith(deps, getWorldDirsToDelete(levelName), "clean-world-pty");
 }
+
+// a kill-port pty differs from a trash pty only in cwd (it doesn't need
+// the server dir — though the caller supplies it anyway via the OS probe)
+export interface KillProcessDeps extends TrashRemoveDeps {}
+
 
 export async function killConflictingProcessWith(
     deps: KillProcessDeps,
     port: string,
 ): Promise<void> {
-    const killCmd = buildKillPortCommand(port);
-    await deps.createPty("kill-port-pty", { cols: 80, rows: 24 });
-    deps.writePty("kill-port-pty", `${killCmd}\nexit\n`);
-    deps.scheduleDestroy("kill-port-pty");
-}
-
-export interface ResetWorldDeps extends KillProcessDeps {
-    getServerDir: () => Promise<string>;
-    getTargetOs: () => Promise<string>;
-}
-
-export async function resetWorldFilesWith(deps: ResetWorldDeps): Promise<void> {
+    // last line of defense: even a service caller that forgot to validate
+    // cannot interpolate shell syntax through here
+    const safePort = assertPort(port);
     const serverDir = await deps.getServerDir();
     const targetOs = await deps.getTargetOs();
-    const isWin = isWindowsTarget(serverDir, targetOs);
-    const cleanCmd = buildResetWorldCommand(isWin);
-
-    await deps.createPty("clean-world-pty", { cwd: serverDir, cols: 80, rows: 24 });
-    deps.writePty("clean-world-pty", `${cleanCmd}\nexit\n`);
-    deps.scheduleDestroy("clean-world-pty");
+    const killCmd = buildKillPortCommand(safePort, isWindowsTarget(serverDir, targetOs));
+    await deps.createPty("kill-port-pty", { cols: 80, rows: 24, cwd: serverDir });
+    // completion is verified the same way a trash remove is: the pty runs
+    // to exit. There is no success marker — `|| true` legitimately treats
+    // "nothing bound to this port" as success — but a dead pty is no
+    // longer reported as a completed kill.
+    await runPtyCommandWith(deps, "kill-port-pty", killCmd);
 }

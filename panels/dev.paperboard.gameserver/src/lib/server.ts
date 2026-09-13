@@ -1,5 +1,6 @@
+import { PANEL_ID, ACTION_IDS } from "../service/contract";
 import { createSignal } from "solid-js";
-import { createPanelBridge, system, config, files as fileApi } from "@paperboard-dev/paperapi";
+import { createPanelBridge, system } from "@paperboard-dev/paperapi";
 import type { PaperConsoleEntry, PaperBadgeVariant } from "@paperboard-dev/paperui";
 import stripAnsi from "strip-ansi";
 import { SOFTWARE_NAMES, type ServerSoftwareType } from "./software";
@@ -18,8 +19,7 @@ import {
     setPlayerPlaytime,
     type PlayerStatData,
 } from "./players";
-import { setActiveIssue, clearActiveIssue, type ServerIssue } from "./diagnostics";
-import { parseProperties as coreParseProperties, extractServerPort, cleanMotdValue } from "../core/properties";
+import { setActiveIssue, type ServerIssue } from "./diagnostics";
 import { applyStatePatch } from "../core/state";
 import type { ServerStatus as CoreServerStatus, ChatMessage as CoreChatMessage } from "../core/state";
 import { PLAYER_NAME_PATTERN as CORE_PLAYER_NAME_PATTERN, SERVER_PROC_ID as CORE_SERVER_PROC_ID } from "../core/players";
@@ -40,20 +40,17 @@ export const [serverMotd, setServerMotd] = createSignal("A Minecraft Server");
 export const [serverSoftware, setServerSoftware] = createSignal<ServerSoftwareType>("paper");
 export const [serverVersion, setServerVersion] = createSignal("");
 export const [ramAllocation, setRamAllocation] = createSignal(4);
+export const [gamerules, setGamerules] = createSignal<Record<string, string>>({});
 
 export const MIN_RAM_GB = 1;
 export const MAX_RAM_GB = 16;
-
-export function parseProperties(content: string): Record<string, string> {
-    return coreParseProperties(content);
-}
 
 export function getLocalNetworkIP(): Promise<string> {
     return system.getLocalIP();
 }
 
 export const serverBridge = createPanelBridge({
-    panelId: "dev.paperboard.gameserver",
+    panelId: PANEL_ID,
 });
 
 function currentSetters() {
@@ -72,6 +69,7 @@ function currentSetters() {
         setSeenPlayerNames,
         setPlayerStats,
         setPlayerPlaytime,
+        setGamerules,
     };
 }
 
@@ -83,45 +81,28 @@ serverBridge.refreshState().then((state: any) => {
     applyStatePatch(state as Record<string, unknown>, currentSetters());
 });
 
+// config lives in the service (service/config.ts owns read-merge-write
+// with an explicit PANEL_ID). The UI only triggers a reload and pulls the
+// resulting state — the duplicated read-merge-write twins that lived here
+// are gone, and with them the ambient (id-less) config.get/set calls.
 export async function loadServerConfig() {
     try {
-        const saved = await config.get<any>();
-        if (saved && typeof saved === "object") {
-            if (saved.version) setServerVersion(saved.version);
-            if (saved.software) setServerSoftware(saved.software);
-            if (typeof saved.ramGB === "number") setRamAllocation(saved.ramGB);
-        }
-    } catch {}
-
-    try {
-        const propertiesContent = await fileApi.read("server.properties");
-        if (propertiesContent) {
-            const props = parseProperties(propertiesContent);
-            const port = extractServerPort(props);
-            if (port) setServerPort(port);
-            const motd = cleanMotdValue(props["motd"]);
-            if (motd) setServerMotd(motd);
-        }
-    } catch {}
-
-    try {
-        await serverBridge.actions.loadServerConfig();
-    } catch {}
+        await serverBridge.call(ACTION_IDS.loadConfig);
+        await serverBridge.refreshState();
+    } catch (err) {
+        console.debug("[gameserver] service-side loadServerConfig failed:", String(err));
+    }
 }
 
 loadServerConfig();
 
 export async function updatePanelConfig(patch: Record<string, unknown>) {
-    let current: Record<string, unknown> = {};
     try {
-        const saved = await config.get<Record<string, unknown>>();
-        if (saved && typeof saved === "object") current = saved;
-    } catch {}
-    await config.set({ ...current, ...patch });
-    await loadServerConfig();
-    try {
-        await serverBridge.actions.updatePanelConfig(patch);
-    } catch {}
+        await serverBridge.call(ACTION_IDS.updatePanelConfig, { patch });
+        await serverBridge.refreshState();
+    } catch (err) {
+        console.debug("[gameserver] service-side updatePanelConfig failed:", String(err));
+    }
 }
 
 export async function initServerListeners() {
@@ -130,23 +111,39 @@ export async function initServerListeners() {
 }
 
 export function startServer() {
-    serverBridge.call("start-server").catch(() => {});
+    serverBridge
+        .call(ACTION_IDS.startServer)
+        .catch((err) =>
+            console.error("[ServerBridge] start-server failed:", String(err)),
+        );
 }
 
 export function stopServer() {
-    serverBridge.call("stop-server").catch(() => {});
+    serverBridge
+        .call(ACTION_IDS.stopServer)
+        .catch((err) =>
+            console.error("[ServerBridge] stop-server failed:", String(err)),
+        );
 }
 
 export function restartServer() {
-    serverBridge.call("restart-server").catch(() => {});
+    serverBridge
+        .call(ACTION_IDS.restartServer)
+        .catch((err) =>
+            console.error("[ServerBridge] restart-server failed:", String(err)),
+        );
 }
 
 export function sendServerCommand(cmd: string) {
-    serverBridge.call("run-command", { command: cmd }).catch(() => {});
+    serverBridge.call(ACTION_IDS.runCommand, { command: cmd }).catch((err) =>
+        console.error("[ServerBridge] run-command failed:", String(err)),
+    );
 }
 
 export function sendChatMessage(msg: string) {
-    serverBridge.call("say-chat", { message: msg }).catch(() => {});
+    serverBridge.call(ACTION_IDS.sayChat, { message: msg }).catch((err) =>
+        console.error("[ServerBridge] say-chat failed:", String(err)),
+    );
 }
 
 export function getStatusBadge(status: ServerStatus): {

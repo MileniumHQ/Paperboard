@@ -68,6 +68,8 @@ export class PaperboardLogger {
                                   try {
                                       return JSON.stringify(a);
                                   } catch {
+                                      // direct console: the logger cannot log to itself
+                                      console.debug("[logger] arg not stringifiable, using String()");
                                       return String(a);
                                   }
                               return String(a);
@@ -89,7 +91,7 @@ export class PaperboardLogger {
             if (LEVEL_ORDER[level] >= LEVEL_ORDER[this.minLevel]) {
                 this.writeLine(line);
             }
-        } catch {}
+        } catch (err) { logger.debug("[logger.ts] op failed:", err) }
     }
 
     private writeLine(line: string): void {
@@ -97,7 +99,7 @@ export class PaperboardLogger {
         if (!file) return;
         try {
             fs.appendFileSync(file, line, "utf8");
-        } catch {}
+        } catch (err) { logger.debug("[logger.ts] op failed:", err) }
     }
 
     private ensureLogFile(): string | null {
@@ -109,6 +111,9 @@ export class PaperboardLogger {
             this.currentFile = path.join(this.logDir, `${this.name}.log`);
             return this.currentFile;
         } catch {
+            // direct console: the logger cannot log to itself; a dead log
+            // file must be loud, not a quiet null
+            console.error(`[logger] log file unavailable in ${this.logDir}, console only`);
             return null;
         }
     }
@@ -136,7 +141,7 @@ export class PaperboardLogger {
                     path.join(this.logDir, `${this.name}.1.log`),
                 );
             }
-        } catch {}
+        } catch (err) { logger.debug("[logger.ts] op failed:", err) }
     }
 }
 

@@ -1,4 +1,4 @@
-import { type Component, createSignal, createEffect, onMount, For, Show } from "solid-js";
+import { type Component, createSignal, createEffect, onMount, onCleanup, For, Show } from "solid-js";
 import {
     PaperProvider,
     PaperFlex,
@@ -51,6 +51,7 @@ const App: Component = () => {
         refreshComputers,
         activeComputer,
         subscribeComputerChanges,
+        computersLoadFailed,
     } = useComputers();
     const {
         panelsByComputer,
@@ -61,7 +62,7 @@ const App: Component = () => {
         setOpenedPanels,
         reloadTokens,
         setReloadTokens,
-        storeLoadFailed,
+        storeLoadFailedFor,
         panelsLoadFailed,
         getSelectedTab,
         setComputerTab,
@@ -79,6 +80,7 @@ const App: Component = () => {
     const [contextMenuComputerId, setContextMenuComputerId] = createSignal<string | null>(null);
     const [isForgetConfirmOpen, setIsForgetConfirmOpen] = createSignal(false);
     const [isForgetting, setIsForgetting] = createSignal(false);
+    const [forgetError, setForgetError] = createSignal<string | null>(null);
     const [isUninstallModalOpen, setIsUninstallModalOpen] =
         createSignal<boolean>(false);
     const [uninstallTarget, setUninstallTarget] =
@@ -100,21 +102,22 @@ const App: Component = () => {
         }
     };
 
+    // the ONLY reload path: PanelView builds the iframe src from this
+    // token (`?_r=`), so bumping it reloads through Solid instead of a
+    // direct DOM mutation that bypasses the framework
+    const bumpReloadToken = (key: string) => {
+        setReloadTokens((prev) => ({
+            ...prev,
+            [key]: (prev[key] || 0) + 1,
+        }));
+    };
+
     const handleReloadPanel = () => {
         const target = contextMenuPanel();
         if (!target) return;
         panelContextMenu.close();
         const key = `${target.compId}::${target.panel.id}`;
-        setReloadTokens((prev) => ({
-            ...prev,
-            [key]: (prev[key] || 0) + 1,
-        }));
-        const iframe = document.querySelector(
-            `iframe[data-panel-key="${key}"]`,
-        ) as HTMLIFrameElement | null;
-        if (iframe) {
-            iframe.src = `panel://${target.compId}.${target.panel.id}/?_r=${Date.now()}`;
-        }
+        bumpReloadToken(key);
     };
 
     const handleRequestUninstall = () => {
@@ -204,14 +207,17 @@ const App: Component = () => {
                 ) {
                     target = last.panelId;
                 }
-            } catch {}
+            } catch (err) { console.error("[App] op failed:", err); }
             if (!target && localPanels.length > 0) {
                 target = localPanels[0].id;
             }
             if (target) setComputerTab("local", target);
         }
 
-        subscribeComputerChanges();
+        // R1: the unsubscribe is kept and torn down. shell.onChanged's
+        // contract returns an unsubscribe; discarding it invites every
+        // future consumer to leak a live IPC listener.
+        onCleanup(subscribeComputerChanges());
     });
 
     const finishComputerSelect = (compId: string) => {
@@ -269,9 +275,17 @@ const App: Component = () => {
         finishComputerSelect(compId);
     };
 
-    const handleRemoveComputer = async (compId: string) => {
+    // R4: removal is a destructive action whose failure must be visible.
+    // Returns a typed result so the confirm modal can show what happened
+    // instead of closing identically for success and failure.
+    const handleRemoveComputer = async (
+        compId: string,
+    ): Promise<{ ok: boolean; error?: string }> => {
         try {
-            await computersApi.remove(compId);
+            const removed = await computersApi.remove(compId);
+            if (!removed) {
+                return { ok: false, error: "Paperboard could not forget that computer." };
+            }
             setOpenedPanels((prev) =>
                 prev.filter((k) => !k.startsWith(`${compId}::`)),
             );
@@ -287,8 +301,15 @@ const App: Component = () => {
             });
             await refreshComputers();
             await handleComputerSelect("local");
-        } catch (err) {
+            return { ok: true };
+        } catch (err: any) {
             logToMain("error", "Failed to remove computer:", err);
+            return {
+                ok: false,
+                error: err?.message
+                    ? `Couldn't forget this computer: ${err.message}`
+                    : "Couldn't forget this computer.",
+            };
         }
     };
 
@@ -308,6 +329,7 @@ const App: Component = () => {
 
     const handleForgetFromMenu = () => {
         computerContextMenu.close();
+        setForgetError(null);
         setIsForgetConfirmOpen(true);
     };
 
@@ -316,11 +338,18 @@ const App: Component = () => {
         if (!compId) return;
         setIsForgetting(true);
         try {
-            await handleRemoveComputer(compId);
-        } finally {
-            setIsForgetting(false);
+            const result = await handleRemoveComputer(compId);
+            // R4: the modal only closes on success; a failure keeps it
+            // open with the reason, so a failed forget never masquerades
+            // as a successful one
+            if (!result.ok) {
+                setForgetError(result.error ?? "Couldn't forget this computer.");
+                return;
+            }
             setIsForgetConfirmOpen(false);
             setContextMenuComputerId(null);
+        } finally {
+            setIsForgetting(false);
         }
     };
 
@@ -389,6 +418,8 @@ const App: Component = () => {
                         onSelect={(val) => handleRailSelect(val)}
                         onAdd={() => setIsSetupOpen(true)}
                         onComputerContextMenu={handleComputerContextMenu}
+                        loadFailed={computersLoadFailed()}
+                        onRetryLoad={() => void refreshComputers()}
                     />
 
                     <Show
@@ -604,7 +635,7 @@ const App: Component = () => {
                                 <PanelLibrary
                                     panels={activePanelsList(activeComputerId())}
                                     computerId={activeComputerId()}
-                                    loadFailed={storeLoadFailed()}
+                                    loadFailed={storeLoadFailedFor(activeComputerId())}
                                     onRetryLoad={() =>
                                         void refreshStorePanels(
                                             activeComputerId(),
@@ -668,6 +699,7 @@ const App: Component = () => {
                                     activeComputerId={activeComputerId()}
                                     openedPanels={openedPanels()}
                                     reloadTokens={reloadTokens()}
+                                    onReloadPanel={bumpReloadToken}
                                 />
                             </PaperFlex>
                         </PaperFlex>
@@ -766,8 +798,12 @@ const App: Component = () => {
                 <PaperText preset="body">
                     Are you sure you want to forget{" "}
                     <strong>{forgetTargetName()}</strong>?
-                    This will disconnect all boards on this machine.
                 </PaperText>
+                <Show when={forgetError()}>
+                    <PaperText size={2} color="red">
+                        {forgetError()}
+                    </PaperText>
+                </Show>
             </PaperModal>
 
             <UninstallPanelModal

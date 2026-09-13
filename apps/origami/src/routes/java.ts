@@ -12,12 +12,19 @@ export async function handleJavaRoutes(
         pathname === "/update/java/" ||
         pathname.startsWith("/update/java/")
     ) {
+        // O8: this route writes KV (per-release records). A state-mutating
+        // GET invites naive prefetchers and link-scanners to mutate
+        // production state; updates are triggered deliberately, via POST.
+        if (request.method !== "POST") {
+            return jsonResponse({ error: "Method Not Allowed" }, 405);
+        }
         if (!verifyAuth(request, env)) {
             return jsonResponse(
                 {
                     error: "Unauthorized",
-                    message:
-                        "Valid auth key required (via Authorization header, X-Auth-Key, or ?key= query parameter)",
+                    // query keys are refused by design (see lib.ts
+                    // verifyAuth): header credentials only
+                    message: "Valid auth key required (via Authorization header or X-Auth-Key; query parameters are refused)",
                 },
                 401,
             );

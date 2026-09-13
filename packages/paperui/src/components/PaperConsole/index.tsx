@@ -27,6 +27,9 @@ export interface PaperConsoleEntry {
     timestamp?: string | Date | number;
 }
 
+// recall history cap (see history signal below)
+export const MAX_CONSOLE_HISTORY = 200;
+
 export interface PaperConsoleProps
     extends Omit<JSX.HTMLAttributes<HTMLDivElement>, "onCommand"> {
     entries?: (PaperConsoleEntry | string)[];
@@ -62,6 +65,8 @@ export function PaperConsole(props: ParentProps<PaperConsoleProps>) {
     ]);
 
     const [inputValue, setInputValue] = createSignal(local.value ?? "");
+    // command recall ring: newest commands win, oldest drop past the cap —
+    // a long-lived console session must not grow this array forever
     const [history, setHistory] = createSignal<string[]>([]);
     const [historyIndex, setHistoryIndex] = createSignal<number>(-1);
     const [tempInput, setTempInput] = createSignal<string>("");
@@ -93,7 +98,12 @@ export function PaperConsole(props: ParentProps<PaperConsoleProps>) {
             local.onCommand(cmd);
         }
 
-        setHistory((prev) => [...prev, cmd]);
+        setHistory((prev) => {
+            const next = [...prev, cmd];
+            return next.length > MAX_CONSOLE_HISTORY
+                ? next.slice(next.length - MAX_CONSOLE_HISTORY)
+                : next;
+        });
         setHistoryIndex(-1);
         setTempInput("");
 

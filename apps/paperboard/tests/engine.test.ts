@@ -36,6 +36,40 @@ describe("PaperCraneEngine path containment", () => {
     });
 });
 
+describe("PaperCraneEngine killProcess hygiene", () => {
+    it("the teardown timer never holds the process open", () => {
+        const fake = {
+            // intentional no-op stubs: the test observes the teardown
+            // timer, never the fake client's behavior
+            kill(_signal: string) {
+                /* no-op stub */
+            },
+            on(_event: string, _fn: () => void) {
+                /* no-op stub */
+            },
+            destroy() {
+                /* no-op stub */
+            },
+        };
+        (engine as any).clients.set("ghost", fake);
+        const captured: any[] = [];
+        const realSetTimeout = globalThis.setTimeout;
+        (globalThis as any).setTimeout = ((fn: any, ms: number, ...rest: any[]) => {
+            const t = realSetTimeout(fn, ms, ...rest);
+            if (ms === 5000) captured.push(t);
+            return t;
+        }) as any;
+        try {
+            engine.killProcess("ghost");
+        } finally {
+            (globalThis as any).setTimeout = realSetTimeout;
+        }
+        expect(captured).toHaveLength(1);
+        expect(captured[0].hasRef()).toBe(false);
+        clearTimeout(captured[0]);
+    });
+});
+
 describe("PaperCraneEngine panels install/uninstall parity", () => {
     it("uninstallPanel removes config and files like the local driver should", async () => {
         await engine.setConfig("somepanel", { a: 1 });
@@ -44,6 +78,20 @@ describe("PaperCraneEngine panels install/uninstall parity", () => {
         expect(fs.existsSync(path.join(tmp, "panels", "somepanel"))).toBe(false);
         expect(await engine.getConfig("somepanel")).toBeNull();
     });
+
+    it("uninstallPanel renames to trash before delete and sweeps stale trash", async () => {
+        fs.mkdirSync(path.join(tmp, "panels", "trashed"), { recursive: true });
+        fs.writeFileSync(path.join(tmp, "panels", "trashed", "manifest.json"), "{}");
+        // a previous crashed uninstall leaves a marked trash dir behind
+        fs.mkdirSync(path.join(tmp, "panels", ".trash-123-trashed"), { recursive: true });
+        // a live panel with a similar name must never be touched by the sweep
+        fs.mkdirSync(path.join(tmp, "panels", "trashed2"), { recursive: true });
+        expect(await engine.uninstallPanel("trashed")).toBe(true);
+        expect(fs.existsSync(path.join(tmp, "panels", "trashed"))).toBe(false);
+        expect(fs.existsSync(path.join(tmp, "panels", ".trash-123-trashed"))).toBe(false);
+        expect(fs.readdirSync(path.join(tmp, "panels")).filter((e) => e.startsWith(".trash-"))).toEqual([]);
+        expect(fs.existsSync(path.join(tmp, "panels", "trashed2"))).toBe(true);
+    });
 });
 
 describe("PaperCraneEngine package platform selection", () => {
@@ -51,6 +99,18 @@ describe("PaperCraneEngine package platform selection", () => {
         // Indirectly covered by downloadPackage; here we test the index round-trip.
         engine.getPackageIndex(); // should not throw on missing file
         expect(engine.isPackageInstalled("nothing")).toBe(false);
+    });
+
+    it("isPackageInstalled honors the version param against the index", () => {
+        fs.mkdirSync(path.join(tmp, "packages", "ffmpeg", "bin"), { recursive: true });
+        fs.writeFileSync(
+            path.join(tmp, "packages", "index.json"),
+            JSON.stringify({ ffmpeg: { name: "ffmpeg", version: "7.1", installedAt: new Date().toISOString() } }),
+        );
+        expect(engine.isPackageInstalled("ffmpeg")).toBe(true);
+        expect(engine.isPackageInstalled("ffmpeg", "latest")).toBe(true);
+        expect(engine.isPackageInstalled("ffmpeg", "7.1")).toBe(true);
+        expect(engine.isPackageInstalled("ffmpeg", "6.0")).toBe(false);
     });
 });
 

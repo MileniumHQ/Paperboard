@@ -6,8 +6,10 @@ import {
     terminalApi,
     processApi,
     files,
+    resolveOneShotShell,
     type ServiceContext,
 } from "@paperboard-dev/paperapi";
+import { SCROLLBACK_CHARS, applyScrollbackCap, readWholeLines } from "./lib/scrollback";
 
 // pass PANEL_ID explicitly, ambient scope resolves to last-imported panel
 const PANEL_ID = "dev.paperboard.terminal";
@@ -24,7 +26,6 @@ interface TerminalServiceState {
 
 type Ctx = ServiceContext<TerminalServiceState>;
 
-const SCROLLBACK_CHARS = 200000;
 const SCROLLBACK_DIR = "terminal-scrollback";
 
 let tabs: TerminalTab[] = [];
@@ -34,6 +35,9 @@ let lastActiveId = "";
 const buffers = new Map<string, string>();
 const persistTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const subscribedSessions = new Set<string>();
+// teardown handles for the listeners above: a closed tab must detach, not
+// just hide behind the tabs.some() guard inside the callbacks
+const sessionUnsubs = new Map<string, Array<() => void>>();
 
 function scrollbackPath(id: string): string {
     return `${SCROLLBACK_DIR}/${id}.log`;
@@ -46,7 +50,9 @@ function schedulePersist(id: string) {
         id,
         setTimeout(() => {
             persistTimers.delete(id);
-            files.write(scrollbackPath(id), buffers.get(id) || "", PANEL_ID).catch(() => {});
+            files.write(scrollbackPath(id), buffers.get(id) || "", PANEL_ID).catch((err) =>
+                console.error(`[TerminalService] scrollback persist failed for ${id}:`, err),
+            );
         }, 500),
     );
 }
@@ -58,45 +64,171 @@ function updateCounts(ctx: Ctx) {
 async function persistTabs(ctx: Ctx | null) {
     try {
         await config.set({ tabs, activeTabId }, PANEL_ID);
-    } catch {}
+    } catch (err) {
+        console.error("[TerminalService] tab config persist failed:", err);
+    }
     if (ctx) updateCounts(ctx);
 }
 
-function subscribeSession(id: string, ctx: Ctx | null) {
+function cancelPersistTimer(id: string) {
+    const timer = persistTimers.get(id);
+    if (timer) clearTimeout(timer);
+    persistTimers.delete(id);
+}
+
+export function subscribeSession(id: string, ctx: Ctx | null) {
     if (subscribedSessions.has(id)) return;
     subscribedSessions.add(id);
     try {
-        terminalApi.onData(id, (data) => {
-            if (!tabs.some((t) => t.id === id)) return;
-            buffers.set(id, ((buffers.get(id) || "") + data).slice(-SCROLLBACK_CHARS));
-            schedulePersist(id);
-        });
-        terminalApi.onExit(id, (exitCode) => {
-            buffers.delete(id);
-            ctx?.emitTrigger("terminal-exit", { tabId: id, exitCode });
-        });
-    } catch {}
+        const unsubs = [
+            terminalApi.onData(id, (data) => {
+                if (!tabs.some((t) => t.id === id)) return;
+                buffers.set(id, applyScrollbackCap(data, buffers.get(id) || ""));
+                schedulePersist(id);
+            }),
+            terminalApi.onExit(id, (exitCode) => {
+                buffers.delete(id);
+                ctx?.emitTrigger("terminal-exit", { tabId: id, exitCode });
+            }),
+        ];
+        sessionUnsubs.set(id, unsubs);
+    } catch (err) {
+        console.error(`[TerminalService] session subscription failed for ${id}:`, err);
+    }
 }
 
-async function ensureSession(id: string, cols?: number, rows?: number) {
+export function unsubscribeSession(id: string) {
+    // deallocated, not just guarded: drop the id AND detach the listeners
+    // so a reconnect storm or daemon echo can't wake a dead tab
+    subscribedSessions.delete(id);
+    const unsubs = sessionUnsubs.get(id);
+    sessionUnsubs.delete(id);
+    for (const unsub of unsubs ?? []) {
+        try {
+            unsub();
+        } catch (err) {
+            console.error(`[TerminalService] session unsubscribe failed for ${id}:`, err);
+        }
+    }
+}
+
+export function __terminalTestState() {
+    return {
+        subscribedCount: subscribedSessions.size,
+        isSubscribed: (id: string) => subscribedSessions.has(id),
+        // test hooks only: observe (and for targeting tests, seed) the
+        // module-level tab list; never used by the runtime paths above
+        tabIds: () => tabs.map((t) => t.id),
+        registerTabForTest: (id: string) => tabs.push({ id, label: id }),
+        clearTabsForTest: () => {
+            const prior = tabs;
+            tabs = [];
+            return prior.map((t) => t.id);
+        },
+    };
+}
+
+// returns false when the session could not be probed AND not created:
+// keystrokes must never be sent into a void and reported as delivered
+async function ensureSession(id: string, cols?: number, rows?: number): Promise<boolean> {
     let exists = false;
     try {
         exists = await terminalApi.exists(id);
-    } catch {
-        exists = false;
+    } catch (err) {
+        console.error(`[TerminalService] session probe failed for ${id}:`, err);
     }
-    if (!exists) {
-        try {
-            await terminalApi.create(id, { cols, rows });
-        } catch {}
+    if (exists) return true;
+    try {
+        await terminalApi.create(id, { cols, rows });
+        return true;
+    } catch (err) {
+        console.error(`[TerminalService] session create failed for ${id}:`, err);
+        return false;
     }
 }
 
 function resolveTabId(input?: string): string {
+    return resolveTabIdPure(input, tabs);
+}
+
+// pure form: exported for tests, used by resolveTabId
+export function resolveTabIdPure(
+    input: string | undefined,
+    tabList: TerminalTab[],
+): string {
     const clean = (input || "").trim();
-    if (clean && tabs.some((t) => t.id === clean)) return clean;
-    if (lastActiveId && tabs.some((t) => t.id === lastActiveId)) return lastActiveId;
-    return tabs[0]?.id || "";
+    if (!clean) {
+        throw new Error("Terminal tab id required");
+    }
+    const tab = tabList.find((t) => t.id === clean);
+    if (tab) return tab.id;
+    // an unknown/renamed id must REFUSE, never fall back to another
+    // session: keystrokes silently landing in the wrong shell is the
+    // worst kind of silent success for a terminal
+    throw new Error(`Unknown terminal tab: ${clean}`);
+}
+
+// One-shot shell resolution lives in PaperAPI (shared with the actions
+// panel) — re-exported here so existing imports keep working. One
+// invariant, one implementation.
+export { resolveOneShotShell };
+
+// keystrokes must never vanish: a session that could not be created makes
+// the action FAIL with a typed error, not return true into the void
+export async function writeToTerminal(
+    _ctx: Ctx,
+    inputs?: { tabId?: string; text?: string },
+): Promise<boolean> {
+    const id = resolveTabId(inputs?.tabId);
+    const ready = await ensureSession(id);
+    let live = ready;
+    if (live) {
+        // verify the session is actually live: an unacknowledged create
+        // must not pass as ready and swallow the keystrokes
+        try {
+            live = await terminalApi.exists(id);
+        } catch (err) {
+            console.error(`[TerminalService] session verify failed for ${id}:`, err);
+            live = false;
+        }
+    }
+    if (!live) {
+        throw new Error(
+            `Terminal session "${id}" could not be created; keystrokes were not sent`,
+        );
+    }
+    terminalApi.write(id, inputs?.text || "");
+    return true;
+}
+
+// trash-first: recoverable before irrecoverable. The files API has no
+// rename, so close copies to the trash name, then removes the live file.
+// Either side failing is logged loudly; the live file is still removed.
+export async function trashScrollback(id: string): Promise<void> {
+    try {
+        const saved = await files.read(scrollbackPath(id), PANEL_ID);
+        if (saved) {
+            const trashName = trashScrollbackName(id);
+            try {
+                await files.write(trashName, saved, PANEL_ID);
+            } catch (err) {
+                console.error(`[TerminalService] scrollback trash write failed for ${id}:`, err);
+            }
+        }
+    } catch (err) {
+        console.error(`[TerminalService] scrollback trash step failed for ${id}:`, err);
+    }
+    try {
+        await files.delete(scrollbackPath(id), PANEL_ID);
+    } catch (err) {
+        console.error(`[TerminalService] scrollback file delete failed for ${id}:`, err);
+    }
+}
+
+// pure, exported for tests: every trashed scrollback is named after the
+// live file, never in its place
+export function trashScrollbackName(id: string, ts = Date.now()): string {
+    return `.trash-${ts}-${id}.log`;
 }
 
 const actions = [
@@ -196,14 +328,42 @@ const actions = [
             const id = (inputs?.id || "").trim();
             tabs = tabs.filter((t) => t.id !== id);
             buffers.delete(id);
-            try {
-                await files.delete(scrollbackPath(id), PANEL_ID);
-            } catch {}
+            // teardown: detach listeners and drop the subscription id, then
+            // cancel the pending debounce so no write fires for a dead tab
+            unsubscribeSession(id);
+            cancelPersistTimer(id);
+            // trash-first: recoverable before irrecoverable (see trashScrollback)
+            await trashScrollback(id);
             try {
                 await terminalApi.destroy(id);
-            } catch {}
+            } catch (err) {
+                console.error(`[TerminalService] session destroy failed for ${id}:`, err);
+            }
             if (lastActiveId === id) lastActiveId = tabs[0]?.id || "";
             if (activeTabId === id) activeTabId = tabs[0]?.id || "";
+            await persistTabs(ctx);
+            return true;
+        },
+    }),
+
+    defineAction({
+        id: "reorder-tabs",
+        name: "Reorder Terminal Tabs",
+        description: "Persists a new tab order (drag / rearrange)",
+        template: "Reorder terminal tabs as {orderedIds}",
+        inputs: {
+            orderedIds: { type: "array", label: "Ordered tab ids" },
+        },
+        output: { type: "boolean", label: "Success" },
+        icon: "reorder",
+        run: async (ctx: Ctx, inputs: { orderedIds?: string[] }) => {
+            const ids = Array.isArray(inputs?.orderedIds) ? inputs!.orderedIds.map((s) => String(s)) : [];
+            const byId = new Map(tabs.map((t) => [t.id, t]));
+            // accept only a permutation of the current tabs, no silent drops
+            if (ids.length !== tabs.length || !ids.every((id) => byId.has(id))) {
+                throw new Error("reorder-tabs requires exactly the current tab ids");
+            }
+            tabs = ids.map((id) => byId.get(id)!);
             await persistTabs(ctx);
             return true;
         },
@@ -240,13 +400,7 @@ const actions = [
         },
         output: { type: "boolean", label: "Success" },
         icon: "keyboard",
-        run: async (_ctx: Ctx, inputs: { tabId?: string; text: string }) => {
-            const id = resolveTabId(inputs?.tabId);
-            if (!id) throw new Error("No terminal sessions exist");
-            await ensureSession(id);
-            terminalApi.write(id, inputs?.text || "");
-            return true;
-        },
+        run: async (_ctx: Ctx, inputs: { tabId?: string; text: string }) => writeToTerminal(_ctx, inputs),
     }),
 
     defineAction({
@@ -262,9 +416,8 @@ const actions = [
         icon: "article",
         run: async (_ctx: Ctx, inputs: { tabId?: string; lines?: number }) => {
             const id = resolveTabId(inputs?.tabId);
-            if (!id) return "";
             const count = Math.max(1, Math.min(1000, Math.trunc(Number(inputs?.lines ?? 100))));
-            return (buffers.get(id) || "").split("\n").slice(-count).join("\n");
+            return readWholeLines(buffers.get(id) || "", count);
         },
     }),
 
@@ -282,7 +435,8 @@ const actions = [
             const cmd = (inputs?.command || "").trim();
             if (!cmd) throw new Error("Command is required");
             try {
-                const res = await processApi.exec("sh", ["-c", cmd]);
+                const shell = resolveOneShotShell();
+                const res = await processApi.exec(shell.command, [...shell.baseArgs, cmd]);
                 return res.stdout || res.stderr || "";
             } catch (err: any) {
                 throw new Error(err?.message || String(err));
@@ -332,7 +486,9 @@ export const terminalService = definePanelService({
                 if (saved) {
                     buffers.set(tab.id, saved.slice(-SCROLLBACK_CHARS));
                 }
-            } catch {}
+            } catch (err) {
+                console.error(`[TerminalService] scrollback restore failed for ${tab.id}:`, err);
+            }
             subscribeSession(tab.id, ctx);
         }
 

@@ -4,9 +4,14 @@ import os from "os";
 import { PANEL_ID_REGEX } from "./pack";
 import { debugErr } from "./debug";
 
+// dev-link target root. Same root variable the transport handshake uses
+// (PAPERBOARD_DIR, see ws.ts), so a machine with a relocated .paperboard
+// links into the same tree the daemon scans.
 function getPanelsDir(): string {
-    const home = typeof os.homedir === "function" ? os.homedir() : "";
-    return path.join(home, ".paperboard", "panels");
+    const root =
+        process.env.PAPERBOARD_DIR ||
+        path.join(typeof os.homedir === "function" ? os.homedir() : "", ".paperboard");
+    return path.join(root, "panels");
 }
 
 export interface LinkOptions {
@@ -46,7 +51,15 @@ export function linkPanel(options: LinkOptions = {}): {
             fs.unlinkSync(linkPath);
         } else if (lstat.isDirectory()) {
             if (options.force) {
-                fs.rmSync(linkPath, { recursive: true, force: true });
+                // recoverable destruction: rename to a trash name BEFORE
+                // rmSync — a crash mid-delete leaves a recoverable trash
+                // entry instead of a half-destroyed panel directory
+                const trashPath = path.join(
+                    panelsDir,
+                    `${manifest.id}.trash-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                );
+                fs.renameSync(linkPath, trashPath);
+                fs.rmSync(trashPath, { recursive: true, force: true });
             } else {
                 throw new Error(`Destination ${linkPath} already exists. Use --force to replace it.`);
             }

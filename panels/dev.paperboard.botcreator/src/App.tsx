@@ -7,6 +7,8 @@ import {
     PaperInterfaceItem,
 } from "@paperboard-dev/paperui";
 import { config } from "@paperboard-dev/paperapi";
+
+const PANEL_ID = "dev.paperboard.botcreator";
 import Setup from "./components/Setup";
 import Overview from "./components/Overview";
 import Invite from "./components/Invite";
@@ -20,13 +22,14 @@ export default function App() {
 
     const checkConfig = async () => {
         try {
-            const saved = await config.get<any>();
+            const saved = await config.get<any>(PANEL_ID);
             if (saved && typeof saved === "object") {
                 setConfigured(Boolean(saved.configured));
             } else {
                 setConfigured(false);
             }
-        } catch {
+        } catch (err) {
+            console.debug("[botcreator] saved config unreadable, treating as unconfigured:", String(err));
             setConfigured(false);
         }
     };

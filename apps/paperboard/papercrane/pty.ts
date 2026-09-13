@@ -29,7 +29,7 @@ try {
             returns: FFIType.i32,
         },
     });
-} catch {}
+} catch (err) { logger.debug("[pty.ts] op failed:", err) }
 
 // restore exec bit on native helpers, copies strip it
 export function ensureNativeHelpersExecutable(): void {
@@ -52,8 +52,8 @@ export function ensureNativeHelpersExecutable(): void {
                 fs.chmodSync(helper, st.mode | 0o755);
                 logger.info(`[pty] restored executable bit on ${helper} (stripped by copy)`);
             }
-        } catch {}
-    } catch {}
+        } catch (err) { logger.debug("[pty.ts] op failed:", err) }
+    } catch (err) { logger.debug("[pty.ts] op failed:", err) }
 }
 
 // Resolves default system shell per platform
@@ -112,51 +112,51 @@ export function spawnPty(
 
             try {
                 ffiLibc.symbols.close(secondaryFd);
-            } catch {}
+            } catch (err) { logger.debug("[pty.ts] op failed:", err) }
 
             const inStream = fs.createReadStream("", { fd: primaryFd, autoClose: false });
             const outStream = fs.createWriteStream("", { fd: primaryFd, autoClose: false });
-            inStream.on("error", () => {});
-            outStream.on("error", () => {});
+            inStream.on("error", (err) => logger.debug("[pty.ts] fd pipe error:", err));
+            outStream.on("error", (err) => logger.debug("[pty.ts] fd pipe error:", err));
 
             let isCleanedUp = false;
             const cleanup = () => {
                 if (isCleanedUp) return;
                 isCleanedUp = true;
-                try { inStream.destroy(); } catch {}
-                try { outStream.destroy(); } catch {}
-                try { ffiLibc.symbols.close(primaryFd); } catch {}
+                try { inStream.destroy(); } catch (err) { logger.debug("[pty.ts] op failed:", err) }
+                try { outStream.destroy(); } catch (err) { logger.debug("[pty.ts] op failed:", err) }
+                try { ffiLibc.symbols.close(primaryFd); } catch (err) { logger.debug("[pty.ts] op failed:", err) }
             };
 
             return {
                 write(data: string) {
-                    if (!isCleanedUp) try { outStream.write(data); } catch {}
+                    if (!isCleanedUp) try { outStream.write(data); } catch (err) { logger.debug("[pty.ts] op failed:", err) }
                 },
                 resize(newCols: number, newRows: number) {
                     if (!isCleanedUp && newCols > 0 && newRows > 0) {
                         try {
                             const ws = new Uint16Array([newRows, newCols, 0, 0]);
                             ffiLibc.symbols.ioctl(primaryFd, TIOCSWINSZ, ffiPtr(ws));
-                        } catch {}
+                        } catch (err) { logger.debug("[pty.ts] op failed:", err) }
                     }
                 },
                 onData(cb: (data: string) => void) {
                     inStream.on("data", (chunk: any) => {
-                        try { cb(chunk.toString("utf8")); } catch {}
+                        try { cb(chunk.toString("utf8")); } catch (err) { logger.debug("[pty.ts] op failed:", err) }
                     });
                 },
                 onExit(cb: (code: number) => void) {
                     proc.on("close", (code) => {
                         cleanup();
-                        try { cb(code ?? 0); } catch {}
+                        try { cb(code ?? 0); } catch (err) { logger.debug("[pty.ts] op failed:", err) }
                     });
                     proc.on("error", () => {
                         cleanup();
-                        try { cb(1); } catch {}
+                        try { cb(1); } catch (err) { logger.debug("[pty.ts] op failed:", err) }
                     });
                 },
                 kill() {
-                    try { proc.kill(); } catch {}
+                    try { proc.kill(); } catch (err) { logger.debug("[pty.ts] op failed:", err) }
                     cleanup();
                 },
             };
@@ -226,7 +226,10 @@ function loadNodePtyCandidates(): { label: string; mod: any }[] {
     const proc = cp.spawn(shell, process.platform === "win32" ? [] : ["-i"], { cwd, env, windowsHide: true });
     return {
         write: (d: string) => proc.stdin?.write(d),
-        resize: () => {},
+        // no terminal to resize in the pipe fallback
+        resize: () => {
+            /* nothing to resize without a real pty */
+        },
         onData: (cb: (d: string) => void) => {
             proc.stdout?.on("data", (chunk: any) => cb(chunk.toString("utf8")));
             proc.stderr?.on("data", (chunk: any) => cb(chunk.toString("utf8")));

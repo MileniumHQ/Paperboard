@@ -58,15 +58,18 @@ export class ConnectionPool extends EventEmitter {
         super();
         this.configPath = path.join(getLocalDir(), "paired_computers.json");
         this.loadConfig();
-        this.ensureLocalComputer();
+        // fire-and-forget here is safe: init() awaits the same idempotent
+        // refresh below before the pool is used; the local record's
+        // identity fields only ever refine
+        void this.ensureLocalComputer();
     }
 
     public async init(): Promise<void> {
-        this.ensureLocalComputer();
+        await this.ensureLocalComputer();
         // warm local daemon so panels find a live endpoint
         try {
             await this.getClient("local").connect("127.0.0.1");
-        } catch {}
+        } catch (err) { logger.debug("[ConnectionPool.ts] op failed:", err) }
     }
 
     private loadConfig() {
@@ -94,14 +97,14 @@ export class ConnectionPool extends EventEmitter {
                 activeId: this.activeId,
                 computers: Array.from(this.computers.values()),
             };
-            writeJsonAtomicSync(this.configPath, data);
+            writeJsonAtomicSync(this.configPath, data, { mode: 0o600 });
         } catch (err) {
             logger.warn("[ConnectionPool] failed to save paired computers:", err);
         }
     }
 
-    private ensureLocalComputer() {
-        const info = getDetailedOsInfo();
+    private async ensureLocalComputer() {
+        const info = await getDetailedOsInfo();
         const localComp: StoredComputer = {
             id: "local",
             name: "This Computer",
@@ -143,9 +146,9 @@ export class ConnectionPool extends EventEmitter {
             this.clients.set(id, client);
             if (id === "local") {
                 // credentials resolved internally via handshake/embedded
-                client.connect("127.0.0.1", undefined as never).catch(() => {});
+                client.connect("127.0.0.1").catch((err) => logger.debug("[ConnectionPool] local connect failed:", err));
             } else {
-                client.connect(comp.host, comp.port, comp.token).catch(() => {});
+                client.connect(comp.host, comp.port, comp.token).catch((err) => logger.debug("[ConnectionPool] remote connect failed:", err));
             }
         }
         return client;
@@ -194,8 +197,9 @@ export class ConnectionPool extends EventEmitter {
             const url = `http://${host}:${port}/health`;
             const res = await fetch(url, { signal: AbortSignal.timeout(2000) });
             if (res.ok) {
-                const data = (await res.json()) as any;
-                return { reachable: true, hostname: data.hostname };
+                // /health carries liveness + version only; hostname arrives
+                // over the authenticated pair/verify handshake instead
+                return { reachable: true };
             }
             return { reachable: false, error: `HTTP ${res.status}` };
         } catch (err: any) {
@@ -218,7 +222,9 @@ export class ConnectionPool extends EventEmitter {
                 throw new Error("Pairing rejected: invalid code or daemon refused");
             }
 
-            const id = `remote-${Date.now()}`;
+            // explicit identity: millisecond timestamps collide; a random
+            // suffix keeps two paired-in-a-blink computers distinct
+            const id = `remote-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
             const comp: StoredComputer = {
                 id,
                 name: customName || pairRes.hostname || host,
@@ -246,6 +252,16 @@ export class ConnectionPool extends EventEmitter {
     }
 
     public updateComputer(id: string, updates: Partial<StoredComputer>): boolean {
+        // validate at the boundary that owns the record: a bad port through
+        // computer-update previously poisoned the persisted record until
+        // the next session's loader silently skipped it
+        if (
+            updates.port !== undefined &&
+            (!Number.isFinite(updates.port) || updates.port < 1 || updates.port > 65535)
+        ) {
+            logger.warn(`[ConnectionPool] refusing invalid port ${JSON.stringify(updates.port)} for ${id}`);
+            return false;
+        }
         const comp = this.computers.get(id);
         if (!comp) return false;
         Object.assign(comp, updates);
@@ -268,7 +284,8 @@ export class ConnectionPool extends EventEmitter {
                 if (client) {
                     await client.call("auth:revoke-self", {}, 5000);
                 }
-            } catch {
+            } catch (err) {
+                logger.debug("[ConnectionPool] best-effort remote forget failed:", err);
             }
         }
         const client = this.clients.get(id);

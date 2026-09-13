@@ -23,6 +23,11 @@ export interface DirectoryListing {
 
 export async function tryListDirectory(dir: string): Promise<DirectoryListing> {
     try {
+        // boundary: dir must itself be a safe segment before it reaches a
+        // shell-adjacent command — never rely on the caller remembering
+        if (typeof dir !== "string" || !isValidEntryName(dir) || dir.includes("/")) {
+            throw new Error(`Unsafe directory name: ${JSON.stringify(dir)}`);
+        }
         const serverDir = await fileApi.getPath("", PANEL_ID);
         const targetOs = (await system.getInfo()).os;
         const isWin = isWindowsTarget(serverDir, targetOs);

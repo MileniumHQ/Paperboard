@@ -1,5 +1,6 @@
 // paired-computer registry for remote tunneling
 import * as fs from "fs";
+import { logger } from "./logger";
 
 export interface RemoteEntry {
     id: string;
@@ -15,7 +16,10 @@ export function readRemotes(file: string | undefined): RemoteEntry[] {
     let raw: any;
     try {
         raw = JSON.parse(fs.readFileSync(file, "utf8"));
-    } catch {
+    } catch (err) {
+        // corrupt remotes file reads as empty (quarantine lives in
+        // credentials.ts; here the file is advisory, not trust)
+        logger.debug(`[remotes] unreadable remotes file ${file}, treating as empty:`, err);
         return [];
     }
     const list: unknown[] = Array.isArray(raw?.computers) ? raw.computers : [];

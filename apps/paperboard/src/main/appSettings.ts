@@ -3,6 +3,10 @@ import * as path from "path";
 import * as fs from "fs";
 import type { WebFrameMain } from "electron";
 import { logger } from "../../papercrane/logger";
+import {
+    TITLEBAR_OVERLAY_COLORS,
+    TITLEBAR_SYMBOL_COLORS,
+} from "../../papercrane/themeConstants";
 
 // theme via nativeTheme; reduced motion injected into panel frames
 export interface AppSettings {
@@ -19,14 +23,16 @@ const DEFAULTS: AppSettings = {
     defaultPanel: "last",
 };
 
-function paperboardDir(): string {
-    return process.env.PAPERBOARD_DIR || path.join(process.env.HOME || "", ".paperboard");
-}
+// the daemon's paths module owns this fact (one implementation) — the
+// loader/restorer/etc. already resolve through it
+import { getPaperboardDir as paperboardDir } from "../../papercrane/paths";
 
 export function appSettingsPath(): string {
     return path.join(paperboardDir(), "local", "app-settings.json");
 }
 
+// TODO(remove after v3.1): legacy pre-meaningful-location settings path,
+// kept only for read-through; dies in one release
 function legacyAppSettingsPath(): string {
     return path.join(paperboardDir(), "configs", "app-settings.json");
 }
@@ -36,8 +42,9 @@ export function readAppSettings(): AppSettings {
         try {
             const raw = JSON.parse(fs.readFileSync(file, "utf8"));
             return { ...DEFAULTS, ...raw };
-        } catch {
+        } catch (err) {
             // missing or corrupt — try next location, else defaults
+            logger.debug("[appSettings] ignoring unreadable settings file:", err);
         }
     }
     return { ...DEFAULTS };
@@ -92,7 +99,7 @@ export async function broadcastAppSettings(): Promise<void> {
             for (const frame of wc.mainFrame.frames) {
                 await applyToFrame(frame);
             }
-        } catch {}
+        } catch (err) { logger.debug("[appSettings.ts] op failed:", err) }
     }
 }
 
@@ -102,10 +109,14 @@ export function syncTitleBarOverlays(): void {
     for (const win of BrowserWindow.getAllWindows()) {
         try {
             win.setTitleBarOverlay({
-                color: isDark ? "#2a2a2a" : "#e2e6eb",
-                symbolColor: isDark ? "#f5f5f5" : "#0f1319",
+                color: isDark
+                    ? TITLEBAR_OVERLAY_COLORS.dark
+                    : TITLEBAR_OVERLAY_COLORS.light,
+                symbolColor: isDark
+                    ? TITLEBAR_SYMBOL_COLORS.dark
+                    : TITLEBAR_SYMBOL_COLORS.light,
             });
-        } catch {}
+        } catch (err) { logger.debug("[appSettings.ts] op failed:", err) }
     }
 }
 
@@ -118,7 +129,7 @@ export function initAppSettingsSync(): void {
             try {
                 const frame = webFrameMain.fromId(processId, routingId);
                 if (frame) await applyToFrame(frame);
-            } catch {}
+            } catch (err) { logger.debug("[appSettings.ts] op failed:", err) }
         });
     });
 

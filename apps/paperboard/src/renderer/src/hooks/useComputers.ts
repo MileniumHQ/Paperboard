@@ -23,6 +23,12 @@ export function useComputers() {
         createSignal<string>("local");
     const [offlineTarget, setOfflineTarget] =
         createSignal<ComputerInfo | null>(null);
+    // R9: a failed startup load degrades the rail to "local" only, with
+    // nothing telling the user why or offering a way out. A typed failed
+    // flag gives App the hook for a retry affordance (same pattern the
+    // panels path already has).
+    const [computersLoadFailed, setComputersLoadFailed] =
+        createSignal<boolean>(false);
 
     const refreshComputers = async () => {
         try {
@@ -32,8 +38,12 @@ export function useComputers() {
                 if (data.activeId) {
                     setActiveComputerId(data.activeId);
                 }
+                setComputersLoadFailed(false);
             }
-        } catch {}
+        } catch (err) {
+            console.error("[useComputers] load failed:", err);
+            setComputersLoadFailed(true);
+        }
     };
 
     const activeComputer = () =>
@@ -59,6 +69,7 @@ export function useComputers() {
         refreshComputers,
         activeComputer,
         subscribeComputerChanges,
+        computersLoadFailed,
     };
 }
 

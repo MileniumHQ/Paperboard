@@ -1,0 +1,8 @@
+/* Document-level styles OWNED BY THE SHELL (not the library).
+ * PaperUI scopes everything under .paperui-root; the app's own document
+ * reset lives here so removing the library never shifts app layout. */
+html,
+body {
+    margin: 0;
+    padding: 0;
+}

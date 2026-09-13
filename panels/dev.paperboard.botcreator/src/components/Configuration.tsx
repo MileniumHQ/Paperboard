@@ -8,7 +8,10 @@ import {
     PaperSettingList,
     PaperSettingItem,
 } from "@paperboard-dev/paperui";
-import { config, actionsApi } from "@paperboard-dev/paperapi";
+import { config, secretsApi, actionsApi } from "@paperboard-dev/paperapi";
+
+const PANEL_ID = "dev.paperboard.botcreator";
+const TOKEN_NAME = "bot-token";
 
 export interface ConfigurationProps {
     onReset?: () => void;
@@ -20,21 +23,28 @@ export default function Configuration(props: ConfigurationProps) {
 
     onMount(async () => {
         try {
-            const saved = await config.get<any>();
+            const saved = await config.get<any>(PANEL_ID);
             if (saved?.applicationId) setAppId(saved.applicationId);
-        } catch {}
+        } catch (err) { console.error('[Configuration] app settings read failed:', err); }
     });
 
     const handleConfirmReset = async () => {
         try {
             await actionsApi
                 .call("dev.paperboard.botcreator", "disconnect-bot")
-                .catch(() => {});
+                .catch((err) => {
+                    console.error("[Configuration] disconnect-bot failed, resetting anyway:", err);
+                });
+            // the token lives in the vault, not in config: delete it there.
+            // Writing `token: ""` into config would reintroduce the exact
+            // plaintext-token field the vault migration removed.
+            await secretsApi.delete(TOKEN_NAME, PANEL_ID).catch((err) => {
+                console.error("[Configuration] vault secret delete failed, resetting anyway:", err);
+            });
             await config.set({
                 configured: false,
-                token: "",
                 applicationId: "",
-            });
+            }, PANEL_ID);
             setShowResetModal(false);
             props.onReset?.();
         } catch (err) {

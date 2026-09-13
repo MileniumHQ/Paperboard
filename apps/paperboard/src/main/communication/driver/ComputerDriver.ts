@@ -23,73 +23,16 @@ export interface SystemInfo {
     uptime?: number;
 }
 
+// The driver abstraction exists for the UPDATER's remote-capable surface:
+// probe a computer, install panels/packages, read/write config. Panels do
+// NOT render through the driver — panel iframes speak the daemon protocol
+// directly (PaperAPI), and streams/shell/files are owned there. Everything
+// else was a dead passthrough and is gone (honor or delete).
 export interface ComputerDriver {
     getId(): string;
     getSystemInfo(): Promise<SystemInfo>;
-    getIP(): Promise<string>;
 
-    createTerminal(
-        id: string,
-        cols: number,
-        rows: number,
-        cwd?: string,
-        env?: Record<string, string>,
-        onData?: (data: string) => void,
-        onExit?: (exitCode: number) => void,
-    ): Promise<void>;
-    writeTerminal(id: string, data: string): void;
-    resizeTerminal(id: string, cols: number, rows: number): void;
-    destroyTerminal(id: string): void;
-    isTerminalRunning(id: string): Promise<boolean>;
-
-    startProcess(
-        id: string,
-        command: string,
-        args?: string[],
-        cwd?: string,
-        env?: Record<string, string>,
-        onData?: (data: string) => void,
-        onStdout?: (data: string) => void,
-        onStderr?: (data: string) => void,
-        onExit?: (exitCode: number) => void,
-    ): Promise<void>;
-    writeProcess(id: string, data: string): void;
-    killProcess(id: string, signal?: string): void;
-    isProcessRunning(id: string): Promise<boolean>;
-    attachProcess(
-        id: string,
-        onData?: (data: string) => void,
-        onStdout?: (data: string) => void,
-        onStderr?: (data: string) => void,
-        onExit?: (exitCode: number) => void,
-    ): Promise<boolean>;
-
-    getFilePath(targetPath: string, appId?: string): Promise<string>;
-    fileExists(targetPath: string, appId?: string): Promise<boolean>;
-    writeFile(targetPath: string, content: string, appId?: string): Promise<string>;
-    readFile(targetPath: string, appId?: string): Promise<string | null>;
-    clearFiles(appId?: string): Promise<boolean>;
-    downloadFile(
-        url: string,
-        targetPath: string,
-        appId: string | undefined,
-        downloadId: string,
-        options: {
-            sha1?: string;
-            sha256?: string;
-            checksum?: { algorithm: string; value: string };
-        },
-        onProgress: ProgressCallback,
-    ): Promise<string>;
-
-    isPackageInstalled(packageName: string, version?: string): Promise<boolean>;
     getPackageIndex(): Promise<Record<string, any>>;
-    getPackagePath(packageName: string): Promise<string>;
-    downloadPackage(
-        packageName: string,
-        downloadId: string,
-        onProgress: ProgressCallback,
-    ): Promise<string>;
 
     listPanels(): Promise<PanelManifest[]>;
     installPanel(
@@ -97,7 +40,19 @@ export interface ComputerDriver {
         downloadUrl: string,
         expectedSha256?: string,
     ): Promise<PanelManifest>;
-    uninstallPanel(panelId: string): Promise<boolean>;
+
+    downloadPackage(
+        packageName: string,
+        downloadId: string,
+        onProgress: ProgressCallback,
+        expectedSha256?: string,
+    ): Promise<string>;
+
+    updateCrane(
+        version: string,
+        downloadUrl: string,
+        sha256?: string,
+    ): Promise<void>;
 
     getConfig(id: string): Promise<any>;
     setConfig(id: string, data: any): Promise<boolean>;

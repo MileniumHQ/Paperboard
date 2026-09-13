@@ -148,7 +148,9 @@ export function PaperList(props: ParentProps<PaperListProps>) {
         const targetEl = e.currentTarget as HTMLElement;
         try {
             targetEl.setPointerCapture(e.pointerId);
-        } catch {}
+        } catch (err) {
+            console.debug("[PaperList] pointer capture failed:", err);
+        }
 
         const handlePointerMove = (ev: PointerEvent) => {
             const currentCoord = horiz ? ev.clientX : ev.clientY;
@@ -182,7 +184,9 @@ export function PaperList(props: ParentProps<PaperListProps>) {
         const handlePointerUp = (ev: PointerEvent) => {
             try {
                 targetEl.releasePointerCapture(ev.pointerId);
-            } catch {}
+            } catch (err) {
+                console.debug("[PaperList] pointer capture release failed:", err);
+            }
 
             window.removeEventListener("pointermove", handlePointerMove);
             window.removeEventListener("pointerup", handlePointerUp);

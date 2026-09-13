@@ -23,8 +23,13 @@ export async function handlePackagesRoutes(
             );
         }
 
+        // page cap: the index lists at most MAX_KEYS packages per request
+        // — unbounded cursor loops die the day the registry grows
+        const MAX_KEYS = 200;
         const packageIndex: Record<string, unknown> = {};
         let cursor: string | undefined = undefined;
+        let collected = 0;
+        let capped = false;
 
         do {
             const listResult: KVNamespaceListResult<unknown> =
@@ -38,6 +43,10 @@ export async function handlePackagesRoutes(
                     (name) =>
                         !name.startsWith("panel:") &&
                         !name.startsWith("panels:") &&
+                        !name.startsWith("trash:") &&
+                        // pre-rename deployed KV still holds board:*/boards:*
+                        // keys; no code reads them, but they must not leak
+                        // into the package listing either
                         !name.startsWith("board:") &&
                         !name.startsWith("boards:"),
                 );
@@ -49,7 +58,11 @@ export async function handlePackagesRoutes(
                             type: "json",
                         });
                         return { key, val };
-                    } catch {
+                    } catch (err) {
+                        console.warn(
+                            `[origami] package index: JSON read failed for ${key}, falling back to text:`,
+                            err instanceof Error ? err.message : String(err),
+                        );
                         const textVal = await env.PACKAGES.get(key, {
                             type: "text",
                         });
@@ -59,15 +72,23 @@ export async function handlePackagesRoutes(
             );
 
             for (const { key, val } of values) {
+                if (collected >= MAX_KEYS) {
+                    capped = true;
+                    break;
+                }
                 packageIndex[key] = val ?? null;
+                collected++;
             }
 
             cursor = listResult.list_complete
                 ? undefined
                 : listResult.cursor;
-        } while (cursor);
+        } while (cursor && collected < MAX_KEYS);
 
-        return jsonResponse(packageIndex);
+        return jsonResponse({
+            ...packageIndex,
+            ...(capped ? { truncated: `listing capped at ${MAX_KEYS} keys` } : {}),
+        });
     }
 
     const singlePackageMatch = pathname.match(
@@ -95,7 +116,11 @@ export async function handlePackagesRoutes(
             pkgData = await env.PACKAGES.get(packageName, {
                 type: "json",
             });
-        } catch {
+        } catch (err) {
+            console.warn(
+                `[origami] package ${packageName}: JSON read failed, falling back to text:`,
+                err instanceof Error ? err.message : String(err),
+            );
             pkgData = await env.PACKAGES.get(packageName, {
                 type: "text",
             });

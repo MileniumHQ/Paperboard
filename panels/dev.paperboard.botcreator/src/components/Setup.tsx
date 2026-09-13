@@ -10,8 +10,11 @@ import {
     PaperQuote,
     PaperInput,
 } from "@paperboard-dev/paperui";
-import { config, actionsApi } from "@paperboard-dev/paperapi";
-import { extractApplicationIdFromToken } from "../types";
+import { config, secretsApi, actionsApi } from "@paperboard-dev/paperapi";
+import { errorToMessage, extractApplicationIdFromToken } from "../types";
+
+const PANEL_ID = "dev.paperboard.botcreator";
+const TOKEN_NAME = "bot-token";
 
 export interface SetupProps {
     onComplete?: () => void;
@@ -19,6 +22,7 @@ export interface SetupProps {
 
 export default function Setup(props: SetupProps) {
     const [token, setToken] = createSignal("");
+    const [setupError, setSetupError] = createSignal("");
     const parsedAppId = () => extractApplicationIdFromToken(token());
 
     const handleFinishSetup = async () => {
@@ -26,24 +30,25 @@ export default function Setup(props: SetupProps) {
         const appId = parsedAppId();
         if (!currentToken || !appId) return;
 
+        setSetupError("");
         try {
+            // token goes to the daemon secret vault; only non-secret state
+            // is written to panel config
+            await secretsApi.set(TOKEN_NAME, currentToken, PANEL_ID);
             await config.set({
                 configured: true,
-                token: currentToken,
                 applicationId: appId,
-            });
+            }, PANEL_ID);
 
-            try {
-                await actionsApi.call(
-                    "dev.paperboard.botcreator",
-                    "connect-bot",
-                    currentToken,
-                );
-            } catch {}
+            // connect without passing the token — the service reads the vault
+            await actionsApi.call(PANEL_ID, "connect-bot");
 
             props.onComplete?.();
         } catch (err) {
             console.error("[Setup] Failed to save bot configuration:", err);
+            // the error stays retryable: the wizard holds its place, the
+            // reason renders below, and Finish Setup can be clicked again
+            setSetupError(errorToMessage(err));
         }
     };
 
@@ -118,6 +123,12 @@ export default function Setup(props: SetupProps) {
                         <Show when={parsedAppId()}>
                             <PaperQuote variant="green" icon="check_circle">
                                 Application ID: {parsedAppId()}
+                            </PaperQuote>
+                        </Show>
+
+                        <Show when={setupError()}>
+                            <PaperQuote variant="red" icon="warning" title="Setup failed">
+                                {setupError()} — check the token and try again.
                             </PaperQuote>
                         </Show>
                     </PaperFlex>

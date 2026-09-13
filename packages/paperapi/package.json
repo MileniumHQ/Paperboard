@@ -1,6 +1,6 @@
 {
     "name": "@paperboard-dev/paperapi",
-    "version": "2.0.0",
+    "version": "3.0.0-alpha",
     "type": "module",
     "main": "./dist/paperapi.cjs.js",
     "module": "./dist/paperapi.es.js",

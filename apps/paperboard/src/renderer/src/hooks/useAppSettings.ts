@@ -39,16 +39,21 @@ export function useAppSettings() {
                 if (!merged.defaultPanel) merged.defaultPanel = "last";
                 setAppSettings(merged);
             }
-        } catch {}
+        } catch (err) { console.error("[useAppSettings] load failed:", err); }
     };
 
     const handleAppSettingsChange = async (next: AppSettingsData) => {
-        setAppSettings(next);
-        // Persist BEFORE notifying main: main re-reads the file during sync
+        // Persist BEFORE notifying main: main re-reads the file during sync.
+        // R3: a failed persist must NOT notify — main would broadcast the
+        // stale file while the UI shows the new values, and the states
+        // silently diverge until the next load reverts the UI. Re-read
+        // from the store instead: the UI falls back to persisted truth.
         try {
             await config.set(next, APP_SETTINGS_ID);
         } catch (err) {
-            logToMain("error", "Failed to persist app settings:", err);
+            logToMain("error", "Failed to persist app settings; native side not notified:", err);
+            await loadAppSettings();
+            return;
         }
         notifyAppSettingsChanged();
     };

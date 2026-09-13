@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { semverGt, RingBuffer } from "../papercrane/util";
+import { semverGt, RingBuffer, resolveRegistryUrl } from "../papercrane/util";
 
 describe("semverGt", () => {
     it("compares major/minor/patch", () => {
@@ -53,5 +53,36 @@ describe("RingBuffer", () => {
         rb.push("toolongstring"); // whole chunk is evicted — cannot split
         expect(rb.getAll()).toBe("");
         expect(rb.size).toBe(0);
+    });
+});
+
+describe("resolveRegistryUrl", () => {
+    it("honors ORIGAMI_REGISTRY_URL outside production", () => {
+        const url = resolveRegistryUrl({
+            env: { NODE_ENV: "development", ORIGAMI_REGISTRY_URL: "http://dev-registry" },
+            argv: [],
+        });
+        expect(url).toBe("http://dev-registry");
+    });
+
+    it("ignores the env override in a production daemon", () => {
+        const url = resolveRegistryUrl({
+            env: { NODE_ENV: "production", ORIGAMI_REGISTRY_URL: "http://evil.example" },
+            argv: [],
+        });
+        expect(url).toBe("https://origami.ariapis.com");
+    });
+
+    it("honors the override in production only with the explicit flag", () => {
+        const url = resolveRegistryUrl({
+            env: { NODE_ENV: "production", ORIGAMI_REGISTRY_URL: "http://flagged.example" },
+            argv: ["--allow-registry-override"],
+        });
+        expect(url).toBe("http://flagged.example");
+    });
+
+    it("falls back to the default when no override is set", () => {
+        const url = resolveRegistryUrl({ env: {}, argv: [] });
+        expect(url).toBe("https://origami.ariapis.com");
     });
 });

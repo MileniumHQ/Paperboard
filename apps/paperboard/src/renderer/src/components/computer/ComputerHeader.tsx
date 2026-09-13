@@ -6,7 +6,7 @@ import {
     PaperFlex,
     getVarCss,
 } from "@paperboard-dev/paperui";
-import libraryIcon from "../../assets/BoardLibrary.png";
+import libraryIcon from "../../assets/PanelLibrary.png";
 import type { ComputerItem } from "../../App";
 
 export interface ComputerHeaderProps {
@@ -23,26 +23,26 @@ export interface OsBrandInfo {
 }
 
 const OS_BRANDS: Record<string, { name: string; color: string }> = {
-    macos: { name: "macOS", color: "#FFFFFF" },
-    darwin: { name: "macOS", color: "#FFFFFF" },
-    windows: { name: "Windows", color: "#0078D4" },
-    ubuntu: { name: "Ubuntu", color: "#E95420" },
-    arch: { name: "Arch Linux", color: "#1793D1" },
-    debian: { name: "Debian", color: "#A80030" },
-    fedora: { name: "Fedora", color: "#3C6EB4" },
-    linuxmint: { name: "Linux Mint", color: "#86BE43" },
-    mint: { name: "Linux Mint", color: "#86BE43" },
-    zorin: { name: "Zorin OS", color: "#0CC1E8" },
-    zorinos: { name: "Zorin OS", color: "#0CC1E8" },
-    steamos: { name: "SteamOS", color: "#1A9FFF" },
-    steamdeck: { name: "SteamOS", color: "#1A9FFF" },
-    pop: { name: "Pop!_OS", color: "#48B9C7" },
-    pop_os: { name: "Pop!_OS", color: "#48B9C7" },
-    manjaro: { name: "Manjaro", color: "#35BF5C" },
-    elementary: { name: "elementary OS", color: "#64BAFF" },
-    nixos: { name: "NixOS", color: "#5277C3" },
-    raspbian: { name: "Raspberry Pi OS", color: "#C51A4A" },
-    linux: { name: "Linux", color: "#FCC624" },
+    macos: { name: "macOS", color: "var(--paper-brand-os-macos)" },
+    darwin: { name: "macOS", color: "var(--paper-brand-os-macos)" },
+    windows: { name: "Windows", color: "var(--paper-brand-os-windows)" },
+    ubuntu: { name: "Ubuntu", color: "var(--paper-brand-os-ubuntu)" },
+    arch: { name: "Arch Linux", color: "var(--paper-brand-os-arch)" },
+    debian: { name: "Debian", color: "var(--paper-brand-os-debian)" },
+    fedora: { name: "Fedora", color: "var(--paper-brand-os-fedora)" },
+    linuxmint: { name: "Linux Mint", color: "var(--paper-brand-os-linuxmint)" },
+    mint: { name: "Linux Mint", color: "var(--paper-brand-os-linuxmint)" },
+    zorin: { name: "Zorin OS", color: "var(--paper-brand-os-zorin)" },
+    zorinos: { name: "Zorin OS", color: "var(--paper-brand-os-zorin)" },
+    steamos: { name: "SteamOS", color: "var(--paper-brand-os-steamos)" },
+    steamdeck: { name: "SteamOS", color: "var(--paper-brand-os-steamos)" },
+    pop: { name: "Pop!_OS", color: "var(--paper-brand-os-pop)" },
+    pop_os: { name: "Pop!_OS", color: "var(--paper-brand-os-pop)" },
+    manjaro: { name: "Manjaro", color: "var(--paper-brand-os-manjaro)" },
+    elementary: { name: "elementary OS", color: "var(--paper-brand-os-elementary)" },
+    nixos: { name: "NixOS", color: "var(--paper-brand-os-nixos)" },
+    raspbian: { name: "Raspberry Pi OS", color: "var(--paper-brand-os-raspbian)" },
+    linux: { name: "Linux", color: "var(--paper-brand-os-linux)" },
 };
 
 export function getOsBrandInfo(comp?: ComputerItem): OsBrandInfo {
@@ -51,7 +51,7 @@ export function getOsBrandInfo(comp?: ComputerItem): OsBrandInfo {
             name: "Unknown",
             version: "",
             display: "Unknown OS",
-            color: "#888888",
+            color: "var(--paper-brand-os-unknown)",
         };
     }
 
@@ -73,7 +73,7 @@ export function getOsBrandInfo(comp?: ComputerItem): OsBrandInfo {
                 : rawOs === "win32"
                   ? "Windows"
                   : comp.os || "System"),
-        color: "#888888",
+        color: "var(--paper-brand-os-unknown)",
     };
 
     let version = comp.osVersion ? comp.osVersion.trim() : "";
@@ -84,14 +84,24 @@ export function getOsBrandInfo(comp?: ComputerItem): OsBrandInfo {
         rawOs === "darwin" ||
         rawOs.includes("mac")
     ) {
+        // R10: the old heuristic (rawNum >= 20 ? rawNum - 9 : 10.x) predates
+        // Apple's year-based versioning — a truthful osVersion of 26 rendered
+        // as "macOS 17". Versions 26+ are already the human-facing major
+        // number and pass through verbatim; the legacy map applies only to
+        // the pre-Ventura range it was written for (4..19 → 10.x).
         if (!version || version.includes(".")) {
             const rawNum = parseInt(
                 (version || comp.osVersion || "").split(".")[0],
                 10,
             );
             if (!isNaN(rawNum) && rawNum >= 4) {
-                version =
-                    rawNum >= 20 ? (rawNum - 9).toString() : `10.${rawNum - 4}`;
+                if (rawNum >= 26) {
+                    version = rawNum.toString();
+                } else if (rawNum >= 20) {
+                    version = (rawNum - 9).toString();
+                } else {
+                    version = `10.${rawNum - 4}`;
+                }
             }
         }
     }

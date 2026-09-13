@@ -12,12 +12,15 @@ import { formatOsVersion } from "./ComputerHeader";
 
 export interface ComputerSettingsProps {
     computer?: ComputerItem;
-    onRemove?: (id: string) => Promise<void> | void;
+    onRemove?: (
+        id: string,
+    ) => Promise<{ ok: boolean; error?: string } | void> | void;
 }
 
 const ComputerSettings: Component<ComputerSettingsProps> = (props) => {
     const [isRemoving, setIsRemoving] = createSignal(false);
     const [isConfirmOpen, setIsConfirmOpen] = createSignal(false);
+    const [removeError, setRemoveError] = createSignal<string | null>(null);
 
     const isLocal = () => Boolean(props.computer?.isLocal);
 
@@ -25,7 +28,13 @@ const ComputerSettings: Component<ComputerSettingsProps> = (props) => {
         if (!props.computer || props.computer.isLocal) return;
         setIsRemoving(true);
         try {
-            await props.onRemove?.(props.computer.id);
+            // R4: the modal closes only on success; a failure keeps it
+            // open with the reason, mirroring the forget-confirm flow
+            const result = await props.onRemove?.(props.computer.id);
+            if (result && !result.ok) {
+                setRemoveError(result.error ?? "Couldn't forget this computer.");
+                return;
+            }
             setIsConfirmOpen(false);
         } finally {
             setIsRemoving(false);
@@ -66,7 +75,7 @@ const ComputerSettings: Component<ComputerSettingsProps> = (props) => {
                 <Show when={!isLocal()}>
                     <PaperSettingItem
                         title="Remove Computer"
-                        description="Forget this computer and disconnect all boards"
+                        description="Forget this computer and disconnect all panels"
                     >
                         <PaperButton
                             variant="red"
@@ -112,8 +121,13 @@ const ComputerSettings: Component<ComputerSettingsProps> = (props) => {
                 <PaperText preset="body">
                     Are you sure you want to forget{" "}
                     <strong>{props.computer?.name || "this computer"}</strong>?
-                    This will disconnect all boards on this machine.
+                    This will disconnect all panels on this machine.
                 </PaperText>
+                <Show when={removeError()}>
+                    <PaperText size={2} color="red">
+                        {removeError()}
+                    </PaperText>
+                </Show>
             </PaperModal>
         </PaperFlex>
     );

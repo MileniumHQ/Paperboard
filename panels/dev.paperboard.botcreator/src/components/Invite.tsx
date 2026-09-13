@@ -31,7 +31,7 @@ export default function Invite() {
             if (url) {
                 setInviteUrl(url);
             }
-        } catch {}
+        } catch (err) { console.error('[Invite] invite URL generation failed:', err); }
     };
 
     onMount(() => {
@@ -57,12 +57,13 @@ export default function Invite() {
         const url = inviteUrl();
         if (!url) return;
         try {
-            if (navigator.clipboard?.writeText) {
-                await navigator.clipboard.writeText(url);
-            }
-        } catch {}
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
+            await navigator.clipboard.writeText(url);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        } catch (err) {
+            // a failed copy must not falsely claim "Copied"
+            console.error("[Invite] clipboard copy failed:", err);
+        }
     };
 
     const generalPerms = () =>
@@ -94,9 +95,10 @@ export default function Invite() {
                         style={{
                             flex: 1,
                             "min-width": 0,
-                            overflow: "hidden",
-                            "text-overflow": "ellipsis",
-                            "white-space": "nowrap",
+                            // long invite URLs must stay readable: wrap
+                            // instead of ellipsizing behind one line
+                            "overflow-wrap": "anywhere",
+                            "white-space": "normal",
                         }}
                     >
                         {inviteUrl() || "Generating invite link..."}

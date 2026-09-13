@@ -4,9 +4,12 @@ import {
     type PlayerStatData,
     PLAYER_NAME_PATTERN,
     SERVER_PROC_ID,
+    appendCapped,
+    MAX_BUFFERED_ENTRIES,
 } from "./types";
 import {
     STAT_QUERIES,
+    assertPlayerName,
     consoleTimeToSeconds,
     extractJoinedName,
     extractLeftName,
@@ -14,12 +17,36 @@ import {
     extractStatValue,
     normalizePlayerKey,
 } from "../core/players";
+import { trashRemovePathsWith } from "../core/trash";
+import { resolveLevelName } from "./worlds";
+import { makeTrashRemoveDeps } from "./trashDeps";
+import { PANEL_ID } from "./types";
+import { TRIGGER_IDS } from "./contract";
 
 export type { PlayerStatData };
 export { PLAYER_NAME_PATTERN, SERVER_PROC_ID, STAT_QUERIES };
 
 const lastJoinAt = new Map<string, number>();
 let pendingStatFields: { player: string; field: keyof PlayerStatData }[] = [];
+
+// join timestamps are keyed per username and only deleted on leave —
+// without a cap, spoofed joins grow the map forever. Map preserves
+// insertion order, so evict oldest first.
+function rememberJoin(key: string, ts: number): void {
+    lastJoinAt.delete(key);
+    lastJoinAt.set(key, ts);
+    while (lastJoinAt.size > MAX_BUFFERED_ENTRIES) {
+        const oldest = lastJoinAt.keys().next();
+        if (oldest.done) break;
+        lastJoinAt.delete(oldest.value);
+    }
+}
+
+// test seam: lets tests assert the bound without 1000 log lines of setup
+export const __playersTest = {
+    lastJoinSize: () => lastJoinAt.size,
+    clearJoins: () => lastJoinAt.clear(),
+};
 
 export function trackPlayerActivity(
     ctx: ServiceContext<GameServerState>,
@@ -30,17 +57,19 @@ export function trackPlayerActivity(
     const joined = extractJoinedName(clean);
     if (joined) {
         const key = normalizePlayerKey(joined);
-        if (ts !== undefined) lastJoinAt.set(key, ts);
+        if (ts !== undefined) rememberJoin(key, ts);
         ctx.setState((prev) => {
+            // seenPlayers is history, not presence: cap it like every other
+            // buffer instead of growing one entry per unique join forever
             const seen = prev.seenPlayers.includes(key)
                 ? prev.seenPlayers
-                : [...prev.seenPlayers, key];
+                : appendCapped(prev.seenPlayers, key);
             const online = prev.onlinePlayers.includes(key)
                 ? prev.onlinePlayers
                 : [...prev.onlinePlayers, key];
             return { seenPlayers: seen, onlinePlayers: online };
         });
-        ctx.emitTrigger("player-joined", joined);
+        ctx.emitTrigger(TRIGGER_IDS.playerJoined, joined);
         return;
     }
 
@@ -61,20 +90,21 @@ export function trackPlayerActivity(
             playtime[key] = (playtime[key] ?? 0) + sessionSeconds;
             return { onlinePlayers: online, playerPlaytime: playtime };
         });
-        ctx.emitTrigger("player-left", left);
+        ctx.emitTrigger(TRIGGER_IDS.playerLeft, left);
         return;
     }
 
     const names = extractListedNames(clean);
     if (names) {
         for (const name of names) {
-            if (ts !== undefined && !lastJoinAt.has(name)) lastJoinAt.set(name, ts);
+            if (ts !== undefined && !lastJoinAt.has(name)) rememberJoin(name, ts);
         }
         ctx.setState((prev) => {
             const seen = new Set([...prev.seenPlayers, ...names]);
             return {
                 onlinePlayers: names,
-                seenPlayers: Array.from(seen),
+                // same cap as the join path: history stays bounded
+                seenPlayers: Array.from(seen).slice(-MAX_BUFFERED_ENTRIES),
             };
         });
     }
@@ -109,11 +139,17 @@ export function queryPlayerStats(
     name: string,
 ): void {
     if (ctx.state.serverStatus !== "online") return;
-    const key = normalizePlayerKey(name);
+    // boundary: the name reaches `data get entity` raw — UI checks don't count
+    const safe = assertPlayerName(name);
+    const key = normalizePlayerKey(safe);
     pendingStatFields = pendingStatFields.filter((p) => p.player !== key);
     for (const { field, path } of STAT_QUERIES) {
         pendingStatFields.push({ player: key, field });
-        processApi.write(SERVER_PROC_ID, `data get entity ${name} ${path}\n`);
+        processApi.write(SERVER_PROC_ID, `data get entity ${safe} ${path}\n`);
+    }
+    // bounded: bursts of stat queries from many players evict oldest first
+    while (pendingStatFields.length > MAX_BUFFERED_ENTRIES) {
+        pendingStatFields.shift();
     }
 }
 
@@ -121,7 +157,7 @@ export function forgetPlayerData(
     ctx: ServiceContext<GameServerState>,
     name: string,
 ): void {
-    const key = normalizePlayerKey(name);
+    const key = normalizePlayerKey(assertPlayerName(name));
     lastJoinAt.delete(key);
     ctx.setState((prev) => {
         const seen = prev.seenPlayers.filter((p) => p !== key);
@@ -137,4 +173,33 @@ export function forgetPlayerData(
             playerPlaytime: playtime,
         };
     });
+}
+
+const UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+
+// player-data delete: trash first, then remove (see core/trash.ts), under
+// the server's actual level-name — never a hardcoded "world". The uuid is
+// asserted, not trusted: it reaches shell paths.
+export async function deletePlayerData(
+    ctx: ServiceContext<GameServerState>,
+    playerName: string,
+    uuid: string,
+): Promise<void> {
+    const safeName = assertPlayerName(playerName);
+    const safeUuid = String(uuid ?? "").trim();
+    if (!UUID_RE.test(safeUuid)) {
+        throw new Error(`Refusing player-data delete for invalid uuid: ${JSON.stringify(uuid)}`);
+    }
+    const level = await resolveLevelName();
+    await trashRemovePathsWith(
+        makeTrashRemoveDeps("Service:Players"),
+        [
+            `${level}/playerdata/${safeUuid}.dat`,
+            `${level}/playerdata/${safeUuid}.dat_old`,
+            `${level}/advancements/${safeUuid}.json`,
+            `${level}/stats/${safeUuid}.json`,
+        ],
+        "delete-player-pty",
+    );
+    forgetPlayerData(ctx, safeName);
 }

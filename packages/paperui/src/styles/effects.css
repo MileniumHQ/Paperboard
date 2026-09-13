@@ -34,15 +34,9 @@
         --paper-blur-light: blur(0);
         --paper-blur-medium: blur(0);
         --paper-blur-heavy: blur(0);
-    }
-
-    *,
-    *::before,
-    *::after {
-        transition-duration: 0.01ms !important;
-        animation-duration: 0.01ms !important;
-        animation-iteration-count: 1 !important;
-        backdrop-filter: none !important;
+        /* no global * selector here: it escapes .paperui-root and mutates
+           the host document — components zero their own animations under
+           their own classes; doc-level opt-out rides the scoped variant */
     }
 }
 

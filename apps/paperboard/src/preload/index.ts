@@ -1,7 +1,14 @@
 import { contextBridge, ipcRenderer } from "electron";
 
 // ─── Retained IPC channels ───────────────────────────────────────────────────
-// Panels use no Electron IPC; these channels serve the shell window only.
+// These channels serve the shell window only. Panel iframes inherit this
+// preload, so the allowlist here is NOT the enforcement boundary — main
+// validates event.senderFrame.url per invoke/send channel (shellGuard.ts:
+// panel:// origins get a typed PANEL_IPC_REFUSED on every shell channel),
+// and the event-PUSH channels (discovery-changed, computers-changed,
+// app-update-*) are filtered at the broadcast: main skips panel://
+// webContents (communication.ts isPanelWebContents). Both directions are
+// enforced in main; this allowlist is defense-in-depth, not the boundary.
 
 import {
     SHELL_INVOKE_CHANNELS,

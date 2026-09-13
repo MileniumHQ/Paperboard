@@ -11,7 +11,7 @@ import {
     PaperBadge,
     getVarCss,
 } from "@paperboard-dev/paperui";
-import bannerImg from "../../assets/BoardLibraryBanner.png";
+import bannerImg from "../../assets/PanelLibraryBanner.png";
 import { logToMain } from "../../lib/shell";
 
 export interface PanelItem {
@@ -26,9 +26,38 @@ export interface PanelItem {
     size?: string;
     updatedAt?: string;
     isInstalled?: boolean;
+    // manifest-declared capability labels, shown at the moment of trust
+    permissions?: string[];
+    // daemon-recorded install provenance (absent for pre-provenance installs)
+    installSource?: "registry" | "direct" | "dev";
+    isLinked?: boolean;
 }
 
-export type BoardItem = PanelItem;
+// The word under a panel card is a trust fact, so it must be true:
+// - a declared publisher is named;
+// - registry installs are reviewed (closed registry, human review) — that
+//   is what "Reviewed by Paperboard" claims, no more;
+// - direct-URL installs are checksum-verified but NOT reviewed;
+// - dev links are the developer's own build;
+// - panels installed before provenance shipped stay "Unsigned" until
+//   reinstalled, because "we don't know" is the honest answer for them.
+function publisherLabel(panel: PanelItem): string {
+    if (panel.publisher) return panel.publisher;
+    if (panel.isLinked) return "Dev link";
+    if (panel.installSource === "registry") return "Reviewed by Paperboard";
+    if (panel.installSource === "direct") return "Direct install";
+    return "Unsigned";
+}
+
+// where the bytes came from — a different fact from who published them
+function installSourceLabel(panel: PanelItem): string {
+    if (panel.isLinked) return "Dev link (local build)";
+    if (panel.installSource === "registry")
+        return "Paperboard Registry (reviewed)";
+    if (panel.installSource === "direct")
+        return "Direct URL (checksum verified)";
+    return "Unknown (installed before provenance was recorded)";
+}
 
 interface PanelLibraryProps {
     panels: PanelItem[];
@@ -133,7 +162,7 @@ const PanelLibrary: Component<PanelLibraryProps> = (props) => {
                     >
                         <img
                             src={bannerImg}
-                            alt="Panel Library - Find and launch poweful tools in just a click"
+                            alt="Panel Library - Find and launch powerful tools in just a click"
                             style={{
                                 width: "100%",
                                 height: "auto",
@@ -173,7 +202,7 @@ const PanelLibrary: Component<PanelLibraryProps> = (props) => {
                                         }
                                         footerLeft={
                                             <PaperText size={2} color="light">
-                                                {panel.publisher || panel.id}
+                                                {publisherLabel(panel)}
                                             </PaperText>
                                         }
                                         footerRight={
@@ -236,7 +265,7 @@ const PanelLibrary: Component<PanelLibraryProps> = (props) => {
                                         {panel().name}
                                     </PaperText>
                                     <PaperText size={2} color="light">
-                                        {panel().publisher || "Paperboard"}
+                                        {publisherLabel(panel())}
                                     </PaperText>
                                 </PaperFlex>
 
@@ -284,8 +313,13 @@ const PanelLibrary: Component<PanelLibraryProps> = (props) => {
                                         <tr>
                                             <th>Publisher</th>
                                             <td>
-                                                {panel().publisher ||
-                                                    "Paperboard"}
+                                                {panel().publisher || "—"}
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <th>Install source</th>
+                                            <td>
+                                                {installSourceLabel(panel())}
                                             </td>
                                         </tr>
                                         <tr>
@@ -319,6 +353,43 @@ const PanelLibrary: Component<PanelLibraryProps> = (props) => {
                                         </Show>
                                     </tbody>
                                 </PaperTable>
+                            </PaperFlex>
+
+                            <PaperFlex direction="column" gap="onefourth">
+                                <PaperText size={3} weight={700}>
+                                    Permissions
+                                </PaperText>
+                                <Show
+                                    when={
+                                        panel().permissions &&
+                                        (panel().permissions as string[])
+                                            .length > 0
+                                    }
+                                    fallback={
+                                        <PaperText size={2} color="light">
+                                            This panel declares no
+                                            permissions.
+                                        </PaperText>
+                                    }
+                                >
+                                    <PaperFlex
+                                        direction="row"
+                                        gap="onefourth"
+                                        wrap
+                                    >
+                                        <For
+                                            each={
+                                                panel().permissions as string[]
+                                            }
+                                        >
+                                            {(perm) => (
+                                                <PaperBadge>
+                                                    {perm}
+                                                </PaperBadge>
+                                            )}
+                                        </For>
+                                    </PaperFlex>
+                                </Show>
                             </PaperFlex>
                         </PaperFlex>
                     )}

@@ -1,0 +1,25 @@
+# workspace-root guard: applies to every project under this root
+.dev.vars
+.dev.vars.*
+.env
+.env.local
+*.local
+node_modules/
+dist/
+dist-ssr/
+out/
+tmp/
+.cache/
+*.tsbuildinfo
+*.tgz
+*.lcov
+.eslintcache
+coverage/
+logs/
+report.[0-9]*.json
+.idea
+.wrangler
+worker-configuration.d.ts
+.DS_Store
+*.log
+*.log*

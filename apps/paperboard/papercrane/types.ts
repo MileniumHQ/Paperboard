@@ -15,6 +15,16 @@ export interface PanelManifest {
     isLinked?: boolean;
     service?: string;
     autostart?: boolean;
+    // declared capability labels + network egress, preserved verbatim
+    // from the manifest by validatePanelManifest (surfaced at install,
+    // enforced at registry-open — never granted here)
+    permissions?: string[];
+    network?: { hosts?: string[]; mode?: string };
+    // daemon-recorded install provenance: "registry" (reviewed, closed
+    // registry), "direct" (checksummed URL install, not reviewed), "dev"
+    // (symlinked dev link). Absent for panels installed before provenance
+    // shipped — the renderer says "Unsigned" for those, honestly.
+    installSource?: "registry" | "direct" | "dev";
 }
 
 export type BoardManifest = PanelManifest;

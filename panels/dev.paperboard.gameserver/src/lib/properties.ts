@@ -1,4 +1,5 @@
-import { fileApi } from "@paperboard-dev/paperapi";
+import { PANEL_ID } from "../service/types";
+import {   fileApi } from "@paperboard-dev/paperapi";
 import properties from "dot-properties";
 import { parseProperties } from "../core/properties";
 import { supports, type CapabilityName } from "./capabilities";
@@ -93,7 +94,7 @@ export function visiblePropertyFields(): PropertyField[] {
 
 export async function readServerProperties(): Promise<Record<string, string>> {
     try {
-        const content = await fileApi.read("server.properties");
+        const content = await fileApi.read("server.properties", PANEL_ID);
         if (!content) return {};
         return parseProperties(content);
     } catch (err) {
@@ -112,7 +113,7 @@ export async function writeServerProperties(values: Record<string, string>) {
             lineWidth: null,
             latin1: false,
         });
-        await fileApi.write("server.properties", content);
+        await fileApi.write("server.properties", content, PANEL_ID);
     } catch (err) {
         console.error("[Options] Failed to write server.properties:", err);
         throw err;

@@ -1,4 +1,6 @@
 import { getTransport, getPanelId } from "./ipc";
+import { debugErr } from "./debug";
+import { warnOnce } from "./identity";
 import {
     type ActionDefinition,
     type ActionSchema,
@@ -198,7 +200,7 @@ export const actionsApi = {
             callback(data);
         };
         transport.subscribeEvent("actions:registry-updated", listener);
-        transport.ensureConnected().catch(() => {});
+        transport.ensureConnected().catch((err) => debugErr("ensure connected on subscribe", err));
         return () => {
             transport.unsubscribeEvent("actions:registry-updated", listener);
         };
@@ -279,7 +281,16 @@ export const actionsApi = {
         let callback: (payload: any) => void;
 
         if (typeof eventOrCallback === "function") {
+            // the two-arg form is "my panel's event": same discipline as
+            // onTrigger — unresolvable identity must throw, not silently
+            // subscribe to a filter that can never match
             targetPanel = getPanelId();
+            if (!targetPanel) {
+                throw new Error(
+                    `[paperapi] actions.on("${panelOrEvent}", ...) could not resolve this panel's id. ` +
+                        "Pass the explicit panel id: on(\"panel.id\", \"event\", cb).",
+                );
+            }
             targetEvent = panelOrEvent;
             callback = eventOrCallback;
         } else {
@@ -288,19 +299,28 @@ export const actionsApi = {
             callback = maybeCallback || (() => {});
         }
 
+        if (targetEvent === "*" || targetPanel === "*") {
+            // TODO(remove after v3.1): wildcard panel/event matching dies
+            // with the pre-namespaced read-through. The daemon warns; the
+            // client must warn too — the deprecation has two ends of the wire.
+            warnOnce(
+                "paperapi:wildcard-on",
+                '[paperapi] actions.on with "*" panel/event is deprecated and will be refused after v3.1; subscribe to explicit panel:event names instead.',
+            );
+        }
+
         const listener = (data: any) => {
             if (!data) return;
             if (targetEvent === "*" || targetPanel === "*") {
                 callback(data);
                 return;
-            }
-            if (data.panelId === targetPanel && data.event === targetEvent) {
+            }            if (data.panelId === targetPanel && data.event === targetEvent) {
                 callback(data.payload);
             }
         };
 
         transport.subscribeEvent("actions:event", listener);
-        transport.ensureConnected().catch(() => {});
+        transport.ensureConnected().catch((err) => debugErr("ensure connected on subscribe", err));
 
         return () => {
             transport.unsubscribeEvent("actions:event", listener);
@@ -326,13 +346,31 @@ export const actionsApi = {
         let callback: (output: T, payload: TriggerEventPayload<T>) => void;
 
         if (typeof triggerOrCallback === "function") {
-            targetPanel = "*";
+            // the two-arg form is "my panel's trigger": identity defaults to
+            // the transport's own resolved panel id, never the wildcard —
+            // a deprecated scope must not be an implicit default. Panels
+            // listening to OTHER panels pass the explicit three-arg form.
+            targetPanel = transport.getDefaultPanelId();
+            if (!targetPanel) {
+                throw new Error(
+                    `[paperapi] actions.onTrigger("${panelOrTrigger}", ...) could not resolve this panel's id. ` +
+                        "Pass the explicit panel id: onTrigger(\"panel.id\", \"trigger\", cb).",
+                );
+            }
             targetTrigger = panelOrTrigger;
             callback = triggerOrCallback;
         } else {
             targetPanel = panelOrTrigger;
             targetTrigger = triggerOrCallback;
             callback = maybeCallback || (() => {});
+        }
+
+        if (targetPanel === "*" || targetTrigger === "*") {
+            // TODO(remove after v3.1): see actions.on above.
+            warnOnce(
+                "paperapi:wildcard-onTrigger",
+                '[paperapi] actions.onTrigger with "*" panel/trigger is deprecated and will be refused after v3.1; subscribe to explicit panel:trigger names instead.',
+            );
         }
 
         const listener = (data: any) => {
@@ -345,7 +383,7 @@ export const actionsApi = {
         };
 
         transport.subscribeEvent("triggers:event", listener);
-        transport.ensureConnected().catch(() => {});
+        transport.ensureConnected().catch((err) => debugErr("ensure connected on subscribe", err));
 
         return () => {
             transport.unsubscribeEvent("triggers:event", listener);

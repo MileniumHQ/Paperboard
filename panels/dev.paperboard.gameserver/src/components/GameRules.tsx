@@ -1,15 +1,16 @@
-import { createSignal, For, onMount, Show } from "solid-js";
+import { createSignal, createEffect, For, Show } from "solid-js";
 import {
     PaperFlex,
     PaperInput,
     PaperLink,
+    PaperQuote,
     PaperSettingItem,
     PaperSettingList,
     PaperText,
     PaperToggle,
 } from "@paperboard-dev/paperui";
-import { processApi } from "@paperboard-dev/paperapi";
-import { serverStatus, SERVER_PROC_ID } from "../lib/server";
+import { serverStatus, serverBridge, gamerules } from "../lib/server";
+import { ACTION_IDS } from "../service/contract";
 import { mcVersionAtLeast } from "../lib/capabilities";
 import { GAMERULES } from "../generated/gamerules.generated";
 
@@ -44,24 +45,30 @@ function RuleControl(props: {
 }
 
 export default function GameRules() {
-    const [values, setValues] = createSignal<Record<string, string>>({});
     const [search, setSearch] = createSignal("");
 
     const isOnline = () => serverStatus() === "online";
 
-    onMount(() => {
-        const initial: Record<string, string> = {};
-        for (const rule of availableGamerules()) {
-            initial[rule.name] = rule.defaultValue;
-        }
-        setValues(initial);
+    // truth, not defaults: the service reads every visible rule from the
+    // running server (and re-applies offline edits at boot); responses
+    // arrive through the log parser and sync into the gamerules() signal.
+    // Until a response lands, the registry default is the honest fallback.
+    createEffect(() => {
+        if (!isOnline()) return;
+        serverBridge
+            .call(ACTION_IDS.queryGamerules, {
+                names: availableGamerules().map((rule) => rule.name),
+            })
+            .catch((err) => console.error("[gamerules] server sync failed:", String(err)));
     });
 
-    // Game rules apply live through the console — no restart needed.
+    // the service owns the console and the config: online edits go live,
+    // offline edits persist and re-apply at next start — nothing is
+    // silently discarded
     const updateRule = (name: string, value: string) => {
-        setValues((prev) => ({ ...prev, [name]: value }));
-        if (!isOnline()) return;
-        processApi.write(SERVER_PROC_ID, `gamerule ${name} ${value}\n`);
+        serverBridge
+            .call(ACTION_IDS.setGamerule, { name, value })
+            .catch((err) => console.error(`[gamerules] set ${name} failed:`, String(err)));
     };
 
     const visibleGamerules = () => {
@@ -90,9 +97,17 @@ export default function GameRules() {
                     value={search()}
                     onInput={(e) => setSearch(e.currentTarget.value)}
                 />
-                <Show when={!isOnline()}>
-                    <PaperText size={3} weight={500}>
-                        Start the server to change game rules.
+                <Show
+                    when={isOnline()}
+                    fallback={
+                        <PaperQuote variant="yellow" icon="info" title="Server offline">
+                            Edits are saved and applied the next time the server starts. Values
+                            load live once it is online.
+                        </PaperQuote>
+                    }
+                >
+                    <PaperText size={2} color="light-text">
+                        Values are read live from the running server.
                     </PaperText>
                 </Show>
                 <PaperText size={2} color="light-text">
@@ -107,11 +122,10 @@ export default function GameRules() {
                         <PaperSettingItem
                             title={rule.name}
                             description={rule.description}
-                            disabled={!isOnline()}
                         >
                             <RuleControl
                                 valueType={rule.valueType}
-                                value={() => values()[rule.name] ?? rule.defaultValue}
+                                value={() => gamerules()[rule.name] ?? rule.defaultValue}
                                 onUpdate={(value) => updateRule(rule.name, value)}
                             />
                         </PaperSettingItem>

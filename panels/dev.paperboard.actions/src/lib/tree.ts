@@ -14,8 +14,7 @@ export interface CanvasBlock {
     elseChildren?: CanvasBlock[];
 }
 
-export function outputLabelOf(action: ActionSchema | TriggerSchema): string | null {
-    const out = (action as ActionSchema)?.output;
+export function outputLabelOf(action: ActionSchema | TriggerSchema): string | null {    const out = (action as ActionSchema)?.output;
     if (!out) return null;
     if (typeof out === "string") return out;
     return (out as any).label || (out as any).type || null;
@@ -24,6 +23,30 @@ export function outputLabelOf(action: ActionSchema | TriggerSchema): string | nu
 export function blockVariableName(block: CanvasBlock): string | null {
     if (block.variableName?.trim()) return block.variableName.trim();
     return outputLabelOf(block.action);
+}
+
+// shape validator for stored/synced flows: the sync-flows boundary filters
+// with this instead of accepting arbitrary arrays. Recursion is depth-
+// capped so a hostile nested payload cannot blow the stack.
+const MAX_BLOCK_DEPTH = 32;
+
+export function isCanvasBlock(value: unknown, depth = 0): value is CanvasBlock {
+    if (!value || typeof value !== "object") return false;
+    if (depth > MAX_BLOCK_DEPTH) return false;
+    const b = value as Record<string, unknown>;
+    if (typeof b.id !== "string" || b.id.length === 0) return false;
+    if (typeof b.panelId !== "string") return false;
+    if (typeof b.isTrigger !== "boolean") return false;
+    const action = b.action as Record<string, unknown> | null;
+    if (!action || typeof action !== "object" || typeof action.id !== "string") return false;
+    if (b.values !== undefined && (typeof b.values !== "object" || b.values === null)) return false;
+    for (const key of ["children", "elseChildren"] as const) {
+        const kids = b[key];
+        if (kids === undefined) continue;
+        if (!Array.isArray(kids)) return false;
+        if (!kids.every((k) => isCanvasBlock(k, depth + 1))) return false;
+    }
+    return true;
 }
 
 function escapeRegExp(s: string): string {

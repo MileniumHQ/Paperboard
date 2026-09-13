@@ -40,7 +40,9 @@ function getHighlightedHTML(code: string, lang?: string): string {
     if (!grammar) return code;
     try {
         return Prism.highlight(code, grammar, language);
-    } catch {
+    } catch (err) {
+        // graceful degradation (renders unhighlighted), still traced
+        console.debug("[PaperCode] highlight failed, rendering plain:", err);
         return code;
     }
 }

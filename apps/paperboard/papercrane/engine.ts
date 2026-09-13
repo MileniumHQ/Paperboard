@@ -13,9 +13,11 @@ import {
     resolveSecureTargetPath,
     sanitizeId,
     panelFilesDirName,
+    unrefTimer,
     validatePanelManifest,
     writeJsonAtomicSync,
     writeFileAtomic,
+    LimitError,
 } from "./storage";
 import { getSocketsDir, getPaperboardDir } from "./paths";
 import { logger } from "./logger";
@@ -23,9 +25,31 @@ import { spawnSupervisedClient } from "./engineSupervisor";
 import { getDefaultShell } from "./pty";
 import { extractArchive, findBinDir } from "./engineArchives";
 import { panelServices } from "./panelServices";
+import { CredentialStore } from "./credentials";
+import { resolveRegistryUrl } from "./util";
 
-export const REGISTRY_URL =
-    process.env.ORIGAMI_REGISTRY_URL || "https://origami.ariapis.com";
+export const REGISTRY_URL = resolveRegistryUrl();
+
+// install provenance: whether a panel arrived through the reviewed registry
+// or a direct checksummed URL is a daemon-owned fact, recorded at install
+// time and surfaced in the library ("Reviewed by Paperboard" vs "Direct
+// install"). The registry is closed and reviewed; a direct URL install is
+// checksum-verified but NOT reviewed — the two words must never blur.
+export function resolveInstallSource(downloadUrl: string): "registry" | "direct" {
+    try {
+        return new URL(downloadUrl).origin === new URL(REGISTRY_URL).origin
+            ? "registry"
+            : "direct";
+    } catch (err) {
+        logger.debug("[engine] install source resolve failed, treating as direct:", err);
+        return "direct";
+    }
+}
+
+// bounded payloads: file reads refuse past 16 MiB (larger blobs stream via
+// file:download), config payloads past 1 MiB serialized
+export const FILE_READ_MAX_BYTES = 16 * 1024 * 1024;
+export const CONFIG_MAX_BYTES = 1 * 1024 * 1024;
 
 export class PaperCraneEngine {
     private appDataDir: string;
@@ -34,6 +58,7 @@ export class PaperCraneEngine {
     private panelsDir: string;
     private configsDir: string;
     private localDir: string;
+    private credentialsStore: CredentialStore;
     private clients = new Map<string, SupervisedProcessClient>();
 
     constructor(baseDir?: string) {
@@ -55,11 +80,61 @@ export class PaperCraneEngine {
             if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
         }
 
-        this.sweepOrphans();
+        this.credentialsStore = new CredentialStore(this.appDataDir);
+    }
+
+    // install provenance record: one small daemon-owned JSON beside the
+    // panels dir — OUTSIDE any panel directory, because upgrades swap that
+    // directory wholesale and the fact must survive them. One entry per
+    // panel id; removed when the panel is uninstalled.
+    private installSourcesPath(): string {
+        return path.join(this.panelsDir, ".install-sources.json");
+    }
+
+    private readInstallSources(): Record<string, { source: string; at: string }> {
+        try {
+            const raw = JSON.parse(fs.readFileSync(this.installSourcesPath(), "utf-8"));
+            return raw && typeof raw === "object" ? raw : {};
+        } catch (err: any) {
+            if (err?.code !== "ENOENT") {
+                logger.debug("[engine] install sources read failed:", err?.message || err);
+            }
+            return {};
+        }
+    }
+
+    private writeInstallSources(map: Record<string, { source: string; at: string }>): void {
+        try {
+            fs.writeFileSync(this.installSourcesPath(), JSON.stringify(map, null, 2));
+        } catch (err: any) {
+            logger.error(`[engine] install sources write failed: ${err?.message || err}`);
+        }
+    }
+
+    private recordInstallSource(cleanId: string, source: "registry" | "direct"): void {
+        const map = this.readInstallSources();
+        map[cleanId] = { source, at: new Date().toISOString() };
+        this.writeInstallSources(map);
+    }
+
+    private forgetInstallSource(cleanId: string): void {
+        const map = this.readInstallSources();
+        if (!(cleanId in map)) return;
+        delete map[cleanId];
+        this.writeInstallSources(map);
     }
 
     // Removes interrupted download/install artifacts (*.tmp-*, *.staging-*).
     // These appear when a crash/restart interrupts a long operation.
+    //
+    // Explicit, NOT in the constructor: sweeping deletes live temp files,
+    // so it must only run after this instance owns its port. A second
+    // daemon constructed during a port race (see index.ts tryStart) must
+    // never sweep the first daemon's in-flight downloads.
+    public sweepStartupOrphans(): void {
+        this.sweepOrphans();
+    }
+
     private sweepOrphans(): void {
         for (const dir of [this.packagesDir, this.panelsDir]) {
             try {
@@ -71,7 +146,7 @@ export class PaperCraneEngine {
                         });
                     }
                 }
-            } catch {}
+            } catch (err) { logger.debug("[engine.ts] op failed:", err) }
         }
     }
 
@@ -138,6 +213,21 @@ export class PaperCraneEngine {
         }
     }
 
+    // ownership ledger: supervised id → creating panel claim (null =
+    // master/host-created or pre-ledger). One entry per live client id,
+    // deleted with the client — bounded by the client map itself. The RPC
+    // layer records the socket claim on create and warns on mismatches
+    // (rpc/ownership.ts); enforcement waits for the registry-opening gate.
+    private clientOwners = new Map<string, string | null>();
+
+    public setClientOwner(id: string, owner: string | null): void {
+        if (typeof id === "string" && id) this.clientOwners.set(id, owner ?? null);
+    }
+
+    public clientOwner(id: string): string | null {
+        return this.clientOwners.get(id) ?? null;
+    }
+
     // lookup with reconnect, shared by attach/isRunning
     private async getOrConnectClient(
         id: string,
@@ -161,7 +251,7 @@ export class PaperCraneEngine {
                 const candidate = path.join(dir, sub, "manifest.json");
                 if (fs.existsSync(candidate)) return candidate;
             }
-        } catch {}
+        } catch (err) { logger.debug("[engine.ts] op failed:", err) }
         return null;
     }
 
@@ -175,11 +265,12 @@ export class PaperCraneEngine {
         return this.appDataDir;
     }
 
-    // Config filenames keep the historical `sanitizeId(id) || id` fallback
-    // (existing installs may carry unsanitized names); new panel/package
-    // installs go through sanitizeIdOrThrow instead.
+    // Config filenames are built from validated ids only. There is no
+    // fallback to raw input: a traversal id must throw here, never shape
+    // a path (the RPC boundary refuses it first with INVALID_PARAMS;
+    // this throw is the defense for direct engine callers).
     private configFileName(id: string): string {
-        return `${sanitizeId(id) || id}.json`;
+        return `${this.sanitizeIdOrThrow(id, "config")}.json`;
     }
 
     // globals in local/, panel working data in files/<id>/data.json
@@ -198,9 +289,15 @@ export class PaperCraneEngine {
     }
 
     private legacyConfigPaths(id: string): string[] {
-        const current = this.configFileFor(id);
-        const name = this.configFileName(id);
-        const dir = panelFilesDirName(id);
+        // TODO(remove after v3.1): pre-move read-through locators die with
+        // the first stable release after Alpha 2 installs are on this scheme
+        // The id is validated up front, so every path below is built from a
+        // known-safe token plus fixed legacy basenames: caller input selects
+        // which known names to probe, it never shapes a path.
+        const clean = this.sanitizeIdOrThrow(id, "config");
+        const current = this.configFileFor(clean);
+        const name = this.configFileName(clean);
+        const dir = panelFilesDirName(clean);
         const paths: string[] = [];
         // Pre-move locations, newest scheme first — read through once.
         // tabs.json / workspace.json are retired per-panel names from before
@@ -268,6 +365,7 @@ export class PaperCraneEngine {
             client.destroy();
             this.clients.delete(id);
         }
+        this.clientOwners.delete(id);
     }
 
     // Reattaches streaming for a terminal owned by a previous session
@@ -321,6 +419,7 @@ export class PaperCraneEngine {
                     onStderr,
                     onExit: (exitCode: number) => {
                         this.clients.delete(id);
+                        this.clientOwners.delete(id);
                         resolve({ exitCode });
                     },
                 },
@@ -336,15 +435,20 @@ export class PaperCraneEngine {
 
     public killProcess(id: string, signal: string = "SIGTERM"): void {
         const client = this.clients.get(id);
-        if (!client) return;
+        if (!client) {
+            this.clientOwners.delete(id);
+            return;
+        }
         this.clients.delete(id);
+        this.clientOwners.delete(id);
 
         client.kill(signal);
 
-        // destroy() clears listeners, drop it after exit fires
+        // destroy() clears listeners, drop it after exit fires. the timer
+        // is unref'd so a killed process never holds the daemon open
         const teardown = () => client.destroy();
         client.on("exit", teardown);
-        setTimeout(teardown, 5000);
+        unrefTimer(setTimeout(teardown, 5000));
     }
 
     public async isProcessRunning(id: string): Promise<boolean> {
@@ -414,6 +518,14 @@ export class PaperCraneEngine {
     ): Promise<string | null> {
         const fullPath = this.resolveSecureTargetPath(targetPath, appId);
         if (!fs.existsSync(fullPath)) return null;
+        // bounded read: stat first so a runaway data file refuses instead
+        // of slurping gigabytes into one WS frame (self-DoS otherwise)
+        const stat = await fs.promises.stat(fullPath);
+        if (stat.size > FILE_READ_MAX_BYTES) {
+            throw new LimitError(
+                `File exceeds ${FILE_READ_MAX_BYTES} byte read cap: ${targetPath}`,
+            );
+        }
         return await fs.promises.readFile(fullPath, "utf-8");
     }
 
@@ -458,7 +570,7 @@ export class PaperCraneEngine {
         for (const [, client] of entries) {
             try {
                 client.kill("SIGTERM");
-            } catch {}
+            } catch (err) { logger.debug("[engine.ts] op failed:", err) }
         }
 
         const deadline = Date.now() + graceMs;
@@ -475,10 +587,10 @@ export class PaperCraneEngine {
         for (const [id, client] of [...this.clients.entries()]) {
             try {
                 if (client.isConnected()) client.kill("SIGKILL");
-            } catch {}
+            } catch (err) { logger.debug("[engine.ts] op failed:", err) }
             try {
                 client.destroy();
-            } catch {}
+            } catch (err) { logger.debug("[engine.ts] op failed:", err) }
             this.clients.delete(id);
         }
     }
@@ -520,17 +632,28 @@ export class PaperCraneEngine {
             return finalDest;
         } catch (err: any) {
             if (fs.existsSync(tempPath))
-                await fs.promises.unlink(tempPath).catch(() => {});
+                await fs.promises.unlink(tempPath).catch((err) => logger.debug("[engine] temp unlink failed:", err));
             onProgress?.({ stage: "error", percent: 0, message: err.message });
             throw err;
         }
     }
 
     // Runtime package management
-    public isPackageInstalled(packageName: string, _version?: string): boolean {
+    public isPackageInstalled(packageName: string, version?: string): boolean {
         const base = path.join(this.packagesDir, packageName);
         if (!fs.existsSync(base)) return false;
-        return this.findBinDir(base, 4) !== null;
+        if (this.findBinDir(base, 4) === null) return false;
+        // a requested version is a promise: confirm it against the install
+        // index instead of ignoring it. "latest"/omitted keeps the old
+        // presence check; installs predating the index re-verify once by
+        // reinstalling, then read as installed.
+        if (version && version !== "latest") {
+            const entry = this.getPackageIndex()?.[packageName];
+            const installed = typeof entry?.version === "string" ? entry.version : null;
+            if (!installed) return false;
+            return installed === version;
+        }
+        return true;
     }
 
     public getPackageIndex(): Record<string, any> {
@@ -563,7 +686,15 @@ export class PaperCraneEngine {
         packageName: string,
         _downloadId: string,
         onProgress?: ProgressCallback,
+        expectedSha256?: string,
     ): Promise<string> {
+        // trust boundary: same rule as installPanel — no checksum fact from
+        // the anchor means no install, never proceed with sha256: undefined
+        if (typeof expectedSha256 !== "string" || !/^[a-f0-9]{64}$/i.test(expectedSha256)) {
+            throw new Error(
+                `Install refused for package "${packageName}": registry did not provide a sha256 checksum`,
+            );
+        }
         packageName = this.sanitizeIdOrThrow(packageName, "package");
         const log = (msg: string) =>
             logger.info(`[package:${packageName}] ${msg}`);
@@ -617,6 +748,15 @@ export class PaperCraneEngine {
             );
         }
         log(`source: ${downloadInfo.url}`);
+        // the updater's checksum fact must agree with the metadata record;
+        // a mismatch means one of the two sources is lying — refuse
+        if (typeof downloadInfo.sha256 === "string" && downloadInfo.sha256.length > 0) {
+            if (downloadInfo.sha256.toLowerCase() !== expectedSha256.toLowerCase()) {
+                throw new Error(
+                    `Install refused for package "${packageName}": checksum mismatch between update plan and registry metadata`,
+                );
+            }
+        }
 
         // keep the URL extension so extraction dispatches on format
         let urlExt = "";
@@ -626,7 +766,7 @@ export class PaperCraneEngine {
             else if (urlBase.endsWith(".tgz")) urlExt = ".tgz";
             else if (urlBase.endsWith(".tar.gz")) urlExt = ".tar.gz";
             else if (urlBase.endsWith(".tar")) urlExt = ".tar";
-        } catch {}
+        } catch (err) { logger.debug("[engine.ts] op failed:", err) }
         const tempArchive = path.join(
             this.packagesDir,
             `${packageName}-archive.tmp-${Date.now()}${urlExt}`,
@@ -656,7 +796,7 @@ export class PaperCraneEngine {
                 tempArchive,
                 milestoneProgress,
                 downloadInfo.sha1,
-                downloadInfo.sha256,
+                expectedSha256,
             );
             const archiveSize = fs.existsSync(tempArchive)
                 ? fs.statSync(tempArchive).size
@@ -738,13 +878,13 @@ export class PaperCraneEngine {
         } catch (err: any) {
             log(`FAILED: ${err?.message || err}`);
             if (fs.existsSync(pkgDir) && !this.findBinDir(pkgDir, 4)) {
-                await fs.promises.rm(pkgDir, { recursive: true, force: true }).catch(() => {});
+                await fs.promises.rm(pkgDir, { recursive: true, force: true }).catch((err) => logger.debug("[engine] package dir cleanup failed:", err));
                 log("removed partial install");
             }
             throw err;
         } finally {
             if (fs.existsSync(tempArchive)) {
-                await fs.promises.unlink(tempArchive).catch(() => {});
+                await fs.promises.unlink(tempArchive).catch((err) => logger.debug("[engine] archive cleanup failed:", err));
             }
         }
     }
@@ -760,6 +900,7 @@ export class PaperCraneEngine {
         if (!fs.existsSync(this.panelsDir)) return [];
         const entries = await fs.promises.readdir(this.panelsDir);
         const panels: PanelManifest[] = [];
+        const sources = this.readInstallSources();
 
         for (const entry of entries) {
             const panelPath = path.join(this.panelsDir, entry);
@@ -774,13 +915,19 @@ export class PaperCraneEngine {
                     let isDevLink = false;
                     try {
                         isDevLink = fs.lstatSync(panelPath).isSymbolicLink();
-                    } catch {}
+                    } catch (err) { logger.debug("[engine.ts] op failed:", err) }
                     panels.push({
                         ...validated,
                         base: validated.base || "./dist/index.html",
                         isInstalled: true,
                         isDevLink,
                         isLinked: isDevLink,
+                        installSource: isDevLink
+                            ? "dev"
+                            : (sources[entry]?.source as
+                                  | "registry"
+                                  | "direct"
+                                  | undefined),
                     } as PanelManifest);
                 } catch (err) {
                     logger.debug(
@@ -798,6 +945,13 @@ export class PaperCraneEngine {
         downloadUrl: string,
         expectedSha256?: string,
     ): Promise<PanelManifest> {
+        // trust boundary: no checksum fact from the anchor means no install,
+        // no matter where the URL came from
+        if (typeof expectedSha256 !== "string" || !/^[a-f0-9]{64}$/i.test(expectedSha256)) {
+            throw new Error(
+                `Install refused for "${panelId}": registry did not provide a sha256 checksum`,
+            );
+        }
         const cleanId = this.sanitizeIdOrThrow(panelId, "panel");
         const targetDir = path.join(this.panelsDir, cleanId);
 
@@ -853,19 +1007,45 @@ export class PaperCraneEngine {
                 : null;
             const manifest = rawManifest
                 ? validatePanelManifest(rawManifest, cleanId)
-                : { id: cleanId, name: cleanId, version: "1.0.0" };
+                : { id: cleanId, name: cleanId };
 
-            // atomic swap into place
+            // atomic swap into place: the live dir moves to trash first,
+            // so a failed swap leaves the previous version recoverable
+            // instead of deleting the working panel before its replacement
+            // exists. Same rename-to-trash discipline as uninstall.
+            const trashDir = path.join(this.panelsDir, `.trash-${Date.now()}-${cleanId}`);
             if (fs.existsSync(targetDir)) {
-                await fs.promises.rm(targetDir, {
-                    recursive: true,
-                    force: true,
-                });
+                await fs.promises.rename(targetDir, trashDir);
             }
-            await moveFileSafe(contentDir, targetDir);
+            try {
+                await moveFileSafe(contentDir, targetDir);
+                if (fs.existsSync(trashDir)) {
+                    await fs.promises
+                        .rm(trashDir, { recursive: true, force: true })
+                        .catch((err) => logger.debug("[engine] upgrade trash cleanup failed:", err));
+                }
+            } catch (err) {
+                // swap failed: restore the previous version from trash
+                if (fs.existsSync(trashDir) && !fs.existsSync(targetDir)) {
+                    await fs.promises
+                        .rename(trashDir, targetDir)
+                        .catch((restoreErr) =>
+                            logger.error(
+                                `[engine] panel "${cleanId}" upgrade failed AND restore from trash failed; previous version survives at ${trashDir}:`,
+                                restoreErr,
+                            ),
+                        );
+                }
+                throw err;
+            }
             await fs.promises
                 .rm(stagingDir, { recursive: true, force: true })
-                .catch(() => {});
+                .catch((err) => logger.debug("[engine] staging cleanup failed:", err));
+
+            // provenance is recorded only after the panel is actually in
+            // place: a failed install must not leave a Reviewed/Direct fact
+            // behind for something that does not exist
+            this.recordInstallSource(cleanId, resolveInstallSource(downloadUrl));
 
             try {
                 panelServices.startService(cleanId);
@@ -878,18 +1058,38 @@ export class PaperCraneEngine {
                 id: manifest.id || cleanId,
                 publisher:
                     (manifest as any).publisher ||
-                    (manifest as any).author ||
-                    "Paperboard",
+                    (manifest as any).author,
                 isInstalled: true,
             };
         } catch (err) {
             await fs.promises
                 .rm(stagingDir, { recursive: true, force: true })
-                .catch(() => {});
+                .catch((cleanupErr) => logger.debug("[engine] staging cleanup failed:", cleanupErr));
             throw err;
         } finally {
             if (fs.existsSync(tempArchive))
-                await fs.promises.unlink(tempArchive).catch(() => {});
+                await fs.promises.unlink(tempArchive).catch((err) => logger.debug("[engine] archive cleanup failed:", err));
+        }
+    }
+
+    // removes stale .trash-<ts>-<id> dirs left by a crashed uninstall.
+    // Scoped to this panel id only — never a directory walk that could
+    // touch a live panel.
+    private async sweepPanelTrash(cleanId: string): Promise<void> {
+        let entries: string[];
+        try {
+            entries = await fs.promises.readdir(this.panelsDir);
+        } catch (err) {
+            logger.debug("[engine] trash sweep readdir failed:", err);
+            return;
+        }
+        const suffix = `-${cleanId}`;
+        for (const entry of entries) {
+            if (entry.startsWith(".trash-") && entry.endsWith(suffix)) {
+                await fs.promises
+                    .rm(path.join(this.panelsDir, entry), { recursive: true, force: true })
+                    .catch((err) => logger.debug("[engine] trash sweep rm failed:", err));
+            }
         }
     }
 
@@ -899,19 +1099,29 @@ export class PaperCraneEngine {
 
         try {
             panelServices.stopService(cleanId);
-        } catch {}
+        } catch (err) { logger.debug("[engine.ts] op failed:", err) }
 
+        // exact id or owned prefix only (`panel:child`); substring matching
+        // let uninstalling "game" terminate "game2"/"retrogame" clients
         for (const [id, client] of this.clients.entries()) {
-            if (id.startsWith(cleanId) || id.includes(cleanId)) {
+            if (id === cleanId || id.startsWith(`${cleanId}:`)) {
                 client.kill("SIGTERM");
                 client.destroy();
                 this.clients.delete(id);
+                this.clientOwners.delete(id);
             }
         }
 
         const panelDir = path.join(this.panelsDir, cleanId);
         if (fs.existsSync(panelDir)) {
-            await fs.promises.rm(panelDir, { recursive: true, force: true });
+            // destructive boundary, recoverable: rename to trash first so
+            // a crash mid-delete leaves a clearly-marked .trash-<ts>-<id>
+            // dir instead of a half-deleted live panel. Stale trash from a
+            // previous crash is swept at the next uninstall of the same id.
+            await this.sweepPanelTrash(cleanId);
+            const trashDir = path.join(this.panelsDir, `.trash-${Date.now()}-${cleanId}`);
+            await fs.promises.rename(panelDir, trashDir);
+            await fs.promises.rm(trashDir, { recursive: true, force: true });
         }
         await this.clearFiles(cleanId);
 
@@ -919,14 +1129,24 @@ export class PaperCraneEngine {
         // with the files dir above); sweep current + legacy spots anyway.
         for (const configFile of [this.configFileFor(cleanId), ...this.legacyConfigPaths(cleanId)]) {
             if (fs.existsSync(configFile)) {
-                await fs.promises.unlink(configFile).catch(() => {});
+                await fs.promises.unlink(configFile).catch((err) => logger.debug("[engine] config unlink failed:", err));
             }
         }
+
+        this.credentialsStore.purge(cleanId);
+        // a removed panel stops authenticating immediately: its scoped
+        // token is revoked, not left lingering in the vault
+        panelServices.revokePanel(cleanId);
+        // and its provenance fact goes with it — a record for a panel that
+        // is not installed is a lie
+        this.forgetInstallSource(cleanId);
 
         return true;
     }
 
     public async getConfig(id: string): Promise<any> {
+        // service-owned boundary: traversal ids throw before touching disk
+        this.sanitizeIdOrThrow(id, "config");
         const files = [
             this.configFileFor(id),
             ...this.legacyConfigPaths(id),
@@ -947,12 +1167,43 @@ export class PaperCraneEngine {
     }
 
     public async setConfig(id: string, data: any): Promise<boolean> {
+        // service-owned boundary: traversal ids throw before touching disk
+        this.sanitizeIdOrThrow(id, "config");
+        // bounded payload: config is small structured state, never a blob
+        // store — 1 MiB serialized refuses before the atomic write
+        const serialized = JSON.stringify(data, null, 2);
+        if (serialized.length > CONFIG_MAX_BYTES) {
+            throw new LimitError(
+                `Config "${id}" exceeds ${CONFIG_MAX_BYTES} byte payload cap`,
+            );
+        }
         const file = this.configFileFor(id);
         await fs.promises.mkdir(path.dirname(file), { recursive: true });
-        await writeFileAtomic(file, JSON.stringify(data, null, 2));
+        await writeFileAtomic(file, serialized);
         for (const legacy of this.legacyConfigPaths(id)) {
-            await fs.promises.unlink(legacy).catch(() => {});
+            await fs.promises.unlink(legacy).catch((err) => logger.debug("[engine] legacy config unlink failed:", err));
         }
         return true;
+    }
+
+    // Secret vault delegation — daemon-owned store, see credentials.ts
+    public setSecret(name: string, value: string, panelId: string): void {
+        this.credentialsStore.set(name, value, panelId);
+    }
+
+    public getSecret(name: string, panelId: string): { found: boolean; value: string | null } {
+        return this.credentialsStore.get(name, panelId);
+    }
+
+    public deleteSecret(name: string, panelId: string): boolean {
+        return this.credentialsStore.delete(name, panelId);
+    }
+
+    public listSecrets(panelId?: string, includeOtherPanels = false): string[] {
+        return this.credentialsStore.list(panelId, includeOtherPanels);
+    }
+
+    public purgeSecrets(panelId: string): number {
+        return this.credentialsStore.purge(panelId);
     }
 }

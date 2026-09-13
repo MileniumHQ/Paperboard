@@ -7,12 +7,6 @@
                 "image": "/paperui.png",
                 "description": "Build interfaces with PaperUI components and templates."
             },
-            "paperboard": {
-                "name": "Paperboard",
-                "icon": "grid_view",
-                "image": "/paperboard.png",
-                "description": "Run extensions and panels on your desktop."
-            },
             "paperapi": {
                 "name": "PaperAPI",
                 "icon": "api",

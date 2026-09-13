@@ -3,24 +3,14 @@ import {
     processApi,
     systemApi,
     files,
+    resolveOneShotShell,
 } from "@paperboard-dev/paperapi";
 import { Parser as ExprParser } from "expr-eval";
-import { quote as shellQuote } from "shell-quote";
 import type { CanvasBlock } from "./tree";
 import { BUILTIN_DEFS } from "./builtinRegistry";
+import { ACTIONS_PANEL_ID } from "../panelId";
 
 const mathParser = new ExprParser();
-
-// posix quoting via shell-quote, "{}" fallback when empty
-function posixArg(value: string): string {
-    const q = shellQuote([value]);
-    return q || '""';
-}
-
-// powershell literal: escape ' as ''
-function psString(value: string): string {
-    return `'${String(value).replace(/'/g, "''")}'`;
-}
 
 export interface ExecutionLog {
     id: string;
@@ -42,7 +32,10 @@ async function getHostPlatform(): Promise<"linux" | "darwin" | "win32"> {
         if (o.includes("win")) return "win32";
         if (o.includes("darwin") || o.includes("mac")) return "darwin";
         return "linux";
-    } catch {
+    } catch (err) {
+        // daemon unreachable — user-agent sniffing is the documented
+        // fallback, not a silent one
+        console.debug("[ActionsRuntime] host platform probe failed, sniffing UA:", err);
         const ua = typeof navigator !== "undefined" ? navigator.userAgent : "";
         if (ua.includes("Win")) return "win32";
         if (ua.includes("Mac")) return "darwin";
@@ -52,15 +45,16 @@ async function getHostPlatform(): Promise<"linux" | "darwin" | "win32"> {
 
 async function runHostShell(cmd: string): Promise<string> {
     const plat = await getHostPlatform();
-    const shellCmd = plat === "win32" ? "cmd.exe" : "sh";
-    const shellArgs = plat === "win32" ? ["/d", "/s", "/c", cmd] : ["-c", cmd];
+    // shared with the terminal panel (PaperAPI): one shell resolution
+    const shell = resolveOneShotShell(plat);
 
     try {
-        const res = await processApi.exec(shellCmd, shellArgs);
+        const res = await processApi.exec(shell.command, [...shell.baseArgs, cmd]);
         return res.stdout || res.stderr;
     } catch (err: any) {
-        console.error(`[Host Shell Error] Command "${cmd}" failed:`, err);
-        return "";
+        // a shell failure fails the step loudly: returning "" would report
+        // success with empty output and let the flow continue on a lie
+        throw new Error(`Shell command failed: ${err?.message || String(err)}`);
     }
 }
 
@@ -358,14 +352,22 @@ export function resolveInputs(
 }
 
 function evaluateMath(expression: string): number {
-    try {
-        const text = (expression ?? "").trim();
-        if (!text) return 0;
-        const result = mathParser.evaluate(text);
-        return typeof result === "number" && Number.isFinite(result) ? result : 0;
-    } catch {
-        return 0;
+    const text = (expression ?? "").trim();
+    if (!text) {
+        throw new Error("math-calculate: expression is empty");
     }
+    let result: unknown;
+    try {
+        result = mathParser.evaluate(text);
+    } catch (err) {
+        throw new Error(
+            `math-calculate: cannot parse expression "${text}": ${err instanceof Error ? err.message : String(err)}`,
+        );
+    }
+    if (typeof result !== "number" || !Number.isFinite(result)) {
+        throw new Error(`math-calculate: expression "${text}" did not evaluate to a finite number`);
+    }
+    return result;
 }
 
 function evaluateCondition(left: any, operator: string, right: any): boolean {
@@ -428,7 +430,10 @@ function evaluateCondition(left: any, operator: string, right: any): boolean {
 
 const flowVariablesStore = new Map<string, any>();
 
-const ACTIONS_PANEL_ID = "dev.paperboard.actions";
+// BOUNDED: an action flow that set-variables in a loop must not be able to
+// grow the persisted store without limit (both memory and variables.json).
+const MAX_VARIABLES = 500;
+
 const VARIABLES_PATH = "actions-variables/variables.json";
 let variablesPersistTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -442,7 +447,10 @@ export async function initVariablesStore(): Promise<void> {
                 flowVariablesStore.set(k, v);
             }
         }
-    } catch {}
+    } catch (err) {
+        // a wiped variables store looks like "user lost data" — surface it
+        console.error("[ActionsRuntime] variables store failed to load:", err);
+    }
 }
 
 function schedulePersistVariables() {
@@ -451,9 +459,59 @@ function schedulePersistVariables() {
         variablesPersistTimer = undefined;
         try {
             const obj = Object.fromEntries(flowVariablesStore);
-            files.write(VARIABLES_PATH, JSON.stringify(obj), ACTIONS_PANEL_ID).catch(() => {});
-        } catch {}
+            files
+                .write(VARIABLES_PATH, JSON.stringify(obj), ACTIONS_PANEL_ID)
+                .catch((err) =>
+                    console.error("[ActionsRuntime] variables persist failed:", err),
+                );
+        } catch (err) {
+            console.error("[ActionsRuntime] variables serialize failed:", err);
+        }
     }, 250);
+}
+
+// responses are text-only feature data: cap what a block will hold
+const HTTP_RESPONSE_MAX_BYTES = 10 * 1024 * 1024;
+// the manifest declares `network: { mode: "any-https" }` — service-side
+// fetches (node, beyond CSP reach) enforce the same contract here:
+// https anywhere, http only to loopback for dev
+function assertAnyHttps(rawUrl: string): void {
+    let url: URL;
+    try {
+        url = new URL(rawUrl);
+    } catch {
+        throw new Error(`Refusing fetch: malformed URL`);
+    }
+    if (url.protocol === "https:") return;
+    if (url.protocol === "http:") {
+        const host = url.hostname.toLowerCase();
+        if (host === "localhost" || host === "127.0.0.1" || host === "[::1]") return;
+    }
+    throw new Error(
+        `Refusing fetch: manifest network mode is any-https, got ${url.protocol}//${url.hostname}`,
+    );
+}
+async function fetchCappedText(res: Response): Promise<string> {
+    const declared = Number(res.headers.get("content-length")) || 0;
+    if (declared > HTTP_RESPONSE_MAX_BYTES) {
+        throw new Error(`Response exceeds ${HTTP_RESPONSE_MAX_BYTES / 1024 / 1024}MB cap (${declared} declared)`);
+    }
+    const reader = res.body?.getReader();
+    if (!reader) throw new Error("Response has no body");
+    const decoder = new TextDecoder();
+    let text = "";
+    let total = 0;
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        total += value.length;
+        if (total > HTTP_RESPONSE_MAX_BYTES) {
+            await reader.cancel();
+            throw new Error(`Response exceeds ${HTTP_RESPONSE_MAX_BYTES / 1024 / 1024}MB cap`);
+        }
+        text += decoder.decode(value, { stream: true });
+    }
+    return text;
 }
 
 type BuiltinHandler = (
@@ -462,15 +520,40 @@ type BuiltinHandler = (
 ) => Promise<any> | any;
 
 // control-flow ids run in executeFlow, so no handler entry here
+// wait durations are CLAMPED: an "Infinity"/huge duration must not be able
+// to park a flow execution (and its resources) forever
+export const MAX_WAIT_SECONDS = 3600;
+export const MAX_WAIT_MILLIS = MAX_WAIT_SECONDS * 1000;
+
+// pure clamp, exported for tests
+export function clampWaitValue(raw: string | number, unit: "s" | "ms"): number {
+    const parsed =
+        typeof raw === "number"
+            ? raw
+            : unit === "s"
+                ? parseFloat(raw || "1")
+                : parseInt(raw || "500", 10);
+    if (Number.isNaN(parsed)) return unit === "s" ? 1 : 500;
+    // infinity (explicit or parsed) clamps to the cap, never the default:
+    // the author asked for a long wait, the cap is the long wait
+    if (!Number.isFinite(parsed)) return unit === "s" ? MAX_WAIT_SECONDS : MAX_WAIT_MILLIS;
+    const cap = unit === "s" ? MAX_WAIT_SECONDS : MAX_WAIT_MILLIS;
+    return Math.max(0, Math.min(cap, parsed));
+}
+
 const builtinHandlers: Record<string, BuiltinHandler> = {
     wait: async (inputs) => {
-        const sec = typeof inputs.duration === "number" ? inputs.duration : parseFloat(inputs.duration || "1") || 1;
-        await new Promise((resolve) => setTimeout(resolve, Math.max(0, sec * 1000)));
+        const sec = clampWaitValue(
+            typeof inputs.duration === "number" ? inputs.duration : (inputs.duration as string), "s",
+        );
+        await new Promise((resolve) => setTimeout(resolve, sec * 1000));
         return sec;
     },
     "wait-millis": async (inputs) => {
-        const ms = typeof inputs.duration === "number" ? inputs.duration : parseInt(inputs.duration || "500", 10) || 500;
-        await new Promise((resolve) => setTimeout(resolve, Math.max(0, ms)));
+        const ms = clampWaitValue(
+            typeof inputs.duration === "number" ? inputs.duration : (inputs.duration as string), "ms",
+        );
+        await new Promise((resolve) => setTimeout(resolve, ms));
         return ms;
     },
     "stop-flow": () => {
@@ -478,6 +561,11 @@ const builtinHandlers: Record<string, BuiltinHandler> = {
     },
     "set-variable": (inputs) => {
         const key = String(inputs.key || "var");
+        if (!flowVariablesStore.has(key) && flowVariablesStore.size >= MAX_VARIABLES) {
+            throw new Error(
+                `Variable store full: ${MAX_VARIABLES} variables is the limit — clear unused variables`,
+            );
+        }
         const val = inputs.value ?? "";
         flowVariablesStore.set(key, val);
         schedulePersistVariables();
@@ -555,15 +643,17 @@ const builtinHandlers: Record<string, BuiltinHandler> = {
     "http-get": async (inputs) => {
         const url = String(inputs.url ?? "").trim();
         if (!url) throw new Error("URL is required");
+        assertAnyHttps(url);
         const res = await fetch(url, { signal: AbortSignal.timeout(30000) });
         if (!res.ok) {
             throw new Error(`Request failed with status ${res.status}`);
         }
-        return await res.text();
+        return await fetchCappedText(res);
     },
     "http-post": async (inputs) => {
         const url = String(inputs.url ?? "").trim();
         if (!url) throw new Error("URL is required");
+        assertAnyHttps(url);
         const res = await fetch(url, {
             method: "POST",
             headers: {
@@ -575,7 +665,7 @@ const builtinHandlers: Record<string, BuiltinHandler> = {
         if (!res.ok) {
             throw new Error(`Request failed with status ${res.status}`);
         }
-        return await res.text();
+        return await fetchCappedText(res);
     },
     text: (inputs) => String(inputs.value ?? ""),
     "text-join": (inputs) => `${inputs.text1 ?? ""}${inputs.text2 ?? ""}`,
@@ -666,8 +756,12 @@ async function executeBuiltinAction(
     onConsoleLog?: (entry: { time: string; message: string }) => void,
 ): Promise<any> {
     const handler = builtinHandlers[actionId];
-    if (handler) return await handler(inputs, onConsoleLog);
-    return inputs;
+    // silent success is worse than an error: downstream steps would consume
+    // garbage. A registry id with no handler fails the step loudly.
+    if (!handler) {
+        throw new Error(`Unknown builtin action "${actionId}": no handler registered`);
+    }
+    return await handler(inputs, onConsoleLog);
 }
 
 // every registry id needs a handler or a control-flow exemption

@@ -23,13 +23,26 @@ export const packageApi = {
         onProgress?: (progress: PackageProgress) => void,
     ): Promise<string> => {
         const downloadId = newClientId(packageName);
+        // hoisted so a rejected invoke can unsubscribe (see file.ts)
+        let off: (() => void) | undefined;
         if (onProgress) {
-            on(`package-progress:${downloadId}`, (event: any, payload: any) => {
+            off = on(`package-progress:${downloadId}`, (event: any, payload: any) => {
                 const data = payload !== undefined ? payload : event;
-                if (data) onProgress(data);
+                if (data) {
+                    const progress = data as PackageProgress;
+                    onProgress(progress);
+                    if (progress.stage === "completed" || progress.stage === "error") {
+                        off?.();
+                    }
+                }
             });
         }
-        return invoke<string>("package-download", { packageName, downloadId });
+        try {
+            return await invoke<string>("package-download", { packageName, downloadId });
+        } catch (err) {
+            off?.();
+            throw err;
+        }
     },
 
     isInstalled: (packageName: string, version?: string): Promise<boolean> =>

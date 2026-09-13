@@ -44,7 +44,8 @@ export default function Overview() {
             if (navigator.clipboard?.writeText) {
                 await navigator.clipboard.writeText(addr);
             }
-        } catch {
+        } catch (err) {
+            console.debug("[overview] clipboard write failed, falling back:", String(err));
             const textarea = document.createElement("textarea");
             textarea.value = addr;
             textarea.style.position = "fixed";

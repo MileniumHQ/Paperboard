@@ -38,7 +38,7 @@ export default function f() {
                 Using npm
             </PaperText>
             <PaperCode block language="bash">
-                npm install paperui solid-js
+                npm install @paperboard-dev/paperui solid-js
             </PaperCode>
 
             <PaperText id="bun" preset="title">

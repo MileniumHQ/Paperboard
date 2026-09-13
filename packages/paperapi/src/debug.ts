@@ -8,7 +8,11 @@ export function debug(msg: string): void {
     if (DEBUG) console.debug(`[transport] ${msg}`);
 }
 
-/** log swallowed errors without changing control flow */
+/**
+ * Errors always surface on the console — DEBUG only adds the chatty trace.
+ * "Logged" must mean "visible", not "hidden behind a flag".
+ */
 export function debugErr(where: string, err: unknown): void {
-    debug(`${where} swallowed error: ${err instanceof Error ? err.message : String(err)}`);
+    console.error(`[transport] ${where}:`, err instanceof Error ? err : String(err));
+    if (DEBUG) console.debug(`[transport] ${where} trace above`);
 }

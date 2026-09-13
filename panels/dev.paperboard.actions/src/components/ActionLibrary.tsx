@@ -17,8 +17,7 @@ import {
     type TriggerInfo,
     type PanelItem,
     type ActionSchema,
-    type TriggerSchema,
-} from "@paperboard-dev/paperapi";
+    type TriggerSchema,} from "@paperboard-dev/paperapi";
 import { createStore } from "solid-js/store";
 import ActionBlock from "./ActionBlock";
 import { BUILTIN_CATEGORIES, type BuiltinCategory } from "../lib/builtins";
@@ -31,6 +30,7 @@ import {
     createFunctionId,
 } from "../lib/functions";
 import { PaperModal, PaperSelectMenu, PaperSelectMenuItem } from "@paperboard-dev/paperui";
+import { ACTIONS_PANEL_ID } from "../panelId";
 
 export interface ActionLibraryProps {
     onStartDrag: (
@@ -197,7 +197,7 @@ export default function ActionLibrary(props: ActionLibraryProps) {
         for (const act of registeredActions()) {
             if (act.action.startsWith("call-function-")) continue;
             // own sync/test actions run via api, never placeable blocks
-            if (act.panelId === "dev.paperboard.actions") continue;
+            if (act.panelId === ACTIONS_PANEL_ID) continue;
             const isInternal =
                 act.action.startsWith("__") ||
                 act.action === "load-config" ||

@@ -9,6 +9,7 @@ import type { PlayerStatData as CorePlayerStatData } from "../core/players";
 import type { ServerIssue as CoreServerIssue, ServerIssueAction as CoreServerIssueAction } from "../core/diagnostics";
 import { WORLD_NAME_PATTERN as CORE_WORLD_NAME_PATTERN } from "../core/worlds";
 import type { InstalledRecord as CoreInstalledRecord, InstalledPlugin as CoreInstalledPlugin } from "../core/plugins";
+import { PANEL_ID } from "./contract";
 
 export type ServerStatus = CoreServerStatus;
 export type ChatMessage = CoreChatMessage;
@@ -18,8 +19,8 @@ export type ServerIssueAction = CoreServerIssueAction;
 export type InstalledRecord = CoreInstalledRecord;
 export type InstalledPlugin = CoreInstalledPlugin;
 
-// pass PANEL_ID explicitly, ambient scope resolves to last-imported panel
-export const PANEL_ID = "dev.paperboard.gameserver";
+// contract.ts owns the id now; types.ts re-exports for the renderer
+export { PANEL_ID } from "./contract";
 
 export interface GameServerState {
     serverStatus: ServerStatus;
@@ -35,6 +36,9 @@ export interface GameServerState {
     seenPlayers: string[];
     playerStats: Record<string, PlayerStatData>;
     playerPlaytime: Record<string, number>;
+    // live gamerule values read from the running server (and optimistic
+    // offline edits); synced to the Game Rules tab through the bridge
+    gamerules: Record<string, string>;
     activeIssue: ServerIssue | null;
 }
 

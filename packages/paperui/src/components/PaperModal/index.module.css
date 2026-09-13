@@ -4,7 +4,7 @@
     left: 0;
     width: 100vw;
     height: 100vh;
-    background: rgba(0, 0, 0, 0.45);
+    background: var(--paper-overlay);
     backdrop-filter: var(--paper-blur-light);
     display: flex;
     align-items: center;

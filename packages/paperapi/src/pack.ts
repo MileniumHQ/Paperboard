@@ -43,8 +43,13 @@ export function packPanel(options: PackOptions = {}): PackResult {
     if (!manifest.name) {
         throw new Error("Panel manifest must specify a 'name'");
     }
+    if (!manifest.version) {
+        throw new Error(
+            `Panel manifest must specify a 'version' (refusing to pack ${manifest.name}); a versionless archive cannot be released`,
+        );
+    }
 
-    const version = manifest.version || "1.0.0";
+    const version = manifest.version;
     const base = manifest.base || "./dist/index.html";
     const baseAbsolutePath = path.resolve(panelDir, base);
 
@@ -64,6 +69,15 @@ export function packPanel(options: PackOptions = {}): PackResult {
         }
     }
 
+    // manifest.base says where the panel entry lives; the directory holding
+    // it must be packed — previously base was validated but the archive
+    // silently hardcoded dist/, so a base outside dist was dropped on the
+    // floor
+    const baseDirRel: string | null = (() => {
+        const rel = path.relative(panelDir, path.dirname(baseAbsolutePath));
+        return rel === "" ? null : rel;
+    })();
+
     const outDir = options.outputDir
         ? path.resolve(options.outputDir)
         : path.join(panelDir, "out");
@@ -76,9 +90,17 @@ export function packPanel(options: PackOptions = {}): PackResult {
     const archivePath = path.join(outDir, archiveName);
 
     const entriesToPack = ["manifest.json"];
-    if (fs.existsSync(path.join(panelDir, "dist"))) entriesToPack.push("dist");
-    if (fs.existsSync(path.join(panelDir, "branding"))) entriesToPack.push("branding");
-    else if (fs.existsSync(path.join(panelDir, "icon.png"))) entriesToPack.push("icon.png");
+
+    const addEntry = (entry: string): void => {
+        if (!entriesToPack.includes(entry) && fs.existsSync(path.join(panelDir, entry))) {
+            entriesToPack.push(entry);
+        }
+    };
+
+    addEntry(baseDirRel ?? "dist");
+    addEntry("dist");
+    if (fs.existsSync(path.join(panelDir, "branding"))) addEntry("branding");
+    else if (fs.existsSync(path.join(panelDir, "icon.png"))) addEntry("icon.png");
 
     console.log(`[Packager] Archiving into ${archiveName}...`);
     tar.create(

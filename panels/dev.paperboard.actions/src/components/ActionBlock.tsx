@@ -775,7 +775,9 @@ export default function ActionBlock(props: ActionBlockProps) {
             setIsDragging(false);
             try {
                 (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
-            } catch {}
+            } catch (err) {
+                console.debug("[actions] pointer capture release failed:", String(err));
+            }
             props.onDragEnd?.();
         }
     };

@@ -34,3 +34,13 @@
         transform: translateX(300%);
     }
 }
+
+/* reduced motion zeroes within THIS component only — an infinite sweep
+   must not keep animating for OS-level reduced-motion users */
+@media (prefers-reduced-motion: reduce) {
+    .indeterminate .bar {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+}

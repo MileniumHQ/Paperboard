@@ -1,12 +1,14 @@
 import { fileApi, config } from "@paperboard-dev/paperapi";
-import { serverSoftware, serverVersion, updatePanelConfig } from "./server";
+import { PANEL_ID } from "../service/types";
+import { serverSoftware, serverVersion, updatePanelConfig, serverBridge } from "./server";
+import { ACTION_IDS } from "../service/contract";
 import type { ServerSoftwareType } from "./software";
-import { sanitizeFileName, tryListDirectory } from "./filesystem";
+import { sanitizeFileName } from "./filesystem";
 import {
     INSTALL_RECORDS_KEY,
-    collectInstalledPlugins,
     isInstallRecord,
     parseInstallRecords,
+    pickVersionFile,
     pluginDirName,
     validatePluginFilename,
 } from "../core/plugins";
@@ -20,7 +22,8 @@ const SEARCH_LIMIT = 24;
 
 export async function getInstallRecords(): Promise<Record<string, InstalledRecord>> {
     try {
-        const saved = await config.get<Record<string, unknown>>();
+        // explicit panel id: ambient resolution resolves to last-imported
+        const saved = await config.get<Record<string, unknown>>(PANEL_ID);
         return parseInstallRecords(saved?.[INSTALL_RECORDS_KEY]);
     } catch (err) {
         console.error("[Plugins] Failed to read install records:", err);
@@ -38,36 +41,14 @@ export async function listInstalledPlugins(): Promise<{
     plugins: InstalledPlugin[];
     warning?: string;
 }> {
-    const dirName = pluginDirName(serverSoftware());
-    const [records, listing] = await Promise.all([
-        getInstallRecords(),
-        tryListDirectory(dirName),
-    ]);
-
-    const plugins = await collectInstalledPlugins({
-        records,
-        listingEntries: listing.entries,
-        exists: (path) => fileApi.exists(path),
-        sanitize: sanitizeFileName,
-        dirName,
-        onVerifyError: (filename, err) =>
-            console.error(`[Plugins] Failed to verify "${dirName}/${filename}":`, err),
-    });
-
-    if (listing.error) {
-        console.warn(`[Plugins] ${listing.error} Raw entries: none available.`);
-    }
-    return { plugins, warning: listing.error };
+    // service-owned (service/plugins.ts): listing verifies hashes against
+    // install records, and the twin that lived here is gone
+    return serverBridge.call(ACTION_IDS.listInstalledPlugins);
 }
 
 export async function deletePlugin(filename: string): Promise<void> {
-    const safe = validatePluginFilename(sanitizeFileName(filename) ?? filename);
-    await fileApi.delete(`${pluginDirName(serverSoftware())}/${safe}`);
-    const records = await getInstallRecords();
-    if (records[safe]) {
-        delete records[safe];
-        await writeInstallRecords(records);
-    }
+    // service-owned: trash-first delete, never a bare fileApi.delete
+    await serverBridge.call(ACTION_IDS.deletePlugin, { filename });
 }
 
 export interface ModrinthHit {
@@ -98,6 +79,13 @@ export interface ResolvedDownload {
     url: string;
     filename: string;
     versionNumber: string;
+    /** Modrinth file hashes, passed through to fileApi.download (vanilla/Paper already do) */
+    sha1?: string;
+    sha512?: string;
+    /** MC versions the picked build targets; empty when the API omits them */
+    gameVersions: string[];
+    /** false when the version-filtered lookup had no match and this is a cross-version fallback */
+    exactMatch: boolean;
 }
 
 interface RawHit {
@@ -126,7 +114,13 @@ interface RawProject {
 
 interface RawVersion {
     version_number?: string;
-    files?: { url?: string; filename?: string; primary?: boolean }[];
+    game_versions?: string[];
+    files?: {
+        url?: string;
+        filename?: string;
+        primary?: boolean;
+        hashes?: { sha1?: string; sha512?: string };
+    }[];
 }
 
 // text first so non-JSON answers fail with a clear message
@@ -240,18 +234,21 @@ export async function getProject(projectIdOrSlug: string): Promise<ModrinthProje
     };
 }
 
-// newest file matching the game version, else any loader build
-async function resolveLatestFile(projectId: string): Promise<ResolvedDownload> {
+// newest file matching the game version, else any loader build.
+// The fallback pick is returned with exactMatch:false — callers must surface
+// the explicit confirm state, never install it silently.
+export async function resolveLatestFile(projectId: string): Promise<ResolvedDownload> {
     const software = serverSoftware();
     const loader = software === "fabric" ? "fabric" : "paper";
     const mcVersion = serverVersion();
 
     const loaders = JSON.stringify([loader]);
-    let versions: RawVersion[] = [];
+    let exactVersions: RawVersion[] = [];
+    let fallbackVersions: RawVersion[] = [];
 
     if (mcVersion) {
         try {
-            versions = await modrinthFetch<RawVersion[]>(
+            exactVersions = await modrinthFetch<RawVersion[]>(
                 `/project/${encodeURIComponent(projectId)}/version`,
                 { loaders, game_versions: JSON.stringify([mcVersion]) },
             );
@@ -260,29 +257,48 @@ async function resolveLatestFile(projectId: string): Promise<ResolvedDownload> {
         }
     }
 
-    if (versions.length === 0) {
-        versions = await modrinthFetch<RawVersion[]>(
+    if (exactVersions.length === 0) {
+        fallbackVersions = await modrinthFetch<RawVersion[]>(
             `/project/${encodeURIComponent(projectId)}/version`,
             { loaders },
         );
     }
 
-    const latest = versions[0];
-    const primary = latest?.files?.find((f) => f.primary) ?? latest?.files?.[0];
-    if (!primary?.url || !primary?.filename) {
-        throw new Error("No downloadable file on the latest version");
+    return pickVersionFile(exactVersions, fallbackVersions);
+}
+
+// thrown instead of installing when the only available build targets a
+// different MC version: the UI turns this into the "latest compatible is
+// for MC X — install anyway?" confirm, never a silent install
+export class PluginVersionMismatchError extends Error {
+    readonly mcVersion: string;
+    readonly gameVersions: string[];
+    readonly filename: string;
+    readonly versionNumber: string;
+
+    constructor(pick: ResolvedDownload, mcVersion: string) {
+        const targets = pick.gameVersions.length > 0 ? pick.gameVersions.join(", ") : "unknown versions";
+        super(
+            mcVersion
+                ? `Latest build targets Minecraft ${targets} but the server runs ${mcVersion} — install anyway?`
+                : `Latest build targets Minecraft ${targets} and no server version is set — install anyway?`,
+        );
+        this.name = "PluginVersionMismatchError";
+        this.mcVersion = mcVersion;
+        this.gameVersions = pick.gameVersions;
+        this.filename = pick.filename;
+        this.versionNumber = pick.versionNumber;
     }
-    return {
-        url: primary.url,
-        filename: primary.filename,
-        versionNumber: latest.version_number ?? "",
-    };
 }
 
 export async function installProject(
     projectId: string,
+    opts?: { allowIncompatible?: boolean },
 ): Promise<{ filename: string; version: string }> {
     const file = await resolveLatestFile(projectId);
+    if (!file.exactMatch && !opts?.allowIncompatible) {
+        throw new PluginVersionMismatchError(file, serverVersion());
+    }
     const safe = sanitizeFileName(file.filename);
     if (!safe || !safe.toLowerCase().endsWith(".jar")) {
         throw new Error(`Unsafe download filename: "${file.filename}"`);
@@ -291,6 +307,12 @@ export async function installProject(
     await fileApi.download({
         url: file.url,
         targetPath: `${pluginDirName(serverSoftware())}/${safe}`,
+        appId: PANEL_ID,
+        // Modrinth hashes ride the same fields vanilla (sha1) and Paper
+        // (sha256) already use. The daemon enforces sha1/sha256 today;
+        // sha512 travels in checksum for verifiers that accept it.
+        ...(file.sha1 ? { sha1: file.sha1 } : {}),
+        ...(file.sha512 ? { checksum: { algorithm: "sha512", value: file.sha512 } } : {}),
     });
 
     // record project for icons and versions

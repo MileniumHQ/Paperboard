@@ -61,7 +61,8 @@ export default function Worlds() {
         try {
             await writeServerProperties(snapshot);
             setSaveError(false);
-        } catch {
+        } catch (err) {
+            console.debug("[worlds] server.properties save failed:", String(err));
             setSaveError(true);
         }
     };

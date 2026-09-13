@@ -6,17 +6,16 @@
         "dev": "vite",
         "build": "tsc && vite build && bun build ./src/service.ts --outfile ./dist/service.js --target=node --external @paperboard-dev/paperui",
         "pack": "bunx paperapi pack",
-        "preview": "vite preview"
+        "preview": "vite preview",
+        "test": "bun test"
     },
     "dependencies": {
-        "@paperboard-dev/paperapi": "file:/home/pxlkt/Documents/Paperboard/PaperAPI",
-        "@paperboard-dev/paperui": "file:/home/pxlkt/Documents/Paperboard/PaperUI",
+        "@paperboard-dev/paperapi": "workspace:*",
+        "@paperboard-dev/paperui": "workspace:*",
         "expr-eval": "^2.0.2",
-        "shell-quote": "^1.10.0",
         "solid-js": "^1.9.13"
     },
     "devDependencies": {
-        "@types/shell-quote": "^1.7.5",
         "typescript": "~6.0.2",
         "vite": "^8.1.0",
         "vite-plugin-solid": "^2.11.14"

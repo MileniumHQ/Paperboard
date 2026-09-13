@@ -59,7 +59,6 @@ export interface PluginCollectDeps {
     dirName: string;
     onVerifyError?: (filename: string, err: unknown) => void;
 }
-
 // install records are primary truth, listing adds untracked jars
 export async function collectInstalledPlugins(deps: PluginCollectDeps): Promise<InstalledPlugin[]> {
     const { records, listingEntries, exists, sanitize, dirName, onVerifyError } = deps;
@@ -84,4 +83,64 @@ export async function collectInstalledPlugins(deps: PluginCollectDeps): Promise<
     }
 
     return [...byFile.values()].sort((a, b) => a.filename.localeCompare(b.filename));
+}
+
+// ─── Modrinth version selection (pure) ───────────────────────────────────────
+// The network layer fetches two lists: versions filtered to the server's MC
+// version ("exact"), and unfiltered loader builds ("fallback"). Selection is
+// pure so the fallback path stays testable: a non-exact pick never installs
+// silently, it returns exactMatch:false and the caller must confirm.
+
+export interface ModrinthVersionFile {
+    url?: string;
+    filename?: string;
+    primary?: boolean;
+    hashes?: { sha1?: string; sha512?: string };
+}
+
+export interface ModrinthVersion {
+    version_number?: string;
+    versionNumber?: string;
+    game_versions?: string[];
+    gameVersions?: string[];
+    files?: ModrinthVersionFile[];
+}
+
+export interface VersionPick {
+    url: string;
+    filename: string;
+    versionNumber: string;
+    sha1?: string;
+    sha512?: string;
+    gameVersions: string[];
+    exactMatch: boolean;
+}
+
+function firstDownloadable(versions: ModrinthVersion[]): Omit<VersionPick, "exactMatch"> | null {
+    const latest = versions[0];
+    const primary = latest?.files?.find((f) => f.primary) ?? latest?.files?.[0];
+    if (!primary?.url || !primary?.filename) return null;
+    return {
+        url: primary.url,
+        filename: primary.filename,
+        versionNumber: latest.version_number ?? latest.versionNumber ?? "",
+        sha1: primary.hashes?.sha1,
+        sha512: primary.hashes?.sha512,
+        gameVersions: Array.isArray(latest.game_versions)
+            ? (latest.game_versions as string[])
+            : Array.isArray(latest.gameVersions)
+              ? (latest.gameVersions as string[])
+              : [],
+    };
+}
+
+export function pickVersionFile(
+    exactVersions: ModrinthVersion[],
+    fallbackVersions: ModrinthVersion[],
+): VersionPick {
+    const exact = firstDownloadable(exactVersions);
+    if (exact) return { ...exact, exactMatch: true };
+    const fallback = firstDownloadable(fallbackVersions);
+    if (fallback) return { ...fallback, exactMatch: false };
+    throw new Error("No downloadable file on the latest version");
 }

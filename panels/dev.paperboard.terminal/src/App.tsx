@@ -44,7 +44,9 @@ export default function App() {
                 setActiveTab(listed[0].id);
                 return;
             }
-        } catch {}
+        } catch (err) {
+            console.debug("[terminal] list-tabs failed:", String(err));
+        }
         try {
             const id = await actionsApi.call<string>(
                 TERMINAL_PANEL_ID,
@@ -55,7 +57,9 @@ export default function App() {
                 setTabs([{ id, label: "Tab 1" }]);
                 setActiveTab(id);
             }
-        } catch {}
+        } catch (err) {
+            console.debug("[terminal] create-tab failed:", String(err));
+        }
     });
 
     const handleCloseTab = (closedId: string) => {
@@ -72,7 +76,9 @@ export default function App() {
         }
 
         setTabs(current.filter((item) => item.id !== closedId));
-        actionsApi.call(TERMINAL_PANEL_ID, "close-tab", { id: closedId }).catch(() => {});
+        actionsApi.call(TERMINAL_PANEL_ID, "close-tab", { id: closedId }).catch((err) =>
+            console.debug("[terminal] close-tab failed:", String(err)),
+        );
     };
 
     const addTab = async () => {
@@ -85,17 +91,24 @@ export default function App() {
             if (!id) return;
             const listed = await actionsApi
                 .call<TerminalTab[]>(TERMINAL_PANEL_ID, "list-tabs")
-                .catch(() => [] as TerminalTab[]);
+                .catch((err) => {
+                    console.debug("[terminal] list-tabs failed:", String(err));
+                    return [] as TerminalTab[];
+                });
             const label =
                 listed.find((t) => t.id === id)?.label || `Tab ${tabs().length + 1}`;
             setTabs((prev) => [...prev, { id, label }]);
             setActiveTab(id);
-        } catch {}
+        } catch (err) {
+            console.warn("[terminal] create-tab failed:", String(err));
+        }
     };
 
     const handleSwitchTab = (id: string) => {
         setActiveTab(id);
-        actionsApi.call(TERMINAL_PANEL_ID, "touch-tab", { id }).catch(() => {});
+        actionsApi.call(TERMINAL_PANEL_ID, "touch-tab", { id }).catch((err) =>
+            console.debug("[terminal] touch-tab failed:", String(err)),
+        );
     };
 
     const terminalMenu = useContextMenuState();
@@ -119,7 +132,9 @@ export default function App() {
             );
             actionsApi
                 .call(TERMINAL_PANEL_ID, "rename-tab", { id: tid, label: newName })
-                .catch(() => {});
+                .catch((err) =>
+                    console.debug("[terminal] rename-tab failed:", String(err)),
+                );
         }
         setIsRenameOpen(false);
         setContextTabId(null);
@@ -148,6 +163,17 @@ export default function App() {
                             .map((id) => current.find((item) => item.id === id)!)
                             .filter(Boolean);
                         setTabs(reordered);
+                        // persistence lives in the service — a silent local
+                        // reorder would reset on restart
+                        actionsApi
+                            .call(
+                                TERMINAL_PANEL_ID,
+                                "reorder-tabs",
+                                { orderedIds: reordered.map((t) => t.id) },
+                            )
+                            .catch((err) =>
+                                console.error("[Terminal] reorder persist failed:", err),
+                            );
                     }}
                 >
                     <For each={tabs()}>

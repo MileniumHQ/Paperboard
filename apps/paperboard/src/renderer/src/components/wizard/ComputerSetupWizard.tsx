@@ -31,6 +31,9 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
 
     const [isReachable, setIsReachable] = createSignal(false);
     const [probeUnreachable, setProbeUnreachable] = createSignal(false);
+    // the probe's typed error carries the real reason (refused / timeout /
+    // unknown host); losing it turned every failure into "check the address"
+    const [probeDetail, setProbeDetail] = createSignal("");
     const [isPairing, setIsPairing] = createSignal(false);
     const [pairError, setPairError] = createSignal("");
 
@@ -52,12 +55,16 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
     let probeTimeout: any;
     let lastAutoName = "";
 
+    // the probe timer must not fire past this component's lifecycle
+    onCleanup(() => clearTimeout(probeTimeout));
+
     const probeTarget = async (targetHost: string, targetPort: string) => {
         const trimmedHost = targetHost.trim();
         const trimmedPort = targetPort.trim();
         if (!trimmedHost) {
             setIsReachable(false);
             setProbeUnreachable(false);
+            setProbeDetail("");
             return;
         }
 
@@ -70,6 +77,7 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
             if (res && res.reachable) {
                 setIsReachable(true);
                 setProbeUnreachable(false);
+                setProbeDetail("");
                 const rawName = (res.hostname || trimmedHost)
                     .replace(/\.local$/i, "")
                     .trim();
@@ -81,9 +89,10 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
                 setIsReachable(false);
                 setProbeUnreachable(true);
             }
-        } catch {
+        } catch (err: any) {
             setIsReachable(false);
             setProbeUnreachable(true);
+            setProbeDetail(String(err?.message ?? err));
         }
     };
 
@@ -266,8 +275,11 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
                                 Computer Details
                             </PaperText>
                             <PaperText preset="body">
-                                Enter the IP address of the computer running
-                                PaperCrane.
+                                Enter the IP address of a computer running
+                                PaperCrane — the small daemon that hosts your
+                                panels. New machine? Install PaperCrane there
+                                first; the same download page that gave you
+                                Paperboard has the headless PaperCrane binary.
                             </PaperText>
                         </PaperFlex>
 
@@ -297,6 +309,10 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
                                     Can't reach {host().trim()}:
                                     {port().trim() || "45464"} — check the
                                     address
+                                    <Show when={probeDetail()}>
+                                        <br />
+                                        {probeDetail()}
+                                    </Show>
                                 </PaperText>
                             </Show>
                         </PaperFlex>

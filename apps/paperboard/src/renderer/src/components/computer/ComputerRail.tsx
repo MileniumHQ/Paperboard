@@ -1,5 +1,5 @@
 import type { JSX } from "solid-js";
-import { For } from "solid-js";
+import { For, Show } from "solid-js";
 import {
     PaperRail,
     PaperRailItem,
@@ -19,6 +19,10 @@ interface ComputerRailProps {
     onSelect: (val: string) => void;
     onAdd: () => void;
     onComputerContextMenu?: (compId: string, e: MouseEvent) => void;
+    // R9: the initial computers-list failed — the rail shows only "local"
+    // and the user needs a way to retry instead of a silently broken rail
+    loadFailed?: boolean;
+    onRetryLoad?: () => void;
 }
 
 // Left rail: computers, add-computer action, settings entry ("__settings")
@@ -57,6 +61,13 @@ const ComputerRail = (props: ComputerRailProps): JSX.Element => {
                 label="Add Computer"
                 onClick={() => props.onAdd()}
             />
+            <Show when={props.loadFailed}>
+                <PaperRailAction
+                    icon="refresh"
+                    label="Couldn't load computers — retry"
+                    onClick={() => props.onRetryLoad?.()}
+                />
+            </Show>
             <PaperSeparator
                 direction="vertical"
                 style={{

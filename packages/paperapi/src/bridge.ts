@@ -18,7 +18,8 @@ export function createPanelBridge<
     let localState: TState = { ...(options.defaultState || {}) } as TState;
     const listeners = new Set<(patch: Partial<TState>, full: TState) => void>();
 
-    actionsApi.on(panelId, STATE_SYNC_EVENT, (payload: any) => {
+    // the subscription is tearable: createPanelBridge returns dispose()
+    const unsubscribeSync = actionsApi.on(panelId, STATE_SYNC_EVENT, (payload: any) => {
         if (payload?.state) {
             localState = { ...localState, ...payload.state };
             for (const cb of listeners) {
@@ -39,8 +40,10 @@ export function createPanelBridge<
                     cb(fetched, localState);
                 }
             }
-        } catch {
-            // service may be booting
+        } catch (err) {
+            // service may still be booting — logged, and the bridge keeps
+            // serving the last-known (possibly default) state meanwhile
+            console.debug(`[bridge:${panelId}] refreshState deferred, service may be booting:`, err);
         }
         return localState;
     };
@@ -56,10 +59,22 @@ export function createPanelBridge<
 
     // proxy so bridge.actions.name(args) works
     const actionsProxy = new Proxy({} as TActions, {
-        get(_target, prop: string) {
+        get(_target, prop) {
+            // Promise-protocol inspection (`then`, symbol props like
+            // toPrimitive/asyncIterator) must not fire a bogus action call —
+            // only real string action names proxy through
+            if (prop === "then" || typeof prop !== "string") return undefined;
             return (...args: any[]) => actionsApi.call(panelId, prop, ...args);
         },
     });
+
+    // teardown for the whole bridge: unsubscriber + listener set. bridges
+    // outliving their component previously leaked the transport
+    // subscription forever (bounded everything).
+    const dispose = (): void => {
+        unsubscribeSync();
+        listeners.clear();
+    };
 
     return {
         panelId,
@@ -69,5 +84,6 @@ export function createPanelBridge<
         actions: actionsProxy,
         call: <R = unknown>(actionName: string, ...args: any[]): Promise<R> =>
             actionsApi.call<R>(panelId, actionName, ...args),
+        dispose,
     };
 }

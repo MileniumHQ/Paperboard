@@ -101,7 +101,9 @@ describe("CraneTransport computer scoping", () => {
     afterEach(() => {
         try {
             t?.close();
-        } catch {}
+        } catch (err) {
+            console.debug("[test] transport already closed:", String(err));
+        }
     });
 
     /** Connects the transport and completes its tunnel handshake. */

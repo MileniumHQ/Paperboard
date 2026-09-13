@@ -1,9 +1,9 @@
-import { jsonResponse, verifyAuth, type Env } from "../lib";
+import { jsonResponse, type Env } from "../lib";
 
 export async function handlePaperdlRoutes(
     request: Request,
     env: Env,
-    url: URL,
+    _url: URL,
     pathname: string,
     _bucket: R2Bucket | undefined,
 ): Promise<Response | null> {
@@ -83,126 +83,39 @@ export async function handlePaperdlRoutes(
             // Trailing filename wins over stored metadata
             const trailingName =
                 sub.match(/^\/[a-zA-Z0-9_\-]+\/download\/([^\r\n]+)$/)?.[1]?.split("/").pop() || "";
-            const filename =
-                (trailingName && decodeURIComponent(trailingName)) ||
-                meta.filename;
-            if (filename) {
-                headers.set(
-                    "Content-Disposition",
-                    `attachment; filename="${filename.replace(/"/g, "")}"`,
-                );
+            let filename = meta.filename ?? "";
+            if (trailingName) {
+                try {
+                    filename = decodeURIComponent(trailingName);
+                } catch (err) {
+                    console.warn(
+                        `[origami] paperdl: undecodable download filename for ${app}/${target}:`,
+                        err instanceof Error ? err.message : String(err),
+                    );
+                    return jsonResponse(
+                        { error: "Invalid download filename encoding" },
+                        400,
+                    );
+                }
             }
-            return new Response(obj.body, { headers });
-        }
-
-        // POST confirm, binary already in R2
-        // @ts-ignore
-        if (sub === "/confirm" && request.method === "POST") {
-            if (!verifyAuth(request, env)) {
-                return jsonResponse({ error: "Unauthorized" }, 401);
-            }
-            if (!dl) {
+            // Content-Disposition is a header: control characters (newlines,
+            // CR, NUL, …) would throw inside Headers.set. Strip them and the
+            // quote/backslash breakouts before the value goes anywhere near
+            // a header.
+            filename = filename.replace(/[\x00-\x1f\x7f"\\]/g, "");
+            if (trailingName && !filename) {
                 return jsonResponse(
-                    { error: "PAPERDL_BUCKET not configured" },
-                    500,
-                );
-            }
-            if (!env.PACKAGES) {
-                return jsonResponse(
-                    { error: "PACKAGES KV not configured" },
-                    500,
-                );
-            }
-
-            const body = (await request.json()) as {
-                target?: string;
-                version?: string;
-                filename?: string;
-                sha256?: string;
-                sha512?: string;
-                sizeBytes?: number;
-                downloadUrl?: string;
-            };
-            const {
-                target,
-                version,
-                filename,
-                sha256,
-                sha512,
-                sizeBytes,
-                downloadUrl,
-            } = body;
-
-            if (!target || !version || !sha256 || !sha512 || typeof sizeBytes !== "number") {
-                return jsonResponse(
-                    {
-                        error: "body must include target, version, sha256, sha512, sizeBytes",
-                    },
+                    { error: "Invalid download filename" },
                     400,
                 );
             }
-
-            const existing = ((await env.PACKAGES.get(
-                `paperdl:${app}:index`,
-                { type: "json" },
-            )) || {}) as Record<string, unknown>;
-            existing[target] = {
-                target,
-                version,
-                filename: filename || target,
-                sha256,
-                sha512,
-                sizeBytes,
-                downloadUrl:
-                    downloadUrl ??
-                    `${url.origin}/paperdl/${app}/${target}/download`,
-                publishedAt: new Date().toISOString(),
-            };
-            await env.PACKAGES.put(
-                `paperdl:${app}:index`,
-                JSON.stringify(existing),
-            );
-
-            if (app === "paperboard") {
-                const dlUrl =
-                    downloadUrl ??
-                    `${url.origin}/paperdl/paperboard/${target}/download`;
-                const yamlContent = [
-                    `version: ${version}`,
-                    `files:`,
-                    `  - url: ${dlUrl}`,
-                    `    sha512: ${sha512}`,
-                    `    size: ${sizeBytes}`,
-                    `path: ${dlUrl}`,
-                    `sha512: ${sha512}`,
-                    `releaseDate: '${new Date().toISOString()}'`,
-                ].join("\n");
-
-                let ymlKey: string | null = null;
-                if (target.startsWith("windows"))
-                    ymlKey = "paperboard/latest.yml";
-                else if (target.startsWith("macos"))
-                    ymlKey = "paperboard/latest-mac.yml";
-                else if (target.startsWith("linux"))
-                    ymlKey = "paperboard/latest-linux.yml";
-
-                if (ymlKey) {
-                    await dl.put(ymlKey, yamlContent, {
-                        httpMetadata: { contentType: "text/yaml" },
-                    });
-                }
+            if (filename) {
+                headers.set(
+                    "Content-Disposition",
+                    `attachment; filename="${filename}"`,
+                );
             }
-
-            return jsonResponse({
-                success: true,
-                app,
-                target,
-                version,
-                sha256,
-                downloadUrl:
-                    downloadUrl ??
-                    `${url.origin}/paperdl/${app}/${target}/download`,
-            });
+            return new Response(obj.body, { headers });
         }
     }
 

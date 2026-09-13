@@ -1,5 +1,9 @@
 import type { ActionInfo, TriggerInfo } from "@paperboard-dev/paperapi";
 
+
+// reserved synthetic panel id for core-provided actions
+const BUILTIN_PANEL_ID = "builtin.computer";
+
 export interface BuiltinCategory {
     id: string;
     domain: "logic" | "computer";
@@ -1130,8 +1134,8 @@ export const BUILTIN_DEFS: BuiltinDef[] = [
                         icon: "notifications",
                     },
                 } },
-    { id: "take-screenshot", category: "computer.display", panelId: "builtin.computer", item: {
-                    panelId: "builtin.computer",
+    { id: "take-screenshot", category: "computer.display", panelId: BUILTIN_PANEL_ID, item: {
+                    panelId: BUILTIN_PANEL_ID,
                     action: "take-screenshot",
                     schema: {
                         id: "take-screenshot",
@@ -1154,8 +1158,8 @@ export const BUILTIN_DEFS: BuiltinDef[] = [
                         },
                     },
                 } },
-    { id: "set-volume", category: "computer.audio", panelId: "builtin.computer", item: {
-                    panelId: "builtin.computer",
+    { id: "set-volume", category: "computer.audio", panelId: BUILTIN_PANEL_ID, item: {
+                    panelId: BUILTIN_PANEL_ID,
                     action: "set-volume",
                     schema: {
                         id: "set-volume",
@@ -1174,8 +1178,8 @@ export const BUILTIN_DEFS: BuiltinDef[] = [
                         },
                     },
                 } },
-    { id: "mute-audio", category: "computer.audio", panelId: "builtin.computer", item: {
-                    panelId: "builtin.computer",
+    { id: "mute-audio", category: "computer.audio", panelId: BUILTIN_PANEL_ID, item: {
+                    panelId: BUILTIN_PANEL_ID,
                     action: "mute-audio",
                     schema: {
                         id: "mute-audio",
@@ -1192,8 +1196,8 @@ export const BUILTIN_DEFS: BuiltinDef[] = [
                         },
                     },
                 } },
-    { id: "send-notification", category: "computer.system", panelId: "builtin.computer", item: {
-                    panelId: "builtin.computer",
+    { id: "send-notification", category: "computer.system", panelId: BUILTIN_PANEL_ID, item: {
+                    panelId: BUILTIN_PANEL_ID,
                     action: "send-notification",
                     schema: {
                         id: "send-notification",
@@ -1218,8 +1222,8 @@ export const BUILTIN_DEFS: BuiltinDef[] = [
                         },
                     },
                 } },
-    { id: "lock-screen", category: "computer.system", panelId: "builtin.computer", item: {
-                    panelId: "builtin.computer",
+    { id: "lock-screen", category: "computer.system", panelId: BUILTIN_PANEL_ID, item: {
+                    panelId: BUILTIN_PANEL_ID,
                     action: "lock-screen",
                     schema: {
                         id: "lock-screen",
@@ -1233,9 +1237,9 @@ export const BUILTIN_DEFS: BuiltinDef[] = [
     {
         id: "run-command",
         category: "computer.system",
-        panelId: "builtin.computer",
+        panelId: BUILTIN_PANEL_ID,
         item: {
-            panelId: "builtin.computer",
+            panelId: BUILTIN_PANEL_ID,
             action: "run-command",
             schema: {
                 id: "run-command",
@@ -1264,19 +1268,3 @@ export const BUILTIN_CATEGORIES: BuiltinCategory[] = BUILTIN_CATEGORY_META.map((
     ...meta,
     items: BUILTIN_DEFS.filter((d) => d.category === meta.id).map((d) => d.item),
 }));
-
-export const BUILTIN_PANEL_BY_ID: Map<string, string> = new Map(
-    BUILTIN_DEFS.map((d) => [d.id, d.panelId]),
-);
-
-export const BUILTIN_IDS: Set<string> = new Set(BUILTIN_DEFS.map((d) => d.id));
-
-export function isBuiltinId(id: string | undefined | null): boolean {
-    if (!id) return false;
-    return BUILTIN_IDS.has(id);
-}
-
-export function getBuiltinPanelId(id: string | undefined | null): string | undefined {
-    if (!id) return undefined;
-    return BUILTIN_PANEL_BY_ID.get(id);
-}

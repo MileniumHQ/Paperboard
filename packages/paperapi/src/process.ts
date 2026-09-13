@@ -1,6 +1,11 @@
 import { invoke, send, on, unpackIpcPayload } from "./ipc";
-import { debugErr } from "./debug";
 import { newClientId } from "./channels";
+
+export interface ProcessRunResult {
+    exitCode: number;
+    /** Machine-readable cause when the run ended without a child exit. */
+    code?: "RUN_TIMEOUT";
+}
 
 export interface ProcessRunOptions {
     command: string;
@@ -31,13 +36,11 @@ export const processApi = {
             env: options.env,
         }),
 
-    write: (id: string, data: string): void => {
-        send("process-write", { id, data });
-    },
+    write: (id: string, data: string): Promise<void> =>
+        send("process-write", { id, data }),
 
-    kill: (id: string, signal: string = "SIGTERM"): void => {
-        send("process-kill", { id, signal });
-    },
+    kill: (id: string, signal: string = "SIGTERM"): Promise<void> =>
+        send("process-kill", { id, signal }),
 
     exists: async (id: string): Promise<boolean> =>
         invoke<boolean>("process-exists", { id }),
@@ -45,40 +48,37 @@ export const processApi = {
     attach: async (id: string): Promise<{ success: boolean }> =>
         invoke<{ success: boolean }>("process-attach", { id }),
 
-    onData: (id: string, callback: (data: string) => void): void => {
-        on(`process-data:${id}`, (event: unknown, data: any) => {
-            const text = unpackIpcPayload<string>(event, data) as string;
-            if (text) callback(text);
-        });
-        invoke<boolean>("process-exists", { id })
-            .then((exists) => {
-                if (exists) invoke("process-attach", { id }).catch((err) => debugErr(`process-attach ${id}`, err));
-            })
-            .catch((err) => debugErr(`process-exists ${id}`, err));
-    },
-
-    onStdout: (id: string, callback: (data: string) => void): void => {
-        on(`process-stdout:${id}`, (event: unknown, data: any) => {
+    onData: (id: string, callback: (data: string) => void): (() => void) => {
+        // attach + track are handled by on(); the UNSUBSCRIBE must too —
+        // every subscription returns its teardown or it is a leak
+        return on(`process-data:${id}`, (event: unknown, data: any) => {
             const text = unpackIpcPayload<string>(event, data) as string;
             if (text) callback(text);
         });
     },
 
-    onStderr: (id: string, callback: (data: string) => void): void => {
-        on(`process-stderr:${id}`, (event: unknown, data: any) => {
+    onStdout: (id: string, callback: (data: string) => void): (() => void) => {
+        return on(`process-stdout:${id}`, (event: unknown, data: any) => {
             const text = unpackIpcPayload<string>(event, data) as string;
             if (text) callback(text);
         });
     },
 
-    onExit: (id: string, callback: (exitCode?: number) => void): void => {
-        on(`process-exit:${id}`, (event: unknown, payload: any) => {
+    onStderr: (id: string, callback: (data: string) => void): (() => void) => {
+        return on(`process-stderr:${id}`, (event: unknown, data: any) => {
+            const text = unpackIpcPayload<string>(event, data) as string;
+            if (text) callback(text);
+        });
+    },
+
+    onExit: (id: string, callback: (exitCode?: number) => void): (() => void) => {
+        return on(`process-exit:${id}`, (event: unknown, payload: any) => {
             const raw = payload !== undefined ? payload : event;
             callback(typeof raw === "number" ? raw : raw?.exitCode);
         });
     },
 
-    run: async (options: ProcessRunOptions, timeoutMs = 30_000): Promise<{ exitCode: number }> => {
+    run: async (options: ProcessRunOptions, timeoutMs: number | null = 30_000): Promise<ProcessRunResult> => {
         const id = newClientId("proc");
         const unsubscribers: (() => void)[] = [];
 
@@ -104,13 +104,20 @@ export const processApi = {
             if (off) unsubscribers.push(off);
         }
 
-        const exitPromise = new Promise<{ exitCode: number }>((resolve) => {
-            const timer = setTimeout(() => {
-                resolve({ exitCode: -1 });
-            }, timeoutMs);
+        const exitPromise = new Promise<ProcessRunResult>((resolve) => {
+            // bounded: a timeout must kill the child it started, not quietly
+            // leave it running while reporting a synthetic exit code; null
+            // timeout waits for the real exit
+            const timer =
+                timeoutMs === null
+                    ? null
+                    : setTimeout(() => {
+                          send("process-kill", { id, signal: "SIGTERM" });
+                          resolve({ exitCode: -1, code: "RUN_TIMEOUT" });
+                      }, timeoutMs);
 
             const off = on(`process-exit:${id}`, (_event: unknown, payload: any) => {
-                clearTimeout(timer);
+                if (timer !== null) clearTimeout(timer);
                 const raw = payload !== undefined ? payload : _event;
                 const code = typeof raw === "number" ? raw : raw?.exitCode ?? 0;
                 resolve({ exitCode: code });
@@ -136,8 +143,10 @@ export const processApi = {
     exec: async (
         command: string,
         args: string[] = [],
-        options?: { cwd?: string; env?: Record<string, string>; timeoutMs?: number },
+        options?: { cwd?: string; env?: Record<string, string>; timeoutMs?: number; execBufferCapBytes?: number },
     ): Promise<{ stdout: string; stderr: string; exitCode: number }> => {
+        // BOUNDED: a chatty command must not balloon exec's memory cap-free
+        const cap = options?.execBufferCapBytes ?? 10 * 1024 * 1024;
         let stdout = "";
         let stderr = "";
         const res = await processApi.run(
@@ -147,14 +156,21 @@ export const processApi = {
                 cwd: options?.cwd,
                 env: options?.env,
                 onStdout: (text) => {
-                    stdout += text;
+                    if (stdout.length < cap) stdout += text;
                 },
                 onStderr: (text) => {
-                    stderr += text;
+                    if (stderr.length < cap) stderr += text;
                 },
             },
             options?.timeoutMs ?? 30_000,
         );
+        // a timeout is not an exit code -1 shaped like any other failure:
+        // reject loudly so callers can't mistake partial output for success
+        if (res.code === "RUN_TIMEOUT") {
+            throw new Error(
+                `RUN_TIMEOUT: "${command}" exceeded ${options?.timeoutMs ?? 30_000}ms and was killed`,
+            );
+        }
         return {
             stdout: stdout.trim(),
             stderr: stderr.trim(),

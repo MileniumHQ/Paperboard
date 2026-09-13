@@ -126,6 +126,17 @@ describe("validatePanelManifest", () => {
         expect(() => validatePanelManifest("string", "id")).toThrow();
     });
 
+    it("preserves declared permissions as a bounded factual clip", () => {
+        const m = validatePanelManifest(
+            { name: "T", permissions: ["terminal.create", 42, "x".repeat(100)] },
+            "id",
+        );
+        expect(m.permissions).toEqual(["terminal.create", "x".repeat(64)]);
+        expect(validatePanelManifest({ name: "T" }, "id").permissions).toBeUndefined();
+        expect(validatePanelManifest({ name: "T", permissions: "all" }, "id").permissions).toBeUndefined();
+        expect(validatePanelManifest({ name: "T", permissions: [] }, "id").permissions).toBeUndefined();
+    });
+
     it("rejects absolute base paths", () => {
         expect(() =>
             validatePanelManifest({ base: "/etc/passwd" }, "id"),

@@ -1,5 +1,8 @@
 import { createSignal, createMemo, createEffect, onMount, onCleanup, For, Show } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
+
+// console log ring: newest entries win, oldest drop past the cap
+const MAX_CONSOLE_LOGS = 500;
 import ActionBlock from "./components/ActionBlock";
 import NoteBlock, { type CanvasNote } from "./components/NoteBlock";
 import ActionLibrary from "./components/ActionLibrary";
@@ -20,9 +23,11 @@ import {
 import {
     config as configApi,
     actions as actionsApi,
+    getType,
     type ActionInfo,
     type TriggerInfo,
 } from "@paperboard-dev/paperapi";
+import { ACTIONS_PANEL_ID } from "./panelId";
 import {
     type CanvasBlock,
     removeBlock,
@@ -33,6 +38,7 @@ import {
     blockVariableName,
     renameBlockVariable,
     relabelVariableRefs,
+    isCanvasBlock,
 } from "./lib/tree";
 import {
     type FunctionDef,
@@ -110,63 +116,38 @@ export default function App() {
         availableVariables: [],
     });
 
-        const TRIGGER_FIELD_TYPES: Record<string, Record<string, string>> = {
-        "on-message": {
-            content: "string",
-            author: "string",
-            authorId: "discord-user",
-            channelId: "discord-channel",
-            guildId: "string",
-            messageId: "discord-message",
-        },
-        "on-message-keyword": {
-            content: "string",
-            author: "string",
-            authorId: "discord-user",
-            channelId: "discord-channel",
-            guildId: "string",
-            messageId: "discord-message",
-        },
-        "on-member-join": {
-            username: "string",
-            userId: "discord-user",
-            guildId: "string",
-            guildName: "string",
-        },
-        "on-member-leave": {
-            username: "string",
-            userId: "discord-user",
-            guildId: "string",
-        },
-        "on-reaction-add": {
-            emoji: "string",
-            userId: "discord-user",
-            username: "string",
-            messageId: "discord-message",
-            channelId: "discord-channel",
-        },
-    };
-
-    const TRIGGER_FIELD_LABELS: Record<string, string> = {
-        content: "Content",
-        author: "Author Name",
-        authorId: "Author",
-        channelId: "Channel",
-        guildId: "Server",
-        messageId: "Message",
-        username: "Username",
-        userId: "User",
-        guildName: "Server",
-        emoji: "Emoji",
-    };
-
-    const TRIGGER_FIELD_ICONS: Record<string, string> = {
-        channelId: "tag",
-        authorId: "person",
-        userId: "person",
-        messageId: "chat",
-        content: "chat",
-        emoji: "add_reaction",
+    const typedTriggerFields = (
+        action: any,
+    ): Record<string, string> | null => {
+        if (!action || typeof action !== "object") return null;
+        // trigger schemas that carry typed output fields directly (the DSL
+        // does not yet produce these — see report: metadata still needed)
+        if (
+            action.outputFields &&
+            typeof action.outputFields === "object" &&
+            Object.keys(action.outputFields).length > 0
+        ) {
+            const map: Record<string, string> = {};
+            for (const [fieldId, v] of Object.entries<any>(action.outputFields)) {
+                map[fieldId] = typeof v === "string" ? v : v?.type || "any";
+            }
+            return map;
+        }
+        // typed output defined with the PaperAPI schema DSL: derive fields
+        // from the registered custom type
+        const outType =
+            typeof action.output === "string" ? action.output : action.output?.type;
+        if (outType) {
+            const def = getType(outType);
+            if (def?.fields && Object.keys(def.fields).length > 0) {
+                const map: Record<string, string> = {};
+                for (const [fieldId, f] of Object.entries(def.fields)) {
+                    map[fieldId] = String(f.type);
+                }
+                return map;
+            }
+        }
+        return null;
     };
 
     const [functions, setFunctions] = createSignal<FunctionDef[]>([]);
@@ -184,13 +165,19 @@ export default function App() {
     };
 
     const appendConsoleLog = (entry: { time: string; message: string }) => {
-        setConsoleLogs((prev) => [
-            ...prev,
-            {
-                id: `log_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-                ...entry,
-            },
-        ]);
+        // bounded: a long flow-test session must not grow this store forever
+        setConsoleLogs((prev) => {
+            const next = [
+                ...prev,
+                {
+                    id: `log_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+                    ...entry,
+                },
+            ];
+            return next.length > MAX_CONSOLE_LOGS
+                ? next.slice(next.length - MAX_CONSOLE_LOGS)
+                : next;
+        });
     };
 
     const PRIMITIVE_EXPECTED_TYPES = new Set([
@@ -261,23 +248,25 @@ export default function App() {
                 (trig.action as any)?.trigger ||
                 "";
                     const fieldTypes =
-                        TRIGGER_FIELD_TYPES[trigActionId] ||
                         functionTriggerFields(trigActionId) ||
-                        undefined;
+                        (() => {
+                            const typed = typedTriggerFields(trig.action);
+                            if (!typed) {
+                                console.debug(
+                                    `[actions] trigger "${trigActionId}" exposes no typed field metadata; variable picker offers only the trigger output`,
+                                );
+                            }
+                            return typed;
+                        })();
             if (fieldTypes) {
                 for (const [fieldId, fieldType] of Object.entries(fieldTypes)) {
+                    const def = getType(fieldType);
                     available.push({
                         id: fieldId,
-                        label:
-                            TRIGGER_FIELD_LABELS[fieldId] ||
-                            fieldId.charAt(0).toUpperCase() +
-                                fieldId.slice(1),
+                        label: def?.name || fieldId.charAt(0).toUpperCase() + fieldId.slice(1),
                         sourceBlockId: trig.id,
                         sourceName: trig.action.name,
-                        icon:
-                            TRIGGER_FIELD_ICONS[fieldId] ||
-                            trig.action.icon ||
-                            "bolt",
+                        icon: trig.action.icon || "bolt",
                         type: fieldType,
                     });
                 }
@@ -475,7 +464,7 @@ export default function App() {
     const handleTestRunFlow = async (triggerBlock: CanvasBlock, payload: any) => {
         try {
             const log = await actionsApi.call<any>(
-                "dev.paperboard.actions",
+                ACTIONS_PANEL_ID,
                 "test-run-flow",
                 { triggerBlockId: triggerBlock.id, payload: payload || {} },
             );
@@ -494,41 +483,63 @@ export default function App() {
     };
 
     const handlePlayAllFlows = () => {
-        let ranOnPlay = false;
-        for (const b of blocks) {
-            if (
+        // only on-play triggers run here — silently running OTHER triggers
+        // as a stand-in would be a surprising side effect, not a fallback
+        const onPlay = blocks.filter(
+            (b) =>
                 b.isTrigger &&
-                (b.action?.id === "on-play" || (b.action as any)?.trigger === "on-play")
-            ) {
-                handleTestRunFlow(b, {});
-                ranOnPlay = true;
-            }
+                (b.action?.id === "on-play" || (b.action as any)?.trigger === "on-play"),
+        );
+        if (onPlay.length === 0) {
+            appendConsoleLog({
+                time: new Date().toLocaleTimeString(),
+                message: "No on-play flows on the canvas — nothing ran (play button only runs on-play triggers).",
+            });
+            return;
         }
-        if (!ranOnPlay) {
-            for (const b of blocks) {
-                if (b.isTrigger) {
-                    handleTestRunFlow(b, {});
-                }
-            }
+        for (const b of onPlay) {
+            handleTestRunFlow(b, {});
         }
     };
 
     let saveTimer: ReturnType<typeof setTimeout> | undefined;
+    // a pending debounced save must never fire after unmount
+    onCleanup(() => clearTimeout(saveTimer));
+    // canvas payloads are plain shapes; blocks may be a Solid store proxy,
+    // which structuredClone rejects — fall back to the parse/stringify
+    // roundtrip that handles the proxy read-through
+    const deepClone = <T,>(value: T): T => {
+        if (typeof structuredClone === "function") {
+            try {
+                return structuredClone(value);
+            } catch (err) {
+                console.debug("[actions] structuredClone rejected (store proxy?), falling back to JSON clone");
+            }
+        }
+        try {
+            return JSON.parse(JSON.stringify(value)) as T;
+        } catch (err) {
+            console.error("[Actions] deep clone of canvas data failed; saving shared object:", err);
+            return value;
+        }
+    };
     const saveFlows = (currentBlocks?: CanvasBlock[], currentNotes?: CanvasNote[]) => {
-        const dataToSave = currentBlocks || JSON.parse(JSON.stringify(blocks));
-        const notesToSave = currentNotes || JSON.parse(JSON.stringify(notes));
-        const functionsToSave = JSON.parse(JSON.stringify(functions()));
+        const dataToSave = currentBlocks || deepClone(blocks);
+        const notesToSave = currentNotes || deepClone(notes);
+        const functionsToSave = deepClone(functions());
         clearTimeout(saveTimer);
         saveTimer = setTimeout(() => {
-            configApi.set({ flows: dataToSave, notes: notesToSave, functions: functionsToSave }).catch((err) => {
+            configApi.set({ flows: dataToSave, notes: notesToSave, functions: functionsToSave }, ACTIONS_PANEL_ID).catch((err) => {
                 console.error("[Actions] Failed to save flows:", err);
             });
             actionsApi
-                .call("dev.paperboard.actions", "sync-flows", {
+                .call(ACTIONS_PANEL_ID, "sync-flows", {
                     flows: dataToSave,
                     functions: functionsToSave,
                 })
-                .catch(() => {});
+                .catch((err) => {
+                    console.warn("[actions] flow sync to daemon failed:", String(err));
+                });
         }, 80);
     };
 
@@ -600,7 +611,7 @@ export default function App() {
 
     onMount(async () => {
         try {
-            const saved = await configApi.get<any>();
+            const saved = await configApi.get<any>(ACTIONS_PANEL_ID);
             if (saved?.functions && Array.isArray(saved.functions)) {
                 setFunctions(
                     saved.functions.filter(
@@ -609,7 +620,15 @@ export default function App() {
                 );
             }
             if (saved?.flows && Array.isArray(saved.flows)) {
-                setBlocks(saved.flows);
+                // stored flows are executable content: drop malformed
+                // blocks loudly instead of rendering them into the canvas
+                const clean = saved.flows.filter(isCanvasBlock);
+                if (clean.length !== saved.flows.length) {
+                    console.warn(
+                        `[Actions] dropped ${saved.flows.length - clean.length} malformed stored block(s)`,
+                    );
+                }
+                setBlocks(clean);
             }
             if (saved?.notes && Array.isArray(saved.notes)) {
                 setNotes(saved.notes);
@@ -620,7 +639,11 @@ export default function App() {
     });
 
     onMount(() => {
-        const unsub = actionsApi.onTrigger("*", (output, data) => {
+        // internal flow-state triggers belong to THIS panel: explicit
+        // two-arg subscriptions (each filters its own trigger name) —
+        // no wildcard; cross-panel flows live in the service's trigger
+        // subscriptions instead
+        const handler = (output: any, data: any) => {
             if (!data) return;
             if (data.trigger === "flow-step" && output?.blockId) {
                 setBlockRunning(output.blockId, output.status === "start");
@@ -641,10 +664,13 @@ export default function App() {
                 });
                 return;
             }
-        });
+        };
+        const unsubs = (["flow-step", "flow-start", "flow-end", "flow-log"] as const).map(
+            (trigger) => actionsApi.onTrigger(trigger, handler),
+        );
 
         onCleanup(() => {
-            unsub();
+            for (const unsub of unsubs) unsub();
         });
     });
 
@@ -692,7 +718,9 @@ export default function App() {
                     }
                 }
             }
-        } catch {}
+        } catch (err) {
+            console.debug("[actions] drop-zone lookup failed:", String(err));
+        }
         return null;
     };
 
@@ -732,7 +760,9 @@ export default function App() {
             if (containerRef) {
                 try {
                     containerRef.setPointerCapture(e.pointerId);
-                } catch {}
+                } catch (err) {
+                    console.debug("[actions] pointer capture failed:", String(err));
+                }
             }
         }
     };

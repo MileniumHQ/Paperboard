@@ -61,7 +61,8 @@ export default function Options() {
         try {
             await writeServerProperties(snapshot);
             setSaveError(false);
-        } catch {
+        } catch (err) {
+            console.debug("[options] server.properties save failed:", String(err));
             setSaveError(true);
         }
     };

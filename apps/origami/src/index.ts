@@ -20,7 +20,7 @@ export default {
             });
         }
 
-        const bucket = env.PANELS_BUCKET || env.BOARDS_BUCKET;
+        const bucket = env.PANELS_BUCKET;
         const url = new URL(request.url);
         const pathname = url.pathname;
 
@@ -36,13 +36,8 @@ export default {
                         "/panel/:id.json",
                         "/panel/:id/download",
                         "/panel/publish",
-                        "/boards/index.json",
-                        "/board/:id.json",
-                        "/board/:id/download",
-                        "/board/publish",
                         "/update/java",
                         "/paperdl/:app/index.json",
-                        "/paperdl/:app/confirm",
                         "/paperdl/:app/:target/download",
                         "/paperdl/paperboard/latest.yml",
                         "/paperdl/paperboard/latest-mac.yml",
@@ -83,12 +78,11 @@ export default {
 
             return jsonResponse({ error: "Not Found" }, 404);
         } catch (err) {
-            const errorMessage =
-                err instanceof Error ? err.message : String(err);
-            return jsonResponse(
-                { error: "Internal Server Error", details: errorMessage },
-                500,
-            );
+            // O9: the detail goes to the logs, not the caller — KV/R2
+            // binding errors are internal facts, and echoing err.message
+            // to an unauthenticated caller is an information leak.
+            console.error("[origami] unhandled error:", err);
+            return jsonResponse({ error: "Internal Server Error" }, 500);
         }
     },
 };

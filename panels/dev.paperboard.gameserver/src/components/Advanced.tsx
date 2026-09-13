@@ -250,7 +250,8 @@ export default function Advanced() {
         try {
             await writeServerProperties(snapshot);
             setSaveError(false);
-        } catch {
+        } catch (err) {
+            console.debug("[advanced] server.properties save failed:", String(err));
             setSaveError(true);
         }
     };

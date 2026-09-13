@@ -1,5 +1,6 @@
 // archive extraction via bundled libs, no system tools
 import path from "path";
+import { logger } from "./logger";
 import fs from "fs";
 import * as tar from "tar";
 import AdmZip from "adm-zip";
@@ -67,8 +68,8 @@ export function findBinDir(dir: string, maxDepth: number): string | null {
                     const result = findBinDir(sub, maxDepth - 1);
                     if (result) return result;
                 }
-            } catch {}
+            } catch (err) { logger.debug("[engineArchives.ts] op failed:", err) }
         }
-    } catch {}
+    } catch (err) { logger.debug("[engineArchives.ts] op failed:", err) }
     return null;
 }

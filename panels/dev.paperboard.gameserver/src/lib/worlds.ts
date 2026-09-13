@@ -1,6 +1,5 @@
-import { files as fileApi, terminal as terminalApi, system } from "@paperboard-dev/paperapi";
-import { listDirectory, sanitizeFileName } from "./filesystem";
-import { collectWorldDirs, deleteWorldDirs } from "../core/worlds";
+import { serverBridge } from "./server";
+import { ACTION_IDS } from "../service/contract";
 import type { PropertyField } from "./properties";
 
 export const WORLD_PROPERTY_FIELDS: PropertyField[] = [
@@ -72,30 +71,14 @@ export const WORLD_PROPERTY_FIELDS: PropertyField[] = [
 
 export { WORLD_NAME_PATTERN } from "../core/worlds";
 
+// world listing and deletion run in the service (service/worlds.ts owns
+// the pty + trash discipline with an explicit PANEL_ID). The direct
+// fileApi/terminalApi twins that lived here are gone: the UI triggers,
+// the service executes, state syncs back.
 export async function listWorldDirs(): Promise<string[]> {
-    const entries = await listDirectory("");
-    return collectWorldDirs({
-        entries,
-        sanitize: sanitizeFileName,
-        exists: (path) => fileApi.exists(path),
-        onError: (safe, err) => console.error(`[Worlds] Failed to check "${safe}/level.dat":`, err),
-    });
+    return serverBridge.call<string[]>(ACTION_IDS.listWorldDirs);
 }
 
 export async function deleteActiveWorldDirs(levelName: string): Promise<void> {
-    await deleteWorldDirs(levelName, {
-        getServerDir: () => fileApi.getPath(""),
-        getTargetOs: async () => (await system.getInfo()).os,
-        createPty: (id, opts) => terminalApi.create(id, opts),
-        writePty: (id, data) => terminalApi.write(id, data),
-        scheduleDestroy: (id) => {
-            setTimeout(() => {
-                try {
-                    terminalApi.destroy(id);
-                } catch (err) {
-                    console.error("[Worlds] Failed to clean up delete-world pty:", err);
-                }
-            }, 1000);
-        },
-    });
+    await serverBridge.call(ACTION_IDS.deleteWorld, { levelName });
 }

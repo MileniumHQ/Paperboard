@@ -1,5 +1,6 @@
 import { createSignal } from "solid-js";
 import { serverBridge } from "./server";
+import { ACTION_IDS } from "../service/contract";
 import type { PlayerStatData } from "../core/players";
 
 export type { PlayerStatData };
@@ -45,15 +46,21 @@ export function forgetPlayerData(name: string) {
         next.delete(key);
         return next;
     });
-    serverBridge.actions.forgetPlayerData(name).catch(() => {});
+    serverBridge.call(ACTION_IDS.forgetPlayerData, { player: name }).catch((err) =>
+        console.debug("[players] forgetPlayerData failed:", String(err)),
+    );
 }
 
 export function queryPlayerStats(name: string) {
-    serverBridge.actions.queryPlayerStats(name).catch(() => {});
+    serverBridge.call(ACTION_IDS.queryPlayerStats, { player: name }).catch((err) =>
+        console.debug("[players] queryPlayerStats failed:", String(err)),
+    );
 }
 
 export function queryOnlinePlayers() {
-    serverBridge.actions.queryOnlinePlayers().catch(() => {});
+    serverBridge.call(ACTION_IDS.queryOnlinePlayers).catch((err) =>
+        console.debug("[players] queryOnlinePlayers failed:", String(err)),
+    );
 }
 
 export async function restorePlayerStateFromLog() {

@@ -46,22 +46,36 @@ export const fileApi = {
 
         const downloadId = newClientId("file");
 
+        // hoisted so a rejected invoke can unsubscribe: a download that
+        // fails to start must not leave a permanently subscribed listener
+        let off: (() => void) | undefined;
         if (opts.onProgress) {
-            on(`file-progress:${downloadId}`, (event: unknown, data: any) => {
+            off = on(`file-progress:${downloadId}`, (event: unknown, data: any) => {
                 const payload = data !== undefined ? data : event;
-                if (payload) opts.onProgress!(payload as FileDownloadProgress);
+                if (payload) {
+                    const progress = payload as FileDownloadProgress;
+                    opts.onProgress!(progress);
+                    if (progress.stage === "completed" || progress.stage === "error") {
+                        off?.();
+                    }
+                }
             });
         }
 
-        return invoke("file-download", {
-            url: opts.url,
-            targetPath: opts.targetPath,
-            appId: opts.appId || getHost(),
-            downloadId,
-            sha1: opts.sha1,
-            sha256: opts.sha256,
-            checksum: opts.checksum,
-        });
+        try {
+            return await invoke("file-download", {
+                url: opts.url,
+                targetPath: opts.targetPath,
+                appId: opts.appId || getHost(),
+                downloadId,
+                sha1: opts.sha1,
+                sha256: opts.sha256,
+                checksum: opts.checksum,
+            });
+        } catch (err) {
+            off?.();
+            throw err;
+        }
     },
 
     getPath: (targetPath: string, appId?: string): Promise<string> =>

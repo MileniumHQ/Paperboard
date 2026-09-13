@@ -127,12 +127,34 @@ export function logToMain(
     level: "info" | "warn" | "error",
     ...args: unknown[]
 ): void {
-    const message = args
-        .map((a) => (a instanceof Error ? a.stack ?? String(a) : typeof a === "object" ? JSON.stringify(a) : String(a)))
-        .join(" ");
+    // R12: serialization happens INSIDE the try — a circular payload must
+    // degrade to a safe string here, not throw in the caller's context
+    // and defeat "logging must never break the caller".
+    let message = "";
     try {
+        message = args
+            .map((a) =>
+                a instanceof Error
+                    ? a.stack ?? String(a)
+                    : typeof a === "object"
+                      ? JSON.stringify(a, jsonReplacer, 2)
+                      : String(a),
+            )
+            .join(" ");
         requireIpc().send("renderer-log", level, message);
-    } catch {
-        // Logging must never break the caller
+    } catch (err) {
+        // Logging must never break the caller, but the failure itself is logged
+        console.warn("[shell.ts] logToMain failed (IPC unavailable):", err);
     }
 }
+
+// JSON.stringify replacer that survives circular structures: seen objects
+// become "[Circular]" instead of a TypeError
+function jsonReplacer(_key: string, value: unknown) {
+    if (typeof value === "object" && value !== null) {
+        if (jsonReplacerSeen.has(value)) return "[Circular]";
+        jsonReplacerSeen.add(value);
+    }
+    return value;
+}
+const jsonReplacerSeen = new Set<unknown>();

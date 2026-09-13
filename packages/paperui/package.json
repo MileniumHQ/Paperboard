@@ -1,6 +1,6 @@
 {
     "name": "@paperboard-dev/paperui",
-    "version": "1.1.0",
+    "version": "3.0.0-alpha",
     "type": "module",
     "main": "./dist/paperui.cjs.js",
     "module": "./dist/paperui.es.js",
@@ -10,8 +10,7 @@
         "**/*.css"
     ],
     "files": [
-        "dist",
-        "src"
+        "dist"
     ],
     "exports": {
         ".": {
@@ -27,7 +26,7 @@
         "dev": "vite",
         "build": "tsc --noEmit && vite build",
         "preview": "vite preview",
-        "test": "vitest run"
+        "test": "bash scripts/check-styling.sh && vitest run"
     },
     "devDependencies": {
         "@solidjs/testing-library": "^0.8.10",

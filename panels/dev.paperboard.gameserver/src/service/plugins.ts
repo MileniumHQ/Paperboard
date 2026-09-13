@@ -11,6 +11,8 @@ import {
     pluginDirName,
     validatePluginFilename,
 } from "../core/plugins";
+import { trashRemovePathsWith } from "../core/trash";
+import { makeTrashRemoveDeps } from "./trashDeps";
 import type { GameServerState, InstalledPlugin, InstalledRecord } from "./types";
 import { PANEL_ID } from "./types";
 
@@ -21,7 +23,8 @@ async function getInstallRecords(): Promise<Record<string, InstalledRecord>> {
     try {
         const saved = await config.get<Record<string, unknown>>(PANEL_ID);
         return parseInstallRecords(saved?.[INSTALL_RECORDS_KEY]);
-    } catch {
+    } catch (err) {
+        console.debug("[plugins] install records unreadable, starting empty:", String(err));
         return {};
     }
 }
@@ -33,7 +36,9 @@ async function writeInstallRecords(
     try {
         const saved = await config.get<Record<string, unknown>>(PANEL_ID);
         if (saved && typeof saved === "object") current = saved;
-    } catch {}
+    } catch (err) {
+        console.debug("[plugins] no saved panel config yet:", String(err));
+    }
     await config.set({ ...current, [INSTALL_RECORDS_KEY]: records }, PANEL_ID);
 }
 
@@ -62,7 +67,13 @@ export async function deletePlugin(
     filename: string,
 ): Promise<void> {
     const safe = validatePluginFilename(sanitizeFileName(filename) ?? filename);
-    await fileApi.delete(`${pluginDirName(ctx.state.serverSoftware)}/${safe}`, PANEL_ID);
+    // trash first, then remove (see core/trash.ts) — a bare fileApi.delete
+    // here is irreversible destruction on a single RPC
+    await trashRemovePathsWith(
+        makeTrashRemoveDeps("Service:Plugins"),
+        [`${pluginDirName(ctx.state.serverSoftware)}/${safe}`],
+        "delete-plugin-pty",
+    );
     const records = await getInstallRecords();
     if (records[safe]) {
         delete records[safe];

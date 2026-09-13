@@ -1,17 +1,13 @@
 import * as os from "os";
 import * as fs from "fs";
-import * as crypto from "crypto";
 import { spawn } from "child_process";
 import { getDetailedOsInfo, getNetworkIp } from "../index";
-import {
-    notifyComputer,
-    screenshotComputer,
-    setComputerVolume,
-    setComputerMuted,
-    beepComputer,
-} from "../syscontrol";
+import { streamToFileWithProgress } from "../storage";
 import pkg from "../../package.json";
+import { logger } from "../logger";
 import type { RpcContext } from "./context";
+import { rpcErrorCode } from "./params";
+import { forbidden } from "./errors";
 
 // self-update URL must be https or loopback http
 function isSafeUpdateUrl(rawUrl: string): boolean {
@@ -26,20 +22,24 @@ function isSafeUpdateUrl(rawUrl: string): boolean {
             );
         }
         return false;
-    } catch {
+    } catch (err) {
+        // malformed URL fails closed (deny) — logged so update refusals
+        // stay diagnosable instead of mysterious
+        console.error("[system:update] refusing unparseable download URL:", err);
         return false;
     }
 }
 
 export async function handleSystem(action: string, id: unknown, params: any, ctx: RpcContext): Promise<boolean> {
     const { reply } = ctx;
-    switch (action) {
+    try {
+        switch (action) {
         case "system:ip": {
             reply(id, { ip: getNetworkIp() });
             return true;
         }
         case "system:info": {
-            const osInfo = getDetailedOsInfo();
+            const osInfo = await getDetailedOsInfo();
             reply(id, {
                 service: "papercrane",
                 version: pkg.version || "1.0.0",
@@ -54,38 +54,35 @@ export async function handleSystem(action: string, id: unknown, params: any, ctx
             });
             return true;
         }
-        case "system:notify": {
-            await notifyComputer(
-                String(params.title || "Paperboard"),
-                String(params.message || ""),
-            );
-            reply(id, { success: true });
-            return true;
-        }
-        case "system:screenshot": {
-            const savePath = await screenshotComputer(String(params.savePath || "screenshot.png"));
-            reply(id, { savePath });
-            return true;
-        }
-        case "system:set-volume": {
-            const volume = await setComputerVolume(Number(params.volume ?? 50));
-            reply(id, { volume });
-            return true;
-        }
-        case "system:set-muted": {
-            const muted = await setComputerMuted(Boolean(params.muted));
-            reply(id, { muted });
-            return true;
-        }
-        case "system:beep": {
-            await beepComputer();
-            reply(id, { success: true });
-            return true;
-        }
         case "system:update": {
             const { downloadUrl, sha256 } = params;
+            // replacing the daemon binary is host equipment, never panel
+            // equipment: a scoped pcp_ token carries one panel claim and no
+            // wider reach. Caller identity is the token claim, not a param.
+            if (ctx.callerPanelId()) {
+                logger.warn(
+                    `[system] scoped token claim "${ctx.callerPanelId()}" refused system:update`,
+                );
+                throw forbidden("system:update is host-only; scoped panel tokens may not self-update the daemon");
+            }
+            // DOCUMENTED EXCEPTION to "separate trust decisions": the URL
+            // and the sha256 arrive in the same params object, from the
+            // same caller. That is inherent to a self-hosted updater — the
+            // machine is told where its next binary lives, and there is no
+            // second authority to cross-check against. The facts are still
+            // validated independently (URL scheme/loopback here, checksum
+            // format here, bytes verified against the sha after download),
+            // the RPC is host-token-only, and the gap is recorded in
+            // known-vulnerabilities.md. Do not "fix" this by mirroring the
+            // registry rule — the updater has no registry to ask.
             if (!downloadUrl || !isSafeUpdateUrl(downloadUrl)) {
                 reply(id, null, "Refusing update: download URL must be https (or http to localhost)");
+                return true;
+            }
+            // checksum refusal happens BEFORE any network is touched and
+            // before the client is told the update started
+            if (typeof sha256 !== "string" || !/^[a-f0-9]{64}$/i.test(sha256)) {
+                reply(id, null, "Refusing update: sha256 checksum is required");
                 return true;
             }
             if (process.platform === "win32") {
@@ -93,30 +90,30 @@ export async function handleSystem(action: string, id: unknown, params: any, ctx
                 reply(id, null, "Self-update is not supported on Windows yet");
                 return true;
             }
+            if (process.versions.electron) {
+                // embedded daemon: "the crane binary" IS the running
+                // Electron executable, which electron-updater owns. Swapping
+                // it here would replace the app beneath its own updater —
+                // the respawn guard below is not enough, the rename must
+                // never happen either.
+                reply(id, null, "Self-update is not supported when the daemon runs embedded in Electron");
+                return true;
+            }
             reply(id, { success: true, message: "Update initiated" });
             setTimeout(async () => {
+                const tmpPath = `${process.execPath}.tmp-${Date.now()}`;
                 try {
-                    const res = await fetch(downloadUrl);
-                    if (!res.ok) return;
-                    const buffer = Buffer.from(await res.arrayBuffer());
-                    if (!sha256) {
-                        console.error("[PaperCrane:Update] Refusing update without sha256");
-                        return;
-                    }
-                    const actual = crypto
-                        .createHash("sha256")
-                        .update(buffer)
-                        .digest("hex")
-                        .toLowerCase();
-                    if (actual !== String(sha256).toLowerCase()) {
-                        console.error(
-                            `[PaperCrane:Update] SHA256 mismatch: expected ${sha256}, got ${actual}`,
-                        );
-                        return;
-                    }
+                    // single path for downloads: 2GB cap + stall timeout +
+                    // sha256 verification, same machinery as panels/packages
+                    await streamToFileWithProgress(
+                        downloadUrl,
+                        tmpPath,
+                        undefined,
+                        undefined,
+                        sha256,
+                    );
                     const execPath = process.execPath;
-                    const tmpPath = `${execPath}.tmp-${Date.now()}`;
-                    await fs.promises.writeFile(tmpPath, buffer, { mode: 0o755 });
+                    await fs.promises.chmod(tmpPath, 0o755);
                     await fs.promises.rename(tmpPath, execPath);
                     // relaunch detached before exiting, embedded must not respawn
                     if (!process.versions.electron) {
@@ -146,11 +143,21 @@ export async function handleSystem(action: string, id: unknown, params: any, ctx
                     process.exit(0);
                 } catch (err) {
                     console.error("[PaperCrane:Update:Error]", err);
+                    try {
+                        if (fs.existsSync(tmpPath)) await fs.promises.unlink(tmpPath);
+                    } catch (cleanupErr) {
+                        console.error("[PaperCrane:Update] tmp cleanup failed:", cleanupErr);
+                    }
                 }
             }, 500);
             return true;
         }
         default:
             return false;
+        }
+    } catch (err: any) {
+        // codes travel on the error (RpcError, InvalidParams) — see rpc/errors.ts
+        reply(id, null, err?.message || "System operation failed", rpcErrorCode(err));
+        return true;
     }
 }

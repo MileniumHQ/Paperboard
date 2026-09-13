@@ -5,6 +5,7 @@ import * as http from "http";
 import type { PaperCraneEngine } from "./engine";
 import type { PaperCraneAuth } from "./auth";
 import { lookupMime } from "./mime";
+import { secretsMatch } from "./secretCompare";
 import { logger } from "./logger";
 
 // WebDAV rooted at the app-data dir, main token or ephemeral session auth
@@ -13,8 +14,35 @@ export const DAV_REALM = "PaperCrane";
 const DEFAULT_IDLE_MS = 5 * 60_000;
 const MIN_IDLE_MS = 30_000;
 const MAX_IDLE_MS = 30 * 60_000;
+// session cap: refusals for NEW sessions only, never eviction of live ones
+// (same shape as the token vault's MAX_TOKENS refusal)
+const MAX_SESSIONS = 50;
 // non-regular entries break PROPFIND/GET
 const BLOCKED_TOP_LEVEL = new Set(["sockets"]);
+
+// credential/server-local files are never visible through WebDAV,
+// for any method (resolveDavPath is the single enforcement point)
+const BLOCKED_FILE_NAMES = new Set([
+    "secrets.json",
+    "crane.json",
+    "authorized_tokens.json",
+    "paired_computers.json",
+    "machine-id.json",
+]);
+
+const KEY_MATERIAL_RE = /\.(key|pem|crt)$/i;
+
+// upload cap, overridable via env for tests/dev
+export const DEFAULT_DAV_MAX_UPLOAD = 512 * 1024 * 1024;
+
+export function davMaxUploadBytes(): number {
+    const raw = Number(process.env.PAPERCRANE_DAV_MAX_UPLOAD);
+    return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : DEFAULT_DAV_MAX_UPLOAD;
+}
+
+function isBlockedFileName(name: string): boolean {
+    return BLOCKED_FILE_NAMES.has(name.toLowerCase()) || KEY_MATERIAL_RE.test(name);
+}
 
 export interface DavSession {
     user: string;
@@ -29,7 +57,11 @@ export class DavSessionStore {
     private secrets = new Set<string>();
 
     issue(idleMs = DEFAULT_IDLE_MS): DavSession {
-        const clamped = Math.min(MAX_IDLE_MS, Math.max(MIN_IDLE_MS, idleMs));
+        if (this.byUser.size >= MAX_SESSIONS) {
+            throw new Error(
+                `Session store is full (${MAX_SESSIONS} active sessions). Revoke one before opening another.`,
+            );
+        }        const clamped = Math.min(MAX_IDLE_MS, Math.max(MIN_IDLE_MS, idleMs));
         const now = Date.now();
         const s: DavSession = {
             user: `dav-${crypto.randomBytes(6).toString("hex")}`,
@@ -69,7 +101,7 @@ export class DavSessionStore {
             this.revoke(user);
             return null;
         }
-        if (s.pass !== pass) return null;
+        if (!secretsMatch(s.pass, pass)) return null;
         s.lastActiveAt = Date.now();
         return s;
     }
@@ -95,7 +127,8 @@ function parseBasic(header: string): { user: string; pass: string } | null {
     let decoded: string;
     try {
         decoded = Buffer.from(m[1], "base64").toString("utf-8");
-    } catch {
+    } catch (err) {
+        logger.debug("[dav] basic-auth decode failed:", err);
         return null;
     }
     const idx = decoded.indexOf(":");
@@ -108,8 +141,11 @@ function isMainToken(auth: PaperCraneAuth | undefined, secret: string): boolean 
     if (!auth || !secret) return false;
     if (auth.noAuth) return true;
     try {
-        return auth.getAuthorizedClients().some((c) => c.token === secret);
-    } catch {
+        // hash-index lookup + one constant-time compare (auth.matchToken),
+        // no per-entry scan
+        return auth.matchToken(secret) !== null;
+    } catch (err) {
+        logger.debug("[dav] main-token check failed:", err);
         return false;
     }
 }
@@ -141,6 +177,19 @@ export function davUnauthorized(res: http.ServerResponse): void {
     res.end("Unauthorized");
 }
 
+// main-token Bearer check for non-DAV surfaces (panel assets): ephemeral
+// DAV session secrets are never accepted here, same as session minting
+export function isMainBearer(
+    auth: PaperCraneAuth | undefined,
+    req: http.IncomingMessage,
+): boolean {
+    const header = req.headers.authorization;
+    if (!header || !/^Bearer\s+/i.test(header)) return false;
+    const token = header.replace(/^Bearer\s+/i, "").trim();
+    if (!token) return false;
+    return isMainToken(auth, token);
+}
+
 function escXml(s: string): string {
     return s
         .replace(/&/g, "&amp;")
@@ -154,7 +203,8 @@ export function resolveDavPath(root: string, rel: string): string | null {
     let decoded = rel;
     try {
         decoded = decodeURIComponent(rel);
-    } catch {
+    } catch (err) {
+        logger.debug("[dav] path decode failed, blocking:", err);
         return null;
     }
     const target = path.resolve(root, "." + (decoded.startsWith("/") ? decoded : "/" + decoded));
@@ -162,6 +212,14 @@ export function resolveDavPath(root: string, rel: string): string | null {
     if (relToRoot.startsWith("..") || path.isAbsolute(relToRoot)) return null;
     const top = relToRoot.split(path.sep)[0];
     if (BLOCKED_TOP_LEVEL.has(top)) return null;
+    // refuse credential/local files and key material at ANY depth,
+    // including dot-segment tricks after decodeURIComponent.
+    // polarity: only "." and ".." are navigation segments; a dotfile NAME
+    // is still a name and still gets checked
+    for (const seg of relToRoot.split(path.sep)) {
+        if (seg === "." || seg === "..") continue;
+        if (isBlockedFileName(seg)) return null;
+    }
     return target;
 }
 
@@ -264,6 +322,7 @@ function listDir(root: string, dir: string): string[] {
         .readdirSync(dir, { withFileTypes: true })
         .filter((e) => {
             if (dir === root && BLOCKED_TOP_LEVEL.has(e.name)) return false;
+            if (isBlockedFileName(e.name)) return false;
             return true;
         })
         .map((e) => e.name)
@@ -296,13 +355,15 @@ async function handlePropfind(
     const { mode, names } = parsePropfind(body);
     const depth = (req.headers.depth as string | undefined ?? "infinity").toLowerCase();
 
-    const st = fs.statSync(target);
-    // never follow symlinks out for listings
+    const st = fs.lstatSync(target);
+    // never follow symlinks out for listings. lstat (not stat) is
+    // load-bearing here: stat follows links, so isSymbolicLink() on a
+    // stat result is always false and the guard below would be theater.
     const isDir = st.isDirectory() && !st.isSymbolicLink();
     const davPath = rel === "" || rel === "/" ? "/" : rel.replace(/\/+$/, "") || "/";
 
     const build = (p: string, abs: string, name: string): string => {
-        const s = fs.statSync(abs);
+        const s = fs.lstatSync(abs);
         const dir = s.isDirectory() && !s.isSymbolicLink();
         const rows = statProps(p, s, dir, name);
         if (mode === "propname") {
@@ -319,21 +380,28 @@ async function handlePropfind(
     };
 
     let out = build(davPath, target, davPath === "/" ? "paperboard" : path.basename(davPath));
+    // listing hygiene: a depth-infinity walk is bounded — no client
+    // request converts a whole-data-tree walk into unbounded memory
+    const MAX_WALKED_ENTRIES = 5000;
+    let walked = 0;
     if (isDir && depth !== "0") {
         const entries = depth === "1" || depth === "infinity" ? listDir(root, target) : [];
         const walk = (dirAbs: string, dirDav: string, level: number): void => {
             if (depth === "1" && level > 1) return;
+            if (walked >= MAX_WALKED_ENTRIES) return;
             for (const name of listDir(root, dirAbs)) {
+                if (walked >= MAX_WALKED_ENTRIES) return;
                 const abs = path.join(dirAbs, name);
                 const p = dirDav === "/" ? `/${name}` : `${dirDav}/${name}`;
                 let s: fs.Stats;
                 try {
-                    s = fs.statSync(abs);
+                    s = fs.lstatSync(abs);
                 } catch {
                     continue;
                 }
                 if (s.isSymbolicLink()) continue;
                 out += build(p, abs, name);
+                walked++;
                 if (depth === "infinity" && s.isDirectory()) {
                     walk(abs, p, level + 1);
                 }
@@ -388,7 +456,7 @@ function sendFile(
 }
 
 const DAV_ALLOW =
-    "OPTIONS, PROPFIND, GET, HEAD, PUT, DELETE, MKCOL, COPY, MOVE, PROPPATCH, LOCK, UNLOCK";
+    "OPTIONS, PROPFIND, GET, HEAD, PUT, DELETE, MKCOL, COPY, MOVE";
 
 function davRooted(pathname: string): string | null {
     if (pathname === DAV_PREFIX || pathname === `${DAV_PREFIX}/`) return "/";
@@ -449,7 +517,7 @@ export async function handleDavRequest(
     if (method === "OPTIONS") {
         res.writeHead(200, {
             Allow: DAV_ALLOW,
-            DAV: "1, 2",
+            DAV: "1",
             "MS-Author-Via": "DAV",
             "Content-Length": "0",
         });
@@ -475,7 +543,9 @@ export async function handleDavRequest(
             res.end("Not Found");
             return;
         }
-        const st = fs.statSync(target);
+        const st = fs.lstatSync(target);
+        // lstat, not stat — see the PROPFIND guard above. A symlink is
+        // never served, even one pointing inside the tree.
         if (!st.isFile() || st.isSymbolicLink()) {
             res.writeHead(403, { "Content-Type": "text/plain" });
             res.end("Not a file");
@@ -517,7 +587,17 @@ export async function handleDavRequest(
         const tmp = `${target}.davpart-${process.pid}-${Date.now()}`;
         try {
             await new Promise<void>((resolve, reject) => {
+                const cap = davMaxUploadBytes();
+                let written = 0;
                 const out = fs.createWriteStream(tmp);
+                req.on("data", (chunk: Buffer) => {
+                    written += chunk.length;
+                    if (written > cap) {
+                        req.unpipe(out);
+                        out.destroy();
+                        reject(new Error(`upload exceeds ${cap} byte cap`));
+                    }
+                });
                 req.pipe(out);
                 req.on("aborted", () => reject(new Error("aborted")));
                 out.on("finish", () => resolve());
@@ -526,9 +606,17 @@ export async function handleDavRequest(
             });
             fs.renameSync(tmp, target);
         } catch (err) {
+            req.resume();
             try {
                 fs.unlinkSync(tmp);
-            } catch {}
+            } catch (cleanupErr) {
+                logger.debug("[WebDAV] PUT tmp cleanup failed:", cleanupErr);
+            }
+            if ((err as Error)?.message?.includes("byte cap")) {
+                res.writeHead(413, { "Content-Type": "text/plain" });
+                res.end("Upload too large");
+                return;
+            }
             logger.warn("[WebDAV] PUT failed:", (err as Error)?.message ?? err);
             res.writeHead(500, { "Content-Type": "text/plain" });
             res.end("Write failed");
@@ -636,45 +724,20 @@ export async function handleDavRequest(
         return;
     }
 
+    if (method === "LOCK" || method === "UNLOCK") {
+        // locks are genuinely not stored anywhere — minting receipts we
+        // never honor teaches clients to overwrite each other. honest
+        // refusal lets WebDAV clients use their own safe save path
+        res.writeHead(501, { "Content-Type": "text/plain" });
+        res.end("Locking is not implemented");
+        return;
+    }
+
     if (method === "PROPPATCH") {
-        // accept-and-store-nothing, echo props back as stored
-        const body = (await readBody(req)).toString("utf-8");
-        const names = new Set<string>();
-        const setInner = /<set[\s>]([\s\S]*?)<\/\w*:?set\s*>/i.exec(body)?.[1] ?? body;
-        const re = /<(\w+):(\w+)[\s/>]/g;
-        let m: RegExpExecArray | null;
-        while ((m = re.exec(setInner)) !== null) {
-            if (m[1].toLowerCase() !== "d") names.add(m[2]);
-            else if (!["prop", "set", "remove", "propertyupdate"].includes(m[2].toLowerCase())) {
-                names.add(m[2]);
-            }
-        }
-        const href = hrefFor(rel === "/" ? "/" : rel.replace(/\/+$/, ""), false);
-        const props = [...names]
-            .map((n) => `<D:${escXml(n)}/>` )
-            .join("");
-        res.writeHead(207, { "Content-Type": 'application/xml; charset="utf-8"' });
-        res.end(
-            multiStatus(
-                `<D:response><D:href>${escXml(href)}</D:href><D:propstat><D:prop>${props}</D:prop><D:status>HTTP/1.1 200 OK</D:status></D:propstat></D:response>`,
-            ),
-        );
-        return;
-    }
-
-    if (method === "LOCK") {
-        const token = `opaquelocktoken:${crypto.randomUUID()}`;
-        const href = hrefFor(rel === "/" ? "/" : rel.replace(/\/+$/, ""), false);
-        res.writeHead(200, { "Content-Type": 'application/xml; charset="utf-8"' });
-        res.end(
-            `<?xml version="1.0" encoding="utf-8"?><D:prop xmlns:D="DAV:"><D:lockdiscovery><D:activelock><D:locktype><D:write/></D:locktype><D:lockscope><D:exclusive/></D:lockscope><D:depth>infinity</D:depth><D:owner><D:href>${escXml(href)}</D:href></D:owner><D:timeout>Second-3600</D:timeout><D:locktoken><D:href>${token}</D:href></D:locktoken></D:activelock></D:lockdiscovery></D:prop>`,
-        );
-        return;
-    }
-
-    if (method === "UNLOCK") {
-        res.writeHead(204);
-        res.end();
+        // dead-end properties are accepted-and-lost; clients that store
+        // live metadata get their writes back as no-ops
+        res.writeHead(501, { "Content-Type": "text/plain" });
+        res.end("Property storage not implemented");
         return;
     }
 
@@ -702,10 +765,22 @@ export async function handleDavSessionIssue(
         const raw = (await readBody(req, 4096)).toString("utf-8");
         const parsed = raw ? JSON.parse(raw) : {};
         if (typeof parsed?.idleMs === "number") idleMs = parsed.idleMs;
-    } catch {
+    } catch (err) {
         // fall through with defaults
+        logger.debug("[dav] session body unreadable, using defaults:", err);
     }
-    const s = sessions.issue(idleMs);
+    const s = (() => {
+        try {
+            return sessions.issue(idleMs);
+        } catch (err) {
+            // capped store: loud refusal, never a hung connection
+            logger.warn("[dav] session issue refused:", (err as Error)?.message ?? err);
+            res.writeHead(503, { "Content-Type": "text/plain" });
+            res.end("Session store is full");
+            return null;
+        }
+    })();
+    if (!s) return;
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ user: s.user, pass: s.pass, path: `${DAV_PREFIX}/` }));
 }
@@ -729,8 +804,9 @@ export async function handleDavSessionRevoke(
     try {
         const raw = (await readBody(req, 4096)).toString("utf-8");
         user = (raw ? JSON.parse(raw) : {})?.user ?? "";
-    } catch {
+    } catch (err) {
         // reported below as unknown user
+        logger.debug("[dav] session revoke body unreadable:", err);
     }
     if (typeof user !== "string" || !sessions.revoke(user)) {
         res.writeHead(404, { "Content-Type": "application/json" });

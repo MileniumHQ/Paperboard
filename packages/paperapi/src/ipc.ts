@@ -1,7 +1,8 @@
 // transport router, every channel rides the WebSocket
-import { CraneTransport, ambientScope } from "./ws";
+import { CraneTransport } from "./ws";
 import { debugErr } from "./debug";
-import { REGISTRY_URL } from "./config";
+import { REGISTRY_URL, fetchRegistryIndex } from "./config";
+import { ambientScope, resolvePanelId } from "./identity";
 
 export interface IpcRendererLike {
     invoke<T = unknown>(channel: string, ...args: unknown[]): Promise<T>;
@@ -27,6 +28,10 @@ declare global {
     }
 }
 
+// TODO(remove after v3.1): the Electron-shim surface below (getElectronIpc
+// and the WS_INVOKE channel table it feeds) dies with the scoped-token
+// milestone — pre-namespaced dispatch rides this translation layer, and
+// scoped tokens remove the need for the shim entirely.
 export function getElectronIpc(): IpcRendererLike | undefined {
     if (typeof window === "undefined") return undefined;
     return window.electron?.ipcRenderer ?? window.ipcRenderer;
@@ -40,18 +45,9 @@ export function unpackIpcPayload<T>(event: unknown, data: T): T | unknown {
     return data !== undefined ? data : event;
 }
 
-// panel id is hostname after first dot, or env in Node/service runtimes
+// panel id resolution, priority and semantics live in src/identity.ts
 export function getPanelId(): string {
-    if (typeof window !== "undefined" && window.location) {
-        const host = window.location.hostname || "";
-        const dot = host.indexOf(".");
-        if (dot < 0) return host;
-        return host.slice(dot + 1);
-    }
-    if (typeof process !== "undefined" && process.env?.PAPERBOARD_PANEL_ID) {
-        return process.env.PAPERBOARD_PANEL_ID;
-    }
-    return "";
+    return resolvePanelId();
 }
 
 // ─── Transport registry ──────────────────────────────────────────────────────
@@ -72,9 +68,21 @@ export function getTransport(scope?: string): CraneTransport {
     return transport;
 }
 
+// teardown path for the transport registry: closing without removing
+// leaks one transport per scope forever
+export function closeTransport(scope?: string): void {
+    const id = scope || ambientScope();
+    const transport = transports.get(id);
+    if (transport) {
+        transport.close();
+        transports.delete(id);
+    }
+}
+
 export interface InitOptions {
     port?: number;
     token?: string;
+    panelId?: string;
     computerId?: string;
     /** Node-only: explicit handshake file location. */
     craneJsonPath?: string;
@@ -92,6 +100,7 @@ export function initPaperApi(opts: InitOptions = {}): Promise<void> {
     } else if (
         opts.port ||
         opts.token ||
+        opts.panelId ||
         opts.computerId ||
         opts.craneJsonPath
     ) {
@@ -121,7 +130,14 @@ interface WsRoute {
     timeoutMs?: number | null;
 }
 
-const WS_INVOKE: Record<string, WsRoute> = {
+// default per-call timeout for table routes without an explicit one; null
+// on a route waits indefinitely (see CraneTransport.call)
+const DEFAULT_ROUTE_TIMEOUT_MS = 30_000;
+
+// exported for tests: channel → WS action binding table
+// TODO(remove after v3.1): see getElectronIpc above — this table is the shim
+// half of the same deprecated surface.
+export const WS_INVOKE: Record<string, WsRoute> = {
     "terminal-exists": {
         action: "term:exists",
         unwrap: (r) => r.running,
@@ -159,6 +175,26 @@ const WS_INVOKE: Record<string, WsRoute> = {
     "config-set": {
         action: "config:set",
         unwrap: (r) => r.success,
+    },
+    "secrets-set": {
+        action: "secrets:set",
+        unwrap: (r) => r.success,
+    },
+    "secrets-get": {
+        action: "secrets:get",
+        unwrap: (r) => ({ found: !!r?.found, value: r?.value ?? null }),
+    },
+    "secrets-delete": {
+        action: "secrets:delete",
+        unwrap: (r) => r.deleted,
+    },
+    "secrets-list": {
+        action: "secrets:list",
+        unwrap: (r) => r.keys ?? [],
+    },
+    "secrets-purge": {
+        action: "secrets:purge",
+        unwrap: (r) => r.purged ?? 0,
     },
     "package-is-installed": {
         action: "package:isInstalled",
@@ -266,15 +302,23 @@ async function invokeSpecial(
             let signature: string | undefined;
             let version: string | undefined;
             try {
-                const res = await fetch(`${REGISTRY_URL}/panels/index.json`);
-                if (res.ok) {
-                    const record = (await res.json())?.[panelId];
-                    sha256 = record?.sha256;
-                    signature = record?.signature;
-                    version = record?.version;
+                const registryData = await fetchRegistryIndex();
+                const record = registryData?.[panelId];
+                // the checksum and the download are separate facts: if the
+                // anchor can't produce a checksum, there is no install
+                sha256 = record?.sha256;
+                if (typeof sha256 !== "string" || !sha256) {
+                    throw new Error(
+                        `Refusing install: registry has no sha256 for "${panelId}"`,
+                    );
                 }
-            } catch (err) {
+                signature = record?.signature;
+                version = record?.version;
+            } catch (err: any) {
                 debugErr("panel-install registry lookup", err);
+                throw new Error(
+                    `Install refused for "${panelId}": ${err?.message || "registry lookup failed"}`,
+                );
             }
             const result = await t.call(
                 "panel:install",
@@ -290,20 +334,10 @@ async function invokeSpecial(
             return result.panel;
         }
 
-        case "process-start": {
-            const p = args[0] as any;
-            await t.call("process:run", {
-                id: p.id,
-                command: p.command,
-                args: p.args || [],
-                cwd: p.cwd,
-                env: p.env,
-            });
-            t.trackProcess(p.id);
-            return { success: true };
-        }
-
+        case "process-start":
         case "process-run": {
+            // one shape for both channels: same wire params, same track
+            // bookkeeping; only the returned envelope differs
             const p = args[0] as any;
             const res = await t.call("process:run", {
                 id: p.id,
@@ -313,7 +347,7 @@ async function invokeSpecial(
                 env: p.env,
             });
             t.trackProcess(p.id);
-            return res;
+            return channel === "process-start" ? { success: true } : res;
         }
 
         case "process-attach": {
@@ -395,7 +429,14 @@ export async function invokeIn<T = unknown>(
         const params: Record<string, unknown> = route.params
             ? route.params(args)
             : ((args[0] as Record<string, unknown>) ?? {});
-        const result = await transport.call(route.action, params);
+        // route.timeoutMs overrides the default: null means "no timeout" —
+        // panel-uninstall must never reject while the daemon is still
+        // shredding a panel past the default 30s
+        const timeoutMs =
+            route.timeoutMs !== undefined
+                ? route.timeoutMs
+                : DEFAULT_ROUTE_TIMEOUT_MS;
+        const result = await transport.call(route.action, params, timeoutMs);
         return route.unwrap ? route.unwrap(result) : result;
     }
 
@@ -409,47 +450,49 @@ export async function invoke<T = unknown>(
     return invokeIn<T>(undefined, channel, ...args);
 }
 
-export function send(channel: string, ...args: unknown[]): void {
+// fire-and-forget channels log failures, never drop them; the returned
+// promise is already failure-caught, so callers MAY await it (e.g.
+// terminal.create) but existing fire-and-forget callers keep working
+export function send(channel: string, ...args: unknown[]): Promise<void> {
     const t = getTransport();
     switch (channel) {
         case "terminal-create": {
             const p = args[0] as any;
-            t.ensureConnected()
+            return t
+                .ensureConnected()
                 .then(() => t.call("term:create", p))
                 .then(() => t.trackTerminal(p.id))
                 .catch((err) => debugErr(`terminal-create ${p?.id}`, err));
-            return;
         }
         case "terminal-write":
-            t.call("term:write", args[0] as any).catch((err) =>
+            return t.call("term:write", args[0] as any).catch((err) =>
                 debugErr("terminal-write", err),
             );
-            return;
         case "terminal-resize":
-            t.call("term:resize", args[0] as any).catch((err) =>
+            return t.call("term:resize", args[0] as any).catch((err) =>
                 debugErr("terminal-resize", err),
             );
-            return;
         case "terminal-destroy": {
             const { id } = args[0] as any;
-            t.call("term:destroy", { id }).catch((err) =>
+            t.untrackTerminal(id);
+            // the resource is gone: the ledger dies with it, so a later
+            // resubscribe attaches fresh instead of seeing a stale count
+            dropAttachmentLedger("terminal", id, t);
+            return t.call("term:destroy", { id }).catch((err) =>
                 debugErr(`terminal-destroy ${id}`, err),
             );
-            t.untrackTerminal(id);
-            return;
         }
         case "process-write":
-            t.call("process:write", args[0] as any).catch((err) =>
+            return t.call("process:write", args[0] as any).catch((err) =>
                 debugErr("process-write", err),
             );
-            return;
         case "process-kill": {
             const { id } = args[0] as any;
-            t.call("process:kill", args[0] as any).catch((err) =>
+            t.untrackProcess(id);
+            dropAttachmentLedger("process", id, t);
+            return t.call("process:kill", args[0] as any).catch((err) =>
                 debugErr(`process-kill ${id}`, err),
             );
-            t.untrackProcess(id);
-            return;
         }
         default:
             throw new Error(`[paperapi] IPC channel not allowed: ${channel}`);
@@ -488,29 +531,103 @@ export function on(
     // eager connect so streams flow before first invoke
     t.ensureConnected().catch((err) => debugErr("stream eager connect", err));
 
-    // replay attachments this client owns
-    let tracked: "terminal" | "process" | null = null;
-    if (kind === "terminal-data") {
-        t.call("term:attach", { id: suffix }).catch((err) =>
-            debugErr(`term:attach ${suffix}`, err),
-        );
-        t.trackTerminal(suffix);
-        tracked = "terminal";
-    } else if (
-        kind === "process-data" ||
-        kind === "process-stdout" ||
-        kind === "process-stderr"
-    ) {
-        t.call("process:attach", { id: suffix }).catch((err) =>
-            debugErr(`process:attach ${suffix}`, err),
-        );
-        t.trackProcess(suffix);
-        tracked = "process";
+    // replay attachments this client owns — refcounted per resource id:
+    // multiple subscribers to the same id share ONE attachment (one remote
+    // attach RPC, one replay entry), so an unsubscribe only tears down when
+    // the LAST subscriber leaves. Per-subscriber attach/untrack pairs
+    // previously untracked on the first unsubscribe while a listener
+    // remained, silently losing reconnect replay.
+    const tracked: "terminal" | "process" | null =
+        kind === "terminal-data"
+            ? "terminal"
+            : kind === "process-data" ||
+                kind === "process-stdout" ||
+                kind === "process-stderr"
+            ? "process"
+            : null;
+    if (tracked) {
+        attachRefcounts(tracked, suffix, t);
     }
 
     return () => {
         t.unsubscribeSource(route.source, wrapped);
-        if (tracked === "terminal") t.untrackTerminal(suffix);
-        else if (tracked === "process") t.untrackProcess(suffix);
+        if (tracked) {
+            releaseAttachment(tracked, suffix, t);
+        }
     };
+}
+
+// attach refcount ledger keyed PER TRANSPORT, then BY RESOURCE
+// (${tracked}:${id}) — the ONE place "one live attachment per resource" is
+// implemented. count>0 means the transport tracks and the daemon has been
+// asked to attach. All three process channel kinds map to the same
+// "process" resource key. Per-transport keying matters: transports are
+// per-scope and replaceable (closeTransport drops the whole instance), and
+// a transport-global ledger would leak refcounts into a replacement
+// transport, which would then silently never re-attach. A WeakMap entry
+// dies with its transport, so the ledger needs no teardown hook.
+const attachRefs = new WeakMap<
+    CraneTransport,
+    Map<string, number>
+>();
+
+function ledgerFor(t: CraneTransport): Map<string, number> {
+    let ledger = attachRefs.get(t);
+    if (!ledger) {
+        ledger = new Map();
+        attachRefs.set(t, ledger);
+    }
+    return ledger;
+}
+
+function attachRefcounts(
+    tracked: "terminal" | "process",
+    id: string,
+    t: ReturnType<typeof getTransport>,
+): void {
+    const ledger = ledgerFor(t);
+    const key = `${tracked}:${id}`;
+    const count = (ledger.get(key) ?? 0) + 1;
+    ledger.set(key, count);
+    if (count > 1) return; // attachment already live; nothing to redo
+    if (tracked === "terminal") {
+        t.call("term:attach", { id }).catch((err) =>
+            debugErr(`term:attach ${id}`, err),
+        );
+        t.trackTerminal(id);
+    } else {
+        t.call("process:attach", { id }).catch((err) =>
+            debugErr(`process:attach ${id}`, err),
+        );
+        t.trackProcess(id);
+    }
+    // a failed attach still had the id tracked so reconnect replays it; the
+    // attach retry rides the daemon's own attach semantics
+}
+
+function releaseAttachment(
+    tracked: "terminal" | "process",
+    id: string,
+    t: ReturnType<typeof getTransport>,
+): void {
+    const ledger = ledgerFor(t);
+    const key = `${tracked}:${id}`;
+    const count = ledger.get(key);
+    if (count === undefined || count <= 1) {
+        ledger.delete(key);
+        if (tracked === "terminal") t.untrackTerminal(id);
+        else t.untrackProcess(id);
+        return;
+    }
+    ledger.set(key, count - 1);
+}
+
+// a destroyed/kill'ed resource tears its ledger entry down so a later
+// resubscribe re-attaches fresh instead of inheriting a stale count
+function dropAttachmentLedger(
+    tracked: "terminal" | "process",
+    id: string,
+    t?: ReturnType<typeof getTransport>,
+): void {
+    ledgerFor(t ?? getTransport()).delete(`${tracked}:${id}`);
 }

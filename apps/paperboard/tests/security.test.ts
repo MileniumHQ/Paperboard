@@ -91,8 +91,11 @@ describe("isAllowedOrigin", () => {
 
     it("allows app custom schemes", () => {
         expect(isAllowedOrigin("panel://com.example.terminal")).toBe(true);
-        expect(isAllowedOrigin("file://")).toBe(true);
         expect(isAllowedOrigin("vscode-webview://webview")).toBe(true);
+    });
+
+    it("rejects file:// origins (local HTML must not hold a WS origin)", () => {
+        expect(isAllowedOrigin("file://")).toBe(false);
     });
 
     it("rejects remote http origins", () => {

@@ -1,3 +1,7 @@
+// GENERATED FILE — do not edit by hand.
+// Source: minecraft.wiki /w/Game_rule (scraped 2026-09-12)
+// Regenerate with: bun run Paperboard/devutils/scrape-gamerules.ts
+
 export interface GameruleEntry {
     name: string;
     category: string;

@@ -22,7 +22,9 @@ export async function loadConfigAndProperties(
 
         try {
             patch.localIp = await system.getLocalIP();
-        } catch {}
+        } catch (err) {
+            console.debug("[Service:Config] local IP lookup failed:", String(err));
+        }
 
         const propertiesContent = await fileApi.read("server.properties", PANEL_ID);
         if (propertiesContent) {
@@ -46,7 +48,9 @@ export async function updatePanelConfig(
     try {
         const saved = await config.get<Record<string, unknown>>(PANEL_ID);
         if (saved && typeof saved === "object") current = saved;
-    } catch {}
+    } catch (err) {
+        console.debug("[Service:Config] no saved panel config yet:", String(err));
+    }
     await config.set({ ...current, ...patch }, PANEL_ID);
     await loadConfigAndProperties(ctx);
 }

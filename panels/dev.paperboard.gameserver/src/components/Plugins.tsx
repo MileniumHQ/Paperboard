@@ -32,6 +32,7 @@ import {
     installProject,
     listInstalledPlugins,
     pluginDirName,
+    PluginVersionMismatchError,
     searchModrinth,
     type InstalledPlugin,
     type ModrinthHit,
@@ -127,6 +128,10 @@ export default function Plugins() {
     const [pendingDelete, setPendingDelete] = createSignal<InstalledPlugin | null>(
         null,
     );
+    const [pendingCrossVersion, setPendingCrossVersion] = createSignal<{
+        target: DetailTarget;
+        mismatch: PluginVersionMismatchError;
+    } | null>(null);
     const [detail, setDetail] = createSignal<DetailTarget | null>(null);
     const [project, setProject] = createSignal<ModrinthProject | null>(null);
     const [projectLoading, setProjectLoading] = createSignal(false);
@@ -191,13 +196,22 @@ export default function Plugins() {
                     entry.record.slug === target.slug),
         ) ?? null;
 
-    const install = async (target: DetailTarget) => {
+    const install = async (target: DetailTarget, allowIncompatible = false) => {
         setInstallingId(target.projectId);
         setError("");
         try {
-            await installProject(target.projectId);
+            await installProject(
+                target.projectId,
+                allowIncompatible ? { allowIncompatible: true } : undefined,
+            );
             await reloadInstalled();
         } catch (err) {
+            // cross-version builds never install silently: the mismatch
+            // becomes an explicit confirm, install-anyway is one click away
+            if (err instanceof PluginVersionMismatchError) {
+                setPendingCrossVersion({ target, mismatch: err });
+                return;
+            }
             console.error(`[Plugins] Failed to install "${target.title}":`, err);
             setError(
                 `Failed to install "${target.title}". Check the console for details.`,
@@ -205,6 +219,13 @@ export default function Plugins() {
         } finally {
             setInstallingId(null);
         }
+    };
+
+    const confirmCrossVersionInstall = async () => {
+        const pending = pendingCrossVersion();
+        setPendingCrossVersion(null);
+        if (!pending) return;
+        await install(pending.target, true);
     };
 
     const confirmDelete = async () => {
@@ -560,6 +581,35 @@ export default function Plugins() {
                         </PaperFlex>
                     )}
                 </Show>
+            </PaperModal>
+
+            <PaperModal
+                open={pendingCrossVersion() !== null}
+                onClose={() => setPendingCrossVersion(null)}
+                title="Install a build for another Minecraft version?"
+                size="small"
+                footer={
+                    <PaperFlex direction="row" justify="flex-end" gap="half" fullWidth>
+                        <PaperButton compact onClick={() => setPendingCrossVersion(null)}>
+                            Cancel
+                        </PaperButton>
+                        <PaperButton compact variant="green" onClick={confirmCrossVersionInstall}>
+                            Install anyway
+                        </PaperButton>
+                    </PaperFlex>
+                }
+            >
+                <PaperText preset="body">
+                    The latest compatible build
+                    {pendingCrossVersion()?.mismatch.versionNumber
+                        ? ` (${pendingCrossVersion()!.mismatch.versionNumber})`
+                        : ""}{" "}
+                    targets Minecraft{" "}
+                    {pendingCrossVersion()?.mismatch.gameVersions.length
+                        ? pendingCrossVersion()!.mismatch.gameVersions.join(", ")
+                        : "an unknown version"}
+                    . Cross-version builds can crash the server on startup.
+                </PaperText>
             </PaperModal>
 
             <PaperModal

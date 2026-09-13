@@ -46,4 +46,22 @@ describe("PaperConsole Component Tests", () => {
         fireEvent.keyDown(input, { key: "ArrowUp" });
         expect(input.value).toBe("say Hello world");
     });
+
+    test("command history is capped instead of growing forever", async () => {
+        render(() => <PaperConsole placeholder="Command..." />);
+
+        const input = screen.getByPlaceholderText("Command...") as HTMLInputElement;
+        const form = input.closest("form")!;
+        for (let i = 0; i < 250; i++) {
+            fireEvent.input(input, { target: { value: `cmd-${i}` } });
+            fireEvent.submit(form);
+        }
+
+        // oldest dropped: the first recallable command is cmd-50, not cmd-0
+        fireEvent.keyDown(input, { key: "ArrowUp" });
+        for (let i = 0; i < 199; i++) {
+            fireEvent.keyDown(input, { key: "ArrowUp" });
+        }
+        expect(input.value).toBe("cmd-50");
+    });
 });

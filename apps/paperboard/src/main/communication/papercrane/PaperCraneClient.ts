@@ -1,6 +1,6 @@
 import { WebSocket } from "ws";
+import { logger } from "../../../../papercrane/logger";
 import { EventEmitter } from "events";
-import * as fs from "fs";
 import * as path from "path";
 import * as crypto from "crypto";
 import {
@@ -9,6 +9,8 @@ import {
     ServerInstance,
     DEFAULT_PORT,
 } from "../../../../papercrane";
+import { PROTOCOL_VERSION } from "../../../../papercrane/protocol";
+import { readCraneHandshake } from "../../../../papercrane/handshake";
 import { getLocalDir } from "../../../../papercrane/paths";
 
 export type RpcParams = Record<string, unknown>;
@@ -48,20 +50,9 @@ export interface PackageInstallInfo {
     installedAt?: string;
 }
 
-interface CraneHandshake {
-    port: number;
-    token: string;
-}
-
-function readCraneJson(): CraneHandshake | null {
-    try {
-        const file = path.join(getLocalDir(), "crane.json");
-        const raw = JSON.parse(fs.readFileSync(file, "utf8"));
-        if (typeof raw?.port === "number" && typeof raw?.token === "string")
-            return raw;
-    } catch {}
-    return null;
-}
+// same reader as every other consumer of the handshake file
+// (papercrane/handshake.ts) — validation lives there
+const readCraneJson = readCraneHandshake;
 
 async function probeAlive(port: number): Promise<boolean> {
     try {
@@ -69,7 +60,8 @@ async function probeAlive(port: number): Promise<boolean> {
             signal: AbortSignal.timeout(600),
         });
         return res.ok;
-    } catch {
+    } catch (err) {
+        logger.debug(`[PaperCraneClient] daemon probe on ${port} failed:`, err);
         return false;
     }
 }
@@ -107,13 +99,6 @@ export class PaperCraneClient extends EventEmitter {
         return this.embeddedServer;
     }
 
-    private termDataListeners = new Map<string, (data: string) => void>();
-    private termExitListeners = new Map<string, (exitCode: number) => void>();
-    private processDataListeners = new Map<
-        string,
-        (data: string, stream: "stdout" | "stderr") => void
-    >();
-    private processExitListeners = new Map<string, (exitCode: number) => void>();
     private progressListeners = new Map<
         string,
         (payload: ProgressPayload) => void
@@ -267,7 +252,7 @@ export class PaperCraneClient extends EventEmitter {
                                 msg.payload ?? {},
                             );
                         }
-                    } catch {}
+                    } catch (err) { logger.debug("[PaperCraneClient.ts] op failed:", err) }
                 });
 
                 ws.on("close", () => {
@@ -293,7 +278,7 @@ export class PaperCraneClient extends EventEmitter {
         if (this.ws) {
             try {
                 this.ws.close();
-            } catch {}
+            } catch (err) { logger.debug("[PaperCraneClient.ts] op failed:", err) }
             this.ws = null;
         }
         this.isConnected = false;
@@ -303,34 +288,24 @@ export class PaperCraneClient extends EventEmitter {
     public stopEmbeddedServer(): void {
         try {
             this.embeddedServer?.stop?.();
-        } catch {}
+        } catch (err) { logger.debug("[PaperCraneClient.ts] op failed:", err) }
         this.embeddedServer = null;
     }
 
+    // NOTE: the client no longer tracks terminal/process streams — panels
+    // own their streams through PaperAPI's transport (refcounted attach,
+    // reconnect replay there). The dispatcher below only serves progress
+    // events for the updater's package downloads.
     private handlePushEvent(
         event: string,
         payload: Record<string, unknown>,
     ) {
-        const id = payload.id as string;
-        if (event === "term:data") {
-            this.termDataListeners.get(id)?.(payload.data as string);
-        } else if (event === "term:exit") {
-            this.termExitListeners.get(id)?.(payload.exitCode as number);
-            this.termDataListeners.delete(id);
-            this.termExitListeners.delete(id);
-        } else if (event === "process:data") {
-            this.processDataListeners.get(id)?.(
-                payload.data as string,
-                payload.stream as "stdout" | "stderr",
-            );
-        } else if (event === "process:exit") {
-            this.processExitListeners.get(id)?.(payload.exitCode as number);
-            this.processDataListeners.delete(id);
-            this.processExitListeners.delete(id);
-        } else if (event === "progress") {
-            this.progressListeners.get(payload.downloadId as string)?.(
-                payload as unknown as ProgressPayload,
-            );
+        // terminal/process push events are owned by PaperAPI's transport;
+        // this client only dispatches updater progress
+        if (event === "progress") {
+            this.progressListeners
+                .get(payload.downloadId as string)
+                ?.(payload as unknown as ProgressPayload);
         }
     }
 
@@ -347,7 +322,12 @@ export class PaperCraneClient extends EventEmitter {
         }
 
         const id = this.requestIdCounter++;
-        const finalParams = this.token ? { token: this.token, ...params } : params;
+        // token last: a params object that happens to carry a token (or a
+        // typo'd field) can never clobber the real credential — same
+        // polarity as PaperAPI's CraneTransport. v marks the wire protocol
+        // version from the shared constant; the daemon refuses unknown
+        // versions with a typed BAD_PROTOCOL error instead of guessing.
+        const finalParams = { ...params, token: this.token, v: PROTOCOL_VERSION };
         return new Promise<T>((resolve, reject) => {
             const timer = setTimeout(() => {
                 this.pendingRequests.delete(id);
@@ -391,173 +371,6 @@ export class PaperCraneClient extends EventEmitter {
         return res;
     }
 
-    // Terminal methods
-    public async createTerminal(
-        id: string,
-        cols: number,
-        rows: number,
-        cwd?: string,
-        env?: Record<string, string>,
-        onData?: (data: string) => void,
-        onExit?: (exitCode: number) => void,
-    ): Promise<void> {
-        if (onData) this.termDataListeners.set(id, onData);
-        if (onExit) this.termExitListeners.set(id, onExit);
-        await this.call("term:create", { id, cols, rows, cwd, env });
-    }
-
-    public writeTerminal(id: string, data: string): void {
-        this.call("term:write", { id, data }).catch(() => {});
-    }
-
-    public resizeTerminal(id: string, cols: number, rows: number): void {
-        this.call("term:resize", { id, cols, rows }).catch(() => {});
-    }
-
-    public destroyTerminal(id: string): void {
-        this.termDataListeners.delete(id);
-        this.termExitListeners.delete(id);
-        this.call("term:destroy", { id }).catch(() => {});
-    }
-
-    public async isTerminalRunning(id: string): Promise<boolean> {
-        const res = await this.call<{ running: boolean }>("term:exists", { id });
-        return Boolean(res?.running);
-    }
-
-    // Process methods
-    public async startProcess(
-        id: string,
-        command: string,
-        args: string[] = [],
-        cwd?: string,
-        env?: Record<string, string>,
-        onData?: (data: string) => void,
-        onStdout?: (data: string) => void,
-        onStderr?: (data: string) => void,
-        onExit?: (exitCode: number) => void,
-    ): Promise<void> {
-        this.processDataListeners.set(id, (data, stream) => {
-            onData?.(data);
-            if (stream === "stdout") onStdout?.(data);
-            if (stream === "stderr") onStderr?.(data);
-        });
-        if (onExit) this.processExitListeners.set(id, onExit);
-        await this.call("process:run", { id, command, args, cwd, env });
-    }
-
-    public writeProcess(id: string, data: string): void {
-        this.call("process:write", { id, data }).catch(() => {});
-    }
-
-    public killProcess(id: string, signal: string = "SIGTERM"): void {
-        this.processDataListeners.delete(id);
-        this.processExitListeners.delete(id);
-        this.call("process:kill", { id, signal }).catch(() => {});
-    }
-
-    public async isProcessRunning(id: string): Promise<boolean> {
-        const res = await this.call<{ running: boolean }>("process:exists", { id });
-        return Boolean(res?.running);
-    }
-
-    public async attachProcess(
-        id: string,
-        onData?: (data: string) => void,
-        onStdout?: (data: string) => void,
-        onStderr?: (data: string) => void,
-        onExit?: (exitCode: number) => void,
-    ): Promise<boolean> {
-        this.processDataListeners.set(id, (data, stream) => {
-            onData?.(data);
-            if (stream === "stdout") onStdout?.(data);
-            if (stream === "stderr") onStderr?.(data);
-        });
-        if (onExit) this.processExitListeners.set(id, onExit);
-        const res = await this.call<{ success: boolean }>("process:attach", { id });
-        return Boolean(res?.success);
-    }
-
-    public async runProcess(
-        id: string,
-        command: string,
-        args: string[] = [],
-        cwd?: string,
-        env?: Record<string, string>,
-        onData?: (data: string) => void,
-        onStdout?: (data: string) => void,
-        onStderr?: (data: string) => void,
-    ): Promise<{ exitCode: number }> {
-        return new Promise<{ exitCode: number }>((resolve, reject) => {
-            this.processDataListeners.set(id, (data, stream) => {
-                onData?.(data);
-                if (stream === "stdout") onStdout?.(data);
-                if (stream === "stderr") onStderr?.(data);
-            });
-            this.processExitListeners.set(id, (exitCode) => resolve({ exitCode }));
-            this.call("process:run", { id, command, args, cwd, env }).catch(reject);
-        });
-    }
-
-    // File operations
-    public async getFilePath(targetPath: string, appId?: string): Promise<string> {
-        const res = await this.call<{ path: string }>("file:getPath", { targetPath, appId });
-        return res.path;
-    }
-
-    public async fileExists(targetPath: string, appId?: string): Promise<boolean> {
-        const res = await this.call<{ exists: boolean }>("file:exists", { targetPath, appId });
-        return res.exists;
-    }
-
-    public async writeFile(targetPath: string, content: string, appId?: string): Promise<string> {
-        const res = await this.call<{ path: string }>("file:write", { targetPath, content, appId });
-        return res.path;
-    }
-
-    public async readFile(targetPath: string, appId?: string): Promise<string | null> {
-        const res = await this.call<{ content: string | null }>("file:read", { targetPath, appId });
-        return res.content;
-    }
-
-    public async clearFiles(appId?: string): Promise<boolean> {
-        const res = await this.call<{ success: boolean }>("file:clear", { appId });
-        return res.success;
-    }
-
-    public async downloadFile(
-        url: string,
-        targetPath: string,
-        appId: string | undefined,
-        downloadId: string,
-        options: {
-            sha1?: string;
-            sha256?: string;
-            checksum?: { algorithm: string; value: string };
-        },
-        onProgress: (payload: ProgressPayload) => void,
-    ): Promise<string> {
-        this.progressListeners.set(downloadId, onProgress);
-        try {
-            const res = await this.call<{ path: string }>("file:download", {
-                url,
-                targetPath,
-                appId,
-                downloadId,
-                options,
-            });
-            return res.path;
-        } finally {
-            this.progressListeners.delete(downloadId);
-        }
-    }
-
-    // Package operations
-    public async isPackageInstalled(packageName: string, version?: string): Promise<boolean> {
-        const res = await this.call<{ installed: boolean }>("package:isInstalled", { packageName, version });
-        return res.installed;
-    }
-
     public async getPackageIndex(): Promise<Record<string, PackageInstallInfo>> {
         const res = await this.call<{
             index: Record<string, PackageInstallInfo>;
@@ -565,26 +378,22 @@ export class PaperCraneClient extends EventEmitter {
         return res.index;
     }
 
-    public async getPackagePath(packageName: string): Promise<string> {
-        const res = await this.call<{ path: string }>("package:getPath", { packageName });
-        return res.path;
-    }
 
     public async downloadPackage(
         packageName: string,
         downloadId: string,
         onProgress: (payload: ProgressPayload) => void,
+        expectedSha256?: string,
     ): Promise<string> {
         this.progressListeners.set(downloadId, onProgress);
         try {
-            const res = await this.call<{ path: string }>("package:download", { packageName, downloadId });
+            const res = await this.call<{ path: string }>("package:download", { packageName, downloadId, sha256: expectedSha256 });
             return res.path;
         } finally {
             this.progressListeners.delete(downloadId);
         }
     }
 
-    // Panel operations
     public async listPanels(): Promise<PanelManifest[]> {
         const res = await this.call<{ panels?: PanelManifest[] }>("panel:list");
         return res.panels || [];
@@ -596,10 +405,6 @@ export class PaperCraneClient extends EventEmitter {
         return res.panel;
     }
 
-    public async uninstallPanel(panelId: string): Promise<boolean> {
-        const res = await this.call<{ success?: boolean }>("panel:uninstall", { panelId });
-        return res.success ?? true;
-    }
 
     // Config operations
     public async getConfig<T = Record<string, unknown>>(
@@ -624,15 +429,12 @@ export class PaperCraneClient extends EventEmitter {
     }
 
     // System info
-    public async getIP(): Promise<string> {
-        const res = await this.call<{ ip: string }>("system:ip");
-        return res.ip;
-    }
 
     public async getSystemInfo(): Promise<CraneSystemInfo | null> {
         try {
             return await this.call<CraneSystemInfo>("system:info");
-        } catch {
+        } catch (err) {
+            logger.debug("[PaperCraneClient] getSystemInfo failed, caller treats null as unknown:", err);
             return null;
         }
     }

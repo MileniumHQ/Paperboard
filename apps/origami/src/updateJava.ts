@@ -83,6 +83,15 @@ export async function fetchJavaPackage(
         if (platformKey && !platforms[platformKey]) {
             platforms[platformKey] = {
                 url: binary.package.link,
+                // Unlike the registry's own "checksum must come from a
+                // source separate from the download record" rule, this
+                // sha256 comes from the same Adoptium API record as the
+                // URL. That is deliberate: Adoptium is a well-known
+                // authority reached over TLS, and this record is re-fetched
+                // fresh on every update run — nothing publisher-supplied is
+                // persisted or echoed back. The authority itself is the
+                // trust anchor; there is no self-attesting third party here
+                // to deceive.
                 sha256: binary.package.checksum,
             };
         }

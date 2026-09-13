@@ -107,8 +107,8 @@ export default function AppSettings(props: {
             </PaperSettingItem>
 
             <PaperSettingItem
-                title="Restart to Update"
-                description="Restarts Paperboard and checks for updates. If updates are available, all panels, packages, and PaperCrane instances are updated on every connected computer."
+                title="Updates"
+                description="Runs a full update sweep right now: every panel, package, and PaperCrane instance on every connected computer is checked and updated, then Paperboard restarts."
             >
                 <PaperEffect variant="blue">
                     <PaperButton
@@ -120,7 +120,7 @@ export default function AppSettings(props: {
                         }
                     >
                         <PaperIcon>restart_alt</PaperIcon>
-                        Check for Updates
+                        Update everything now
                     </PaperButton>
                 </PaperEffect>
             </PaperSettingItem>

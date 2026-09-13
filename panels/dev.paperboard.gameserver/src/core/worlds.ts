@@ -1,20 +1,31 @@
-import { isWindowsTarget } from "../lib/platform";
+import { trashRemovePathsWith, type TrashRemoveDeps } from "./trash";
 
 export const WORLD_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 
-// names reach shell commands, so stricter than the entry pattern
-export function getWorldDirsToDelete(levelName: string): string[] {
-    const safe = levelName.trim();
-    if (!WORLD_NAME_PATTERN.test(safe)) {
-        throw new Error(`Refusing to delete unsafe world name: "${levelName}"`);
+// shell-safe level names for DELETION: single-quoteable on posix (only '
+// is unsafe there) and double-quoteable on Windows (only " and % are
+// unsafe there — cmd expands %VAR% inside quotes). Creation stays on the
+// stricter WORLD_NAME_PATTERN; an exotic-but-valid level-name refuses
+// loudly instead of deleting the wrong directory.
+export const SHELL_SAFE_LEVEL_NAME = /^[A-Za-z0-9][A-Za-z0-9 _().-]{0,63}$/;
+
+export function assertShellSafeLevelName(levelName: unknown): string {
+    const safe = String(levelName ?? "").trim();
+    if (
+        !SHELL_SAFE_LEVEL_NAME.test(safe) ||
+        safe.includes("..") ||
+        safe.includes("/") ||
+        safe.includes("\\")
+    ) {
+        throw new Error(`Refusing to delete unsafe world name: ${JSON.stringify(levelName)}`);
     }
-    return [safe, `${safe}_nether`, `${safe}_the_end`];
+    return safe;
 }
 
-export function buildDeleteWorldCommand(dirs: string[], isWin: boolean): string {
-    return isWin
-        ? `rmdir /s /q ${dirs.join(" ")} 2>nul || exit 0`
-        : `rm -rf ${dirs.join(" ")}`;
+// names reach shell commands, so stricter than the entry pattern
+export function getWorldDirsToDelete(levelName: string): string[] {
+    const safe = assertShellSafeLevelName(levelName);
+    return [safe, `${safe}_nether`, `${safe}_the_end`];
 }
 
 export interface WorldListDeps {
@@ -42,26 +53,14 @@ export async function collectWorldDirs(deps: WorldListDeps): Promise<string[]> {
     return worlds.sort((a, b) => a.localeCompare(b));
 }
 
-export interface WorldDeleteDeps {
-    getServerDir: () => Promise<string>;
-    getTargetOs: () => Promise<string>;
-    createPty: (id: string, opts: { cwd: string; cols: number; rows: number }) => unknown;
-    writePty: (id: string, data: string) => void;
-    scheduleDestroy: (id: string) => void;
-}
+export interface WorldDeleteDeps extends TrashRemoveDeps {}
 
-// deletes <level>, <level>_nether and <level>_the_end via a short-lived pty
+// deletes <level>, <level>_nether and <level>_the_end via a short-lived
+// pty — trash first, then remove (see core/trash.ts), never a bare rm
 export async function deleteWorldDirs(
     levelName: string,
     deps: WorldDeleteDeps,
 ): Promise<void> {
     const dirs = getWorldDirsToDelete(levelName);
-    const serverDir = await deps.getServerDir();
-    const targetOs = await deps.getTargetOs();
-    const isWin = isWindowsTarget(serverDir, targetOs);
-    const deleteCmd = buildDeleteWorldCommand(dirs, isWin);
-
-    await deps.createPty("delete-world-pty", { cwd: serverDir, cols: 80, rows: 24 });
-    deps.writePty("delete-world-pty", `${deleteCmd}\nexit\n`);
-    deps.scheduleDestroy("delete-world-pty");
+    await trashRemovePathsWith(deps, dirs, "delete-world-pty");
 }

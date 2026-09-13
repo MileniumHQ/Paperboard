@@ -15,10 +15,6 @@ export function getPaperboardDir(): string {
     return path.join(os.homedir(), ".paperboard");
 }
 
-export function getAppsDir(): string {
-    return path.join(getPaperboardDir(), "apps");
-}
-
 export function getPackagesDir(): string {
     return path.join(getPaperboardDir(), "packages");
 }
@@ -51,6 +47,6 @@ export function getSocketsDir(): string {
 export function ensureDir(dir: string): string {
     try {
         if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    } catch {}
+    } catch (err) { console.error("[paths.ts] ensureDir failed:", err) }
     return dir;
 }

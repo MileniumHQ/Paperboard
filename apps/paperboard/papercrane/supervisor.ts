@@ -6,6 +6,7 @@ import * as cp from "child_process";
 import { spawnPty, getDefaultShell } from "./pty";
 import { IPtyProcess } from "./types";
 import { logger } from "./logger";
+import { redactEnvValues, unrefTimer } from "./storage";
 
 export interface SupervisorSpawnConfig {
     command?: string;
@@ -105,6 +106,8 @@ export class SupervisedProcessClient {
                     resolve(false);
                 }
             }, 1500);
+            // a pending connect must never hold the client process open
+            unrefTimer(connectTimeout);
 
             socket.on("connect", () => {
                 clearTimeout(connectTimeout);
@@ -127,7 +130,7 @@ export class SupervisedProcessClient {
                     try {
                         const msg = JSON.parse(line);
                         this.handleMessage(msg);
-                    } catch {}
+                    } catch (err) { logger.debug("[supervisor.ts] op failed:", err) }
                 }
             });
 
@@ -234,6 +237,7 @@ export async function runSupervisor(procId: string): Promise<void> {
     const rawConfig = await new Promise<string>((resolve) => {
         let input = "";
         const timer = setTimeout(() => resolve(input), 3000);
+        unrefTimer(timer);
         process.stdin.setEncoding("utf8");
         process.stdin.on("data", (chunk) => { input += chunk; });
         process.stdin.on("end", () => {
@@ -245,12 +249,15 @@ export async function runSupervisor(procId: string): Promise<void> {
     let config: SupervisorSpawnConfig = {};
     try {
         if (rawConfig.trim()) config = JSON.parse(rawConfig.trim());
-    } catch {
+    } catch (err) {
+        // a supervisor that cannot read its spawn config must die loudly,
+        // never sit on the socket with zero config
+        console.error("[supervisor] invalid spawn config on stdin, exiting:", err);
         process.exit(1);
     }
 
     if (process.platform !== "win32" && fs.existsSync(socketPath)) {
-        try { fs.unlinkSync(socketPath); } catch {}
+        try { fs.unlinkSync(socketPath); } catch (err) { logger.debug("[supervisor.ts] op failed:", err) }
     }
 
     const ringBuffer = new CircularBuffer(64 * 1024);
@@ -265,7 +272,7 @@ export async function runSupervisor(procId: string): Promise<void> {
         for (const client of clients) {
             try {
                 if (!client.destroyed) client.write(payload);
-            } catch {}
+            } catch (err) { logger.debug("[supervisor.ts] op failed:", err) }
         }
     };
 
@@ -275,15 +282,18 @@ export async function runSupervisor(procId: string): Promise<void> {
         broadcast({ type: "exit", code });
 
         for (const client of clients) {
-            try { client.end(); } catch {}
+            try { client.end(); } catch (err) { logger.debug("[supervisor.ts] op failed:", err) }
         }
-        try { if (fs.existsSync(metadataPath)) fs.unlinkSync(metadataPath); } catch {}
-        try { if (process.platform !== "win32" && fs.existsSync(socketPath)) fs.unlinkSync(socketPath); } catch {}
+        try { if (fs.existsSync(metadataPath)) fs.unlinkSync(metadataPath); } catch (err) { logger.debug("[supervisor.ts] op failed:", err) }
+        try { if (process.platform !== "win32" && fs.existsSync(socketPath)) fs.unlinkSync(socketPath); } catch (err) { logger.debug("[supervisor.ts] op failed:", err) }
 
-        setTimeout(() => {
+        // exit timers never hold the supervisor open: the inner force-exit
+        // is already unref'd; the outer close gets the same treatment
+        const exitTimer = setTimeout(() => {
             server.close(() => process.exit(code));
             setTimeout(() => process.exit(code), 200).unref();
         }, 40);
+        unrefTimer(exitTimer);
     };
 
     const server = net.createServer((socket) => {
@@ -319,7 +329,7 @@ export async function runSupervisor(procId: string): Promise<void> {
                         if (ptyInstance) ptyInstance.kill();
                         else childProcess?.kill(msg.signal || "SIGTERM");
                     }
-                } catch {}
+                } catch (err) { logger.debug("[supervisor.ts] op failed:", err) }
             }
         });
 
@@ -335,7 +345,7 @@ export async function runSupervisor(procId: string): Promise<void> {
                 const msg = `[supervisor:${procId}] configured cwd does not exist: ${config.cwd}`;
                 try {
                     fs.writeFileSync(metadataPath, JSON.stringify({ id: procId, error: msg }, null, 2), "utf8");
-                } catch {}
+                } catch (err) { logger.debug("[supervisor.ts] op failed:", err) }
                 console.error(msg);
                 process.exit(1);
             }
@@ -345,7 +355,7 @@ export async function runSupervisor(procId: string): Promise<void> {
         }
         try {
             logger.debug(`[supervisor:${procId}] spawning ${config.command || "sh"} in ${finalCwd}`);
-        } catch {}
+        } catch (err) { logger.debug("[supervisor.ts] op failed:", err) }
         const isPtyMode = Boolean(config.isPty || (config as any).type === "pty");
 
         if (isPtyMode) {
@@ -403,19 +413,15 @@ export async function runSupervisor(procId: string): Promise<void> {
             childPid: childPid || process.pid,
             isPty: Boolean(config.isPty),
             startedAt: new Date().toISOString(),
-            config,
+            // env travels with secrets (bot tokens live here): names that
+            // look like secrets are stored redacted, never with values
+            config: { ...config, env: redactEnvValues(config.env) },
         };
         try {
             fs.writeFileSync(metadataPath, JSON.stringify(meta, null, 2), "utf8");
-        } catch {}
+        } catch (err) { logger.debug("[supervisor.ts] op failed:", err) }
     });
 
     process.on("SIGTERM", () => cleanupAndExit(0));
     process.on("SIGINT", () => cleanupAndExit(0));
-}
-
-// auto-run when started with the flag
-if (process.argv.includes("--run-supervisor")) {
-    const targetId = process.env.SUPERVISOR_TARGET_ID || "default";
-    runSupervisor(targetId);
 }

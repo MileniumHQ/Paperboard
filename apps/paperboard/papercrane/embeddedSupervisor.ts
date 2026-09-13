@@ -1,6 +1,8 @@
 // in-process supervision for embedded hosts, single daemon lifetime
 // node-pty resolved lazily, standalone daemons use FFI instead
 import * as cp from "child_process";
+import * as fs from "fs";
+import { logger } from "./logger";
 import * as os from "os";
 import type { PaperCraneClientLike } from "./supervisorTypes";
 
@@ -73,11 +75,11 @@ export class EmbeddedSupervisor implements PaperCraneClientLike {
 
         // missing cwd fails fast, create it
         let cwd = this.config.cwd;
-        if (cwd && !require("fs").existsSync(cwd)) {
+        if (cwd && !fs.existsSync(cwd)) {
             try {
-                require("fs").mkdirSync(cwd, { recursive: true });
-            } catch {}
-            if (!require("fs").existsSync(cwd)) {
+                fs.mkdirSync(cwd, { recursive: true });
+            } catch (err) { logger.debug("[embeddedSupervisor.ts] op failed:", err) }
+            if (!fs.existsSync(cwd)) {
                 cwd = undefined;
             }
         }
@@ -86,7 +88,18 @@ export class EmbeddedSupervisor implements PaperCraneClientLike {
             if (this.config.type === "pty" || this.config.isPty) {
                 // eslint-disable-next-line @typescript-eslint/no-var-requires
                 const pty = require("node-pty");
-                this.proc = pty.spawn(this.config.command, [], {
+                // args are honored for pty spawns too: an argv array of
+                // strings only — anything else is a bug, dropped args would
+                // silently change what the child runs
+                const args = this.config.args;
+                let ptyArgs = args ?? [];
+                if (!Array.isArray(ptyArgs) || !ptyArgs.every((a) => typeof a === "string")) {
+                    logger.warn(
+                        `[embedded-supervisor] "${this.config.id}": pty "${args}" is not an array of strings — spawning without args`,
+                    );
+                    ptyArgs = [];
+                }
+                this.proc = pty.spawn(this.config.command, ptyArgs, {
                     name: "xterm-256color",
                     cols: this.config.cols || 80,
                     rows: this.config.rows || 24,
@@ -143,7 +156,10 @@ export class EmbeddedSupervisor implements PaperCraneClientLike {
             }
 
             return true;
-        } catch {
+        } catch (err) {
+            // spawn itself failed (bad binary, bad cwd): the exit code
+            // below is not enough — the WHY must be logged, not swallowed
+            logger.error(`[embedded-supervisor] spawn failed for "${this.config?.id ?? "unknown"}":`, err);
             this.alive = false;
             this.emit("exit", 1);
             return false;
@@ -168,7 +184,7 @@ export class EmbeddedSupervisor implements PaperCraneClientLike {
         try {
             if (this.isPty) this.proc?.kill();
             else this.proc?.kill(signal as NodeJS.Signals);
-        } catch {}
+        } catch (err) { logger.debug("[embeddedSupervisor.ts] op failed:", err) }
         this.alive = false;
     }
 

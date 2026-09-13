@@ -6,19 +6,12 @@ export default defineConfig({
     test: {
         environment: "jsdom",
         globals: true,
-        transformMode: {
-            web: [/\.[jt]sx?$/],
-        },
-        deps: {
-            optimizer: {
-                web: {
-                    include: ["solid-js"],
-                },
-            },
-        },
         isolate: true,
     },
     resolve: {
+        // solid-js resolves browser/development builds through package.json
+        // export conditions; the deps.optimizer/transformMode options used
+        // previously are removed (deprecated in vitest 3+).
         conditions: ["development", "browser"],
     },
 });

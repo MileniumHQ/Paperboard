@@ -3,6 +3,11 @@ import * as fs from "fs";
 import connectionPool from "./communication/papercrane/ConnectionPool";
 import { logger } from "../../papercrane/logger";
 import { panelFilesDirName } from "../../papercrane/storage";
+import {
+    buildWindowsMountCommand,
+    buildMacMountScript,
+    macMountScriptPath,
+} from "./remoteFolderMount";
 
 // remote data dir over WebDAV with ephemeral session; teardown on explorer close
 const IDLE_MS = 180_000;
@@ -34,12 +39,18 @@ function execAsync(
     args: string[],
     timeoutMs: number,
     input?: string,
+    env?: Record<string, string>,
 ): Promise<{ stdout: string; stderr: string }> {
     return new Promise((resolve, reject) => {
-        const child = execFile(cmd, args, { timeout: timeoutMs }, (err, stdout, stderr) => {
-            if (err) reject(err);
-            else resolve({ stdout: String(stdout), stderr: String(stderr) });
-        });
+        const child = execFile(
+            cmd,
+            args,
+            { timeout: timeoutMs, ...(env ? { env: { ...process.env, ...env } } : {}) },
+            (err, stdout, stderr) => {
+                if (err) reject(err);
+                else resolve({ stdout: String(stdout), stderr: String(stderr) });
+            },
+        );
         if (input && child.stdin) {
             child.stdin.write(input);
             child.stdin.end();
@@ -55,8 +66,9 @@ async function revokeSession(s: ActiveSession): Promise<void> {
             body: JSON.stringify({ user: s.davUser }),
             signal: AbortSignal.timeout(10_000),
         });
-    } catch {
+    } catch (err) {
         // unreachable — server expiry reaps it
+        logger.debug("[remoteFolder] session keepalive failed:", err);
     }
 }
 
@@ -81,7 +93,7 @@ async function unmount(s: ActiveSession): Promise<void> {
                 if (hit) {
                     await execAsync("gio", ["mount", "-u", `dav://${s.host}:${s.port}/dav/`], 20_000);
                 }
-            } catch {}
+            } catch (err) { logger.debug("[remoteFolder.ts] op failed:", err) }
         }
     } catch (err: any) {
         logger.warn("[RemoteFolder] unmount failed:", err?.message ?? err);
@@ -120,7 +132,8 @@ async function macHasWindow(mountPoint: string): Promise<boolean> {
     try {
         const { stdout } = await execAsync("osascript", ["-e", script], 15_000);
         return stdout.split(/,\s*|\r?\n/).some((line) => line.includes(mountPoint));
-    } catch {
+    } catch (err) {
+        logger.debug("[RemoteFolder] Finder window probe failed, assuming closed:", err);
         return false;
     }
 }
@@ -213,21 +226,20 @@ export async function openRemoteFolder(
                     headers: { Authorization: basic },
                     signal: AbortSignal.timeout(10_000),
                 });
-            } catch {}
+            } catch (err) { logger.debug("[remoteFolder.ts] op failed:", err) }
         }
     }
 
     try {
         if (process.platform === "win32") {
+            // credential in child env, never argv: cmdkey/net-use password
+            // args are world-readable via WMI/Task Manager
             const url = `http://${host}:${port}/dav`;
-            const out = await execAsync(
-                "net",
-                ["use", "*", url, session.pass, `/user:${session.user}`, "/persistent:no"],
-                60_000,
-            );
+            const plan = buildWindowsMountCommand(url, session.user, session.pass);
+            const out = await execAsync("powershell.exe", plan.args, 60_000, undefined, plan.env);
             const drive = /([A-Z]:)/i.exec(out.stdout)?.[1]?.toUpperCase();
             if (!drive) {
-                logger.warn("[RemoteFolder] net use output:", out.stdout);
+                logger.warn("[RemoteFolder] mount output:", out.stdout);
                 return await fail("mount-parse");
             }
             rec.mount = drive;
@@ -244,8 +256,19 @@ export async function openRemoteFolder(
             const safeId = computerId.replace(/[^A-Za-z0-9-]/g, "-").slice(0, 32) || "remote";
             const mountPoint = `/Volumes/Paperboard-${safeId}`;
             fs.mkdirSync(mountPoint, { recursive: true });
-            const credUrl = `http://${encodeURIComponent(session.user)}:${encodeURIComponent(session.pass)}@${host}:${port}/dav`;
-            await execAsync("mount_webdav", [credUrl, mountPoint], 60_000);
+            // credential in a 0600 temp file, never argv/URL (both leak
+            // into ps output)
+            const scriptPath = macMountScriptPath();
+            fs.writeFileSync(scriptPath, buildMacMountScript(session.user, session.pass, host, port), {
+                mode: 0o600,
+            });
+            try {
+                await execAsync("osascript", [scriptPath], 60_000);
+            } finally {
+                try {
+                    fs.unlinkSync(scriptPath);
+                } catch (err) { logger.debug("[remoteFolder.ts] op failed:", err) }
+            }
             rec.mount = mountPoint;
             active.set(computerId, rec);
             const target = subDir ? `${mountPoint}/${subDir}` : mountPoint;
@@ -255,6 +278,10 @@ export async function openRemoteFolder(
         }
 
         // linux: no window API to watch; rely on server expiry + quit cleanup
+        // TODO(remove after v3.2): the credential-bearing dav URI in argv is
+        // a documented residual — xdg-open passes it to ps output. Loan
+        // expired; it is denied (like every other credential-in-argv path)
+        // at the registry-opening gate.
         const uri = `dav://${encodeURIComponent(session.user)}:${encodeURIComponent(session.pass)}@${host}:${port}/dav/${subDir ? subDir + "/" : ""}`;
         active.set(computerId, rec);
         spawn("xdg-open", [uri], { detached: true, stdio: "ignore" }).unref();

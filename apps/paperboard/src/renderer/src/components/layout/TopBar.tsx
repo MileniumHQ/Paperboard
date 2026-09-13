@@ -37,7 +37,7 @@ const TopBar: Component<{
                     setCaptionReserve(
                         Math.max(0, window.innerWidth - rect.x - rect.width),
                     );
-                } catch {}
+                } catch (err) { console.error("[TopBar] op failed:", err); }
             };
             update();
             wco.addEventListener?.("geometrychange", update);
@@ -56,7 +56,7 @@ const TopBar: Component<{
             setLeftReserve(84);
         }
 
-        // "1.0.0-alpha" -> "Alpha 1" (trailing .0s trimmed, tag capitalized)
+        // "3.0.0-alpha" -> "Alpha 3" (trailing .0s trimmed, tag capitalized)
         shellApi
             .getAppVersion()
             .then((raw) => {
@@ -74,7 +74,7 @@ const TopBar: Component<{
                     `${tag.charAt(0).toUpperCase()}${tag.slice(1)} ${core.join(".")}`,
                 );
             })
-            .catch(() => {});
+            .catch((err) => console.error("[TopBar] failed to read app version:", err));
     });
 
     const handleFolder = () => {

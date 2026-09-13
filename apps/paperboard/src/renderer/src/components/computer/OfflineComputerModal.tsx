@@ -38,7 +38,13 @@ export const OfflineComputerModal: Component<OfflineComputerModalProps> = (
             if (target !== props.computer) return;
             setError(err?.message || "Unreachable");
         } finally {
-            setIsProbing(false);
+            // R13: only the probe that owns the CURRENT target may clear
+            // the busy flag — a stale probe's finally used to re-enable
+            // "Try Again" while a newer probe for a new target was in
+            // flight, briefly allowing a double-probe.
+            if (target === props.computer) {
+                setIsProbing(false);
+            }
         }
     };
 

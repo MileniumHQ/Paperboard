@@ -6,9 +6,11 @@ import * as crypto from "crypto";
 import { Bonjour } from "bonjour-service";
 import { logger } from "./logger";
 import { getPaperboardDir } from "./paths";
+import pkg from "../package.json";
 
 export const PAPERCRANE_MDNS_TYPE = "papercrane";
-export const PAPERCRANE_VERSION = "1.0.0";
+// version travels with the app package.json — one source, never a drift
+export const PAPERCRANE_VERSION = pkg.version;
 
 export interface AdvertiseOptions {
     port: number;
@@ -36,7 +38,7 @@ export function paperCraneMachineId(): string {
     try {
         const raw = JSON.parse(fs.readFileSync(file, "utf8")) as { id?: unknown };
         if (typeof raw?.id === "string" && raw.id.length >= 8) return raw.id;
-    } catch {}
+    } catch (err) { logger.debug("[discovery.ts] op failed:", err) }
     const id = crypto.randomUUID();
     try {
         fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -87,7 +89,7 @@ export function advertisePaperCrane(
             clearRetry();
             try {
                 current?.stop();
-            } catch {}
+            } catch (err) { logger.debug("[discovery.ts] op failed:", err) }
             current = null;
         },
     };
@@ -121,7 +123,7 @@ export function advertisePaperCrane(
             logger.warn("[PaperCrane] failed to start mDNS advertisement:", err);
             try {
                 bonjour.destroy();
-            } catch {}
+            } catch (err) { logger.debug("[discovery.ts] op failed:", err) }
             return;
         }
 

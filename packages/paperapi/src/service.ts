@@ -46,9 +46,8 @@ export function definePanelService<
         | ActionDefinition[],
 >(options: DefinePanelServiceOptions<TState, TActions>) {
     const panelId = options.id || getPanelId();
-    if (panelId && typeof process !== "undefined" && process.env) {
-        process.env.PAPERBOARD_PANEL_ID = panelId;
-    }
+    // identity is threaded as a parameter everywhere; writing it back to
+    // process.env gives two services in one process the same name
     let currentState = { ...(options.state || {}) } as TState;
 
     if (options.types) {
@@ -102,7 +101,9 @@ export function definePanelService<
         STATE_GET_ACTION,
         () => currentState,
         panelId,
-    ).catch(() => {});
+    ).catch((err) => {
+        console.error(`[Service:${panelId}] Failed to register hydration action '${STATE_GET_ACTION}':`, err);
+    });
 
     if (options.actions) {
         if (Array.isArray(options.actions)) {

@@ -26,8 +26,8 @@ export default defineConfig({
             fs: {
                 allow: [
                     "..",
-                    resolve(__dirname, "../PaperUI"),
-                    resolve(__dirname, "../PaperAPI"),
+                    resolve(__dirname, "../../packages/paperui"),
+                    resolve(__dirname, "../../packages/paperapi"),
                 ],
             },
         },

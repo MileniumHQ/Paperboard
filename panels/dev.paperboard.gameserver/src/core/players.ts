@@ -1,6 +1,28 @@
 export const PLAYER_NAME_PATTERN = /^[a-zA-Z0-9_]{1,16}$/;
 export const SERVER_PROC_ID = "mc-server";
 
+// names reach console commands raw (`kick ${name}`, `data get entity
+// ${name}`): validated at every service boundary, never just UI-side.
+// A newline anywhere in these values is a second console command.
+export function assertPlayerName(name: unknown): string {
+    const s = String(name ?? "").trim();
+    if (!PLAYER_NAME_PATTERN.test(s)) {
+        throw new Error(`Refusing unsafe player name: ${JSON.stringify(name)}`);
+    }
+    return s;
+}
+
+export function assertSingleLine(value: unknown, what: string, max = 200): string {
+    const s = String(value ?? "");
+    if (s.includes("\n") || s.includes("\r")) {
+        throw new Error(`Refusing multi-line ${what}: a line break would inject a second console command`);
+    }
+    if (s.length > max) {
+        throw new Error(`Refusing overlong ${what}: ${s.length} chars past the ${max} cap`);
+    }
+    return s;
+}
+
 export interface PlayerStatData {
     health?: number;
     food?: number;

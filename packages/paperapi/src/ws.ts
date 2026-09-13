@@ -2,7 +2,10 @@
 import type * as fsType from "fs";
 
 import { debug, debugErr } from "./debug";
+import { PROTOCOL_VERSION } from "./protocol";
 import { TransportRegistry } from "./transport/registry";
+import { ambientScope, resolveDefaultPanelId } from "./identity";
+import { serviceBootContext } from "./boot";
 
 const LOCAL_ONLY_APP_SETTINGS = "app-settings";
 
@@ -27,16 +30,6 @@ interface Pending {
 
 const RECONNECT_BASE_MS = 400;
 const RECONNECT_MAX_MS = 5_000;
-
-// Computer scope implied by the hostname prefix of the embedding document
-export function ambientScope(): string {
-    if (typeof location !== "undefined") {
-        const host = location.hostname || "";
-        const dot = host.indexOf(".");
-        if (dot > 0) return host.slice(0, dot);
-    }
-    return "local";
-}
 
 async function randomTunnelId(): Promise<string> {
     const c = (globalThis as any).crypto;
@@ -88,7 +81,7 @@ async function getWebSocketImpl(): Promise<any> {
                     for (const { event, fn } of this._wrapped.values()) {
                         try {
                             remove(event, fn);
-                        } catch {}
+                        } catch (err) { debugErr("detach shim listener", err) }
                     }
                 }
                 this._wrapped.clear();
@@ -118,7 +111,7 @@ async function getWebSocketImpl(): Promise<any> {
                     if (entry && entry.event === event) {
                         try {
                             remove(event, entry.fn);
-                        } catch {}
+                        } catch (err) { debugErr("detach shim listener", err) }
                         this._wrapped.delete(cb);
                     }
                     return;
@@ -127,7 +120,7 @@ async function getWebSocketImpl(): Promise<any> {
                     if (entry.event === event) {
                         try {
                             remove(event, entry.fn);
-                        } catch {}
+                        } catch (err) { debugErr("detach shim listener", err) }
                         this._wrapped.delete(orig);
                     }
                 }
@@ -152,6 +145,9 @@ export class CraneTransport {
     private pending = new Map<number, Pending>();
     private listeners = new Map<string, Set<Listener>>();
     private requestId = 1;
+    // last subscription set announced to the daemon; null means not announced
+    private lastSubscribedEvents: Set<string> | null = null;
+    private subSyncScheduled = false;
     private connecting: Promise<void> | null = null;
     private reconnectAttempts = 0;
     private closedByUser = false;
@@ -189,6 +185,17 @@ export class CraneTransport {
             return;
         }
 
+        // service boot context: credentials GRANTED at service start
+        // (in-process boot window or spawned-service env, captured once in
+        // boot.ts). Issued credentials outrank discovered ones — a service
+        // never reads crane.json or ambient env to find out who it is.
+        const boot = serviceBootContext();
+        if (boot) {
+            this.port = boot.port;
+            this.token = boot.token;
+            return;
+        }
+
         if (!this.isNode) {
             // Browser: credentials are injected by the host at serve time
             // (scoped to this document's computer). No fetch fallback.
@@ -216,6 +223,17 @@ export class CraneTransport {
         const fsMod: typeof fsType = await nodeBuiltin("fs");
         const file = this.opts.craneJsonPath || defaultCraneJsonPath(pathMod);
         const raw = JSON.parse(fsMod.readFileSync(file, "utf8"));
+        // the handshake file is a trust boundary: garbage fields must fail
+        // here with a typed message, not as ws://127.0.0.1:undefined later
+        if (!raw || typeof raw !== "object") {
+            throw new Error(`Invalid crane handshake file (expected an object): ${file}`);
+        }
+        if (typeof raw.port !== "number" || !Number.isFinite(raw.port)) {
+            throw new Error(`Invalid crane handshake file (port must be a number): ${file}`);
+        }
+        if (typeof raw.token !== "string" || raw.token.length === 0) {
+            throw new Error(`Invalid crane handshake file (token must be a non-empty string): ${file}`);
+        }
         this.port = raw.port;
         this.token = raw.token;
     }
@@ -224,6 +242,10 @@ export class CraneTransport {
 
     public onStatus(cb: Listener): void {
         this.statusListeners.add(cb);
+    }
+
+    public offStatus(cb: Listener): void {
+        this.statusListeners.delete(cb);
     }
 
     private emitStatus(connected: boolean, error?: string): void {
@@ -263,7 +285,6 @@ export class CraneTransport {
                     this.ws = ws;
                     this.reconnectAttempts = 0;
                     this.emitStatus(true);
-                    this.afterOpen();
                     resolve();
                 });
 
@@ -301,8 +322,6 @@ export class CraneTransport {
         await this.resubscribe();
     }
 
-    private afterOpen(): void {}
-
     private scheduleReconnect(): void {
         const delay = Math.min(
             RECONNECT_MAX_MS,
@@ -312,7 +331,13 @@ export class CraneTransport {
         this.reconnectTimer = setTimeout(() => {
             this.reconnectTimer = null;
             if (this.closedByUser) return;
-            this.open().catch(() => this.scheduleReconnect());
+            // a dropped reconnect must be recorded, not just retried:
+            // debugErr is always visible, debug-trace is not
+            this.open().catch((err) => {
+                debugErr("reconnect attempt failed", err);
+                this.emitStatus(false, err instanceof Error ? err.message : String(err));
+                this.scheduleReconnect();
+            });
         }, delay);
     }
 
@@ -327,6 +352,18 @@ export class CraneTransport {
         this.ws = null;
         this.tunnelId = null;
         this.rejectAllPending("PaperCrane transport closed");
+        // Full teardown: the transport is stopped for good, so its callback
+        // registries are released, not muted — a closed transport must not
+        // hold references that keep panels (or their handlers) alive.
+        // Re-subscription on a replacement transport re-attaches from a
+        // clean slate.
+        this.statusListeners.clear();
+        this.listeners.clear();
+        this.sourceSubs.clear();
+        this.rawListeners.clear();
+        this.attachedTerminals.clear();
+        this.attachedProcesses.clear();
+        this.lastSubscribedEvents = null;
     }
 
     private async openTunnel(computerId: string): Promise<void> {
@@ -334,10 +371,12 @@ export class CraneTransport {
         debug(`target=${computerId} opening tunnel ${id}`);
         try {
             await new Promise<void>((resolve, reject) => {
-                const timeout = setTimeout(
-                    () => reject(new Error("Tunnel open timed out")),
-                    5_000,
-                );
+                // teardown on timeout: a refused tunnel must not leak its
+                // handshake listener every retry
+                const timeout = setTimeout(() => {
+                    this.removeMessageListener(listener);
+                    reject(new Error("Tunnel open timed out"));
+                }, 5_000);
                 const listener = (msg: any) => {
                     try {
                         const parsed = JSON.parse(msg);
@@ -351,6 +390,7 @@ export class CraneTransport {
                             if (parsed.type === "tunnel-open") {
                                 resolve();
                             } else {
+                                clearTimeout(timeout);
                                 reject(
                                     new Error(
                                         `Remote tunnel failed: ${parsed.reason ?? "closed"}`,
@@ -369,6 +409,7 @@ export class CraneTransport {
             });
         } catch (err: any) {
             debug(`target=${computerId} tunnel open FAILED: ${err?.message}`);
+            this.tunnelId = null;
             throw err;
         }
         this.tunnelId = id;
@@ -403,6 +444,7 @@ export class CraneTransport {
         try {
             msg = JSON.parse(text);
         } catch {
+            debug("dropping unparseable frame");
             return;
         }
 
@@ -412,6 +454,7 @@ export class CraneTransport {
                 msg = JSON.parse(msg.payload);
                 debug(`target=${this.computerId} <- tunnel frame id=${msg.id ?? ""} type=${msg.type}`);
             } catch {
+                debug("dropping unparseable tunneled frame");
                 return;
             }
         }
@@ -438,7 +481,9 @@ export class CraneTransport {
 
         if (msg.type === "action_call") {
             const { callId, action, args } = msg;
-            const handler = this.registry.getHandler(action);
+            // namespaced dispatch: unique composite owner only; ambiguous
+            // bare names are refused rather than resolved last-writer-wins
+            const handler = this.registry.resolveHandler(action);
             if (!handler) {
                 this.rawSend({
                     type: "action_reply",
@@ -471,8 +516,22 @@ export class CraneTransport {
             if (p) {
                 this.pending.delete(msg.id);
                 clearTimeout(p.timer);
-                if (msg.error) p.reject(new Error(msg.error));
-                else p.resolve(msg.result);
+                if (msg.error) {
+                    const err = new Error(msg.error);
+                    // machine-readable code travels with the error when the
+                    // daemon speaks a version that knows codes
+                    if (msg.code) (err as any).code = msg.code;
+                    p.reject(err);
+                } else {
+                    p.resolve(msg.result);
+                }
+            } else {
+                // a response id with no pending call is a protocol anomaly
+                // (a late reply after a timeout, or a foreign frame);
+                // logged, not dropped silently
+                debug(
+                    `dropping response for unknown id=${msg.id} (${msg.error ? `error: ${msg.error}` : "timed-out or foreign frame"})`,
+                );
             }
         } else if (msg.type === "event") {
             this.dispatch(msg.event, msg.payload);
@@ -481,7 +540,17 @@ export class CraneTransport {
 
     private dispatch(event: string, payload: any): void {
         const set = this.listeners.get(event);
-        if (set) for (const cb of set) cb(payload);
+        if (!set) return;
+        // per-listener isolation: one throwing panel listener must not
+        // abort delivery of the same event to the others (raw listeners
+        // already had this; one invariant, one implementation applies)
+        for (const cb of set) {
+            try {
+                cb(payload);
+            } catch (err) {
+                debugErr(`listener for ${event}`, err);
+            }
+        }
     }
 
     private rejectAllPending(reason: string): void {
@@ -494,11 +563,26 @@ export class CraneTransport {
 
     // ── Public API used by the namespace router ─────────────────────────────
 
+    // BOUNDED: outstanding calls are capped — long-running downloads and a
+    // wedged daemon previously compounded here without limit. Past the cap
+    // the call refuses with a typed error instead of compounding.
+    private static readonly MAX_PENDING_CALLS = 1000;
+
     public async call(action: string, params: Record<string, unknown> = {}, timeoutMs: number | null = 30_000): Promise<any> {
         await this.ensureConnected();
 
+        if (this.pending.size >= CraneTransport.MAX_PENDING_CALLS) {
+            throw new Error(
+                `PaperCrane transport has ${this.pending.size} outstanding calls (cap ${CraneTransport.MAX_PENDING_CALLS}); refusing to queue '${action}'`,
+            );
+        }
+
         const id = this.requestId++;
-        const finalParams = { token: this.token, ...params };
+        // token last: a params object that happens to carry a token (or a
+        // typo'd field) can never clobber the real credential.
+        // v marks the wire protocol version — the daemon refuses unknown
+        // versions with a typed BAD_PROTOCOL error instead of guessing
+        const finalParams = { ...params, token: this.token, v: PROTOCOL_VERSION };
         return new Promise((resolve, reject) => {
             // null timeoutMs waits indefinitely (long-running operations)
             const timer =
@@ -529,13 +613,23 @@ export class CraneTransport {
         if (!set) {
             set = new Set();
             this.listeners.set(event, set);
+            this.scheduleSubSync();
         }
         set.add(cb);
     }
 
     public unsubscribeEvent(event: string, cb?: Listener): void {
-        if (!cb) this.listeners.delete(event);
-        else this.listeners.get(event)?.delete(cb);
+        if (!cb) {
+            if (this.listeners.delete(event)) this.scheduleSubSync();
+        } else {
+            const set = this.listeners.get(event);
+            if (!set) return;
+            set.delete(cb);
+            if (set.size <= 0) {
+                this.listeners.delete(event);
+                this.scheduleSubSync();
+            }
+        }
     }
 
     // fan-out for channels sharing one upstream event
@@ -571,6 +665,40 @@ export class CraneTransport {
         }
     }
 
+    // ── Broadcast subscription sync ──────────────────────────────────────────
+    // the daemon only broadcasts events the socket declared via
+    // events:subscribe (full-replace). Kept in sync with the listeners set.
+
+    private scheduleSubSync(): void {
+        if (this.subSyncScheduled) return;
+        this.subSyncScheduled = true;
+        queueMicrotask(() => {
+            this.subSyncScheduled = false;
+            this.syncSubscriptions();
+        });
+    }
+
+    private async syncSubscriptions(): Promise<void> {
+        if (!this.isConnected()) return;
+        const wanted = new Set(this.listeners.keys());
+        // An empty declaration is indistinguishable from no declaration on the
+        // daemon; don't burn a tunnel round-trip announcing nothing.
+        const neverDeclared =
+            !this.lastSubscribedEvents || this.lastSubscribedEvents.size === 0;
+        if (wanted.size === 0 && neverDeclared) return;
+        if (
+            this.lastSubscribedEvents &&
+            this.lastSubscribedEvents.size === wanted.size &&
+            [...wanted].every((e) => this.lastSubscribedEvents!.has(e))
+        ) {
+            return;
+        }
+        this.lastSubscribedEvents = wanted;
+        this.call("events:subscribe", { events: [...wanted] }).catch((err) =>
+            debugErr("events:subscribe sync", err),
+        );
+    }
+
     public trackTerminal(id: string): void {
         this.attachedTerminals.add(id);
     }
@@ -588,17 +716,15 @@ export class CraneTransport {
     }
 
     private resolveDefaultPanelId(): string {
-        if (this.opts.panelId) return this.opts.panelId;
-        if (typeof window !== "undefined" && window.location) {
-            const host = window.location.hostname || "";
-            const dot = host.indexOf(".");
-            if (dot >= 0) return host.slice(dot + 1);
-            if (host) return host;
-        }
-        if (typeof process !== "undefined" && process.env?.PAPERBOARD_PANEL_ID) {
-            return process.env.PAPERBOARD_PANEL_ID;
-        }
-        return "";
+        return resolveDefaultPanelId(this.opts.panelId);
+    }
+
+    // the transport's own resolved identity: private because it may be an
+    // ambient fallback (deprecated), public because panels legitimately
+    // need "my panel id" for default subscriptions — with the same
+    // loud-warning discipline the fallback carries everywhere else
+    public getDefaultPanelId(): string {
+        return this.resolveDefaultPanelId();
     }
 
     public setActionHandler(
@@ -654,6 +780,10 @@ export class CraneTransport {
 
     // replays attachments and registrations after reconnect
     private async resubscribe(): Promise<void> {
+        // the daemon forgot this socket's subscriptions; re-announce the set
+        this.lastSubscribedEvents = null;
+        this.syncSubscriptions();
+
         for (const id of this.attachedTerminals) {
             this.call("term:attach", { id }).catch((err) => debugErr(`term:attach ${id}`, err));
         }

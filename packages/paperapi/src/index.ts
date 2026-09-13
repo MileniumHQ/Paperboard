@@ -1,8 +1,9 @@
 import { invoke, send, on, unpackIpcPayload } from "./ipc";
 
-export * from "./types";
 export * from "./ipc";
 export * from "./config";
+export * from "./identity";
+export * from "./secrets";
 export * from "./package";
 export * from "./file";
 export * from "./process";
@@ -12,9 +13,12 @@ export * from "./actions";
 export * from "./service";
 export * from "./bridge";
 export * from "./channels";
+export * from "./protocol";
+export * from "./shell";
 
 // terminal management
 export const terminalApi = {
+    /** Terminal identity is the explicit argument: options cannot clobber it. */
     create: (
         id: string,
         options?: {
@@ -23,14 +27,15 @@ export const terminalApi = {
             cwd?: string;
             env?: Record<string, string>;
         },
-    ) => send("terminal-create", { id, ...options }),
+    ): Promise<void> => send("terminal-create", { ...options, id }),
 
-    write: (id: string, data: string) => send("terminal-write", { id, data }),
+    write: (id: string, data: string): Promise<void> =>
+        send("terminal-write", { id, data }),
 
-    resize: (id: string, cols: number, rows: number) =>
+    resize: (id: string, cols: number, rows: number): Promise<void> =>
         send("terminal-resize", { id, cols, rows }),
 
-    destroy: (id: string) => send("terminal-destroy", { id }),
+    destroy: (id: string): Promise<void> => send("terminal-destroy", { id }),
 
     exists: async (id: string): Promise<boolean> =>
         invoke<boolean>("terminal-exists", { id }),

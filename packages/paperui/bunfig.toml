@@ -1,0 +1,9 @@
+# PaperUI test contract — see README ("@paperui/dom-requires-vitest").
+# `bun run test` (vitest, jsdom via vitest.config.ts) is the supported runner.
+# Plain `bun test` is blocked on purpose by test/bun-test-guard.ts: bun's test
+# transpiler cannot compile SolidJS tsx (not even with bunfig jsx = "solid"),
+# so it would run these DOM tests against a React-classic fallback or the SSR
+# solid builds and fail with confusing errors instead of refusing.
+
+[test]
+preload = ["./test/bun-test-guard.ts"]
