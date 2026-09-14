@@ -6,6 +6,7 @@ import {
     PaperInput,
     PaperList,
     PaperListItem,
+    PaperQuote,
     PaperText,
     getVarCss,
 } from "@paperboard-dev/paperui";
@@ -100,6 +101,11 @@ export default function VersionPicker(props: {
                     value={searchQuery()}
                     onInput={(e) => setSearchQuery(e.currentTarget.value)}
                 />
+
+                <PaperQuote variant="yellow" icon="info" title="Compatibility">
+                    Paperboard works best on the latest Minecraft version. Full
+                    feature support for older versions may vary.
+                </PaperQuote>
 
                 <PaperContainer style={{ flex: 1, "min-height": 0, "overflow-y": "auto" }}>
                     <Show

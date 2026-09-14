@@ -28,6 +28,7 @@ import { readServerProperties, writeServerProperties } from "../lib/properties";
 import {
     deleteActiveWorldDirs,
     listWorlds,
+    normalizeLevelType,
     setActiveWorld,
     WORLD_CREATE_FIELDS,
     WORLD_NAME_PATTERN,
@@ -94,7 +95,9 @@ export default function Worlds() {
         const props = await readServerProperties();
         const next: Record<string, string> = {};
         for (const field of WORLD_CREATE_FIELDS) {
-            next[field.key] = props[field.key] ?? field.defaultValue;
+            const raw = props[field.key] ?? field.defaultValue;
+            next[field.key] =
+                field.key === "level-type" ? normalizeLevelType(raw) : raw;
         }
         setCreateValues(next);
     });
@@ -104,8 +107,10 @@ export default function Worlds() {
     // itself current — no Refresh button to forget to press.
     createEffect(on(serverStatus, () => void refresh(), { defer: true }));
 
-    const createValue = (key: string, fallback: string) =>
-        createValues()[key] ?? fallback;
+    const createValue = (key: string, fallback: string) => {
+        const raw = createValues()[key] ?? fallback;
+        return key === "level-type" ? normalizeLevelType(raw) : raw;
+    };
 
     const setCreateValue = (key: string, value: string) =>
         setCreateValues((prev) => ({ ...prev, [key]: value }));
@@ -311,7 +316,7 @@ export default function Worlds() {
                                         when={world.active}
                                         fallback={
                                             <PaperText size={3} color="light-text">
-                                                Inactive — switching takes effect after a restart.
+                                                Inactive. Switching takes effect after a restart.
                                             </PaperText>
                                         }
                                     >
@@ -425,7 +430,7 @@ export default function Worlds() {
                     "{selected()?.name}" to trash, including all builds and items
                     in them.
                     <Show when={selected()?.active}>
-                        {" "}This is the active world — the server will generate a
+                        {" "}This is the active world. The server will generate a
                         fresh one on the next start.
                     </Show>
                 </PaperText>

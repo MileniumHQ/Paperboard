@@ -670,38 +670,38 @@ function PlayerModal(props: {
                             </tr>
                             <tr>
                                 <th>Health</th>
-                                <td>{stats()?.health !== undefined ? stats()!.health : "—"}</td>
+                                <td>{stats()?.health !== undefined ? stats()!.health : "–"}</td>
                             </tr>
                             <tr>
                                 <th>Food</th>
-                                <td>{stats()?.food !== undefined ? stats()!.food : "—"}</td>
+                                <td>{stats()?.food !== undefined ? stats()!.food : "–"}</td>
                             </tr>
                             <tr>
                                 <th>XP Level</th>
-                                <td>{stats()?.xpLevel !== undefined ? stats()!.xpLevel : "—"}</td>
+                                <td>{stats()?.xpLevel !== undefined ? stats()!.xpLevel : "–"}</td>
                             </tr>
                             <tr>
                                 <th>Deaths</th>
-                                <td>{summary()?.deaths ?? "—"}</td>
+                                <td>{summary()?.deaths ?? "–"}</td>
                             </tr>
                             <tr>
                                 <th>Mob Kills</th>
-                                <td>{summary()?.mobKills ?? "—"}</td>
+                                <td>{summary()?.mobKills ?? "–"}</td>
                             </tr>
                             <tr>
                                 <th>Player Kills</th>
-                                <td>{summary()?.playerKills ?? "—"}</td>
+                                <td>{summary()?.playerKills ?? "–"}</td>
                             </tr>
                             <tr>
                                 <th>Blocks Mined</th>
-                                <td>{summary()?.blocksMined ?? "—"}</td>
+                                <td>{summary()?.blocksMined ?? "–"}</td>
                             </tr>
                             <tr>
                                 <th>Distance</th>
                                 <td>
                                     {summary()
                                         ? formatDistance(summary()!.distanceCm)
-                                        : "—"}
+                                        : "–"}
                                 </td>
                             </tr>
                         </tbody>

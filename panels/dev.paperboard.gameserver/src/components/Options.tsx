@@ -8,6 +8,8 @@ import {
 } from "@paperboard-dev/paperui";
 import { FieldControl } from "./PropertyFieldControl";
 import { PaperPageHeader } from "@paperboard-dev/paperui";
+import { serverBridge } from "../lib/server";
+import { ACTION_IDS } from "../service/contract";
 import {
     readServerProperties,
     visiblePropertyFields,
@@ -22,6 +24,9 @@ export default function Options() {
     const [saveError, setSaveError] = createSignal(false);
 
     let saveTimer: ReturnType<typeof setTimeout> | null = null;
+    // keys edited since the last successful save; only these are offered for
+    // live application so an unrelated edit doesn't re-issue commands
+    const dirty = new Set<string>();
 
     onMount(async () => {
         const props = await readServerProperties();
@@ -33,7 +38,13 @@ export default function Options() {
     });
 
     onCleanup(() => {
-        if (saveTimer) clearTimeout(saveTimer);
+        // a debounced edit made just before leaving the tab must not be
+        // dropped: flush it instead of cancelling it
+        if (saveTimer) {
+            clearTimeout(saveTimer);
+            saveTimer = null;
+            void persistChanges();
+        }
     });
 
     const currentValue = (field: PropertyField) =>
@@ -48,6 +59,7 @@ export default function Options() {
             if (field.max !== undefined && num > field.max) return;
         }
         setValues((prev) => ({ ...(prev ?? {}), [field.key]: value }));
+        dirty.add(field.key);
         scheduleSave();
     };
 
@@ -59,8 +71,25 @@ export default function Options() {
     const persistChanges = async () => {
         const snapshot = values();
         if (!snapshot) return;
+        const changed: Record<string, string> = {};
+        for (const key of dirty) {
+            if (snapshot[key] !== undefined) changed[key] = snapshot[key];
+        }
+        // a gamemode change needs the current force-gamemode to decide
+        // whether to also force online players
+        if (changed.gamemode !== undefined) {
+            changed["force-gamemode"] = snapshot["force-gamemode"] ?? "false";
+        }
         try {
             await writeServerProperties(snapshot);
+            // difficulty/gamemode are per-world (level.dat); apply the edited
+            // ones to a running server live, or queue them for the next start
+            if (Object.keys(changed).length > 0) {
+                await serverBridge.call(ACTION_IDS.applyRuntimeProperties, {
+                    values: changed,
+                });
+            }
+            dirty.clear();
             setSaveError(false);
         } catch (err) {
             console.debug("[options] server.properties save failed:", String(err));
@@ -85,7 +114,7 @@ export default function Options() {
                         <PaperSettingList autoHeight>
                             <PaperFlex padding="full" gap="half">
                                 <PaperQuote variant="yellow" icon="warning" title="Note">
-                                    Changes won't be applied until the server is restarted.
+                                    World generation and network settings apply after a restart. Difficulty and game mode apply immediately while the server is running.
                                 </PaperQuote>
                                 <Show when={saveError()}>
                                     <PaperQuote variant="red" icon="warning" title="Error">

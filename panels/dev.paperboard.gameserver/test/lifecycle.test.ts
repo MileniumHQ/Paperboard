@@ -6,6 +6,7 @@ import { describe, it, expect, mock, beforeEach } from "bun:test";
 
 const writes: string[] = [];
 const kills: string[] = [];
+const starts: string[] = [];
 let savedConfig: Record<string, unknown> = {};
 const configSets: Record<string, unknown>[] = [];
 
@@ -26,7 +27,10 @@ mock.module("@paperboard-dev/paperapi", () => ({
             kills.push(sig);
         },
         exists: async () => false,
-        start: async () => true,
+        start: async (opts: { id: string }) => {
+            starts.push(opts.id);
+            return true;
+        },
         run: async () => ({}),
         onData: () => () => {},
         onExit: () => () => {},
@@ -34,7 +38,7 @@ mock.module("@paperboard-dev/paperapi", () => ({
     files: {
         read: async () => null,
         write: async () => "/fake",
-        exists: async () => false,
+        exists: async () => true,
         getPath: async () => "/srv/mc",
         download: async () => "/fake",
         clear: async () => true,
@@ -43,14 +47,14 @@ mock.module("@paperboard-dev/paperapi", () => ({
     fileApi: {
         read: async () => null,
         write: async () => "/fake",
-        exists: async () => false,
+        exists: async () => true,
         getPath: async () => "/srv/mc",
         download: async () => "/fake",
         clear: async () => true,
         delete: async () => true,
     },
     packages: {
-        isInstalled: async () => false,
+        isInstalled: async () => true,
         getPath: async () => "/java",
         download: async () => {},
     },
@@ -68,6 +72,7 @@ mock.module("@paperboard-dev/paperapi", () => ({
 }));
 
 const { handleProcessData, handleProcessExit, __lifecycleTest } = await import("../src/service/lifecycle");
+const { restartServerInstance } = await import("../src/service/lifecycle");
 const { queryGamerules, setGamerule } = await import("../src/service/gamerules");
 const {
     assertGameruleName,
@@ -108,6 +113,7 @@ function makeCtx(overrides: Record<string, unknown> = {}) {
 beforeEach(() => {
     writes.length = 0;
     kills.length = 0;
+    starts.length = 0;
     configSets.length = 0;
     savedConfig = {};
 });
@@ -215,6 +221,23 @@ describe("gamerule readouts", () => {
             "[12:00:04] [Server thread/INFO]: Gamerule totally_made_up is currently set to: yes\n",
         );
         expect(ctx.state.gamerules).toEqual({});
+    });
+});
+
+describe("restart", () => {
+    it("a restart starts a fresh instance after the stop half completes", async () => {
+        const ctx = makeCtx({ serverStatus: "online", serverVersion: "1.21.1" });
+        await restartServerInstance(ctx);
+        expect(ctx.state.serverStatus).toBe("restarting");
+
+        handleProcessExit(ctx);
+        await new Promise((resolve) => setTimeout(resolve, 30));
+
+        // the old bug set status to "starting" then called
+        // startServerInstance, whose "offline"-only guard refused — so a
+        // restart only ever stopped the server
+        expect(starts.length).toBe(1);
+        expect(ctx.state.serverStatus).toBe("starting");
     });
 });
 

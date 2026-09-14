@@ -146,20 +146,35 @@ describe("level-name validation", () => {
 });
 
 describe("buildTrashRemoveCommand", () => {
-    test("posix moves to trash, then removes the trash", () => {
+    test("posix moves each existing path to trash, then removes the trash", () => {
         expect(buildTrashRemoveCommand(["world", "My World_nether"], ".trash-1", false)).toBe(
-            "mkdir -p '.trash-1' && mv 'world' 'My World_nether' '.trash-1'/ && rm -rf '.trash-1' && echo TRASH_REMOVE_'OK' ; echo TRASH_REMOVE_'DONE'",
+            "mkdir -p '.trash-1' && ( [ ! -e 'world' ] || mv 'world' '.trash-1' ) && ( [ ! -e 'My World_nether' ] || mv 'My World_nether' '.trash-1' ) && rm -rf '.trash-1' && echo TRASH_REMOVE_'OK' ; echo TRASH_REMOVE_'DONE'",
         );
     });
 
-    test("windows moves to trash, then removes the trash", () => {
+    test("windows moves each existing path to trash, then removes the trash", () => {
         expect(buildTrashRemoveCommand(["world", "My Plugin.jar"], ".trash-1", true)).toBe(
-            'mkdir ".trash-1" && move "world" ".trash-1" && move "My Plugin.jar" ".trash-1" && rmdir /s /q ".trash-1" && echo TRASH_REMOVE_O^K & echo TRASH_REMOVE_D^ONE',
+            'mkdir ".trash-1" && if exist "world" move "world" ".trash-1" && if exist "My Plugin.jar" move "My Plugin.jar" ".trash-1" && rmdir /s /q ".trash-1" && echo TRASH_REMOVE_O^K & echo TRASH_REMOVE_D^ONE',
         );
     });
 
     test("an empty path list refuses instead of emitting a bare rm", () => {
         expect(() => buildTrashRemoveCommand([], ".trash-1", false)).toThrow();
+    });
+
+    test("a missing dimension dir is skipped, not fatal", () => {
+        const cmd = buildTrashRemoveCommand(
+            ["world", "world_nether", "world_the_end"],
+            ".trash-1",
+            false,
+        );
+        // each move is existence-guarded, so a never-entered nether/end
+        // cannot abort the chain before the OK marker
+        expect(cmd).toContain("[ ! -e 'world_nether' ] || mv 'world_nether' '.trash-1'");
+        expect(cmd).toContain("[ ! -e 'world_the_end' ] || mv 'world_the_end' '.trash-1'");
+        expect(cmd.indexOf("TRASH_REMOVE_'OK'")).toBeGreaterThan(
+            cmd.indexOf("rm -rf '.trash-1'"),
+        );
     });
 
     test("trashRemovePathsWith runs in the server dir and destroys the pty", async () => {
@@ -173,7 +188,7 @@ describe("buildTrashRemoveCommand", () => {
         expect(calls[1]).toEqual({ op: "subscribe-data", arg: "test-pty" });
         expect(calls[2]).toEqual({ op: "subscribe-exit", arg: "test-pty" });
         const write = calls[3].arg as { data: string };
-        expect(write.data).toContain("mv 'world' '.trash-9'/");
+        expect(write.data).toContain("mv 'world' '.trash-9'");
         expect(write.data).toContain("echo TRASH_REMOVE_'OK'");
         expect(calls[4]).toEqual({ op: "destroy", arg: "test-pty" });
     });

@@ -1,4 +1,4 @@
-import { files as fileApi, type ServiceContext } from "@paperboard-dev/paperapi";
+import { config, files as fileApi, type ServiceContext } from "@paperboard-dev/paperapi";
 import properties from "dot-properties";
 import { sanitizeFileName, listDirectory } from "../lib/filesystem";
 import {
@@ -17,6 +17,42 @@ import { makeTrashRemoveDeps } from "./trashDeps";
 export { WORLD_NAME_PATTERN };
 export type { WorldInfo };
 
+// Created-but-never-started worlds have no directory yet, so disk listing
+// cannot find them. They used to be remembered only as the active
+// level-name, which meant switching away dropped them from the UI. Persist
+// their names until they generate (or are deleted) so a created world does
+// not vanish on switch.
+const MAX_PENDING_WORLDS = 100;
+
+async function readPendingWorlds(): Promise<string[]> {
+    try {
+        const saved = await config.get<Record<string, unknown>>(PANEL_ID);
+        const list = saved?.pendingWorlds;
+        if (!Array.isArray(list)) return [];
+        return list.filter(
+            (name): name is string =>
+                typeof name === "string" && WORLD_NAME_PATTERN.test(name),
+        );
+    } catch (err) {
+        console.debug("[Service:Worlds] pending worlds read failed:", String(err));
+        return [];
+    }
+}
+
+async function writePendingWorlds(names: string[]): Promise<void> {
+    let saved: Record<string, unknown> = {};
+    try {
+        const current = await config.get<Record<string, unknown>>(PANEL_ID);
+        if (current && typeof current === "object") saved = current;
+    } catch (err) {
+        console.debug("[Service:Worlds] no saved panel config yet:", String(err));
+    }
+    await config.set(
+        { ...saved, pendingWorlds: names.slice(0, MAX_PENDING_WORLDS) },
+        PANEL_ID,
+    );
+}
+
 export async function listWorldDirs(): Promise<string[]> {
     const entries = await listDirectory("");
     return collectWorldDirs({
@@ -33,6 +69,9 @@ export async function deleteActiveWorldDirs(
     // enforce offline here, at the owner, not only in the action that calls it
     assertServerOffline(ctx);
     await deleteWorldDirs(levelName, makeTrashRemoveDeps("Service:Worlds"));
+    const pending = await readPendingWorlds();
+    const next = pending.filter((n) => n.toLowerCase() !== levelName.toLowerCase());
+    if (next.length !== pending.length) await writePendingWorlds(next);
 }
 
 // world mutations are offline-only: the server holds open handles on the
@@ -51,14 +90,26 @@ export function assertServerOffline(ctx: ServiceContext<GameServerState>): void 
 // level.dat check per dimension — a world whose nether was never entered
 // honestly reports "not generated" instead of pretending.
 export async function listWorlds(): Promise<WorldInfo[]> {
-    const [generated, active] = await Promise.all([
+    const [generated, active, pending] = await Promise.all([
         listWorldDirs(),
         resolveLevelName(),
+        readPendingWorlds(),
     ]);
-    // every generated directory plus the configured active world, which is
-    // shown (generated:false) even before its first start
+    // prune names that have since generated, keeping the pending list bounded
+    const generatedKeys = new Set(generated.map((name) => name.toLowerCase()));
+    const pendingOnly = pending.filter((name) => !generatedKeys.has(name.toLowerCase()));
+    if (pendingOnly.length !== pending.length) {
+        void writePendingWorlds(pendingOnly).catch((err) =>
+            console.debug("[Service:Worlds] pending prune failed:", String(err)),
+        );
+    }
+    // every generated directory, every not-yet-generated created world, and
+    // the configured active world (shown generated:false before its first start)
     const infos = buildWorldInfos(
-        generated.map((name) => ({ name, generated: true })),
+        [
+            ...generated.map((name) => ({ name, generated: true })),
+            ...pendingOnly.map((name) => ({ name, generated: false })),
+        ],
         active,
     );
     await Promise.all(
@@ -122,6 +173,12 @@ export async function setActiveWorld(
     }
     const out = properties.stringify(props, { keySep: "=", lineWidth: null, latin1: false });
     await fileApi.write("server.properties", out, PANEL_ID);
+    if (plan.kind === "create") {
+        const pending = await readPendingWorlds();
+        if (!pending.some((n) => n.toLowerCase() === plan.name.toLowerCase())) {
+            await writePendingWorlds([...pending, plan.name]);
+        }
+    }
     return { activated: plan.name, created: plan.kind === "create" };
 }
 

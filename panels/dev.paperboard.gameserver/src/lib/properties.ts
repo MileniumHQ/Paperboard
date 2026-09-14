@@ -16,6 +16,8 @@ export interface PropertyField {
     max?: number;
     options?: () => { value: string; label: string }[];
     capability?: CapabilityName;
+    /** show this field only when another field holds the given value */
+    dependsOn?: { key: string; equals: string };
 }
 export const SERVER_PROPERTY_FIELDS: PropertyField[] = [
     {

@@ -129,7 +129,7 @@ export default function Overview() {
                     </Show>
                 </PaperFlex>
 
-                <PaperFlex direction="row" align="center" gap="half" style={{ height: "fit-content" }}>
+                <PaperFlex direction="row" align="center" gap="onefourth" style={{ height: "fit-content" }}>
                     <PaperBadge>{serverVersion()}</PaperBadge>
                     <PaperBadge>
                         {SOFTWARE_NAMES[serverSoftware()] || serverSoftware()}

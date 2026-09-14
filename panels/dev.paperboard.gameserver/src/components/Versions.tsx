@@ -134,19 +134,13 @@ export default function Versions(props: { onRequestPluginUpdate?: () => void }) 
                                     setSelectedVersion("");
                                 }}
                             >
-                                <PaperSelectorItem value="vanilla" icon="deployed_code">
+                                <PaperSelectorItem value="vanilla">
                                     Vanilla
                                 </PaperSelectorItem>
-                                <PaperSelectorItem
-                                    value="paper"
-                                    icon={<PaperIcon src="/assets/paper.png" />}
-                                >
+                                <PaperSelectorItem value="paper">
                                     Paper
                                 </PaperSelectorItem>
-                                <PaperSelectorItem
-                                    value="fabric"
-                                    icon={<PaperIcon src="/assets/fabric.png" />}
-                                >
+                                <PaperSelectorItem value="fabric">
                                     Fabric
                                 </PaperSelectorItem>
                             </PaperSelector>
@@ -224,7 +218,7 @@ export default function Versions(props: { onRequestPluginUpdate?: () => void }) 
                         {SOFTWARE_NAMES[software()]} {selectedVersion()}.
                     </PaperText>
                     <PaperQuote variant="yellow" icon="warning" title="Heads up">
-                        Worlds and plugins may not survive every update — success
+                        Worlds and plugins may not survive every update. Success
                         varies by version, and there is no undo. Back up your world
                         first.
                     </PaperQuote>
@@ -268,7 +262,7 @@ export default function Versions(props: { onRequestPluginUpdate?: () => void }) 
                 <PaperFlex direction="column" gap="half">
                     <PaperText preset="body">
                         {software() === "vanilla"
-                            ? "Vanilla has no plugin system — plugins don't exist until you switch back to Paper."
+                            ? "Vanilla has no plugin system. Plugins don't exist until you switch back to Paper."
                             : `${SOFTWARE_NAMES[software()]} ${selectedVersion()} is installed.`}
                     </PaperText>
                     <Show when={postSwitchCount() > 0}>

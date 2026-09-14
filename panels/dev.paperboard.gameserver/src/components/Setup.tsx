@@ -87,7 +87,7 @@ function InstallStep(props: InstallStepProps) {
         const javaPkg = getRequiredJavaVersion(props.version);
         if (!javaPkg) {
             throw new Error(
-                `Could not determine the Minecraft version (got ${JSON.stringify(props.version)}) — pick a version before installing.`,
+                `Could not determine the Minecraft version (got ${JSON.stringify(props.version)}). Pick a version before installing.`,
             );
         }
 
@@ -203,7 +203,7 @@ function InstallStep(props: InstallStepProps) {
         // files do no work until the server starts, and they are exactly
         // what a later accept-and-start reuses.)
         setDeclineNotice(
-            "EULA declined — the downloaded files stay in place. The server cannot start until the EULA is accepted; you can accept it any time by running setup again or agreeing when the server prompts.",
+            "EULA declined. The downloaded files stay in place. The server cannot start until the EULA is accepted; you can accept it any time by running setup again or agreeing when the server prompts.",
         );
 
         setJavaDownloadPercent(0);

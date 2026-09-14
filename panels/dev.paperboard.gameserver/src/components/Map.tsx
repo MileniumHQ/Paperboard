@@ -7,7 +7,9 @@ import {
     Show,
 } from "solid-js";
 import {
+    PaperButton,
     PaperIcon,
+    PaperInput,
     PaperQuote,
     PaperSelectMenu,
     PaperSelectMenuItem,
@@ -57,6 +59,10 @@ export default function MapView() {
     const [revision, setRevision] = createSignal(0);
     const [tileRefresh, setTileRefresh] = createSignal(0);
     const [selectedPlayer, setSelectedPlayer] = createSignal("");
+    const [coordX, setCoordX] = createSignal("");
+    const [coordZ, setCoordZ] = createSignal("");
+    // world coords under the pointer, null when it leaves the map
+    const [cursor, setCursor] = createSignal<{ x: number; z: number } | null>(null);
 
     let canvas: HTMLCanvasElement | undefined;
     let wrapper: HTMLDivElement | undefined;
@@ -214,6 +220,25 @@ export default function MapView() {
         setOffsetY(height / 2 - z * scale());
     };
 
+    // world coordinates at the center of the viewport (screen -> world is
+    // the inverse of the draw transform: screen = world * scale + offset)
+    const centerCoords = () => {
+        const { width, height } = sizeOf();
+        const s = scale();
+        if (!s) return { x: 0, z: 0 };
+        return {
+            x: (width / 2 - offsetX()) / s,
+            z: (height / 2 - offsetY()) / s,
+        };
+    };
+
+    const goToCoords = () => {
+        const x = Number(coordX().trim());
+        const z = Number(coordZ().trim());
+        if (!Number.isFinite(x) || !Number.isFinite(z)) return;
+        centerOnWorld(x, z);
+    };
+
     const centerOnRegion = (rx: number, rz: number) =>
         centerOnWorld((rx + 0.5) * REGION_BLOCKS, (rz + 0.5) * REGION_BLOCKS);
 
@@ -274,6 +299,18 @@ export default function MapView() {
         let dragging = false;
         let lastX = 0;
         let lastY = 0;
+
+        const worldAt = (clientX: number, clientY: number) => {
+            const rect = canvas?.getBoundingClientRect();
+            if (!rect) return null;
+            const s = scale();
+            if (!s) return null;
+            return {
+                x: (clientX - rect.left - offsetX()) / s,
+                z: (clientY - rect.top - offsetY()) / s,
+            };
+        };
+
         const onPointerDown = (e: PointerEvent) => {
             dragging = true;
             lastX = e.clientX;
@@ -282,6 +319,7 @@ export default function MapView() {
             canvas?.setPointerCapture(e.pointerId);
         };
         const onPointerMove = (e: PointerEvent) => {
+            setCursor(worldAt(e.clientX, e.clientY));
             if (!dragging) return;
             setOffsetX((v) => v + (e.clientX - lastX));
             setOffsetY((v) => v + (e.clientY - lastY));
@@ -293,6 +331,7 @@ export default function MapView() {
             if (canvas) canvas.style.cursor = "grab";
             canvas?.releasePointerCapture(e.pointerId);
         };
+        const onPointerLeave = () => setCursor(null);
         const onWheel = (e: WheelEvent) => {
             e.preventDefault();
             const rect = canvas?.getBoundingClientRect();
@@ -312,6 +351,7 @@ export default function MapView() {
         canvas?.addEventListener("pointermove", onPointerMove);
         canvas?.addEventListener("pointerup", onPointerUp);
         canvas?.addEventListener("pointercancel", onPointerUp);
+        canvas?.addEventListener("pointerleave", onPointerLeave);
         canvas?.addEventListener("wheel", onWheel, { passive: false });
 
         const positionPoll = setInterval(() => {
@@ -330,6 +370,7 @@ export default function MapView() {
             canvas?.removeEventListener("pointermove", onPointerMove);
             canvas?.removeEventListener("pointerup", onPointerUp);
             canvas?.removeEventListener("pointercancel", onPointerUp);
+            canvas?.removeEventListener("pointerleave", onPointerLeave);
             canvas?.removeEventListener("wheel", onWheel);
         });
 
@@ -426,12 +467,19 @@ export default function MapView() {
                 </Show>
             </div>
 
-            <Show when={pendingCount() > 0}>
+            <div
+                style={{
+                    position: "absolute",
+                    top: "var(--paper-uigap)",
+                    right: "var(--paper-uigap)",
+                    display: "flex",
+                    "flex-direction": "column",
+                    "align-items": "flex-end",
+                    gap: "var(--paper-uigap-half)",
+                }}
+            >
                 <div
                     style={{
-                        position: "absolute",
-                        top: "var(--paper-uigap)",
-                        right: "var(--paper-uigap)",
                         display: "flex",
                         "align-items": "center",
                         gap: "var(--paper-uigap-onefourth)",
@@ -443,12 +491,57 @@ export default function MapView() {
                         border: "var(--paper-border-width) solid var(--paper-medium-border)",
                     }}
                 >
-                    <PaperIcon>hourglass_top</PaperIcon>
+                    <PaperIcon>my_location</PaperIcon>
                     <PaperText size={2} color="light-text">
-                        Rendering {pendingCount()} tile{pendingCount() === 1 ? "" : "s"}…
+                        {Math.round((cursor() ?? centerCoords()).x)},{" "}
+                        {Math.round((cursor() ?? centerCoords()).z)}
                     </PaperText>
+                    <Show when={pendingCount() > 0}>
+                        <PaperIcon>hourglass_top</PaperIcon>
+                        <PaperText size={2} color="light-text">
+                            {pendingCount()}
+                        </PaperText>
+                    </Show>
                 </div>
-            </Show>
+
+                <div
+                    style={{
+                        display: "flex",
+                        "align-items": "center",
+                        gap: "var(--paper-uigap-onefourth)",
+                        padding: "var(--paper-uigap-half)",
+                        "border-radius": "var(--paper-border-radius)",
+                        background:
+                            "color-mix(in srgb, var(--paper-background-frontest) 72%, transparent)",
+                        "backdrop-filter": "var(--paper-blur-medium)",
+                        border: "var(--paper-border-width) solid var(--paper-medium-border)",
+                    }}
+                >
+                    <div style={{ width: "5.5rem" }}>
+                        <PaperInput
+                            placeholder="X"
+                            value={coordX()}
+                            onInput={(e) => setCoordX(e.currentTarget.value)}
+                            onKeyDown={(e) => {
+                                if (e.key === "Enter") goToCoords();
+                            }}
+                        />
+                    </div>
+                    <div style={{ width: "5.5rem" }}>
+                        <PaperInput
+                            placeholder="Z"
+                            value={coordZ()}
+                            onInput={(e) => setCoordZ(e.currentTarget.value)}
+                            onKeyDown={(e) => {
+                                if (e.key === "Enter") goToCoords();
+                            }}
+                        />
+                    </div>
+                    <PaperButton tiny onClick={goToCoords}>
+                        Go
+                    </PaperButton>
+                </div>
+            </div>
 
             <Show when={error()}>
                 <div

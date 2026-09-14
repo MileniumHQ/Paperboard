@@ -16,6 +16,7 @@ import { trackPlayerActivity, handleStatResponse, handlePositionResponse } from 
 import { assertSingleLine } from "../core/players";
 import { checkLogForIssues } from "./diagnostics";
 import { onServerOnline } from "./gamerules";
+import { applyPendingRuntimeProperties } from "./runtimeProperties";
 import { type GameServerState, SERVER_PROC_ID, appendCapped, PANEL_ID } from "./types";
 import { TRIGGER_IDS } from "./contract";
 
@@ -302,6 +303,9 @@ export function handleProcessData(
                 onServerOnline(ctx).catch((err) =>
                     console.error("[Service:Lifecycle] gamerule boot sync failed:", err),
                 );
+                applyPendingRuntimeProperties(ctx).catch((err) =>
+                    console.error("[Service:Lifecycle] runtime property boot sync failed:", err),
+                );
             }
         } else if (clean.includes("Stopping server") || clean.includes("Saving players")) {
             ctx.setState({ serverStatus: "stopping" });
@@ -345,15 +349,19 @@ export function handleProcessExit(ctx: ServiceContext<GameServerState>): void {
 
     if (isRestarting) {
         isRestarting = false;
+        // startServerInstance only proceeds from "offline"; setting
+        // "starting" here made its guard reject the restart's start half, so
+        // a restart just stopped the server. Hand it an offline state and let
+        // startServerInstance own the transition.
         ctx.setState({
-            serverStatus: "starting",
+            serverStatus: "offline",
             onlinePlayers: [],
             serverEntries: appendCapped(ctx.state.serverEntries, {
                 type: "info",
                 content: "[Server] Restarting instance...",
             }),
         });
-        startServerInstance(ctx);
+        void startServerInstance(ctx);
     } else {
         ctx.setState({
             serverStatus: "offline",
@@ -374,8 +382,11 @@ function watchForceKill(ctx: ServiceContext<GameServerState>): void {
             const stillRunning = await processApi.exists(SERVER_PROC_ID);
             if (!stillRunning || Date.now() - startedAt > 10000) {
                 clearInterval(poll);
-                isRestarting = false;
                 cancelStopForceKill();
+                // a forced kill during a restart must still restart; the
+                // old code dropped the restart on the floor here
+                const wasRestarting = isRestarting;
+                isRestarting = false;
                 ctx.setState({
                     serverStatus: "offline",
                     serverEntries: appendCapped(ctx.state.serverEntries, {
@@ -383,6 +394,7 @@ function watchForceKill(ctx: ServiceContext<GameServerState>): void {
                         content: "[Server] Process stopped.",
                     }),
                 });
+                if (wasRestarting) void startServerInstance(ctx);
             }
         } catch (err) {
             clearInterval(poll);

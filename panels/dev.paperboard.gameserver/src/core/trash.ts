@@ -4,8 +4,15 @@ import { isWindowsTarget } from "../lib/platform";
 // this panel (worlds, world reset, plugins, player data). The daemon's
 // discipline — rename to trash before delete — applied through a pty:
 //
-//   posix: mkdir -p .trash-<ts> && mv <paths> .trash-<ts>/ && rm -rf .trash-<ts>
-//   win:   mkdir .trash-<ts> && move <p> .trash-<ts> && ... && rmdir /s /q .trash-<ts>
+//   posix: mkdir -p .trash-<ts> && (move each existing path) && rm -rf .trash-<ts>
+//   win:   mkdir .trash-<ts> && (move each existing path) && rmdir /s /q .trash-<ts>
+//
+// Each path is moved only if it exists: a world may not have a
+// `_nether`/`_the_end` directory until those dimensions are entered, and a
+// missing sibling must not abort the whole chain (which left the trash dir
+// staged and the delete reported as failed). A path that EXISTS but fails
+// to move still aborts before the remove, so the trash dir remains the
+// recovery point.
 //
 // A crash between the move and the remove leaves a clearly-marked trash
 // dir instead of a half-deleted live tree. Every path is pre-validated by
@@ -81,7 +88,7 @@ export async function runPtyCommandWith(
             () =>
                 timerReject(
                     new Error(
-                        `pty "${ptyId}" did not complete in ${deps.completionTimeoutMs ?? TRASH_REMOVE_TIMEOUT_MS}ms — its work may be unfinished`,
+                        `pty "${ptyId}" did not complete in ${deps.completionTimeoutMs ?? TRASH_REMOVE_TIMEOUT_MS}ms; its work may be unfinished`,
                     ),
                 ),
             deps.completionTimeoutMs ?? TRASH_REMOVE_TIMEOUT_MS,
@@ -90,7 +97,7 @@ export async function runPtyCommandWith(
             await Promise.race([completion, timerDone]);
             if (successMarker !== undefined && !output.includes(successMarker)) {
                 throw new Error(
-                    `pty "${ptyId}" exited without the "${successMarker}" marker — the command failed partway`,
+                    `pty "${ptyId}" exited without the "${successMarker}" marker; the command failed partway`,
                 );
             }
         } finally {
@@ -116,18 +123,25 @@ export function buildTrashRemoveCommand(
         throw new Error("Refusing to run a trash-remove with no paths");
     }
     if (isWin) {
-        // `&` separates unconditionally: DONE is printed even when a
-        // earlier link fails; OK only prints after the whole chain. The
-        // ^ escapes keep the echoed command line from containing the
-        // bare markers, so a failed chain's echo cannot fake success.
+        // each path is moved only when present; a missing sibling is
+        // skipped, a present-but-unmovable path still breaks the chain
+        // before the remove. `&` separates unconditionally: DONE is printed
+        // even when an earlier link fails; OK only prints after the whole
+        // chain. The ^ escapes keep the echoed command line from containing
+        // the bare markers, so a failed chain's echo cannot fake success.
         const q = (p: string) => `"${p}"`;
-        const moves = paths.map((p) => `move ${q(p)} ${q(trashDir)}`).join(" && ");
+        const moves = paths
+            .map((p) => `if exist ${q(p)} move ${q(p)} ${q(trashDir)}`)
+            .join(" && ");
         return `mkdir ${q(trashDir)} && ${moves} && rmdir /s /q ${q(trashDir)} && echo TRASH_REMOVE_O^K & echo TRASH_REMOVE_D^ONE`;
     }
     // "; echo DONE" separates unconditionally. The 'ok'/'done' fragments
     // drop their quotes in OUTPUT but stay in the echoed typed line.
     const q = (p: string) => `'${p}'`;
-    return `mkdir -p ${q(trashDir)} && mv ${paths.map(q).join(" ")} ${q(trashDir)}/ && rm -rf ${q(trashDir)} && echo TRASH_REMOVE_'OK' ; echo TRASH_REMOVE_'DONE'`;
+    const moves = paths
+        .map((p) => `( [ ! -e ${q(p)} ] || mv ${q(p)} ${q(trashDir)} )`)
+        .join(" && ");
+    return `mkdir -p ${q(trashDir)} && ${moves} && rm -rf ${q(trashDir)} && echo TRASH_REMOVE_'OK' ; echo TRASH_REMOVE_'DONE'`;
 }
 
 export async function trashRemovePathsWith(
@@ -149,7 +163,7 @@ export async function trashRemovePathsWith(
         const message = err instanceof Error ? err.message : String(err);
         if (message.includes(`remains on disk`)) throw err;
         throw new Error(
-            `${message} — staged trash dir "${trashDir}" remains on disk for manual recovery`,
+            `${message}; staged trash dir "${trashDir}" remains on disk for manual recovery`,
         );
     }
 }

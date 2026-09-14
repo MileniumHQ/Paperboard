@@ -41,6 +41,7 @@ import type { MapDimension } from "../core/map";
 import { listPlayerStats } from "./playerStats";
 import { listLogFiles, readLogFile } from "./logs";
 import { queryGamerules, setGamerule } from "./gamerules";
+import { applyRuntimeProperties } from "./runtimeProperties";
 import { assertPlayerName, assertSingleLine } from "../core/players";
 import type { GameServerState } from "./types";
 import { ACTION_IDS, TRIGGER_IDS, PANEL_ID } from "./contract";
@@ -892,6 +893,29 @@ export const panelActions: ActionDefinition[] = [
                 throw new Error("Game rule name and value are required");
             }
             return setGamerule(ctx, inputs.name, inputs.value);
+        },
+    }),
+
+    defineAction({
+        id: ACTION_IDS.applyRuntimeProperties,
+        name: "Apply Runtime Properties",
+        description: "Applies runtime server.properties values (difficulty, gamemode) to the running server, or queues them for the next start",
+        template: "Apply runtime server properties",
+        inputs: {
+            values: { type: "object", label: "Values" },
+        },
+        output: { type: "boolean", label: "Success" },
+        quick: false,
+        icon: "tune",
+        run: async (
+            ctx: ServiceContext<GameServerState>,
+            inputs: { values?: Record<string, string> },
+        ) => {
+            applyRuntimeProperties(
+                ctx,
+                inputs?.values && typeof inputs.values === "object" ? inputs.values : {},
+            );
+            return true;
         },
     }),
 ];

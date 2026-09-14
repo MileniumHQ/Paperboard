@@ -739,8 +739,8 @@ export default function Plugins(props: { updateRequest?: number }) {
                 <PaperFlex direction="column" gap="half">
                     <PaperText preset="body">
                         These plugins have no build for your server's software and
-                        Minecraft version. They may crash the server on startup —
-                        uninstall the ones you no longer need.
+                        Minecraft version. They may crash the server on startup.
+                        Uninstall the ones you no longer need.
                     </PaperText>
                     <For each={failures() ?? []}>
                         {(failure) => (

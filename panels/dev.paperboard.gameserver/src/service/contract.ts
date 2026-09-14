@@ -50,6 +50,7 @@ export const ACTION_IDS = {
     queryOnlinePlayers: "query-online-players",
     queryGamerules: "query-gamerules",
     setGamerule: "set-gamerule",
+    applyRuntimeProperties: "apply-runtime-properties",
 } as const;
 
 export type ActionId = (typeof ACTION_IDS)[keyof typeof ACTION_IDS];

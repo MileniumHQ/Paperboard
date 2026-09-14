@@ -172,14 +172,32 @@ const ADVANCED_PROPERTY_FIELDS: PropertyField[] = [
         defaultValue: "false",
         capability: "requireResourcePack",
     },
+    {
+        key: "resource-pack",
+        title: "Resource Pack URL",
+        description: "Direct download URL for the resource pack.",
+        control: "text",
+        defaultValue: "",
+        capability: "requireResourcePack",
+        dependsOn: { key: "require-resource-pack", equals: "true" },
+    },
 ];
 
 // a field whose capability this Minecraft version lacks is hidden, not
-// shown with an apology
-function visibleAdvancedFields(): PropertyField[] {
-    return ADVANCED_PROPERTY_FIELDS.filter(
-        (field) => !field.capability || supports(field.capability),
-    );
+// shown with an apology; a dependent field also needs its gate value set
+function visibleAdvancedFields(
+    values?: Record<string, string>,
+): PropertyField[] {
+    return ADVANCED_PROPERTY_FIELDS.filter((field) => {
+        if (field.capability && !supports(field.capability)) return false;
+        if (
+            field.dependsOn &&
+            values?.[field.dependsOn.key] !== field.dependsOn.equals
+        ) {
+            return false;
+        }
+        return true;
+    });
 }
 
 export default function Advanced() {
@@ -196,7 +214,7 @@ export default function Advanced() {
     onMount(async () => {
         const props = await readServerProperties();
         const next: Record<string, string> = {};
-        for (const field of visibleAdvancedFields()) {
+        for (const field of visibleAdvancedFields(props)) {
             next[field.key] = props[field.key] ?? field.defaultValue;
         }
         setValues(next);
@@ -267,8 +285,9 @@ export default function Advanced() {
 
     const visibleFields = () => {
         const query = search().toLowerCase().trim();
-        if (!query) return visibleAdvancedFields();
-        return visibleAdvancedFields().filter(
+        const fields = visibleAdvancedFields(values() ?? undefined);
+        if (!query) return fields;
+        return fields.filter(
             (field) =>
                 field.title.toLowerCase().includes(query) ||
                 (field.description ?? "").toLowerCase().includes(query) ||
