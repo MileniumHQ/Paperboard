@@ -32,8 +32,6 @@ export default function VersionPicker(props: {
 
     const [includeReleases, setIncludeReleases] = createSignal(true);
     const [includeSnapshots, setIncludeSnapshots] = createSignal(false);
-    const [includeBetas, setIncludeBetas] = createSignal(false);
-    const [includeAlphas, setIncludeAlphas] = createSignal(false);
 
     const loadVersions = async () => {
         setLoading(true);
@@ -63,14 +61,12 @@ export default function VersionPicker(props: {
         const query = searchQuery().toLowerCase().trim();
         const releases = includeReleases();
         const snapshots = includeSnapshots();
-        const betas = includeBetas();
-        const alphas = includeAlphas();
 
         return allVersions().filter((item) => {
+            // never offer a version the source publishes no server jar for
+            if (!item.installable) return false;
             if (item.type === "release" && !releases) return false;
             if (item.type === "snapshot" && !snapshots) return false;
-            if ((item.type === "old_beta" || item.type === "beta") && !betas) return false;
-            if (item.type === "old_alpha" && !alphas) return false;
             if (query && !item.id.toLowerCase().includes(query)) return false;
             return true;
         });
@@ -182,18 +178,6 @@ export default function VersionPicker(props: {
                                 onChange={setIncludeSnapshots}
                                 label="Snapshots"
                             />
-                            <Show when={props.software === "vanilla"}>
-                                <PaperCheckbox
-                                    checked={includeBetas()}
-                                    onChange={setIncludeBetas}
-                                    label="Beta Versions"
-                                />
-                                <PaperCheckbox
-                                    checked={includeAlphas()}
-                                    onChange={setIncludeAlphas}
-                                    label="Alpha Versions"
-                                />
-                            </Show>
                         </PaperFlex>
                     </PaperFlex>
                 </PaperContainer>

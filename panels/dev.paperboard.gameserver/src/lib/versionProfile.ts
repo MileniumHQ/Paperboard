@@ -74,6 +74,12 @@ export const CAPABILITIES = {
     logIps: { since: "1.20.2" }, // 23w31a
     bugReportLink: { since: "1.21" }, // 24w21a
     entityBroadcastRange: { since: "1.16" }, // 20w18a
+
+    // whole-feature floors: below these the tab is hidden entirely rather
+    // than shown with half its controls doing nothing
+    mapRendering: { since: "1.18" }, // block_states palette + -64 heightmaps
+    playerStats: { since: "1.13" }, // namespaced stats/<uuid>.json
+    worldManager: { since: "1.9" }, // hardcore / bonus-chest world options
 } as const;
 
 export type CapabilityName = keyof typeof CAPABILITIES;
@@ -383,6 +389,15 @@ export function mcAtLeast(
     boundary: string,
 ): boolean {
     return mcSatisfies(version, { since: boundary });
+}
+
+// Paperboard's supported floor. Below this the server's console format,
+// server.properties keys and command set diverge too far to manage reliably:
+// the picker hides these versions and install/start refuse them.
+export const MIN_SUPPORTED_MC_VERSION = "1.12.2";
+
+export function isSupportedMcVersion(version: string | null | undefined): boolean {
+    return mcAtLeast(version, MIN_SUPPORTED_MC_VERSION);
 }
 
 export function versionSupports(

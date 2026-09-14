@@ -4,6 +4,7 @@ import {
     canonicalGameruleName,
     canonicalGameruleValue,
     classifyMcVersion,
+    isSupportedMcVersion,
     levelTypeOptionsFor,
     mcAtLeast,
     mcSatisfies,
@@ -366,5 +367,25 @@ describe("capabilities match the wiki boundary snapshots", () => {
         expect(versionSupports("25w35a", "propertyPvp")).toBe(false);
         // accepts-transfers arrived in 24w03a, inside the 1.20.5 cycle
         expect(versionSupports("24w03a", "acceptsTransfers")).toBe(true);
+    });
+
+    test("whole-feature floors hide the tab below the supporting version", () => {
+        expect(versionSupports("1.17.1", "mapRendering")).toBe(false);
+        expect(versionSupports("1.18", "mapRendering")).toBe(true);
+        expect(versionSupports("1.12.2", "playerStats")).toBe(false);
+        expect(versionSupports("1.13", "playerStats")).toBe(true);
+        expect(versionSupports("1.8.9", "worldManager")).toBe(false);
+        expect(versionSupports("1.9", "worldManager")).toBe(true);
+    });
+});
+
+describe("minimum supported version", () => {
+    test("versions below 1.12.2 are unsupported", () => {
+        expect(isSupportedMcVersion("1.7.10")).toBe(false);
+        expect(isSupportedMcVersion("1.12.1")).toBe(false);
+        expect(isSupportedMcVersion("1.12.2")).toBe(true);
+        expect(isSupportedMcVersion("26.2")).toBe(true);
+        expect(isSupportedMcVersion("")).toBe(false);
+        expect(isSupportedMcVersion(undefined)).toBe(false);
     });
 });

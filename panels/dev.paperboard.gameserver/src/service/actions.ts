@@ -46,6 +46,7 @@ import { assertPlayerName, assertSingleLine } from "../core/players";
 import type { GameServerState } from "./types";
 import { ACTION_IDS, TRIGGER_IDS, PANEL_ID } from "./contract";
 import { getRequiredJavaVersion, getSoftwareDownload } from "../lib/software";
+import { isSupportedMcVersion, MIN_SUPPORTED_MC_VERSION } from "../lib/versionProfile";
 
 export const playerType = defineType({
     id: "player",
@@ -577,6 +578,11 @@ export const panelActions: ActionDefinition[] = [
                 throw new Error(`Unknown server software: ${JSON.stringify(inputs?.software)}`);
             }
             const version = assertSingleLine(inputs?.version, "version", 64);
+            if (!isSupportedMcVersion(version)) {
+                throw new Error(
+                    `Minecraft ${version} is below Paperboard's minimum supported version (${MIN_SUPPORTED_MC_VERSION}).`,
+                );
+            }
             // the owner enforces offline, not just the button
             if (ctx.state.serverStatus !== "offline") {
                 throw new Error("Stop the server before switching versions");

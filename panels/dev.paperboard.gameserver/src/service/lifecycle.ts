@@ -12,6 +12,7 @@ import { isWindowsTarget } from "../lib/platform";
 import { parseChatMessage, parseLogLine } from "../lib/logs";
 import { parseGameruleValue } from "../core/gamerules";
 import { resolveVersionProfile } from "../lib/versionProfile";
+import { isSupportedMcVersion, MIN_SUPPORTED_MC_VERSION } from "../lib/versionProfile";
 import { loadConfigAndProperties } from "./config";
 import { trackPlayerActivity, handleStatResponse, handlePositionResponse } from "./players";
 import { assertSingleLine } from "../core/players";
@@ -71,6 +72,12 @@ export async function startServerInstance(
                 version = saved.version;
                 ctx.setState({ serverVersion: version });
             }
+        }
+
+        if (version && !isSupportedMcVersion(version)) {
+            throw new Error(
+                `Minecraft ${version} is below Paperboard's minimum supported version (${MIN_SUPPORTED_MC_VERSION}).`,
+            );
         }
 
         const javaPkg = getRequiredJavaVersion(version);

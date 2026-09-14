@@ -1,5 +1,5 @@
 import semver from "semver";
-import { javaPackageFor } from "./versionProfile";
+import { isSupportedMcVersion, javaPackageFor } from "./versionProfile";
 
 export type ServerSoftwareType = "vanilla" | "paper" | "fabric";
 
@@ -13,6 +13,27 @@ export interface VersionItem {
     id: string;
     type: "release" | "snapshot" | "old_beta" | "old_alpha" | "beta" | "other";
     releaseTime?: string;
+    // false when the source publishes no server jar for this version, so the
+    // picker must not offer it (Mojang only ships clients for old alpha/beta
+    // and for 1.0/1.1; server jars start at 1.2.5)
+    installable: boolean;
+}
+
+// Mojang's manifest has no server download before 1.2.5, and never for
+// old_alpha/old_beta. Everything else it lists is installable.
+const VANILLA_SERVER_MIN = "1.2.5";
+
+export function isInstallableVanillaVersion(
+    id: string,
+    type: VersionItem["type"],
+): boolean {
+    if (type === "old_alpha" || type === "old_beta" || type === "beta") {
+        return false;
+    }
+    const v = semver.coerce(id);
+    const min = semver.coerce(VANILLA_SERVER_MIN);
+    if (!v || !min) return false;
+    return semver.gte(v, min);
 }
 
 // null when version missing or unparseable. The thresholds live in
@@ -43,6 +64,9 @@ export async function getDetailedVanillaVersions(): Promise<VersionItem[]> {
         id: v.id,
         type: v.type,
         releaseTime: v.releaseTime,
+        installable:
+            isInstallableVanillaVersion(v.id, v.type) &&
+            isSupportedMcVersion(v.id),
     }));
 }
 
@@ -133,7 +157,8 @@ export async function getDetailedVersionsForSoftware(software: ServerSoftwareTyp
             const versions = await getPaperVersions();
             return versions.map((v) => ({
                 id: v,
-                type: v.includes("pre") || v.includes("rc") ? "snapshot" : "release",
+                type: (v.includes("pre") || v.includes("rc") ? "snapshot" : "release") as VersionItem["type"],
+                installable: isSupportedMcVersion(v),
             }));
         }
         case "fabric": {
@@ -141,7 +166,8 @@ export async function getDetailedVersionsForSoftware(software: ServerSoftwareTyp
             const data = await res.json();
             return (data || []).map((v: any) => ({
                 id: v.version,
-                type: v.stable ? "release" : "snapshot",
+                type: (v.stable ? "release" : "snapshot") as VersionItem["type"],
+                installable: isSupportedMcVersion(v.version),
             }));
         }
         default:

@@ -9,6 +9,7 @@ import {
 import { config } from "@paperboard-dev/paperapi";
 import { PANEL_ID } from "./service/contract";
 import { serverSoftware } from "./lib/server";
+import { hasKnownMcVersion, supports } from "./lib/capabilities";
 import Setup from "./components/Setup";
 import Overview from "./components/Overview";
 import Chat from "./components/Chat";
@@ -34,10 +35,21 @@ export default function App() {
     const pluginKind = () => (serverSoftware() === "fabric" ? "Mods" : "Plugins");
     const hasPluginTab = () => serverSoftware() !== "vanilla";
 
+    // whole-feature floors: hide the tab rather than show half its controls
+    // doing nothing. Unknown version stays permissive so nothing flashes out
+    // before config loads; once known, unsupported features disappear.
+    const featureReady = (
+        cap: "mapRendering" | "playerStats" | "worldManager",
+    ) => !hasKnownMcVersion() || supports(cap);
+    const showMap = () => featureReady("mapRendering");
+    const showPlayers = () => featureReady("playerStats");
+    const showWorlds = () => featureReady("worldManager");
+
     createEffect(() => {
-        if (!hasPluginTab() && activeTab() === "plugins") {
-            setActiveTab("worlds");
-        }
+        if (!hasPluginTab() && activeTab() === "plugins") setActiveTab("overview");
+        if (!showMap() && activeTab() === "map") setActiveTab("overview");
+        if (!showPlayers() && activeTab() === "players") setActiveTab("overview");
+        if (!showWorlds() && activeTab() === "worlds") setActiveTab("overview");
     });
 
     const checkConfig = async () => {
@@ -83,12 +95,16 @@ export default function App() {
                         <PaperMenuItem value="gamerules" icon="list_alt_check">
                             Game Rules
                         </PaperMenuItem>
-                        <PaperMenuItem value="map" icon="map">
-                            Map
-                        </PaperMenuItem>
-                        <PaperMenuItem value="players" icon="group">
-                            Players
-                        </PaperMenuItem>
+                        <Show when={showMap()}>
+                            <PaperMenuItem value="map" icon="map">
+                                Map
+                            </PaperMenuItem>
+                        </Show>
+                        <Show when={showPlayers()}>
+                            <PaperMenuItem value="players" icon="group">
+                                Players
+                            </PaperMenuItem>
+                        </Show>
                         <PaperMenuItem value="versions" icon="deployed_code">
                             Versions
                         </PaperMenuItem>
@@ -100,9 +116,11 @@ export default function App() {
                         <PaperMenuItem value="logs" icon="description">
                             Logs
                         </PaperMenuItem>
-                        <PaperMenuItem value="worlds" icon="public">
-                            Worlds
-                        </PaperMenuItem>
+                        <Show when={showWorlds()}>
+                            <PaperMenuItem value="worlds" icon="public">
+                                Worlds
+                            </PaperMenuItem>
+                        </Show>
                         <PaperMenuItem value="advanced" icon="settings">
                             Advanced
                         </PaperMenuItem>
@@ -124,12 +142,16 @@ export default function App() {
                         <PaperInterfaceItem value="gamerules">
                             <GameRules />
                         </PaperInterfaceItem>
-                        <PaperInterfaceItem value="map">
-                            <MapView />
-                        </PaperInterfaceItem>
-                        <PaperInterfaceItem value="players">
-                            <Players />
-                        </PaperInterfaceItem>
+                        <Show when={showMap()}>
+                            <PaperInterfaceItem value="map">
+                                <MapView />
+                            </PaperInterfaceItem>
+                        </Show>
+                        <Show when={showPlayers()}>
+                            <PaperInterfaceItem value="players">
+                                <Players />
+                            </PaperInterfaceItem>
+                        </Show>
                         <PaperInterfaceItem value="versions">
                             <Versions
                                 onRequestPluginUpdate={() => {
@@ -146,9 +168,11 @@ export default function App() {
                         <PaperInterfaceItem value="logs">
                             <Logs />
                         </PaperInterfaceItem>
-                        <PaperInterfaceItem value="worlds">
-                            <Worlds />
-                        </PaperInterfaceItem>
+                        <Show when={showWorlds()}>
+                            <PaperInterfaceItem value="worlds">
+                                <Worlds />
+                            </PaperInterfaceItem>
+                        </Show>
                         <PaperInterfaceItem value="advanced">
                             <Advanced />
                         </PaperInterfaceItem>
