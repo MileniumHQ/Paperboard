@@ -353,6 +353,11 @@ describe("capabilities match the wiki boundary snapshots", () => {
         }
     });
 
+    test("difficulty/gamemode names start at 1.14", () => {
+        expect(versionSupports("1.13.2", "namedGameSettings")).toBe(false);
+        expect(versionSupports("1.14", "namedGameSettings")).toBe(true);
+    });
+
     test("mid-cycle snapshots gate on the feature snapshot, not the release", () => {
         // 25w31a is 1.21.9 but predates the property move at 25w35a
         expect(versionSupports("25w31a", "propertyPvp")).toBe(true);

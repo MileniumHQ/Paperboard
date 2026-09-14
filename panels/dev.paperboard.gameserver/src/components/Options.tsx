@@ -11,6 +11,7 @@ import { PaperPageHeader } from "@paperboard-dev/paperui";
 import { serverBridge } from "../lib/server";
 import { ACTION_IDS } from "../service/contract";
 import {
+    defaultValueFor,
     readServerProperties,
     visiblePropertyFields,
     writeServerProperties,
@@ -32,7 +33,7 @@ export default function Options() {
         const props = await readServerProperties();
         const next: Record<string, string> = {};
         for (const field of visiblePropertyFields()) {
-            next[field.key] = props[field.key] ?? field.defaultValue;
+            next[field.key] = props[field.key] ?? defaultValueFor(field);
         }
         setValues(next);
     });
@@ -48,7 +49,7 @@ export default function Options() {
     });
 
     const currentValue = (field: PropertyField) =>
-        values()?.[field.key] ?? field.defaultValue;
+        values()?.[field.key] ?? defaultValueFor(field);
 
     const updateValue = (field: PropertyField, value: string) => {
         if (field.control === "number") {

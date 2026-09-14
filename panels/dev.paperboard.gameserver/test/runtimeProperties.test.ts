@@ -19,6 +19,16 @@ describe("runtimeCommandsFor", () => {
         ]);
     });
 
+    test("legacy integers map to the same commands", () => {
+        expect(runtimeCommandsFor({ difficulty: "1" })).toEqual(["difficulty easy"]);
+        expect(runtimeCommandsFor({ gamemode: "0" })).toEqual([
+            "defaultgamemode survival",
+        ]);
+        expect(
+            runtimeCommandsFor({ gamemode: "1", "force-gamemode": "true" }),
+        ).toEqual(["defaultgamemode creative", "gamemode creative @a"]);
+    });
+
     test("unknown values are ignored, not injected", () => {
         expect(runtimeCommandsFor({ difficulty: "hardcore", gamemode: "god" })).toEqual([]);
         expect(runtimeCommandsFor({})).toEqual([]);

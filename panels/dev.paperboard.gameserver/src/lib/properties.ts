@@ -33,24 +33,41 @@ export const SERVER_PROPERTY_FIELDS: PropertyField[] = [
         title: "Difficulty",
         control: "select",
         defaultValue: "easy",
-        options: () => [
-            { value: "peaceful", label: "Peaceful" },
-            { value: "easy", label: "Easy" },
-            { value: "normal", label: "Normal" },
-            { value: "hard", label: "Hard" },
-        ],
+        // pre-1.14 server.properties stores 0-3; 1.14+ stores names
+        options: () =>
+            supports("namedGameSettings")
+                ? [
+                      { value: "peaceful", label: "Peaceful" },
+                      { value: "easy", label: "Easy" },
+                      { value: "normal", label: "Normal" },
+                      { value: "hard", label: "Hard" },
+                  ]
+                : [
+                      { value: "0", label: "Peaceful" },
+                      { value: "1", label: "Easy" },
+                      { value: "2", label: "Normal" },
+                      { value: "3", label: "Hard" },
+                  ],
     },
     {
         key: "gamemode",
         title: "Game Mode",
         control: "select",
         defaultValue: "survival",
-        options: () => [
-            { value: "survival", label: "Survival" },
-            { value: "creative", label: "Creative" },
-            { value: "adventure", label: "Adventure" },
-            { value: "spectator", label: "Spectator" },
-        ],
+        options: () =>
+            supports("namedGameSettings")
+                ? [
+                      { value: "survival", label: "Survival" },
+                      { value: "creative", label: "Creative" },
+                      { value: "adventure", label: "Adventure" },
+                      { value: "spectator", label: "Spectator" },
+                  ]
+                : [
+                      { value: "0", label: "Survival" },
+                      { value: "1", label: "Creative" },
+                      { value: "2", label: "Adventure" },
+                      { value: "3", label: "Spectator" },
+                  ],
     },
     {
         key: "max-players",
@@ -89,6 +106,16 @@ export function visiblePropertyFields(): PropertyField[] {
     return SERVER_PROPERTY_FIELDS.filter(
         (field) => !field.capability || supports(field.capability),
     );
+}
+
+// Field-table defaults are written in their modern form. The only fields
+// whose *stored* representation is era-dependent get a version-aware
+// resolution here, so a missing key on an old server is never seeded with
+// a value that server cannot parse.
+export function defaultValueFor(field: PropertyField): string {
+    if (field.key === "difficulty" && !supports("namedGameSettings")) return "1";
+    if (field.key === "gamemode" && !supports("namedGameSettings")) return "0";
+    return field.defaultValue;
 }
 
 export async function readServerProperties(): Promise<Record<string, string>> {

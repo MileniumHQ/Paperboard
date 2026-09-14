@@ -80,6 +80,10 @@ export const CAPABILITIES = {
     mapRendering: { since: "1.18" }, // block_states palette + -64 heightmaps
     playerStats: { since: "1.13" }, // namespaced stats/<uuid>.json
     worldManager: { since: "1.9" }, // hardcore / bonus-chest world options
+
+    // difficulty/gamemode are integers before 1.14 and names after; the
+    // console commands have always accepted names
+    namedGameSettings: { since: "1.14" }, // 18w48a
 } as const;
 
 export type CapabilityName = keyof typeof CAPABILITIES;

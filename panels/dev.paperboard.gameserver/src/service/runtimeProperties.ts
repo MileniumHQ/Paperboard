@@ -6,23 +6,46 @@ import { PANEL_ID, SERVER_PROC_ID, type GameServerState } from "./types";
 // these are the ones a running server can be told to change immediately.
 // `difficulty` and `gamemode` are also stored per-world in level.dat, which
 // is why writing server.properties alone looked like it "did nothing".
-const DIFFICULTIES = new Set(["peaceful", "easy", "normal", "hard"]);
-const GAMEMODES = new Set(["survival", "creative", "adventure", "spectator"]);
+// Console commands have always taken names, even on servers whose
+// server.properties stores the legacy integers (pre-1.14): map either form
+// to the name. Unknown values are refused at the boundary below.
+const DIFFICULTY_NAMES: Record<string, string> = {
+    "0": "peaceful",
+    "1": "easy",
+    "2": "normal",
+    "3": "hard",
+    peaceful: "peaceful",
+    easy: "easy",
+    normal: "normal",
+    hard: "hard",
+};
+const GAMEMODE_NAMES: Record<string, string> = {
+    "0": "survival",
+    "1": "creative",
+    "2": "adventure",
+    "3": "spectator",
+    survival: "survival",
+    creative: "creative",
+    adventure: "adventure",
+    spectator: "spectator",
+};
 
 // one validated property write per key; bounded by the field list
 const MAX_PENDING_PROPERTIES = 32;
 
 export function runtimeCommandsFor(values: Record<string, string>): string[] {
     const commands: string[] = [];
-    if (values.difficulty && DIFFICULTIES.has(values.difficulty)) {
-        commands.push(`difficulty ${values.difficulty}`);
+    const difficulty = values.difficulty ? DIFFICULTY_NAMES[values.difficulty] : undefined;
+    if (difficulty) {
+        commands.push(`difficulty ${difficulty}`);
     }
-    if (values.gamemode && GAMEMODES.has(values.gamemode)) {
-        commands.push(`defaultgamemode ${values.gamemode}`);
+    const gamemode = values.gamemode ? GAMEMODE_NAMES[values.gamemode] : undefined;
+    if (gamemode) {
+        commands.push(`defaultgamemode ${gamemode}`);
         // force-gamemode makes returning players adopt the default on join;
         // mirror that intent for players already online
         if (values["force-gamemode"] === "true") {
-            commands.push(`gamemode ${values.gamemode} @a`);
+            commands.push(`gamemode ${gamemode} @a`);
         }
     }
     return commands;
@@ -57,10 +80,10 @@ async function persistPendingProperties(values: Record<string, string>): Promise
     const pending: Record<string, string> = {
         ...((saved.pendingProperties as Record<string, string> | undefined) ?? {}),
     };
-    if (values.difficulty && DIFFICULTIES.has(values.difficulty)) {
+    if (values.difficulty && DIFFICULTY_NAMES[values.difficulty]) {
         pending.difficulty = values.difficulty;
     }
-    if (values.gamemode && GAMEMODES.has(values.gamemode)) {
+    if (values.gamemode && GAMEMODE_NAMES[values.gamemode]) {
         pending.gamemode = values.gamemode;
         pending["force-gamemode"] = values["force-gamemode"] === "true" ? "true" : "false";
     }
