@@ -809,10 +809,7 @@ export default function Plugins(props: { updateRequest?: number }) {
                                     <For each={installVersions() ?? []}>
                                         {(option) => (
                                             <PaperSelectMenuItem value={option.versionId}>
-                                                {`v${option.versionNumber || "?"} · ${
-                                                    option.gameVersions.join(", ") ||
-                                                    "unknown versions"
-                                                }${option.recommended ? " · Recommended" : ""}`}
+                                                {`v${option.versionNumber || "?"}${option.recommended ? " · Recommended" : ""}`}
                                             </PaperSelectMenuItem>
                                         )}
                                     </For>
