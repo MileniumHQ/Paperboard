@@ -281,7 +281,7 @@ export async function openRemoteFolder(
         // TODO(remove after v3.2): the credential-bearing dav URI in argv is
         // a documented residual — xdg-open passes it to ps output. Loan
         // expired; it is denied (like every other credential-in-argv path)
-        // at the registry-opening gate.
+        // after v3.2.
         const uri = `dav://${encodeURIComponent(session.user)}:${encodeURIComponent(session.pass)}@${host}:${port}/dav/${subDir ? subDir + "/" : ""}`;
         active.set(computerId, rec);
         spawn("xdg-open", [uri], { detached: true, stdio: "ignore" }).unref();

@@ -2,8 +2,8 @@
 // The engine keeps the ledger (id → creating panel claim); these helpers
 // are the only RPC-layer readers/writers. A scoped caller touching an id
 // owned by another panel logs loudly and stays allowed — deprecation now,
-// enforcement at the registry-opening gate (TODO deny after v3.2), zero
-// broken flows. Unclaimed ids (master-created, pre-ledger) stay shared.
+// enforcement after v3.2 (TODO deny after v3.2), zero broken flows.
+// Unclaimed ids (master-created, pre-ledger) stay shared.
 import { logger } from "../logger";
 import type { RpcContext } from "./context";
 import { forbidden } from "./errors";
@@ -17,7 +17,7 @@ export function claimClient(id: unknown, ctx: RpcContext, what: string): void {
     if (claim && owner && claim !== owner) {
         logger.warn(
             `[${what}] id "${id}" owned by panel "${owner}" re-created by scoped caller "${claim}". ` +
-            `TODO(deny after v3.2): ownership mismatches are denied at registry-open.`,
+            `TODO(deny after v3.2): ownership mismatches are denied after v3.2.`,
         );
     }
     ctx.engine.setClientOwner(id, claim);
@@ -31,7 +31,7 @@ export function checkClientOwnership(id: unknown, ctx: RpcContext, what: string)
     if (claim && owner && claim !== owner) {
         logger.warn(
             `[${what}] id "${id}" owned by panel "${owner}" touched by scoped caller "${claim}". ` +
-            `TODO(deny after v3.2): ownership mismatches are denied at registry-open.`,
+            `TODO(deny after v3.2): ownership mismatches are denied after v3.2.`,
         );
     }
 }
@@ -65,7 +65,7 @@ export function checkSpawnEnv(
         }
         logger.warn(
             `[${what}] master caller overriding "${key}" in a child env. ` +
-            `TODO(deny after v3.2): credential overrides are denied at registry-open.`,
+            `TODO(deny after v3.2): credential overrides are denied after v3.2.`,
         );
     }
 }

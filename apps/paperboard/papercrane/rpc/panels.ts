@@ -11,7 +11,7 @@ function effectivePanelId(requested: string, action: string, ctx: RpcContext): s
     const claim = ctx.callerPanelId();
     if (claim && claim !== requested) {
         // TODO(deny after v3.2): the mismatch log below becomes the only
-        // behavior — every disagreement is denied at the registry-opening gate.
+        // behavior — every disagreement is denied after v3.2.
         logger.warn(
             `[panels] cross-panel access refused: token claim "${claim}" ` +
             `requested "${requested}" via "${action}"`,

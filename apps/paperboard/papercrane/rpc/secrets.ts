@@ -23,7 +23,7 @@ function effectivePanelId(params: any, action: string, ctx: RpcContext): string 
     if (claim && claim !== requested) {
         // TODO(deny after v3.2): the mismatch log below becomes the only
         // behavior — unscoped master-token callers start carrying claims
-        // and every disagreement is denied at the registry-opening gate.
+        // and every disagreement is denied after v3.2.
         logger.warn(
             `[secrets] cross-panel access refused: token claim "${claim}" ` +
             `requested "${requested}" secrets via "${action}"`,

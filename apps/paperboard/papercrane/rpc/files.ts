@@ -18,7 +18,7 @@ function effectiveAppId(params: any, action: string, ctx: RpcContext): string | 
     if (claim && requested && claim !== requested) {
         // TODO(deny after v3.2): same tombstone as secrets — unscoped
         // master-token callers start carrying claims and every disagreement
-        // is denied at the registry-opening gate.
+        // is denied after v3.2.
         logger.warn(
             `[files] cross-panel access refused: token claim "${claim}" ` +
             `requested "${requested}" files via "${action}"`,

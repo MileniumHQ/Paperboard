@@ -52,9 +52,9 @@ Paperboard is a dashboard for self-hosted programs. Panels are the apps. Optimiz
 
 ## Scope-token policy (the migration)
 
-- **Identity is granted, never ambient.** Panel tokens carry a `panelId` claim issued at spawn/injection; the vault and any per-panel resource derive the caller's panel from the token claim, not from a parameter. A parameter that disagrees with the claim logs loudly and is tombstoned to *deny after v3.2* — deprecation now, enforcement at registry-open.
+- **Identity is granted, never ambient.** Panel tokens carry a `panelId` claim issued at spawn/injection; the vault and any per-panel resource derive the caller's panel from the token claim, not from a parameter. A parameter that disagrees with the claim logs loudly and denies after v3.2. There is no later gate: the registry stays closed.
 - The session's master token (`PAPERCRANE_TOKEN`, daemon host) is not panel equipment: panel services get `PAPERCRANE_PANEL_TOKEN`; broadening a credential's reach in any code path is rejected.
-- Permission *enforcement* (deny undeclared) stays gated behind the registry-opening milestone — until then, scoped tokens carry claims and log mismatches; they do not break existing flows.
+- Scoped tokens carry claims and log mismatches without breaking existing flows; mismatches deny after v3.2. There is no dispatch enforcement and no milestone that adds it — the `permissions` array was deleted and the registry stays closed.
 
 ## The approval test
 

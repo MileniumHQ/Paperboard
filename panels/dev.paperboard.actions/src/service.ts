@@ -213,7 +213,7 @@ function handleTriggerEvent(output: any, data: any): void {
         } else if (!b.panelId) {
             matchesPanel = true;
             console.warn(
-                `[ActionsService] flow "${b.id}" has no panelId; it fires for every panel — declare the panel explicitly (deprecated; denied at registry-open). TODO(remove after v3.1)`,
+                `[ActionsService] flow "${b.id}" has no panelId; it fires for every panel — declare the panel explicitly (deprecated; denied after v3.1). TODO(remove after v3.1)`,
             );
         }
         if (matchesTrigger && matchesPanel) {

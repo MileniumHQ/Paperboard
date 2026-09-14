@@ -15,10 +15,9 @@ export interface PanelManifest {
     isLinked?: boolean;
     service?: string;
     autostart?: boolean;
-    // declared capability labels + network egress, preserved verbatim
+    // network egress declaration, preserved verbatim
     // from the manifest by validatePanelManifest (surfaced at install,
-    // enforced at registry-open — never granted here)
-    permissions?: string[];
+    // enforced by the panel CSP — never granted here)
     network?: { hosts?: string[]; mode?: string };
     // daemon-recorded install provenance: "registry" (reviewed, closed
     // registry), "direct" (checksummed URL install, not reviewed), "dev"

@@ -217,7 +217,7 @@ export class PaperCraneEngine {
     // master/host-created or pre-ledger). One entry per live client id,
     // deleted with the client — bounded by the client map itself. The RPC
     // layer records the socket claim on create and warns on mismatches
-    // (rpc/ownership.ts); enforcement waits for the registry-opening gate.
+    // (rpc/ownership.ts); enforcement lands after v3.2.
     private clientOwners = new Map<string, string | null>();
 
     public setClientOwner(id: string, owner: string | null): void {

@@ -194,15 +194,15 @@ export class PanelServicesManager {
         const crashCount = running?.crashCount ?? 0;
 
         // scoped credential first: services authenticate as their panel id.
-        // The master PAPERCRANE_TOKEN stays until the registry-opening
-        // enforcement gate — its presence is deprecated, loud, and dated.
+        // The master PAPERCRANE_TOKEN stays until v3.2 — its presence is
+        // deprecated, loud, and dated.
         const panelToken = this.tokenForPanel(panelId);
         if (this.token && !this.warnedMaster.has(panelId)) {
             this.warnedMaster.add(panelId);
             logger.warn(
                 `[PanelServices] panel "${panelId}" still receives the master PAPERCRANE_TOKEN. ` +
                 `Migrate to PAPERCRANE_PANEL_TOKEN (scoped to this panel). ` +
-                `TODO(deny after v3.2): master-token service auth is denied at registry-open.`,
+                `TODO(deny after v3.2): master-token service auth is denied after v3.2.`,
             );
         }
         const env: Record<string, string> = {

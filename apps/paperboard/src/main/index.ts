@@ -114,7 +114,7 @@ const readCraneCreds = readCraneHandshake;
 // never parsed from a URL after the fact. The token is the panel's own
 // scoped credential when the embedded daemon has issued one; the master
 // handshake token is the fallback so panels load before/​without the
-// issuer wiring — never a denial, enforcement waits for registry-open.
+// issuer wiring — never a denial here; claim mismatches deny after v3.2.
 const injectCraneCreds = (
     html: string,
     comp: string,
