@@ -9,7 +9,8 @@ import { logger } from "./logger";
 //
 // review sees what a panel is allowed to talk to; the panel CSP is built
 // from this. UI-layer fetches to unknown hosts are refused by the browser;
-// service-side (node) fetches stay governed by the permissions review.
+// service-side (node) fetches stay governed by review against the panel's
+// stated product.
 
 const HOST_RE = /^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$/;
 const MAX_HOSTS = 32;

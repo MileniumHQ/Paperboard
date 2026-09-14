@@ -7,12 +7,6 @@
     "base": "./dist/index.html",
     "service": "./dist/service.js",
     "icon": "./branding/icon.png",
-    "permissions": [
-        "config.readWrite",
-        "actions.registry",
-        "triggers.registry",
-        "secrets.readWrite"
-    ],
     "network": {
         "hosts": [
             "cdn.discordapp.com",

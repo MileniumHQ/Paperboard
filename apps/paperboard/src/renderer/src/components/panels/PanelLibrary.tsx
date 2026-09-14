@@ -26,8 +26,6 @@ export interface PanelItem {
     size?: string;
     updatedAt?: string;
     isInstalled?: boolean;
-    // manifest-declared capability labels, shown at the moment of trust
-    permissions?: string[];
     // daemon-recorded install provenance (absent for pre-provenance installs)
     installSource?: "registry" | "direct" | "dev";
     isLinked?: boolean;
@@ -353,43 +351,6 @@ const PanelLibrary: Component<PanelLibraryProps> = (props) => {
                                         </Show>
                                     </tbody>
                                 </PaperTable>
-                            </PaperFlex>
-
-                            <PaperFlex direction="column" gap="onefourth">
-                                <PaperText size={3} weight={700}>
-                                    Permissions
-                                </PaperText>
-                                <Show
-                                    when={
-                                        panel().permissions &&
-                                        (panel().permissions as string[])
-                                            .length > 0
-                                    }
-                                    fallback={
-                                        <PaperText size={2} color="light">
-                                            This panel declares no
-                                            permissions.
-                                        </PaperText>
-                                    }
-                                >
-                                    <PaperFlex
-                                        direction="row"
-                                        gap="onefourth"
-                                        wrap
-                                    >
-                                        <For
-                                            each={
-                                                panel().permissions as string[]
-                                            }
-                                        >
-                                            {(perm) => (
-                                                <PaperBadge>
-                                                    {perm}
-                                                </PaperBadge>
-                                            )}
-                                        </For>
-                                    </PaperFlex>
-                                </Show>
                             </PaperFlex>
                         </PaperFlex>
                     )}

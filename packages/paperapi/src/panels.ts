@@ -13,26 +13,11 @@ export interface PanelItem {
     size?: string;
     updatedAt?: string;
     isInstalled?: boolean;
-    // declared capability labels, single-sourced from the panel manifest
-    // (registry record manifest, else installed manifest). Surfaced at the
-    // moment of trust in the install dialog; enforced at registry-open.
-    permissions?: string[];
     // daemon-recorded install provenance: "registry" (reviewed), "direct"
     // (checksummed URL, not reviewed), "dev" (symlinked dev build). Absent
     // for panels installed before provenance shipped.
     installSource?: "registry" | "direct" | "dev";
     isLinked?: boolean;
-}
-
-// manifest-declared permission labels or undefined when the record
-// carries none — never invented, never widened
-function normalizePermissions(value: unknown): string[] | undefined {
-    if (!Array.isArray(value)) return undefined;
-    const perms = value
-        .filter((p): p is string => typeof p === "string")
-        .map((p) => p.slice(0, 64))
-        .slice(0, 64);
-    return perms.length > 0 ? perms : undefined;
 }
 
 // panel store and lifecycle, scope omitted = ambient
@@ -95,9 +80,6 @@ export const panelsApi = {
                           )
                         : localPanel?.updatedAt || "Recently",
                     isInstalled: installedMap.has(id),
-                    permissions:
-                        normalizePermissions(record.manifest?.permissions) ??
-                        normalizePermissions(localPanel?.permissions),
                 });
             }
 

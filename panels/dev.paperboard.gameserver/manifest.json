@@ -7,15 +7,6 @@
     "base": "./dist/index.html",
     "service": "./dist/service.js",
     "icon": "./branding/icon.png",
-    "permissions": [
-        "terminal.create",
-        "process.run",
-        "files.readWrite",
-        "config.readWrite",
-        "actions.registry",
-        "triggers.registry",
-        "packages.write"
-    ],
     "network": {
         "hosts": [
             "api.modrinth.com",

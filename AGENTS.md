@@ -9,7 +9,7 @@ Paperboard is a dashboard for self-hosted programs. Panels are the apps. Optimiz
 ## Trust model — don't fight it
 
 - Panels are **reviewed, not sandboxed**. A reviewed panel is trusted like first-party code. This is a design decision. Never add sandbox plumbing or "harden" panels by distrusting them.
-- What makes review meaningful is the **registry and the manifest**. Panels declare `permissions` in their manifest; review checks what they use against what they declare.
+- What makes review meaningful is the **registry and the manifest**. Panels declare network egress in their manifest; review checks declared hosts against what they actually fetch, and checks API use against the panel's stated product.
 - Secrets (bot tokens, API keys) never go in panel config files or injected payload. They go through the daemon secret vault (Credentials API: `papercrane/credentials.ts`, `secretsApi` in PaperAPI), always with the panel id explicit. `secrets:list` returns names only. A panel that stores a secret in plaintext config does not get released.
 - Accepted trust-model gaps are recorded in a private security ledger, not in this repository. Never add entries; close them.
 
@@ -17,7 +17,7 @@ Paperboard is a dashboard for self-hosted programs. Panels are the apps. Optimiz
 
 **No silent failure.** Never write `catch {}`. Every catch logs (even `logger.debug`), rethrows, or returns a typed error. Code that continues after failing quietly is the single worst thing you can write here.
 
-**No shell strings from input.** Spawn processes with argv arrays (`execFile`/array `spawn`), never `sh -c` with interpolated values, never quote-stripping as escaping. A shell is only allowed when running a command is the panel's stated product (a terminal, a "run command" action), it is declared as a permission in the panel manifest, and the command is either static text from the flow author or validated.
+**No shell strings from input.** Spawn processes with argv arrays (`execFile`/array `spawn`), never `sh -c` with interpolated values, never quote-stripping as escaping. A shell is only allowed when running a command is the panel's stated product (a terminal, a "run command" action — plain from name, description, and service), and the command is either static text from the flow author or validated.
 
 **Explicit identity everywhere.** Every config, file, action, and trigger call passes an explicit panel id. No hostname parsing as identity, no `process.env` fallbacks, no ambient-scoped transports, no writing identity back to `process.env`, no registering action names that another panel can collide with (key handlers by `panelId:action` in new code).
 
@@ -29,7 +29,7 @@ Paperboard is a dashboard for self-hosted programs. Panels are the apps. Optimiz
 
 **No dead links in UI styling.** Use `--paper-*` tokens from PaperUI; if a token doesn't exist, add it there rather than hardcoding a hex. No global selectors (`*`, bare `:disabled`) escape `.paperui-root`. No component ships a workbench/demo file in its package `files`.
 
-**Manifests and version numbers tell the truth.** If the manifest declares a permission, the code must use it. If the version says `1.0.0`, the thing is finished. A half-finished panel is `0.x`, never `1.0.0`. A trigger must do exactly what its id says — a trigger that fires on everything is deleted, not shipped.
+**Manifests and version numbers tell the truth.** If the version says `1.0.0`, the thing is finished. A half-finished panel is `0.x`, never `1.0.0`. A trigger must do exactly what its id says — a trigger that fires on everything is deleted, not shipped. The `permissions` array was deleted as unenforced ceremony (network egress stays declared and CSP-enforced) — do not reintroduce it without dispatch enforcement.
 
 **Changelogs are suspended.** Do not create, recreate, or edit `CHANGELOG.md` files in any repo. Two rounds of audits caught claims-vs-code drift as the top defect class; until the truth-hygiene revamp, silence is the honest record. Version numbers and manifests still make promises.
 

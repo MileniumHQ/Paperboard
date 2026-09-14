@@ -7,14 +7,6 @@
     "base": "./dist/index.html",
     "service": "./dist/service.js",
     "icon": "./branding/icon.png",
-    "permissions": [
-        "process.exec",
-        "shell.run",
-        "files.readWrite",
-        "config.readWrite",
-        "actions.registry",
-        "triggers.registry"
-    ],
     "network": {
         "mode": "any-https"
     }

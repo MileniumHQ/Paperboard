@@ -168,7 +168,6 @@ export interface PanelManifestLike {
     publisher?: string;
     icon?: string;
     base?: string;
-    permissions?: string[];
     [key: string]: unknown;
 }
 
@@ -241,17 +240,12 @@ export function validatePanelManifest(
         manifest.network = record.network;
     }
 
-    // declared capability labels: factual clip here (bounded count and
-    // length); review reads them, the install dialog surfaces them, and
-    // registry-open enforcement will dispatch on them. Nothing here
-    // grants anything — it only preserves what the manifest declares.
-    if (Array.isArray(record.permissions)) {
-        const perms = record.permissions
-            .filter((p): p is string => typeof p === "string")
-            .map((p) => p.slice(0, 64))
-            .slice(0, 64);
-        if (perms.length > 0) manifest.permissions = perms;
-    }
+    // NOTE: the `permissions` array was deleted — it was declared,
+    // validated, and displayed, but nothing ever dispatched on it, so it
+    // taught readers the badges meant something they didn't. Unknown fields
+    // like it are dropped here (see the index-signature type above) rather
+    // than preserved. Network egress stays declared (`network`) because the
+    // panel CSP is actually built from it.
 
     return manifest;
 }
