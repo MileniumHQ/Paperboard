@@ -115,6 +115,7 @@ export default function Logs() {
                         <div style={{ "min-width": "16rem", flex: "1" }}>
                             <PaperSelectMenu
                                 name="logFile"
+                                fullWidth
                                 value={selected()}
                                 onValueChange={(val) => void selectFile(String(val))}
                             >

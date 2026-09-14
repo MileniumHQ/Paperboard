@@ -10,6 +10,7 @@ import {
 import {
     PaperBadge,
     PaperButton,
+    PaperCheckbox,
     PaperEffect,
     PaperFlex,
     PaperIcon,
@@ -19,29 +20,34 @@ import {
     PaperMediaCardGroup,
     PaperModal,
     PaperQuote,
+    PaperSelectMenu,
+    PaperSelectMenuItem,
     PaperTable,
     PaperText,
 } from "@paperboard-dev/paperui";
 import DOMPurify from "dompurify";
 import { marked } from "marked";
-import { serverSoftware } from "../lib/server";
+import { serverSoftware, serverVersion } from "../lib/server";
 import { PaperPageHeader } from "@paperboard-dev/paperui";
 import {
     checkPluginUpdates,
     deletePlugin,
     getEcosystem,
     getProject,
-    installProject,
+    installProjectVersion,
     listInstalledPlugins,
+    listProjectVersions,
     pluginDirName,
-    PluginVersionMismatchError,
+    previewInstall,
     searchModrinth,
     uninstallPlugin,
     updatePlugin,
     type InstalledPlugin,
+    type InstallPreview,
     type ModrinthHit,
     type ModrinthProject,
     type PluginUpdateCheck,
+    type ProjectVersionOption,
 } from "../lib/plugins";
 
 // Third-party markdown is rendered with marked, then sanitized before touching the DOM
@@ -128,10 +134,15 @@ export default function Plugins(props: { updateRequest?: number }) {
     const [pendingDelete, setPendingDelete] = createSignal<InstalledPlugin | null>(
         null,
     );
-    const [pendingCrossVersion, setPendingCrossVersion] = createSignal<{
-        target: DetailTarget;
-        mismatch: PluginVersionMismatchError;
-    } | null>(null);
+    const [installTarget, setInstallTarget] = createSignal<DetailTarget | null>(null);
+    const [installVersions, setInstallVersions] =
+        createSignal<ProjectVersionOption[] | null>(null);
+    const [installVersionsLoading, setInstallVersionsLoading] = createSignal(false);
+    const [installSelectedVersionId, setInstallSelectedVersionId] = createSignal("");
+    const [installPreview, setInstallPreview] = createSignal<InstallPreview | null>(null);
+    const [installPreviewLoading, setInstallPreviewLoading] = createSignal(false);
+    const [installOptional, setInstallOptional] = createSignal<string[]>([]);
+    const [installModalError, setInstallModalError] = createSignal("");
     const [detail, setDetail] = createSignal<DetailTarget | null>(null);
     const [project, setProject] = createSignal<ModrinthProject | null>(null);
     const [projectLoading, setProjectLoading] = createSignal(false);
@@ -271,36 +282,118 @@ export default function Plugins(props: { updateRequest?: number }) {
                     entry.record.slug === target.slug),
         ) ?? null;
 
-    const install = async (target: DetailTarget, allowIncompatible = false) => {
+    const previewToken = () =>
+        `${installTarget()?.projectId ?? ""}:${installSelectedVersionId()}:${[...installOptional()].sort().join(",")}`;
+
+    // opening the modal loads the version list; picking a version (or
+    // toggling an optional dep) resolves the preview. Stale responses are
+    // dropped by token so a quick reselection can't show the wrong version.
+    createEffect(() => {
+        const target = installTarget();
+        setInstallVersions(null);
+        setInstallSelectedVersionId("");
+        setInstallPreview(null);
+        setInstallOptional([]);
+        setInstallModalError("");
+        if (!target) return;
+        const captured = target.projectId;
+        setInstallVersionsLoading(true);
+        listProjectVersions(target.projectId)
+            .then((options) => {
+                if (installTarget()?.projectId !== captured) return;
+                setInstallVersions(options);
+                const recommended =
+                    options.find((o) => o.recommended) ?? options[0];
+                if (recommended?.versionId) {
+                    setInstallSelectedVersionId(recommended.versionId);
+                }
+            })
+            .catch((err) => {
+                if (installTarget()?.projectId !== captured) return;
+                setInstallModalError(
+                    err instanceof Error ? err.message : String(err),
+                );
+            })
+            .finally(() => {
+                if (installTarget()?.projectId === captured) {
+                    setInstallVersionsLoading(false);
+                }
+            });
+    });
+
+    createEffect(() => {
+        const target = installTarget();
+        const versionId = installSelectedVersionId();
+        const checked = installOptional();
+        setInstallPreview(null);
+        if (!target || !versionId) return;
+        const token = previewToken();
+        setInstallPreviewLoading(true);
+        previewInstall(target.projectId, target.title, versionId, checked)
+            .then((preview) => {
+                if (previewToken() !== token) return;
+                setInstallPreview(preview);
+            })
+            .catch((err) => {
+                if (previewToken() !== token) return;
+                setInstallModalError(
+                    err instanceof Error ? err.message : String(err),
+                );
+            })
+            .finally(() => {
+                if (previewToken() === token) setInstallPreviewLoading(false);
+            });
+    });
+
+    const closeInstallModal = () => {
+        setInstallTarget(null);
+        setInstallVersions(null);
+        setInstallSelectedVersionId("");
+        setInstallPreview(null);
+        setInstallOptional([]);
+        setInstallModalError("");
+    };
+
+    const canConfirmInstall = () => {
+        const target = installTarget();
+        const preview = installPreview();
+        if (
+            !target ||
+            !installSelectedVersionId() ||
+            installingId() ||
+            installVersionsLoading() ||
+            installPreviewLoading() ||
+            !preview ||
+            !preview.mainFile
+        ) {
+            return false;
+        }
+        return preview.failures.length === 0;
+    };
+
+    const confirmInstallModal = async () => {
+        const target = installTarget();
+        const versionId = installSelectedVersionId();
+        if (!target || !versionId || installingId()) return;
         setInstallingId(target.projectId);
-        setError("");
+        setInstallModalError("");
         try {
-            await installProject(
-                target.projectId,
-                allowIncompatible ? { allowIncompatible: true } : undefined,
-            );
+            await installProjectVersion({
+                projectId: target.projectId,
+                slug: target.slug,
+                iconUrl: target.iconUrl,
+                versionId,
+                includeOptionalKeys: installOptional(),
+            });
+            closeInstallModal();
             await reloadInstalled();
         } catch (err) {
-            // cross-version builds never install silently: the mismatch
-            // becomes an explicit confirm, install-anyway is one click away
-            if (err instanceof PluginVersionMismatchError) {
-                setPendingCrossVersion({ target, mismatch: err });
-                return;
-            }
+            const message = err instanceof Error ? err.message : String(err);
             console.error(`[Plugins] Failed to install "${target.title}":`, err);
-            setError(
-                `Failed to install "${target.title}". Check the console for details.`,
-            );
+            setInstallModalError(message);
         } finally {
             setInstallingId(null);
         }
-    };
-
-    const confirmCrossVersionInstall = async () => {
-        const pending = pendingCrossVersion();
-        setPendingCrossVersion(null);
-        if (!pending) return;
-        await install(pending.target, true);
     };
 
     const confirmDelete = async () => {
@@ -554,7 +647,7 @@ export default function Plugins(props: { updateRequest?: number }) {
                                             <PaperButton
                                                 variant="green"
                                                 disabled={busy()}
-                                                onClick={() => void install(target)}
+                                                onClick={() => setInstallTarget(target)}
                                             >
                                                 <PaperIcon>
                                                     {installingId() === target.projectId
@@ -664,32 +757,186 @@ export default function Plugins(props: { updateRequest?: number }) {
             </PaperModal>
 
             <PaperModal
-                open={pendingCrossVersion() !== null}
-                onClose={() => setPendingCrossVersion(null)}
-                title="Install a build for another Minecraft version?"
-                size="small"
+                open={installTarget() !== null}
+                onClose={closeInstallModal}
+                title={
+                    installTarget() ? `Install ${installTarget()!.title}` : "Install"
+                }
+                size="medium"
                 footer={
                     <PaperFlex direction="row" justify="flex-end" gap="half" fullWidth>
-                        <PaperButton compact onClick={() => setPendingCrossVersion(null)}>
+                        <PaperButton compact onClick={closeInstallModal}>
                             Cancel
                         </PaperButton>
-                        <PaperButton compact variant="green" onClick={confirmCrossVersionInstall}>
-                            Install anyway
+                        <PaperButton
+                            compact
+                            variant="green"
+                            disabled={!canConfirmInstall()}
+                            onClick={() => void confirmInstallModal()}
+                        >
+                            <PaperIcon>
+                                {installingId() ? "hourglass_top" : "download"}
+                            </PaperIcon>
+                            {installingId() ? "Installing…" : "Install"}
                         </PaperButton>
                     </PaperFlex>
                 }
             >
-                <PaperText preset="body">
-                    The latest compatible build
-                    {pendingCrossVersion()?.mismatch.versionNumber
-                        ? ` (${pendingCrossVersion()!.mismatch.versionNumber})`
-                        : ""}{" "}
-                    targets Minecraft{" "}
-                    {pendingCrossVersion()?.mismatch.gameVersions.length
-                        ? pendingCrossVersion()!.mismatch.gameVersions.join(", ")
-                        : "an unknown version"}
-                    . Cross-version builds can crash the server on startup.
-                </PaperText>
+                <Show when={installTarget()} keyed>
+                    {(target) => (
+                        <PaperFlex direction="column" gap="half">
+                            <PaperText size={3} weight={700}>
+                                Version
+                            </PaperText>
+                            <Show
+                                when={!installVersionsLoading()}
+                                fallback={
+                                    <PaperText size={2} color="light-text">
+                                        Loading versions...
+                                    </PaperText>
+                                }
+                            >
+                                <PaperSelectMenu
+                                    name="installVersion"
+                                    fullWidth
+                                    value={installSelectedVersionId()}
+                                    onValueChange={(val) =>
+                                        setInstallSelectedVersionId(String(val))
+                                    }
+                                >
+                                    <For each={installVersions() ?? []}>
+                                        {(option) => (
+                                            <PaperSelectMenuItem value={option.versionId}>
+                                                {`v${option.versionNumber || "?"} · ${
+                                                    option.gameVersions.join(", ") ||
+                                                    "unknown versions"
+                                                }${option.recommended ? " · Recommended" : ""}`}
+                                            </PaperSelectMenuItem>
+                                        )}
+                                    </For>
+                                </PaperSelectMenu>
+                            </Show>
+
+                            <Show when={!installPreviewLoading() && installPreview()}>
+                                {(preview) => (
+                                    <>
+                                        <Show when={!preview().matchesServer}>
+                                            <PaperQuote
+                                                variant="yellow"
+                                                icon="warning"
+                                                title="Different Minecraft version"
+                                            >
+                                                This build targets{" "}
+                                                {preview().gameVersions.length > 0
+                                                    ? preview().gameVersions.join(", ")
+                                                    : "unknown versions"}
+                                                ; your server runs{" "}
+                                                {serverVersion() || "an unknown version"}. Installing
+                                                it is your call — it may crash the server on startup.
+                                            </PaperQuote>
+                                        </Show>
+
+                                        <Show when={preview().required.length > 0}>
+                                            <PaperText size={3} weight={700}>
+                                                Also installs (required)
+                                            </PaperText>
+                                            <For each={preview().required}>
+                                                {(dep) => (
+                                                    <PaperFlex
+                                                        direction="row"
+                                                        justify="space-between"
+                                                        align="center"
+                                                        gap="half"
+                                                        fullWidth
+                                                    >
+                                                        <PaperText size={3}>{dep.name}</PaperText>
+                                                        <PaperText size={2} color="light-text">
+                                                            {dep.file
+                                                                ? `v${dep.versionNumber || "?"}${dep.gameVersions.length > 0 ? ` · ${dep.gameVersions.join(", ")}` : ""}`
+                                                                : (dep.unresolvableReason ??
+                                                                  "Could not resolve")}
+                                                        </PaperText>
+                                                    </PaperFlex>
+                                                )}
+                                            </For>
+                                        </Show>
+
+                                        <Show when={preview().optional.length > 0}>
+                                            <PaperText size={3} weight={700}>
+                                                Optional
+                                            </PaperText>
+                                            <For each={preview().optional}>
+                                                {(dep) => (
+                                                    <PaperCheckbox
+                                                        checked={installOptional().includes(dep.key)}
+                                                        disabled={!dep.file || installingId() !== null}
+                                                        onChange={(checked) =>
+                                                            setInstallOptional((prev) =>
+                                                                checked
+                                                                    ? [...prev, dep.key]
+                                                                    : prev.filter((k) => k !== dep.key),
+                                                            )
+                                                        }
+                                                        label={dep.name}
+                                                        description={
+                                                            dep.file
+                                                                ? `v${dep.versionNumber || "?"}${dep.gameVersions.length > 0 ? ` · ${dep.gameVersions.join(", ")}` : ""}`
+                                                                : (dep.unresolvableReason ??
+                                                                  "Could not resolve")
+                                                        }
+                                                    />
+                                                )}
+                                            </For>
+                                        </Show>
+
+                                        <Show when={preview().transitive.length > 0}>
+                                            <PaperText size={2} color="light-text">
+                                                Also pulls in:{" "}
+                                                {preview()
+                                                    .transitive.map((dep) => dep.name)
+                                                    .join(", ")}
+                                            </PaperText>
+                                        </Show>
+
+                                        <Show when={preview().incompatible.length > 0}>
+                                            <PaperQuote
+                                                variant="yellow"
+                                                icon="warning"
+                                                title="Incompatible with this version"
+                                            >
+                                                Do not install alongside:{" "}
+                                                {preview()
+                                                    .incompatible.map((dep) => dep.name)
+                                                    .join(", ")}
+                                            </PaperQuote>
+                                        </Show>
+
+                                        <Show when={preview().embedded.length > 0}>
+                                            <PaperText size={2} color="light-text">
+                                                Bundled:{" "}
+                                                {preview()
+                                                    .embedded.map((dep) => dep.name)
+                                                    .join(", ")}
+                                            </PaperText>
+                                        </Show>
+                                    </>
+                                )}
+                            </Show>
+
+                            <Show when={installPreviewLoading()}>
+                                <PaperText size={2} color="light-text">
+                                    Resolving dependencies...
+                                </PaperText>
+                            </Show>
+
+                            <Show when={installModalError()}>
+                                <PaperQuote variant="red" icon="warning" title="Install failed">
+                                    {installModalError()}
+                                </PaperQuote>
+                            </Show>
+                        </PaperFlex>
+                    )}
+                </Show>
             </PaperModal>
 
             <PaperModal
