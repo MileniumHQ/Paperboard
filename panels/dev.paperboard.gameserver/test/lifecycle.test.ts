@@ -93,6 +93,8 @@ function makeCtx(overrides: Record<string, unknown> = {}) {
         gamerules: {},
         serverPort: "25565",
         activeIssue: null,
+        serverSoftware: "paper",
+        serverVersion: "1.21.11",
         ...overrides,
     };
     const triggers: { id: string; output: unknown }[] = [];
@@ -316,5 +318,34 @@ describe("gamerule service actions", () => {
         expect(setGamerule(ctx, "keep_inventory", "false")).toBe(true);
         expect(writes).toEqual(["gamerule keep_inventory false\n"]);
         expect(ctx.state.gamerules.keep_inventory).toBe("false");
+    });
+
+    it("pre-1.21.11 writes the camelCase name the server speaks", () => {
+        const ctx = makeCtx({ serverStatus: "online", serverVersion: "1.21.10" });
+        expect(setGamerule(ctx, "keep_inventory", "true")).toBe(true);
+        expect(writes).toEqual(["gamerule keepInventory true\n"]);
+        // the UI still stores the canonical id
+        expect(ctx.state.gamerules.keep_inventory).toBe("true");
+    });
+
+    it("pre-1.21.11 inverts disable* rules on write", () => {
+        const ctx = makeCtx({ serverStatus: "online", serverVersion: "1.21.10" });
+        expect(setGamerule(ctx, "raids", "false")).toBe(true);
+        expect(writes).toEqual(["gamerule disableRaids true\n"]);
+    });
+
+    it("pre-1.21.11 readouts are canonicalized and un-inverted", () => {
+        const ctx = makeCtx({ serverStatus: "online", serverVersion: "1.21.10" });
+        handleProcessData(
+            ctx,
+            "[12:00:02] [Server thread/INFO]: Gamerule keepInventory is currently set to: true\n",
+        );
+        expect(ctx.state.gamerules.keep_inventory).toBe("true");
+
+        handleProcessData(
+            ctx,
+            "[12:00:03] [Server thread/INFO]: Gamerule disableRaids is currently set to: true\n",
+        );
+        expect(ctx.state.gamerules.raids).toBe("false");
     });
 });

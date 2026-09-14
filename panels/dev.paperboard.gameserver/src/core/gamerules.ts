@@ -1,4 +1,9 @@
 import { GAMERULES } from "../generated/gamerules.generated";
+import {
+    canonicalGameruleName,
+    canonicalGameruleValue,
+    type VersionProfile,
+} from "../lib/versionProfile";
 
 // gamerule names and values reach console commands raw (`gamerule ${name}
 // ${value}`): validated at the service boundary against the static
@@ -32,13 +37,23 @@ export function assertGameruleValue(name: string, value: unknown): string {
 // null when the line is not a gamerule readout. Both the query response
 // ("Gamerule X is currently set to: V") and the write confirmation
 // ("Gamerule X is now set to: V") are accepted — the write confirmation
-// is what makes an online edit converge on server truth. Names must be
-// registry members so the stored record stays bounded by the registry.
-export function parseGameruleValue(clean: string): { name: string; value: string } | null {
+// is what makes an online edit converge on server truth. On pre-1.21.11
+// servers the name and value are translated to the canonical id first, so
+// readouts still land on the right rule. Names must be registry members so
+// the stored record stays bounded by the registry.
+export function parseGameruleValue(
+    clean: string,
+    profile?: VersionProfile,
+): { name: string; value: string } | null {
     const match = clean.match(/Gamerule ([A-Za-z0-9_]+) is (?:currently|now) set to: (.+?)\s*$/i);
     if (!match) return null;
-    if (!isKnownGameruleName(match[1])) return null;
-    return { name: match[1], value: match[2].trim() };
+    const name = profile
+        ? canonicalGameruleName(profile, match[1])
+        : match[1];
+    if (!isKnownGameruleName(name)) return null;
+    const raw = match[2].trim();
+    const value = profile ? canonicalGameruleValue(profile, name, raw) : raw;
+    return { name, value };
 }
 
 // the values record only ever grows by registry-member names parsed from

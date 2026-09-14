@@ -5,6 +5,12 @@ import {
     isKnownGameruleName,
     mergeGameruleValue,
 } from "../core/gamerules";
+import {
+    resolveVersionProfile,
+    serverGameruleName,
+    serverGameruleValue,
+    type VersionProfile,
+} from "../lib/versionProfile";
 import { PANEL_ID, SERVER_PROC_ID, type GameServerState } from "./types";
 
 // gamerule truth comes from the running server, not from registry
@@ -15,6 +21,12 @@ import { PANEL_ID, SERVER_PROC_ID, type GameServerState } from "./types";
 // one write per pending edit; bounded by the registry the UI queries from
 const MAX_GAMERULE_WRITES = 100;
 
+// pre-1.21.11 servers spell gamerules in camelCase and invert the `disable*`
+// rules; every console write and query is translated through the profile.
+function profileFor(ctx: ServiceContext<GameServerState>): VersionProfile {
+    return resolveVersionProfile(ctx.state.serverSoftware, ctx.state.serverVersion);
+}
+
 export function setGamerule(
     ctx: ServiceContext<GameServerState>,
     rawName: string,
@@ -22,9 +34,12 @@ export function setGamerule(
 ): boolean {
     const name = assertGameruleName(rawName);
     const value = assertGameruleValue(name, rawValue);
+    const profile = profileFor(ctx);
+    const serverName = serverGameruleName(profile, name);
+    const serverValue = serverGameruleValue(profile, name, value);
 
     if (ctx.state.serverStatus === "online") {
-        processApi.write(SERVER_PROC_ID, `gamerule ${name} ${value}\n`);
+        processApi.write(SERVER_PROC_ID, `gamerule ${serverName} ${serverValue}\n`);
     } else {
         // offline edits must never look applied-and-dropped: they persist
         // in panel config and re-apply the next time the server boots
@@ -62,9 +77,13 @@ export function queryGamerules(
     names: string[],
 ): boolean {
     if (ctx.state.serverStatus !== "online") return false;
+    const profile = profileFor(ctx);
     const known = names.filter(isKnownGameruleName).slice(0, MAX_GAMERULE_WRITES);
     for (const name of known) {
-        processApi.write(SERVER_PROC_ID, `gamerule ${name}\n`);
+        processApi.write(
+            SERVER_PROC_ID,
+            `gamerule ${serverGameruleName(profile, name)}\n`,
+        );
     }
     return true;
 }
@@ -94,13 +113,17 @@ export async function applyPendingGamerules(
         return;
     }
 
+    const profile = profileFor(ctx);
     for (const [name, value] of entries) {
         try {
             // re-validate at this boundary: the config file is edited by
             // users too, and these strings reach console commands
             const safeName = assertGameruleName(name);
             const safeValue = assertGameruleValue(safeName, value);
-            processApi.write(SERVER_PROC_ID, `gamerule ${safeName} ${safeValue}\n`);
+            processApi.write(
+                SERVER_PROC_ID,
+                `gamerule ${serverGameruleName(profile, safeName)} ${serverGameruleValue(profile, safeName, safeValue)}\n`,
+            );
         } catch (err) {
             console.error(`[Service:Gamerules] pending edit refused:`, err);
         }

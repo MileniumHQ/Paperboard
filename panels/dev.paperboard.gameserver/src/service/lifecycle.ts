@@ -11,6 +11,7 @@ import { getRequiredJavaVersion, SOFTWARE_NAMES } from "../lib/software";
 import { isWindowsTarget } from "../lib/platform";
 import { parseChatMessage, parseLogLine } from "../lib/logs";
 import { parseGameruleValue } from "../core/gamerules";
+import { resolveVersionProfile } from "../lib/versionProfile";
 import { loadConfigAndProperties } from "./config";
 import { trackPlayerActivity, handleStatResponse, handlePositionResponse } from "./players";
 import { assertSingleLine } from "../core/players";
@@ -260,7 +261,11 @@ function handleGameruleResponse(
     ctx: ServiceContext<GameServerState>,
     clean: string,
 ): void {
-    const parsed = parseGameruleValue(clean);
+    const profile = resolveVersionProfile(
+        ctx.state.serverSoftware,
+        ctx.state.serverVersion,
+    );
+    const parsed = parseGameruleValue(clean, profile);
     if (!parsed) return;
     ctx.setState((prev) => ({
         gamerules: { ...prev.gamerules, [parsed.name]: parsed.value },

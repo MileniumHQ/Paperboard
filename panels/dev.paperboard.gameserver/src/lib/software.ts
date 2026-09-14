@@ -1,4 +1,5 @@
 import semver from "semver";
+import { javaPackageFor } from "./versionProfile";
 
 export type ServerSoftwareType = "vanilla" | "paper" | "fabric";
 
@@ -14,16 +15,11 @@ export interface VersionItem {
     releaseTime?: string;
 }
 
-// null when version missing or unparseable
+// null when version missing or unparseable. The thresholds live in
+// versionProfile's override table; this is the one entry point the installer
+// and lifecycle use.
 export function getRequiredJavaVersion(mcVersion: string): string | null {
-    const v = semver.coerce(mcVersion);
-    if (!v) return null;
-
-    if (semver.gte(v, "26.0.0")) return "java-25";
-    if (semver.gte(v, "1.20.5")) return "java-21";
-    if (semver.gte(v, "1.18.0")) return "java-17";
-    if (semver.gte(v, "1.17.0")) return "java-16";
-    return "java-8";
+    return javaPackageFor(mcVersion);
 }
 
 const PISTON_META_URL = "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json";
