@@ -23,3 +23,6 @@ worker-configuration.d.ts
 .DS_Store
 *.log
 *.log*
+
+# internal security ledger: tracked privately, never in this repo
+known-vulnerabilities.md
