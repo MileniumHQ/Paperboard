@@ -55,6 +55,11 @@ export function useAppSettings() {
             await loadAppSettings();
             return;
         }
+        // commit to renderer state: PaperSelectMenu/PaperToggle are controlled
+        // (their display follows the value prop), and the theme/motion effects
+        // read this signal, so a successful persist must update it or the UI
+        // keeps showing the previous selection.
+        setAppSettings({ ...next, defaultPanel: next.defaultPanel || "last" });
         notifyAppSettingsChanged();
     };
 

@@ -44,7 +44,7 @@ export default function AppSettings(props: {
             }}
         >
             <PaperSettingItem
-                title="Dark mode"
+                title="Appearance"
                 description="Match the operating system appearance or force light or dark."
             >
                 <PaperSelectMenu
@@ -108,7 +108,7 @@ export default function AppSettings(props: {
 
             <PaperSettingItem
                 title="Updates"
-                description="Runs a full update sweep right now: every panel, package, and PaperCrane instance on every connected computer is checked and updated, then Paperboard restarts."
+                description="Runs a full update sweep right now: every panel, package, and Paperboard Server daemon on every connected computer is checked and updated, then Paperboard restarts."
             >
                 <PaperEffect variant="blue">
                     <PaperButton
