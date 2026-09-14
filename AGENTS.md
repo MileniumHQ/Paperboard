@@ -11,7 +11,7 @@ Paperboard is a dashboard for self-hosted programs. Panels are the apps. Optimiz
 - Panels are **reviewed, not sandboxed**. A reviewed panel is trusted like first-party code. This is a design decision. Never add sandbox plumbing or "harden" panels by distrusting them.
 - What makes review meaningful is the **registry and the manifest**. Panels declare `permissions` in their manifest; review checks what they use against what they declare.
 - Secrets (bot tokens, API keys) never go in panel config files or injected payload. They go through the daemon secret vault (Credentials API: `papercrane/credentials.ts`, `secretsApi` in PaperAPI), always with the panel id explicit. `secrets:list` returns names only. A panel that stores a secret in plaintext config does not get released.
-- `known-vulnerabilities.md` is a record of accepted trust-model gaps. Never add entries; close them.
+- Accepted trust-model gaps are recorded in a private security ledger, not in this repository. Never add entries; close them.
 
 ## Hard rules
 
@@ -43,7 +43,7 @@ Paperboard is a dashboard for self-hosted programs. Panels are the apps. Optimiz
 ## Fix discipline — how fixes land (tough rules)
 
 - **A fix ships with its proof.** A behavioral change without a test that fails without it is not a fix — it's a claim. If nothing is testable, run the gate grep for the defect class and cite the zero in the PR. "It's fixed" without evidence doesn't merge.
-- **A fix closes its own record.** If your fix contradicts a comment, the comment changes in the same commit. If it closes something in `known-vulnerabilities.md`, the entry is deleted in the same commit. A fix that leaves the record disagreeing with the code is a new lie.
+- **A fix closes its own record.** If your fix contradicts a comment, the comment changes in the same commit. If it closes something in the private security ledger, the entry is deleted in the same commit. A fix that leaves the record disagreeing with the code is a new lie.
 - **One invariant, one implementation.** If a security/validation invariant exists twice (mirrors, "same logic in two files"), you either extract to one module with shared tests or you haven't fixed it. Mirroring is how polarity drift starts.
 - **No half-shipped deprecations.** When a deprecation lands, the loud warning, the `TODO(deny/remove after vX)` marker, AND the enforcement date all land in one commit. A deprecation with no deadline is a decoration.
 - **Manifest fields are honored or deleted.** A validated manifest field the code ignores is a lie per these rules — wire it or remove it from the validator.
