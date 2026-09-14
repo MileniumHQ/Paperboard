@@ -1,6 +1,7 @@
 {
     "name": "dev.paperboard.gameserver",
     "private": true,
+    "license": "PolyForm-Noncommercial-1.0.0",
     "type": "module",
     "scripts": {
         "dev": "vite",

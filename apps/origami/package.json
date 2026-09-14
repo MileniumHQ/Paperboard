@@ -4,6 +4,7 @@
     "module": "src/index.ts",
     "type": "module",
     "private": true,
+    "license": "PolyForm-Noncommercial-1.0.0",
     "scripts": {
         "dev": "wrangler dev",
         "deploy": "wrangler deploy -c wrangler.jsonc --no-autoconfig",

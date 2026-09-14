@@ -6,7 +6,7 @@
   "main": "./out/main/index.js",
   "author": "Milenium <contact@paperboard.dev>",
   "homepage": "https://paperboard.dev",
-  "license": "PolyForm-Strict-1.0.0",
+  "license": "PolyForm-Noncommercial-1.0.0",
   "keywords": [
     "paperboard",
     "self-hosting",
