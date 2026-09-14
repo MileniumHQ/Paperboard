@@ -442,14 +442,16 @@ export default function Plugins(props: { updateRequest?: number }) {
                         icon="extension"
                         title={kindLabel() === "mod" ? "Mods" : "Plugins"}
                     >
-                        <PaperButton
-                            compact
-                            disabled={updating()}
-                            onClick={() => void runUpdateCheck()}
-                        >
-                            <PaperIcon>sync</PaperIcon>
-                            {updating() ? "Checking…" : "Check for updates"}
-                        </PaperButton>
+                        <PaperEffect variant="green">
+                            <PaperButton
+                                compact
+                                disabled={updating()}
+                                onClick={() => void runUpdateCheck()}
+                            >
+                                <PaperIcon>sync</PaperIcon>
+                                {updating() ? "Updating…" : "Update plugins"}
+                            </PaperButton>
+                        </PaperEffect>
                     </PaperPageHeader>
                     <div class="gs-surface">
                         <PaperFlex direction="column" gap="half" padding="full">

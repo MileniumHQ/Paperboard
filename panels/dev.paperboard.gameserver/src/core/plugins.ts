@@ -157,7 +157,7 @@ export type PluginUpdateStatus =
     | "update-available"
     | "incompatible";
 
-// What "Check for updates" should do with one installed plugin, given the
+// What "Update plugins" should do with one installed plugin, given the
 // latest build resolved for the server's software + Minecraft version.
 // No compatible build (exactMatch false) is "incompatible", never silently
 // treated as up to date.

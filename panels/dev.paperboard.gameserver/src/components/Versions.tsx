@@ -388,7 +388,7 @@ export default function Versions(props: { onRequestPluginUpdate?: () => void }) 
                                     props.onRequestPluginUpdate?.();
                                 }}
                             >
-                                Check for updates
+                                Update plugins
                             </PaperButton>
                         </Show>
                         <Show when={postSwitchCount() > 0}>
