@@ -442,7 +442,7 @@ export default function Plugins(props: { updateRequest?: number }) {
                         icon="extension"
                         title={kindLabel() === "mod" ? "Mods" : "Plugins"}
                     >
-                        <PaperEffect variant="green">
+                        <PaperEffect variant="blue">
                             <PaperButton
                                 compact
                                 disabled={updating()}
