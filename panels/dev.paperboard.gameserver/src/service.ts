@@ -23,6 +23,7 @@ const initialState: GameServerState = {
     playerPlaytime: {},
     playerPositions: {},
     gamerules: {},
+    installProgress: null,
     activeIssue: null,
 };
 

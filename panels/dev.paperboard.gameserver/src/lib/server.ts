@@ -4,6 +4,7 @@ import { createPanelBridge } from "@paperboard-dev/paperapi";
 import type { PaperConsoleEntry, PaperBadgeVariant } from "@paperboard-dev/paperui";
 import stripAnsi from "strip-ansi";
 import { SOFTWARE_NAMES, type ServerSoftwareType } from "./software";
+import type { InstallProgress } from "../core/state";
 import {
     forgetPlayerData,
     getPlayerPlaytimeSeconds,
@@ -48,6 +49,8 @@ export const [serverSoftware, setServerSoftware] = createSignal<ServerSoftwareTy
 export const [serverVersion, setServerVersion] = createSignal("");
 export const [ramAllocation, setRamAllocation] = createSignal(4);
 export const [gamerules, setGamerules] = createSignal<Record<string, string>>({});
+export const [installProgress, setInstallProgress] =
+    createSignal<InstallProgress | null>(null);
 // last lifecycle (start/stop/restart) failure, surfaced on the Overview
 // tab — bridge-call rejections otherwise land in console.error only, and
 // a button that does nothing is a silent failure with a click handler.
@@ -78,6 +81,7 @@ function currentSetters() {
         setPlayerPositions,
         setPlayerPlaytime,
         setGamerules,
+        setInstallProgress,
     };
 }
 

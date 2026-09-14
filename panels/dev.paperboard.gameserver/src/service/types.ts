@@ -1,6 +1,6 @@
 import type { PaperConsoleEntry } from "@paperboard-dev/paperui";
 import type { ServerSoftwareType } from "../lib/software";
-import type { ServerStatus as CoreServerStatus, ChatMessage as CoreChatMessage } from "../core/state";
+import type { ServerStatus as CoreServerStatus, ChatMessage as CoreChatMessage, InstallProgress } from "../core/state";
 import {
     PLAYER_NAME_PATTERN as CORE_PLAYER_NAME_PATTERN,
     SERVER_PROC_ID as CORE_SERVER_PROC_ID,
@@ -44,6 +44,9 @@ export interface GameServerState {
     // live gamerule values read from the running server (and optimistic
     // offline edits); synced to the Game Rules tab through the bridge
     gamerules: Record<string, string>;
+    // live jar-download progress during installServerVersion; null when no
+    // install is running. The Versions modal reads this for its row.
+    installProgress: InstallProgress | null;
     activeIssue: ServerIssue | null;
 }
 

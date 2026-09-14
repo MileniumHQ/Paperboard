@@ -1,4 +1,4 @@
-import { createSignal, onMount, Show } from "solid-js";
+import { createEffect, createSignal, onMount, Show } from "solid-js";
 import {
     PaperButton,
     PaperFlex,
@@ -16,7 +16,12 @@ import { ensureJavaRuntime } from "../lib/ensureJava";
 import InstallLoaders from "./InstallLoaders";
 import { PANEL_ID } from "../service/types";
 import { ACTION_IDS } from "../service/contract";
-import { serverBridge, serverStatus } from "../lib/server";
+import {
+    serverBridge,
+    serverStatus,
+    installProgress,
+    setInstallProgress,
+} from "../lib/server";
 import {
     SOFTWARE_NAMES,
     getRequiredJavaVersion,
@@ -54,6 +59,25 @@ export default function Versions(props: { onRequestPluginUpdate?: () => void }) 
     const [softwareStatus, setSoftwareStatus] = createSignal<LoaderStatus>("waiting");
 
     const online = () => serverStatus() !== "offline";
+
+    // The jar download runs inside the service action, which publishes
+    // throttled progress through service state; map it onto the row while
+    // this modal owns the switch. Terminal states stay with the call below.
+    createEffect(() => {
+        if (!installOpen() || installFailed()) return;
+        const progress = installProgress();
+        if (!progress) return;
+        if (progress.stage === "completed") {
+            setSoftwarePercent(100);
+            setSoftwareStatus("success");
+        } else if (progress.stage === "error") {
+            setSoftwarePercent(0);
+            setSoftwareStatus("error");
+        } else {
+            setSoftwarePercent(progress.percent);
+            setSoftwareStatus("loading");
+        }
+    });
 
     onMount(async () => {
         try {
@@ -99,6 +123,9 @@ export default function Versions(props: { onRequestPluginUpdate?: () => void }) 
         setSoftwarePercent(0);
         setSoftwareStatus("waiting");
         setInstallFailed(false);
+        // clear any previous switch's terminal state before the modal reads
+        // the signal; the service resets it again when its download starts
+        setInstallProgress(null);
         setInstallOpen(true);
         setSwitching(true);
         try {

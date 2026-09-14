@@ -18,6 +18,14 @@ export interface ChatMessage {
     content?: string;
 }
 
+// Live jar-download progress published by installServerVersion through
+// service state (bridge calls are request/response, so there is no other
+// channel). Null when no install is running.
+export interface InstallProgress {
+    stage: "downloading" | "verifying" | "completed" | "error";
+    percent: number;
+}
+
 export interface StateSetters {
     setServerStatus: (v: ServerStatus) => void;
     setServerEntries: (v: PaperConsoleEntry[]) => void;
@@ -35,6 +43,7 @@ export interface StateSetters {
     setPlayerPositions: (v: Map<string, PlayerPosition>) => void;
     setPlayerPlaytime: (v: Map<string, number>) => void;
     setGamerules: (v: Record<string, string>) => void;
+    setInstallProgress: (v: InstallProgress | null) => void;
 }
 
 // serverVersion applies only when truthy, rest when defined
@@ -99,6 +108,10 @@ export function applyStatePatch(
         {
             key: "gamerules",
             apply: (v) => setters.setGamerules(v as Record<string, string>),
+        },
+        {
+            key: "installProgress",
+            apply: (v) => setters.setInstallProgress(v as InstallProgress | null),
         },
     ];
 

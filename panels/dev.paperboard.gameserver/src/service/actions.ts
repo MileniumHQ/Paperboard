@@ -42,6 +42,11 @@ import { listPlayerStats } from "./playerStats";
 import { listLogFiles, readLogFile } from "./logs";
 import { queryGamerules, setGamerule } from "./gamerules";
 import { applyRuntimeProperties } from "./runtimeProperties";
+import {
+    toInstallProgress,
+    shouldRelayInstallProgress,
+    type InstallProgress,
+} from "./installProgress";
 import { assertPlayerName, assertSingleLine } from "../core/players";
 import type { GameServerState } from "./types";
 import { ACTION_IDS, TRIGGER_IDS, PANEL_ID } from "./contract";
@@ -596,12 +601,24 @@ export const panelActions: ActionDefinition[] = [
             }
             // throws when the upstream record has no checksum (never undefined)
             const download = await getSoftwareDownload(software, version);
+            // the Versions modal reads the jar row through service state:
+            // bridge calls are request/response, so without this relay the
+            // row would sit static until the call resolves
+            ctx.setState({ installProgress: null });
+            let lastProgress: InstallProgress | null = null;
             await fileApi.download({
                 url: download.url,
                 targetPath: "server.jar",
                 appId: PANEL_ID,
                 sha1: download.sha1,
                 sha256: download.sha256,
+                onProgress: (payload) => {
+                    const next = toInstallProgress(payload);
+                    if (!next) return;
+                    if (!shouldRelayInstallProgress(lastProgress, next)) return;
+                    lastProgress = next;
+                    ctx.setState({ installProgress: next });
+                },
             });
             await updatePanelConfig(ctx, { software, version });
             return { software, version };
