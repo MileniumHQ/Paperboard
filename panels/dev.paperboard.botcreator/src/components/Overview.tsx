@@ -207,7 +207,7 @@ export default function Overview() {
                                             </PaperText>
                                             <Show when={connectionError()}>
                                                 <PaperText size={2} color="red">
-                                                    — {connectionError()}
+                                                    {connectionError()}
                                                 </PaperText>
                                             </Show>
                                         </>
@@ -231,7 +231,7 @@ export default function Overview() {
                             <For each={guilds()}>
                                 {(guild) => (
                                     <PaperText size={3}>
-                                        {guild.name} — {guild.channels.length}{" "}
+                                        {guild.name}, {guild.channels.length}{" "}
                                         {guild.channels.length === 1 ? "channel" : "channels"}
                                     </PaperText>
                                 )}

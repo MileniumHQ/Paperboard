@@ -81,9 +81,9 @@ export const OfflineComputerModal: Component<OfflineComputerModalProps> = (
                     {(comp) => (
                         <PaperText preset="body">
                             Nothing responded at {comp().host}:
-                            {comp().port}. Make sure PaperCrane is running on
-                            that computer and both devices are on the same
-                            network.
+                            {comp().port}. Make sure the Paperboard Server
+                            daemon is running on that computer and both
+                            devices are on the same trusted network.
                         </PaperText>
                     )}
                 </Show>

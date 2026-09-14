@@ -563,7 +563,7 @@ const builtinHandlers: Record<string, BuiltinHandler> = {
         const key = String(inputs.key || "var");
         if (!flowVariablesStore.has(key) && flowVariablesStore.size >= MAX_VARIABLES) {
             throw new Error(
-                `Variable store full: ${MAX_VARIABLES} variables is the limit — clear unused variables`,
+                `Variable store full: ${MAX_VARIABLES} variables is the limit. Clear unused variables`,
             );
         }
         const val = inputs.value ?? "";
@@ -881,7 +881,7 @@ export async function executeFlow(
             const actionId = schema.id;
             if (!panelId || !actionId) {
                 throw new Error(
-                    `Corrupt block ${child.id}: missing panelId/action id (no migration — re-create the block)`,
+                    `Corrupt block ${child.id}: missing panelId/action id (no migration; re-create the block)`,
                 );
             }
 

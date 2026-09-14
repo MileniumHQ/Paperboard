@@ -131,13 +131,13 @@ export async function handleSystem(action: string, id: unknown, params: any, ctx
                                 },
                             );
                             child.on("error", (err) =>
-                                console.error("[PaperCrane:Update] respawn failed:", err),
+                                console.error("[Paperboard Server:Update] respawn failed:", err),
                             );
                             child.unref();
                             // let the replacement bind before handing off
                             await new Promise((r) => setTimeout(r, 300));
                         } catch (err) {
-                            console.error("[PaperCrane:Update] respawn failed:", err);
+                            console.error("[Paperboard Server:Update] respawn failed:", err);
                         }
                     }
                     process.exit(0);
@@ -146,7 +146,7 @@ export async function handleSystem(action: string, id: unknown, params: any, ctx
                     try {
                         if (fs.existsSync(tmpPath)) await fs.promises.unlink(tmpPath);
                     } catch (cleanupErr) {
-                        console.error("[PaperCrane:Update] tmp cleanup failed:", cleanupErr);
+                        console.error("[Paperboard Server:Update] tmp cleanup failed:", cleanupErr);
                     }
                 }
             }, 500);

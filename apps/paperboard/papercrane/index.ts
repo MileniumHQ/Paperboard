@@ -182,7 +182,7 @@ function writePidFile() {
         };
         writeFileAtomicSync(pidFile, JSON.stringify(record, null, 2));
     } catch (err) {
-        logger.debug("[PaperCrane] failed to write PID file:", err);
+        logger.debug("[Paperboard Server] failed to write PID file:", err);
     }
 }
 
@@ -196,7 +196,7 @@ function readPidRecord(): PidFileRecord | null {
             }
         }
     } catch (err) {
-        logger.debug("[PaperCrane] failed to read PID file:", err);
+        logger.debug("[Paperboard Server] failed to read PID file:", err);
     }
     return null;
 }
@@ -205,7 +205,7 @@ function removePidFile() {
     try {
         fs.unlinkSync(getPidFile());
     } catch {
-        logger.debug("[PaperCrane] failed to remove PID file (already gone?)");
+        logger.debug("[Paperboard Server] failed to remove PID file (already gone?)");
     }
 }
 
@@ -216,7 +216,7 @@ function isProcessAlive(pid: number): boolean {
     } catch (err) {
         // ESRCH/EPERM both mean "not ours to signal" — false IS the answer,
         // logged so a stale-pidfile takeover stays visible
-        logger.debug(`[PaperCrane] pid ${pid} liveness probe failed (treated as not alive):`, err);
+        logger.debug(`[Paperboard Server] pid ${pid} liveness probe failed (treated as not alive):`, err);
         return false;
     }
 }
@@ -233,7 +233,7 @@ function isRecordedProcessAlive(record: PidFileRecord): boolean {
         return true; // non-linux: recorded pid from our own pidfile is trusted
     } catch (err) {
         logger.debug(
-            `[PaperCrane] could not verify executable of PID ${record.pid}:`,
+            `[Paperboard Server] could not verify executable of PID ${record.pid}:`,
             err,
         );
         return false;
@@ -248,12 +248,12 @@ async function killStalePaperCrane(
     const record = readPidRecord();
     if (record && record.pid !== process.pid && isRecordedProcessAlive(record)) {
         console.log(
-            `[PaperCrane] Reclaiming port ${port} from stale instance (PID ${record.pid})...`,
+            `[Paperboard Server] Reclaiming port ${port} from stale instance (PID ${record.pid})...`,
         );
         try {
             process.kill(record.pid, "SIGTERM");
         } catch (err) {
-            logger.debug(`[PaperCrane] SIGTERM to PID ${record.pid} failed:`, err);
+            logger.debug(`[Paperboard Server] SIGTERM to PID ${record.pid} failed:`, err);
         }
         await new Promise((r) => setTimeout(r, 400));
         if (isProcessAlive(record.pid)) {
@@ -261,7 +261,7 @@ async function killStalePaperCrane(
                 process.kill(record.pid, "SIGKILL");
             } catch (err) {
                 logger.debug(
-                    `[PaperCrane] SIGKILL to PID ${record.pid} failed:`,
+                    `[Paperboard Server] SIGKILL to PID ${record.pid} failed:`,
                     err,
                 );
             }
@@ -301,7 +301,7 @@ function writeCraneJson(port: number, token: string | null) {
         );
     } catch (err) {
         logger.warn(
-            "[PaperCrane] failed to write crane.json handshake file:",
+            "[Paperboard Server] failed to write crane.json handshake file:",
             err,
         );
     }
@@ -329,7 +329,7 @@ export function startPaperCraneServer(
             process.on("unhandledRejection", (reason: any) => {
                 try {
                     logger.error(
-                        "[PaperCrane] unhandled rejection (daemon stays up):",
+                        "[Paperboard Server] unhandled rejection (daemon stays up):",
                         reason?.stack || reason?.message || reason,
                     );
                 } catch (err) { logger.debug("[index.ts] op failed:", err) }
@@ -351,7 +351,7 @@ export function startPaperCraneServer(
 
             engine.recoverRunningSupervisors().catch((err) => {
                 console.error(
-                    "[PaperCrane] Failed to recover running supervisors:",
+                    "[Paperboard Server] Failed to recover running supervisors:",
                     err,
                 );
             });
@@ -401,7 +401,7 @@ export function startPaperCraneServer(
             const handleListenError = async (err: any) => {
                 // post-listen socket errors never tear down the server
                 if (hasListened) {
-                    logger.debug("[PaperCrane] server socket error after listen:", err?.message ?? err);
+                    logger.debug("[Paperboard Server] server socket error after listen:", err?.message ?? err);
                     return;
                 }
                 if (listenFailed) return;
@@ -422,7 +422,7 @@ export function startPaperCraneServer(
                     }
                     // Port is held by a foreign, non-PaperCrane application
                     const friendly =
-                        `[PaperCrane] Port ${currentPort} is already in use by another application.\n` +
+                        `[Paperboard Server] Port ${currentPort} is already in use by another application.\n` +
                         `  Run with --port <number> to choose a different port, or free up port ${currentPort} first.`;
                     console.error(friendly);
                     reject(new Error(friendly));
@@ -473,7 +473,7 @@ export function startPaperCraneServer(
                 try {
                     panelServices.init(actualPort, staticToken ?? undefined, auth);
                 } catch (err: any) {
-                    logger.warn("[PaperCrane] Failed to initialize panel services:", err?.message || err);
+                    logger.warn("[Paperboard Server] Failed to initialize panel services:", err?.message || err);
                 }
 
                 // this instance owns the port now: safe to sweep interrupted
@@ -496,13 +496,13 @@ export function startPaperCraneServer(
                 // LAN pairing may need a firewall exception on Windows
                 if (process.platform === "win32") {
                     logger.info(
-                        "[PaperCrane] LAN pairing needs a Windows Firewall inbound exception for this binary — accept the first-listen prompt, or add one manually (Defender Firewall > Allow an app > papercrane). Declined/missing = remote HTTP/WS times out while loopback works.",
+                        "[Paperboard Server] LAN pairing needs a Windows Firewall inbound exception for this binary. Accept the first-listen prompt, or add one manually (Defender Firewall > Allow an app > papercrane). Declined/missing = remote HTTP/WS times out while loopback works.",
                     );
                 }
 
                 if (noAuth || headless) {
                     console.log(
-                        `[PaperCrane] Listening on http://${host}:${actualPort}`,
+                        `[Paperboard Server] Listening on http://${host}:${actualPort}`,
                     );
                 } else {
                     const existingClients = auth.getAuthorizedClients();

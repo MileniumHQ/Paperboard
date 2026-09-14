@@ -330,7 +330,7 @@ export class PaperCraneEngine {
         const shell =
             process.platform === "win32" ? "powershell.exe" : getDefaultShell();
         const resolvedCwd = this.resolveSpawnCwd(cwd);
-        logger.debug(`[PaperCrane] creating terminal ${id} (shell=${shell} cwd=${resolvedCwd})`);
+        logger.debug(`[Paperboard Server] creating terminal ${id} (shell=${shell} cwd=${resolvedCwd})`);
 
         await spawnSupervisedClient(
             id,
@@ -556,7 +556,7 @@ export class PaperCraneEngine {
             }
         } catch (err) {
             logger.warn(
-                "[PaperCrane] failed to recover running supervisors:",
+                "[Paperboard Server] failed to recover running supervisors:",
                 err,
             );
         }
@@ -663,7 +663,7 @@ export class PaperCraneEngine {
                 return JSON.parse(fs.readFileSync(indexFile, "utf-8"));
             } catch (err) {
                 logger.debug(
-                    "[PaperCrane] package index.json is corrupt, treating as empty:",
+                    "[Paperboard Server] package index.json is corrupt, treating as empty:",
                     err,
                 );
             }
@@ -857,7 +857,7 @@ export class PaperCraneEngine {
             if (!this.findBinDir(pkgDir, 4)) {
                 await fs.promises.rm(pkgDir, { recursive: true, force: true });
                 throw new Error(
-                    `Package ${packageName} extracted but no usable binary directory was found — removed partial install`,
+                    `Package ${packageName} extracted but no usable binary directory was found. Removed partial install.`,
                 );
             }
 
@@ -931,7 +931,7 @@ export class PaperCraneEngine {
                     } as PanelManifest);
                 } catch (err) {
                     logger.debug(
-                        `[PaperCrane] panel manifest for ${entry} failed validation/read:`,
+                        `[Paperboard Server] panel manifest for ${entry} failed validation/read:`,
                         err,
                     );
                 }
@@ -1050,7 +1050,7 @@ export class PaperCraneEngine {
             try {
                 panelServices.startService(cleanId);
             } catch (err: any) {
-                logger.warn(`[PaperCrane] Failed to start service for newly installed panel ${cleanId}:`, err?.message || err);
+                logger.warn(`[Paperboard Server] Failed to start service for newly installed panel ${cleanId}:`, err?.message || err);
             }
 
             return {
@@ -1157,7 +1157,7 @@ export class PaperCraneEngine {
                     return JSON.parse(await fs.promises.readFile(file, "utf-8"));
                 } catch (err) {
                     logger.debug(
-                        `[PaperCrane] config file for ${id} is corrupt, returning null:`,
+                        `[Paperboard Server] config file for ${id} is corrupt, returning null:`,
                         err,
                     );
                 }

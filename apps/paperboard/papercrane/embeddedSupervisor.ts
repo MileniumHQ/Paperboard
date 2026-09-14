@@ -95,7 +95,7 @@ export class EmbeddedSupervisor implements PaperCraneClientLike {
                 let ptyArgs = args ?? [];
                 if (!Array.isArray(ptyArgs) || !ptyArgs.every((a) => typeof a === "string")) {
                     logger.warn(
-                        `[embedded-supervisor] "${this.config.id}": pty "${args}" is not an array of strings — spawning without args`,
+                        `[embedded-supervisor] "${this.config.id}": pty "${args}" is not an array of strings; spawning without args`,
                     );
                     ptyArgs = [];
                 }

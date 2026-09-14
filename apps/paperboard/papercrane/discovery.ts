@@ -44,7 +44,7 @@ export function paperCraneMachineId(): string {
         fs.mkdirSync(path.dirname(file), { recursive: true });
         fs.writeFileSync(file, JSON.stringify({ id }, null, 2));
     } catch (err) {
-        logger.warn("[PaperCrane] cannot persist machine id, using ephemeral one:", err);
+        logger.warn("[Paperboard Server] cannot persist machine id, using ephemeral one:", err);
     }
     return id;
 }
@@ -54,7 +54,7 @@ export function advertisePaperCrane(
 ): AdvertisementHandle | null {
     if (isLoopbackHost(options.host)) {
         logger.debug(
-            "[PaperCrane] daemon is loopback-only — skipping mDNS advertisement",
+            "[Paperboard Server] daemon is loopback-only; skipping mDNS advertisement",
         );
         return null;
     }
@@ -102,7 +102,7 @@ export function advertisePaperCrane(
         try {
             bonjour = new Bonjour();
         } catch (err) {
-            logger.warn("[PaperCrane] failed to start mDNS advertisement:", err);
+            logger.warn("[Paperboard Server] failed to start mDNS advertisement:", err);
             return;
         }
         // publish throws synchronously on invalid config
@@ -120,7 +120,7 @@ export function advertisePaperCrane(
                 },
             });
         } catch (err) {
-            logger.warn("[PaperCrane] failed to start mDNS advertisement:", err);
+            logger.warn("[Paperboard Server] failed to start mDNS advertisement:", err);
             try {
                 bonjour.destroy();
             } catch (err) { logger.debug("[discovery.ts] op failed:", err) }
@@ -131,12 +131,12 @@ export function advertisePaperCrane(
             try {
                 service.stop();
             } catch (err) {
-                logger.debug("[PaperCrane] mDNS unpublish failed:", err);
+                logger.debug("[Paperboard Server] mDNS unpublish failed:", err);
             }
             try {
                 bonjour.destroy();
             } catch (err) {
-                logger.debug("[PaperCrane] mDNS shutdown failed:", err);
+                logger.debug("[Paperboard Server] mDNS shutdown failed:", err);
             }
         };
         current = { stop: stopService };
@@ -146,7 +146,7 @@ export function advertisePaperCrane(
             isUp = true;
             clearRetry();
             logger.info(
-                `[PaperCrane] advertising via mDNS as "${name}" (_${PAPERCRANE_MDNS_TYPE}._tcp, port ${options.port})`,
+                `[Paperboard Server] advertising via mDNS as "${name}" (_${PAPERCRANE_MDNS_TYPE}._tcp, port ${options.port})`,
             );
         });
         // no 'up' in time means name clash, try the next suffix
@@ -155,13 +155,13 @@ export function advertisePaperCrane(
             if (stopped || isUp) return;
             if (attempt < MAX_ATTEMPTS) {
                 logger.warn(
-                    `[PaperCrane] mDNS name "${name}" produced no announcement — retrying as "${baseName} (${attempt + 1})"`,
+                    `[Paperboard Server] mDNS name "${name}" produced no announcement. Retrying as "${baseName} (${attempt + 1})"`,
                 );
                 stopService();
                 retryTimer = setTimeout(publishAttempt, RETRY_MS);
             } else {
                 logger.warn(
-                    `[PaperCrane] mDNS advertisement failed for "${name}" after ${MAX_ATTEMPTS} attempts — continuing undiscovered (manual IP:port still works)`,
+                    `[Paperboard Server] mDNS advertisement failed for "${name}" after ${MAX_ATTEMPTS} attempts. Continuing undiscovered (manual IP:port still works)`,
                 );
             }
         }, UP_TIMEOUT_MS);
@@ -169,13 +169,13 @@ export function advertisePaperCrane(
             const msg = err instanceof Error ? err.message : String(err);
             if (!isUp && /already in use/i.test(msg) && attempt < MAX_ATTEMPTS && !stopped) {
                 logger.warn(
-                    `[PaperCrane] mDNS name "${name}" is taken — retrying as "${baseName} (${attempt + 1})"`,
+                    `[Paperboard Server] mDNS name "${name}" is taken. Retrying as "${baseName} (${attempt + 1})"`,
                 );
                 stopService();
                 retryTimer = setTimeout(publishAttempt, RETRY_MS);
                 return;
             }
-            logger.warn("[PaperCrane] mDNS advertisement error:", err);
+            logger.warn("[Paperboard Server] mDNS advertisement error:", err);
         });
     };
 

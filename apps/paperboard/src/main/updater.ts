@@ -126,7 +126,7 @@ async function confirmCraneVersion(
         if (info?.version === version) return true;
         if (Date.now() >= deadline) {
             logger.warn(
-                `[Updater] crane on ${computerId} never reported version ${version} after update`,
+                `[Updater] Paperboard Server on ${computerId} never reported version ${version} after update`,
             );
             return false;
         }
@@ -201,7 +201,7 @@ function wireAppUpdater(win: BrowserWindow): void {
         });
         autoUpdater.on("update-downloaded", (info: any) => {
             appUpdaterLog.info(`[Updater] app update downloaded: ${info?.version ?? "unknown"}`);
-            sendProgress(win, 100, "App update ready — restart to apply");
+            sendProgress(win, 100,         "App update ready. Restart to apply");
             broadcast("app-update-downloaded", { version: info?.version ?? null });
         });
         autoUpdater.on("error", (err: any) => {
@@ -210,7 +210,7 @@ function wireAppUpdater(win: BrowserWindow): void {
             // from here — without it the window sat on "Downloading app
             // update…" forever. `failed: true` is the renderer's signal
             // to render the error state; Skip stays the only control.
-            sendProgress(win, null, "Update failed — you can keep using Paperboard", true);
+            sendProgress(win, null,         "Update failed. You can keep using Paperboard", true);
         });
         autoUpdater
             .checkForUpdates()
@@ -369,7 +369,7 @@ async function runOrchestratorInner(
                     // without a checksum exactly like panels and packages
                     if (!validSha256(task.sha256)) {
                         throw new Error(
-                            `Install refused for crane update on ${task.computerId}: update task carries no sha256 checksum`,
+                            `Install refused for Paperboard Server update on ${task.computerId}: update task carries no sha256 checksum`,
                         );
                     }
                     const client = connectionPool.getClient(task.computerId);
@@ -386,7 +386,7 @@ async function runOrchestratorInner(
                     );
                     if (!confirmed) {
                         throw new Error(
-                            `Crane update to ${task.version} on ${task.computerId} did not report back: refusing to record the version`,
+                            `Paperboard Server update to ${task.version} on ${task.computerId} did not report back: refusing to record the version`,
                         );
                     }
                     try {

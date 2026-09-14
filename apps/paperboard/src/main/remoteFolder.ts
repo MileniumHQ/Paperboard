@@ -151,7 +151,7 @@ function startWatcher(s: ActiveSession, hasWindow: () => Promise<boolean>): void
             s.misses += 1;
             if (s.seen || Date.now() >= s.deadline) {
                 if (s.misses >= CONFIRM_MISSES || Date.now() >= s.deadline) {
-                    logger.info(`[RemoteFolder] explorer closed for ${s.computerId} — tearing down`);
+                    logger.info(`[RemoteFolder] explorer closed for ${s.computerId}; tearing down`);
                     await closeRemoteFolder(s.computerId);
                 }
             }

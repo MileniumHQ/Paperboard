@@ -146,7 +146,7 @@ export async function planUpdateTasks(
             // The next run retries once the version is readable.
             if (!currentCraneVersion) {
                 logger.warn(
-                    `[Updater] Skipping crane update on ${comp.name}: installed version unknown`,
+                    `[Updater] Skipping Paperboard Server update on ${comp.name}: installed version unknown`,
                 );
                 continue;
             }
@@ -155,7 +155,7 @@ export async function planUpdateTasks(
                 // checksum exactly like panels and packages
                 if (!validSha256(craneEntry.sha256)) {
                     logger.warn(
-                        `[Updater] Refusing crane update on ${comp.name}: registry did not provide a sha256 checksum`,
+                        `[Updater] Refusing Paperboard Server update on ${comp.name}: registry did not provide a sha256 checksum`,
                     );
                 } else {
                     tasks.push({
@@ -165,7 +165,7 @@ export async function planUpdateTasks(
                         downloadUrl:
                             craneEntry.downloadUrl ??
                             `${opts.registryUrl}/paperdl/crane/${platform}-${arch}/download`,
-                        label: `Updating PaperCrane on ${comp.name}`,
+                        label: `Updating Paperboard Server on ${comp.name}`,
                         sha256: craneEntry.sha256,
                     });
                 }

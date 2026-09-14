@@ -60,7 +60,7 @@ export class DiscoveryService extends EventEmitter {
             );
         } catch (err) {
             logger.warn(
-                "[Discovery] mDNS unavailable — network discovery disabled:",
+                "[Discovery] mDNS unavailable; network discovery disabled:",
                 err,
             );
             this.started = false;
@@ -139,7 +139,7 @@ export class DiscoveryService extends EventEmitter {
         };
         this.services.set(key, entry);
         logger.debug(
-            `[Discovery] PaperCrane online: ${entry.name} (${entry.host}:${entry.port})`,
+            `[Discovery] Paperboard Server online: ${entry.name} (${entry.host}:${entry.port})`,
         );
         this.emitChange();
     }
@@ -166,7 +166,7 @@ export class DiscoveryService extends EventEmitter {
         const removed = this.services.get(removedKey)!;
         this.services.delete(removedKey);
         logger.debug(
-            `[Discovery] PaperCrane offline: ${removed.name} (${removed.host}:${removed.port})`,
+            `[Discovery] Paperboard Server offline: ${removed.name} (${removed.host}:${removed.port})`,
         );
         this.emitChange();
     }

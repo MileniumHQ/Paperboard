@@ -119,8 +119,9 @@ export class PaperCraneTui {
         }
 
         this.clear();
-        console.log(readBanner() ?? "PaperCrane");
+        console.log(readBanner() ?? "Paperboard Server");
         console.log(`Listening on http://${this.host}:${this.port}\n`);
+        console.log("Only pair on a home or other trusted network you control: the connection is unencrypted on the local network.\n");
 
         if (this.auth.isPairingActive()) {
             const code = this.auth.getPairingCode() || "------";
@@ -143,10 +144,11 @@ export class PaperCraneTui {
     }
 
     private renderPlain() {
-        console.log(`[PaperCrane] Listening on http://${this.host}:${this.port}`);
+        console.log(`[Paperboard Server] Listening on http://${this.host}:${this.port}`);
+        console.log("[Paperboard Server] Only pair on a trusted network you control: the connection is unencrypted on the local network.");
         if (this.auth.isPairingActive()) {
             const code = this.auth.getPairingCode() || "------";
-            console.log(`[PaperCrane] Pairing Code: ${code.slice(0, 3)} ${code.slice(3)}`);
+            console.log(`[Paperboard Server] Pairing Code: ${code.slice(0, 3)} ${code.slice(3)}`);
         }
     }
 

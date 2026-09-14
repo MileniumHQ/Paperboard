@@ -345,7 +345,7 @@ export class PanelServicesManager {
         crashCount: number,
     ): Promise<void> {
         logger.info(
-            `[PanelServices] No bun/node runtime found — starting background service for panel "${panelId}" in-process`,
+            `[PanelServices] No bun/node runtime found. Starting background service for panel "${panelId}" in-process`,
         );
         const previous = this.inProcessBoot;
         const runningInProcess = [...this.services.values()].filter((s) => s.inProcess && !s.stopped);

@@ -64,7 +64,7 @@ const ComputerRail = (props: ComputerRailProps): JSX.Element => {
             <Show when={props.loadFailed}>
                 <PaperRailAction
                     icon="refresh"
-                    label="Couldn't load computers — retry"
+                    label="Couldn't load computers. Retry"
                     onClick={() => props.onRetryLoad?.()}
                 />
             </Show>

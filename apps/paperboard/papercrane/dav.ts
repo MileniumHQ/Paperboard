@@ -10,7 +10,7 @@ import { logger } from "./logger";
 
 // WebDAV rooted at the app-data dir, main token or ephemeral session auth
 export const DAV_PREFIX = "/dav";
-export const DAV_REALM = "PaperCrane";
+export const DAV_REALM = "Paperboard Server";
 const DEFAULT_IDLE_MS = 5 * 60_000;
 const MIN_IDLE_MS = 30_000;
 const MAX_IDLE_MS = 30 * 60_000;

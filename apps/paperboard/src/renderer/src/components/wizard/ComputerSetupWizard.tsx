@@ -276,10 +276,7 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
                             </PaperText>
                             <PaperText preset="body">
                                 Enter the IP address of a computer running
-                                PaperCrane — the small daemon that hosts your
-                                panels. New machine? Install PaperCrane there
-                                first; the same download page that gave you
-                                Paperboard has the headless PaperCrane binary.
+                                the Paperboard Server daemon.
                             </PaperText>
                         </PaperFlex>
 
@@ -307,7 +304,7 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
                             <Show when={probeUnreachable()}>
                                 <PaperText size={2} color="red">
                                     Can't reach {host().trim()}:
-                                    {port().trim() || "45464"} — check the
+                                    {port().trim() || "45464"}. Check the
                                     address
                                     <Show when={probeDetail()}>
                                         <br />
@@ -332,9 +329,11 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
                                 Pairing Verification
                             </PaperText>
                             <PaperText preset="body">
-                                Enter the 6-digit pairing code shown in
-                                PaperCrane on{" "}
+                                Enter the 6-digit pairing code shown by the
+                                Paperboard Server daemon on{" "}
                                 {name() || host() || "the target computer"}.
+                                Only do this on a trusted network you
+                                control.
                             </PaperText>
                         </PaperFlex>
 

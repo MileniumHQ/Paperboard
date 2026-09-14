@@ -493,7 +493,7 @@ export default function App() {
         if (onPlay.length === 0) {
             appendConsoleLog({
                 time: new Date().toLocaleTimeString(),
-                message: "No on-play flows on the canvas — nothing ran (play button only runs on-play triggers).",
+                message: "No on-play flows on the canvas. Nothing ran (play button only runs on-play triggers).",
             });
             return;
         }

@@ -128,7 +128,7 @@ export default function Setup(props: SetupProps) {
 
                         <Show when={setupError()}>
                             <PaperQuote variant="red" icon="warning" title="Setup failed">
-                                {setupError()} — check the token and try again.
+                                {setupError()}. Check the token and try again.
                             </PaperQuote>
                         </Show>
                     </PaperFlex>

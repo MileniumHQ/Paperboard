@@ -57,7 +57,7 @@ export function checkSpawnEnv(
         if (!RESERVED_ENV_KEYS.has(key)) continue;
         if (claim) {
             logger.warn(
-                `[${what}] scoped caller "${claim}" attempted to override "${key}" in a child env — refused`,
+                `[${what}] scoped caller "${claim}" attempted to override "${key}" in a child env. Refused.`,
             );
             throw forbidden(
                 `Overriding "${key}" in a spawned child env is refused: the credential is issued, not chosen`,

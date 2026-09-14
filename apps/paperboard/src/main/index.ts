@@ -527,7 +527,7 @@ app.on("window-all-closed", () => {
 
 // kill local processes and disconnect clients on quit
 app.on("before-quit", () => {
-    log.info("[Main] quitting — cleaning up local processes and connections");
+    log.info("[Main] quitting; cleaning up local processes and connections");
     try {
         connectionPool.dispose();
     } catch (err: any) {

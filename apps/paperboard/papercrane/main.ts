@@ -16,12 +16,12 @@ import { getPaperboardDir } from "./paths";
 function fatalCliError(err: any): never {
     const msg = err?.message || String(err);
     if (err?.code === "EADDRINUSE") {
-        console.error(`[PaperCrane] Port is already in use — another crane is running, or pass --port <n>.`);
+        console.error(`[Paperboard Server] Port is already in use. Another Paperboard Server may be running, or pass --port <n>.`);
     } else if (/EACCES|EPERM|permission/i.test(msg)) {
-        console.error(`[PaperCrane] Cannot start: ${msg}`);
-        console.error(`[PaperCrane] Check the data directory is writable (PAPERBOARD_DIR=${getPaperboardDir()}).`);
+        console.error(`[Paperboard Server] Cannot start: ${msg}`);
+        console.error(`[Paperboard Server] Check the data directory is writable (PAPERBOARD_DIR=${getPaperboardDir()}).`);
     } else {
-        console.error(`[PaperCrane] Failed to start: ${msg}`);
+        console.error(`[Paperboard Server] Failed to start: ${msg}`);
     }
     process.exit(1);
 }
@@ -31,7 +31,7 @@ async function main(): Promise<void> {
     try {
         cliOptions = parseCliArgs();
     } catch (err) {
-        logger.debug("[PaperCrane] CLI parse failed, starting with defaults:", err);
+        logger.debug("[Paperboard Server] CLI parse failed, starting with defaults:", err);
         cliOptions = {};
     }
     const supervise = (cliOptions as { supervise?: unknown }).supervise;

@@ -216,7 +216,7 @@ export class PaperCraneClient extends EventEmitter {
                         this.isConnected = false;
                         reject(
                             new Error(
-                                `Cannot connect to PaperCrane at ${host}:${this.port}` +
+                                `Cannot connect to the Paperboard Server daemon at ${host}:${this.port}` +
                                     (err?.message ? `: ${err.message}` : ""),
                             ),
                         );
@@ -260,7 +260,7 @@ export class PaperCraneClient extends EventEmitter {
                     this.ws = null;
                     for (const pending of this.pendingRequests.values()) {
                         clearTimeout(pending.timer);
-                        pending.reject(new Error("PaperCrane connection closed"));
+                        pending.reject(new Error("Paperboard Server connection closed"));
                     }
                     this.pendingRequests.clear();
                     this.emit("status", this.getStatus());
@@ -318,7 +318,7 @@ export class PaperCraneClient extends EventEmitter {
             await this.connect(this.host, this.port, this.token);
         }
         if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-            throw new Error(`Cannot connect to PaperCrane at ${this.host}:${this.port}`);
+            throw new Error(`Cannot connect to the Paperboard Server daemon at ${this.host}:${this.port}`);
         }
 
         const id = this.requestIdCounter++;
@@ -331,7 +331,7 @@ export class PaperCraneClient extends EventEmitter {
         return new Promise<T>((resolve, reject) => {
             const timer = setTimeout(() => {
                 this.pendingRequests.delete(id);
-                reject(new Error(`PaperCrane RPC '${action}' timed out after ${timeoutMs}ms`));
+                reject(new Error(`Paperboard Server RPC '${action}' timed out after ${timeoutMs}ms`));
             }, timeoutMs);
             this.pendingRequests.set(id, {
                 resolve: resolve as (val: unknown) => void,

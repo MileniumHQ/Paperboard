@@ -99,7 +99,7 @@ export const ConnectionLostOverlay: Component<ConnectionLostOverlayProps> = (
                     Cannot communicate with{" "}
                     <strong>{props.computer.name}</strong> at{" "}
                     {props.computer.host}:{props.computer.port}. Make sure
-                    PaperCrane is running.
+                    the Paperboard Server daemon is running.
                 </PaperText>
             </PaperFlex>
 

@@ -31,17 +31,17 @@ export interface StoredComputer {
 export function classifyProbeError(err: any): string {
     const msg = String(err?.message || "");
     if (err?.name === "TimeoutError" || /aborted|timeout/i.test(msg)) {
-        return "Timed out with no response — the computer may be offline, on a different network, or its firewall is blocking PaperCrane";
+        return "Timed out with no response. The computer may be offline, on a different network, or its firewall is blocking the Paperboard Server daemon";
     }
     const code = (err as any)?.cause?.code || (err as any)?.code;
     if (code === "ECONNREFUSED") {
-        return "Connection refused — PaperCrane isn't running on that computer";
+        return "Connection refused. The Paperboard Server daemon isn't running on that computer";
     }
     if (code === "ENOTFOUND" || code === "EAI_AGAIN") {
-        return "Host not found — check the address";
+        return "Host not found. Check the address";
     }
     if (code === "EHOSTUNREACH" || code === "ENETUNREACH") {
-        return "Network unreachable — is this device on the same network?";
+        return "Network unreachable. Is this device on the same network?";
     }
     return msg || "Unreachable";
 }

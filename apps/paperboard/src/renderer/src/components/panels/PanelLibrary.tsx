@@ -209,7 +209,7 @@ const PanelLibrary: Component<PanelLibraryProps> = (props) => {
                                             <PaperText size={2} color="light">
                                                 {panel.version
                                                     ? `v${panel.version}`
-                                                    : "—"}
+                                                    : "–"}
                                             </PaperText>
                                         }
                                         onClick={() => setSelectedPanel(panel)}
@@ -313,7 +313,7 @@ const PanelLibrary: Component<PanelLibraryProps> = (props) => {
                                         <tr>
                                             <th>Publisher</th>
                                             <td>
-                                                {panel().publisher || "—"}
+                                                {panel().publisher || "–"}
                                             </td>
                                         </tr>
                                         <tr>
@@ -331,7 +331,7 @@ const PanelLibrary: Component<PanelLibraryProps> = (props) => {
                                             <td>
                                                 {panel().version
                                                     ? `v${panel().version}`
-                                                    : "—"}
+                                                    : "–"}
                                             </td>
                                         </tr>
                                         <Show

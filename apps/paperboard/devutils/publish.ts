@@ -1,13 +1,13 @@
 #!/usr/bin/env bun
 /**
- * publish.ts — Build and (optionally) publish Paperboard, PaperCrane, or any Board/Panel to Origami
+ * publish.ts: build and (optionally) publish Paperboard, the Paperboard Server, or any panel to Origami
  *
  * Builds by default. Nothing leaves the machine unless --publish is passed.
  *
  * Usage:
  *   ./publish.ts pb                            # Build Paperboard desktop app
- *   ./publish.ts crane                         # Build PaperCrane daemon binary
- *   ./publish.ts dev.paperboard.terminal       # Build a board / panel
+ *   ./publish.ts crane                         # Build Paperboard Server daemon binary
+ *   ./publish.ts dev.paperboard.terminal       # Build a panel
  *   ./publish.ts gameserver                    # Also matches ../dev.paperboard.gameserver
  *   ./publish.ts usb                           # Build everything into ../usb/ for sneakernet testing
  *   ./publish.ts pb --all --publish            # Build + upload Paperboard for every target
@@ -25,8 +25,8 @@ if (!targetArg || targetArg === "--help" || targetArg === "-h") {
     console.error(`
 Usage:
   ./publish.ts pb                         Build Paperboard app binary
-  ./publish.ts crane                      Build PaperCrane daemon binary
-  ./publish.ts <board-id | folder-name>   Build a Board / Panel
+  ./publish.ts crane                      Build Paperboard Server daemon binary
+  ./publish.ts <panel-id | folder-name>   Build a panel
   ./publish.ts usb                        Build everything into ../usb/ for testing
 
   --publish     Upload the result (R2 / Origami). Without it, artifacts stay local.
@@ -124,7 +124,7 @@ const osOf = (t: Target): Os =>
 // Windows-host build. Title/publisher/icon live in papercrane/branding/.
 function craneCompileFlags(target: Target): string[] {
     if (osOf(target) !== "windows" || process.platform !== "win32") return [];
-    const flags = ["--windows-title=PaperCrane", "--windows-publisher=Paperboard"];
+    const flags = ["--windows-title=Paperboard Server", "--windows-publisher=Paperboard"];
     const icon = join(HERE, "papercrane", "branding", "icon.ico");
     if (existsSync(icon)) flags.push(`--windows-icon=${icon}`);
     return flags;
@@ -166,7 +166,7 @@ if (appLower !== "pb" && appLower !== "crane" && appLower !== "paperboard") {
     const { id: boardId, name: boardName, version: boardVersion } =
         resolvePublishTarget(manifest, boardDir);
 
-    console.log(`\n📦 Building Board \x1b[1m${boardName}\x1b[0m (${boardId} v${boardVersion})…\n`);
+    console.log(`\n📦 Building panel \x1b[1m${boardName}\x1b[0m (${boardId} v${boardVersion})…\n`);
 
     // 1. Build panel
     await $`bun run build`.cwd(boardDir);
@@ -374,7 +374,7 @@ for (const target of selectedTargets) {
         const outName = os === "windows" ? `papercrane-${target}.exe` : `papercrane-${target}`;
         await $`bun build --compile --target=${bunTarget} ${craneCompileFlags(target)} ./papercrane/main.ts --outfile ./dist/${outName}`.cwd(HERE);
         filePath = join(distDir, outName);
-        if (!existsSync(filePath)) throw new Error(`No crane binary found at ${filePath}`);
+        if (!existsSync(filePath)) throw new Error(`No Paperboard Server binary found at ${filePath}`);
     }
 
     const filename = basename(filePath);
@@ -586,10 +586,10 @@ async function buildUsbFolder() {
         const os = osOf(target);
         const bunTarget = BUN_TARGET_MAP[target];
         const outName = os === "windows" ? `papercrane-${target}.exe` : `papercrane-${target}`;
-        console.log(`\n🔨 Building crane for ${target}…`);
+        console.log(`\n🔨 Building Paperboard Server for ${target}…`);
         await $`bun build --compile --target=${bunTarget} ${craneCompileFlags(target)} ./papercrane/main.ts --outfile ./dist/${outName}`.cwd(HERE);
         const built = join(distDir, outName);
-        if (!existsSync(built)) throw new Error(`No crane binary found at ${built}`);
+        if (!existsSync(built)) throw new Error(`No Paperboard Server binary found at ${built}`);
         cpSync(built, join(craneDir, outName));
         craneFiles.push(`crane/${outName}`);
     }
@@ -646,7 +646,7 @@ async function buildUsbFolder() {
         };
         this._inSocket = inSocketShim;`;
             if (!src.includes(from)) {
-                throw new Error("node-pty sidecar patch no longer applies — update it for the new node-pty version");
+                throw new Error("node-pty sidecar patch no longer applies. Update it for the new node-pty version");
             }
             writeFileSync(agentJs, src.replace(from, to));
         }
@@ -730,20 +730,20 @@ echo done. Restart Paperboard to pick up the panels.
 `;
     writeFileSync(join(USB, "link-panels.bat"), linkBat);
 
-    const readme = `Paperboard v${version} — USB test bundle (built ${new Date().toISOString()})
+    const readme = `Paperboard v${version} USB test bundle (built ${new Date().toISOString()})
 
 INSTALLERS (installers/)
 ${installerFiles.map((f) => `  ${f}`).join("\n")}
 
   Install: Windows -> run the setup exe; macOS -> double-click the
   .tar.gz to extract, then drag Paperboard.app to Applications (the tarball
-  preserves permissions — never copy the .app itself off the stick);
+  preserves permissions; never copy the .app itself off the stick);
   Linux -> chmod +x the .AppImage, then run it.
 
-  CRANE DAEMON BINARIES (crane/)
-  Standalone papercrane daemon per target. Mostly useful for headless boxes:
+  PAPERBOARD SERVER BINARIES (crane/)
+  Standalone Paperboard Server daemon per target. Mostly useful for headless boxes:
     ./papercrane-linux-x64 --help
-  Plus node-pty/ — helper files the Windows binary needs for real terminal
+  Plus node-pty/: helper files the Windows binary needs for real terminal
   emulation (keep the folder next to the .exe).
 ${craneFiles.map((f) => `  ${f}`).join("\n")}
 
@@ -752,19 +752,20 @@ ${panelEntries.map((p) => `  ${p.id} (${p.name} v${p.version})`).join("\n")}
 
   Panels are prebuilt (dist/ included). To test them:
     1. Copy this folder anywhere, e.g. ~/paperboard-usb
-    2. USB sticks strip executable bits — restore them first:
+    2. USB sticks strip executable bits; restore them first:
          macOS/Linux: chmod +x crane/* link-panels.sh
          (Windows .exe files are unaffected.)
     3. ./link-panels.sh  (macOS/Linux) or double-click link-panels.bat (Windows)
        (symlinks/junctions each panel into ~/.paperboard/panels/)
-    4. (Re)start Paperboard — linked panels load as-is
+    4. (Re)start Paperboard; linked panels load as-is
 
   Set PAPERBOARD_DIR=... before running the script to target a custom data dir.
-  The crane never overwrites a symlinked panel on registry install.
+  The Paperboard Server never overwrites a symlinked panel on registry install.
 
   LAN PAIRING / WINDOWS FIREWALL
-  Remote devices reach the crane over HTTP/WS on its port (default 45464).
-  On Windows, accept the Firewall first-listen prompt for the crane/app binary.
+  Remote devices reach the Paperboard Server daemon over HTTP/WS on its port (default 45464).
+  Only pair on a home or other trusted network you control: the connection is unencrypted on the local network.
+  On Windows, accept the Firewall first-listen prompt for the server/app binary.
   If remote pairing times out while localhost works, the prompt was declined
   or the binary moved: add an inbound exception manually (Windows Defender
   Firewall > Allow an app through firewall > papercrane). macOS/Linux need
@@ -773,7 +774,7 @@ ${panelEntries.map((p) => `  ${p.id} (${p.name} v${p.version})`).join("\n")}
     writeFileSync(join(USB, "README.txt"), readme);
 
     console.log(`\n✅ USB bundle ready → ${USB}`);
-    console.log(`   ${installerFiles.length} installer(s), ${craneFiles.length} crane binarie(s), ${panelEntries.length} panel(s)`);
+    console.log(`   ${installerFiles.length} installer(s), ${craneFiles.length} server binaries, ${panelEntries.length} panel(s)`);
     console.log(`   Copy the folder onto a USB stick and run ./link-panels.sh on the test machine.\n`);
 }
 

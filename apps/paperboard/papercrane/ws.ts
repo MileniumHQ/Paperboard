@@ -474,9 +474,9 @@ export function setupWebSocketServer(
                         );
                     }
                 } catch (replyErr) {
-                    logger.debug("[PaperCrane:RPC] error reply failed:", replyErr);
+                    logger.debug("[Paperboard Server:RPC] error reply failed:", replyErr);
                 }
-                console.error("[PaperCrane:RPC:Error]", err?.message || err);
+                console.error("[Paperboard Server:RPC:Error]", err?.message || err);
             }
         });
     });

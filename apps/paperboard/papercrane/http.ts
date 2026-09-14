@@ -108,7 +108,7 @@ export function handleHttpRequest(
         if (!isMainBearer(ctx.auth, req)) {
             res.writeHead(401, {
                 "Content-Type": "text/plain",
-                "WWW-Authenticate": 'Bearer realm="PaperCrane"',
+                "WWW-Authenticate": 'Bearer realm="Paperboard Server"',
             });
             res.end("Unauthorized");
             return;
