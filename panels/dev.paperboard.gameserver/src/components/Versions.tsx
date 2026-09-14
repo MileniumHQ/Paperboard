@@ -9,12 +9,19 @@ import {
     PaperSelector,
     PaperSelectorItem,
     PaperText,
+    type LoaderStatus,
 } from "@paperboard-dev/paperui";
 import { config } from "@paperboard-dev/paperapi";
+import { ensureJavaRuntime } from "../lib/ensureJava";
+import InstallLoaders from "./InstallLoaders";
 import { PANEL_ID } from "../service/types";
 import { ACTION_IDS } from "../service/contract";
 import { serverBridge, serverStatus } from "../lib/server";
-import { SOFTWARE_NAMES, type ServerSoftwareType } from "../lib/software";
+import {
+    SOFTWARE_NAMES,
+    getRequiredJavaVersion,
+    type ServerSoftwareType,
+} from "../lib/software";
 import { listInstalledPlugins, uninstallAllPlugins } from "../lib/plugins";
 import VersionPicker from "./VersionPicker";
 
@@ -33,6 +40,18 @@ export default function Versions(props: { onRequestPluginUpdate?: () => void }) 
     const [postSwitchCount, setPostSwitchCount] = createSignal(0);
     const [uninstallingAll, setUninstallingAll] = createSignal(false);
     const [confirmSwitchOpen, setConfirmSwitchOpen] = createSignal(false);
+    // blocking install modal: no onClose, so no dismiss path exists while
+    // the switch runs. A footer Dismiss appears only on failure.
+    const [installOpen, setInstallOpen] = createSignal(false);
+    const [installFailed, setInstallFailed] = createSignal(false);
+    const [javaDownloadPercent, setJavaDownloadPercent] = createSignal(0);
+    const [javaDownloadStatus, setJavaDownloadStatus] =
+        createSignal<LoaderStatus>("waiting");
+    const [javaExtractPercent, setJavaExtractPercent] = createSignal(0);
+    const [javaExtractStatus, setJavaExtractStatus] =
+        createSignal<LoaderStatus>("waiting");
+    const [softwarePercent, setSoftwarePercent] = createSignal(0);
+    const [softwareStatus, setSoftwareStatus] = createSignal<LoaderStatus>("waiting");
 
     const online = () => serverStatus() !== "offline";
 
@@ -64,6 +83,23 @@ export default function Versions(props: { onRequestPluginUpdate?: () => void }) 
             setError("Stop the server before switching versions.");
             return;
         }
+        // The service installs Java as part of the switch, but the rows need
+        // a truthful starting state: an already-present runtime shows success
+        // immediately, a missing one shows loading. The service call emits no
+        // staged progress, so the loaders are coarse by design.
+        const javaPkg = getRequiredJavaVersion(selectedVersion());
+        if (!javaPkg) {
+            setError(`Could not determine the Java runtime for ${selectedVersion()}.`);
+            return;
+        }
+        setJavaDownloadPercent(0);
+        setJavaDownloadStatus("loading");
+        setJavaExtractPercent(0);
+        setJavaExtractStatus("waiting");
+        setSoftwarePercent(0);
+        setSoftwareStatus("waiting");
+        setInstallFailed(false);
+        setInstallOpen(true);
         setSwitching(true);
         try {
             // count the OLD software's jars before the switch changes which
@@ -72,22 +108,55 @@ export default function Versions(props: { onRequestPluginUpdate?: () => void }) 
                 .then((r) => r.plugins.length)
                 .catch(() => 0);
 
-            // the service owns the download: it enforces offline, installs
-            // the required Java runtime, verifies the jar checksum, and
-            // updates panel state (so the sidebar reacts)
+            // Java installs here with real staged progress, exactly like
+            // onboarding. The service call below re-checks and skips it, so
+            // there is no double download — it still owns the jar, the
+            // checksum, and the state sync.
+            await ensureJavaRuntime(javaPkg, {
+                onDownload: (percent) => {
+                    setJavaDownloadStatus("loading");
+                    setJavaDownloadPercent(percent);
+                },
+                onExtract: (percent) => {
+                    setJavaDownloadStatus("success");
+                    setJavaDownloadPercent(100);
+                    setJavaExtractStatus("loading");
+                    setJavaExtractPercent(percent);
+                },
+            });
+            setJavaDownloadPercent(100);
+            setJavaDownloadStatus("success");
+            setJavaExtractPercent(100);
+            setJavaExtractStatus("success");
+
+            setSoftwareStatus("loading");
             await serverBridge.call(ACTION_IDS.installServerVersion, {
                 software: software(),
                 version: selectedVersion(),
             });
 
+            setSoftwarePercent(100);
+            setSoftwareStatus("success");
             setInstalledSoftware(software());
             setInstalledVersion(selectedVersion());
             setPostSwitchCount(previousCount);
+            setInstallOpen(false);
             setPostSwitchOpen(true);
         } catch (err) {
             const message = err instanceof Error ? err.message : String(err);
             console.error("[Versions] Failed to switch version:", err);
             setError(message);
+            if (softwareStatus() === "loading") {
+                setSoftwarePercent(0);
+                setSoftwareStatus("error");
+            } else if (javaExtractStatus() === "loading") {
+                setJavaExtractPercent(0);
+                setJavaExtractStatus("error");
+            } else {
+                setJavaDownloadPercent(0);
+                setJavaDownloadStatus("error");
+            }
+            setInstallFailed(true);
         } finally {
             setSwitching(false);
         }
@@ -222,6 +291,58 @@ export default function Versions(props: { onRequestPluginUpdate?: () => void }) 
                         varies by version, and there is no undo. Back up your world
                         first.
                     </PaperQuote>
+                </PaperFlex>
+            </PaperModal>
+
+            <PaperModal
+                open={installOpen()}
+                size="medium"
+                noHeader
+                closeOnBackdropClick={false}
+                closeOnEsc={false}
+                footer={
+                    installFailed() ? (
+                        <PaperFlex direction="row" justify="flex-end" gap="half" fullWidth>
+                            <PaperButton
+                                compact
+                                onClick={() => {
+                                    setInstallOpen(false);
+                                    setInstallFailed(false);
+                                }}
+                            >
+                                Dismiss
+                            </PaperButton>
+                        </PaperFlex>
+                    ) : undefined
+                }
+            >
+                <PaperFlex fullWidth center>
+                    <div style={{ width: "100%", "max-width": "24rem" }}>
+                        <InstallLoaders
+                            items={[
+                                {
+                                    label: "Downloading Java...",
+                                    percent: javaDownloadPercent,
+                                    status: javaDownloadStatus,
+                                },
+                                {
+                                    label: "Installing Java...",
+                                    percent: javaExtractPercent,
+                                    status: javaExtractStatus,
+                                },
+                                {
+                                    label: `Downloading ${SOFTWARE_NAMES[software()]}...`,
+                                    percent: softwarePercent,
+                                    status: softwareStatus,
+                                },
+                            ]}
+                        />
+                        <Show when={installFailed() && error()}>
+                            <PaperQuote variant="red" icon="warning" title="Switch failed">
+                                {error()}
+                            </PaperQuote>
+                        </Show>
+                    </div>
                 </PaperFlex>
             </PaperModal>
 

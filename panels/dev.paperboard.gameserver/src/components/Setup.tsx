@@ -10,19 +10,15 @@ import {
     PaperCenteredInterface,
     PaperSelector,
     PaperSelectorItem,
-    PaperLoader,
-    PaperLoaderGroup,
     PaperModal,
     PaperLink,
     PaperQuote,
     useWizard,
     type LoaderStatus,
 } from "@paperboard-dev/paperui";
-import {
-    fileApi,
-    packageApi,
-    type PackageProgress,
-} from "@paperboard-dev/paperapi";
+import InstallLoaders from "./InstallLoaders";
+import { fileApi } from "@paperboard-dev/paperapi";
+import { ensureJavaRuntime } from "../lib/ensureJava";
 import {
     getSoftwareDownload,
     getRequiredJavaVersion,
@@ -92,33 +88,22 @@ function InstallStep(props: InstallStepProps) {
         }
 
         try {
-            const alreadyInstalled = await packageApi.isInstalled(javaPkg);
-            if (alreadyInstalled) {
-                setJavaDownloadPercent(100);
-                setJavaDownloadStatus("success");
-                setJavaExtractPercent(100);
-                setJavaExtractStatus("success");
-            } else {
-                await packageApi.download(javaPkg, (progress: PackageProgress) => {
-                    if (progress.stage === "downloading") {
-                        setJavaDownloadStatus("loading");
-                        setJavaDownloadPercent(progress.percent);
-                    } else if (progress.stage === "extracting") {
-                        setJavaDownloadStatus("success");
-                        setJavaDownloadPercent(100);
-                        setJavaExtractStatus("loading");
-                        setJavaExtractPercent(progress.percent);
-                    } else if (progress.stage === "completed") {
-                        setJavaDownloadStatus("success");
-                        setJavaExtractStatus("success");
-                        setJavaExtractPercent(100);
-                    }
-                });
-                setJavaDownloadStatus("success");
-                setJavaDownloadPercent(100);
-                setJavaExtractStatus("success");
-                setJavaExtractPercent(100);
-            }
+            await ensureJavaRuntime(javaPkg, {
+                onDownload: (percent) => {
+                    setJavaDownloadStatus("loading");
+                    setJavaDownloadPercent(percent);
+                },
+                onExtract: (percent) => {
+                    setJavaDownloadStatus("success");
+                    setJavaDownloadPercent(100);
+                    setJavaExtractStatus("loading");
+                    setJavaExtractPercent(percent);
+                },
+            });
+            setJavaDownloadStatus("success");
+            setJavaDownloadPercent(100);
+            setJavaExtractStatus("success");
+            setJavaExtractPercent(100);
         } catch (err) {
             console.error("[InstallStep] Java installation error:", err);
             setJavaExtractStatus("error");
@@ -239,28 +224,30 @@ function InstallStep(props: InstallStepProps) {
                         {declineNotice()}
                     </PaperQuote>
                 </Show>
-                <PaperLoaderGroup>
-                        <PaperLoader
-                            percent={javaDownloadPercent()}
-                            loaderStatus={javaDownloadStatus()}
-                            label="Downloading Java..."
-                        />
-                        <PaperLoader
-                            percent={javaExtractPercent()}
-                            loaderStatus={javaExtractStatus()}
-                            label="Installing Java..."
-                        />
-                        <PaperLoader
-                            percent={softwarePercent()}
-                            loaderStatus={softwareStatus()}
-                            label={`Downloading ${softwareName()}...`}
-                        />
-                        <PaperLoader
-                            percent={setupPercent()}
-                            loaderStatus={setupStatus()}
-                            label="Setting up server..."
-                        />
-                    </PaperLoaderGroup>
+                <InstallLoaders
+                    items={[
+                        {
+                            label: "Downloading Java...",
+                            percent: javaDownloadPercent,
+                            status: javaDownloadStatus,
+                        },
+                        {
+                            label: "Installing Java...",
+                            percent: javaExtractPercent,
+                            status: javaExtractStatus,
+                        },
+                        {
+                            label: `Downloading ${softwareName()}...`,
+                            percent: softwarePercent,
+                            status: softwareStatus,
+                        },
+                        {
+                            label: "Setting up server...",
+                            percent: setupPercent,
+                            status: setupStatus,
+                        },
+                    ]}
+                />
                 </PaperFlex>
             </PaperCenteredInterface>
             <PaperModal
