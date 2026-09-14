@@ -1,5 +1,6 @@
-import { serverBridge } from "./server";
+import { serverBridge, serverSoftware, serverVersion } from "./server";
 import { ACTION_IDS } from "../service/contract";
+import { levelTypeOptionsFor } from "./versionProfile";
 import type { PropertyField } from "./properties";
 import type { WorldInfo } from "../core/worlds";
 
@@ -21,14 +22,10 @@ export const WORLD_CREATE_FIELDS: PropertyField[] = [
         title: "World Type",
         description: "Terrain generator for the new world.",
         control: "select",
-        defaultValue: "minecraft\\:normal",
-        options: () => [
-            { value: "minecraft\\:normal", label: "Normal" },
-            { value: "minecraft\\:flat", label: "Superflat" },
-            { value: "minecraft\\:large_biomes", label: "Large Biomes" },
-            { value: "minecraft\\:amplified", label: "Amplified" },
-            { value: "minecraft\\:single_biome_surface", label: "Single Biome" },
-        ],
+        // preset ids differ by era (see versionProfile); serverVersion is
+        // unknown at module load, so the options resolve per render
+        defaultValue: "normal",
+        options: () => levelTypeOptionsFor(serverSoftware(), serverVersion()),
     },
     {
         key: "generate-structures",
@@ -64,6 +61,13 @@ export const WORLD_CREATE_FIELDS: PropertyField[] = [
 
 export { WORLD_NAME_PATTERN } from "../core/worlds";
 export type { WorldInfo } from "../core/worlds";
+
+// server.properties stores a preset id with an escaped colon
+// (`minecraft\:flat`); older builds can double-escape it. Match against the
+// bare id the select options use, so the label renders instead of the raw id.
+export function normalizeLevelType(value: string): string {
+    return value.replace(/\\+/g, "");
+}
 
 // world listing and deletion run in the service (service/worlds.ts owns
 // the pty + trash discipline with an explicit PANEL_ID). The direct

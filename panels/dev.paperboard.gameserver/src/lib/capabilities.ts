@@ -1,6 +1,7 @@
 import { createMemo } from "solid-js";
 import semver from "semver";
 import { serverVersion } from "./server";
+import { mcSatisfies } from "./versionProfile";
 
 // version-dependent facts, "since"/"until" bound each
 export const CAPABILITIES = {
@@ -38,32 +39,13 @@ const mcVersion = createMemo(() => {
     return v ? semver.coerce(v) : null;
 });
 
-function satisfiesConstraint(
-    constraint: { since?: string; until?: string } | undefined,
-    version: semver.SemVer | null,
-): boolean {
-    if (!constraint || (!constraint.since && !constraint.until)) return true;
-    if (!version) return false;
-
-    // normalize shorthand like "1.18" before semver comparison
-    const since = constraint.since ? semver.coerce(constraint.since) : null;
-    const until = constraint.until ? semver.coerce(constraint.until) : null;
-
-    if (since && !semver.gte(version, since)) return false;
-    if (until && !semver.lt(version, until)) return false;
-    return true;
-}
-
 export function supports(capability: CapabilityName): boolean {
-    return satisfiesConstraint(CAPABILITIES[capability], mcVersion());
+    return mcSatisfies(serverVersion(), CAPABILITIES[capability]);
 }
 
 // gate for schemas with version requirements outside the registry
 export function mcVersionAtLeast(since: string): boolean {
-    const version = mcVersion();
-    if (!version) return false;
-    const target = semver.coerce(since);
-    return target ? semver.gte(version, target) : false;
+    return mcSatisfies(serverVersion(), { since });
 }
 
 export function hasKnownMcVersion(): boolean {
