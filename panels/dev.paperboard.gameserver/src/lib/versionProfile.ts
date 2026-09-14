@@ -210,20 +210,19 @@ const CANONICAL_TO_LEGACY: Record<string, string> = (() => {
 //   release   "1.21.11", "26.1"        -> itself
 //   pre / rc  "1.21.5-pre1", "-rc1"    -> its base release
 //   snapshot  "25w35a"                 -> anchored release, else itself
-//   old_*     "b1.7.3", "a1.2.6"       -> "0.0.0" (pre-1.0)
+// Pre-1.0 builds are below the supported floor and are refused upstream, so
+// they classify as unknown rather than carrying special handling here.
 export type McVersionKind =
     | "release"
     | "snapshot"
     | "pre"
     | "rc"
-    | "old_beta"
-    | "old_alpha"
     | "unknown";
 
 export interface ClassifiedMcVersion {
     raw: string;
     kind: McVersionKind;
-    /** the release id the build behaves as; "0.0.0" for pre-1.0 builds */
+    /** the release id the build behaves as */
     base: string;
 }
 
@@ -232,8 +231,6 @@ const DROP_SNAPSHOT_RE = /^(\d+\.\d+(?:\.\d+)?)[-_]snapshot[-_]?\d+$/i;
 const PRE_RC_RE =
     /^(\d+\.\d+(?:\.\d+)?)[-_](pre(?:[-_]?release)?|rc)[-_]?\d*$/i;
 const RELEASE_RE = /^\d+\.\d+(?:\.\d+)?$/;
-const OLD_RE =
-    /^(?:[ab]\d+(?:\.\d+)*|rd[-_]?\d|inf[-_]?\d|pre[-_]?classic|classic|indev|infdev|alpha|beta)/i;
 
 // Weekly "YYwWWx" snapshots are frozen (the calendar drops now use
 // "<drop>-snapshot-N" / "<drop>-pre-N"), so this table is permanent. It is
@@ -247,25 +244,11 @@ const OLD_RE =
 //   25w35a  1.21.9  (cycle started 25w31a) — properties -> gamerules
 //   25w44a  1.21.11 (cycle started 25w41a) — gamerule namespaced rename
 // Regenerate with the manifest when this ever needs revisiting.
+//
+// Starts at the first weekly snapshot above Paperboard's supported floor
+// (1.12.2); anything older is refused by the picker and the install/start
+// paths, so those rows are omitted rather than carried as dead data.
 export const SNAPSHOT_RELEASE_ANCHORS: Record<string, string> = {
-    "13w16a": "1.5.2",
-    "13w17a": "1.6.1",
-    "13w36a": "1.6.4",
-    "13w38a": "1.7.2",
-    "13w47a": "1.7.3",
-    "14w02a": "1.7.5",
-    "14w08a": "1.7.6",
-    "14w11b": "1.7.10",
-    "14w20a": "1.8",
-    "15w14a": "1.8.4",
-    "15w31a": "1.8.9",
-    "15w49b": "1.9",
-    "16w14a": "1.9.3",
-    "16w20a": "1.10",
-    "16w32a": "1.11",
-    "16w50a": "1.11.1",
-    "17w06a": "1.12",
-    "17w31a": "1.12.1",
     "17w43a": "1.13",
     "18w30a": "1.13.1",
     "18w43a": "1.14",
@@ -337,13 +320,6 @@ export function classifyMcVersion(raw: string): ClassifiedMcVersion {
     if (RELEASE_RE.test(id)) {
         return { raw: id, kind: "release", base: id };
     }
-    if (OLD_RE.test(id)) {
-        return {
-            raw: id,
-            kind: /^a/i.test(id) ? "old_alpha" : "old_beta",
-            base: "0.0.0",
-        };
-    }
     return { raw: id, kind: "unknown", base: id };
 }
 
@@ -367,7 +343,7 @@ export function behaviorVersionOf(raw: string): string {
     return best?.release ?? classified.base;
 }
 
-// pure version comparison over releases, drops, snapshots and pre-1.0
+// pure version comparison over releases, drops and snapshots
 // builds; snapshots resolve through SNAPSHOT_RELEASE_ANCHORS first
 export function mcSatisfies(
     version: string | null | undefined,

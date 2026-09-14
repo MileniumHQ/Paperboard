@@ -31,13 +31,6 @@ describe("version comparison", () => {
         expect(classifyMcVersion("25w35a")).toMatchObject({ kind: "snapshot" });
     });
 
-    test("classifies pre-1.0 builds as older than everything", () => {
-        expect(classifyMcVersion("b1.7.3")).toMatchObject({ kind: "old_beta", base: "0.0.0" });
-        expect(classifyMcVersion("a1.2.6")).toMatchObject({ kind: "old_alpha", base: "0.0.0" });
-        expect(behaviorVersionOf("b1.7.3")).toBe("0.0.0");
-        expect(mcAtLeast("b1.7.3", "1.16")).toBe(false);
-    });
-
     test("pre-releases behave as their base release", () => {
         expect(behaviorVersionOf("1.21.5-pre1")).toBe("1.21.5");
         expect(resolveFacts("vanilla", "1.21.5-pre1").javaPackage).toBe("java-21");
@@ -61,8 +54,7 @@ describe("version comparison", () => {
     });
 
     test("manifest cycle table covers the weekly snapshot tail", () => {
-        expect(behaviorVersionOf("13w16a")).toBe("1.5.2");
-        expect(mcAtLeast("13w16a", "1.16")).toBe(false);
+        expect(behaviorVersionOf("17w43a")).toBe("1.13");
         expect(behaviorVersionOf("20w06a")).toBe("1.16");
         expect(behaviorVersionOf("21w37a")).toBe("1.18");
         expect(resolveVersionProfile("paper", "21w37a").mapMinBuildHeight).toBe(-64);
