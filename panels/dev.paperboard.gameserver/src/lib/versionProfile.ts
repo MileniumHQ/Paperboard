@@ -48,34 +48,32 @@ export interface VersionProfile {
 }
 
 // ─── capabilities ────────────────────────────────────────────────────
-// version-dependent facts, "since"/"until" bound each. Moved here so the
-// profile is the single source; capabilities.ts re-exports for the UI.
+// version-dependent facts, "since"/"until" bound each. Snapshot ids cite
+// minecraft.wiki's Server.properties history. Moved here so the profile is
+// the single source; capabilities.ts re-exports for the UI.
 export const CAPABILITIES = {
-    enableStatus: { since: "1.16" },
-    hideOnlinePlayers: { since: "1.18" },
-    rateLimit: { since: "1.16.2" },
-    acceptsTransfers: { since: "1.20.5" },
+    enableStatus: { since: "1.16" }, // 20w18a
+    hideOnlinePlayers: { since: "1.18" }, // 21w44a
+    rateLimit: { since: "1.16.2" }, // 20w28a
+    acceptsTransfers: { since: "1.20.5" }, // 24w03a
 
-    simulationDistance: { since: "1.18" },
-    pauseWhenEmpty: { since: "1.21.2" },
-    propertyPvp: { until: "1.21.9" },
-    propertyAllowNether: { until: "1.21.9" },
-    propertySpawnMonsters: { until: "1.21.9" },
-    propertyEnableCommandBlock: { until: "1.21.9" },
+    simulationDistance: { since: "1.18" }, // 21w38a
+    pauseWhenEmpty: { since: "1.21.2" }, // 24w33a
+    propertyPvp: { until: "1.21.9" }, // 25w35a
+    propertyAllowNether: { until: "1.21.9" }, // 25w35a
+    propertySpawnMonsters: { until: "1.21.9" }, // 25w35a
+    propertyEnableCommandBlock: { until: "1.21.9" }, // 25w35a
 
-    legacyLevelTypePresets: { until: "1.19" },
-    worldPresetLevelType: { since: "1.19" },
+    requireResourcePack: { since: "1.17" }, // 20w45a
+    resourcePackPrompt: { since: "1.17" }, // 21w15a
+    resourcePackId: { since: "1.20.3" }, // 1.20.3-pre1
 
-    requireResourcePack: { since: "1.17" },
-    resourcePackPrompt: { since: "1.17" },
-    resourcePackId: { since: "1.20.3" },
-
-    functionPermissionLevel: { since: "1.14.4" },
-    syncChunkWrites: { since: "1.16" },
-    enforceSecureProfile: { since: "1.19" },
-    logIps: { since: "1.20.2" },
-    bugReportLink: { since: "1.21" },
-    entityBroadcastRange: { since: "1.16" },
+    functionPermissionLevel: { since: "1.14.4" }, // 1.14.4-pre4
+    syncChunkWrites: { since: "1.16" }, // 20w14a
+    enforceSecureProfile: { since: "1.19" }, // 22w17a
+    logIps: { since: "1.20.2" }, // 23w31a
+    bugReportLink: { since: "1.21" }, // 24w21a
+    entityBroadcastRange: { since: "1.16" }, // 20w18a
 } as const;
 
 export type CapabilityName = keyof typeof CAPABILITIES;
@@ -99,7 +97,24 @@ const PRESET_LEVEL_TYPES: LevelTypeOption[] = [
     { value: "single_biome_surface", label: "Single Biome" },
 ];
 
-// 1.16–1.18 bare legacy values
+// Level-type value sets by era. The post-1.19 world-preset ids are
+// documented precisely; the pre-1.19 legacy names changed case across the
+// flattening (1.12 server.properties wrote DEFAULT, 1.13+ lowercase) and the
+// wiki lists the extras lowercase. The game has historically accepted the
+// legacy names, so treat the case as best-effort, not load-bearing.
+//
+// 1.13–1.15: lowercase bare values; buffet/default_1_1/customized still exist
+const LEGACY_MID_LEVEL_TYPES: LevelTypeOption[] = [
+    { value: "default", label: "Default" },
+    { value: "flat", label: "Superflat" },
+    { value: "largeBiomes", label: "Large Biomes" },
+    { value: "amplified", label: "Amplified" },
+    { value: "buffet", label: "Buffet" },
+    { value: "default_1_1", label: "Default 1.1" },
+    { value: "customized", label: "Customized" },
+];
+
+// 1.16–1.18: the three removed options are gone
 const LEGACY_LEVEL_TYPES: LevelTypeOption[] = [
     { value: "default", label: "Default" },
     { value: "flat", label: "Superflat" },
@@ -107,13 +122,12 @@ const LEGACY_LEVEL_TYPES: LevelTypeOption[] = [
     { value: "amplified", label: "Amplified" },
 ];
 
-// 1.15 and older uppercase values
+// 1.12 and older: uppercase values
 const ANCIENT_LEVEL_TYPES: LevelTypeOption[] = [
     { value: "DEFAULT", label: "Default" },
     { value: "FLAT", label: "Superflat" },
     { value: "LARGEBIOMES", label: "Large Biomes" },
     { value: "AMPLIFIED", label: "Amplified" },
-    { value: "BUFFET", label: "Buffet" },
     { value: "CUSTOMIZED", label: "Customized" },
 ];
 
@@ -124,6 +138,9 @@ const ANCIENT_LEVEL_TYPES: LevelTypeOption[] = [
 const GAMERULE_LEGACY_ALIASES: Record<string, string> = {
     announceAdvancements: "show_advancement_messages",
     commandBlocksEnabled: "command_blocks_work",
+    // 25w35a..1.21.9 dev builds called it enableCommandBlocks before the
+    // release renamed it to commandBlocksEnabled
+    enableCommandBlocks: "command_blocks_work",
     command_modification_block_limit: "max_block_modifications",
     commandBlockOutput: "command_block_output",
     disableElytraMovementCheck: "elytra_movement_check",
@@ -182,18 +199,180 @@ const CANONICAL_TO_LEGACY: Record<string, string> = (() => {
     return map;
 })();
 
-// pure version comparison over shorthand ("1.18", "26.1") and full
-// ("1.21.11") release strings; snapshots coerce to their base release
+// Minecraft version identifiers are not all semver. Classify before
+// comparing, then map to the release whose behaviour the build carries:
+//   release   "1.21.11", "26.1"        -> itself
+//   pre / rc  "1.21.5-pre1", "-rc1"    -> its base release
+//   snapshot  "25w35a"                 -> anchored release, else itself
+//   old_*     "b1.7.3", "a1.2.6"       -> "0.0.0" (pre-1.0)
+export type McVersionKind =
+    | "release"
+    | "snapshot"
+    | "pre"
+    | "rc"
+    | "old_beta"
+    | "old_alpha"
+    | "unknown";
+
+export interface ClassifiedMcVersion {
+    raw: string;
+    kind: McVersionKind;
+    /** the release id the build behaves as; "0.0.0" for pre-1.0 builds */
+    base: string;
+}
+
+const WEEKLY_SNAPSHOT_RE = /^(\d{2})w(\d{2})([a-z])$/i;
+const DROP_SNAPSHOT_RE = /^(\d+\.\d+(?:\.\d+)?)[-_]snapshot[-_]?\d+$/i;
+const PRE_RC_RE =
+    /^(\d+\.\d+(?:\.\d+)?)[-_](pre(?:[-_]?release)?|rc)[-_]?\d*$/i;
+const RELEASE_RE = /^\d+\.\d+(?:\.\d+)?$/;
+const OLD_RE =
+    /^(?:[ab]\d+(?:\.\d+)*|rd[-_]?\d|inf[-_]?\d|pre[-_]?classic|classic|indev|infdev|alpha|beta)/i;
+
+// Weekly "YYwWWx" snapshots are frozen (the calendar drops now use
+// "<drop>-snapshot-N" / "<drop>-pre-N"), so this table is permanent. It is
+// generated from Mojang's version manifest: each entry is the FIRST weekly
+// snapshot whose next release (by releaseTime) is that id, so one row covers
+// a whole dev cycle. A snapshot resolves to the latest row at or before it.
+//
+// Two rows are feature refinements rather than pure cycle starts, because a
+// behaviour we gate on changed mid-cycle and the earlier snapshots in that
+// cycle must keep the previous behaviour:
+//   25w35a  1.21.9  (cycle started 25w31a) — properties -> gamerules
+//   25w44a  1.21.11 (cycle started 25w41a) — gamerule namespaced rename
+// Regenerate with the manifest when this ever needs revisiting.
+export const SNAPSHOT_RELEASE_ANCHORS: Record<string, string> = {
+    "13w16a": "1.5.2",
+    "13w17a": "1.6.1",
+    "13w36a": "1.6.4",
+    "13w38a": "1.7.2",
+    "13w47a": "1.7.3",
+    "14w02a": "1.7.5",
+    "14w08a": "1.7.6",
+    "14w11b": "1.7.10",
+    "14w20a": "1.8",
+    "15w14a": "1.8.4",
+    "15w31a": "1.8.9",
+    "15w49b": "1.9",
+    "16w14a": "1.9.3",
+    "16w20a": "1.10",
+    "16w32a": "1.11",
+    "16w50a": "1.11.1",
+    "17w06a": "1.12",
+    "17w31a": "1.12.1",
+    "17w43a": "1.13",
+    "18w30a": "1.13.1",
+    "18w43a": "1.14",
+    "19w34a": "1.15",
+    "20w06a": "1.16",
+    "20w27a": "1.16.2",
+    "20w45a": "1.16.5",
+    "21w03a": "1.17",
+    "21w37a": "1.18",
+    "22w03a": "1.18.2",
+    "22w11a": "1.19",
+    "22w24a": "1.19.1",
+    "22w42a": "1.19.3",
+    "23w03a": "1.19.4",
+    "23w12a": "1.20",
+    "23w31a": "1.20.2",
+    "23w40a": "1.20.3",
+    "23w51a": "1.20.5",
+    "24w18a": "1.21",
+    "24w33a": "1.21.2",
+    "24w44a": "1.21.4",
+    "25w02a": "1.21.5",
+    "25w15a": "1.21.6",
+    "25w35a": "1.21.9",
+    "25w44a": "1.21.11",
+    "26w14a": "26.1.2",
+};
+
+interface WeeklyKey {
+    year: number;
+    week: number;
+    letter: string;
+}
+
+function weeklyKey(id: string): WeeklyKey | null {
+    const match = id.match(WEEKLY_SNAPSHOT_RE);
+    if (!match) return null;
+    return {
+        year: Number(match[1]),
+        week: Number(match[2]),
+        letter: match[3].toLowerCase(),
+    };
+}
+
+function compareWeekly(a: WeeklyKey, b: WeeklyKey): number {
+    if (a.year !== b.year) return a.year - b.year;
+    if (a.week !== b.week) return a.week - b.week;
+    return a.letter < b.letter ? -1 : a.letter > b.letter ? 1 : 0;
+}
+
+export function classifyMcVersion(raw: string): ClassifiedMcVersion {
+    const id = String(raw ?? "").trim();
+    if (WEEKLY_SNAPSHOT_RE.test(id)) {
+        return { raw: id, kind: "snapshot", base: id };
+    }
+    const drop = id.match(DROP_SNAPSHOT_RE);
+    if (drop) {
+        // "<drop>-snapshot-N": the base already carries the target release
+        return { raw: id, kind: "snapshot", base: drop[1] };
+    }
+    const preRc = id.match(PRE_RC_RE);
+    if (preRc) {
+        return {
+            raw: id,
+            kind: /rc/i.test(preRc[2]) ? "rc" : "pre",
+            base: preRc[1],
+        };
+    }
+    if (RELEASE_RE.test(id)) {
+        return { raw: id, kind: "release", base: id };
+    }
+    if (OLD_RE.test(id)) {
+        return {
+            raw: id,
+            kind: /^a/i.test(id) ? "old_alpha" : "old_beta",
+            base: "0.0.0",
+        };
+    }
+    return { raw: id, kind: "unknown", base: id };
+}
+
+/** the release id whose behaviour this build carries */
+export function behaviorVersionOf(raw: string): string {
+    const classified = classifyMcVersion(raw);
+    if (classified.kind !== "snapshot") return classified.base;
+    const key = weeklyKey(classified.raw);
+    // drop snapshots and pre-releases already carry their release in `base`
+    if (!key) return classified.base;
+
+    // weekly snapshots: take the latest cycle start at or before this one
+    let best: { key: WeeklyKey; release: string } | null = null;
+    for (const [anchorId, release] of Object.entries(SNAPSHOT_RELEASE_ANCHORS)) {
+        const anchorKey = weeklyKey(anchorId);
+        if (!anchorKey || compareWeekly(anchorKey, key) > 0) continue;
+        if (!best || compareWeekly(anchorKey, best.key) > 0) {
+            best = { key: anchorKey, release };
+        }
+    }
+    return best?.release ?? classified.base;
+}
+
+// pure version comparison over releases, drops, snapshots and pre-1.0
+// builds; snapshots resolve through SNAPSHOT_RELEASE_ANCHORS first
 export function mcSatisfies(
     version: string | null | undefined,
     range: { since?: string; until?: string },
 ): boolean {
     if (!range.since && !range.until) return true;
     if (!version) return false;
-    const v = semver.coerce(version);
+    const v = semver.coerce(behaviorVersionOf(version));
     if (!v) return false;
-    const since = range.since ? semver.coerce(range.since) : null;
-    const until = range.until ? semver.coerce(range.until) : null;
+    const since = range.since ? semver.coerce(behaviorVersionOf(range.since)) : null;
+    const until = range.until ? semver.coerce(behaviorVersionOf(range.until)) : null;
     if (since && !semver.gte(v, since)) return false;
     if (until && !semver.lt(v, until)) return false;
     return true;
@@ -357,12 +536,16 @@ const BASELINE: ResolvedFacts = {
     levelTypeOptions: ANCIENT_LEVEL_TYPES,
 };
 
-// Ascending by `at`. Add a row to change behaviour from that version until
-// the next row that names the same field. Gaps inherit — not every version
-// needs an entry.
+// Ascending by `at`. Snapshot ids cite minecraft.wiki's Server.properties
+// history table and Java Edition release notes.
 export const VERSION_OVERRIDES: readonly VersionOverride[] = [
+    // 1.13: level-type values lowercased (flattening)
+    { at: "1.13", patch: { levelTypeOptions: LEGACY_MID_LEVEL_TYPES } },
+    // 1.16: buffet/default_1_1/customized removed from level-type
     { at: "1.16", patch: { levelTypeOptions: LEGACY_LEVEL_TYPES } },
+    // Java 16 from 1.17 (21w19a); 1.16.5 stays Java 8
     { at: "1.17", patch: { javaPackage: "java-16" } },
+    // 1.18 (21w37a): build range -64..320, modern chunk palette, Java 17
     {
         at: "1.18",
         patch: {
@@ -371,6 +554,7 @@ export const VERSION_OVERRIDES: readonly VersionOverride[] = [
             mapPalette: "modern",
         },
     },
+    // 1.19 (22w11a): level-type becomes world-preset ids
     {
         at: "1.19",
         patch: {
@@ -378,12 +562,17 @@ export const VERSION_OVERRIDES: readonly VersionOverride[] = [
             supportsWorldPresetLevelType: true,
         },
     },
+    // Java 21 from 1.20.5 (24w14a)
     { at: "1.20.5", patch: { javaPackage: "java-21" } },
+    // 1.21.9 (25w35a): pvp/allow-nether/spawn-monsters/enable-command-block
+    // become gamerules
     {
         at: "1.21.9",
         patch: { propertiesMovedToGamerules: PROPERTIES_MOVED_TO_GAMERULES },
     },
+    // 1.21.11 (25w44a): gamerules become namespaced snake_case
     { at: "1.21.11", patch: { gameruleNaming: "namespaced" } },
+    // 26.1 (26.1-snapshot-6): dimensions/ + players/ storage, Java 25
     {
         at: "26.1",
         patch: {
@@ -442,7 +631,7 @@ export function resolveVersionProfile(
 }
 
 export function javaPackageFor(version: string): string | null {
-    if (!semver.coerce(version)) return null;
+    if (!semver.coerce(behaviorVersionOf(version))) return null;
     return resolveFacts("vanilla", version).javaPackage;
 }
 
