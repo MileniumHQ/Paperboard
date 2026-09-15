@@ -22,6 +22,9 @@ import {
     PaperSettingList,
     PaperTable,
     PaperText,
+    getVarCss,
+    PaperCard,
+    PaperAvatar,
 } from "@paperboard-dev/paperui";
 import { FieldControl } from "./PropertyFieldControl";
 import { readServerProperties, writeServerProperties } from "../lib/properties";
@@ -46,22 +49,16 @@ function dimensionsLabel(info: WorldInfo): string {
 
 function WorldTile(props: { active: boolean }) {
     return (
-        <span
+        <PaperAvatar
+            shape="square"
+            size="large"
+            fallbackIcon="public"
             style={{
-                display: "inline-flex",
-                "align-items": "center",
-                "justify-content": "center",
-                width: "4.5rem",
-                height: "4.5rem",
-                "border-radius": "var(--paper-border-radius)",
                 background: props.active
-                    ? "color-mix(in srgb, var(--paper-front-green) 16%, transparent)"
-                    : "color-mix(in srgb, var(--paper-anti-background) 8%, transparent)",
-                "font-size": "2.25rem",
+                    ? `color-mix(in srgb, ${getVarCss("success")} 16%, transparent)`
+                    : `color-mix(in srgb, ${getVarCss("contrast")} 8%, transparent)`,
             }}
-        >
-            <PaperIcon>public</PaperIcon>
-        </span>
+        />
     );
 }
 
@@ -190,34 +187,30 @@ export default function Worlds() {
     };
 
     return (
-        <PaperFlex direction="column" fullWidth fullHeight style={{ "min-height": 0 }}>
-            <div class="gs-scroll">
-                <div class="gs-page">
+        <>
                     <PaperPageHeader icon="public" title="Worlds">
-                        <PaperEffect>
+                        <PaperEffect variant="success">
                             <PaperButton
-                                compact
-                                variant="green"
+                                variant="success"
                                 disabled={online()}
-                                onClick={() => setCreateOpen(true)}
-                            >
+                                onClick={() => setCreateOpen(true)}>
                                 <PaperIcon>add</PaperIcon>
                                 New World
                             </PaperButton>
                         </PaperEffect>
                     </PaperPageHeader>
                     <Show when={online()}>
-                        <PaperQuote variant="yellow" icon="warning" title="Server running">
+                        <PaperQuote variant="warning" icon="warning" title="Server running">
                             Stop the server to switch, create, or delete worlds.
                         </PaperQuote>
                     </Show>
                     <Show when={actionError()}>
-                        <PaperQuote variant="red" icon="warning" title="Error">
+                        <PaperQuote variant="danger" icon="warning" title="Error">
                             {actionError()}
                         </PaperQuote>
                     </Show>
                     <Show when={listError()}>
-                        <PaperQuote variant="red" icon="warning" title="Error">
+                        <PaperQuote variant="danger" icon="warning" title="Error">
                             {listError()}
                         </PaperQuote>
                     </Show>
@@ -225,30 +218,30 @@ export default function Worlds() {
                     <Show
                         when={worlds() !== null}
                         fallback={
-                            <div class="gs-surface">
+                            <PaperCard>
                                 <PaperFlex padding="full" center>
-                                    <PaperText size={3} color="light-text">
+                                    <PaperText size={3} color="text-subtle">
                                         Loading worlds...
                                     </PaperText>
                                 </PaperFlex>
-                            </div>
+                            </PaperCard>
                         }
                     >
                         <Show
                             when={(worlds() ?? []).length > 0}
                             fallback={
-                                <div class="gs-surface">
+                                <PaperCard>
                                     <PaperFlex padding="full" center>
-                                        <PaperText size={3} color="light-text">
+                                        <PaperText size={3} color="text-subtle">
                                             No worlds on disk yet. Create one to get started.
                                         </PaperText>
                                     </PaperFlex>
-                                </div>
+                                </PaperCard>
                             }
                         >
-                            <div class="gs-surface">
+                            <PaperCard>
                                 <PaperFlex padding="full">
-                                    <PaperMediaCardGroup minCardWidth="15rem">
+                                    <PaperMediaCardGroup minCardWidth={getVarCss("size-card-min")}>
                                         <For each={worlds() ?? []}>
                                             {(world) => (
                                                 <PaperMediaCard
@@ -257,7 +250,7 @@ export default function Worlds() {
                                                     subtitle={dimensionsLabel(world)}
                                                     badge={
                                                         world.active ? (
-                                                            <PaperBadge variant="green">
+                                                            <PaperBadge variant="success">
                                                                 Active
                                                             </PaperBadge>
                                                         ) : undefined
@@ -268,11 +261,9 @@ export default function Worlds() {
                                         </For>
                                     </PaperMediaCardGroup>
                                 </PaperFlex>
-                            </div>
+                            </PaperCard>
                         </Show>
                     </Show>
-                </div>
-            </div>
 
             <PaperModal
                 open={detail() !== null}
@@ -281,25 +272,21 @@ export default function Worlds() {
                 size="medium"
                 footer={
                     <PaperFlex direction="row" justify="flex-end" gap="half" fullWidth>
-                        <PaperButton compact onClick={() => setSelected(null)}>
+                        <PaperButton onClick={() => setSelected(null)}>
                             Close
                         </PaperButton>
                         <PaperButton
-                            compact
-                            variant="red"
+                            variant="danger"
                             disabled={online() || mutating()}
-                            onClick={() => setDeleteConfirmOpen(true)}
-                        >
+                            onClick={() => setDeleteConfirmOpen(true)}>
                             <PaperIcon>delete</PaperIcon>
                             Delete
                         </PaperButton>
                         <Show when={!(detail()?.active ?? false)}>
                             <PaperButton
-                                compact
-                                variant="green"
+                                variant="success"
                                 disabled={online() || mutating()}
-                                onClick={() => void confirmSwitch()}
-                            >
+                                onClick={() => void confirmSwitch()}>
                                 Switch to this world
                             </PaperButton>
                         </Show>
@@ -315,12 +302,12 @@ export default function Worlds() {
                                     <Show
                                         when={world.active}
                                         fallback={
-                                            <PaperText size={3} color="light-text">
+                                            <PaperText size={3} color="text-subtle">
                                                 Inactive. Switching takes effect after a restart.
                                             </PaperText>
                                         }
                                     >
-                                        <PaperBadge variant="green">Active world</PaperBadge>
+                                        <PaperBadge variant="success">Active world</PaperBadge>
                                     </Show>
                                     <PaperText size={3}>{dimensionsLabel(world)}</PaperText>
                                 </PaperFlex>
@@ -357,15 +344,13 @@ export default function Worlds() {
                 size="medium"
                 footer={
                     <PaperFlex direction="row" justify="flex-end" gap="half" fullWidth>
-                        <PaperButton compact onClick={() => setCreateOpen(false)}>
+                        <PaperButton onClick={() => setCreateOpen(false)}>
                             Cancel
                         </PaperButton>
                         <PaperButton
-                            compact
-                            variant="green"
+                            variant="success"
                             disabled={!nameValid() || mutating()}
-                            onClick={() => void submitCreate()}
-                        >
+                            onClick={() => void submitCreate()}>
                             Create
                         </PaperButton>
                     </PaperFlex>
@@ -377,16 +362,16 @@ export default function Worlds() {
                             fullWidth
                             placeholder="World name"
                             value={newName()}
+                            invalid={newName().trim() !== "" && !nameValid()}
                             onInput={(e) => setNewName(e.currentTarget.value)}
                         />
                         <Show when={newName() && !nameValid()}>
-                            <PaperText size={2} color="light-text">
+                            <PaperText size={2} color="text-subtle">
                                 Letters, numbers, _ and - only, starting with a letter or number.
                             </PaperText>
                         </Show>
                     </PaperFlex>
 
-                    <div class="gs-surface">
                         <PaperSettingList autoHeight>
                             <For each={WORLD_CREATE_FIELDS}>
                                 {(field) => (
@@ -403,7 +388,6 @@ export default function Worlds() {
                                 )}
                             </For>
                         </PaperSettingList>
-                    </div>
                 </PaperFlex>
             </PaperModal>
 
@@ -414,10 +398,10 @@ export default function Worlds() {
                 size="small"
                 footer={
                     <PaperFlex direction="row" justify="flex-end" gap="half" fullWidth>
-                        <PaperButton compact onClick={() => setDeleteConfirmOpen(false)}>
+                        <PaperButton onClick={() => setDeleteConfirmOpen(false)}>
                             Cancel
                         </PaperButton>
-                        <PaperButton compact variant="red" onClick={() => void confirmDelete()}>
+                        <PaperButton variant="danger" onClick={() => void confirmDelete()}>
                             Delete
                         </PaperButton>
                     </PaperFlex>
@@ -435,6 +419,6 @@ export default function Worlds() {
                     </Show>
                 </PaperText>
             </PaperModal>
-        </PaperFlex>
+        </>
     );
 }

@@ -1,6 +1,6 @@
 import { createEffect, createSignal, onMount, Show } from "solid-js";
 import {
-    PaperFlex,
+    PaperPanel,
     PaperMenu,
     PaperMenuItem,
     PaperInterfaceGroup,
@@ -23,7 +23,7 @@ import Advanced from "./components/Advanced";
 import Logs from "./components/Logs";
 import Versions from "./components/Versions";
 import "@paperboard-dev/paperui/style.css";
-import "./style.css";
+import "@paperboard-dev/paperui/panel.css";
 
 export default function App() {
     const [configured, setConfigured] = createSignal<boolean | null>(null);
@@ -76,7 +76,7 @@ export default function App() {
                 when={configured()}
                 fallback={<Setup onComplete={() => setConfigured(true)} />}
             >
-                <PaperFlex direction="row" fullWidth fullHeight>
+                <PaperPanel>
                     <PaperMenu
                         name="serverMenu"
                         spacing="half"
@@ -126,14 +126,11 @@ export default function App() {
                         </PaperMenuItem>
                     </PaperMenu>
 
-                    <PaperInterfaceGroup
-                        value={activeTab()}
-                        style={{ flex: 1, height: "100%", "min-height": 0, overflow: "auto" }}
-                    >
-                        <PaperInterfaceItem value="overview">
+                    <PaperInterfaceGroup value={activeTab()}>
+                        <PaperInterfaceItem value="overview" variant="full">
                             <Overview />
                         </PaperInterfaceItem>
-                        <PaperInterfaceItem value="chat">
+                        <PaperInterfaceItem value="chat" variant="full">
                             <Chat />
                         </PaperInterfaceItem>
                         <PaperInterfaceItem value="options">
@@ -143,7 +140,7 @@ export default function App() {
                             <GameRules />
                         </PaperInterfaceItem>
                         <Show when={showMap()}>
-                            <PaperInterfaceItem value="map">
+                            <PaperInterfaceItem value="map" variant="full">
                                 <MapView />
                             </PaperInterfaceItem>
                         </Show>
@@ -177,7 +174,7 @@ export default function App() {
                             <Advanced />
                         </PaperInterfaceItem>
                     </PaperInterfaceGroup>
-                </PaperFlex>
+                </PaperPanel>
             </Show>
         </Show>
     );

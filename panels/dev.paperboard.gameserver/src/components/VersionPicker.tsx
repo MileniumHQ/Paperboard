@@ -1,7 +1,7 @@
 import { createEffect, createSignal, For, Show } from "solid-js";
 import {
     PaperCheckbox,
-    PaperContainer,
+    PaperCard,
     PaperFlex,
     PaperInput,
     PaperList,
@@ -78,11 +78,8 @@ export default function VersionPicker(props: {
             gap="full"
             align="stretch"
             fullWidth
-            style={
-                props.fill
-                    ? { flex: 1, "min-height": 0 }
-                    : { height: "18rem", "min-height": 0 }
-            }
+            flex={props.fill}
+            minHeight={props.fill ? 0 : getVarCss("size-panel-height-small")}
         >
             <PaperFlex
                 direction="column"
@@ -98,17 +95,17 @@ export default function VersionPicker(props: {
                     onInput={(e) => setSearchQuery(e.currentTarget.value)}
                 />
 
-                <PaperQuote variant="yellow" icon="info" title="Compatibility">
+                <PaperQuote variant="warning" icon="info" title="Compatibility">
                     Paperboard works best on the latest Minecraft version. Full
                     feature support for older versions may vary.
                 </PaperQuote>
 
-                <PaperContainer style={{ flex: 1, "min-height": 0, "overflow-y": "auto" }}>
+                <PaperCard grow minHeight={0} scrollable="y">
                     <Show
                         when={!loading()}
                         fallback={
                             <PaperFlex padding="full" center>
-                                <PaperText preset="body" color={getVarCss("light-text")}>
+                                <PaperText preset="body" color={getVarCss("text-subtle")}>
                                     Loading versions...
                                 </PaperText>
                             </PaperFlex>
@@ -118,7 +115,7 @@ export default function VersionPicker(props: {
                             when={filteredVersions().length > 0}
                             fallback={
                                 <PaperFlex padding="full" center>
-                                    <PaperText preset="body" color={getVarCss("light-text")}>
+                                    <PaperText preset="body" color={getVarCss("text-subtle")}>
                                         No versions matching your filters.
                                     </PaperText>
                                 </PaperFlex>
@@ -128,12 +125,9 @@ export default function VersionPicker(props: {
                                 name="minecraftVersion"
                                 value={props.selectedVersion}
                                 onValueChange={(val) => props.onSelectVersion(String(val))}
-                                style={{
-                                    width: "100%",
-                                    height: "auto",
-                                    border: "none",
-                                    background: "transparent",
-                                }}
+                                fullWidth
+                                borderless
+                                style={{ height: "auto", background: "transparent" }}
                             >
                                 <For each={filteredVersions()}>
                                     {(item) => (
@@ -152,18 +146,10 @@ export default function VersionPicker(props: {
                             </PaperList>
                         </Show>
                     </Show>
-                </PaperContainer>
+                </PaperCard>
             </PaperFlex>
 
-            <div
-                style={{
-                    "flex-shrink": 0,
-                    display: "flex",
-                    "flex-direction": "column",
-                    "min-height": 0,
-                }}
-            >
-                <PaperContainer style={{ height: "100%", "overflow-y": "auto" }}>
+            <PaperCard shrink={false} scrollable="y">
                     <PaperFlex direction="column" gap="full" padding="full">
                         <PaperText preset="title">Version Types</PaperText>
                         <PaperFlex direction="column" gap="threefourths">
@@ -180,8 +166,7 @@ export default function VersionPicker(props: {
                             />
                         </PaperFlex>
                     </PaperFlex>
-                </PaperContainer>
-            </div>
+            </PaperCard>
         </PaperFlex>
     );
 }

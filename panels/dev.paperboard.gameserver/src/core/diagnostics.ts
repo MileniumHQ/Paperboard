@@ -4,7 +4,7 @@ import { trashRemovePathsWith, runPtyCommandWith, type TrashRemoveDeps } from ".
 
 export interface ServerIssueAction {
     label: string;
-    variant?: "red" | "yellow" | "brand" | "blue";
+    variant?: "danger" | "warning" | "brand" | "primary";
     icon?: string;
     actionKey?: string;
     action?: () => void | Promise<void>;
@@ -14,7 +14,7 @@ export interface ServerIssue {
     id: string;
     title: string;
     description: string;
-    variant?: "red" | "yellow" | "brand";
+    variant?: "danger" | "warning" | "brand";
     actions: ServerIssueAction[];
 }
 
@@ -30,11 +30,11 @@ export function detectServerIssue(
             id: "port-conflict",
             title: "Port Conflict Detected",
             description: `A process is already using port ${serverPort}. You can kill the conflicting process or change ports in Options.`,
-            variant: "red",
+            variant: "danger",
             actions: [
                 {
                     label: "Kill Process & Retry",
-                    variant: "red",
+                    variant: "danger",
                     icon: "skull",
                     actionKey: "killPortAndRetry",
                 },
@@ -47,11 +47,11 @@ export function detectServerIssue(
             title: "World Already Locked",
             description:
                 "Another Minecraft server instance is already running this world. Kill it to free the world.",
-            variant: "red",
+            variant: "danger",
             actions: [
                 {
                     label: "Kill Old Instance & Start",
-                    variant: "red",
+                    variant: "danger",
                     icon: "skull",
                     actionKey: "killPortAndRetry",
                 },

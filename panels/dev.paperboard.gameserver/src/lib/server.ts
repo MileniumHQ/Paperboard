@@ -167,13 +167,13 @@ export function getStatusBadge(status: ServerStatus): {
 } {
     switch (status) {
         case "online":
-            return { label: "Online", variant: "green" };
+            return { label: "Online", variant: "success" };
         case "starting":
-            return { label: "Starting...", variant: "yellow" };
+            return { label: "Starting...", variant: "warning" };
         case "stopping":
-            return { label: "Stopping...", variant: "red" };
+            return { label: "Stopping...", variant: "danger" };
         case "restarting":
-            return { label: "Restarting...", variant: "yellow" };
+            return { label: "Restarting...", variant: "warning" };
         case "offline":
         default:
             return { label: "Offline", variant: "monochrome" };

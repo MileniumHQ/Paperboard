@@ -220,7 +220,7 @@ function InstallStep(props: InstallStepProps) {
         <PaperCenteredInterface>
             <PaperFlex direction="column" gap="full" center fullWidth>
                 <Show when={declineNotice()}>
-                    <PaperQuote variant="yellow" icon="info" title="Setup cancelled">
+                    <PaperQuote variant="warning" icon="info" title="Setup cancelled">
                         {declineNotice()}
                     </PaperQuote>
                 </Show>
@@ -256,10 +256,10 @@ function InstallStep(props: InstallStepProps) {
                 title="Minecraft End User License Agreement"
                 footer={
                     <PaperFlex direction="row" justify="flex-end" gap="half" fullWidth>
-                        <PaperButton onClick={handleDeclineEula} compact variant="text">
+                        <PaperButton onClick={handleDeclineEula} variant="text">
                             Decline
                         </PaperButton>
-                        <PaperButton onClick={handleAgreeEula} compact>
+                        <PaperButton onClick={handleAgreeEula}>
                             Agree & Continue
                         </PaperButton>
                     </PaperFlex>
@@ -311,7 +311,7 @@ export default function Setup(props: SetupProps) {
             showProgress={false}
             hideBack={true}
             finishLabel="Finish Setup"
-            finishVariant="green"
+            finishVariant="success"
             onComplete={handleFinishSetup}
         >
             <PaperWizardStep index={0}>

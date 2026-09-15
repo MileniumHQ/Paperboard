@@ -1,12 +1,13 @@
 import { createSignal, onMount, Show } from "solid-js";
 import {
     PaperFlex,
-    PaperContainer,
     PaperText,
     PaperButton,
     PaperIcon,
     PaperSeparator,
     PaperConsole,
+    PaperPage,
+    PaperCard,
     PaperBadge,
     PaperEffect,
     PaperQuote,
@@ -30,7 +31,6 @@ import {
 } from "../lib/server";
 import { SOFTWARE_NAMES } from "../lib/software";
 import ServerIssueModal from "./ServerIssueModal";
-import "../style.css";
 
 export default function Overview() {
     const [copied, setCopied] = createSignal(false);
@@ -64,8 +64,8 @@ export default function Overview() {
     const badge = () => getStatusBadge(serverStatus());
 
     return (
-        <PaperFlex fullHeight fullWidth padding="double" gap="threefourths">
-            <PaperContainer style={{ "flex-shrink": 0 }}>
+        <PaperPage fullWidth fullHeight gap="full">
+            <PaperCard shrink={false}>
                 <PaperFlex fullWidth padding="full">
                     <PaperFlex direction="row" justify="space-between" align="center">
                         <PaperFlex gap="onefourth">
@@ -73,36 +73,34 @@ export default function Overview() {
                                 <PaperText weight={700} size={8}>
                                     {localIp()}:{serverPort()}
                                 </PaperText>
-                                <PaperButton
+                                <PaperButton size="tiny"
                                     icon
-                                    tiny
                                     onClick={handleCopyAddress}
-                                    title={copied() ? "Copied!" : "Copy address"}
-                                >
+                                    title={copied() ? "Copied!" : "Copy address"}>
                                     {copied() ? "check" : "content_copy"}
                                 </PaperButton>
                                 <PaperBadge variant={badge().variant}>
                                     {badge().label}
                                 </PaperBadge>
                             </PaperFlex>
-                            <PaperText weight={400} size={4} color="light-text">
+                            <PaperText weight={400} size={4} color="text-subtle">
                                 {serverMotd()}
                             </PaperText>
                         </PaperFlex>
                     </PaperFlex>
                 </PaperFlex>
-            </PaperContainer>
+            </PaperCard>
 
             <PaperFlex
                 justify="space-between"
                 direction="row"
                 align="center"
-                style={{ "flex-shrink": 0 }}
+                shrink={false}
             >
                 <PaperFlex gap="half" direction="row" align="center">
                     <Show when={serverStatus() === "offline"}>
                         <PaperEffect>
-                            <PaperButton compact onClick={startServer}>
+                            <PaperButton onClick={startServer}>
                                 <PaperIcon>power</PaperIcon>
                                 Start
                             </PaperButton>
@@ -111,25 +109,23 @@ export default function Overview() {
 
                     <Show when={serverStatus() !== "offline"}>
                         <PaperButton
-                            variant="red"
-                            compact
+                            variant="danger"
                             onClick={stopServer}
-                            disabled={serverStatus() === "stopping"}
-                        >
+                            disabled={serverStatus() === "stopping"}>
                             <PaperIcon>stop</PaperIcon>
                             Stop
                         </PaperButton>
                     </Show>
 
                     <Show when={serverStatus() === "online"}>
-                        <PaperButton variant="yellow" compact onClick={restartServer}>
+                        <PaperButton variant="warning" onClick={restartServer}>
                             <PaperIcon>restart_alt</PaperIcon>
                             Restart
                         </PaperButton>
                     </Show>
                 </PaperFlex>
 
-                <PaperFlex direction="row" align="center" gap="onefourth" style={{ height: "fit-content" }}>
+                <PaperFlex direction="row" align="center" gap="onefourth">
                     <PaperBadge>{serverVersion()}</PaperBadge>
                     <PaperBadge>
                         {SOFTWARE_NAMES[serverSoftware()] || serverSoftware()}
@@ -138,27 +134,23 @@ export default function Overview() {
             </PaperFlex>
 
             <Show when={serverActionError()}>
-                <PaperQuote variant="red" icon="warning" title="Server action failed">
+                <PaperQuote variant="danger" icon="warning" title="Server action failed">
                     {serverActionError()}
                 </PaperQuote>
             </Show>
 
             <PaperSeparator />
 
-            <PaperFlex fullWidth style={{ flex: 1, "min-height": 0 }}>
-                <PaperContainer style={{ flex: 1, height: "100%", "min-height": 0 }}>
-                    <PaperFlex padding="full" fullHeight style={{ "min-height": 0 }}>
-                        <PaperConsole
-                            entries={serverEntries()}
-                            onCommand={sendServerCommand}
-                            placeholder="Enter command..."
-                            prompt="chevron_right"
-                        />
-                    </PaperFlex>
-                </PaperContainer>
-            </PaperFlex>
+            <PaperCard grow minHeight={0} padding="full">
+                <PaperConsole
+                    entries={serverEntries()}
+                    onCommand={sendServerCommand}
+                    placeholder="Enter command..."
+                    prompt="chevron_right"
+                />
+            </PaperCard>
 
             <ServerIssueModal />
-        </PaperFlex>
+        </PaperPage>
     );
 }

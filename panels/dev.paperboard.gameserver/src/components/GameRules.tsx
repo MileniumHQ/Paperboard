@@ -8,6 +8,7 @@ import {
     PaperSettingList,
     PaperText,
     PaperToggle,
+    PaperCard,
 } from "@paperboard-dev/paperui";
 import { serverStatus, serverBridge, gamerules } from "../lib/server";
 import { ACTION_IDS } from "../service/contract";
@@ -85,11 +86,9 @@ export default function GameRules() {
     };
 
     return (
-        <PaperFlex direction="column" fullWidth fullHeight style={{ "min-height": 0 }}>
-            <div class="gs-scroll">
-                <div class="gs-page">
+        <>
                     <PaperPageHeader icon="list_alt_check" title="Game Rules" />
-                    <div class="gs-surface">
+                    <PaperCard>
                         <PaperFlex padding="full">
                             <PaperInput
                                 fullWidth
@@ -99,24 +98,23 @@ export default function GameRules() {
                                 onInput={(e) => setSearch(e.currentTarget.value)}
                             />
                         </PaperFlex>
-                    </div>
-                    <div class="gs-surface">
+                    </PaperCard>
                         <PaperSettingList autoHeight>
                             <PaperFlex direction="column" gap="half" padding="full">
                                 <Show
                                     when={isOnline()}
                                     fallback={
-                                        <PaperQuote variant="yellow" icon="info" title="Server offline">
+                                        <PaperQuote variant="warning" icon="info" title="Server offline">
                                             Edits are saved and applied the next time the server starts. Values
                                             load live once it is online.
                                         </PaperQuote>
                                     }
                                 >
-                                    <PaperText size={2} color="light-text">
+                                    <PaperText size={2} color="text-subtle">
                                         Values are read live from the running server.
                                     </PaperText>
                                 </Show>
-                                <PaperText size={2} color="light-text">
+                                <PaperText size={2} color="text-subtle">
                                     Descriptions provided by{" "}
                                     <PaperLink href={WIKI_URL} target="_blank">Minecraft Wiki</PaperLink>.
                                 </PaperText>
@@ -136,9 +134,6 @@ export default function GameRules() {
                                 )}
                             </For>
                         </PaperSettingList>
-                    </div>
-                </div>
-            </div>
-        </PaperFlex>
+        </>
     );
 }

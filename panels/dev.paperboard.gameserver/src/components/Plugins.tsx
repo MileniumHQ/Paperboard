@@ -8,6 +8,7 @@ import {
     type JSX,
 } from "solid-js";
 import {
+    PaperAvatar,
     PaperBadge,
     PaperButton,
     PaperCheckbox,
@@ -23,7 +24,10 @@ import {
     PaperSelectMenu,
     PaperSelectMenuItem,
     PaperTable,
+    PaperProse,
     PaperText,
+    getVarCss,
+    PaperCard,
 } from "@paperboard-dev/paperui";
 import DOMPurify from "dompurify";
 import { marked } from "marked";
@@ -102,21 +106,12 @@ interface DetailTarget {
 
 function ProjectIcon(props: { iconUrl?: string; glyph?: string }): JSX.Element {
     return (
-        <Show
-            when={props.iconUrl}
-            fallback={
-                <span style={{ "font-size": "3rem" }}>
-                    {props.glyph ?? "extension"}
-                </span>
-            }
-        >
-            <img
-                src={props.iconUrl}
-                alt=""
-                class="gs-plugin-icon"
-                style={{ "border-radius": "var(--paper-border-radius)" }}
-            />
-        </Show>
+        <PaperAvatar
+            src={props.iconUrl}
+            shape="square"
+            size="large"
+            fallbackIcon={props.glyph ?? "extension"}
+        />
     );
 }
 
@@ -431,29 +426,25 @@ export default function Plugins(props: { updateRequest?: number }) {
     };
 
     const renderCardIcon = (iconUrl?: string): JSX.Element => (
-        <img src={iconUrl} alt="" class="gs-plugin-icon" />
+        <PaperAvatar src={iconUrl} shape="square" size="large" fallbackIcon="extension" />
     );
 
     return (
-        <PaperFlex direction="column" fullWidth fullHeight style={{ "min-height": 0 }}>
-            <div class="gs-scroll">
-                <div class="gs-page">
+        <>
                     <PaperPageHeader
                         icon="extension"
                         title={kindLabel() === "mod" ? "Mods" : "Plugins"}
                     >
-                        <PaperEffect variant="blue">
+                        <PaperEffect variant="primary">
                             <PaperButton
-                                compact
                                 disabled={updating()}
-                                onClick={() => void runUpdateCheck()}
-                            >
+                                onClick={() => void runUpdateCheck()}>
                                 <PaperIcon>sync</PaperIcon>
                                 {updating() ? "Updating…" : "Update plugins"}
                             </PaperButton>
                         </PaperEffect>
                     </PaperPageHeader>
-                    <div class="gs-surface">
+                    <PaperCard>
                         <PaperFlex direction="column" gap="half" padding="full">
                             <PaperInput
                                 fullWidth
@@ -465,36 +456,36 @@ export default function Plugins(props: { updateRequest?: number }) {
                                     if (e.key === "Enter") void runSearch();
                                 }}
                             />
-                            <PaperText size={2} color="light-text">
+                            <PaperText size={2} color="text-subtle">
                                 Projects provided by{" "}
                                 <PaperLink href="https://modrinth.com" target="_blank">Modrinth</PaperLink>.
                             </PaperText>
                             <Show when={error()}>
-                                <PaperQuote variant="red" icon="warning" title="Error">
+                                <PaperQuote variant="danger" icon="warning" title="Error">
                                     {error()}
                                 </PaperQuote>
                             </Show>
                             <Show when={listWarning()}>
-                                <PaperQuote variant="yellow" icon="warning" title="Warning">
+                                <PaperQuote variant="warning" icon="warning" title="Warning">
                                     {listWarning()}
                                 </PaperQuote>
                             </Show>
                             <Show when={updateError()}>
-                                <PaperQuote variant="red" icon="warning" title="Update error">
+                                <PaperQuote variant="danger" icon="warning" title="Update error">
                                     {updateError()}
                                 </PaperQuote>
                             </Show>
                         </PaperFlex>
-                    </div>
+                    </PaperCard>
 
                     <PaperFlex direction="column" gap="full">
                     <Show when={installed() !== null && installed()!.length > 0}>
-                        <div class="gs-surface">
+                        <PaperCard>
                         <PaperFlex direction="column" gap="half" padding="full">
                             <PaperText size={5} weight={700}>
                                 Installed {kindLabel() === "mod" ? "Mods" : "Plugins"}
                             </PaperText>
-                            <PaperMediaCardGroup minCardWidth="13rem">
+                            <PaperMediaCardGroup minCardWidth={getVarCss("size-card-min")}>
                                 <For each={installed()}>
                                     {(entry) => (
                                         <PaperMediaCard
@@ -509,12 +500,12 @@ export default function Plugins(props: { updateRequest?: number }) {
                                             }
                                             subtitle={entry.filename}
                                             badge={
-                                                <PaperBadge variant="green">
+                                                <PaperBadge variant="success">
                                                     Installed
                                                 </PaperBadge>
                                             }
                                             footerLeft={
-                                                <PaperText size={2} color="light">
+                                                <PaperText size={2} color="text-subtle">
                                                     {entry.record?.version
                                                         ? `v${entry.record.version}`
                                                         : "Unknown version"}
@@ -550,35 +541,35 @@ export default function Plugins(props: { updateRequest?: number }) {
                                 </For>
                             </PaperMediaCardGroup>
                         </PaperFlex>
-                        </div>
+                        </PaperCard>
                     </Show>
 
                     <Show when={searching()}>
-                        <div class="gs-surface">
+                        <PaperCard>
                         <PaperFlex padding="full" center>
-                            <PaperText size={3} color="light-text">
+                            <PaperText size={3} color="text-subtle">
                                 Searching Modrinth...
                             </PaperText>
                         </PaperFlex>
-                        </div>
+                        </PaperCard>
                     </Show>
 
                     <Show when={!searching() && searched()}>
                         <Show
                             when={results().length > 0}
                             fallback={
-                                <div class="gs-surface">
+                                <PaperCard>
                                 <PaperFlex padding="full" center>
-                                    <PaperText size={3} color="light-text">
+                                    <PaperText size={3} color="text-subtle">
                                         No {kindLabel()}s matched your search.
                                     </PaperText>
                                 </PaperFlex>
-                                </div>
+                                </PaperCard>
                             }
                         >
-                            <div class="gs-surface">
+                            <PaperCard>
                             <PaperFlex padding="full">
-                            <PaperMediaCardGroup minCardWidth="13rem">
+                            <PaperMediaCardGroup minCardWidth={getVarCss("size-card-min")}>
                                     <For each={results()}>
                                         {(hit) => (
                                             <PaperMediaCard
@@ -586,7 +577,7 @@ export default function Plugins(props: { updateRequest?: number }) {
                                                 title={hit.title}
                                                 subtitle={truncate(hit.description, 110)}
                                                 footerLeft={
-                                                    <PaperText size={2} color="light">
+                                                    <PaperText size={2} color="text-subtle">
                                                         {formatCount(hit.downloads)} downloads
                                                     </PaperText>
                                                 }
@@ -604,12 +595,10 @@ export default function Plugins(props: { updateRequest?: number }) {
                                     </For>
                                 </PaperMediaCardGroup>
                             </PaperFlex>
-                            </div>
+                            </PaperCard>
                         </Show>
                     </Show>
                 </PaperFlex>
-                </div>
-            </div>
 
             <PaperModal
                 open={detail() !== null}
@@ -636,18 +625,18 @@ export default function Plugins(props: { updateRequest?: number }) {
                                     <PaperText size={5} weight={700}>
                                         {project()?.title ?? target.title}
                                     </PaperText>
-                                    <PaperText size={2} color="light">
+                                    <PaperText size={2} color="text-subtle">
                                         {truncate(detailSummary(), 200)}
                                     </PaperText>
                                 </PaperFlex>
 
-                                <PaperEffect>
-                                    <Show
-                                        when={detailInstalled()}
-                                        keyed
-                                        fallback={
-                                            <PaperButton
-                                                variant="green"
+                                <Show
+                                    when={detailInstalled()}
+                                    keyed
+                                    fallback={
+                                        <PaperEffect variant="success">
+                                            <PaperButton size="large"
+                                                variant="success"
                                                 disabled={busy()}
                                                 onClick={() => setInstallTarget(target)}
                                             >
@@ -658,20 +647,22 @@ export default function Plugins(props: { updateRequest?: number }) {
                                                 </PaperIcon>
                                                 Install
                                             </PaperButton>
-                                        }
-                                    >
-                                        {(entry) => (
-                                            <PaperButton
-                                                variant="red"
+                                        </PaperEffect>
+                                    }
+                                >
+                                    {(entry) => (
+                                        <PaperEffect variant="danger">
+                                            <PaperButton size="large"
+                                                variant="danger"
                                                 disabled={busy()}
                                                 onClick={() => setPendingDelete(entry)}
                                             >
                                                 <PaperIcon>delete</PaperIcon>
                                                 Uninstall
                                             </PaperButton>
-                                        )}
-                                    </Show>
-                                </PaperEffect>
+                                        </PaperEffect>
+                                    )}
+                                </Show>
                             </PaperFlex>
 
                             <PaperFlex direction="column" gap="onefourth">
@@ -681,7 +672,7 @@ export default function Plugins(props: { updateRequest?: number }) {
                                 <Show
                                     when={!projectLoading()}
                                     fallback={
-                                        <PaperText size={2} color="light-text">
+                                        <PaperText size={2} color="text-subtle">
                                             Loading details from Modrinth...
                                         </PaperText>
                                     }
@@ -689,15 +680,12 @@ export default function Plugins(props: { updateRequest?: number }) {
                                     <Show
                                         when={detailBody()}
                                         fallback={
-                                            <PaperText size={2} color="light-text">
+                                            <PaperText size={2} color="text-subtle">
                                                 No description provided.
                                             </PaperText>
                                         }
                                     >
-                                        <div
-                                            class="modrinth-description"
-                                            innerHTML={detailBody()}
-                                        />
+                                        <PaperProse innerHTML={detailBody()} />
                                     </Show>
                                 </Show>
                             </PaperFlex>
@@ -767,15 +755,13 @@ export default function Plugins(props: { updateRequest?: number }) {
                 size="medium"
                 footer={
                     <PaperFlex direction="row" justify="flex-end" gap="half" fullWidth>
-                        <PaperButton compact onClick={closeInstallModal}>
+                        <PaperButton onClick={closeInstallModal}>
                             Cancel
                         </PaperButton>
                         <PaperButton
-                            compact
-                            variant="green"
+                            variant="success"
                             disabled={!canConfirmInstall()}
-                            onClick={() => void confirmInstallModal()}
-                        >
+                            onClick={() => void confirmInstallModal()}>
                             <PaperIcon>
                                 {installingId() ? "hourglass_top" : "download"}
                             </PaperIcon>
@@ -793,7 +779,7 @@ export default function Plugins(props: { updateRequest?: number }) {
                             <Show
                                 when={!installVersionsLoading()}
                                 fallback={
-                                    <PaperText size={2} color="light-text">
+                                    <PaperText size={2} color="text-subtle">
                                         Loading versions...
                                     </PaperText>
                                 }
@@ -821,7 +807,7 @@ export default function Plugins(props: { updateRequest?: number }) {
                                     <>
                                         <Show when={!preview().matchesServer}>
                                             <PaperQuote
-                                                variant="yellow"
+                                                variant="warning"
                                                 icon="warning"
                                                 title="Different Minecraft version"
                                             >
@@ -849,7 +835,7 @@ export default function Plugins(props: { updateRequest?: number }) {
                                                         fullWidth
                                                     >
                                                         <PaperText size={3}>{dep.name}</PaperText>
-                                                        <PaperText size={2} color="light-text">
+                                                        <PaperText size={2} color="text-subtle">
                                                             {dep.file
                                                                 ? `v${dep.versionNumber || "?"}${dep.gameVersions.length > 0 ? ` · ${dep.gameVersions.join(", ")}` : ""}`
                                                                 : (dep.unresolvableReason ??
@@ -889,7 +875,7 @@ export default function Plugins(props: { updateRequest?: number }) {
                                         </Show>
 
                                         <Show when={preview().transitive.length > 0}>
-                                            <PaperText size={2} color="light-text">
+                                            <PaperText size={2} color="text-subtle">
                                                 Also pulls in:{" "}
                                                 {preview()
                                                     .transitive.map((dep) => dep.name)
@@ -899,7 +885,7 @@ export default function Plugins(props: { updateRequest?: number }) {
 
                                         <Show when={preview().incompatible.length > 0}>
                                             <PaperQuote
-                                                variant="yellow"
+                                                variant="warning"
                                                 icon="warning"
                                                 title="Incompatible with this version"
                                             >
@@ -911,7 +897,7 @@ export default function Plugins(props: { updateRequest?: number }) {
                                         </Show>
 
                                         <Show when={preview().embedded.length > 0}>
-                                            <PaperText size={2} color="light-text">
+                                            <PaperText size={2} color="text-subtle">
                                                 Bundled:{" "}
                                                 {preview()
                                                     .embedded.map((dep) => dep.name)
@@ -923,13 +909,13 @@ export default function Plugins(props: { updateRequest?: number }) {
                             </Show>
 
                             <Show when={installPreviewLoading()}>
-                                <PaperText size={2} color="light-text">
+                                <PaperText size={2} color="text-subtle">
                                     Resolving dependencies...
                                 </PaperText>
                             </Show>
 
                             <Show when={installModalError()}>
-                                <PaperQuote variant="red" icon="warning" title="Install failed">
+                                <PaperQuote variant="danger" icon="warning" title="Install failed">
                                     {installModalError()}
                                 </PaperQuote>
                             </Show>
@@ -945,10 +931,10 @@ export default function Plugins(props: { updateRequest?: number }) {
                 size="small"
                 footer={
                     <PaperFlex direction="row" justify="flex-end" gap="half" fullWidth>
-                        <PaperButton compact onClick={() => setPendingDelete(null)}>
+                        <PaperButton onClick={() => setPendingDelete(null)}>
                             Cancel
                         </PaperButton>
-                        <PaperButton compact variant="red" onClick={confirmDelete}>
+                        <PaperButton variant="danger" onClick={confirmDelete}>
                             Uninstall
                         </PaperButton>
                     </PaperFlex>
@@ -969,14 +955,12 @@ export default function Plugins(props: { updateRequest?: number }) {
                 footer={
                     <PaperFlex direction="row" justify="flex-end" gap="half" fullWidth>
                         <PaperButton
-                            compact
-                            variant="red"
+                            variant="danger"
                             disabled={uninstallingFailure() !== null}
-                            onClick={() => void uninstallAllFailures()}
-                        >
+                            onClick={() => void uninstallAllFailures()}>
                             Uninstall all
                         </PaperButton>
-                        <PaperButton compact onClick={() => setFailures(null)}>
+                        <PaperButton onClick={() => setFailures(null)}>
                             Close
                         </PaperButton>
                     </PaperFlex>
@@ -1005,7 +989,7 @@ export default function Plugins(props: { updateRequest?: number }) {
                                     <PaperText size={3} weight={600}>
                                         {failure.title}
                                     </PaperText>
-                                    <PaperText size={2} color="light-text">
+                                    <PaperText size={2} color="text-subtle">
                                         {failure.status === "incompatible"
                                             ? `No compatible build (latest targets ${
                                                   failure.latest?.gameVersions.join(", ") ||
@@ -1015,13 +999,11 @@ export default function Plugins(props: { updateRequest?: number }) {
                                     </PaperText>
                                 </PaperFlex>
                                 <PaperButton
-                                    compact
-                                    variant="red"
+                                    variant="danger"
                                     disabled={
                                         uninstallingFailure() === failure.filename
                                     }
-                                    onClick={() => void uninstallFailure(failure.filename)}
-                                >
+                                    onClick={() => void uninstallFailure(failure.filename)}>
                                     <PaperIcon>delete</PaperIcon>
                                     Uninstall
                                 </PaperButton>
@@ -1030,6 +1012,6 @@ export default function Plugins(props: { updateRequest?: number }) {
                     </For>
                 </PaperFlex>
             </PaperModal>
-        </PaperFlex>
+        </>
     );
 }

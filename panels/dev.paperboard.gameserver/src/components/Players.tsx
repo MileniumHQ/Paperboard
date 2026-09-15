@@ -18,6 +18,9 @@ import {
     PaperTable,
     PaperText,
     PaperToggle,
+    getVarCss,
+    PaperCard,
+    PaperAvatar,
 } from "@paperboard-dev/paperui";
 import {   fileApi } from "@paperboard-dev/paperapi";
 import {
@@ -377,11 +380,9 @@ export default function Players() {
     };
 
     return (
-        <PaperFlex direction="column" fullWidth fullHeight style={{ "min-height": 0 }}>
-            <div class="gs-scroll">
-                <div class="gs-page">
+        <>
                     <PaperPageHeader icon="group" title="Players">
-                        <div style={{ "min-width": "10rem" }}>
+                        <PaperFlex minWidth={getVarCss("size-field")}>
                             <PaperSelectMenu
                                 name="playersSort"
                                 value={sortBy()}
@@ -395,9 +396,9 @@ export default function Players() {
                                     )}
                                 </For>
                             </PaperSelectMenu>
-                        </div>
+                        </PaperFlex>
                     </PaperPageHeader>
-                    <div class="gs-surface">
+                    <PaperCard>
                         <PaperFlex direction="row" gap="threefourths" padding="full" align="center" wrap>
                             <PaperCheckbox
                                 checked={showOnline()}
@@ -419,26 +420,26 @@ export default function Players() {
                             <PaperText
                                 size={3}
                                 style={{
-                                    color: "var(--paper-front-red)",
-                                    padding: "0 var(--paper-uigap) var(--paper-uigap)",
+                                    color: `${getVarCss("danger")}`,
+                                    padding: `0 ${getVarCss("uigap")} ${getVarCss("uigap")}`,
                                 }}
                             >
                                 {feedback()}
                             </PaperText>
                         </Show>
-                    </div>
+                    </PaperCard>
 
                     <Show
                         when={sortedPlayers().length > 0}
                         fallback={
-                            <div class="gs-surface">
+                            <PaperCard>
                                 <PaperFlex padding="full" center>
                                     <PaperText size={3}>No players match these filters.</PaperText>
                                 </PaperFlex>
-                            </div>
+                            </PaperCard>
                         }
                     >
-                        <PaperMediaCardGroup minCardWidth="15rem">
+                        <PaperMediaCardGroup minCardWidth={getVarCss("size-card-min")}>
                             <For each={sortedPlayers()}>
                                 {(player) => {
                                     const isOn = () =>
@@ -457,16 +458,16 @@ export default function Players() {
                                             badge={
                                                 <Show
                                                     when={!bannedNames().has(player.name.toLowerCase())}
-                                                    fallback={<PaperBadge variant="red">Banned</PaperBadge>}
+                                                    fallback={<PaperBadge variant="danger">Banned</PaperBadge>}
                                                 >
-                                                    <PaperBadge variant={isOn() ? "green" : "monochrome"}>
+                                                    <PaperBadge variant={isOn() ? "success" : "monochrome"}>
                                                         {isOn() ? "Online" : "Offline"}
                                                     </PaperBadge>
                                                 </Show>
                                             }
                                             footerLeft={
                                                 player.op ? (
-                                                    <PaperBadge variant="blue">OP</PaperBadge>
+                                                    <PaperBadge variant="primary">OP</PaperBadge>
                                                 ) : undefined
                                             }
                                             footerRight={
@@ -480,8 +481,6 @@ export default function Players() {
                             </For>
                         </PaperMediaCardGroup>
                     </Show>
-                </div>
-            </div>
 
             <PlayerModal
                 player={openPlayer()}
@@ -526,10 +525,10 @@ export default function Players() {
                 size="small"
                 footer={
                     <PaperFlex direction="row" justify="flex-end" gap="half" fullWidth>
-                        <PaperButton compact onClick={() => setDeleteConfirmOpen(false)}>
+                        <PaperButton onClick={() => setDeleteConfirmOpen(false)}>
                             Cancel
                         </PaperButton>
-                        <PaperButton compact variant="red" onClick={deleteOpenPlayer}>
+                        <PaperButton variant="danger" onClick={deleteOpenPlayer}>
                             Delete Data
                         </PaperButton>
                     </PaperFlex>
@@ -540,7 +539,7 @@ export default function Players() {
                     progress. They will join as a fresh player. This cannot be undone.
                 </PaperText>
             </PaperModal>
-        </PaperFlex>
+        </>
     );
 }
 
@@ -603,33 +602,27 @@ function PlayerModal(props: {
             <PaperFlex direction="column" gap="full">
                 {/* identity */}
                 <PaperFlex direction="row" gap="threefourths" align="center">
-                    <img
+                    <PaperAvatar
                         src={`https://mc-heads.net/avatar/${encodeURIComponent(name())}/64`}
-                        alt=""
-                        style={{
-                            width: "3.5rem",
-                            height: "3.5rem",
-                            "border-radius": "var(--paper-border-radius)",
-                            "image-rendering": "pixelated",
-                            "flex-shrink": 0,
-                        }}
+                        shape="square"
+                        size="xlarge"
                     />
                     <PaperFlex direction="column" gap="onefourth" style={{ "min-width": 0 }}>
                         <PaperText size={7} weight={700}>
                             {name()}
                         </PaperText>
                         <PaperFlex direction="row" gap="half" align="center" wrap>
-                            <PaperBadge variant={isPlayerOnline() ? "green" : "monochrome"}>
+                            <PaperBadge variant={isPlayerOnline() ? "success" : "monochrome"}>
                                 {isPlayerOnline() ? "Online" : "Offline"}
                             </PaperBadge>
                             <Show when={props.player?.op}>
-                                <PaperBadge variant="blue">OP</PaperBadge>
+                                <PaperBadge variant="primary">OP</PaperBadge>
                             </Show>
                             <Show when={props.player?.whitelisted}>
                                 <PaperBadge>Whitelisted</PaperBadge>
                             </Show>
                             <Show when={props.banned}>
-                                <PaperBadge variant="red">Banned</PaperBadge>
+                                <PaperBadge variant="danger">Banned</PaperBadge>
                             </Show>
                         </PaperFlex>
                     </PaperFlex>
@@ -640,12 +633,10 @@ function PlayerModal(props: {
                         style={{ "margin-left": "auto", "flex-shrink": 0 }}
                     >
                         <Show when={props.player?.uuid}>
-                            <PaperButton
-                                tiny
+                            <PaperButton size="tiny"
                                 icon
                                 onClick={handleCopyUuid}
-                                title={copied() ? "Copied!" : props.player!.uuid}
-                            >
+                                title={copied() ? "Copied!" : props.player!.uuid}>
                                 <PaperIcon>{copied() ? "check" : "content_copy"}</PaperIcon>
                             </PaperButton>
                         </Show>
@@ -653,7 +644,7 @@ function PlayerModal(props: {
                 </PaperFlex>
 
                 {/* stats */}
-                <div class="gs-surface">
+                <PaperCard>
                     <PaperTable>
                         <tbody>
                             <tr>
@@ -706,11 +697,10 @@ function PlayerModal(props: {
                             </tr>
                         </tbody>
                     </PaperTable>
-                </div>
+                </PaperCard>
 
                 {/* permissions */}
                 <SectionLabel>Permissions</SectionLabel>
-                <div class="gs-surface">
                     <PaperSettingList autoHeight>
                         <PaperSettingItem
                             title="Operator"
@@ -735,46 +725,37 @@ function PlayerModal(props: {
                             />
                         </PaperSettingItem>
                     </PaperSettingList>
-                </div>
 
                 {/* moderation */}
                 <SectionLabel>Moderation</SectionLabel>
                 <PaperFlex direction="row" gap="half" wrap>
                     <PaperButton
-                        compact
                         disabled={!isOnline() || !isPlayerOnline()}
-                        onClick={() => props.onAction("kick")}
-                    >
+                        onClick={() => props.onAction("kick")}>
                         Kick
                     </PaperButton>
                     <Show
                         when={!props.banned}
                         fallback={
                             <PaperButton
-                                compact
-                                variant="blue"
+                                variant="primary"
                                 disabled={!isOnline()}
-                                onClick={() => void props.onPardon()}
-                            >
+                                onClick={() => void props.onPardon()}>
                                 Pardon
                             </PaperButton>
                         }
                     >
                         <PaperButton
-                            compact
-                            variant="red"
+                            variant="danger"
                             disabled={!isOnline()}
-                            onClick={() => props.onAction("ban")}
-                        >
+                            onClick={() => props.onAction("ban")}>
                             Ban
                         </PaperButton>
                     </Show>
                     <PaperButton
-                        compact
-                        variant="yellow"
+                        variant="warning"
                         disabled={!isOnline() || !isPlayerOnline()}
-                        onClick={() => props.onKill()}
-                    >
+                        onClick={() => props.onKill()}>
                         Kill
                     </PaperButton>
                 </PaperFlex>
@@ -782,11 +763,9 @@ function PlayerModal(props: {
                 {/* danger */}
                 <PaperSeparator />
                 <SectionLabel danger>Danger</SectionLabel>
-                <div
-                    class="gs-surface"
+                <PaperCard
                     style={{
-                        "border-color":
-                            "color-mix(in srgb, var(--paper-front-red) 40%, var(--paper-medium-border))",
+                        "border-color": getVarCss("danger", "transparent"),
                     }}
                 >
                     <PaperFlex
@@ -800,16 +779,16 @@ function PlayerModal(props: {
                             <PaperText size={3} weight={600}>
                                 Delete player data
                             </PaperText>
-                            <PaperText size={2} color="light-text">
+                            <PaperText size={2} color="text-subtle">
                                 Inventory, position and progress. This cannot be undone.
                             </PaperText>
                         </PaperFlex>
-                        <PaperButton compact variant="red" onClick={props.onDeleteRequest}>
+                        <PaperButton variant="danger" onClick={props.onDeleteRequest}>
                             <PaperIcon>delete</PaperIcon>
                             Delete
                         </PaperButton>
                     </PaperFlex>
-                </div>
+                </PaperCard>
             </PaperFlex>
         </PaperModal>
     );
@@ -822,10 +801,10 @@ function SectionLabel(props: { children: JSX.Element; danger?: boolean }) {
             weight={700}
             style={{
                 "text-transform": "uppercase",
-                "letter-spacing": "0.04em",
+                "letter-spacing": getVarCss("text-tracking"),
                 color: props.danger
-                    ? "var(--paper-front-red)"
-                    : "var(--paper-light-text)",
+                    ? `${getVarCss("danger")}`
+                    : `${getVarCss("text-subtle")}`,
             }}
         >
             {props.children}
@@ -856,10 +835,10 @@ function ReasonActionModal(props: {
             size="small"
             footer={
                 <PaperFlex direction="row" justify="flex-end" gap="half" fullWidth>
-                    <PaperButton compact onClick={props.onClose}>
+                    <PaperButton onClick={props.onClose}>
                         Cancel
                     </PaperButton>
-                    <PaperButton compact variant="red" onClick={submit}>
+                    <PaperButton variant="danger" onClick={submit}>
                         {props.confirmLabel}
                     </PaperButton>
                 </PaperFlex>

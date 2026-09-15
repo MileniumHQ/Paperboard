@@ -1,14 +1,18 @@
-import { createEffect, createSignal, For, onMount, Show } from "solid-js";
+import { createSignal, For, onMount, Show } from "solid-js";
 import {
     PaperButton,
+    PaperCard,
+    PaperConsole,
+    PaperEmptyState,
     PaperFlex,
     PaperIcon,
     PaperInput,
+    PaperPage,
     PaperPageHeader,
     PaperQuote,
     PaperSelectMenu,
     PaperSelectMenuItem,
-    PaperText,
+    getVarCss,
 } from "@paperboard-dev/paperui";
 import {
     listLogFiles,
@@ -28,7 +32,6 @@ export default function Logs() {
     const [loading, setLoading] = createSignal(false);
     const [error, setError] = createSignal("");
     const [filter, setFilter] = createSignal("");
-    let viewer: HTMLPreElement | undefined;
 
     const loadFiles = async (selectName?: string) => {
         setError("");
@@ -67,15 +70,6 @@ export default function Logs() {
         void loadFiles();
     });
 
-    // logs read best from the most recent line, so a freshly loaded file
-    // starts scrolled to the bottom
-    createEffect(() => {
-        content();
-        queueMicrotask(() => {
-            if (viewer) viewer.scrollTop = viewer.scrollHeight;
-        });
-    });
-
     const filteredLines = () => {
         const body = content()?.content;
         if (body === undefined) return [];
@@ -87,87 +81,74 @@ export default function Logs() {
     };
 
     return (
-        <PaperFlex direction="column" fullWidth fullHeight style={{ "min-height": 0 }}>
-            <div class="gs-page">
-                <PaperPageHeader icon="description" title="Logs">
-                    <PaperButton
-                        compact
-                        disabled={loading()}
-                        onClick={() => void loadFiles(selected())}
-                    >
-                        <PaperIcon>refresh</PaperIcon>
-                        Refresh
-                    </PaperButton>
-                </PaperPageHeader>
-                <Show when={error()}>
-                    <PaperQuote variant="red" icon="warning" title="Error">
-                        {error()}
-                    </PaperQuote>
-                </Show>
-                <div class="gs-surface">
-                    <PaperFlex
-                        direction="row"
-                        gap="half"
-                        padding="full"
-                        align="center"
-                        wrap
-                    >
-                        <div style={{ "min-width": "16rem", flex: "1" }}>
-                            <PaperSelectMenu
-                                name="logFile"
-                                fullWidth
-                                value={selected()}
-                                onValueChange={(val) => void selectFile(String(val))}
-                            >
-                                <For each={files() ?? []}>
-                                    {(file) => (
-                                        <PaperSelectMenuItem value={file.name}>
-                                            {logLabel(file.name, file.mtimeMs)}
-                                        </PaperSelectMenuItem>
-                                    )}
-                                </For>
-                            </PaperSelectMenu>
-                        </div>
-                        <div style={{ "min-width": "14rem", flex: "2" }}>
-                            <PaperInput
-                                fullWidth
-                                icon="search"
-                                placeholder="Filter lines..."
-                                value={filter()}
-                                onInput={(e) => setFilter(e.currentTarget.value)}
-                            />
-                        </div>
-                    </PaperFlex>
-                </div>
-            </div>
+        <PaperPage fullWidth fullHeight gap="full">
+            <PaperPageHeader icon="description" title="Logs">
+                <PaperButton
+                    disabled={loading()}
+                    onClick={() => void loadFiles(selected())}>
+                    <PaperIcon>refresh</PaperIcon>
+                    Refresh
+                </PaperButton>
+            </PaperPageHeader>
 
-            <div
-                style={{
-                    flex: 1,
-                    "min-height": 0,
-                    padding: "var(--paper-uigap)",
-                    "padding-top": 0,
-                }}
-            >
-                <div class="gs-surface" style={{ height: "100%" }}>
-                    <Show
-                        when={content()}
-                        fallback={
-                            <PaperFlex padding="full" center fullHeight>
-                                <PaperText size={3} color="light-text">
-                                    {files() === null
-                                        ? "Loading logs..."
-                                        : files()!.length === 0
-                                          ? "No log files yet."
-                                          : "Select a log file."}
-                                </PaperText>
-                            </PaperFlex>
-                        }
-                    >
-                        <pre ref={viewer} class="log-view">{filteredLines().join("\n")}</pre>
-                    </Show>
-                </div>
-            </div>
-        </PaperFlex>
+            <Show when={error()}>
+                <PaperQuote variant="danger" icon="warning" title="Error">
+                    {error()}
+                </PaperQuote>
+            </Show>
+
+            <PaperCard padding="full">
+                <PaperFlex direction="row" gap="half" align="center" wrap>
+                    <PaperFlex grow minWidth={getVarCss("size-card-min")}>
+                        <PaperSelectMenu
+                            name="logFile"
+                            fullWidth
+                            value={selected()}
+                            onValueChange={(val) => void selectFile(String(val))}
+                        >
+                            <For each={files() ?? []}>
+                                {(file) => (
+                                    <PaperSelectMenuItem value={file.name}>
+                                        {logLabel(file.name, file.mtimeMs)}
+                                    </PaperSelectMenuItem>
+                                )}
+                            </For>
+                        </PaperSelectMenu>
+                    </PaperFlex>
+                    <PaperFlex grow={2} minWidth={getVarCss("size-card-min")}>
+                        <PaperInput
+                            fullWidth
+                            icon="search"
+                            placeholder="Filter lines..."
+                            value={filter()}
+                            onInput={(e) => setFilter(e.currentTarget.value)}
+                        />
+                    </PaperFlex>
+                </PaperFlex>
+            </PaperCard>
+
+            <PaperCard grow minHeight={0}>
+                <Show
+                    when={content()}
+                    fallback={
+                        <PaperEmptyState
+                            icon="description"
+                            title={
+                                files() === null
+                                    ? "Loading logs..."
+                                    : files()!.length === 0
+                                      ? "No log files yet."
+                                      : "Select a log file."
+                            }
+                        />
+                    }
+                >
+                    <PaperConsole
+                        showInput={false}
+                        text={filteredLines().join("\n")}
+                    />
+                </Show>
+            </PaperCard>
+        </PaperPage>
     );
 }

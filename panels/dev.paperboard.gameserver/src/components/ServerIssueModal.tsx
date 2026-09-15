@@ -1,6 +1,13 @@
 import { PANEL_ID } from "../service/types";
 import { type Component, createSignal, For, Show } from "solid-js";
-import { PaperFlex, PaperModal, PaperButton, PaperText, PaperIcon, PaperQuote } from "@paperboard-dev/paperui";
+import {
+    PaperFlex,
+    PaperModal,
+    PaperButton,
+    PaperText,
+    PaperIcon,
+    PaperQuote,
+} from "@paperboard-dev/paperui";
 import { files as fileApi } from "@paperboard-dev/paperapi";
 import { activeIssue, clearActiveIssue, killConflictingProcess, resetWorldFiles } from "../lib/diagnostics";
 import { serverPort, startServer } from "../lib/server";
@@ -85,16 +92,14 @@ const ServerIssueModal: Component = () => {
                             gap="half"
                             fullWidth
                         >
-                            <PaperButton compact onClick={clearActiveIssue}>
+                            <PaperButton onClick={clearActiveIssue}>
                                 Dismiss
                             </PaperButton>
                             <For each={issue().actions}>
                                 {(action) => (
                                     <PaperButton
-                                        compact
                                         variant={action.variant || "brand"}
-                                        onClick={() => handleActionClick(action)}
-                                    >
+                                        onClick={() => handleActionClick(action)}>
                                         <Show when={action.icon}>
                                             <PaperIcon>{action.icon}</PaperIcon>
                                         </Show>
@@ -109,7 +114,7 @@ const ServerIssueModal: Component = () => {
                         <PaperText preset="body">{issue().description}</PaperText>
                         <Show when={actionError()}>
                             {(error) => (
-                                <PaperQuote variant="red" icon="warning" title="Repair failed">
+                                <PaperQuote variant="danger" icon="warning" title="Repair failed">
                                     {error()}
                                 </PaperQuote>
                             )}

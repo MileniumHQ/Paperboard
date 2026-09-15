@@ -8,6 +8,7 @@ import {
 } from "solid-js";
 import {
     PaperButton,
+    PaperFlex,
     PaperIcon,
     PaperInput,
     PaperQuote,
@@ -15,6 +16,7 @@ import {
     PaperSelectMenuItem,
     PaperText,
     getVarCss,
+    getVar,
 } from "@paperboard-dev/paperui";
 import {
     listMapRegions,
@@ -181,10 +183,10 @@ export default function MapView() {
         const dim = dimension();
         const size = Math.max(18, Math.min(30, 22 * Math.max(0.8, s)));
         // colors come from the token set, not hardcoded hex
-        const strokeColor = getVarCss("over-brand");
-        const markerColor = getVarCss("front-red");
-        const labelBg = getVarCss("overlay");
-        const labelText = getVarCss("over-brand");
+        const strokeColor = getVarCss("on-color");
+        const markerColor = getVarCss("danger");
+        const labelBg = getVarCss("scrim");
+        const labelText = getVarCss("on-color");
         for (const [key, pos] of playerPositions()) {
             if (pos.dimension !== `minecraft:${dim}`) continue;
             const screenX = pos.x * s + offsetX();
@@ -205,7 +207,7 @@ export default function MapView() {
                 ctx.stroke();
             }
             const label = key;
-            ctx.font = "600 12px system-ui, sans-serif";
+            ctx.font = `600 ${getVar("text-size-1", "12px")} system-ui, sans-serif`;
             const textWidth = ctx.measureText(label).width;
             ctx.fillStyle = labelBg;
             ctx.fillRect(screenX + size / 2 + 3, screenY - 9, textWidth + 8, 18);
@@ -411,7 +413,7 @@ export default function MapView() {
                 width: "100%",
                 height: "100%",
                 overflow: "hidden",
-                background: "var(--paper-background-definition)",
+                background: `${getVarCss("surface-inset")}`,
             }}
         >
             <canvas
@@ -422,15 +424,15 @@ export default function MapView() {
             <div
                 style={{
                     position: "absolute",
-                    top: "var(--paper-uigap)",
-                    left: "var(--paper-uigap)",
+                    top: `${getVarCss("uigap")}`,
+                    left: `${getVarCss("uigap")}`,
                     display: "flex",
-                    gap: "var(--paper-uigap-half)",
+                    gap: `${getVarCss("uigap-half")}`,
                     "align-items": "center",
                 }}
             >
                 <Show when={availableDimensions().length > 1}>
-                    <div style={{ "min-width": "9rem" }}>
+                    <PaperFlex minWidth={getVarCss("size-field")}>
                         <PaperSelectMenu
                             name="mapDimension"
                             value={dimension()}
@@ -446,10 +448,10 @@ export default function MapView() {
                                 )}
                             </For>
                         </PaperSelectMenu>
-                    </div>
+                    </PaperFlex>
                 </Show>
                 <Show when={playerKeys().length > 0}>
-                    <div style={{ "min-width": "11rem" }}>
+                    <PaperFlex minWidth={getVarCss("size-field")}>
                         <PaperSelectMenu
                             name="mapPlayer"
                             value={selectedPlayer()}
@@ -463,42 +465,42 @@ export default function MapView() {
                                 )}
                             </For>
                         </PaperSelectMenu>
-                    </div>
+                    </PaperFlex>
                 </Show>
             </div>
 
             <div
                 style={{
                     position: "absolute",
-                    top: "var(--paper-uigap)",
-                    right: "var(--paper-uigap)",
+                    top: `${getVarCss("uigap")}`,
+                    right: `${getVarCss("uigap")}`,
                     display: "flex",
                     "flex-direction": "column",
                     "align-items": "flex-end",
-                    gap: "var(--paper-uigap-half)",
+                    gap: `${getVarCss("uigap-half")}`,
                 }}
             >
                 <div
                     style={{
                         display: "flex",
                         "align-items": "center",
-                        gap: "var(--paper-uigap-onefourth)",
-                        padding: "var(--paper-uigap-half) var(--paper-uigap-threefourths)",
-                        "border-radius": "var(--paper-border-radius)",
+                        gap: `${getVarCss("uigap-onefourth")}`,
+                        padding: `${getVarCss("uigap-half")} ${getVarCss("uigap-threefourths")}`,
+                        "border-radius": `${getVarCss("border-radius")}`,
                         background:
-                            "color-mix(in srgb, var(--paper-background-frontest) 72%, transparent)",
-                        "backdrop-filter": "var(--paper-blur-medium)",
-                        border: "var(--paper-border-width) solid var(--paper-medium-border)",
+                            `color-mix(in srgb, ${getVarCss("surface-raised")} 72%, transparent)`,
+                        "backdrop-filter": `${getVarCss("blur-medium")}`,
+                        border: `${getVarCss("border-width")} solid ${getVarCss("border")}`,
                     }}
                 >
                     <PaperIcon>my_location</PaperIcon>
-                    <PaperText size={2} color="light-text">
+                    <PaperText size={2} color="text-subtle">
                         {Math.round((cursor() ?? centerCoords()).x)},{" "}
                         {Math.round((cursor() ?? centerCoords()).z)}
                     </PaperText>
                     <Show when={pendingCount() > 0}>
                         <PaperIcon>hourglass_top</PaperIcon>
-                        <PaperText size={2} color="light-text">
+                        <PaperText size={2} color="text-subtle">
                             {pendingCount()}
                         </PaperText>
                     </Show>
@@ -508,36 +510,42 @@ export default function MapView() {
                     style={{
                         display: "flex",
                         "align-items": "center",
-                        gap: "var(--paper-uigap-onefourth)",
-                        padding: "var(--paper-uigap-half)",
-                        "border-radius": "var(--paper-border-radius)",
+                        gap: `${getVarCss("uigap-onefourth")}`,
+                        padding: `${getVarCss("uigap-half")}`,
+                        "border-radius": `${getVarCss("border-radius")}`,
                         background:
-                            "color-mix(in srgb, var(--paper-background-frontest) 72%, transparent)",
-                        "backdrop-filter": "var(--paper-blur-medium)",
-                        border: "var(--paper-border-width) solid var(--paper-medium-border)",
+                            `color-mix(in srgb, ${getVarCss("surface-raised")} 72%, transparent)`,
+                        "backdrop-filter": `${getVarCss("blur-medium")}`,
+                        border: `${getVarCss("border-width")} solid ${getVarCss("border")}`,
                     }}
                 >
-                    <div style={{ width: "5.5rem" }}>
+                    <PaperFlex minWidth={getVarCss("size-field")}>
                         <PaperInput
                             placeholder="X"
                             value={coordX()}
+                            invalid={
+                                coordX().trim() !== "" && !Number.isFinite(Number(coordX()))
+                            }
                             onInput={(e) => setCoordX(e.currentTarget.value)}
                             onKeyDown={(e) => {
                                 if (e.key === "Enter") goToCoords();
                             }}
                         />
-                    </div>
-                    <div style={{ width: "5.5rem" }}>
+                    </PaperFlex>
+                    <PaperFlex minWidth={getVarCss("size-field")}>
                         <PaperInput
                             placeholder="Z"
                             value={coordZ()}
+                            invalid={
+                                coordZ().trim() !== "" && !Number.isFinite(Number(coordZ()))
+                            }
                             onInput={(e) => setCoordZ(e.currentTarget.value)}
                             onKeyDown={(e) => {
                                 if (e.key === "Enter") goToCoords();
                             }}
                         />
-                    </div>
-                    <PaperButton tiny onClick={goToCoords}>
+                    </PaperFlex>
+                    <PaperButton size="tiny" onClick={goToCoords}>
                         Go
                     </PaperButton>
                 </div>
@@ -547,12 +555,12 @@ export default function MapView() {
                 <div
                     style={{
                         position: "absolute",
-                        bottom: "var(--paper-uigap)",
-                        left: "var(--paper-uigap)",
-                        "max-width": "26rem",
+                        bottom: `${getVarCss("uigap")}`,
+                        left: `${getVarCss("uigap")}`,
+                        "max-width": getVarCss("size-panel-small"),
                     }}
                 >
-                    <PaperQuote variant="red" icon="warning" title="Error">
+                    <PaperQuote variant="danger" icon="warning" title="Error">
                         {error()}
                     </PaperQuote>
                 </div>
@@ -575,7 +583,7 @@ export default function MapView() {
                         "pointer-events": "none",
                     }}
                 >
-                    <PaperText size={3} color="light-text">
+                    <PaperText size={3} color="text-subtle">
                         No generated terrain to map yet. Start the server once.
                     </PaperText>
                 </div>

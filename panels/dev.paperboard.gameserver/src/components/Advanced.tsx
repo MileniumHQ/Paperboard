@@ -8,6 +8,7 @@ import {
     PaperSettingItem,
     PaperSettingList,
     PaperText,
+    PaperCard,
 } from "@paperboard-dev/paperui";
 import { FieldControl } from "./PropertyFieldControl";
 import { PaperPageHeader } from "@paperboard-dev/paperui";
@@ -296,11 +297,9 @@ export default function Advanced() {
     };
 
     return (
-        <PaperFlex direction="column" fullWidth fullHeight style={{ "min-height": 0 }}>
-            <div class="gs-scroll">
-                <div class="gs-page">
+        <>
                     <PaperPageHeader icon="settings" title="Advanced" />
-                    <div class="gs-surface">
+                    <PaperCard>
                         <PaperFlex padding="full">
                             <PaperInput
                                 fullWidth
@@ -310,24 +309,23 @@ export default function Advanced() {
                                 onInput={(e) => setSearch(e.currentTarget.value)}
                             />
                         </PaperFlex>
-                    </div>
-                    <div class="gs-surface">
+                    </PaperCard>
                         <PaperSettingList autoHeight>
                             <PaperFlex direction="column" gap="half" padding="full">
                                 <Show when={ramSaved()}>
-                                    <PaperQuote variant="green" icon="check" title="Saved">
+                                    <PaperQuote variant="success" icon="check" title="Saved">
                                         Memory allocation saved. It applies the next time the server starts.
                                     </PaperQuote>
                                 </Show>
                                 <Show
                                     when={ramError() || saveError()}
                                     fallback={
-                                        <PaperQuote variant="yellow" icon="info" title="Note">
+                                        <PaperQuote variant="warning" icon="info" title="Note">
                                             Changes won't be applied until the server is restarted.
                                         </PaperQuote>
                                     }
                                 >
-                                    <PaperQuote variant="red" icon="warning" title="Error">
+                                    <PaperQuote variant="danger" icon="warning" title="Error">
                                         {ramError()
                                             ? "Failed to save the memory allocation. Check the console for details."
                                             : "Failed to save changes. Check the console for details."}
@@ -366,9 +364,6 @@ export default function Advanced() {
                                 </For>
                             </Show>
                         </PaperSettingList>
-                    </div>
-                </div>
-            </div>
-        </PaperFlex>
+        </>
     );
 }

@@ -107,18 +107,15 @@ export default function Options() {
     );
 
     return (
-        <PaperFlex direction="column" fullWidth fullHeight style={{ "min-height": 0 }}>
-            <div class="gs-scroll">
-                <div class="gs-page">
+        <>
                     <PaperPageHeader icon="tune" title="Options" />
-                    <div class="gs-surface">
                         <PaperSettingList autoHeight>
                             <PaperFlex padding="full" gap="half">
-                                <PaperQuote variant="yellow" icon="warning" title="Note">
+                                <PaperQuote variant="warning" icon="warning" title="Note">
                                     World generation and network settings apply after a restart. Difficulty and game mode apply immediately while the server is running.
                                 </PaperQuote>
                                 <Show when={saveError()}>
-                                    <PaperQuote variant="red" icon="warning" title="Error">
+                                    <PaperQuote variant="danger" icon="warning" title="Error">
                                         Failed to save changes. Check the console for details.
                                     </PaperQuote>
                                 </Show>
@@ -140,9 +137,6 @@ export default function Options() {
                                 </For>
                             </Show>
                         </PaperSettingList>
-                    </div>
-                </div>
-            </div>
-        </PaperFlex>
+        </>
     );
 }

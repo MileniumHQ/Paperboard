@@ -10,6 +10,8 @@ import {
     PaperSelectorItem,
     PaperText,
     type LoaderStatus,
+    PaperCard,
+    getVarCss,
 } from "@paperboard-dev/paperui";
 import { config } from "@paperboard-dev/paperapi";
 import { ensureJavaRuntime } from "../lib/ensureJava";
@@ -205,18 +207,16 @@ export default function Versions(props: { onRequestPluginUpdate?: () => void }) 
     };
 
     return (
-        <PaperFlex direction="column" fullWidth fullHeight style={{ "min-height": 0 }}>
-            <div class="gs-scroll">
-                <div class="gs-page">
+        <>
                     <PaperPageHeader icon="deployed_code" title="Versions" />
 
                     <Show when={error()}>
-                        <PaperQuote variant="red" icon="warning" title="Error">
+                        <PaperQuote variant="danger" icon="warning" title="Error">
                             {error()}
                         </PaperQuote>
                     </Show>
 
-                    <div class="gs-surface">
+                    <PaperCard>
                         <PaperFlex direction="column" gap="half" padding="full">
                             <PaperText size={3} weight={700}>
                                 Server software
@@ -241,9 +241,9 @@ export default function Versions(props: { onRequestPluginUpdate?: () => void }) 
                                 </PaperSelectorItem>
                             </PaperSelector>
                         </PaperFlex>
-                    </div>
+                    </PaperCard>
 
-                    <div class="gs-surface">
+                    <PaperCard>
                         <PaperFlex direction="column" gap="half" padding="full">
                             <PaperFlex
                                 direction="row"
@@ -254,7 +254,7 @@ export default function Versions(props: { onRequestPluginUpdate?: () => void }) 
                                 <PaperText size={3} weight={700}>
                                     Minecraft version
                                 </PaperText>
-                                <PaperText size={2} color="light-text">
+                                <PaperText size={2} color="text-subtle">
                                     Installed:{" "}
                                     {installedVersion()
                                         ? `${SOFTWARE_NAMES[installedSoftware()]} ${installedVersion()}`
@@ -267,23 +267,19 @@ export default function Versions(props: { onRequestPluginUpdate?: () => void }) 
                                 onSelectVersion={setSelectedVersion}
                             />
                         </PaperFlex>
-                    </div>
+                    </PaperCard>
 
                     <PaperFlex direction="row" justify="flex-end" fullWidth>
                         <PaperButton
-                            compact
-                            variant="green"
+                            variant="success"
                             disabled={!canSwitch()}
-                            onClick={() => setConfirmSwitchOpen(true)}
-                        >
+                            onClick={() => setConfirmSwitchOpen(true)}>
                             <PaperIcon>swap_vert</PaperIcon>
                             {switching()
                                 ? "Switching…"
                                 : `Switch to ${SOFTWARE_NAMES[software()]} ${selectedVersion() || ""}`}
                         </PaperButton>
                     </PaperFlex>
-                </div>
-            </div>
 
             <PaperModal
                 open={confirmSwitchOpen()}
@@ -292,17 +288,15 @@ export default function Versions(props: { onRequestPluginUpdate?: () => void }) 
                 size="small"
                 footer={
                     <PaperFlex direction="row" justify="flex-end" gap="half" fullWidth>
-                        <PaperButton compact onClick={() => setConfirmSwitchOpen(false)}>
+                        <PaperButton onClick={() => setConfirmSwitchOpen(false)}>
                             Cancel
                         </PaperButton>
                         <PaperButton
-                            compact
-                            variant="red"
+                            variant="danger"
                             onClick={() => {
                                 setConfirmSwitchOpen(false);
                                 void switchVersion();
-                            }}
-                        >
+                            }}>
                             Switch anyway
                         </PaperButton>
                     </PaperFlex>
@@ -313,7 +307,7 @@ export default function Versions(props: { onRequestPluginUpdate?: () => void }) 
                         This replaces the server jar with{" "}
                         {SOFTWARE_NAMES[software()]} {selectedVersion()}.
                     </PaperText>
-                    <PaperQuote variant="yellow" icon="warning" title="Heads up">
+                    <PaperQuote variant="warning" icon="warning" title="Heads up">
                         Worlds and plugins may not survive every update. Success
                         varies by version, and there is no undo. Back up your world
                         first.
@@ -331,12 +325,10 @@ export default function Versions(props: { onRequestPluginUpdate?: () => void }) 
                     installFailed() ? (
                         <PaperFlex direction="row" justify="flex-end" gap="half" fullWidth>
                             <PaperButton
-                                compact
                                 onClick={() => {
                                     setInstallOpen(false);
                                     setInstallFailed(false);
-                                }}
-                            >
+                                }}>
                                 Dismiss
                             </PaperButton>
                         </PaperFlex>
@@ -344,7 +336,7 @@ export default function Versions(props: { onRequestPluginUpdate?: () => void }) 
                 }
             >
                 <PaperFlex fullWidth center>
-                    <div style={{ width: "100%", "max-width": "24rem" }}>
+                    <PaperFlex fullWidth maxWidth={getVarCss("size-panel-small")}>
                         <InstallLoaders
                             items={[
                                 {
@@ -365,11 +357,11 @@ export default function Versions(props: { onRequestPluginUpdate?: () => void }) 
                             ]}
                         />
                         <Show when={installFailed() && error()}>
-                            <PaperQuote variant="red" icon="warning" title="Switch failed">
+                            <PaperQuote variant="danger" icon="warning" title="Switch failed">
                                 {error()}
                             </PaperQuote>
                         </Show>
-                    </div>
+                    </PaperFlex>
                 </PaperFlex>
             </PaperModal>
 
@@ -382,26 +374,22 @@ export default function Versions(props: { onRequestPluginUpdate?: () => void }) 
                     <PaperFlex direction="row" justify="flex-end" gap="half" fullWidth>
                         <Show when={software() !== "vanilla"}>
                             <PaperButton
-                                compact
                                 onClick={() => {
                                     setPostSwitchOpen(false);
                                     props.onRequestPluginUpdate?.();
-                                }}
-                            >
+                                }}>
                                 Update plugins
                             </PaperButton>
                         </Show>
                         <Show when={postSwitchCount() > 0}>
                             <PaperButton
-                                compact
-                                variant="red"
+                                variant="danger"
                                 disabled={uninstallingAll()}
-                                onClick={() => void uninstallAll()}
-                            >
+                                onClick={() => void uninstallAll()}>
                                 {uninstallingAll() ? "Removing…" : "Uninstall all"}
                             </PaperButton>
                         </Show>
-                        <PaperButton compact onClick={() => setPostSwitchOpen(false)}>
+                        <PaperButton onClick={() => setPostSwitchOpen(false)}>
                             Done
                         </PaperButton>
                     </PaperFlex>
@@ -414,7 +402,7 @@ export default function Versions(props: { onRequestPluginUpdate?: () => void }) 
                             : `${SOFTWARE_NAMES[software()]} ${selectedVersion()} is installed.`}
                     </PaperText>
                     <Show when={postSwitchCount() > 0}>
-                        <PaperQuote variant="yellow" icon="warning" title="Existing jars">
+                        <PaperQuote variant="warning" icon="warning" title="Existing jars">
                             {postSwitchCount()} plugin/mod jar
                             {postSwitchCount() === 1 ? "" : "s"} from the previous
                             software won't load here. Uninstall them?
@@ -422,6 +410,6 @@ export default function Versions(props: { onRequestPluginUpdate?: () => void }) 
                     </Show>
                 </PaperFlex>
             </PaperModal>
-        </PaperFlex>
+        </>
     );
 }
