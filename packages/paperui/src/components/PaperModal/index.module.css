@@ -4,7 +4,7 @@
     left: 0;
     width: 100vw;
     height: 100vh;
-    background: var(--paper-overlay);
+    background: var(--paper-scrim);
     backdrop-filter: var(--paper-blur-light);
     display: flex;
     align-items: center;
@@ -15,8 +15,8 @@
 }
 
 .modalBox {
-    background: var(--paper-background-frontest);
-    border: var(--paper-border-width) solid var(--paper-medium-border);
+    background: var(--paper-surface-raised);
+    border: var(--paper-border-width) solid var(--paper-border);
     border-radius: var(--paper-border-radius);
     box-shadow: var(--paper-element-shadow);
     display: flex;
@@ -29,19 +29,19 @@
 }
 
 .small {
-    max-width: var(--paper-centered-width-small);
+    max-width: var(--paper-size-panel-small);
 }
 
 .medium {
-    max-width: var(--paper-centered-width-medium);
+    max-width: var(--paper-size-panel-medium);
 }
 
 .large {
-    max-width: var(--paper-centered-width-large);
+    max-width: var(--paper-size-panel-large);
 }
 
 .full {
-    max-width: var(--paper-centered-width-wide);
+    max-width: var(--paper-size-panel-wide);
 }
 
 .fullscreen {
@@ -58,8 +58,8 @@
     align-items: center;
     justify-content: space-between;
     padding: var(--paper-uigap-half) var(--paper-uigap);
-    border-bottom: var(--paper-border-width) solid var(--paper-medium-border);
-    background: var(--paper-background-front);
+    border-bottom: var(--paper-border-width) solid var(--paper-border);
+    background: var(--paper-surface);
 }
 
 .closeBtn {
@@ -97,8 +97,8 @@
     justify-content: flex-end;
     gap: var(--paper-uigap-half);
     padding: var(--paper-uigap) var(--paper-uigap);
-    border-top: var(--paper-border-width) solid var(--paper-medium-border);
-    background: var(--paper-background-front);
+    border-top: var(--paper-border-width) solid var(--paper-border);
+    background: var(--paper-surface);
 }
 
 .backdropTransitionIn {

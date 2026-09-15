@@ -2,7 +2,7 @@
     display: inline-flex;
     align-items: center;
     gap: var(--paper-uigap-onefourth);
-    font-size: 0.88em;
+    font-size: var(--paper-badge-font-scale);
     line-height: 1.2;
     padding: var(--paper-uigap-onefourth) var(--paper-uigap-half);
     border-radius: var(--paper-border-radius-half);
@@ -15,35 +15,14 @@
 }
 
 .variantMonochrome {
-    background: var(--paper-background-back);
-    color: var(--paper-light-text);
-    border: var(--paper-border-width) solid var(--paper-medium-border);
+    background: var(--paper-surface-sunken);
+    color: var(--paper-text-subtle);
+    border: var(--paper-border-width) solid var(--paper-border);
 }
 
-.variantBlue {
-    background: color-mix(in srgb, var(--paper-front-blue) 12%, transparent);
-    color: var(--paper-front-blue);
+.variantRole {
+    background: color-mix(in srgb, var(--role-base) 12%, transparent);
+    color: var(--role-base);
     border: var(--paper-border-width) solid
-        color-mix(in srgb, var(--paper-front-blue) 30%, transparent);
-}
-
-.variantGreen {
-    background: color-mix(in srgb, var(--paper-front-green) 12%, transparent);
-    color: var(--paper-front-green);
-    border: var(--paper-border-width) solid
-        color-mix(in srgb, var(--paper-front-green) 30%, transparent);
-}
-
-.variantYellow {
-    background: color-mix(in srgb, var(--paper-front-yellow) 12%, transparent);
-    color: var(--paper-front-yellow);
-    border: var(--paper-border-width) solid
-        color-mix(in srgb, var(--paper-front-yellow) 30%, transparent);
-}
-
-.variantRed {
-    background: color-mix(in srgb, var(--paper-front-red) 12%, transparent);
-    color: var(--paper-front-red);
-    border: var(--paper-border-width) solid
-        color-mix(in srgb, var(--paper-front-red) 30%, transparent);
+        color-mix(in srgb, var(--role-base) 30%, transparent);
 }

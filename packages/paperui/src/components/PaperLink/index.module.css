@@ -1,5 +1,5 @@
 .PaperLink {
-    color: var(--paper-front-blue);
+    color: var(--paper-primary);
     text-decoration: none;
     font-weight: 600;
     transition:
@@ -12,11 +12,11 @@
 }
 
 .PaperLink:hover {
-    color: var(--paper-back-blue);
+    color: var(--paper-primary-deep);
     text-decoration: underline;
 }
 
 .externalIcon {
-    font-size: 0.85em;
-    color: var(--paper-lightest-text);
+    font-size: var(--paper-link-font-scale);
+    color: var(--paper-text-faint);
 }

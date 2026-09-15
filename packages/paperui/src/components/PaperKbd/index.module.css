@@ -4,15 +4,15 @@
     font-weight: 700;
     padding: var(--paper-uigap-onefourth) var(--paper-uigap-half);
     border-radius: var(--paper-border-radius-half);
-    background: var(--paper-background-front);
-    border: var(--paper-border-width) solid var(--paper-medium-dark-border);
+    background: var(--paper-surface);
+    border: var(--paper-border-width) solid var(--paper-border-strong);
     box-shadow: 0 var(--paper-thick-border-width) 0
-        var(--paper-medium-dark-border);
-    color: var(--paper-main-text);
+        var(--paper-border-strong);
+    color: var(--paper-text);
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 1.6em;
+    min-width: var(--paper-kbd-min-width);
     line-height: 1;
     text-align: center;
     margin: 0 var(--paper-uigap-onefourth);

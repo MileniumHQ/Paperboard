@@ -1,6 +1,7 @@
 import styles from "./index.module.css";
 import { splitProps, Show, type ParentProps, type JSX } from "solid-js";
 import { PaperIcon } from "../PaperIcon";
+import { roleVars, isPaperRole } from "../../utils/colors";
 import type { PaperBadgeVariant } from "../../types";
 
 export interface PaperBadgeProps extends JSX.HTMLAttributes<HTMLSpanElement> {
@@ -11,27 +12,20 @@ export interface PaperBadgeProps extends JSX.HTMLAttributes<HTMLSpanElement> {
 export function PaperBadge(props: ParentProps<PaperBadgeProps>) {
     const [local, rest] = splitProps(props, ["variant", "icon", "class", "classList", "children"]);
 
-    const variantClass = () => {
-        switch (local.variant) {
-            case "blue":
-                return styles.variantBlue;
-            case "green":
-                return styles.variantGreen;
-            case "yellow":
-                return styles.variantYellow;
-            case "red":
-                return styles.variantRed;
-            case "monochrome":
-            default:
-                return styles.variantMonochrome;
-        }
-    };
+    const variantClass = () =>
+        isPaperRole(local.variant)
+            ? styles.variantRole
+            : styles.variantMonochrome;
+
+    const roleStyle = () =>
+        isPaperRole(local.variant) ? roleVars(local.variant) : {};
 
     return (
         <span
             {...rest}
             class={[styles.PaperBadge, variantClass(), local.class].filter(Boolean).join(" ")}
             classList={local.classList}
+            style={roleStyle()}
         >
             <Show when={local.icon}>
                 {typeof local.icon === "string" ? (

@@ -4,8 +4,8 @@
     min-width: 0;
     overflow-x: auto;
     border-radius: var(--paper-border-radius);
-    border: var(--paper-border-width) solid var(--paper-medium-border);
-    background: var(--paper-background-frontest);
+    border: var(--paper-border-width) solid var(--paper-border);
+    background: var(--paper-surface-raised);
     -webkit-overflow-scrolling: touch;
     box-sizing: border-box;
 }
@@ -15,21 +15,21 @@
     border-collapse: collapse;
     text-align: left;
     font-size: var(--paper-text-size-2);
-    color: var(--paper-main-text);
+    color: var(--paper-text);
 }
 
 .PaperTable th {
     padding: var(--paper-uigap-half) var(--paper-uigap-threefourths);
     font-weight: 700;
-    color: var(--paper-lightish-text);
-    background: var(--paper-background-front);
-    border-bottom: var(--paper-border-width) solid var(--paper-medium-border);
+    color: var(--paper-text-muted);
+    background: var(--paper-surface);
+    border-bottom: var(--paper-border-width) solid var(--paper-border);
     white-space: nowrap;
 }
 
 .PaperTable td {
     padding: var(--paper-uigap-half) var(--paper-uigap-threefourths);
-    border-bottom: var(--paper-border-width) solid var(--paper-medium-border);
+    border-bottom: var(--paper-border-width) solid var(--paper-border);
     vertical-align: middle;
 }
 
@@ -38,7 +38,7 @@
 }
 
 .PaperTable td:last-child {
-    min-width: var(--paper-sidebar-width);
+    min-width: var(--paper-size-sidebar);
     white-space: normal;
 }
 
@@ -47,5 +47,5 @@
 }
 
 .PaperTable tr:hover td {
-    background: color-mix(in srgb, var(--paper-anti-background) 3%, transparent);
+    background: color-mix(in srgb, var(--paper-contrast) 3%, transparent);
 }

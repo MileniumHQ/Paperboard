@@ -16,20 +16,20 @@
 
 .track {
     position: relative;
-    height: var(--paper-item-size-tiny);
-    width: calc(var(--paper-item-size-tiny) * 2);
+    height: var(--paper-control-size-tiny);
+    width: calc(var(--paper-control-size-tiny) * 2);
     border-radius: var(--paper-border-radius-half);
-    background: var(--paper-background-element);
+    background: var(--paper-surface-element);
     /* an inner edge so the track reads as a switch even when the fill
        blends with the surface (and after the disabled grayscale) */
-    box-shadow: inset 0 0 0 var(--paper-border-width) var(--paper-medium-dark-border);
+    box-shadow: inset 0 0 0 var(--paper-border-width) var(--paper-border-strong);
     display: flex;
     align-items: center;
     transition: background var(--paper-mid-transition) ease;
 }
 
 .checked .track {
-    background: var(--paper-front-blue);
+    background: var(--paper-primary);
 }
 
 .knob {
@@ -39,9 +39,9 @@
     height: 100%;
     aspect-ratio: 1 / 1;
     border-radius: var(--paper-border-radius-half);
-    background: var(--paper-over-brand);
-    border: var(--paper-thick-border-width) solid var(--paper-medium-dark-border);
-    box-shadow: 0 var(--paper-thick-border-width) 0 var(--paper-medium-dark-border);
+    background: var(--paper-on-color);
+    border: var(--paper-thick-border-width) solid var(--paper-border-strong);
+    box-shadow: 0 var(--paper-thick-border-width) 0 var(--paper-border-strong);
     transform: translate3d(0, calc(-50% - var(--paper-thick-border-width)), 0);
     display: flex;
     align-items: center;
@@ -56,17 +56,17 @@
 
 .checked .knob {
     left: 50%;
-    border-color: var(--paper-back-blue);
-    box-shadow: 0 var(--paper-thick-border-width) 0 var(--paper-back-blue);
+    border-color: var(--paper-primary-deep);
+    box-shadow: 0 var(--paper-thick-border-width) 0 var(--paper-primary-deep);
 }
 
 .PaperToggle:hover:not(:active):not(.animating) .knob {
     transform: translate3d(0, calc(-50% - var(--paper-thickest-border-width)), 0);
-    box-shadow: 0 var(--paper-thickest-border-width) 0 var(--paper-medium-dark-border);
+    box-shadow: 0 var(--paper-thickest-border-width) 0 var(--paper-border-strong);
 }
 
 .PaperToggle.checked:hover:not(:active):not(.animating) .knob {
-    box-shadow: 0 var(--paper-thickest-border-width) 0 var(--paper-back-blue);
+    box-shadow: 0 var(--paper-thickest-border-width) 0 var(--paper-primary-deep);
 }
 
 .PaperToggle:active .knob,
@@ -83,11 +83,11 @@
 }
 
 .iconCheck {
-    color: var(--paper-front-green);
+    color: var(--paper-success);
 }
 
 .iconClose {
-    color: var(--paper-lightest-text);
+    color: var(--paper-text-faint);
 }
 
 .hiddenInput {

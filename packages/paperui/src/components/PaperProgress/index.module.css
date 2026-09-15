@@ -2,7 +2,7 @@
     display: block;
     width: 100%;
     height: calc(var(--paper-thickest-border-width) * 2);
-    background: var(--paper-background-definition);
+    background: var(--paper-surface-inset);
     border: none;
     border-radius: var(--paper-thickest-border-width);
     overflow: hidden;
@@ -12,7 +12,7 @@
 
 .bar {
     height: 100%;
-    background: var(--paper-front-blue);
+    background: var(--paper-primary);
     border-radius: var(--paper-thick-border-width);
     transition: width var(--paper-mid-transition) var(--paper-ease-symmetric);
 }

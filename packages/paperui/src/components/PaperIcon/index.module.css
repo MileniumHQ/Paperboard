@@ -19,8 +19,8 @@
 .monogram {
     font-family: var(--paper-font-family-rounded);
     font-weight: 700;
-    font-size: 0.72em;
-    letter-spacing: -0.02em;
+    font-size: var(--paper-icon-font-scale);
+    letter-spacing: var(--paper-icon-tracking);
     font-variation-settings: normal;
     display: inline-flex;
     align-items: center;
@@ -38,8 +38,8 @@ button .PaperIcon {
 
 .PaperIcon img,
 .iconImage {
-    width: 1em;
-    height: 1em;
+    width: var(--paper-icon-em);
+    height: var(--paper-icon-em);
     object-fit: contain;
     flex-shrink: 0;
     display: inline-block;

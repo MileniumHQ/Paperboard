@@ -18,27 +18,27 @@ describe("Theme & Token Resolution Tests", () => {
     });
 
     test("resolves background surface tokens to CSS variables without var()", () => {
-        expect(resolveBackground("front")).toBe("var(--paper-background-front, var(--paper-front))");
-        expect(resolveBackground("backest")).toBe("var(--paper-background-backest, var(--paper-backest))");
+        expect(resolveBackground("surface")).toBe("var(--paper-surface)");
+        expect(resolveBackground("surface-app")).toBe("var(--paper-surface-app)");
         expect(resolveBackground("#ff0000")).toBe("#ff0000");
         expect(resolveBackground("var(--custom-bg)")).toBe("var(--custom-bg)");
         expect(resolveBackground(undefined)).toBeUndefined();
     });
 
-    test("resolves color tokens to CSS variables without var()", () => {
-        expect(resolveColor("front-blue")).toBe("var(--paper-front-blue)");
-        expect(resolveColor("light-text")).toBe("var(--paper-light-text)");
-        expect(resolveColor("blue")).toBe("var(--paper-front-blue)");
-        expect(resolveColor("green")).toBe("var(--paper-front-green)");
+    test("resolves roles and token names to CSS variables without var()", () => {
+        expect(resolveColor("primary")).toBe("var(--paper-primary)");
+        expect(resolveColor("brand")).toBe("var(--paper-brand)");
+        expect(resolveColor("danger")).toBe("var(--paper-danger)");
+        expect(resolveColor("text-subtle")).toBe("var(--paper-text-subtle)");
         expect(resolveColor("#ffffff")).toBe("#ffffff");
         expect(resolveColor("currentColor")).toBe("currentColor");
         expect(resolveColor(undefined)).toBeUndefined();
     });
 
     test("formats getVarCss accurately", () => {
-        expect(getVarCss("light-text")).toBe("var(--paper-light-text)");
-        expect(getVarCss("--paper-front-blue")).toBe("var(--paper-front-blue)");
-        expect(getVarCss("paper-front-blue")).toBe("var(--paper-front-blue)");
-        expect(getVarCss("light-text", "#000")).toBe("var(--paper-light-text, #000)");
+        expect(getVarCss("text-subtle")).toBe("var(--paper-text-subtle)");
+        expect(getVarCss("--paper-primary")).toBe("var(--paper-primary)");
+        expect(getVarCss("paper-primary")).toBe("var(--paper-primary)");
+        expect(getVarCss("text-subtle", "#000")).toBe("var(--paper-text-subtle, #000)");
     });
 });

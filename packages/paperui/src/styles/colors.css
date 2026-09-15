@@ -1,61 +1,75 @@
 /* forced theme wins over OS preference */
 :root {
-    --paper-front-blue: #2981e5;
-    --paper-back-blue: #0f63c8;
-    --paper-front-green: #0d9d0d;
-    --paper-back-green: #0b720b;
-    /* plain-green convenience alias (panels reference it) */
-    --paper-green: #0d9d0d;
-    --paper-front-red: #e73648;
-    --paper-back-red: #ae1414;
-    --paper-front-yellow: #d7a51d;
-    --paper-back-yellow: #a17e0d;
-    --paper-over-brand: #ffffff;
+    /* roles, not hues: primary/brand are the action color, the rest are
+       meanings. brand is an alias of primary by design. deep is the same
+       hue and saturation at 78% lightness, for text on tinted surfaces. */
+    --paper-primary: #2981e5;
+    --paper-primary-deep: #1764bc;
+    --paper-brand: var(--paper-primary);
+    --paper-brand-deep: var(--paper-primary-deep);
+    --paper-success: #0d9d0d;
+    --paper-success-deep: #0a7a0a;
+    --paper-danger: #e73648;
+    --paper-danger-deep: #c71829;
+    --paper-warning: #d7a51d;
+    --paper-warning-deep: #a88117;
+    --paper-attention: #e66d30;
+    --paper-attention-deep: #c15017;
+    --paper-extra-1: #08d1a9;
+    --paper-extra-1-deep: #06a384;
+    --paper-extra-2: #8312e0;
+    --paper-extra-2-deep: #660eaf;
+    --paper-extra-3: #d450d9;
+    --paper-extra-3-deep: #b929be;
+
+    /* text and icons on a colored fill */
+    --paper-on-color: #ffffff;
     /* scrim resting behind modal surfaces; dark/light resolve below */
-    --paper-overlay: rgba(0, 0, 0, 0.45);
+    --paper-scrim: rgba(0, 0, 0, 0.45);
     /* inverted scrim for dark surfaces (light dim behind overlays) */
-    --paper-overlay-invert: rgba(255, 255, 255, 0.7);
+    --paper-scrim-light: rgba(255, 255, 255, 0.7);
 
     /* OS brand colors — semantic identities, not theme colors (an OS is
        its color); they survive theming by design */
-    --paper-brand-os-macos: #ffffff;
-    --paper-brand-os-windows: #0078d4;
-    --paper-brand-os-ubuntu: #e95420;
-    --paper-brand-os-arch: #1793d1;
-    --paper-brand-os-debian: #a80030;
-    --paper-brand-os-fedora: #3c6eb4;
-    --paper-brand-os-linuxmint: #86be43;
-    --paper-brand-os-zorin: #0cc1e8;
-    --paper-brand-os-steamos: #1a9fff;
-    --paper-brand-os-pop: #48b9c7;
-    --paper-brand-os-manjaro: #35bf5c;
-    --paper-brand-os-elementary: #64baff;
-    --paper-brand-os-nixos: #5277c3;
-    --paper-brand-os-raspbian: #c51a4a;
-    --paper-brand-os-linux: #fcc624;
-    --paper-brand-os-unknown: #888888;
+    --paper-os-macos: #ffffff;
+    --paper-os-windows: #0078d4;
+    --paper-os-ubuntu: #e95420;
+    --paper-os-arch: #1793d1;
+    --paper-os-debian: #a80030;
+    --paper-os-fedora: #3c6eb4;
+    --paper-os-linuxmint: #86be43;
+    --paper-os-zorin: #0cc1e8;
+    --paper-os-steamos: #1a9fff;
+    --paper-os-pop: #48b9c7;
+    --paper-os-manjaro: #35bf5c;
+    --paper-os-elementary: #64baff;
+    --paper-os-nixos: #5277c3;
+    --paper-os-raspbian: #c51a4a;
+    --paper-os-linux: #fcc624;
+    --paper-os-unknown: #888888;
 
-    --paper-background-frontest: #ffffff;
-    --paper-background-front: #f6f8fa;
-    --paper-background-definition: #eceff3;
-    --paper-background-back: #e2e6eb;
-    --paper-background-backest: #d8dce2;
-    --paper-background-element: #cdd3db;
+    --paper-surface-raised: #ffffff;
+    --paper-surface: #f6f8fa;
+    --paper-surface-inset: #eceff3;
+    --paper-surface-sunken: #e2e6eb;
+    --paper-surface-app: #d8dce2;
+    --paper-surface-element: #cdd3db;
 
-    /* low: nested/subtle separators; medium: the standard divider; dark:
-       strong edges (drop targets, table rules). All three must be readable
-       against the surfaces they sit on. */
-    --paper-low-border: #d2d6dd;
-    --paper-medium-border: #c4c9d2;
-    --paper-medium-dark-border: #adb3be;
-    --paper-dark-border: #7d8492;
+    /* subtle: nested separators; border: the standard divider; strong:
+       emphasized edges; emphasis: drop targets and table rules. All must
+       be readable against the surfaces they sit on. */
+    --paper-border-subtle: #d2d6dd;
+    --paper-border: #c4c9d2;
+    --paper-border-strong: #adb3be;
+    --paper-border-emphasis: #7d8492;
 
-    --paper-main-text: #0f1319;
-    --paper-lightish-text: #2e3440;
-    --paper-light-text: #5b6371;
-    --paper-lightest-text: #8b93a2;
+    --paper-text: #0f1319;
+    --paper-text-muted: #2e3440;
+    --paper-text-subtle: #5b6371;
+    --paper-text-faint: #8b93a2;
 
-    --paper-anti-background: #000000;
+    /* the tone opposite the theme background, for tints and mixes */
+    --paper-contrast: #000000;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -63,74 +77,74 @@
         /* dark ramp: near-black, very slightly cool. The blue is a whisper —
            each step's B-R delta is 2-6, so it still reads as grey, just not
            dead concrete. Elevation comes from luminance, not shadow:
-           backest (canvas) < back < front < frontest; definition is recessed
+           surface-app (canvas) < sunken < surface < raised; inset is recessed
            below the canvas (wells), element is an interactive fill. */
-        --paper-background-backest: #141517;
-        --paper-background-back: #1a1b1e;
-        --paper-background-front: #202124;
-        --paper-background-frontest: #27282b;
-        --paper-background-definition: #0f1011;
-        --paper-background-element: #323337;
+        --paper-surface-app: #141517;
+        --paper-surface-sunken: #1a1b1e;
+        --paper-surface: #202124;
+        --paper-surface-raised: #27282b;
+        --paper-surface-inset: #0f1011;
+        --paper-surface-element: #323337;
 
-        /* dividers must clear the surfaces above them (front #202124,
-           frontest #27282b), so these sit well above the background ramp */
-        --paper-low-border: #33353a;
-        --paper-medium-border: #3a3c40;
-        --paper-medium-dark-border: #4d5055;
-        --paper-dark-border: #676a70;
+        /* dividers must clear the surfaces above them (surface #202124,
+           raised #27282b), so these sit well above the background ramp */
+        --paper-border-subtle: #33353a;
+        --paper-border: #3a3c40;
+        --paper-border-strong: #4d5055;
+        --paper-border-emphasis: #676a70;
 
-        --paper-main-text: #f5f5f5;
-        --paper-lightish-text: #d4d4d4;
-        --paper-light-text: #a1a1a1;
-        --paper-lightest-text: #737373;
+        --paper-text: #f5f5f5;
+        --paper-text-muted: #d4d4d4;
+        --paper-text-subtle: #a1a1a1;
+        --paper-text-faint: #737373;
 
-        --paper-anti-background: #ffffff;
+        --paper-contrast: #ffffff;
 
-        --paper-overlay: rgba(0, 0, 0, 0.6);
+        --paper-scrim: rgba(0, 0, 0, 0.6);
     }
 }
 
 [data-paperui-theme="light"],
 [data-theme="light"] {
-    --paper-background-frontest: #ffffff;
-    --paper-background-front: #f6f8fa;
-    --paper-background-definition: #eceff3;
-    --paper-background-back: #e2e6eb;
-    --paper-background-backest: #d8dce2;
-    --paper-background-element: #cdd3db;
+    --paper-surface-raised: #ffffff;
+    --paper-surface: #f6f8fa;
+    --paper-surface-inset: #eceff3;
+    --paper-surface-sunken: #e2e6eb;
+    --paper-surface-app: #d8dce2;
+    --paper-surface-element: #cdd3db;
 
-    --paper-low-border: #d2d6dd;
-    --paper-medium-border: #c4c9d2;
-    --paper-medium-dark-border: #adb3be;
-    --paper-dark-border: #7d8492;
+    --paper-border-subtle: #d2d6dd;
+    --paper-border: #c4c9d2;
+    --paper-border-strong: #adb3be;
+    --paper-border-emphasis: #7d8492;
 
-    --paper-main-text: #0f1319;
-    --paper-lightish-text: #2e3440;
-    --paper-light-text: #5b6371;
-    --paper-lightest-text: #8b93a2;
+    --paper-text: #0f1319;
+    --paper-text-muted: #2e3440;
+    --paper-text-subtle: #5b6371;
+    --paper-text-faint: #8b93a2;
 
-    --paper-anti-background: #000000;
+    --paper-contrast: #000000;
 }
 
 [data-paperui-theme="dark"],
 [data-theme="dark"] {
     /* keep in step with the prefers-color-scheme dark ramp above */
-    --paper-background-backest: #141517;
-    --paper-background-back: #1a1b1e;
-    --paper-background-front: #202124;
-    --paper-background-frontest: #27282b;
-    --paper-background-definition: #0f1011;
-    --paper-background-element: #323337;
+    --paper-surface-app: #141517;
+    --paper-surface-sunken: #1a1b1e;
+    --paper-surface: #202124;
+    --paper-surface-raised: #27282b;
+    --paper-surface-inset: #0f1011;
+    --paper-surface-element: #323337;
 
-    --paper-low-border: #33353a;
-    --paper-medium-border: #3a3c40;
-    --paper-medium-dark-border: #4d5055;
-    --paper-dark-border: #676a70;
+    --paper-border-subtle: #33353a;
+    --paper-border: #3a3c40;
+    --paper-border-strong: #4d5055;
+    --paper-border-emphasis: #676a70;
 
-    --paper-main-text: #f5f5f5;
-    --paper-lightish-text: #d4d4d4;
-    --paper-light-text: #a1a1a1;
-    --paper-lightest-text: #737373;
+    --paper-text: #f5f5f5;
+    --paper-text-muted: #d4d4d4;
+    --paper-text-subtle: #a1a1a1;
+    --paper-text-faint: #737373;
 
-    --paper-anti-background: #ffffff;
+    --paper-contrast: #ffffff;
 }

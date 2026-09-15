@@ -1,9 +1,11 @@
 import styles from "./index.module.css";
 import { splitProps, type JSX } from "solid-js";
+import { roleVars, isPaperRole } from "../../utils/colors";
+import type { PaperRole } from "../../types";
 
 export interface PaperEffectProps extends JSX.HTMLAttributes<HTMLDivElement> {
     colorless?: boolean;
-    variant?: "blue" | "green" | "yellow" | "red" | "brand";
+    variant?: PaperRole;
     disabled?: boolean;
 }
 
@@ -15,14 +17,19 @@ export function PaperEffect(props: PaperEffectProps) {
         "class",
         "classList",
         "children",
+        "style",
     ]);
 
     const isColorless = () => local.colorless || local.disabled;
 
+    const roleStyle = () =>
+        local.variant && isPaperRole(local.variant)
+            ? roleVars(local.variant)
+            : {};
+
     const className = () =>
         [
             styles.PaperEffect,
-            local.variant ? styles[local.variant] : "",
             isColorless() ? styles.colorless : "",
             local.disabled ? styles.disabled : "",
             local.class,
@@ -35,6 +42,7 @@ export function PaperEffect(props: PaperEffectProps) {
             {...rest}
             class={className()}
             classList={local.classList}
+            style={roleStyle()}
         >
             {local.children}
         </div>

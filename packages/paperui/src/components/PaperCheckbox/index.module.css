@@ -35,8 +35,8 @@
     min-width: var(--paper-icon-size-small);
     min-height: var(--paper-icon-size-small);
     border-radius: var(--paper-border-radius-half);
-    background: var(--paper-background-definition);
-    border: var(--paper-border-width) solid var(--paper-medium-dark-border);
+    background: var(--paper-surface-inset);
+    border: var(--paper-border-width) solid var(--paper-border-strong);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -49,23 +49,23 @@
 }
 
 .PaperCheckboxContainer:hover:not(.disabled) .box {
-    border-color: var(--paper-dark-border);
+    border-color: var(--paper-border-emphasis);
 }
 
 .checked .box {
-    background: var(--paper-front-blue);
-    border-color: var(--paper-front-blue);
+    background: var(--paper-primary);
+    border-color: var(--paper-primary);
 }
 
 .PaperCheckboxContainer:hover:not(.disabled) .checked .box {
-    background: var(--paper-front-blue);
-    border-color: var(--paper-front-blue);
+    background: var(--paper-primary);
+    border-color: var(--paper-primary);
 }
 
 .iconCheck {
     font-size: var(--paper-text-size-3);
     font-weight: 800;
-    color: var(--paper-over-brand);
+    color: var(--paper-on-color);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -85,13 +85,13 @@
 .label {
     font-size: var(--paper-text-size-2);
     font-weight: 600;
-    color: var(--paper-main-text);
+    color: var(--paper-text);
     line-height: 1.25;
 }
 
 .description {
     font-size: var(--paper-text-size-1);
-    color: var(--paper-light-text);
+    color: var(--paper-text-subtle);
     line-height: 1.35;
 }
 

@@ -1,11 +1,11 @@
 .PaperCodeInline {
     font-family: var(--paper-font-family-code);
-    font-size: 0.88em;
-    padding: 0.15em 0.35em;
+    font-size: var(--paper-code-font-scale);
+    padding: var(--paper-code-padding-y) var(--paper-code-padding-x);
     border-radius: var(--paper-border-radius-half);
-    background: var(--paper-background-front);
-    border: var(--paper-border-width) solid var(--paper-medium-border);
-    color: var(--paper-light-text);
+    background: var(--paper-surface);
+    border: var(--paper-border-width) solid var(--paper-border);
+    color: var(--paper-text-subtle);
     display: inline;
     font-weight: 600;
     margin: 0;
@@ -19,8 +19,8 @@
     width: 100%;
     border-radius: var(--paper-border-radius);
     overflow: hidden;
-    border: var(--paper-border-width) solid var(--paper-medium-border);
-    background: var(--paper-background-front);
+    border: var(--paper-border-width) solid var(--paper-border);
+    background: var(--paper-surface);
 }
 
 .copyButton {
@@ -34,8 +34,8 @@
     font-family: var(--paper-font-family-code);
     font-size: var(--paper-text-size-2);
     padding: var(--paper-uigap-threefourths) var(--paper-uigap);
-    background: var(--paper-background-front);
-    color: var(--paper-main-text);
+    background: var(--paper-surface);
+    color: var(--paper-text);
     display: block;
     width: 100%;
     overflow-x: auto;
@@ -51,14 +51,14 @@
 
 .PaperCodeBlock :global(.token.keyword),
 .PaperCodeInline :global(.token.keyword) {
-    color: var(--paper-front-blue);
+    color: var(--paper-primary);
     font-weight: 700;
 }
 
 .PaperCodeBlock :global(.token.string),
 .PaperCodeBlock :global(.token.attr-value),
 .PaperCodeInline :global(.token.string) {
-    color: var(--paper-front-green);
+    color: var(--paper-success);
 }
 
 .PaperCodeBlock :global(.token.comment),
@@ -66,7 +66,7 @@
 .PaperCodeBlock :global(.token.doctype),
 .PaperCodeBlock :global(.token.cdata),
 .PaperCodeInline :global(.token.comment) {
-    color: var(--paper-lightest-text);
+    color: var(--paper-text-faint);
     font-style: italic;
 }
 
@@ -74,28 +74,28 @@
 .PaperCodeBlock :global(.token.boolean),
 .PaperCodeBlock :global(.token.constant),
 .PaperCodeInline :global(.token.number) {
-    color: var(--paper-front-yellow);
+    color: var(--paper-warning);
 }
 
 .PaperCodeBlock :global(.token.function),
 .PaperCodeBlock :global(.token.class-name),
 .PaperCodeInline :global(.token.function) {
-    color: var(--paper-front-blue);
+    color: var(--paper-primary);
 }
 
 .PaperCodeBlock :global(.token.tag),
 .PaperCodeInline :global(.token.tag) {
-    color: var(--paper-front-red);
+    color: var(--paper-danger);
     font-weight: 600;
 }
 
 .PaperCodeBlock :global(.token.attr-name),
 .PaperCodeInline :global(.token.attr-name) {
-    color: var(--paper-front-yellow);
+    color: var(--paper-warning);
 }
 
 .PaperCodeBlock :global(.token.operator),
 .PaperCodeBlock :global(.token.punctuation),
 .PaperCodeInline :global(.token.punctuation) {
-    color: var(--paper-light-text);
+    color: var(--paper-text-subtle);
 }

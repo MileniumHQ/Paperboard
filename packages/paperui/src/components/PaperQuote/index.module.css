@@ -5,7 +5,7 @@
     padding: var(--paper-uigap-sixfourths);
     border-radius: var(--paper-border-radius);
     background: var(--quote-bg-color);
-    color: var(--paper-main-text);
+    color: var(--paper-text);
     position: relative;
     overflow: hidden;
 }
@@ -22,33 +22,17 @@
 }
 
 .variantMonochrome {
-    --quote-accent-color: var(--paper-dark-border);
-    --quote-bg-color: var(--paper-background-front);
+    --quote-accent-color: var(--paper-border-emphasis);
+    --quote-bg-color: var(--paper-surface);
 }
 
-.variantBlue {
-    --quote-accent-color: var(--paper-front-blue);
-    --quote-bg-color: color-mix(in srgb, var(--paper-front-blue) 8%, var(--paper-background-frontest));
-}
-
-.variantGreen {
-    --quote-accent-color: var(--paper-front-green);
-    --quote-bg-color: color-mix(in srgb, var(--paper-front-green) 8%, var(--paper-background-frontest));
-}
-
-.variantYellow {
-    --quote-accent-color: var(--paper-front-yellow);
-    --quote-bg-color: color-mix(in srgb, var(--paper-front-yellow) 8%, var(--paper-background-frontest));
-}
-
-.variantRed {
-    --quote-accent-color: var(--paper-front-red);
-    --quote-bg-color: color-mix(in srgb, var(--paper-front-red) 8%, var(--paper-background-frontest));
-}
-
-.variantBrand {
-    --quote-accent-color: var(--paper-front-blue);
-    --quote-bg-color: color-mix(in srgb, var(--paper-front-blue) 12%, var(--paper-background-frontest));
+.variantRole {
+    --quote-accent-color: var(--role-base);
+    --quote-bg-color: color-mix(
+        in srgb,
+        var(--role-base) 8%,
+        var(--paper-surface-raised)
+    );
 }
 
 .quoteIcon {
@@ -70,5 +54,5 @@
 }
 
 .quoteTitle {
-    color: var(--paper-main-text);
+    color: var(--paper-text);
 }

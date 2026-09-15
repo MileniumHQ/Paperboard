@@ -1,12 +1,12 @@
 .PaperList {
     gap: 0;
     padding: 0;
-    width: var(--paper-sidebar-width);
+    width: var(--paper-size-sidebar);
     height: 100%;
     display: flex;
     flex-direction: column;
-    border-right: var(--paper-border-width) solid var(--paper-medium-border);
-    background: var(--paper-background-definition);
+    border-right: var(--paper-border-width) solid var(--paper-border);
+    background: var(--paper-surface-inset);
     touch-action: pan-y;
 }
 
@@ -48,9 +48,9 @@
 
 .PaperListItem {
     position: relative;
-    background: var(--paper-background-frontest);
+    background: var(--paper-surface-raised);
     padding: var(--paper-uigap-threefourths);
-    outline: var(--paper-border-width) solid var(--paper-medium-border);
+    outline: var(--paper-border-width) solid var(--paper-border);
     border-radius: 0;
     border: 0;
     gap: var(--paper-uigap-half);
@@ -66,7 +66,7 @@
 .PaperListItem::before {
     content: "";
     position: absolute;
-    background: var(--paper-front-blue);
+    background: var(--paper-primary);
     z-index: 5;
     pointer-events: none;
     transition: width var(--paper-short-transition), height var(--paper-short-transition);
@@ -94,7 +94,7 @@
 
 .PaperList.horizontal .PaperListItem {
     outline: none;
-    outline: var(--paper-border-width) solid var(--paper-medium-border);
+    outline: var(--paper-border-width) solid var(--paper-border);
     padding-right: var(--paper-uigap-double);
 }
 
@@ -105,7 +105,7 @@
 
 .listIcon {
     font-size: var(--paper-icon-size-large);
-    color: var(--paper-back-blue);
+    color: var(--paper-primary-deep);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -133,15 +133,15 @@
 }
 
 .listDescription {
-    color: var(--paper-light-text);
+    color: var(--paper-text-subtle);
 }
 
 .PaperListItem:hover {
-    background: color-mix(in srgb, var(--paper-anti-background) 3%, var(--paper-background-frontest));
+    background: color-mix(in srgb, var(--paper-contrast) 3%, var(--paper-surface-raised));
 }
 
 .PaperListItem.selected {
-    background: var(--paper-background-frontest);
+    background: var(--paper-surface-raised);
 }
 
 .reorderable .PaperListItem {

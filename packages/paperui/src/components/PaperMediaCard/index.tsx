@@ -1,3 +1,4 @@
+import { getVarCss } from "../../utils/theme";
 import styles from "./index.module.css";
 import { splitProps, Show, type JSX, type ParentProps } from "solid-js";
 import { PaperText } from "../PaperText";
@@ -140,7 +141,7 @@ export function PaperMediaCard(props: ParentProps<PaperMediaCardProps>) {
                     .join(" ")}
             >
                 <Show when={!hasBanner() && local.icon}>
-                    <div style={{ "margin-bottom": "var(--paper-uigap-half)" }}>
+                    <div style={{ "margin-bottom": `${getVarCss("uigap-half")}` }}>
                         {typeof local.icon === "string" ? (
                             local.icon.startsWith("http") ||
                             local.icon.startsWith("/") ||
@@ -149,10 +150,10 @@ export function PaperMediaCard(props: ParentProps<PaperMediaCardProps>) {
                                     src={local.icon}
                                     alt=""
                                     style={{
-                                        width: "3em",
-                                        height: "3em",
+                                        width: `${getVarCss("media-icon-size")}`,
+                                        height: `${getVarCss("media-icon-size")}`,
                                         "border-radius":
-                                            "var(--paper-border-radius)",
+                                            `${getVarCss("border-radius")}`,
                                         display: "block",
                                     }}
                                 />
@@ -173,7 +174,7 @@ export function PaperMediaCard(props: ParentProps<PaperMediaCardProps>) {
                             {local.title}
                         </PaperText>
                         <Show when={local.subtitle}>
-                            <PaperText size={1} color="light-text">
+                            <PaperText size={1} color="text-subtle">
                                 {local.subtitle}
                             </PaperText>
                         </Show>
@@ -242,7 +243,7 @@ export function PaperMediaCardGroup(props: ParentProps<PaperMediaCardGroupProps>
             class={[styles.cardGroup, local.class].filter(Boolean).join(" ")}
             classList={local.classList}
             style={{
-                "grid-template-columns": `repeat(auto-fill, minmax(${local.minCardWidth ?? "16rem"}, 1fr))`,
+                "grid-template-columns": `repeat(auto-fill, minmax(${local.minCardWidth ?? `${getVarCss("size-card-min")}`}, 1fr))`,
                 ...(typeof local.style === "object" ? local.style : {}),
             }}
         >

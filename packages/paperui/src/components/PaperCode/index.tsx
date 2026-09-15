@@ -105,13 +105,11 @@ export function PaperCode(props: ParentProps<PaperCodeProps>) {
         >
             <div class={styles.PaperCodeWrapper}>
                 <Show when={isCopyable()}>
-                    <PaperButton
-                        tiny
+                    <PaperButton size="tiny"
                         icon
                         class={styles.copyButton}
                         onClick={handleCopy}
-                        title={copied() ? "Copied!" : "Copy code"}
-                    >
+                        title={copied() ? "Copied!" : "Copy code"}>
                         <PaperIcon zeroHeight>
                             {copied() ? "check" : "content_copy"}
                         </PaperIcon>

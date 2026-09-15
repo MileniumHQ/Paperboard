@@ -1,11 +1,11 @@
 .PaperMenu {
     padding: var(--paper-uigap-half);
-    width: var(--paper-sidebar-width);
+    width: var(--paper-size-sidebar);
     height: 100%;
     display: flex;
     flex-direction: column;
-    border-right: var(--paper-border-width) solid var(--paper-medium-border);
-    background: var(--paper-background-front);
+    border-right: var(--paper-border-width) solid var(--paper-border);
+    background: var(--paper-surface);
     overflow-y: auto;
     gap: var(--menu-spacing, 0);
 }
@@ -15,7 +15,7 @@
     width: 100%;
     height: auto;
     border-right: 0;
-    border-bottom: var(--paper-border-width) solid var(--paper-medium-border);
+    border-bottom: var(--paper-border-width) solid var(--paper-border);
     gap: var(--menu-spacing, var(--paper-uigap-half));
     align-items: center;
     overflow-x: auto;
@@ -39,7 +39,7 @@
     align-items: center;
     cursor: pointer;
     border-radius: var(--paper-border-radius);
-    color: var(--paper-light-text);
+    color: var(--paper-text-subtle);
 }
 
 .PaperMenuItem,
@@ -54,7 +54,7 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    color: var(--paper-lightest-text);
+    color: var(--paper-text-faint);
 }
 
 .itemText {
@@ -64,22 +64,22 @@
 }
 
 .menuDescription {
-    color: var(--paper-light-text);
+    color: var(--paper-text-subtle);
 }
 
 .PaperMenuItem:hover {
-    color: var(--paper-back-blue);
-    background: color-mix(in srgb, var(--paper-front-blue) 5%, transparent);
+    color: var(--paper-primary-deep);
+    background: color-mix(in srgb, var(--paper-primary) 5%, transparent);
 }
 
 .PaperMenuItem.selected .menuIcon,
 .PaperMenuItem:hover .menuIcon {
-    color: var(--paper-back-blue);
+    color: var(--paper-primary-deep);
 }
 
 .PaperMenuItem.selected {
-    background: color-mix(in srgb, var(--paper-front-blue) 10%, transparent);
-    color: var(--paper-back-blue);
+    background: color-mix(in srgb, var(--paper-primary) 10%, transparent);
+    color: var(--paper-primary-deep);
 }
 
 .PaperMenuSection {
@@ -99,7 +99,7 @@
     );
     cursor: pointer;
     border-radius: var(--paper-border-radius);
-    color: var(--paper-light-text);
+    color: var(--paper-text-subtle);
     user-select: none;
     transition:
         background var(--paper-short-transition),
@@ -107,17 +107,17 @@
 }
 
 .sectionHeader:hover {
-    color: var(--paper-main-text);
+    color: var(--paper-text);
     background: color-mix(
         in srgb,
-        var(--paper-anti-background) 4%,
+        var(--paper-contrast) 4%,
         transparent
     );
 }
 
 .PaperMenuItem:focus-visible,
 .sectionHeader:focus-visible {
-    outline: var(--paper-thickest-border-width) solid var(--paper-front-blue);
+    outline: var(--paper-thickest-border-width) solid var(--paper-primary);
     outline-offset: var(--paper-border-width);
 }
 
@@ -131,7 +131,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    color: var(--paper-lightest-text);
+    color: var(--paper-text-faint);
     transition: transform var(--paper-short-transition) ease;
 }
 

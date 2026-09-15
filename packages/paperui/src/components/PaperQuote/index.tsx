@@ -2,14 +2,10 @@ import styles from "./index.module.css";
 import { splitProps, Show, type JSX, type ParentProps } from "solid-js";
 import { PaperIcon } from "../PaperIcon";
 import { PaperText } from "../PaperText";
+import { roleVars, isPaperRole } from "../../utils/colors";
+import type { PaperRole } from "../../types";
 
-export type PaperQuoteVariant =
-    | "monochrome"
-    | "blue"
-    | "green"
-    | "yellow"
-    | "red"
-    | "brand";
+export type PaperQuoteVariant = "monochrome" | PaperRole;
 
 export interface PaperQuoteProps extends Omit<JSX.HTMLAttributes<HTMLDivElement>, "title"> {
     variant?: PaperQuoteVariant;
@@ -27,23 +23,13 @@ export function PaperQuote(props: ParentProps<PaperQuoteProps>) {
         "children",
     ]);
 
-    const variantClass = () => {
-        switch (local.variant) {
-            case "blue":
-                return styles.variantBlue;
-            case "green":
-                return styles.variantGreen;
-            case "yellow":
-                return styles.variantYellow;
-            case "red":
-                return styles.variantRed;
-            case "brand":
-                return styles.variantBrand;
-            case "monochrome":
-            default:
-                return styles.variantMonochrome;
-        }
-    };
+    const variantClass = () =>
+        isPaperRole(local.variant)
+            ? styles.variantRole
+            : styles.variantMonochrome;
+
+    const roleStyle = () =>
+        isPaperRole(local.variant) ? roleVars(local.variant) : {};
 
     return (
         <div
@@ -52,6 +38,7 @@ export function PaperQuote(props: ParentProps<PaperQuoteProps>) {
                 .filter(Boolean)
                 .join(" ")}
             classList={local.classList}
+            style={roleStyle()}
         >
             <Show when={local.icon}>
                 <div class={styles.quoteIcon}>

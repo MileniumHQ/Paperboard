@@ -7,31 +7,31 @@
 }
 
 .interfaceWrapper {
-    width: var(--paper-centered-width);
-    height: var(--paper-centered-height);
+    width: var(--paper-size-panel);
+    height: var(--paper-size-panel-height);
     overflow: auto;
     padding: var(--paper-uigap);
 }
 
 .small > .interfaceWrapper,
 .compact > .interfaceWrapper {
-    width: var(--paper-centered-width-small);
-    height: var(--paper-centered-height-small);
+    width: var(--paper-size-panel-small);
+    height: var(--paper-size-panel-height-small);
 }
 
 .medium > .interfaceWrapper {
-    width: var(--paper-centered-width-medium);
-    height: var(--paper-centered-height-medium);
+    width: var(--paper-size-panel-medium);
+    height: var(--paper-size-panel-height-medium);
 }
 
 .large > .interfaceWrapper {
-    width: var(--paper-centered-width-large);
-    height: var(--paper-centered-height-large);
+    width: var(--paper-size-panel-large);
+    height: var(--paper-size-panel-height-large);
 }
 
 .wide > .interfaceWrapper {
-    width: var(--paper-centered-width-wide);
-    height: var(--paper-centered-height-wide);
+    width: var(--paper-size-panel-wide);
+    height: var(--paper-size-panel-height-wide);
 }
 
 .full > .interfaceWrapper,

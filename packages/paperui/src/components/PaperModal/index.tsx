@@ -167,15 +167,13 @@ export function PaperModal(props: ParentProps<PaperModalProps>) {
                                     </Show>
 
                                     <Show when={local.onClose}>
-                                        <PaperButton
-                                            tiny
+                                        <PaperButton size="tiny"
                                             icon
                                             type="button"
                                             variant="text"
                                             onClick={() => local.onClose?.()}
                                             aria-label="Close modal"
-                                            class={styles.closeBtn}
-                                        >
+                                            class={styles.closeBtn}>
                                             <PaperIcon aria-hidden="true" zeroHeight>
                                                 close
                                             </PaperIcon>
@@ -185,15 +183,13 @@ export function PaperModal(props: ParentProps<PaperModalProps>) {
                             </Show>
 
                             <Show when={local.noHeader && local.onClose}>
-                                <PaperButton
-                                    tiny
+                                <PaperButton size="tiny"
                                     icon
                                     type="button"
                                     variant="text"
                                     onClick={() => local.onClose?.()}
                                     aria-label="Close modal"
-                                    class={styles.floatingCloseBtn}
-                                >
+                                    class={styles.floatingCloseBtn}>
                                     <PaperIcon aria-hidden="true" zeroHeight>
                                         close
                                     </PaperIcon>

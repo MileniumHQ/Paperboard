@@ -489,15 +489,13 @@ export function PaperListItem(props: ParentProps<PaperListItemProps>) {
                 <PaperText class={styles.listTitle} size={3} weight={500}>
                     <span>{local.children}</span>
                     <Show when={isCloseable()}>
-                        <PaperButton
-                            tiny
+                        <PaperButton size="tiny"
                             icon
                             onPointerDown={(e) => {
                                 e.stopPropagation();
                                 e.preventDefault();
                             }}
-                            onClick={handleCloseClick}
-                        >
+                            onClick={handleCloseClick}>
                             close
                         </PaperButton>
                     </Show>

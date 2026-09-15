@@ -4,7 +4,7 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    background: var(--paper-background-frontest);
+    background: var(--paper-surface-raised);
 }
 
 .wizardProgress {
@@ -18,7 +18,7 @@
 
 .progressBar {
     height: 100%;
-    background: var(--paper-front-blue);
+    background: var(--paper-primary);
     transition: width var(--paper-medium-transition) ease;
 }
 
@@ -35,8 +35,8 @@
     position: relative;
     display: flex;
     padding: var(--paper-uigap);
-    background: var(--paper-background-front);
-    border-top: var(--paper-border-width) solid var(--paper-medium-border);
+    background: var(--paper-surface);
+    border-top: var(--paper-border-width) solid var(--paper-border);
     justify-content: space-between;
     align-items: center;
     transition: transform var(--paper-medium-transition);

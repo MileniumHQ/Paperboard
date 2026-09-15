@@ -35,7 +35,7 @@ describe("PaperModal - Accessibility & Focus Trapping Tests", () => {
 
         const { getByText } = render(() => (
             <div>
-                <PaperButton onClick={() => setOpen(true)}>Open Dialog</PaperButton>
+                <PaperButton size="large" onClick={() => setOpen(true)}>Open Dialog</PaperButton>
                 <PaperModal open={open()} onClose={() => setOpen(false)} title="Focus Restoration">
                     <button onClick={() => setOpen(false)}>Close</button>
                 </PaperModal>

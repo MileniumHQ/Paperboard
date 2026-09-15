@@ -1,7 +1,7 @@
 .PaperSeparator {
     display: inline-block;
     flex-shrink: 0;
-    background: var(--paper-medium-border);
+    background: var(--paper-border);
     border: 0;
     margin: 0;
 }

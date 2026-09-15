@@ -47,7 +47,7 @@ export function PaperPageHeader(props: ParentProps<PaperPageHeaderProps>) {
                         {local.title}
                     </PaperText>
                     <Show when={local.subtitle}>
-                        <PaperText size={3} color="light-text">
+                        <PaperText size={3} color="text-subtle">
                             {local.subtitle}
                         </PaperText>
                     </Show>

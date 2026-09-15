@@ -6,8 +6,8 @@
     width: 100%;
     box-sizing: border-box;
     padding: var(--paper-uigap);
-    background: var(--paper-background-frontest);
-    border: var(--paper-border-width) solid var(--paper-medium-border);
+    background: var(--paper-surface-raised);
+    border: var(--paper-border-width) solid var(--paper-border);
     border-radius: var(--paper-border-radius);
 }
 
@@ -23,11 +23,11 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: var(--paper-item-size-medium);
-    height: var(--paper-item-size-medium);
+    width: var(--paper-control-size-large);
+    height: var(--paper-control-size-large);
     border-radius: var(--paper-border-radius);
-    background: color-mix(in srgb, var(--paper-front-blue) 14%, transparent);
-    color: var(--paper-back-blue);
+    background: color-mix(in srgb, var(--paper-primary) 14%, transparent);
+    color: var(--paper-primary-deep);
     font-size: var(--paper-icon-size-large);
     flex-shrink: 0;
 }

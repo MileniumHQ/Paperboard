@@ -1,5 +1,6 @@
 export const loaderStatuses = [
     "loading",
+    "indeterminate",
     "success",
     "error",
     "waiting",
@@ -24,66 +25,64 @@ export const spacingSizes = [
 export type PaperSpacingSize = (typeof spacingSizes)[number];
 export type PaperSpacing = PaperSpacingSize | (string & {}) | number;
 
-export const brandColors = [
-    "front-blue",
-    "back-blue",
-    "front-green",
-    "back-green",
-    "front-red",
-    "back-red",
-    "front-yellow",
-    "back-yellow",
-    "over-brand",
+/** the semantic color roles; each maps to --paper-<role> and -deep */
+export const paperRoles = [
+    "primary",
+    "brand",
+    "success",
+    "danger",
+    "warning",
+    "attention",
+    "extra-1",
+    "extra-2",
+    "extra-3",
 ] as const;
 
-export type PaperBrandColor = (typeof brandColors)[number];
+export type PaperRole = (typeof paperRoles)[number];
 
 export const backgroundSurfaces = [
-    "frontest",
-    "front",
-    "back",
-    "backest",
-    "definition",
-    "element",
+    "surface-raised",
+    "surface",
+    "surface-sunken",
+    "surface-app",
+    "surface-inset",
+    "surface-element",
 ] as const;
 
 export type PaperBackgroundSurface = (typeof backgroundSurfaces)[number];
 
 export const borderColors = [
-    "medium-border",
-    "medium-dark-border",
-    "dark-border",
+    "border-subtle",
+    "border",
+    "border-strong",
+    "border-emphasis",
 ] as const;
 
 export type PaperBorderColor = (typeof borderColors)[number];
 
 export const textColors = [
-    "main-text",
-    "lightish-text",
-    "light-text",
-    "lightest-text",
-    "anti-background",
+    "text",
+    "text-muted",
+    "text-subtle",
+    "text-faint",
+    "contrast",
+    "on-color",
 ] as const;
 
 export type PaperTextColor = (typeof textColors)[number];
 
 export const paperColors = [
-    ...brandColors,
+    ...paperRoles,
     ...backgroundSurfaces,
     ...borderColors,
     ...textColors,
 ] as const;
 
 export type PaperColor =
-    | PaperBrandColor
+    | PaperRole
     | PaperBackgroundSurface
     | PaperBorderColor
     | PaperTextColor
-    | "blue"
-    | "green"
-    | "yellow"
-    | "red"
-    | "brand"
     | (string & {});
 
 export const textSizes = [
@@ -105,11 +104,7 @@ export const textPresets = [
 export type PaperTextPreset = (typeof textPresets)[number] | (string & {});
 
 export const buttonVariants = [
-    "brand",
-    "blue",
-    "green",
-    "yellow",
-    "red",
+    ...paperRoles,
     "text",
 ] as const;
 
@@ -117,10 +112,7 @@ export type PaperButtonVariant = (typeof buttonVariants)[number];
 
 export const badgeVariants = [
     "monochrome",
-    "blue",
-    "green",
-    "yellow",
-    "red",
+    ...paperRoles,
 ] as const;
 
 export type PaperBadgeVariant = (typeof badgeVariants)[number];

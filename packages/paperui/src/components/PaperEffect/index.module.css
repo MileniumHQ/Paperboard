@@ -1,5 +1,5 @@
 .PaperEffect {
-    --transition-color: var(--paper-back-blue);
+    --transition-color: var(--role-deep, var(--paper-primary-deep));
     --transform-size: var(--paper-uigap-onefourth);
     --hover-offset: calc(var(--paper-border-width) * -1);
     margin-bottom: var(--transform-size);
@@ -57,33 +57,11 @@
     transform: none !important;
 }
 
-.green,
-.PaperEffect:has([class*="green"]) {
-    --transition-color: var(--paper-back-green);
-}
-
-.yellow,
-.PaperEffect:has([class*="yellow"]) {
-    --transition-color: var(--paper-back-yellow);
-}
-
-.red,
-.PaperEffect:has([class*="red"]) {
-    --transition-color: var(--paper-back-red);
-}
-
-.blue,
-.brand,
-.PaperEffect:has([class*="blue"]),
-.PaperEffect:has([class*="brand"]) {
-    --transition-color: var(--paper-back-blue);
-}
-
 .colorless,
 .PaperEffect:has([class*="text"]),
 .PaperEffect:has(:disabled),
 .PaperEffect:has([class*="disabled"]) {
-    --transition-color: var(--paper-medium-dark-border) !important;
+    --transition-color: var(--paper-border-strong) !important;
 }
 
 /* no hover motion when disabled, reads as interactive */

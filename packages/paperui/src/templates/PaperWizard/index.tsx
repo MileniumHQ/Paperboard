@@ -1,6 +1,7 @@
 import { PaperButton } from "../../components/PaperButton";
 import { PaperIcon } from "../../components/PaperIcon";
 import { PaperEffect } from "../../components/PaperEffect";
+import type { PaperButtonVariant } from "../../types";
 import { PaperText } from "../../components/PaperText";
 import styles from "./index.module.css";
 import {
@@ -21,7 +22,7 @@ export interface PaperWizardProps extends JSX.HTMLAttributes<HTMLFormElement> {
     showProgress?: boolean;
     hideBack?: boolean;
     finishLabel?: JSX.Element | string;
-    finishVariant?: "blue" | "green" | "yellow" | "red" | "brand";
+    finishVariant?: PaperButtonVariant;
     nextLabel?: JSX.Element | string;
     backLabel?: JSX.Element | string;
 }
@@ -179,7 +180,7 @@ export function PaperWizard(props: ParentProps<PaperWizardProps>) {
                     <div>
                         <Show when={!local.hideBack && !isFirstStep()}>
                             <PaperEffect colorless disabled={!optionsShown()}>
-                                <PaperButton
+                                <PaperButton size="large"
                                     type="button"
                                     onClick={prevStep}
                                     disabled={!optionsShown()}
@@ -193,9 +194,9 @@ export function PaperWizard(props: ParentProps<PaperWizardProps>) {
 
                     <div>
                         <PaperEffect disabled={!optionsShown() || !canProceedCurrent()}>
-                            <PaperButton
+                            <PaperButton size="large"
                                 type="submit"
-                                variant={isLastStep() ? (local.finishVariant ?? "green") : undefined}
+                                variant={isLastStep() ? (local.finishVariant ?? "success") : undefined}
                                 disabled={!optionsShown() || !canProceedCurrent()}
                             >
                                 {isLastStep()

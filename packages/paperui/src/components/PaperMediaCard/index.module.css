@@ -7,13 +7,13 @@
     position: relative;
     display: flex;
     flex-direction: column;
-    background: var(--paper-background-front);
-    border: var(--paper-border-width) solid var(--paper-medium-border);
+    background: var(--paper-surface);
+    border: var(--paper-border-width) solid var(--paper-border);
     border-radius: var(--paper-border-radius);
     overflow: hidden;
     box-sizing: border-box;
     width: 100%;
-    color: var(--paper-main-text);
+    color: var(--paper-text);
     transform: translateZ(0);
     transition:
         transform var(--paper-tiny-transition) ease,
@@ -27,7 +27,7 @@
 }
 
 .interactive:hover {
-    border-color: var(--paper-front-blue);
+    border-color: var(--paper-primary);
     transform: translate3d(0, calc(var(--paper-border-width) * -2), 0);
     box-shadow: var(--paper-heavy-element-shadow);
 }
@@ -47,8 +47,8 @@
     position: relative;
     width: 100%;
     height: calc(var(--paper-uigap) * 8);
-    background: var(--paper-background-back);
-    border-bottom: var(--paper-border-width) solid var(--paper-medium-border);
+    background: var(--paper-surface-sunken);
+    border-bottom: var(--paper-border-width) solid var(--paper-border);
     overflow: visible;
     flex-shrink: 0;
 }
@@ -64,12 +64,12 @@
 .iconWrapper {
     position: absolute;
     left: var(--paper-uigap);
-    bottom: calc(var(--paper-item-size-medium) * -0.5);
-    width: var(--paper-item-size-medium);
-    height: var(--paper-item-size-medium);
+    bottom: calc(var(--paper-control-size-large) * -0.5);
+    width: var(--paper-control-size-large);
+    height: var(--paper-control-size-large);
     border-radius: var(--paper-border-radius);
-    background: var(--paper-background-front);
-    border: var(--paper-thick-border-width) solid var(--paper-background-front);
+    background: var(--paper-surface);
+    border: var(--paper-thick-border-width) solid var(--paper-surface);
     box-shadow: var(--paper-element-shadow);
     display: flex;
     align-items: center;
@@ -88,7 +88,7 @@
 
 .iconGlyph {
     font-size: var(--paper-icon-size-huge);
-    color: var(--paper-main-text);
+    color: var(--paper-text);
 }
 
 .body {
@@ -101,7 +101,7 @@
 }
 
 .bodyWithOverlappingIcon {
-    padding-top: calc(var(--paper-uigap) + (var(--paper-item-size-medium) * 0.5));
+    padding-top: calc(var(--paper-uigap) + (var(--paper-control-size-large) * 0.5));
 }
 
 .headerRow {
@@ -132,7 +132,7 @@
     -webkit-box-orient: vertical;
     overflow: hidden;
     text-overflow: ellipsis;
-    color: var(--paper-light-text);
+    color: var(--paper-text-subtle);
 }
 
 .contentArea {
@@ -148,7 +148,7 @@
     gap: var(--paper-uigap-half);
     margin-top: auto;
     padding-top: var(--paper-uigap-half);
-    border-top: var(--paper-border-width) solid var(--paper-medium-border);
+    border-top: var(--paper-border-width) solid var(--paper-border);
     box-sizing: border-box;
 }
 

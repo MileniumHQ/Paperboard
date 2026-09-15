@@ -2,11 +2,14 @@
     display: flex;
     flex-direction: column;
     gap: var(--paper-uigap-half);
+    /* a scrolling rail grows with its items so the bottom padding stays
+       below the last one; height: 100% put the padding inside the overflow
+       and the last item was clipped by the container edge */
     padding: var(--paper-uigap-half);
     width: fit-content;
-    height: 100%;
-    border-right: var(--paper-border-width) solid var(--paper-medium-border);
-    background: var(--paper-background-frontest);
+    min-height: 100%;
+    border-right: var(--paper-border-width) solid var(--paper-border);
+    background: var(--paper-surface-raised);
 }
 
 .PaperRail.withLabels {
@@ -16,8 +19,8 @@
 }
 
 .PaperRailItem {
-    width: var(--paper-item-size-small);
-    height: var(--paper-item-size-small);
+    width: var(--paper-control-size-medium);
+    height: var(--paper-control-size-medium);
     aspect-ratio: 1;
     flex-shrink: 0;
     display: flex;
@@ -33,30 +36,31 @@
 }
 
 .PaperRailItem.hasLabel {
-    width: var(--paper-item-size-medium);
-    min-width: var(--paper-item-size-medium);
+    width: var(--paper-control-size-large);
+    min-width: var(--paper-control-size-large);
     flex-shrink: 0;
-    min-height: 50px;
+    min-height: var(--paper-rail-item-height);
     height: auto;
     aspect-ratio: auto;
-    padding: 6px 3px 4px 3px;
+    padding: var(--paper-uigap-half) var(--paper-uigap-onefourth)
+        var(--paper-uigap-onefourth);
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    gap: 3px;
+    gap: var(--paper-uigap-onefourth);
     box-sizing: border-box;
     overflow: visible;
 }
 
 .PaperRailItem.hasLabel .railIcon {
-    width: 24px;
-    height: 24px;
-    font-size: 20px;
+    width: var(--paper-rail-icon-size);
+    height: var(--paper-rail-icon-size);
+    font-size: var(--paper-text-size-5);
     flex-shrink: 0;
 }
 
 .railLabel {
-    font-size: 10px;
+    font-size: var(--paper-rail-label-size);
     font-weight: 600;
     text-align: center;
     line-height: 1.15;
@@ -70,18 +74,18 @@
     -webkit-box-orient: vertical;
     overflow: hidden;
     text-overflow: ellipsis;
-    color: var(--paper-light-text);
+    color: var(--paper-text-subtle);
     user-select: none;
     -webkit-user-select: none;
     transition: color var(--paper-short-transition);
 }
 
 .PaperRailItem.selected .railLabel {
-    color: var(--paper-front-blue);
+    color: var(--paper-primary);
 }
 
 .PaperRailItem:hover {
-    background: var(--paper-background-front);
+    background: var(--paper-surface);
 }
 
 .railIcon {
@@ -90,17 +94,17 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    color: var(--paper-lightest-text);
+    color: var(--paper-text-faint);
     font-size: var(--paper-icon-size-xlarge);
     transition: color var(--paper-short-transition);
 }
 
 .PaperRailItem.selected {
-    outline: var(--paper-thick-border-width) solid var(--paper-front-blue);
+    outline: var(--paper-thick-border-width) solid var(--paper-primary);
 }
 
 .PaperRailItem.selected .railIcon {
-    color: var(--paper-back-blue);
+    color: var(--paper-primary-deep);
 }
 
 .railAction {
