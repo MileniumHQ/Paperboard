@@ -1,4 +1,12 @@
-import { createSignal, createMemo, onMount, onCleanup, For, Show } from "solid-js";
+import {
+    createSignal,
+    createMemo,
+    createEffect,
+    onMount,
+    onCleanup,
+    For,
+    Show,
+} from "solid-js";
 import {
     PaperRail,
     PaperRailItem,
@@ -31,6 +39,10 @@ import {
 } from "../lib/functions";
 import { PaperModal, PaperSelectMenu, PaperSelectMenuItem } from "@paperboard-dev/paperui";
 import { ACTIONS_PANEL_ID } from "../panelId";
+import {
+    buildLibrarySections,
+    type LibrarySection,
+} from "../lib/librarySections";
 
 export interface ActionLibraryProps {
     onStartDrag: (
@@ -54,6 +66,7 @@ export interface PanelCategory {
     iconUrl?: string;
     triggers: TriggerInfo[];
     actions: ActionInfo[];
+    sections: LibrarySection[];
 }
 
 export type Category = BuiltinCategory | PanelCategory;
@@ -188,6 +201,7 @@ export default function ActionLibrary(props: ActionLibraryProps) {
                     iconUrl: info.iconUrl,
                     triggers: [],
                     actions: [],
+                    sections: [],
                 };
                 map.set(trig.panelId, cat);
             }
@@ -223,13 +237,21 @@ export default function ActionLibrary(props: ActionLibraryProps) {
                     iconUrl: info.iconUrl,
                     triggers: [],
                     actions: [],
+                    sections: [],
                 };
                 map.set(act.panelId, cat);
             }
             cat.actions.push({ ...act, schema });
         }
 
-        return Array.from(map.values());
+        const categories = Array.from(map.values());
+        for (const category of categories) {
+            category.sections = buildLibrarySections(
+                category.triggers,
+                category.actions,
+            );
+        }
+        return categories;
     });
 
     const allCategories = createMemo<Category[]>(() => [
@@ -357,6 +379,45 @@ export default function ActionLibrary(props: ActionLibraryProps) {
         return searchResults().reduce((acc, g) => acc + g.items.length, 0);
     });
 
+    let libraryScrollRef: HTMLDivElement | undefined;
+
+    const panelSections = (): LibrarySection[] => {
+        const category = currentCategory();
+        return category?.domain === "panel" ? category.sections : [];
+    };
+
+    // sections are navigated with a select above the list; the headers
+    // themselves stay in flow (sticky stacking read as noise)
+    const [jumpSection, setJumpSection] = createSignal("");
+
+    const scrollToSection = (id: string) => {
+        const container = libraryScrollRef;
+        if (!container) return;
+        const target = container.querySelector(
+            `[data-library-section="${CSS.escape(id)}"]`,
+        ) as HTMLElement | null;
+        if (!target) return;
+        const top =
+            target.getBoundingClientRect().top -
+            container.getBoundingClientRect().top +
+            container.scrollTop;
+        container.scrollTo({ top, behavior: "smooth" });
+    };
+
+    createEffect(() => {
+        // a section name from another panel must not linger in the select
+        selectedCategoryId();
+        search();
+        setJumpSection("");
+    });
+
+    const handleJump = (id: string) => {
+        setJumpSection(id);
+        scrollToSection(id);
+    };
+
+    const headerIcon = (section: LibrarySection) => section.icon || "category";
+
     const handlePointerDownItem = (
         item: ActionInfo | TriggerInfo,
         isTrigger: boolean,
@@ -394,7 +455,7 @@ export default function ActionLibrary(props: ActionLibraryProps) {
         <>
             <Show when={isCollapsed()}>
                 <div class="library-toggle-collapsed">
-                    <PaperButton
+                    <PaperButton size="large"
                         onClick={() => setIsCollapsed(false)}
                         title="Open Actions Library"
                     >
@@ -528,12 +589,10 @@ export default function ActionLibrary(props: ActionLibraryProps) {
                                         </PaperFlex>
                                     </Show>
 
-                                    <PaperButton
-                                        tiny
+                                    <PaperButton size="tiny"
                                         icon
                                         onClick={() => setIsCollapsed(true)}
-                                        title="Collapse Library"
-                                    >
+                                        title="Collapse Library">
                                         <PaperIcon>chevron_left</PaperIcon>
                                     </PaperButton>
                                 </div>
@@ -546,13 +605,36 @@ export default function ActionLibrary(props: ActionLibraryProps) {
                                         setSearch(e.currentTarget.value)
                                     }
                                 />
+
+                                <Show when={!search() && panelSections().length > 1}>
+                                    <PaperSelectMenu
+                                        name="librarySectionJump"
+                                        fullWidth
+                                        value={jumpSection()}
+                                        placeholder="Jump to a section..."
+                                        onValueChange={(value) =>
+                                            handleJump(String(value))
+                                        }
+                                    >
+                                        <For each={panelSections()}>
+                                            {(section) => (
+                                                <PaperSelectMenuItem
+                                                    value={section.id}
+                                                    icon={headerIcon(section)}
+                                                >
+                                                    {section.name}
+                                                </PaperSelectMenuItem>
+                                            )}
+                                        </For>
+                                    </PaperSelectMenu>
+                                </Show>
                             </PaperFlex>
                         </div>
 
-                        <div class="library-scroll">
+                        <div class="library-scroll" ref={libraryScrollRef}>
                             <Show when={selectedCategoryId() === "functions"}>
                                 <Show when={(props.functions?.length || 0) > 0}>
-                                    <PaperButton compact onClick={openCreateModal} style={{ width: "100%" }}>
+                                    <PaperButton onClick={openCreateModal} style={{ width: "100%" }}>
                                         <PaperIcon>add</PaperIcon>
                                         Create Function
                                     </PaperButton>
@@ -564,7 +646,7 @@ export default function ActionLibrary(props: ActionLibraryProps) {
                                         <PaperText preset="body">
                                             No functions yet.
                                         </PaperText>
-                                        <PaperButton tiny onClick={openCreateModal}>
+                                        <PaperButton size="tiny" onClick={openCreateModal}>
                                             <PaperIcon>add</PaperIcon>
                                             Create Function
                                         </PaperButton>
@@ -599,26 +681,22 @@ export default function ActionLibrary(props: ActionLibraryProps) {
                                                         </PaperBadge>
                                                     </div>
                                                     <div class="library-function-actions">
-                                                        <PaperButton
-                                                            tiny
+                                                        <PaperButton size="tiny"
                                                             icon
                                                             onClick={() => openRenameModal(fn)}
-                                                            title={`Rename ${fn.name}`}
-                                                        >
+                                                            title={`Rename ${fn.name}`}>
                                                             <PaperIcon>edit</PaperIcon>
                                                         </PaperButton>
-                                                        <PaperButton
-                                                            tiny
+                                                        <PaperButton size="tiny"
                                                             icon
                                                             onClick={() => props.onDeleteFunction?.(fn.id)}
-                                                            title={`Delete ${fn.name}`}
-                                                        >
+                                                            title={`Delete ${fn.name}`}>
                                                             <PaperIcon>delete</PaperIcon>
                                                         </PaperButton>
                                                     </div>
                                                 </div>
 
-                                                <PaperText size={1} color="light-text" class="library-function-caption">
+                                                <PaperText size={1} color="text-subtle" class="library-function-caption">
                                                     Trigger
                                                 </PaperText>
                                                 <div
@@ -643,7 +721,7 @@ export default function ActionLibrary(props: ActionLibraryProps) {
                                                     />
                                                 </div>
 
-                                                <PaperText size={1} color="light-text" class="library-function-caption">
+                                                <PaperText size={1} color="text-subtle" class="library-function-caption">
                                                     Call
                                                 </PaperText>
                                                 <div
@@ -740,89 +818,85 @@ export default function ActionLibrary(props: ActionLibraryProps) {
 
                             <Show when={!search().trim().length && selectedCategoryId() !== "functions"}>
                                 <Show when={currentCategory()?.domain === "panel"}>
-                                    <Show when={(currentCategory() as PanelCategory)?.triggers?.length > 0}>
-                                        <div class="library-section-header">
-                                            <PaperIcon>bolt</PaperIcon>
-                                            <PaperText size={2} weight={700}>
-                                                Triggers
-                                            </PaperText>
-                                            <PaperBadge variant="monochrome">
-                                                {(currentCategory() as PanelCategory).triggers.length}
-                                            </PaperBadge>
-                                        </div>
-
-                                        <For each={(currentCategory() as PanelCategory).triggers}>
-                                            {(trig) => (
-                                                <div
-                                                    class="library-block-wrapper"
-                                                    onPointerDown={(e) =>
-                                                        handlePointerDownItem(
-                                                            trig,
-                                                            true,
-                                                            e,
-                                                            (currentCategory() as PanelCategory).iconUrl,
-                                                        )
-                                                    }
-                                                >
-                                                    <ActionBlock
-                                                        action={
-                                                            trig.schema || {
-                                                                id: trig.trigger,
-                                                                name: trig.trigger,
-                                                                description: "",
-                                                            }
-                                                        }
-                                                        isTrigger={true}
-                                                        iconSrc={(currentCategory() as PanelCategory).iconUrl}
-                                                        static={true}
-                                                    />
+                                    <For each={panelSections()}>
+                                        {(section) => (
+                                            <div
+                                                class="library-category-section"
+                                                data-library-section={section.id}
+                                            >
+                                                <div class="library-section-header library-category-header">
+                                                    <PaperIcon>
+                                                        {headerIcon(section)}
+                                                    </PaperIcon>
+                                                    <PaperText size={2} weight={700}>
+                                                        {section.name}
+                                                    </PaperText>
+                                                    <PaperBadge variant="monochrome">
+                                                        {section.triggers.length +
+                                                            section.actions.length}
+                                                    </PaperBadge>
                                                 </div>
-                                            )}
-                                        </For>
-                                    </Show>
 
-                                    <Show when={(currentCategory() as PanelCategory)?.actions?.length > 0}>
-                                        <Show when={(currentCategory() as PanelCategory)?.triggers?.length > 0}>
-                                            <div class="library-section-header">
-                                                <PaperIcon>play_circle</PaperIcon>
-                                                <PaperText size={2} weight={700}>
-                                                    Actions
-                                                </PaperText>
-                                                <PaperBadge variant="monochrome">
-                                                    {(currentCategory() as PanelCategory).actions.length}
-                                                </PaperBadge>
+                                                <For each={section.triggers}>
+                                                    {(trig) => (
+                                                        <div
+                                                            class="library-block-wrapper"
+                                                            onPointerDown={(e) =>
+                                                                handlePointerDownItem(
+                                                                    trig,
+                                                                    true,
+                                                                    e,
+                                                                    (currentCategory() as PanelCategory).iconUrl,
+                                                                )
+                                                            }
+                                                        >
+                                                            <ActionBlock
+                                                                action={
+                                                                    trig.schema || {
+                                                                        id: trig.trigger,
+                                                                        name: trig.trigger,
+                                                                        description: "",
+                                                                    }
+                                                                }
+                                                                isTrigger={true}
+                                                                iconSrc={(currentCategory() as PanelCategory).iconUrl}
+                                                                static={true}
+                                                            />
+                                                        </div>
+                                                    )}
+                                                </For>
+
+                                                <For each={section.actions}>
+                                                    {(act) => (
+                                                        <div
+                                                            class="library-block-wrapper"
+                                                            onPointerDown={(e) =>
+                                                                handlePointerDownItem(
+                                                                    act,
+                                                                    false,
+                                                                    e,
+                                                                    (currentCategory() as PanelCategory).iconUrl,
+                                                                )
+                                                            }
+                                                        >
+                                                            <ActionBlock
+                                                                action={
+                                                                    act.schema || {
+                                                                        id: act.action,
+                                                                        name: act.action,
+                                                                        description: "",
+                                                                    }
+                                                                }
+                                                                isTrigger={false}
+                                                                iconSrc={(currentCategory() as PanelCategory).iconUrl}
+                                                                static={true}
+                                                            />
+                                                        </div>
+                                                    )}
+                                                </For>
                                             </div>
-                                        </Show>
-
-                                        <For each={(currentCategory() as PanelCategory).actions}>
-                                            {(act) => (
-                                                <div
-                                                    class="library-block-wrapper"
-                                                    onPointerDown={(e) =>
-                                                        handlePointerDownItem(
-                                                            act,
-                                                            false,
-                                                            e,
-                                                            (currentCategory() as PanelCategory).iconUrl,
-                                                        )
-                                                    }
-                                                >
-                                                    <ActionBlock
-                                                        action={
-                                                            act.schema || {
-                                                                id: act.action,
-                                                                name: act.action,
-                                                                description: "",
-                                                            }
-                                                        }
-                                                        isTrigger={false}
-                                                        iconSrc={(currentCategory() as PanelCategory).iconUrl}
-                                                        static={true}
-                                                    />
-                                                </div>
-                                            )}
-                                        </For>
-                                    </Show>
+                                        )}
+                                    </For>
                                 </Show>
 
                                 <Show when={currentCategory()?.domain !== "panel"}>
@@ -885,18 +959,14 @@ export default function ActionLibrary(props: ActionLibraryProps) {
                 footer={
                     <PaperFlex direction="row" justify="flex-end" gap="half" fullWidth>
                         <PaperButton
-                            compact
                             variant="text"
-                            onClick={() => setCreateOpen(false)}
-                        >
+                            onClick={() => setCreateOpen(false)}>
                             Cancel
                         </PaperButton>
                         <PaperButton
-                            compact
                             variant="brand"
                             onClick={handleConfirmCreate}
-                            disabled={!draftValid()}
-                        >
+                            disabled={!draftValid()}>
                             {editingId() ? "Save" : "Create"}
                         </PaperButton>
                     </PaperFlex>
@@ -938,16 +1008,14 @@ export default function ActionLibrary(props: ActionLibraryProps) {
                                             )}
                                         </For>
                                     </PaperSelectMenu>
-                                    <PaperButton
-                                        tiny
+                                    <PaperButton size="tiny"
                                         icon
                                         onClick={() =>
                                             setDraftParams((prev) =>
                                                 prev.filter((_, i) => i !== index()),
                                             )
                                         }
-                                        title="Remove variable"
-                                    >
+                                        title="Remove variable">
                                         <PaperIcon>delete</PaperIcon>
                                     </PaperButton>
                                 </div>
@@ -955,12 +1023,10 @@ export default function ActionLibrary(props: ActionLibraryProps) {
                         </For>
 
                         <PaperButton
-                            compact
                             variant="text"
                             onClick={() =>
                                 setDraftParams((prev) => [...prev, { name: "", type: "string" }])
-                            }
-                        >
+                            }>
                             <PaperIcon>add</PaperIcon>
                             Add Variable
                         </PaperButton>

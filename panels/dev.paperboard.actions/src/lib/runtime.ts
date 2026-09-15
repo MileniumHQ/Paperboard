@@ -276,6 +276,40 @@ function isObjectishType(t?: string): boolean {
     return !["string", "number", "boolean", "select", "any", "void", "file"].includes(t);
 }
 
+/**
+ * Tokens left in a string after interpolation are references whose source is
+ * gone (block moved/removed). Surfacing them here gives the console a
+ * readable reason instead of forwarding `{{channelId:Channel:tag}}` to an
+ * API that answers with a raw validation error.
+ */
+export function findUnresolvedReferences(
+    text: string,
+): { token: string; label: string }[] {
+    const found: { token: string; label: string }[] = [];
+    const pattern = /\{\{([^{}]+)\}\}/g;
+    let match: RegExpExecArray | null;
+    while ((match = pattern.exec(text)) !== null) {
+        const parts = match[1].split(":");
+        found.push({
+            token: (parts[0] || "").trim(),
+            label: (parts[1] || "").trim(),
+        });
+    }
+    return found;
+}
+
+function unresolvedReferenceError(
+    key: string,
+    label: string | undefined,
+    unresolved: { token: string; label: string }[],
+): Error {
+    const first = unresolved[0];
+    const name = first.label || first.token || "variable";
+    return new Error(
+        `Variable "${name}" for "${label || key}" has no source here. The block that provided it was moved or removed. Reconnect it or clear the reference.`,
+    );
+}
+
 export function resolveInputs(
     inputsMap: Record<string, any> = {},
     values: Record<string, any> = {},
@@ -324,6 +358,11 @@ export function resolveInputs(
                 stepOutputsByLabel,
                 stepOutputsByRef,
             );
+
+            const unresolved = findUnresolvedReferences(interpolated);
+            if (unresolved.length > 0) {
+                throw unresolvedReferenceError(key, def?.label, unresolved);
+            }
 
             if (def?.type === "number") {
                 const parsed = Number(interpolated);
@@ -853,12 +892,11 @@ export async function executeFlow(
         steps: [],
     };
 
-    onLog?.(log);
-
+    // neutral start/success states are not logged: the console shows only
+    // failures and the flow's own Log to Console actions
     if (!triggerBlock.children || triggerBlock.children.length === 0) {
         log.status = "success";
         log.message = "Trigger fired (no actions to execute)";
-        onLog?.(log);
         hooks?.captureOutput?.(triggerPayload);
         return log;
     }
@@ -910,7 +948,6 @@ export async function executeFlow(
                         fid;
                     stepLog.actionName = `Call ${fname}`;
                     log.steps.push(stepLog);
-                    onLog?.(log);
 
                     result = await runFunctionCall(fid, resolvedInputs, {
                         getFunctionBody: hooks?.getFunctionBody,
@@ -924,7 +961,6 @@ export async function executeFlow(
                     const count = Math.max(0, Math.min(1000, Number(resolvedInputs.count ?? 5)));
                     stepLog.actionName = `Repeat (${count} times)`;
                     log.steps.push(stepLog);
-                    onLog?.(log);
 
                     for (let r = 0; r < count; r++) {
                         if (child.children && child.children.length > 0) {
@@ -940,7 +976,6 @@ export async function executeFlow(
                     );
                     stepLog.actionName = `If (${conditionMet ? "true" : "false"})`;
                     log.steps.push(stepLog);
-                    onLog?.(log);
 
                     if (conditionMet && child.children && child.children.length > 0) {
                         await executeBlockList(child.children);
@@ -954,7 +989,6 @@ export async function executeFlow(
                     );
                     stepLog.actionName = `If/Else (${conditionMet ? "if branch" : "else branch"})`;
                     log.steps.push(stepLog);
-                    onLog?.(log);
 
                     if (conditionMet) {
                         if (child.children && child.children.length > 0) {
@@ -1030,6 +1064,6 @@ export async function executeFlow(
         }
     }
 
-    onLog?.(log);
+    // errors already emitted above; a clean run logs nothing
     return log;
 }

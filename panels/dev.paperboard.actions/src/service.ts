@@ -301,6 +301,7 @@ export async function runStoredFlow(
         ctx.emitTrigger("flow-log", {
             time: new Date().toLocaleTimeString(),
             message: `Flow "${triggerBlock.action?.name || triggerBlock.id}" failed: ${message}`,
+            status: "error",
         });
         // stored runs are triggered, so their failures surface via the
         // console log — never an unhandled rejection (matches pre-gate)

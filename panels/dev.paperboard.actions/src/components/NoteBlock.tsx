@@ -104,15 +104,13 @@ export default function NoteBlock(props: NoteBlockProps) {
                         Note
                     </PaperText>
                 </div>
-                <PaperButton
-                    tiny
+                <PaperButton size="tiny"
                     icon
                     onClick={(e) => {
                         e.stopPropagation();
                         props.onDelete?.();
                     }}
-                    title="Delete Note"
-                >
+                    title="Delete Note">
                     <PaperIcon>close</PaperIcon>
                 </PaperButton>
             </div>

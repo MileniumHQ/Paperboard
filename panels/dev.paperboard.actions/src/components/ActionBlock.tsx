@@ -9,6 +9,7 @@ import {
 } from "@paperboard-dev/paperui";
 import type { ActionSchema, TriggerSchema } from "@paperboard-dev/paperapi";
 import type { CanvasBlock } from "../lib/tree";
+import { plainTextFromClipboard, sanitizeNumberText } from "../lib/textInput";
 
 export interface ActionBlockProps {
     id?: string;
@@ -273,6 +274,59 @@ function extractTextWithVariables(element: HTMLElement, preserveNewlines = false
     return preserveNewlines ? result.trim() : result.replace(/\n/g, "").trim();
 }
 
+// contenteditable accepts rich HTML on paste by default; this panel only
+// ever stores text (plus its own chip markup), so paste is reduced to the
+// clipboard's plain text before it can enter the DOM
+function insertPlainTextAtCaret(element: HTMLElement, text: string): void {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) return;
+    const range = selection.getRangeAt(0);
+    if (!element.contains(range.startContainer)) return;
+    range.deleteContents();
+    const node = document.createTextNode(text);
+    range.insertNode(node);
+    range.setStartAfter(node);
+    range.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(range);
+}
+
+// a chip or a text node with visible characters; the zero-width anchors and
+// whitespace-only nodes between chips are not content edges
+function isVisibleContentNode(node: Node): boolean {
+    if (node.nodeType === Node.TEXT_NODE) {
+        return (node.textContent || "").replace(/[\u200B\uFEFF]/g, "").length > 0;
+    }
+    return (
+        (node as HTMLElement).classList?.contains("actionVariableChip") === true
+    );
+}
+
+function nodeRect(node: Node): DOMRect {
+    if (node.nodeType === Node.ELEMENT_NODE) {
+        return (node as Element).getBoundingClientRect();
+    }
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    return range.getBoundingClientRect();
+}
+
+function placeCaret(
+    element: HTMLElement,
+    position: "before" | "after",
+    node: Node,
+): void {
+    const selection = window.getSelection();
+    if (!selection) return;
+    element.focus({ preventScroll: true });
+    const range = document.createRange();
+    if (position === "before") range.setStartBefore(node);
+    else range.setStartAfter(node);
+    range.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(range);
+}
+
 function ActionEditableField(fieldProps: ActionEditableFieldProps) {
     let spanRef: HTMLSpanElement | undefined;
     let savedRange: Range | null = null;
@@ -372,7 +426,24 @@ function ActionEditableField(fieldProps: ActionEditableFieldProps) {
     const handleInput = (e: InputEvent) => {
         if (!spanRef) return;
         saveCurrentRange();
-        const text = spanRef.innerText || "";
+        let text = spanRef.innerText || "";
+
+        // beforeinput covers typing; paste, drop and IME can still slip
+        // non-numeric text in, so the value is re-sanitized here too
+        if (fieldProps.isNumber && !spanRef.querySelector(".actionVariableChip")) {
+            const sanitized = sanitizeNumberText(text);
+            if (sanitized !== text) {
+                spanRef.textContent = sanitized;
+                const selection = window.getSelection();
+                const range = document.createRange();
+                range.selectNodeContents(spanRef);
+                range.collapse(false);
+                selection?.removeAllRanges();
+                selection?.addRange(range);
+                text = sanitized;
+            }
+        }
+
         setCurrentText(text);
 
         if (text.includes("@") || e.data === "@") {
@@ -383,19 +454,49 @@ function ActionEditableField(fieldProps: ActionEditableFieldProps) {
     const handleCommit = () => {
         if (!spanRef) return;
         const clean = extractTextWithVariables(spanRef, fieldProps.multiline);
-        lastCommittedVal = clean;
-        setCurrentText(clean);
-        if (clean.trim() !== "") {
-            spanRef.innerHTML = renderHtmlWithChips(clean);
-        } else {
-            spanRef.innerHTML = "";
+        let parsed: any = clean;
+
+        if (fieldProps.isNumber) {
+            if (clean.includes("{{")) {
+                // a variable reference, not a literal number
+                parsed = clean;
+            } else if (clean === "") {
+                parsed = undefined;
+            } else if (!Number.isFinite(Number(clean))) {
+                // an incomplete edit like "-" or ".": restore the last valid
+                // value instead of committing NaN
+                const restored =
+                    lastCommittedVal !== undefined && lastCommittedVal !== null
+                        ? String(lastCommittedVal)
+                        : "";
+                spanRef.innerHTML = restored ? renderHtmlWithChips(restored) : "";
+                setCurrentText(restored);
+                parsed = lastCommittedVal;
+            } else {
+                parsed = Number(clean);
+            }
         }
-        const parsed = fieldProps.isNumber
-            ? clean === ""
-                ? undefined
-                : Number(clean)
-            : clean;
+
+        const display =
+            parsed === undefined || parsed === null ? "" : String(parsed);
+        lastCommittedVal = parsed;
+        setCurrentText(display);
+        spanRef.innerHTML = display ? renderHtmlWithChips(display) : "";
         fieldProps.onCommit?.(parsed);
+    };
+
+    const handlePaste = (e: ClipboardEvent) => {
+        if (fieldProps.disabled || !spanRef) return;
+        e.preventDefault();
+        let text = plainTextFromClipboard(
+            e.clipboardData?.getData("text/plain"),
+            Boolean(fieldProps.multiline),
+        );
+        if (fieldProps.isNumber) text = sanitizeNumberText(text);
+        if (!text) return;
+        insertPlainTextAtCaret(spanRef, text);
+        saveCurrentRange();
+        handleCommit();
     };
 
     onMount(() => {
@@ -439,23 +540,61 @@ function ActionEditableField(fieldProps: ActionEditableFieldProps) {
             }}
             onClick={(e) => {
                 e.stopPropagation();
-                const clickedChip = (e.target as HTMLElement).closest(".actionVariableChip");
-                if (clickedChip && spanRef) {
-                    const sel = window.getSelection();
-                    const range = document.createRange();
-                    range.setStartAfter(clickedChip);
-                    range.collapse(true);
-                    sel?.removeAllRanges();
-                    sel?.addRange(range);
+                if (!spanRef || fieldProps.disabled) return;
+                const chip = (e.target as HTMLElement).closest?.(
+                    ".actionVariableChip",
+                ) as HTMLElement | null;
+                if (chip) {
+                    // double-click replaces the variable, single click just
+                    // places the caret on the side you clicked so you can
+                    // keep typing next to it
+                    if (e.detail >= 2) {
+                        saveCurrentRange();
+                        openPicker();
+                        return;
+                    }
+                    const rect = chip.getBoundingClientRect();
+                    placeCaret(
+                        spanRef,
+                        e.clientX < rect.left + rect.width / 2 ? "before" : "after",
+                        chip,
+                    );
                     saveCurrentRange();
                     return;
                 }
+                // clicking the padding before/after the content lands the
+                // caret on the correct side of a boundary chip
+                const content = Array.from(spanRef.childNodes).filter(
+                    isVisibleContentNode,
+                );
+                const first = content[0];
+                const last = content[content.length - 1];
+                if (first && last) {
+                    const firstRect = nodeRect(first);
+                    const lastRect = nodeRect(last);
+                    if (e.clientX < firstRect.left) {
+                        placeCaret(spanRef, "before", first);
+                    } else if (e.clientX > lastRect.right) {
+                        placeCaret(spanRef, "after", last);
+                    }
+                }
                 saveCurrentRange();
-                openPicker();
             }}
             onKeyUp={saveCurrentRange}
             onMouseUp={saveCurrentRange}
             onInput={handleInput}
+            onPaste={handlePaste}
+            onBeforeInput={(e) => {
+                if (!fieldProps.isNumber || fieldProps.disabled || !spanRef) return;
+                const data = (e as InputEvent).data;
+                if (data === null || data === undefined) return;
+                const current = extractTextWithVariables(spanRef, false);
+                // a keystroke that sanitizes away (a letter, a second dot)
+                // must never enter the field
+                if (sanitizeNumberText(current + data) === current) {
+                    e.preventDefault();
+                }
+            }}
             onBlur={handleCommit}
             onKeyDown={(e) => {
                 e.stopPropagation();
@@ -1083,16 +1222,14 @@ export default function ActionBlock(props: ActionBlockProps) {
 
             <Show when={extraKeys().length > 0}>
                 <div class="actionMoreOptions">
-                    <PaperButton
-                        tiny
+                    <PaperButton size="tiny"
                         variant="text"
                         onPointerDown={(e) => e.stopPropagation()}
                         onClick={(e) => {
                             e.stopPropagation();
                             setShowMoreOptions(!showMoreOptions());
                         }}
-                        title={showMoreOptions() ? "Hide extra options" : "Show extra options"}
-                    >
+                        title={showMoreOptions() ? "Hide extra options" : "Show extra options"}>
                         <PaperIcon>
                             {showMoreOptions() ? "expand_more" : "chevron_right"}
                         </PaperIcon>

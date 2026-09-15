@@ -70,6 +70,36 @@ export function walkBlocks(
     });
 }
 
+/**
+ * Refreshes each block's action/trigger schema from the live registry while
+ * keeping its id, position, values and name. Stored flows otherwise keep the
+ * schema they were dragged with, so newly declared metadata (typed output
+ * fields, categories, options) would never reach existing blocks.
+ */
+export function mergeActionSchemas(
+    blocks: CanvasBlock[],
+    actions: { panelId: string; action: string; schema?: ActionSchema }[],
+    triggers: { panelId: string; trigger: string; schema?: TriggerSchema }[],
+): CanvasBlock[] {
+    const actionMap = new Map<string, ActionSchema>();
+    for (const entry of actions) {
+        if (entry.schema) actionMap.set(`${entry.panelId}:${entry.action}`, entry.schema);
+    }
+    const triggerMap = new Map<string, TriggerSchema>();
+    for (const entry of triggers) {
+        if (entry.schema) triggerMap.set(`${entry.panelId}:${entry.trigger}`, entry.schema);
+    }
+    return walkBlocks(blocks, (block) => {
+        const actionId = (block.action as { id?: string } | undefined)?.id;
+        if (!actionId) return block;
+        const fresh = (block.isTrigger ? triggerMap : actionMap).get(
+            `${block.panelId}:${actionId}`,
+        );
+        if (!fresh) return block;
+        return { ...block, action: fresh };
+    });
+}
+
 export function relabelVariableRefs(
     blocks: CanvasBlock[],
     blockId: string,

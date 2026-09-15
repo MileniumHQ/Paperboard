@@ -1,5 +1,6 @@
 import { Show, For, createSignal, createMemo, createEffect, onMount, onCleanup } from "solid-js";
 import { PaperIcon } from "@paperboard-dev/paperui";
+import { variableFieldIcon } from "../lib/variableTypes";
 
 export interface VariableMenuItem {
     id: string;
@@ -9,6 +10,8 @@ export interface VariableMenuItem {
     sourceBlockId?: string;
     sourceName?: string;
     type?: string;
+    /** panel-supplied display name for the type badge */
+    typeName?: string;
 }
 
 export interface VariableMenuProps {
@@ -24,8 +27,10 @@ export interface VariableMenuProps {
 const TYPE_BADGE_LABELS: Record<string, string> = {
     "discord-channel": "Channel",
     "discord-user": "User",
+    "discord-role": "Role",
     "discord-message": "Message",
     "discord-embed": "Embed",
+    "discord-interaction": "Interaction",
     string: "Text",
     number: "Number",
     boolean: "True/False",
@@ -35,10 +40,13 @@ const TYPE_BADGE_LABELS: Record<string, string> = {
     color: "Color",
 };
 
-function badgeLabel(t?: string): string {
-    if (!t) return "Var";
-    return TYPE_BADGE_LABELS[t] || t;
+function badgeLabel(type?: string, typeName?: string): string {
+    if (typeName) return typeName;
+    if (!type) return "Var";
+    return TYPE_BADGE_LABELS[type] || type;
 }
+
+
 
 interface MenuGroup {
     key: string;
@@ -101,12 +109,27 @@ export default function VariableMenu(props: VariableMenuProps) {
             }
         };
 
+        // the menu is fixed to the screen, so scrolling the canvas would
+        // leave it floating away from its block: close instead. Scrolling
+        // inside the menu itself is how you reach the rest of the list.
+        const handleScroll = (e: Event) => {
+            if (!props.open) return;
+            const target = e.target;
+            if (menuRef && target instanceof Node && menuRef.contains(target)) return;
+            props.onClose();
+        };
+
         window.addEventListener("pointerdown", handlePointerDown, { capture: true });
         window.addEventListener("keydown", handleKeyDown);
+        window.addEventListener("scroll", handleScroll, {
+            capture: true,
+            passive: true,
+        });
 
         onCleanup(() => {
             window.removeEventListener("pointerdown", handlePointerDown, { capture: true });
             window.removeEventListener("keydown", handleKeyDown);
+            window.removeEventListener("scroll", handleScroll, { capture: true });
         });
     });
 
@@ -168,15 +191,15 @@ export default function VariableMenu(props: VariableMenuProps) {
                                                 }}
                                             >
                                                 <div class="actionVariableMenuItemLeft">
-                                                    <Show when={item.icon}>
-                                                        <PaperIcon>{item.icon}</PaperIcon>
-                                                    </Show>
+                                                    <PaperIcon>
+                                                        {variableFieldIcon(item.type, item.icon)}
+                                                    </PaperIcon>
                                                     <span class="actionVariableMenuItemLabel">
                                                         {item.label}
                                                     </span>
                                                 </div>
                                                 <span class="actionVariableMenuTypeBadge">
-                                                    {badgeLabel(item.type)}
+                                                    {badgeLabel(item.type, item.typeName)}
                                                 </span>
                                             </div>
                                         )}

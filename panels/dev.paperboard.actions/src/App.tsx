@@ -28,6 +28,7 @@ import {
     type TriggerInfo,
 } from "@paperboard-dev/paperapi";
 import { ACTIONS_PANEL_ID } from "./panelId";
+import { variableFieldIcon } from "./lib/variableTypes";
 import {
     type CanvasBlock,
     removeBlock,
@@ -38,6 +39,7 @@ import {
     blockVariableName,
     renameBlockVariable,
     relabelVariableRefs,
+    mergeActionSchemas,
     isCanvasBlock,
 } from "./lib/tree";
 import {
@@ -87,6 +89,22 @@ export default function App() {
         };
     } | null>(null);
 
+    // a press on a nested action only becomes a drag after the pointer moves
+    // past this distance; below it the press is a plain click and the block
+    // must stay mounted where it is
+    const DRAG_START_THRESHOLD_PX = 4;
+
+    interface PendingChildDrag {
+        child: CanvasBlock;
+        grabOffset: { x: number; y: number };
+        startClient: { x: number; y: number };
+        originalParentId: string | null;
+        originalIndex: number;
+    }
+
+    const [pendingChildDrag, setPendingChildDrag] =
+        createSignal<PendingChildDrag | null>(null);
+
     const blockContextMenu = useContextMenuState("mouse");
     const canvasContextMenu = useContextMenuState("mouse");
     const [canvasContextMenuPos, setCanvasContextMenuPos] = createSignal<{ x: number; y: number }>({ x: 0, y: 0 });
@@ -116,20 +134,34 @@ export default function App() {
         availableVariables: [],
     });
 
-    const typedTriggerFields = (
-        action: any,
-    ): Record<string, string> | null => {
+    interface TriggerFieldInfo {
+        type: string;
+        label?: string;
+        typeName?: string;
+        icon?: string;
+    }
+    type TriggerFieldMap = Record<string, TriggerFieldInfo>;
+
+    const typedTriggerFields = (action: any): TriggerFieldMap | null => {
         if (!action || typeof action !== "object") return null;
-        // trigger schemas that carry typed output fields directly (the DSL
-        // does not yet produce these — see report: metadata still needed)
+        // trigger schemas can carry typed output fields directly; the label
+        // travels with the field so the picker can name it
         if (
             action.outputFields &&
             typeof action.outputFields === "object" &&
             Object.keys(action.outputFields).length > 0
         ) {
-            const map: Record<string, string> = {};
+            const map: TriggerFieldMap = {};
             for (const [fieldId, v] of Object.entries<any>(action.outputFields)) {
-                map[fieldId] = typeof v === "string" ? v : v?.type || "any";
+                map[fieldId] =
+                    typeof v === "string"
+                        ? { type: v }
+                        : {
+                              type: v?.type || "any",
+                              label: v?.label,
+                              typeName: v?.typeName,
+                              icon: v?.icon,
+                          };
             }
             return map;
         }
@@ -140,9 +172,9 @@ export default function App() {
         if (outType) {
             const def = getType(outType);
             if (def?.fields && Object.keys(def.fields).length > 0) {
-                const map: Record<string, string> = {};
+                const map: TriggerFieldMap = {};
                 for (const [fieldId, f] of Object.entries(def.fields)) {
-                    map[fieldId] = String(f.type);
+                    map[fieldId] = { type: String(f.type), label: f.label };
                 }
                 return map;
             }
@@ -152,19 +184,21 @@ export default function App() {
 
     const [functions, setFunctions] = createSignal<FunctionDef[]>([]);
 
-    const functionTriggerFields = (
-        actionId: string,
-    ): Record<string, string> | null => {
+    const functionTriggerFields = (actionId: string): TriggerFieldMap | null => {
         const fid = functionIdFromTriggerAction(actionId);
         if (!fid) return null;
         const def = functions().find((f) => f.id === fid);
         if (!def) return null;
-        const map: Record<string, string> = {};
-        for (const p of def.params) map[p.name] = p.type;
+        const map: TriggerFieldMap = {};
+        for (const p of def.params) map[p.name] = { type: p.type, label: p.name };
         return map;
     };
 
-    const appendConsoleLog = (entry: { time: string; message: string }) => {
+    const appendConsoleLog = (entry: {
+        time: string;
+        message: string;
+        level?: "error";
+    }) => {
         // bounded: a long flow-test session must not grow this store forever
         setConsoleLogs((prev) => {
             const next = [
@@ -180,10 +214,11 @@ export default function App() {
         });
     };
 
+    // expected types that accept any variable (they interpolate into text).
+    // number and boolean are NOT here: a numeric input must only offer
+    // number-compatible variables, or a username lands in Round up value.
     const PRIMITIVE_EXPECTED_TYPES = new Set([
         "string",
-        "number",
-        "boolean",
         "object",
         "any",
         "select",
@@ -233,6 +268,7 @@ export default function App() {
             sourceName: string;
             icon?: string;
             type?: string;
+            typeName?: string;
         }[] = [];
 
         for (const trig of blocks) {
@@ -259,21 +295,31 @@ export default function App() {
                             return typed;
                         })();
             if (fieldTypes) {
-                for (const [fieldId, fieldType] of Object.entries(fieldTypes)) {
-                    const def = getType(fieldType);
+                for (const [fieldId, field] of Object.entries(fieldTypes)) {
+                    const def = getType(field.type);
                     available.push({
                         id: fieldId,
-                        label: def?.name || fieldId.charAt(0).toUpperCase() + fieldId.slice(1),
+                        label:
+                            field.label ||
+                            def?.name ||
+                            fieldId.charAt(0).toUpperCase() + fieldId.slice(1),
                         sourceBlockId: trig.id,
                         sourceName: trig.action.name,
-                        icon: trig.action.icon || "bolt",
-                        type: fieldType,
+                        // resolved once, here: the picker displays this icon
+                        // and the inserted chip stores the very same one
+                        icon: variableFieldIcon(field.type, field.icon),
+                        type: field.type,
+                        typeName: field.typeName,
                     });
                 }
             }
 
             const trigOutput = trig.action.output;
-            if (trigOutput) {
+            // a trigger with typed fields exposes those instead of one opaque
+            // output, so the picker never offers "Command Data" next to them
+            const hasTypedFields =
+                fieldTypes !== null && Object.keys(fieldTypes).length > 0;
+            if (trigOutput && !hasTypedFields) {
                 const label =
                     typeof trigOutput === "string"
                         ? trigOutput
@@ -426,7 +472,9 @@ export default function App() {
 
     const [blocks, setBlocks] = createStore<CanvasBlock[]>([]);
     const [notes, setNotes] = createStore<CanvasNote[]>([]);
-    const [consoleLogs, setConsoleLogs] = createStore<{ id: string; time: string; message: string }[]>([]);
+    const [consoleLogs, setConsoleLogs] = createStore<
+        { id: string; time: string; message: string; level?: "error" }[]
+    >([]);
 
     const worldSize = createMemo(() => {
         let maxX = 0;
@@ -468,16 +516,20 @@ export default function App() {
                 "test-run-flow",
                 { triggerBlockId: triggerBlock.id, payload: payload || {} },
             );
-            if (log?.message) {
+            // only failures reach the console; a clean run shows nothing and
+            // the flow's own Log to Console actions speak for themselves
+            if (log?.status === "error" && log.message) {
                 appendConsoleLog({
                     time: new Date().toLocaleTimeString(),
-                    message: `Test run (${triggerBlock.action?.name || triggerBlock.id}): ${log.message}`,
+                    message: log.message,
+                    level: "error",
                 });
             }
         } catch (err: any) {
             appendConsoleLog({
                 time: new Date().toLocaleTimeString(),
-                message: `Test run failed: ${err?.message || err}`,
+                message: err?.message || err,
+                level: "error",
             });
         }
     };
@@ -629,6 +681,7 @@ export default function App() {
                     );
                 }
                 setBlocks(clean);
+                await refreshBlockSchemas(clean);
             }
             if (saved?.notes && Array.isArray(saved.notes)) {
                 setNotes(saved.notes);
@@ -636,6 +689,29 @@ export default function App() {
         } catch (err) {
             console.error("[Actions] Failed to load persisted flows:", err);
         }
+    });
+
+    const refreshBlockSchemas = async (current?: CanvasBlock[]) => {
+        try {
+            const [acts, trigs] = await Promise.all([
+                actionsApi.list(),
+                actionsApi.listTriggers(),
+            ]);
+            const merged = mergeActionSchemas(current ?? blocks, acts, trigs);
+            setBlocks(merged);
+            saveFlows(merged);
+        } catch (err) {
+            console.error("[Actions] Failed to refresh block schemas:", err);
+        }
+    };
+
+    onMount(() => {
+        // panels register after this panel may have loaded, so schemas are
+        // refreshed whenever the registry changes
+        const unsubscribe = actionsApi.onRegistryChange(() => {
+            void refreshBlockSchemas();
+        });
+        onCleanup(unsubscribe);
     });
 
     onMount(() => {
@@ -661,6 +737,7 @@ export default function App() {
                 appendConsoleLog({
                     time: output.time || new Date().toLocaleTimeString(),
                     message: String(output.message ?? ""),
+                    level: output.status === "error" ? "error" : undefined,
                 });
                 return;
             }
@@ -768,6 +845,20 @@ export default function App() {
     };
 
     const handlePointerMove = (e: PointerEvent) => {
+        const pending = pendingChildDrag();
+        if (pending && !ghostDrag()) {
+            const distance = Math.hypot(
+                e.clientX - pending.startClient.x,
+                e.clientY - pending.startClient.y,
+            );
+            if (distance >= DRAG_START_THRESHOLD_PX) {
+                setPendingChildDrag(null);
+                beginChildDrag(pending, e.clientX, e.clientY);
+            }
+            // a press that has not travelled yet is still a click: do not pan
+            return;
+        }
+
         if (ghostDrag()) {
             setGhostDrag({
                 ...ghostDrag()!,
@@ -802,6 +893,12 @@ export default function App() {
     };
 
     const handlePointerUp = (e: PointerEvent) => {
+        // a press that never crossed the drag threshold was a click; the
+        // block was never removed, so there is nothing to restore
+        if (pendingChildDrag()) {
+            setPendingChildDrag(null);
+            return;
+        }
         const dropTarget = hoverDropTarget();
         setHoverDropTarget(null);
 
@@ -1083,6 +1180,39 @@ export default function App() {
         });
     };
 
+    const beginChildDrag = (
+        pending: PendingChildDrag,
+        clientX: number,
+        clientY: number,
+    ) => {
+        const { blocks: updated, removed } = removeBlock(
+            blocks,
+            pending.child.id,
+        );
+        if (!removed) return;
+        setBlocks(updated);
+        setGhostDrag({
+            id: removed.id,
+            panelId: removed.panelId,
+            item: {
+                panelId: removed.panelId,
+                action: (removed.action as any).id || "action",
+                schema: removed.action,
+            },
+            isTrigger: removed.isTrigger,
+            iconSrc: removed.iconSrc,
+            pos: { x: clientX, y: clientY },
+            grabOffset: pending.grabOffset,
+            values: removed.values,
+            children: removed.children,
+            detachedFrom: {
+                originalParentId: pending.originalParentId,
+                originalIndex: pending.originalIndex,
+                block: removed,
+            },
+        });
+    };
+
     const handleStartDragChild = (
         child: CanvasBlock,
         grabOffset: { x: number; y: number },
@@ -1101,30 +1231,13 @@ export default function App() {
             }
         }
 
-        const { blocks: updated, removed } = removeBlock(blocks, child.id);
-        if (removed) {
-            setBlocks(updated);
-            setGhostDrag({
-                id: removed.id,
-                panelId: removed.panelId,
-                item: {
-                    panelId: removed.panelId,
-                    action: (removed.action as any).id || "action",
-                    schema: removed.action,
-                },
-                isTrigger: removed.isTrigger,
-                iconSrc: removed.iconSrc,
-                pos: { x: e.clientX, y: e.clientY },
-                grabOffset,
-                values: removed.values,
-                children: removed.children,
-                detachedFrom: {
-                    originalParentId,
-                    originalIndex,
-                    block: removed,
-                },
-            });
-        }
+        setPendingChildDrag({
+            child,
+            grabOffset,
+            startClient: { x: e.clientX, y: e.clientY },
+            originalParentId,
+            originalIndex,
+        });
     };
 
     const handleDeleteBlock = (id: string) => {
@@ -1200,55 +1313,47 @@ export default function App() {
             />
 
             <div class="canvas-top-right-controls">
-                <PaperEffect variant="green">
+                <PaperEffect variant="success">
                     <PaperButton
-                        compact
-                        variant="green"
+                        variant="success"
                         icon
                         onClick={handlePlayAllFlows}
-                        title="Run On-Play Flows"
-                    >
+                        title="Run On-Play Flows">
                         <PaperIcon>play_arrow</PaperIcon>
                     </PaperButton>
                 </PaperEffect>
 
-                <div class="canvas-console-panel">
-                    <div class="canvas-console-header">
-                        <div class="canvas-console-title">
-                            <PaperIcon class="canvas-console-icon">terminal</PaperIcon>
-                            <PaperText size={1} weight={700}>Console</PaperText>
-                        </div>
-                        <Show when={consoleLogs.length > 0}>
-                            <PaperButton
-                                tiny
+                <Show when={consoleLogs.length > 0}>
+                    <div class="canvas-console-panel">
+                        <div class="canvas-console-header">
+                            <div class="canvas-console-title">
+                                <PaperIcon class="canvas-console-icon">terminal</PaperIcon>
+                                <PaperText size={1} weight={700}>Console</PaperText>
+                            </div>
+                            <PaperButton size="tiny"
                                 icon
                                 onClick={() => setConsoleLogs([])}
-                                title="Clear Console"
-                            >
+                                title="Clear Console">
                                 <PaperIcon>delete_sweep</PaperIcon>
                             </PaperButton>
-                        </Show>
-                    </div>
-                    <div class="canvas-console-body">
-                        <Show
-                            when={consoleLogs.length > 0}
-                            fallback={
-                                <div class="canvas-console-empty">
-                                    No log output yet
-                                </div>
-                            }
-                        >
+                        </div>
+                        <div class="canvas-console-body">
                             <For each={consoleLogs}>
                                 {(log) => (
-                                    <div class="canvas-console-line">
+                                    <div
+                                        class="canvas-console-line"
+                                        classList={{
+                                            "is-error": log.level === "error",
+                                        }}
+                                    >
                                         <span class="canvas-console-time">{log.time}</span>
                                         <span class="canvas-console-text">{log.message}</span>
                                     </div>
                                 )}
                             </For>
-                        </Show>
+                        </div>
                     </div>
-                </div>
+                </Show>
             </div>
 
             <div
@@ -1396,7 +1501,7 @@ export default function App() {
                 </Show>
                 <Show when={(() => {
                     const b = contextBlock();
-                    return b && !b.isTrigger && blockVariableName(b);
+                    return b && blockVariableName(b);
                 })()}>
                     <PaperContextMenuItem
                         icon="edit"
@@ -1406,7 +1511,7 @@ export default function App() {
                             if (id) openRenameModal(id);
                         }}
                     >
-                        Edit Variable Name
+                        Edit Name
                     </PaperContextMenuItem>
                 </Show>
                 <PaperContextMenuItem
@@ -1425,21 +1530,17 @@ export default function App() {
             <PaperModal
                 open={renameTargetId() !== null}
                 onClose={() => setRenameTargetId(null)}
-                title="Rename Variable"
+                title="Edit Name"
                 footer={
                     <PaperFlex direction="row" justify="flex-end" gap="half" fullWidth>
                         <PaperButton
-                            compact
                             variant="text"
-                            onClick={() => setRenameTargetId(null)}
-                        >
+                            onClick={() => setRenameTargetId(null)}>
                             Cancel
                         </PaperButton>
                         <PaperButton
-                            compact
                             variant="brand"
-                            onClick={handleConfirmRename}
-                        >
+                            onClick={handleConfirmRename}>
                             Save
                         </PaperButton>
                     </PaperFlex>

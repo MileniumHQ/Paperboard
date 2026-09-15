@@ -45,12 +45,26 @@ export default function ActionDropdownMenu(props: ActionDropdownMenuProps) {
             }
         };
 
+        // fixed to the screen: scrolling the canvas closes it instead of
+        // leaving it floating; scrolling inside the menu is allowed
+        const handleScroll = (e: Event) => {
+            if (!props.open) return;
+            const target = e.target;
+            if (menuRef && target instanceof Node && menuRef.contains(target)) return;
+            props.onClose();
+        };
+
         window.addEventListener("pointerdown", handlePointerDown, { capture: true });
         window.addEventListener("keydown", handleKeyDown);
+        window.addEventListener("scroll", handleScroll, {
+            capture: true,
+            passive: true,
+        });
 
         onCleanup(() => {
             window.removeEventListener("pointerdown", handlePointerDown, { capture: true });
             window.removeEventListener("keydown", handleKeyDown);
+            window.removeEventListener("scroll", handleScroll, { capture: true });
         });
     });
 
@@ -58,7 +72,7 @@ export default function ActionDropdownMenu(props: ActionDropdownMenuProps) {
         <Show when={props.open && props.items.length > 0}>
             <div
                 ref={menuRef}
-                class="actionVariableMenu"
+                class="actionVariableMenu actionOptionMenu"
                 onPointerDown={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
