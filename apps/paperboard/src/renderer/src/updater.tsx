@@ -4,12 +4,11 @@ import { render } from "solid-js/web";
 import { createSignal, onMount, onCleanup, Show } from "solid-js";
 import {
     PaperProvider,
-    PaperContainer,
+    PaperCard,
     PaperFlex,
     PaperText,
     PaperProgress,
-    PaperButton,
-} from "@paperboard-dev/paperui";
+    PaperButton, getVarCss } from "@paperboard-dev/paperui";
 
 function PaperUpdater() {
     const [progress, setProgress] = createSignal<number | null>(null);
@@ -69,12 +68,13 @@ function PaperUpdater() {
             fullWidth
             style={{ background: "transparent" }}
         >
-            <PaperContainer
+            <PaperCard
+                surface="frontest"
                 style={{
                     width: "100vw",
                     height: "100vh",
                     "box-sizing": "border-box",
-                    "border-radius": "calc(var(--paper-border-radius) * 2)",
+                    "border-radius": `calc(${getVarCss("border-radius")} * 2)`,
                 }}
             >
                 <PaperFlex
@@ -90,11 +90,11 @@ function PaperUpdater() {
                     <Show when={!failed()}>
                         <PaperProgress value={progress() ?? undefined} max={100} />
                     </Show>
-                    <PaperButton variant="text" compact onClick={finish}>
+                    <PaperButton variant="text" onClick={finish}>
                         Skip
                     </PaperButton>
                 </PaperFlex>
-            </PaperContainer>
+            </PaperCard>
         </PaperProvider>
     );
 }

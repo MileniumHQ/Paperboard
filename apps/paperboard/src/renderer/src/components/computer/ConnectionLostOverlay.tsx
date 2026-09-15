@@ -60,11 +60,11 @@ export const ConnectionLostOverlay: Component<ConnectionLostOverlayProps> = (
                 // Reduced motion removes blur; fall back opaque to stay legible
                 "background-color": reducedMotion()
                     ? isDark()
-                        ? getVarCss("background-definition")
-                        : getVarCss("background-frontest")
+                        ? getVarCss("surface-inset")
+                        : getVarCss("surface-raised")
                     : isDark()
-                      ? getVarCss("overlay")
-                      : getVarCss("overlay-invert"),
+                      ? getVarCss("scrim")
+                      : getVarCss("scrim-light"),
                 "backdrop-filter": reducedMotion()
                     ? "none"
                     : getVarCss("blur-medium"),
@@ -79,7 +79,7 @@ export const ConnectionLostOverlay: Component<ConnectionLostOverlayProps> = (
                 <PaperIcon
                     style={{
                         "font-size": "3rem",
-                        color: getVarCss("red"),
+                        color: getVarCss("danger"),
                         opacity: 0.9,
                     }}
                 >
@@ -90,7 +90,7 @@ export const ConnectionLostOverlay: Component<ConnectionLostOverlayProps> = (
                 </PaperText>
                 <PaperText
                     size={3}
-                    color="light-text"
+                    color="text-subtle"
                     style={{
                         "text-align": "center",
                         "max-width": "24rem",
@@ -104,16 +104,14 @@ export const ConnectionLostOverlay: Component<ConnectionLostOverlayProps> = (
             </PaperFlex>
 
             <PaperFlex center direction="column" gap="half">
-                <PaperButton
-                    tiny
+                <PaperButton size="tiny"
                     disabled={isReconnecting()}
-                    onClick={handleReconnect}
-                >
+                    onClick={handleReconnect}>
                     <PaperIcon>restart_alt</PaperIcon>
                     {isReconnecting() ? "Reconnecting..." : "Attempt Reconnect"}
                 </PaperButton>
                 <Show when={lastError()}>
-                    <PaperText size={2} color="light-text">
+                    <PaperText size={2} color="text-subtle">
                         Last error: {lastError()}
                     </PaperText>
                 </Show>

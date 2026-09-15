@@ -101,8 +101,8 @@ const TopBar: Component<{
                 "justify-content": "center",
                 "-webkit-app-region": "drag",
                 "user-select": "none",
-                background: getVarCss("background-back"),
-                "border-bottom": `${getVarCss("border-width")} solid ${getVarCss("medium-border")}`,
+                background: getVarCss("surface-sunken"),
+                "border-bottom": `${getVarCss("border-width")} solid ${getVarCss("border")}`,
                 position: "relative",
                 "flex-shrink": 0,
                 "z-index": 2000,
@@ -111,7 +111,7 @@ const TopBar: Component<{
             <PaperText
                 weight={800}
                 size={2}
-                color="light-text"
+                color="text-subtle"
                 style={{ "pointer-events": "none" }}
             >
                 Paperboard
@@ -126,7 +126,7 @@ const TopBar: Component<{
                         "-webkit-app-region": "no-drag",
                     }}
                 >
-                    <PaperText size={1} color="light-text">
+                    <PaperText size={1} color="text-subtle">
                         {versionLabel()}
                     </PaperText>
                 </div>
@@ -141,22 +141,18 @@ const TopBar: Component<{
                     "-webkit-app-region": "no-drag",
                 }}
             >
-                <PaperButton
-                    tiny
+                <PaperButton size="tiny"
                     icon
                     title="Open panel folder"
-                    onClick={handleFolder}
-                >
+                    onClick={handleFolder}>
                     <PaperIcon>folder_open</PaperIcon>
                 </PaperButton>
                 <Show when={updateReady() !== null}>
                     <PaperButton
-                        compact
                         title={`Restart to install ${updateReady()}`}
                         onClick={() =>
                             (window as any).electron?.ipcRenderer?.send("quit-and-install")
-                        }
-                    >
+                        }>
                         Restart to update
                     </PaperButton>
                 </Show>

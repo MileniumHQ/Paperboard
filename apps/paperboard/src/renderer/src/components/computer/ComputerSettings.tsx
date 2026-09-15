@@ -46,7 +46,7 @@ const ComputerSettings: Component<ComputerSettingsProps> = (props) => {
             direction="column"
             fullWidth
             fullHeight
-            background="frontest"
+            background="surface-raised"
             style={{
                 flex: 1,
                 "overflow-y": "auto",
@@ -60,7 +60,7 @@ const ComputerSettings: Component<ComputerSettingsProps> = (props) => {
                 </PaperSettingItem>
 
                 <PaperSettingItem title="Network Address">
-                    <PaperText size={3} weight={600} color="light-text">
+                    <PaperText size={3} weight={600} color="text-subtle">
                         {props.computer?.host || "127.0.0.1"}:
                         {props.computer?.port || 45464}
                     </PaperText>
@@ -77,8 +77,8 @@ const ComputerSettings: Component<ComputerSettingsProps> = (props) => {
                         title="Remove Computer"
                         description="Forget this computer and disconnect all panels"
                     >
-                        <PaperButton
-                            variant="red"
+                        <PaperButton size="large"
+                            variant="danger"
                             disabled={isRemoving()}
                             onClick={() => setIsConfirmOpen(true)}
                         >
@@ -101,18 +101,14 @@ const ComputerSettings: Component<ComputerSettingsProps> = (props) => {
                         fullWidth
                     >
                         <PaperButton
-                            compact
                             onClick={() => setIsConfirmOpen(false)}
-                            disabled={isRemoving()}
-                        >
+                            disabled={isRemoving()}>
                             Cancel
                         </PaperButton>
                         <PaperButton
-                            compact
-                            variant="red"
+                            variant="danger"
                             disabled={isRemoving()}
-                            onClick={handleConfirmRemove}
-                        >
+                            onClick={handleConfirmRemove}>
                             {isRemoving() ? "Removing..." : "Forget Computer"}
                         </PaperButton>
                     </PaperFlex>
@@ -124,7 +120,7 @@ const ComputerSettings: Component<ComputerSettingsProps> = (props) => {
                     This will disconnect all panels on this machine.
                 </PaperText>
                 <Show when={removeError()}>
-                    <PaperText size={2} color="red">
+                    <PaperText size={2} color="danger">
                         {removeError()}
                     </PaperText>
                 </Show>

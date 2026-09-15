@@ -38,18 +38,14 @@ const UninstallPanelModal: Component<UninstallPanelModalProps> = (props) => {
                 >
                     <PaperButton
                         onClick={() => props.onClose()}
-                        compact
                         variant="text"
-                        disabled={props.isBusy}
-                    >
+                        disabled={props.isBusy}>
                         Cancel
                     </PaperButton>
                     <PaperButton
                         onClick={() => props.onConfirm()}
-                        compact
-                        variant="red"
-                        disabled={props.isBusy}
-                    >
+                        variant="danger"
+                        disabled={props.isBusy}>
                         {props.isBusy ? "Uninstalling..." : "Uninstall"}
                     </PaperButton>
                 </PaperFlex>
@@ -62,13 +58,13 @@ const UninstallPanelModal: Component<UninstallPanelModalProps> = (props) => {
                             Are you sure you want to uninstall{" "}
                             <strong>{target().panel.name}</strong>?
                         </PaperText>
-                        <PaperText size={2} color="light-text">
+                        <PaperText size={2} color="text-subtle">
                             This will permanently delete the panel package,
                             its configuration file, all stored data files,
                             and terminate any running operations.
                         </PaperText>
                         <Show when={props.error}>
-                            <PaperText size={2} color="red">
+                            <PaperText size={2} color="danger">
                                 {props.error}
                             </PaperText>
                         </Show>

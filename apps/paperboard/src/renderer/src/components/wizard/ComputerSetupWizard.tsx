@@ -211,7 +211,7 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
         <PaperWizard
             onComplete={handleFinish}
             finishLabel="Add Computer"
-            finishVariant="green"
+            finishVariant="success"
             style={{ width: "100%", height: "28rem" }}
         >
             <WizardStepRouter />
@@ -302,7 +302,7 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
                             />
 
                             <Show when={probeUnreachable()}>
-                                <PaperText size={2} color="red">
+                                <PaperText size={2} color="danger">
                                     Can't reach {host().trim()}:
                                     {port().trim() || "45464"}. Check the
                                     address
@@ -348,7 +348,7 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
                             />
 
                             <Show when={pairError()}>
-                                <PaperText size={2} color="red">
+                                <PaperText size={2} color="danger">
                                     {pairError()}
                                 </PaperText>
                             </Show>

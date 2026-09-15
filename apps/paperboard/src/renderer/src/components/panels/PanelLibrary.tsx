@@ -154,7 +154,7 @@ const PanelLibrary: Component<PanelLibraryProps> = (props) => {
                             width: "100%",
                             "border-radius": getVarCss("border-radius"),
                             overflow: "hidden",
-                            border: `${getVarCss("border-width")} solid ${getVarCss("medium-border")}`,
+                            border: `${getVarCss("border-width")} solid ${getVarCss("border")}`,
                             "flex-shrink": 0,
                         }}
                     >
@@ -171,10 +171,10 @@ const PanelLibrary: Component<PanelLibraryProps> = (props) => {
 
                     <Show when={props.loadFailed}>
                         <PaperFlex direction="row" gap="half" align="center">
-                            <PaperBadge variant="red">
+                            <PaperBadge variant="danger">
                                 Couldn't load library
                             </PaperBadge>
-                            <PaperButton
+                            <PaperButton size="large"
                                 variant="text"
                                 onClick={() => props.onRetryLoad?.()}
                             >
@@ -193,18 +193,18 @@ const PanelLibrary: Component<PanelLibraryProps> = (props) => {
                                         description={panel.description}
                                         badge={
                                             panel.isInstalled ? (
-                                                <PaperBadge variant="green">
+                                                <PaperBadge variant="success">
                                                     Installed
                                                 </PaperBadge>
                                             ) : undefined
                                         }
                                         footerLeft={
-                                            <PaperText size={2} color="light">
+                                            <PaperText size={2} color="text-subtle">
                                                 {publisherLabel(panel)}
                                             </PaperText>
                                         }
                                         footerRight={
-                                            <PaperText size={2} color="light">
+                                            <PaperText size={2} color="text-subtle">
                                                 {panel.version
                                                     ? `v${panel.version}`
                                                     : "–"}
@@ -262,17 +262,17 @@ const PanelLibrary: Component<PanelLibraryProps> = (props) => {
                                     <PaperText size={5} weight={700}>
                                         {panel().name}
                                     </PaperText>
-                                    <PaperText size={2} color="light">
+                                    <PaperText size={2} color="text-subtle">
                                         {publisherLabel(panel())}
                                     </PaperText>
                                 </PaperFlex>
 
                                 <PaperEffect>
-                                    <PaperButton
+                                    <PaperButton size="large"
                                         variant={
                                             panel().isInstalled
                                                 ? "brand"
-                                                : "blue"
+                                                : "primary"
                                         }
                                         disabled={isDownloading()}
                                         onClick={() => handleAction(panel())}
@@ -287,7 +287,7 @@ const PanelLibrary: Component<PanelLibraryProps> = (props) => {
                             </PaperFlex>
 
                                 <Show when={installError()}>
-                                    <PaperText size={2} color="red">
+                                    <PaperText size={2} color="danger">
                                         {installError()}
                                     </PaperText>
                                 </Show>

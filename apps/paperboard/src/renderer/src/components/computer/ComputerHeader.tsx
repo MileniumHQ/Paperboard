@@ -23,26 +23,26 @@ export interface OsBrandInfo {
 }
 
 const OS_BRANDS: Record<string, { name: string; color: string }> = {
-    macos: { name: "macOS", color: "var(--paper-brand-os-macos)" },
-    darwin: { name: "macOS", color: "var(--paper-brand-os-macos)" },
-    windows: { name: "Windows", color: "var(--paper-brand-os-windows)" },
-    ubuntu: { name: "Ubuntu", color: "var(--paper-brand-os-ubuntu)" },
-    arch: { name: "Arch Linux", color: "var(--paper-brand-os-arch)" },
-    debian: { name: "Debian", color: "var(--paper-brand-os-debian)" },
-    fedora: { name: "Fedora", color: "var(--paper-brand-os-fedora)" },
-    linuxmint: { name: "Linux Mint", color: "var(--paper-brand-os-linuxmint)" },
-    mint: { name: "Linux Mint", color: "var(--paper-brand-os-linuxmint)" },
-    zorin: { name: "Zorin OS", color: "var(--paper-brand-os-zorin)" },
-    zorinos: { name: "Zorin OS", color: "var(--paper-brand-os-zorin)" },
-    steamos: { name: "SteamOS", color: "var(--paper-brand-os-steamos)" },
-    steamdeck: { name: "SteamOS", color: "var(--paper-brand-os-steamos)" },
-    pop: { name: "Pop!_OS", color: "var(--paper-brand-os-pop)" },
-    pop_os: { name: "Pop!_OS", color: "var(--paper-brand-os-pop)" },
-    manjaro: { name: "Manjaro", color: "var(--paper-brand-os-manjaro)" },
-    elementary: { name: "elementary OS", color: "var(--paper-brand-os-elementary)" },
-    nixos: { name: "NixOS", color: "var(--paper-brand-os-nixos)" },
-    raspbian: { name: "Raspberry Pi OS", color: "var(--paper-brand-os-raspbian)" },
-    linux: { name: "Linux", color: "var(--paper-brand-os-linux)" },
+    macos: { name: "macOS", color: `${getVarCss("os-macos")}` },
+    darwin: { name: "macOS", color: `${getVarCss("os-macos")}` },
+    windows: { name: "Windows", color: `${getVarCss("os-windows")}` },
+    ubuntu: { name: "Ubuntu", color: `${getVarCss("os-ubuntu")}` },
+    arch: { name: "Arch Linux", color: `${getVarCss("os-arch")}` },
+    debian: { name: "Debian", color: `${getVarCss("os-debian")}` },
+    fedora: { name: "Fedora", color: `${getVarCss("os-fedora")}` },
+    linuxmint: { name: "Linux Mint", color: `${getVarCss("os-linuxmint")}` },
+    mint: { name: "Linux Mint", color: `${getVarCss("os-linuxmint")}` },
+    zorin: { name: "Zorin OS", color: `${getVarCss("os-zorin")}` },
+    zorinos: { name: "Zorin OS", color: `${getVarCss("os-zorin")}` },
+    steamos: { name: "SteamOS", color: `${getVarCss("os-steamos")}` },
+    steamdeck: { name: "SteamOS", color: `${getVarCss("os-steamos")}` },
+    pop: { name: "Pop!_OS", color: `${getVarCss("os-pop")}` },
+    pop_os: { name: "Pop!_OS", color: `${getVarCss("os-pop")}` },
+    manjaro: { name: "Manjaro", color: `${getVarCss("os-manjaro")}` },
+    elementary: { name: "elementary OS", color: `${getVarCss("os-elementary")}` },
+    nixos: { name: "NixOS", color: `${getVarCss("os-nixos")}` },
+    raspbian: { name: "Raspberry Pi OS", color: `${getVarCss("os-raspbian")}` },
+    linux: { name: "Linux", color: `${getVarCss("os-linux")}` },
 };
 
 export function getOsBrandInfo(comp?: ComputerItem): OsBrandInfo {
@@ -51,7 +51,7 @@ export function getOsBrandInfo(comp?: ComputerItem): OsBrandInfo {
             name: "Unknown",
             version: "",
             display: "Unknown OS",
-            color: "var(--paper-brand-os-unknown)",
+            color: `${getVarCss("os-unknown")}`,
         };
     }
 
@@ -73,7 +73,7 @@ export function getOsBrandInfo(comp?: ComputerItem): OsBrandInfo {
                 : rawOs === "win32"
                   ? "Windows"
                   : comp.os || "System"),
-        color: "var(--paper-brand-os-unknown)",
+        color: `${getVarCss("os-unknown")}`,
     };
 
     let version = comp.osVersion ? comp.osVersion.trim() : "";
@@ -133,10 +133,10 @@ const ComputerHeader: Component<ComputerHeaderProps> = (props) => {
     return (
         <PaperFlex
             direction="column"
-            background="definition"
+            background="surface-inset"
             style={{
                 "flex-shrink": 0,
-                "border-bottom": `${getVarCss("border-width")} solid ${getVarCss("medium-border")}`,
+                "border-bottom": `${getVarCss("border-width")} solid ${getVarCss("border")}`,
             }}
         >
             <PaperFlex
@@ -145,7 +145,7 @@ const ComputerHeader: Component<ComputerHeaderProps> = (props) => {
                     padding: `${getVarCss("uigap-threefourths")} ${getVarCss("uigap-threefourths")} ${getVarCss("uigap-half")}`,
                     gap: "2px",
                     "min-width": 0,
-                    background: `linear-gradient(135deg, color-mix(in srgb, ${brandInfo().color} 22%, ${getVarCss("background-definition")}) 0%, ${getVarCss("background-definition")} 100%)`,
+                    background: `linear-gradient(135deg, color-mix(in srgb, ${brandInfo().color} 22%, ${getVarCss("surface-inset")}) 0%, ${getVarCss("surface-inset")} 100%)`,
                 }}
             >
                 <PaperText
@@ -162,7 +162,7 @@ const ComputerHeader: Component<ComputerHeaderProps> = (props) => {
                 <PaperText
                     size={1}
                     weight={600}
-                    color="light-text"
+                    color="text-subtle"
                     style={{
                         "white-space": "nowrap",
                         overflow: "hidden",

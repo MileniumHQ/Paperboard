@@ -3,8 +3,8 @@
 // Kept in papercrane so the Electron host and any future host reuse them.
 //
 // These MIRROR PaperUI tokens the native layer cannot read as CSS vars:
-//   TITLEBAR_OVERLAY  -> --paper-background-back
-//   WINDOW_BACKGROUND -> --paper-background-frontest (light) / --paper-background-backest (dark)
+//   TITLEBAR_OVERLAY  -> --paper-surface-sunken
+//   WINDOW_BACKGROUND -> --paper-surface-raised (light) / --paper-surface-sunkenest (dark)
 // tests/themeConstants.test.ts parses colors.css and fails if they drift.
 export const TITLEBAR_OVERLAY_COLORS = {
     dark: "#1a1b1e",

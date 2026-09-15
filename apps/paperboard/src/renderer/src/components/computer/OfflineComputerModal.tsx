@@ -62,14 +62,12 @@ export const OfflineComputerModal: Component<OfflineComputerModalProps> = (
             footer={
                 <PaperFlex direction="row" justify="flex-end" gap="half" fullWidth>
                     <PaperButton
-                        compact
                         variant="text"
                         disabled={isProbing()}
-                        onClick={props.onWorkOffline}
-                    >
+                        onClick={props.onWorkOffline}>
                         Work Offline
                     </PaperButton>
-                    <PaperButton compact disabled={isProbing()} onClick={attemptReconnect}>
+                    <PaperButton disabled={isProbing()} onClick={attemptReconnect}>
                         <PaperIcon>restart_alt</PaperIcon>
                         {isProbing() ? "Checking…" : "Try Again"}
                     </PaperButton>
@@ -89,7 +87,7 @@ export const OfflineComputerModal: Component<OfflineComputerModalProps> = (
                 </Show>
 
                 <Show when={error()}>
-                    <PaperText size={2} color="light-text">
+                    <PaperText size={2} color="text-subtle">
                         Last error: {error()}
                     </PaperText>
                 </Show>

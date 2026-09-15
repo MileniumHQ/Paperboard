@@ -464,11 +464,11 @@ const App: Component = () => {
 
                         <PaperFlex
                             direction="column"
-                            background="definition"
+                            background="surface-inset"
                             style={{
-                                width: getVarCss("sidebar-width"),
+                                width: getVarCss("size-sidebar"),
                                 height: "100%",
-                                "border-right": `${getVarCss("border-width")} solid ${getVarCss("medium-border")}`,
+                                "border-right": `${getVarCss("border-width")} solid ${getVarCss("border")}`,
                                 "flex-shrink": 0,
                                 overflow: "hidden",
                             }}
@@ -494,7 +494,7 @@ const App: Component = () => {
                                                     : "none",
                                                 overflow: "hidden",
                                                 background:
-                                                    getVarCss("medium-border"),
+                                                    getVarCss("border"),
                                             }}
                                         >
                                             <ComputerHeader
@@ -564,19 +564,16 @@ const App: Component = () => {
                                                             "align-items": "flex-start",
                                                         }}
                                                     >
-                                                        <PaperText size={1} color="light-text">
+                                                        <PaperText size={1} color="text-subtle">
                                                             Couldn't load panels for this computer.
                                                         </PaperText>
-                                                        <PaperButton
-                                                            compact
-                                                            tiny
+                                                        <PaperButton size="tiny"
                                                             variant="text"
                                                             onClick={() =>
                                                                 void refreshPanelsForComputer(
                                                                     comp.id,
                                                                 )
-                                                            }
-                                                        >
+                                                            }>
                                                             Retry
                                                         </PaperButton>
                                                     </PaperFlex>
@@ -775,21 +772,17 @@ const App: Component = () => {
                         fullWidth
                     >
                         <PaperButton
-                            compact
                             onClick={() => {
                                 setIsForgetConfirmOpen(false);
                                 setContextMenuComputerId(null);
                             }}
-                            disabled={isForgetting()}
-                        >
+                            disabled={isForgetting()}>
                             Cancel
                         </PaperButton>
                         <PaperButton
-                            compact
-                            variant="red"
+                            variant="danger"
                             disabled={isForgetting()}
-                            onClick={handleConfirmForget}
-                        >
+                            onClick={handleConfirmForget}>
                             {isForgetting() ? "Removing..." : "Forget Computer"}
                         </PaperButton>
                     </PaperFlex>
@@ -800,7 +793,7 @@ const App: Component = () => {
                     <strong>{forgetTargetName()}</strong>?
                 </PaperText>
                 <Show when={forgetError()}>
-                    <PaperText size={2} color="red">
+                    <PaperText size={2} color="danger">
                         {forgetError()}
                     </PaperText>
                 </Show>

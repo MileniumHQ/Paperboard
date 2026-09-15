@@ -85,7 +85,7 @@ const PanelView: Component<PanelViewProps> = (props) => {
             direction="column"
             fullWidth
             fullHeight
-            background="frontest"
+            background="surface-raised"
             style={{
                 flex: "1",
                 position: "relative",
@@ -129,8 +129,8 @@ const PanelView: Component<PanelViewProps> = (props) => {
                                         <PaperText preset="body">
                                             This panel didn't load.
                                         </PaperText>
-                                        <PaperButton
-                                            variant="blue"
+                                        <PaperButton size="large"
+                                            variant="primary"
                                             onClick={() => handleRetry(key)}
                                         >
                                             Reload panel
@@ -153,7 +153,7 @@ const PanelView: Component<PanelViewProps> = (props) => {
                                     position: "absolute",
                                     inset: "0",
                                     border: "none",
-                                    "border-left": `${getVarCss("border-width")} solid ${getVarCss("medium-border")}`,
+                                    "border-left": `${getVarCss("border-width")} solid ${getVarCss("border")}`,
                                     "box-sizing": "border-box",
                                     display: isCurrent() ? "block" : "none",
                                     visibility: isLoaded() ? "visible" : "hidden",

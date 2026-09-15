@@ -38,30 +38,30 @@ describe("native theme constants mirror PaperUI tokens", () => {
     const lightRegion = css.slice(0, darkStart);
     const darkRegion = css.slice(darkStart);
 
-    it("titlebar overlay matches --paper-background-back", () => {
+    it("titlebar overlay matches --paper-surface-sunken", () => {
         expect(TITLEBAR_OVERLAY_COLORS.light.toLowerCase()).toBe(
-            tokenValue(lightRegion, "background-back"),
+            tokenValue(lightRegion, "surface-sunken"),
         );
         expect(TITLEBAR_OVERLAY_COLORS.dark.toLowerCase()).toBe(
-            tokenValue(darkRegion, "background-back"),
+            tokenValue(darkRegion, "surface-sunken"),
         );
     });
 
     it("window background matches the renderer base surface", () => {
         expect(WINDOW_BACKGROUND_COLORS.light.toLowerCase()).toBe(
-            tokenValue(lightRegion, "background-frontest"),
+            tokenValue(lightRegion, "surface-raised"),
         );
         expect(WINDOW_BACKGROUND_COLORS.dark.toLowerCase()).toBe(
-            tokenValue(darkRegion, "background-backest"),
+            tokenValue(darkRegion, "surface-app"),
         );
     });
 
-    it("titlebar symbols match --paper-main-text", () => {
+    it("titlebar symbols match --paper-text", () => {
         expect(TITLEBAR_SYMBOL_COLORS.light.toLowerCase()).toBe(
-            tokenValue(lightRegion, "main-text"),
+            tokenValue(lightRegion, "text"),
         );
         expect(TITLEBAR_SYMBOL_COLORS.dark.toLowerCase()).toBe(
-            tokenValue(darkRegion, "main-text"),
+            tokenValue(darkRegion, "text"),
         );
     });
 });

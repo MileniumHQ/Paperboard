@@ -110,15 +110,13 @@ export default function AppSettings(props: {
                 title="Updates"
                 description="Runs a full update sweep right now: every panel, package, and Paperboard Server daemon on every connected computer is checked and updated, then Paperboard restarts."
             >
-                <PaperEffect variant="blue">
+                <PaperEffect variant="primary">
                     <PaperButton
-                        compact
                         onClick={() =>
                             window.electron?.ipcRenderer?.send(
                                 "relaunch-for-update",
                             )
-                        }
-                    >
+                        }>
                         <PaperIcon>restart_alt</PaperIcon>
                         Update everything now
                     </PaperButton>
