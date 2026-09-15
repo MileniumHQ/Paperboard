@@ -1,0 +1,20 @@
+.PaperSwatch {
+    display: inline-block;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.PaperSwatch.small {
+    width: var(--paper-swatch-size-small);
+    height: var(--paper-swatch-size-small);
+}
+
+.PaperSwatch.medium {
+    width: var(--paper-swatch-size-medium);
+    height: var(--paper-swatch-size-medium);
+}
+
+.PaperSwatch.large {
+    width: var(--paper-swatch-size-large);
+    height: var(--paper-swatch-size-large);
+}

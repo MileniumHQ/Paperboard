@@ -1,0 +1,20 @@
+/* Panel document reset.
+ *
+ * Panels render in their own document (usually an iframe), and PaperUI
+ * deliberately styles nothing outside .paperui-root. This is the one file a
+ * panel needs for the document itself: import it and write no CSS.
+ *
+ *   import "@paperboard-dev/paperui/panel.css";
+ */
+html,
+body,
+#app {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background-color: var(--paper-surface-app);
+    color: var(--paper-text);
+    font-family: var(--paper-font-family);
+}

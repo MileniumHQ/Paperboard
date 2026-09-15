@@ -10,6 +10,8 @@ export interface PaperTextProps extends JSX.HTMLAttributes<HTMLElement> {
     weight?: number;
     size?: number;
     rounded?: boolean;
+    /** code switches to the monospace family */
+    family?: "body" | "code";
     preset?: PaperTextPreset;
     as?: string;
     color?: PaperColor;
@@ -33,6 +35,7 @@ export function PaperText(props: PaperTextProps) {
         "weight",
         "size",
         "rounded",
+        "family",
         "preset",
         "as",
         "color",
@@ -74,6 +77,7 @@ export function PaperText(props: PaperTextProps) {
         [
             styles.PaperText,
             local.rounded ? styles.rounded : "",
+            local.family === "code" ? styles.code : "",
             local.preset ? styles[local.preset] : "",
             local.breakWord ? styles.breakWord : "",
             local.truncate ? styles.truncate : "",
@@ -124,14 +128,12 @@ export function PaperText(props: PaperTextProps) {
         >
             {local.children}
             <Show when={rest.id}>
-                <PaperButton
-                    tiny
+                <PaperButton size="tiny"
                     icon
                     variant="text"
                     class={styles.anchorLink}
                     onClick={handleCopyAnchor}
-                    title={copied() ? "Copied link!" : "Copy link"}
-                >
+                    title={copied() ? "Copied link!" : "Copy link"}>
                     <PaperIcon zeroHeight>
                         {copied() ? "check" : "link"}
                     </PaperIcon>

@@ -20,10 +20,11 @@
             "require": "./dist/paperui.cjs.js"
         },
         "./style.css": "./dist/paperui.css",
+        "./panel.css": "./dist/panel.css",
         "./package.json": "./package.json"
     },
     "scripts": {
-        "build": "tsc --noEmit && vite build",
+        "build": "tsc --noEmit && vite build && cp src/styles/panel.css dist/panel.css",
         "test": "bash scripts/check-styling.sh && vitest run"
     },
     "devDependencies": {

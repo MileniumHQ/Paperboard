@@ -16,8 +16,8 @@
 }
 .PaperText.section {
     text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--paper-light-text);
+    letter-spacing: var(--paper-text-tracking);
+    color: var(--paper-text-subtle);
 }
 .PaperText.body {
     line-height: 1.75;
@@ -43,4 +43,8 @@
 }
 .anchorLink:hover {
     opacity: 1;
+}
+
+.PaperText.code {
+    font-family: var(--paper-font-family-code);
 }

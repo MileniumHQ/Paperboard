@@ -2,12 +2,24 @@
     width: var(--size);
     height: var(--size);
     border-radius: 50%;
-    --size: var(--paper-item-size-small);
+    --size: var(--paper-control-size-medium);
     position: relative;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
+}
+
+.small {
+    --size: var(--paper-control-size-tiny);
+}
+
+.medium {
+    --size: var(--paper-control-size-medium);
+}
+
+.large {
+    --size: var(--paper-control-size-large);
 }
 
 .loaderSvg {
@@ -17,23 +29,46 @@
 }
 
 .loaderTrack {
-    stroke: var(--paper-background-definition);
+    stroke: var(--paper-surface-inset);
 }
 
 .loaderProgress {
-    stroke: var(--paper-front-blue);
+    stroke: var(--paper-primary);
     transition:
         stroke-dashoffset 0.35s var(--paper-ease-symmetric),
         stroke var(--paper-short-transition),
         opacity var(--paper-tiny-transition) ease;
 }
 
+.loaderProgress.indeterminate {
+    transform-box: view-box;
+    transform-origin: 50% 50%;
+    animation: loaderSpin 1s linear infinite;
+    transition:
+        opacity var(--paper-mid-transition) ease,
+        stroke var(--paper-short-transition);
+}
+
+.loaderProgress.hidden {
+    opacity: 0;
+    transition: opacity var(--paper-mid-transition) ease;
+}
+
+@keyframes loaderSpin {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
+}
+
 .loaderProgress.error {
-    stroke: var(--paper-front-red);
+    stroke: var(--paper-danger);
 }
 
 .loaderProgress.success {
-    stroke: var(--paper-front-green);
+    stroke: var(--paper-success);
 }
 
 .statusFinisher {
@@ -48,7 +83,7 @@
 .statusFinisher.full:after {
     content: "check";
     font-family: "Material Symbols Rounded";
-    color: var(--paper-over-brand);
+    color: var(--paper-on-color);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -58,7 +93,7 @@
     position: absolute;
     top: 0;
     left: 0;
-    background: var(--paper-front-green);
+    background: var(--paper-success);
     border-radius: 50%;
     animation: fullenter var(--paper-mid-transition) var(--paper-ease-emphasized);
     z-index: 5;
@@ -66,7 +101,7 @@
 
 .statusFinisher.full.error:after {
     content: "close";
-    background: var(--paper-front-red);
+    background: var(--paper-danger);
     border-radius: 50%;
     animation: fullentererror var(--paper-mid-transition) var(--paper-ease-emphasized);
 }
@@ -114,11 +149,11 @@
 
 @keyframes fullripple {
     from {
-        outline: 0 solid var(--paper-front-green);
+        outline: 0 solid var(--paper-success);
         opacity: 1;
     }
     to {
-        outline: var(--paper-thick-border-width) solid var(--paper-front-green);
+        outline: var(--paper-thick-border-width) solid var(--paper-success);
         opacity: 0;
         transform: scale(1.6);
     }
@@ -135,7 +170,7 @@
     display: flex;
     flex-direction: column;
     gap: var(--paper-uigap);
-    width: var(--paper-loader-width);
+    width: var(--paper-size-loader);
 }
 
 /* reduced motion zeroes within THIS component only — the global media

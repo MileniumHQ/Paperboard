@@ -1,0 +1,118 @@
+.PaperProse {
+    font-size: var(--paper-text-size-3);
+    line-height: var(--paper-console-line-height);
+    overflow-wrap: break-word;
+    color: var(--paper-text);
+}
+
+.PaperProse h1,
+.PaperProse h2,
+.PaperProse h3,
+.PaperProse h4,
+.PaperProse h5,
+.PaperProse h6 {
+    margin: var(--paper-uigap) 0 var(--paper-uigap-onefourth);
+    line-height: 1.3;
+}
+
+.PaperProse h1 {
+    font-size: var(--paper-text-size-7);
+}
+
+.PaperProse h2 {
+    font-size: var(--paper-text-size-6);
+    padding-bottom: var(--paper-uigap-onefourth);
+    border-bottom: var(--paper-border-width) solid var(--paper-border);
+}
+
+.PaperProse h3 {
+    font-size: var(--paper-text-size-5);
+}
+
+.PaperProse h4,
+.PaperProse h5,
+.PaperProse h6 {
+    font-size: var(--paper-text-size-4);
+}
+
+.PaperProse p {
+    margin: var(--paper-uigap-half) 0;
+}
+
+.PaperProse ul,
+.PaperProse ol {
+    margin: var(--paper-uigap-half) 0;
+    padding-left: var(--paper-uigap-sixfourths);
+}
+
+.PaperProse li {
+    margin: var(--paper-uigap-onefourth) 0;
+}
+
+.PaperProse a {
+    color: var(--paper-primary);
+}
+
+.PaperProse code {
+    font-family: var(--paper-font-family-code);
+    font-size: var(--paper-code-font-scale);
+    background: color-mix(in srgb, var(--paper-contrast) 15%, transparent);
+    border-radius: var(--paper-border-radius-half);
+    padding: var(--paper-code-padding-y) var(--paper-code-padding-x);
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.PaperProse pre {
+    margin: var(--paper-uigap-half) 0;
+    padding: var(--paper-uigap-threefourths) var(--paper-uigap);
+    background: color-mix(in srgb, var(--paper-contrast) 12%, transparent);
+    border-radius: var(--paper-border-radius-half);
+    overflow-x: auto;
+}
+
+.PaperProse pre code {
+    display: block;
+    padding: 0;
+    background: none;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.PaperProse blockquote {
+    margin: var(--paper-uigap-half) 0;
+    padding: var(--paper-uigap-onefourth) var(--paper-uigap);
+    border-left: var(--paper-thickest-border-width) solid var(--paper-border);
+    color: var(--paper-text-subtle);
+}
+
+.PaperProse table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: var(--paper-uigap-half) 0;
+    display: block;
+    overflow-x: auto;
+}
+
+.PaperProse th,
+.PaperProse td {
+    border: var(--paper-border-width) solid var(--paper-border);
+    padding: var(--paper-uigap-onefourth) var(--paper-uigap-half);
+    text-align: left;
+}
+
+.PaperProse th {
+    background: color-mix(in srgb, var(--paper-contrast) 12%, transparent);
+}
+
+.PaperProse img {
+    max-width: 100%;
+    height: auto;
+    border-radius: var(--paper-border-radius-half);
+}
+
+.PaperProse hr {
+    border: none;
+    border-top: var(--paper-border-width) solid var(--paper-border);
+    margin: var(--paper-uigap) 0;
+}

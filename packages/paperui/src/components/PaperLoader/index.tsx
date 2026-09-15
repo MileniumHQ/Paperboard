@@ -3,9 +3,12 @@ import { splitProps, Show, type JSX } from "solid-js";
 import { LoaderStatus } from "../../types";
 import { PaperText } from "../PaperText";
 
+export type PaperLoaderSize = "small" | "medium" | "large";
+
 export interface PaperLoaderProps extends JSX.HTMLAttributes<HTMLDivElement> {
-    percent: number;
+    percent?: number;
     loaderStatus: LoaderStatus;
+    size?: PaperLoaderSize;
     label?: JSX.Element | string;
 }
 
@@ -17,6 +20,7 @@ export function PaperLoader(props: PaperLoaderProps) {
     const [local, rest] = splitProps(props, [
         "percent",
         "loaderStatus",
+        "size",
         "label",
         "class",
         "classList",
@@ -27,6 +31,7 @@ export function PaperLoader(props: PaperLoaderProps) {
         [styles.PaperLoader, local.class].filter(Boolean).join(" ");
 
     const clampedPercent = () => Math.min(100, Math.max(0, local.percent || 0));
+    const isIndeterminate = () => local.loaderStatus === "indeterminate";
     const isWaiting = () => local.loaderStatus === "waiting";
     const isError = () => local.loaderStatus === "error";
     const isSuccess = () => local.loaderStatus === "success";
@@ -39,6 +44,7 @@ export function PaperLoader(props: PaperLoaderProps) {
             class={styles.elWrapper}
             classList={{
                 [styles.waiting]: isWaiting(),
+                [styles[local.size ?? "medium"]]: true,
                 ...local.classList,
             }}
             style={typeof local.style === "object" ? local.style : {}}
@@ -56,10 +62,29 @@ export function PaperLoader(props: PaperLoaderProps) {
                         classList={{
                             [styles.error]: isError(),
                             [styles.success]: isSuccess(),
+                            [styles.hidden]: isIndeterminate(),
                         }}
                         stroke-dasharray={`${CIRCUMFERENCE}`}
                         stroke-dashoffset={`${strokeDashoffset()}`}
-                        opacity={clampedPercent() <= 0 && !isSuccess() ? "0" : "1"}
+                        opacity={
+                            clampedPercent() <= 0 && !isSuccess() ? "0" : "1"
+                        }
+                        stroke-linecap="round"
+                        d="M 20 4.5 A 15.5 15.5 0 0 1 20 35.5 A 15.5 15.5 0 0 1 20 4.5"
+                        fill="none"
+                        stroke-width="7"
+                    />
+                    {/* its own path: the spinning arc cross-fades instead of
+                        inheriting the determinate rotation (no snap when the
+                        phase changes) */}
+                    <path
+                        class={styles.loaderProgress}
+                        classList={{
+                            [styles.indeterminate]: true,
+                            [styles.hidden]: !isIndeterminate(),
+                        }}
+                        stroke-dasharray={`${CIRCUMFERENCE}`}
+                        stroke-dashoffset={`${CIRCUMFERENCE * 0.65}`}
                         stroke-linecap="round"
                         d="M 20 4.5 A 15.5 15.5 0 0 1 20 35.5 A 15.5 15.5 0 0 1 20 4.5"
                         fill="none"

@@ -1,7 +1,13 @@
+/* the list is its own card: bordered, rounded, clipped, so callers never
+   wrap it in a container just to get a surface */
 .PaperSettingList {
     display: flex;
     flex-direction: column;
     width: 100%;
+    box-sizing: border-box;
+    border: var(--paper-border-width) solid var(--paper-border);
+    border-radius: var(--paper-border-radius);
+    background: var(--paper-surface);
     overflow-y: auto;
 }
 
@@ -11,11 +17,11 @@
 }
 
 .PaperSettingItem:nth-child(odd) {
-    background: var(--paper-background-frontest);
+    background: var(--paper-surface-raised);
 }
 
 .PaperSettingItem:nth-child(even) {
-    background: var(--paper-background-front);
+    background: var(--paper-surface);
 }
 
 .PaperSettingItem {
@@ -24,7 +30,7 @@
     justify-content: space-between;
     gap: var(--paper-uigap);
     padding: var(--paper-uigap-sixfourths);
-    border-bottom: var(--paper-border-width) solid var(--paper-medium-border);
+    border-bottom: var(--paper-border-width) solid var(--paper-border);
 }
 
 .PaperSettingItem:last-child {

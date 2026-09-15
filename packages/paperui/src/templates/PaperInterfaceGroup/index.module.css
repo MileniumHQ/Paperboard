@@ -6,9 +6,44 @@
     box-sizing: border-box;
 }
 
+/* inside PaperPanel the group takes the space beside the menu and lets the
+   active item own its scrolling */
+.PaperInterfaceGroup.inPanel {
+    flex: 1 1 0%;
+    min-width: 0;
+    min-height: 0;
+    height: auto;
+    overflow: hidden;
+}
+
 .PaperInterfaceItem {
     width: 100%;
     height: 100%;
     flex: 1;
+    min-height: 0;
+    box-sizing: border-box;
+}
+
+.PaperInterfaceItem.page {
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+.PaperInterfaceItem.full {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.PaperInterfaceItem.plain {
+    overflow: auto;
+}
+
+.PaperInterfaceItem.centered {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: auto;
+    padding: var(--paper-uigap);
     box-sizing: border-box;
 }

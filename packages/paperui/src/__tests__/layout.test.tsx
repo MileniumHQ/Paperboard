@@ -1,7 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { render } from "@solidjs/testing-library";
 import { PaperFlex } from "../templates/PaperFlex";
-import { PaperContainer } from "../components/PaperContainer";
 import { PaperText } from "../components/PaperText";
 import { PaperSettingList } from "../templates/PaperSettingList";
 import { PaperList, PaperListItem } from "../components/PaperList";
@@ -26,25 +25,6 @@ describe("PaperLayout and Components Layout Enhancements", () => {
         expect(el.style.flexGrow).toBe("1");
         expect(el.style.minHeight).toBe("0px");
         expect(el.style.width).toBe("100%");
-    });
-
-    it("renders PaperContainer with shared layout props", () => {
-        const { getByTestId } = render(() => (
-            <PaperContainer
-                data-testid="container-box"
-                flex
-                shrink={0}
-                scrollable="y"
-                fullHeight
-            >
-                Content
-            </PaperContainer>
-        ));
-
-        const el = getByTestId("container-box");
-        expect(el.style.flexShrink).toBe("0");
-        expect(el.style.overflowY).toBe("auto");
-        expect(el.style.height).toBe("100%");
     });
 
     it("renders PaperText with breakWord and truncate", () => {

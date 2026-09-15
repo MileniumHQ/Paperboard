@@ -1,0 +1,6 @@
+.PaperGrid {
+    display: grid;
+    gap: var(--paper-uigap);
+    width: 100%;
+    box-sizing: border-box;
+}

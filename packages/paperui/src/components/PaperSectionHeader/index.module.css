@@ -1,0 +1,28 @@
+.PaperSectionHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--paper-uigap-half);
+    width: 100%;
+    box-sizing: border-box;
+    color: var(--paper-text-subtle);
+}
+
+.title {
+    display: flex;
+    align-items: center;
+    gap: var(--paper-uigap-half);
+    min-width: 0;
+}
+
+.icon {
+    font-size: var(--paper-icon-size-medium);
+    color: var(--paper-text-subtle);
+}
+
+.actions {
+    display: flex;
+    align-items: center;
+    gap: var(--paper-uigap-half);
+    flex-shrink: 0;
+}

@@ -10,6 +10,7 @@ import {
 } from "solid-js";
 import { PaperInput } from "../PaperInput";
 import { PaperIcon } from "../PaperIcon";
+import { PaperButton } from "../PaperButton";
 import { parseAnsiToSegments } from "../../utils/ansi";
 
 export type PaperConsoleEntryType =
@@ -31,9 +32,16 @@ export interface PaperConsoleEntry {
 export const MAX_CONSOLE_HISTORY = 200;
 
 export interface PaperConsoleProps
-    extends Omit<JSX.HTMLAttributes<HTMLDivElement>, "onCommand"> {
+    extends Omit<JSX.HTMLAttributes<HTMLDivElement>, "onCommand" | "title"> {
     entries?: (PaperConsoleEntry | string)[];
     onCommand?: (command: string) => void;
+    /** header label, usually paired with onClear for a log panel */
+    title?: JSX.Element | string;
+    onClear?: () => void;
+    /** false renders a read-only log with no command row */
+    showInput?: boolean;
+    /** large preformatted body (log files); one text node, auto-scrolled */
+    text?: string;
     banner?: string | JSX.Element;
     placeholder?: string;
     prompt?: string | JSX.Element;
@@ -51,6 +59,10 @@ export function PaperConsole(props: ParentProps<PaperConsoleProps>) {
     const [local, rest] = splitProps(props, [
         "entries",
         "onCommand",
+        "title",
+        "onClear",
+        "showInput",
+        "text",
         "banner",
         "placeholder",
         "prompt",
@@ -84,7 +96,7 @@ export function PaperConsole(props: ParentProps<PaperConsoleProps>) {
     };
 
     createEffect(() => {
-        if (local.entries || local.children) {
+        if (local.entries || local.children || local.text) {
             setTimeout(scrollToBottom, 0);
         }
     });
@@ -223,9 +235,27 @@ export function PaperConsole(props: ParentProps<PaperConsoleProps>) {
                 .join(" ")}
             classList={local.classList}
         >
+            <Show when={local.title || local.onClear}>
+                <div class={styles.header}>
+                    <span class={styles.headerTitle}>{local.title}</span>
+                    <Show when={local.onClear}>
+                        <PaperButton size="tiny"
+                            icon
+                            title="Clear console"
+                            onClick={() => local.onClear?.()}>
+                            <PaperIcon>delete_sweep</PaperIcon>
+                        </PaperButton>
+                    </Show>
+                </div>
+            </Show>
+
             <div ref={outputRef} class={styles.outputArea}>
                 <Show when={local.banner}>
                     <div class={styles.banner}>{local.banner}</div>
+                </Show>
+
+                <Show when={local.text !== undefined}>
+                    <pre class={styles.textBody}>{local.text}</pre>
                 </Show>
 
                 <For each={normalizedEntries()}>
@@ -249,6 +279,7 @@ export function PaperConsole(props: ParentProps<PaperConsoleProps>) {
                 {local.children}
             </div>
 
+            <Show when={local.showInput !== false}>
             <div class={styles.inputArea}>
                 <form class={styles.inputForm} onSubmit={handleFormSubmit}>
                     <PaperInput
@@ -271,6 +302,7 @@ export function PaperConsole(props: ParentProps<PaperConsoleProps>) {
                     />
                 </form>
             </div>
+            </Show>
         </div>
     );
 }

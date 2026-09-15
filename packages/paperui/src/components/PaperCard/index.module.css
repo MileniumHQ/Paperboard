@@ -1,0 +1,35 @@
+.PaperCard {
+    width: 100%;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    border: var(--paper-border-width) solid var(--paper-border);
+    border-radius: var(--paper-border-radius);
+    background: var(--paper-surface);
+    overflow: hidden;
+}
+
+.PaperCard.frontest {
+    background: var(--paper-surface-raised);
+}
+
+.PaperCard.back {
+    background: var(--paper-surface-sunken);
+}
+
+.PaperCard.element {
+    background: var(--paper-surface-element);
+}
+
+.PaperCard.transparent {
+    background: transparent;
+}
+
+.PaperCard.borderless {
+    border: none;
+}
+
+.PaperCard.plain {
+    background: transparent;
+    border: none;
+}

@@ -138,7 +138,7 @@ export function PaperSettingItem(props: ParentProps<PaperSettingItemProps>) {
                     {local.title}
                 </PaperText>
                 <Show when={local.description}>
-                    <PaperText size={2} weight={500} color="light-text">
+                    <PaperText size={2} weight={500} color="text-subtle">
                         {local.description}
                     </PaperText>
                 </Show>

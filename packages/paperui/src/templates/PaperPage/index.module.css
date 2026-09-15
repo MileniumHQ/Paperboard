@@ -1,0 +1,16 @@
+.PaperPage {
+    width: 100%;
+    max-width: var(--paper-page-width);
+    margin: 0 auto;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+}
+
+.PaperPage.wide {
+    max-width: var(--paper-page-width-wide);
+}
+
+.PaperPage.full {
+    max-width: none;
+}
