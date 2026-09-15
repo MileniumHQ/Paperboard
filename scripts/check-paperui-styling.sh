@@ -4,7 +4,9 @@
 #       styling must use --paper-* tokens from PaperUI
 #   (b) no global selectors escaping .paperui-root: bare `* {` / `*,` and
 #       top-level `:global(` with no local selector anchoring it
-# Exits 0 only when both hold.
+#   (c) no literal px/rem/em in component CSS: sizes are tokens, and the
+#       token files (src/styles/*.css) are the only place literals live
+# Exits 0 only when all hold.
 set -u
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -42,6 +44,17 @@ hex_out="$(grep -rnIE '#[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]' "$SRC" \
 if [ -n "$hex_out" ]; then
     echo "FAIL: hardcoded hex colors outside styles/colors.css:" >&2
     printf '%s\n' "$hex_out" >&2
+    fail=1
+fi
+
+# (c) literal units in component CSS (token files are the one exception)
+unit_out="$(grep -rnIE '[0-9.]+(px|rem|em)\b' "$SRC/components" "$SRC/templates" \
+    --include='*.css' --exclude-dir=node_modules --exclude-dir=dist 2>/dev/null \
+    | grep -vE ':[0-9]+:[[:space:]]*\*' \
+    | grep -vE '0px')"
+if [ -n "$unit_out" ]; then
+    echo "FAIL: literal px/rem/em in component CSS (use tokens from src/styles):" >&2
+    printf '%s\n' "$unit_out" >&2
     fail=1
 fi
 

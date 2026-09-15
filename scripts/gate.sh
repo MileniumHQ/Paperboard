@@ -33,6 +33,10 @@ step "paperboard tests" run_in "$ROOT/apps/paperboard" bun test
 step "paperboard lint" run_in "$ROOT/apps/paperboard" bunx biome lint
 step "paperboard silent-catches" run_in "$ROOT/apps/paperboard" bash "$CATCH"
 
+# paperconvert: workspace app with its own typecheck and silent-catch gate
+step "paperconvert typecheck" run_in "$ROOT/apps/paperconvert" bun run typecheck
+step "paperconvert silent-catches" run_in "$ROOT/apps/paperconvert" bash "$CATCH" src
+
 # shared libraries
 step "paperapi typecheck" run_in "$ROOT/packages/paperapi" bunx tsc --noEmit
 step "paperapi tests" run_in "$ROOT/packages/paperapi" bun test
