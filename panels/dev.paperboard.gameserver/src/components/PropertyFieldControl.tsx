@@ -1,4 +1,4 @@
-import { For } from "solid-js";
+import { createSignal, For } from "solid-js";
 import {
     PaperInput,
     PaperSelectMenu,
@@ -40,17 +40,37 @@ export function FieldControl(props: {
                     </For>
                 </PaperSelectMenu>
             );
-        case "number":
+        case "number": {
+            // the draft keeps the rejected keystroke visible so the input can
+            // render it as invalid; a valid value flows to the parent. On
+            // blur the draft drops and the input returns to the saved value.
+            const [draft, setDraft] = createSignal<string | null>(null);
+            const shown = () => draft() ?? props.value();
+            const invalid = () => {
+                const raw = shown().trim();
+                if (raw === "") return true;
+                const num = Number(raw);
+                if (!Number.isFinite(num)) return true;
+                if (field.min !== undefined && num < field.min) return true;
+                if (field.max !== undefined && num > field.max) return true;
+                return false;
+            };
             return (
                 <PaperInput
                     type="number"
                     min={field.min}
                     max={field.max}
-                    value={props.value()}
+                    value={shown()}
+                    invalid={invalid()}
                     disabled={!hasKnownMcVersion()}
-                    onInput={(e) => props.onUpdate(e.currentTarget.value)}
+                    onInput={(e) => {
+                        setDraft(e.currentTarget.value);
+                        props.onUpdate(e.currentTarget.value);
+                    }}
+                    onBlur={() => setDraft(null)}
                 />
             );
+        }
         default:
             return (
                 <PaperInput
