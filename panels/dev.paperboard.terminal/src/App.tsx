@@ -13,6 +13,7 @@ import {
     PaperContextMenuItem,
 } from "@paperboard-dev/paperui";
 import "@paperboard-dev/paperui/style.css";
+import "@paperboard-dev/paperui/panel.css";
 import "@xterm/xterm/css/xterm.css";
 import "./style.css";
 import TerminalComponent, { copySelection, pasteClipboard } from "./Terminal";
@@ -148,7 +149,7 @@ export default function App() {
                 fullHeight
                 direction="column"
                 style={{
-                    background: getVarCss("background-backest", "#0d0e12"),
+                    background: getVarCss("surface-app", "#0d0e12"),
                 }}
             >
                 <PaperList
@@ -193,15 +194,13 @@ export default function App() {
                             </PaperListItem>
                         )}
                     </For>
-                    <PaperButton
-                        tiny
+                    <PaperButton size="tiny"
                         icon
                         onClick={addTab}
                         title="New Tab"
                         style={{
                             "margin-left": getVarCss("uigap-half"),
-                        }}
-                    >
+                        }}>
                         <PaperIcon>add</PaperIcon>
                     </PaperButton>
                 </PaperList>
@@ -283,12 +282,10 @@ export default function App() {
                                 setIsRenameOpen(false);
                                 setContextTabId(null);
                             }}
-                            compact
-                            variant="text"
-                        >
+                            variant="text">
                             Cancel
                         </PaperButton>
-                        <PaperButton onClick={handleSaveRename} compact>
+                        <PaperButton onClick={handleSaveRename}>
                             Save
                         </PaperButton>
                     </PaperFlex>

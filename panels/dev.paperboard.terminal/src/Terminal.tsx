@@ -48,13 +48,13 @@ export function TerminalComponent(props: TerminalComponentProps) {
             console.debug("[terminal] font-ready fit failed:", String(err));
         });
 
-        const bg = getVar("background-backest", "#0d0e12");
-        const fg = getVar("main-text", "#ffffff");
-        const blue = getVar("front-blue", "#2981e5");
-        const red = getVar("front-red", "#e73648");
-        const green = getVar("front-green", "#0d9d0d");
-        const yellow = getVar("front-yellow", "#d7a51d");
-        const lightText = getVar("light-text", "#a0a0a0");
+        const bg = getVar("surface-app", "#0d0e12");
+        const fg = getVar("text", "#ffffff");
+        const blue = getVar("primary", "#2981e5");
+        const red = getVar("danger", "#e73648");
+        const green = getVar("success", "#0d9d0d");
+        const yellow = getVar("warning", "#d7a51d");
+        const lightText = getVar("text-subtle", "#a0a0a0");
 
         term = new Terminal({
             fontFamily: '"SUSE Mono", monospace',
@@ -65,7 +65,7 @@ export function TerminalComponent(props: TerminalComponentProps) {
                 foreground: fg,
                 cursor: blue,
                 selectionBackground: "rgba(41, 129, 229, 0.3)",
-                black: getVar("background-back", "#1d1d1d"),
+                black: getVar("surface-sunken", "#1d1d1d"),
                 red,
                 green,
                 yellow,
@@ -185,8 +185,8 @@ export function TerminalComponent(props: TerminalComponentProps) {
                 width: "100%",
                 height: "100%",
                 flex: "1",
-                background: getVarCss("background-backest"),
-                color: getVarCss("main-text"),
+                background: getVarCss("surface-app"),
+                color: getVarCss("text"),
                 padding: getVarCss("uigap-half"),
                 "box-sizing": "border-box",
                 overflow: "hidden",

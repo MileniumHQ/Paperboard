@@ -1,15 +1,6 @@
-html,
-body,
-#app {
-    margin: 0;
-    padding: 0;
-    width: 100%;
-    height: 100%;
-    overflow: hidden;
-    background-color: var(--paper-background-backest);
-    color: var(--paper-main-text);
-}
-
+/* xterm.js compatibility shims only: the library sets inline sizes and a
+ * viewport background that do not follow PaperUI surfaces. The document
+ * reset lives in @paperboard-dev/paperui/panel.css. */
 .xterm {
     height: 100%;
     padding: 0;
