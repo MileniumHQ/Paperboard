@@ -1,0 +1,32 @@
+{
+  "name": "paperconvert",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Local-first file converter built with PaperUI. 100% in-browser via Web APIs and WASM.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ffmpeg/core": "^0.12.10",
+    "@ffmpeg/ffmpeg": "^0.12.15",
+    "@ffmpeg/util": "^0.12.2",
+    "@paperboard-dev/paperui": "workspace:*",
+    "fflate": "^0.8.2",
+    "gifenc": "^1.0.3",
+    "heic-decode": "^2.1.0",
+    "pdf-lib": "^1.17.1",
+    "solid-js": "^1.9.13",
+    "utif": "^3.1.0",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "typescript": "~6.0.2",
+    "vite": "^8.1.0",
+    "vite-plugin-solid": "^2.11.14"
+  },
+  "license": "MIT"
+}
