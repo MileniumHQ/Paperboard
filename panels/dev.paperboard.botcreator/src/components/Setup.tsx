@@ -56,7 +56,7 @@ export default function Setup(props: SetupProps) {
         <PaperWizard
             showProgress={false}
             finishLabel="Finish Setup"
-            finishVariant="green"
+            finishVariant="success"
             onComplete={handleFinishSetup}
         >
             <PaperWizardStep index={0}>
@@ -121,13 +121,13 @@ export default function Setup(props: SetupProps) {
                         />
 
                         <Show when={parsedAppId()}>
-                            <PaperQuote variant="green" icon="check_circle">
+                            <PaperQuote variant="success" icon="check_circle">
                                 Application ID: {parsedAppId()}
                             </PaperQuote>
                         </Show>
 
                         <Show when={setupError()}>
-                            <PaperQuote variant="red" icon="warning" title="Setup failed">
+                            <PaperQuote variant="danger" icon="warning" title="Setup failed">
                                 {setupError()}. Check the token and try again.
                             </PaperQuote>
                         </Show>

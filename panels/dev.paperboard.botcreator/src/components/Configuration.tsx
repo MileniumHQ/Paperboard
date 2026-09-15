@@ -4,6 +4,7 @@ import {
     PaperText,
     PaperButton,
     PaperModal,
+    PaperPageHeader,
     PaperQuote,
     PaperSettingList,
     PaperSettingItem,
@@ -41,7 +42,21 @@ export default function Configuration(props: ConfigurationProps) {
             await secretsApi.delete(TOKEN_NAME, PANEL_ID).catch((err) => {
                 console.error("[Configuration] vault secret delete failed, resetting anyway:", err);
             });
+            // saved slash commands are kept: reconnecting registers them
+            // again, and silently dropping them while Discord still has
+            // them would be a record that disagrees with the code
+            let saved: Record<string, unknown> = {};
+            try {
+                const existing = await config.get<Record<string, unknown>>(PANEL_ID);
+                if (existing && typeof existing === "object") saved = existing;
+            } catch (err) {
+                console.error(
+                    "[Configuration] saved config unreadable during reset; commands may be lost:",
+                    err,
+                );
+            }
             await config.set({
+                ...saved,
                 configured: false,
                 applicationId: "",
             }, PANEL_ID);
@@ -54,12 +69,18 @@ export default function Configuration(props: ConfigurationProps) {
 
     return (
         <>
-            <PaperSettingList style={{ height: "auto" }}>
+            <PaperPageHeader
+                icon="settings"
+                title="Configuration"
+                subtitle="Credentials and reset"
+            />
+
+            <PaperSettingList autoHeight>
                 <PaperSettingItem
                     title="Application ID"
                     description="The Discord Snowflake ID for this bot"
                 >
-                    <PaperText size={3} color="light-text">
+                    <PaperText size={3} color="text-subtle">
                         {appId() || "Not configured"}
                     </PaperText>
                 </PaperSettingItem>
@@ -68,7 +89,7 @@ export default function Configuration(props: ConfigurationProps) {
                     title="Bot Token"
                     description="The secret authentication token for the bot"
                 >
-                    <PaperText size={3} color="light-text">
+                    <PaperText size={3} color="text-subtle">
                         ••••••••••••••••
                     </PaperText>
                 </PaperSettingItem>
@@ -78,10 +99,8 @@ export default function Configuration(props: ConfigurationProps) {
                     description="Disconnect the bot and delete stored credentials"
                 >
                     <PaperButton
-                        variant="red"
-                        compact
-                        onClick={() => setShowResetModal(true)}
-                    >
+                        variant="danger"
+                        onClick={() => setShowResetModal(true)}>
                         Reset
                     </PaperButton>
                 </PaperSettingItem>
@@ -94,17 +113,13 @@ export default function Configuration(props: ConfigurationProps) {
                 footer={
                     <PaperFlex direction="row" justify="flex-end" gap="half" fullWidth>
                         <PaperButton
-                            compact
                             variant="text"
-                            onClick={() => setShowResetModal(false)}
-                        >
+                            onClick={() => setShowResetModal(false)}>
                             Cancel
                         </PaperButton>
                         <PaperButton
-                            compact
-                            variant="red"
-                            onClick={handleConfirmReset}
-                        >
+                            variant="danger"
+                            onClick={handleConfirmReset}>
                             Confirm Reset
                         </PaperButton>
                     </PaperFlex>
@@ -114,8 +129,9 @@ export default function Configuration(props: ConfigurationProps) {
                     <PaperText preset="body">
                         Are you sure you want to reset your bot configuration? This will stop the bot and clear stored tokens.
                     </PaperText>
-                    <PaperQuote variant="yellow" icon="warning" title="Warning">
+                    <PaperQuote variant="warning" icon="warning" title="Warning">
                         You will need to enter your bot token again to reconnect.
+                        Saved slash commands are kept and register again on reconnect.
                     </PaperQuote>
                 </PaperFlex>
             </PaperModal>

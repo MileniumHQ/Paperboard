@@ -1,6 +1,6 @@
 import { createSignal, onMount, Show } from "solid-js";
 import {
-    PaperFlex,
+    PaperPanel,
     PaperMenu,
     PaperMenuItem,
     PaperInterfaceGroup,
@@ -11,10 +11,12 @@ import { config } from "@paperboard-dev/paperapi";
 const PANEL_ID = "dev.paperboard.botcreator";
 import Setup from "./components/Setup";
 import Overview from "./components/Overview";
+import Commands from "./components/Commands";
+import Servers from "./components/Servers";
 import Invite from "./components/Invite";
 import Configuration from "./components/Configuration";
 import "@paperboard-dev/paperui/style.css";
-import "./style.css";
+import "@paperboard-dev/paperui/panel.css";
 
 export default function App() {
     const [configured, setConfigured] = createSignal<boolean | null>(null);
@@ -44,7 +46,7 @@ export default function App() {
                 when={configured()}
                 fallback={<Setup onComplete={() => setConfigured(true)} />}
             >
-                <PaperFlex direction="row" fullWidth fullHeight>
+                <PaperPanel>
                     <PaperMenu
                         name="botMenu"
                         spacing="half"
@@ -54,6 +56,12 @@ export default function App() {
                         <PaperMenuItem value="overview" icon="dashboard">
                             Overview
                         </PaperMenuItem>
+                        <PaperMenuItem value="commands" icon="terminal">
+                            Commands
+                        </PaperMenuItem>
+                        <PaperMenuItem value="servers" icon="dns">
+                            Servers
+                        </PaperMenuItem>
                         <PaperMenuItem value="invite" icon="person_add">
                             Invite
                         </PaperMenuItem>
@@ -62,17 +70,15 @@ export default function App() {
                         </PaperMenuItem>
                     </PaperMenu>
 
-                    <PaperInterfaceGroup
-                        value={activeTab()}
-                        style={{
-                            flex: 1,
-                            height: "100%",
-                            "min-height": 0,
-                            overflow: "auto",
-                        }}
-                    >
+                    <PaperInterfaceGroup value={activeTab()}>
                         <PaperInterfaceItem value="overview">
                             <Overview />
+                        </PaperInterfaceItem>
+                        <PaperInterfaceItem value="commands">
+                            <Commands />
+                        </PaperInterfaceItem>
+                        <PaperInterfaceItem value="servers">
+                            <Servers />
                         </PaperInterfaceItem>
                         <PaperInterfaceItem value="invite">
                             <Invite />
@@ -81,7 +87,7 @@ export default function App() {
                             <Configuration onReset={() => setConfigured(false)} />
                         </PaperInterfaceItem>
                     </PaperInterfaceGroup>
-                </PaperFlex>
+                </PaperPanel>
             </Show>
         </Show>
     );

@@ -4,7 +4,9 @@ import { describe, it, expect } from "bun:test";
 import type { Client } from "discord.js";
 import {
     __botTest,
+    clearRecentMessages,
     getConnectionStatus,
+    getRecentMessages,
     validatePresenceStatus,
 } from "../src/service";
 
@@ -132,6 +134,37 @@ describe("gateway disconnect truth", () => {
         // the live session's drop does
         secondHandlers.get("shardDisconnect")!({ code: 1006 });
         expect(getConnectionStatus().connected).toBe(false);
+    });
+});
+
+describe("superseded session events", () => {
+    it("ignores the old session's messages but keeps the live session's", async () => {
+        const firstHandlers = new Map<string, Handler>();
+        const secondHandlers = new Map<string, Handler>();
+        const emitted: { triggerId: string; output: unknown }[] = [];
+        const ctx = serviceCtx(emitted);
+        const message = {
+            author: { bot: false, username: "alice", id: "u1" },
+            content: "hi",
+            channelId: "c1",
+            guildId: "g1",
+            id: "m1",
+        };
+
+        await __botTest.startBot("good-token", ctx, () => recordingFactory(firstHandlers));
+        await __botTest.startBot("good-token", ctx, () => recordingFactory(secondHandlers));
+
+        // the superseded session's gateway event must not be reported as the
+        // live bot's activity
+        firstHandlers.get("messageCreate")!(message);
+        expect(getRecentMessages()).toEqual([]);
+        expect(emitted.filter((e) => e.triggerId === "on-message")).toEqual([]);
+
+        // the live session still records and emits normally
+        secondHandlers.get("messageCreate")!(message);
+        expect(getRecentMessages()).toHaveLength(1);
+        expect(emitted.filter((e) => e.triggerId === "on-message")).toHaveLength(1);
+        clearRecentMessages();
     });
 });
 

@@ -1,11 +1,13 @@
 import { createSignal, onMount, For } from "solid-js";
 import {
     PaperFlex,
-    PaperContainer,
     PaperText,
     PaperButton,
+    PaperCard,
     PaperCheckbox,
+    PaperGrid,
     PaperIcon,
+    PaperPageHeader,
     PaperSeparator,
 } from "@paperboard-dev/paperui";
 import { actionsApi } from "@paperboard-dev/paperapi";
@@ -31,7 +33,9 @@ export default function Invite() {
             if (url) {
                 setInviteUrl(url);
             }
-        } catch (err) { console.error('[Invite] invite URL generation failed:', err); }
+        } catch (err) {
+            console.error("[Invite] invite URL generation failed:", err);
+        }
     };
 
     onMount(() => {
@@ -66,29 +70,37 @@ export default function Invite() {
         }
     };
 
-    const generalPerms = () =>
-        PERMISSION_DEFINITIONS.filter((p) => p.category === "general");
-    const textPerms = () =>
-        PERMISSION_DEFINITIONS.filter((p) => p.category === "text");
-    const voicePerms = () =>
-        PERMISSION_DEFINITIONS.filter((p) => p.category === "voice");
+    const permissionGroup = (
+        title: string,
+        perms: typeof PERMISSION_DEFINITIONS,
+    ) => (
+        <PaperCard padding="full" gap="half">
+            <PaperText weight={700} size={3}>
+                {title}
+            </PaperText>
+            <PaperSeparator />
+            <For each={perms}>
+                {(perm) => (
+                    <PaperCheckbox
+                        checked={isSelected(perm.id)}
+                        label={perm.name}
+                        onChange={(checked) => handleToggle(perm.id, checked)}
+                    />
+                )}
+            </For>
+        </PaperCard>
+    );
 
     return (
-        <PaperFlex
-            fullHeight
-            fullWidth
-            padding="double"
-            gap="threefourths"
-            style={{ "box-sizing": "border-box" }}
-        >
-            <PaperContainer style={{ "flex-shrink": 0 }}>
-                <PaperFlex
-                    direction="row"
-                    justify="space-between"
-                    align="center"
-                    padding="full"
-                    gap="full"
-                >
+        <>
+            <PaperPageHeader
+                icon="person_add"
+                title="Invite"
+                subtitle="Add the bot to a server with the permissions it needs"
+            />
+
+            <PaperCard>
+                <PaperFlex direction="row" padding="full" gap="full" align="center">
                     <PaperText
                         size={3}
                         weight={500}
@@ -106,88 +118,31 @@ export default function Invite() {
 
                     <PaperButton
                         variant="brand"
-                        compact
                         onClick={handleCopyInvite}
-                        disabled={!inviteUrl()}
-                    >
+                        disabled={!inviteUrl()}>
                         <PaperIcon>
                             {copied() ? "check" : "content_copy"}
                         </PaperIcon>
                         {copied() ? "Copied" : "Copy"}
                     </PaperButton>
                 </PaperFlex>
-            </PaperContainer>
+            </PaperCard>
 
-            <div
-                style={{
-                    display: "grid",
-                    "grid-template-columns": "repeat(auto-fit, minmax(200px, 1fr))",
-                    gap: "var(--paper-uigap)",
-                    width: "100%",
-                    "box-sizing": "border-box",
-                }}
-            >
-                <PaperContainer>
-                    <PaperFlex padding="full" gap="half">
-                        <PaperText weight={700} size={3}>
-                            General
-                        </PaperText>
-                        <PaperSeparator />
-                        <For each={generalPerms()}>
-                            {(perm) => (
-                                <PaperCheckbox
-                                    checked={isSelected(perm.id)}
-                                    label={perm.name}
-                                    onChange={(checked) =>
-                                        handleToggle(perm.id, checked)
-                                    }
-                                />
-                            )}
-                        </For>
-                    </PaperFlex>
-                </PaperContainer>
-
-                <PaperContainer>
-                    <PaperFlex padding="full" gap="half">
-                        <PaperText weight={700} size={3}>
-                            Text
-                        </PaperText>
-                        <PaperSeparator />
-                        <For each={textPerms()}>
-                            {(perm) => (
-                                <PaperCheckbox
-                                    checked={isSelected(perm.id)}
-                                    label={perm.name}
-                                    onChange={(checked) =>
-                                        handleToggle(perm.id, checked)
-                                    }
-                                />
-                            )}
-                        </For>
-                    </PaperFlex>
-                </PaperContainer>
-
-                <PaperContainer>
-                    <PaperFlex padding="full" gap="half">
-                        <PaperText weight={700} size={3}>
-                            Voice
-                        </PaperText>
-                        <PaperSeparator />
-                        <For each={voicePerms()}>
-                            {(perm) => (
-                                <PaperCheckbox
-                                    checked={isSelected(perm.id)}
-                                    label={perm.name}
-                                    onChange={(checked) =>
-                                        handleToggle(perm.id, checked)
-                                    }
-                                />
-                            )}
-                        </For>
-                    </PaperFlex>
-                </PaperContainer>
-            </div>
-        </PaperFlex>
+            <PaperGrid>
+                {permissionGroup(
+                    "General",
+                    PERMISSION_DEFINITIONS.filter((p) => p.category === "general"),
+                )}
+                {permissionGroup(
+                    "Text",
+                    PERMISSION_DEFINITIONS.filter((p) => p.category === "text"),
+                )}
+                {permissionGroup(
+                    "Voice",
+                    PERMISSION_DEFINITIONS.filter((p) => p.category === "voice"),
+                )}
+            </PaperGrid>
+        </>
     );
 }
 
