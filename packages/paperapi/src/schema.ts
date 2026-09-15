@@ -45,14 +45,44 @@ export interface ActionOutputDefinition {
     description?: string;
 }
 
+/**
+ * A named field on a structured output (typically a trigger payload). The
+ * flow builder offers these as typed variables, so an object output can be
+ * wired into typed inputs field by field.
+ */
+export interface ActionOutputFieldDefinition {
+    type: DataType;
+    label?: string;
+    description?: string;
+    /** display name for the type badge; defaults to the registered type's name */
+    typeName?: string;
+    /** material icon shown with the field; defaults to the source's icon */
+    icon?: string;
+}
+
+// panel-authored grouping for the Actions library; panels name their own
+// sections ("Messages", "Players", ...) instead of the library splitting
+// everything into one Triggers list and one Actions list
+export interface ActionCategoryDefinition {
+    name: string;
+    /** material icon for the section */
+    icon?: string;
+    /** lower sorts first; unordered categories sort alphabetically after */
+    order?: number;
+}
+
+export type ActionCategory = string | ActionCategoryDefinition;
+
 export interface ActionSchema {
     id: string;
     name: string;
     description: string;
     template?: string;
     writtenOut?: string;
+    category?: ActionCategory;
     inputs?: Record<string, ActionParamDefinition>;
     output?: ActionOutputDefinition | DataType;
+    outputFields?: Record<string, ActionOutputFieldDefinition | DataType>;
     quick?: boolean;
     icon?: string;
 }
@@ -73,7 +103,9 @@ export interface TriggerSchema {
     description: string;
     template?: string;
     writtenOut?: string;
+    category?: ActionCategory;
     output?: ActionOutputDefinition | DataType;
+    outputFields?: Record<string, ActionOutputFieldDefinition | DataType>;
     icon?: string;
 }
 

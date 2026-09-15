@@ -97,8 +97,10 @@ export const actionsApi = {
                 description: def.description || "",
                 template: def.template || def.writtenOut,
                 writtenOut: def.writtenOut || def.template,
+                category: def.category,
                 inputs: def.inputs,
                 output: def.output,
+                outputFields: def.outputFields,
                 quick: def.quick,
                 icon: def.icon,
             };
@@ -139,7 +141,9 @@ export const actionsApi = {
             description: triggerDef.description || "",
             template: triggerDef.template || triggerDef.writtenOut,
             writtenOut: triggerDef.writtenOut || triggerDef.template,
+            category: triggerDef.category,
             output: triggerDef.output,
+            outputFields: triggerDef.outputFields,
             icon: triggerDef.icon,
         };
 

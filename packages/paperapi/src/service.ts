@@ -2,11 +2,29 @@ import { actionsApi } from "./actions";
 import { getPanelId } from "./ipc";
 import { STATE_GET_ACTION, STATE_SYNC_EVENT } from "./channels";
 import {
+    type ActionCategory,
+    type ActionCategoryDefinition,
     type ActionDefinition,
     type TriggerDefinition,
     type CustomTypeDefinition,
     defineType,
 } from "./schema";
+
+/**
+ * Resolves an item's category string against the panel's declared category
+ * array, so a panel writes the metadata (icon, order) once and each action
+ * only names the category.
+ */
+export function resolveItemCategory(
+    category: ActionCategory | undefined,
+    categories: ActionCategoryDefinition[] | undefined,
+): ActionCategory | undefined {
+    if (typeof category !== "string" || !categories || categories.length === 0) {
+        return category;
+    }
+    const match = categories.find((entry) => entry.name === category);
+    return match ? { ...match } : category;
+}
 
 export interface ServiceContext<TState> {
     state: TState;
@@ -33,6 +51,12 @@ export interface DefinePanelServiceOptions<
     actions?: TActions;
     triggers?: TriggerDefinition[];
     types?: CustomTypeDefinition[];
+    /**
+     * Section metadata for the Actions library. An action/trigger names a
+     * category with `category: "Messages"`; this array supplies the icon and
+     * sort order for that name.
+     */
+    categories?: ActionCategoryDefinition[];
     onInit?: (ctx: ServiceContext<TState>) => void | Promise<void>;
 }
 
@@ -110,6 +134,10 @@ export function definePanelService<
             for (const actionDef of options.actions) {
                 const wrapped: ActionDefinition = {
                     ...actionDef,
+                    category: resolveItemCategory(
+                        actionDef.category,
+                        options.categories,
+                    ),
                     run: (_c, inputs) => actionDef.run(ctx, inputs),
                 };
                 actionsApi.register(wrapped, undefined, panelId).catch((err) => {
@@ -138,6 +166,10 @@ export function definePanelService<
         for (const triggerDef of options.triggers) {
             const wrapped: TriggerDefinition = {
                 ...triggerDef,
+                category: resolveItemCategory(
+                    triggerDef.category,
+                    options.categories,
+                ),
                 listen: triggerDef.listen
                     ? (_c, emitFn) => triggerDef.listen!(ctx, emitFn)
                     : undefined,
