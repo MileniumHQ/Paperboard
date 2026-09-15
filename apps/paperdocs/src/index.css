@@ -4,7 +4,7 @@
 
 html,
 body {
-    background-color: var(--paper-background-frontest);
+    background-color: var(--paper-surface-raised);
 }
 
 .paperui-root {
@@ -13,18 +13,18 @@ body {
 
 body[data-paperui-theme],
 .paperui-root[data-paperui-theme] {
-    background-color: var(--paper-background-frontest);
+    background-color: var(--paper-surface-raised);
 }
 
 .paperui-root .topbar {
-    border-bottom: var(--paper-border-width) solid var(--paper-medium-border);
+    border-bottom: var(--paper-border-width) solid var(--paper-border);
     padding: var(--paper-uigap-half);
     padding-left: var(--paper-uigap);
     padding-right: var(--paper-uigap);
     position: sticky;
     top: 0;
     z-index: 100;
-    background-color: var(--paper-background-frontest);
+    background-color: var(--paper-surface-raised);
 }
 
 .paperui-root .sticky-sidebar {
@@ -39,7 +39,7 @@ body[data-paperui-theme],
 
 .docs-footer {
     width: 100%;
-    background-color: var(--paper-background-frontest);
+    background-color: var(--paper-surface-raised);
     z-index: 10;
     flex-shrink: 0;
 }
