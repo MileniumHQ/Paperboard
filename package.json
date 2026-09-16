@@ -6,5 +6,9 @@
   "workspaces": ["apps/*", "packages/*", "panels/*"],
   "scripts": {
     "gate": "bash scripts/gate.sh"
+  },
+  "patchedDependencies": {
+    "@solid-primitives/refs@1.1.4": "patches/@solid-primitives%2Frefs@1.1.4.patch",
+    "@solid-primitives/transition-group@1.1.2": "patches/@solid-primitives%2Ftransition-group@1.1.2.patch"
   }
 }

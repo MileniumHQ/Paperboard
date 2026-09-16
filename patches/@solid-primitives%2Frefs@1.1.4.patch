@@ -1,0 +1,21 @@
+diff --git a/package.json b/package.json
+index a4f343aa2cf138c8d1771fbf3bbc63238e7de9c0..c2af09a887023bbe3f908d1f6489714e4e60b1be 100644
+--- a/package.json
++++ b/package.json
+@@ -31,10 +31,12 @@
+   "types": "./dist/index.d.ts",
+   "browser": {},
+   "exports": {
+-    "import": {
+-      "@solid-primitives/source": "./src/index.ts",
+-      "types": "./dist/index.d.ts",
+-      "default": "./dist/index.js"
++    ".": {
++      "import": {
++        "@solid-primitives/source": "./src/index.ts",
++        "types": "./dist/index.d.ts",
++        "default": "./dist/index.js"
++      }
+     }
+   },
+   "typesVersions": {},
