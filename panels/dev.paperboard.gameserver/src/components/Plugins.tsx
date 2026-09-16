@@ -42,6 +42,7 @@ import {
     listInstalledPlugins,
     listProjectVersions,
     pluginDirName,
+    pluginVersionWarning,
     previewInstall,
     searchModrinth,
     uninstallPlugin,
@@ -811,13 +812,10 @@ export default function Plugins(props: { updateRequest?: number }) {
                                                 icon="warning"
                                                 title="Different Minecraft version"
                                             >
-                                                This build targets{" "}
-                                                {preview().gameVersions.length > 0
-                                                    ? preview().gameVersions.join(", ")
-                                                    : "unknown versions"}
-                                                ; your server runs{" "}
-                                                {serverVersion() || "an unknown version"}. Installing
-                                                it is your call — it may crash the server on startup.
+                                                {pluginVersionWarning(
+                                                    preview().gameVersions,
+                                                    serverVersion(),
+                                                )}
                                             </PaperQuote>
                                         </Show>
 

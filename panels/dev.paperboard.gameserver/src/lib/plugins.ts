@@ -1,6 +1,8 @@
+import semver from "semver";
 import { fileApi, config } from "@paperboard-dev/paperapi";
 import { PANEL_ID } from "../service/types";
 import { serverSoftware, serverVersion, updatePanelConfig, serverBridge } from "./server";
+import { behaviorVersionOf } from "./versionProfile";
 import { ACTION_IDS } from "../service/contract";
 import type { ServerSoftwareType } from "./software";
 import { sanitizeFileName } from "./filesystem";
@@ -281,6 +283,46 @@ export async function resolveLatestFile(projectId: string): Promise<ResolvedDown
     }
 
     return pickVersionFile(exactVersions, fallbackVersions);
+}
+
+/** Which side of the running version a build's target list sits on. */
+export type TargetVersionSide = "older" | "newer" | "mixed" | "unknown";
+
+export function targetVersionSide(
+    gameVersions: string[],
+    serverVersionValue: string | null | undefined,
+): TargetVersionSide {
+    const server = serverVersionValue
+        ? semver.coerce(behaviorVersionOf(serverVersionValue))
+        : null;
+    if (!server || gameVersions.length === 0) return "unknown";
+    let older = false;
+    let newer = false;
+    for (const target of gameVersions) {
+        const v = semver.coerce(behaviorVersionOf(target));
+        if (!v) continue;
+        if (semver.lt(v, server)) older = true;
+        else if (semver.gt(v, server)) newer = true;
+    }
+    if (older && newer) return "mixed";
+    if (older) return "older";
+    if (newer) return "newer";
+    return "unknown";
+}
+
+// One warning sentence for a build that does not match the running server.
+export function pluginVersionWarning(
+    gameVersions: string[],
+    serverVersionValue: string | null | undefined,
+): string {
+    const side = targetVersionSide(gameVersions, serverVersionValue);
+    const relative =
+        side === "mixed"
+            ? "older and newer"
+            : side === "unknown"
+              ? "other"
+              : side;
+    return `This build targets versions ${relative} than this one. Installing it has a chance of crashing the server on startup.`;
 }
 
 // thrown instead of installing when the only available build targets a
