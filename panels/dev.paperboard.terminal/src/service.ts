@@ -235,6 +235,7 @@ const actions = [
     defineAction({
         id: "list-tabs",
         name: "List Terminal Tabs",
+        category: "Sessions",
         description: "Lists persistent terminal sessions",
         template: "List terminal tabs",
         inputs: {},
@@ -246,6 +247,7 @@ const actions = [
     defineAction({
         id: "create-tab",
         name: "Create Terminal Tab",
+        category: "Sessions",
         description: "Creates a persistent terminal session",
         template: "Create terminal tab {label}",
         inputs: {
@@ -269,6 +271,7 @@ const actions = [
     defineAction({
         id: "open-tab",
         name: "Open Terminal Tab",
+        category: "Sessions",
         description: "Attaches to a session and returns its scrollback",
         template: "Open terminal tab {id}",
         inputs: {
@@ -295,6 +298,7 @@ const actions = [
     defineAction({
         id: "rename-tab",
         name: "Rename Terminal Tab",
+        category: "Sessions",
         description: "Renames a persistent terminal session",
         template: "Rename terminal tab to {label}",
         inputs: {
@@ -317,6 +321,7 @@ const actions = [
     defineAction({
         id: "close-tab",
         name: "Close Terminal Tab",
+        category: "Sessions",
         description: "Destroys a terminal session and its scrollback",
         template: "Close terminal tab {id}",
         inputs: {
@@ -349,6 +354,9 @@ const actions = [
     defineAction({
         id: "reorder-tabs",
         name: "Reorder Terminal Tabs",
+        category: "Sessions",
+        // the tab bar drives this; flows should never see it
+        internal: true,
         description: "Persists a new tab order (drag / rearrange)",
         template: "Reorder terminal tabs as {orderedIds}",
         inputs: {
@@ -372,6 +380,7 @@ const actions = [
     defineAction({
         id: "touch-tab",
         name: "Touch Terminal Tab",
+        category: "Sessions",
         description: "Marks a tab as most recently used",
         template: "Touch terminal tab {id}",
         inputs: {
@@ -392,6 +401,7 @@ const actions = [
     defineAction({
         id: "write-to-terminal",
         name: "Write to Terminal",
+        category: "Input",
         description: "Sends keystrokes to a live terminal session",
         template: "Write {text} to terminal {tabId}",
         inputs: {
@@ -406,6 +416,7 @@ const actions = [
     defineAction({
         id: "read-terminal-buffer",
         name: "Read Terminal Output",
+        category: "Output",
         description: "Returns the last lines of a terminal session",
         template: "Read last {lines} lines of terminal {tabId}",
         inputs: {
@@ -424,6 +435,7 @@ const actions = [
     defineAction({
         id: "run-terminal-command",
         name: "Run Shell Command",
+        category: "Input",
         description: "Runs a one-shot shell command and returns its output",
         template: "Run shell command {command}",
         inputs: {
@@ -449,6 +461,7 @@ const triggers = [
     defineTrigger({
         id: "terminal-exit",
         name: "When Terminal Session Ends",
+        category: "Events",
         description: "Fires when a terminal shell process exits",
         template: "When terminal session ends",
         output: { type: "object", label: "Session" },
@@ -462,6 +475,12 @@ export const terminalService = definePanelService({
         tabCount: 0,
         activeTabId: "",
     },
+    categories: [
+        { name: "Sessions", icon: "terminal", order: 1 },
+        { name: "Input", icon: "keyboard", order: 2 },
+        { name: "Output", icon: "output", order: 3 },
+        { name: "Events", icon: "bolt", order: 4 },
+    ],
     actions,
     triggers,
     async onInit(ctx: Ctx) {
