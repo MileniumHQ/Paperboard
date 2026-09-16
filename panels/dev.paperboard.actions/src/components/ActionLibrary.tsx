@@ -175,14 +175,12 @@ export default function ActionLibrary(props: ActionLibraryProps) {
         BUILTIN_CATEGORIES.filter((c) => c.domain === "logic"),
     );
 
-    const computerCategories = createMemo(() =>
-        BUILTIN_CATEGORIES.filter((c) => c.domain === "computer"),
-    );
-
     const panelCategories = createMemo<PanelCategory[]>(() => {
         const map = new Map<string, PanelCategory>();
 
         for (const trig of registeredTriggers()) {
+            // internal schemas stay callable; the library only hides them
+            if (trig.schema?.internal === true) continue;
             const schema: TriggerSchema = trig.schema || {
                 id: trig.trigger,
                 name: trig.trigger.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
@@ -212,12 +210,8 @@ export default function ActionLibrary(props: ActionLibraryProps) {
             if (act.action.startsWith("call-function-")) continue;
             // own sync/test actions run via api, never placeable blocks
             if (act.panelId === ACTIONS_PANEL_ID) continue;
-            const isInternal =
-                act.action.startsWith("__") ||
-                act.action === "load-config" ||
-                act.schema?.name?.includes("(Internal)");
-
-            if (isInternal) continue;
+            // declared internal: callable, never offered as a block
+            if (act.schema?.internal === true) continue;
 
             const schema: ActionSchema = act.schema || {
                 id: act.action,
@@ -256,7 +250,6 @@ export default function ActionLibrary(props: ActionLibraryProps) {
 
     const allCategories = createMemo<Category[]>(() => [
         ...logicCategories(),
-        ...computerCategories(),
         ...panelCategories(),
     ]);
 
@@ -495,22 +488,6 @@ export default function ActionLibrary(props: ActionLibraryProps) {
                                             />
                                         </Show>
                                     </>
-                                )}
-                            </For>
-
-                            <PaperSeparator
-                                direction="horizontal"
-                                class="library-rail-separator"
-                            />
-
-                            <For each={computerCategories()}>
-                                {(cat) => (
-                                    <PaperRailItem
-                                        value={cat.id}
-                                        icon={cat.icon}
-                                        label={cat.name}
-                                        showLabel={true}
-                                    />
                                 )}
                             </For>
 
@@ -956,80 +933,110 @@ export default function ActionLibrary(props: ActionLibraryProps) {
                 open={createOpen()}
                 onClose={() => setCreateOpen(false)}
                 title={editingId() ? "Rename Function" : "Create Function"}
+                size="large"
                 footer={
                     <PaperFlex direction="row" justify="flex-end" gap="half" fullWidth>
-                        <PaperButton
-                            variant="text"
-                            onClick={() => setCreateOpen(false)}>
+                        <PaperButton onClick={() => setCreateOpen(false)}>
                             Cancel
                         </PaperButton>
                         <PaperButton
-                            variant="brand"
+                            variant="success"
                             onClick={handleConfirmCreate}
                             disabled={!draftValid()}>
+                            <PaperIcon>
+                                {editingId() ? "check" : "add"}
+                            </PaperIcon>
                             {editingId() ? "Save" : "Create"}
                         </PaperButton>
                     </PaperFlex>
                 }
             >
-                <PaperFlex direction="column" gap="full" fullWidth>
-                    <PaperInput
-                        fullWidth
-                        placeholder="Function name"
-                        value={draftName()}
-                        onInput={(e) => setDraftName(e.currentTarget.value)}
-                    />
+                <PaperFlex direction="column" gap="full">
+                    <PaperFlex direction="column" gap="half">
+                        <PaperInput
+                            fullWidth
+                            placeholder="Function"
+                            maxLength={64}
+                            value={draftName()}
+                            onInput={(e) => setDraftName(e.currentTarget.value)}
+                        />
+                        <Show when={editingId()}>
+                            <PaperText preset="body" color="text-subtle">
+                                Renaming updates every flow that uses this function.
+                            </PaperText>
+                        </Show>
+                    </PaperFlex>
 
                     <Show when={!editingId()}>
-                        <For each={draftParams}>
-                            {(param, index) => (
-                                <div class="library-param-row">
-                                    <PaperInput
-                                        compact
-                                        fullWidth
-                                        placeholder="Variable name"
-                                        value={param.name}
-                                        onInput={(e) => {
-                                            setDraftParams(index(), "name", e.currentTarget.value);
-                                        }}
-                                    />
-                                    <PaperSelectMenu
-                                        name={`param-type-${index()}`}
-                                        value={param.type}
-                                        onValueChange={(v) => {
-                                            setDraftParams(index(), "type", String(v));
-                                        }}
-                                    >
-                                        <For each={FUNCTION_PARAM_TYPES}>
-                                            {(t) => (
-                                                <PaperSelectMenuItem value={t.id}>
-                                                    {t.label}
-                                                </PaperSelectMenuItem>
-                                            )}
-                                        </For>
-                                    </PaperSelectMenu>
-                                    <PaperButton size="tiny"
-                                        icon
-                                        onClick={() =>
-                                            setDraftParams((prev) =>
-                                                prev.filter((_, i) => i !== index()),
-                                            )
-                                        }
-                                        title="Remove variable">
-                                        <PaperIcon>delete</PaperIcon>
-                                    </PaperButton>
-                                </div>
-                            )}
-                        </For>
+                        <PaperFlex direction="column" gap="half">
+                            <PaperFlex
+                                direction="row"
+                                justify="space-between"
+                                align="center"
+                                fullWidth
+                            >
+                                <PaperText size={3} weight={700}>
+                                    Parameters
+                                </PaperText>
+                                <PaperButton
+                                    onClick={() =>
+                                        setDraftParams((prev) => [
+                                            ...prev,
+                                            { name: "", type: "string" },
+                                        ])
+                                    }>
+                                    <PaperIcon>add</PaperIcon>
+                                    Add Parameter
+                                </PaperButton>
+                            </PaperFlex>
 
-                        <PaperButton
-                            variant="text"
-                            onClick={() =>
-                                setDraftParams((prev) => [...prev, { name: "", type: "string" }])
-                            }>
-                            <PaperIcon>add</PaperIcon>
-                            Add Variable
-                        </PaperButton>
+                            <Show when={draftParams.length === 0}>
+                                <PaperText preset="body" color="text-subtle">
+                                    Parameters become variables other actions can read.
+                                </PaperText>
+                            </Show>
+
+                            <For each={draftParams}>
+                                {(param, index) => (
+                                    <div class="library-param-row">
+                                        <PaperInput
+                                            compact
+                                            fullWidth
+                                            placeholder="Parameter"
+                                            value={param.name}
+                                            onInput={(e) => {
+                                                setDraftParams(index(), "name", e.currentTarget.value);
+                                            }}
+                                        />
+                                        <PaperSelectMenu
+                                            name={`param-type-${index()}`}
+                                            value={param.type}
+                                            onValueChange={(v) => {
+                                                setDraftParams(index(), "type", String(v));
+                                            }}
+                                        >
+                                            <For each={FUNCTION_PARAM_TYPES}>
+                                                {(t) => (
+                                                    <PaperSelectMenuItem value={t.id}>
+                                                        {t.label}
+                                                    </PaperSelectMenuItem>
+                                                )}
+                                            </For>
+                                        </PaperSelectMenu>
+                                        <PaperButton size="tiny"
+                                            icon
+                                            onClick={() =>
+                                                setDraftParams((prev) =>
+                                                    prev.filter((_, i) => i !== index()),
+                                                )
+                                            }
+                                            title="Remove parameter">
+                                            <PaperIcon>delete</PaperIcon>
+                                        </PaperButton>
+                                    </div>
+                                )}
+                            </For>
+                        </PaperFlex>
                     </Show>
                 </PaperFlex>
             </PaperModal>

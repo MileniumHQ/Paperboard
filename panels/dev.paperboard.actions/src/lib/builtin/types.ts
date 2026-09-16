@@ -34,7 +34,8 @@ export const BUILTIN_CATEGORY_META: Omit<BuiltinCategory, "items">[] = [
     { id: "logic.web", domain: "logic", name: "Web", icon: "language", description: "HTTP requests and web content" },
     { id: "logic.text", domain: "logic", name: "Text", icon: "format_quote", description: "Text operations and string formatting" },
     { id: "logic.utility", domain: "logic", name: "Utility", icon: "build", description: "Logging and utility operations" },
-    { id: "computer.display", domain: "computer", name: "Display", icon: "desktop_windows", description: "Screen capture controls" },
-    { id: "computer.audio", domain: "computer", name: "Audio", icon: "volume_up", description: "System volume and muting controls" },
-    { id: "computer.system", domain: "computer", name: "System", icon: "settings_suggest", description: "Notifications and system controls" },
 ];
+
+// Display, Audio, and System are retired from the library for now. Stored
+// flows with those blocks still execute: their runtime handlers in
+// lib/runtime.ts are kept until the categories come back.

@@ -8,9 +8,6 @@ import { datetimeBuiltins } from "./datetime";
 import { webBuiltins } from "./web";
 import { textBuiltins } from "./text";
 import { utilityBuiltins } from "./utility";
-import { displayBuiltins } from "./display";
-import { audioBuiltins } from "./audio";
-import { systemBuiltins } from "./system";
 
 export * from "./types";
 
@@ -24,9 +21,6 @@ export const BUILTIN_DEFS: BuiltinDef[] = [
     ...webBuiltins,
     ...textBuiltins,
     ...utilityBuiltins,
-    ...displayBuiltins,
-    ...audioBuiltins,
-    ...systemBuiltins,
 ];
 
 export const BUILTIN_CATEGORIES: BuiltinCategory[] = BUILTIN_CATEGORY_META.map((meta) => ({
