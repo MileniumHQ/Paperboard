@@ -81,4 +81,39 @@ describe("buildLibrarySections", () => {
     test("an empty panel produces no sections", () => {
         expect(buildLibrarySections([], [])).toEqual([]);
     });
+
+    test("internal entries are hidden but nothing else is filtered", () => {
+        const internalTrigger = {
+            panelId: "p",
+            trigger: "ctl-trigger",
+            schema: { id: "ctl-trigger", name: "Ctl", description: "", internal: true },
+        };
+        const internalAction = {
+            panelId: "p",
+            action: "ctl-action",
+            schema: { id: "ctl-action", name: "Ctl", description: "", internal: true },
+        };
+        const sections = buildLibrarySections(
+            [internalTrigger, trigger("on-visible", "Chat")],
+            [internalAction, action("visible", "Chat")],
+        );
+        expect(sections).toHaveLength(1);
+        expect(sections[0].name).toBe("Chat");
+        expect(sections[0].triggers.map((t: any) => t.trigger)).toEqual(["on-visible"]);
+        expect(sections[0].actions.map((a: any) => a.action)).toEqual(["visible"]);
+    });
+
+    test("an explicit internal:false entry stays visible", () => {
+        const sections = buildLibrarySections(
+            [],
+            [
+                {
+                    panelId: "p",
+                    action: "shown",
+                    schema: { id: "shown", name: "Shown", description: "", internal: false },
+                },
+            ],
+        );
+        expect(sections[0].actions).toHaveLength(1);
+    });
 });

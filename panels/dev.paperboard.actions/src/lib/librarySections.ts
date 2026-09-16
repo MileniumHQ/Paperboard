@@ -64,9 +64,13 @@ export function buildLibrarySections(
         return section;
     };
     for (const trigger of triggers) {
+        // internal registry entries stay callable, they just never become
+        // placeable blocks
+        if (trigger.schema?.internal === true) continue;
         ensure(sectionMetaOf(trigger.schema?.category)).triggers.push(trigger);
     }
     for (const action of actions) {
+        if (action.schema?.internal === true) continue;
         ensure(sectionMetaOf(action.schema?.category)).actions.push(action);
     }
     return [...sections.values()].sort((a, b) => {

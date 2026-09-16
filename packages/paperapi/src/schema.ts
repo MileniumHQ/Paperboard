@@ -77,6 +77,11 @@ export interface ActionSchema {
     id: string;
     name: string;
     description: string;
+    /**
+     * Hidden from the Actions library but still callable through the API:
+     * control-plane RPCs a panel's own UI needs, never flow blocks.
+     */
+    internal?: boolean;
     template?: string;
     writtenOut?: string;
     category?: ActionCategory;
@@ -101,6 +106,8 @@ export interface TriggerSchema {
     id: string;
     name: string;
     description: string;
+    /** Hidden from the Actions library, still emitted and subscribable. */
+    internal?: boolean;
     template?: string;
     writtenOut?: string;
     category?: ActionCategory;
