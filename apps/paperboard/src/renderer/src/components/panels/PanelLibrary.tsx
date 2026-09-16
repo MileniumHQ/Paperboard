@@ -174,7 +174,7 @@ const PanelLibrary: Component<PanelLibraryProps> = (props) => {
                             <PaperBadge variant="danger">
                                 Couldn't load library
                             </PaperBadge>
-                            <PaperButton size="large"
+                            <PaperButton
                                 variant="text"
                                 onClick={() => props.onRetryLoad?.()}
                             >
@@ -268,7 +268,7 @@ const PanelLibrary: Component<PanelLibraryProps> = (props) => {
                                 </PaperFlex>
 
                                 <PaperEffect>
-                                    <PaperButton size="large"
+                                    <PaperButton
                                         variant={
                                             panel().isInstalled
                                                 ? "brand"

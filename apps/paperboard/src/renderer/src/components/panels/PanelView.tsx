@@ -129,7 +129,7 @@ const PanelView: Component<PanelViewProps> = (props) => {
                                         <PaperText preset="body">
                                             This panel didn't load.
                                         </PaperText>
-                                        <PaperButton size="large"
+                                        <PaperButton
                                             variant="primary"
                                             onClick={() => handleRetry(key)}
                                         >

@@ -286,7 +286,7 @@ export default function App() {
                     </PaperText>
                   </PaperFlex>
                   <PaperEffect>
-                    <PaperButton size="large"
+                    <PaperButton
                       variant="primary"
                       onClick={(e) => {
                         e.stopPropagation();

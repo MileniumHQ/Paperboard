@@ -635,7 +635,7 @@ export default function Plugins(props: { updateRequest?: number }) {
                                     keyed
                                     fallback={
                                         <PaperEffect variant="success">
-                                            <PaperButton size="large"
+                                            <PaperButton
                                                 variant="success"
                                                 disabled={busy()}
                                                 onClick={() => setInstallTarget(target)}
@@ -652,7 +652,7 @@ export default function Plugins(props: { updateRequest?: number }) {
                                 >
                                     {(entry) => (
                                         <PaperEffect variant="danger">
-                                            <PaperButton size="large"
+                                            <PaperButton
                                                 variant="danger"
                                                 disabled={busy()}
                                                 onClick={() => setPendingDelete(entry)}

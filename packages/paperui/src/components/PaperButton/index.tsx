@@ -3,7 +3,7 @@ import { splitProps, type JSX } from "solid-js";
 import { roleVars, isPaperRole } from "../../utils/colors";
 import type { PaperButtonVariant } from "../../types";
 
-export type PaperButtonSize = "tiny" | "small" | "medium" | "large";
+export type PaperButtonSize = "tiny" | "small" | "medium";
 
 export interface PaperButtonProps extends JSX.ButtonHTMLAttributes<HTMLButtonElement> {
     icon?: boolean;

@@ -46,16 +46,6 @@
     font-size: var(--paper-icon-size-small);
 }
 
-.PaperButton.size-large {
-    padding: var(--paper-uigap-threefourths) var(--paper-uigap-double);
-    font-size: var(--paper-text-size-4);
-    gap: var(--paper-uigap-half);
-}
-
-.PaperButton.size-large [class*="PaperIcon"] {
-    font-size: var(--paper-icon-size-huge);
-}
-
 /* tiny is its own thing: a low-emphasis inline control */
 .PaperButton.size-tiny {
     padding: var(--paper-uigap-onefourth) var(--paper-uigap-threefourths);
@@ -116,12 +106,6 @@
     padding: 0;
     font-family: "Material Symbols Rounded";
     font-variation-settings: "FILL" 1;
-}
-
-.PaperButton.icon.size-large {
-    height: var(--paper-control-size-xlarge);
-    width: var(--paper-control-size-xlarge);
-    font-size: var(--paper-icon-size-huge);
 }
 
 .PaperButton.icon.size-medium {

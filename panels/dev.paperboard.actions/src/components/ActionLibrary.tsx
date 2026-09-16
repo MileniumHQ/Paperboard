@@ -455,7 +455,7 @@ export default function ActionLibrary(props: ActionLibraryProps) {
         <>
             <Show when={isCollapsed()}>
                 <div class="library-toggle-collapsed">
-                    <PaperButton size="large"
+                    <PaperButton
                         onClick={() => setIsCollapsed(false)}
                         title="Open Actions Library"
                     >

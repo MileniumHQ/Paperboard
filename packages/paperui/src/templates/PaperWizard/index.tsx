@@ -180,7 +180,7 @@ export function PaperWizard(props: ParentProps<PaperWizardProps>) {
                     <div>
                         <Show when={!local.hideBack && !isFirstStep()}>
                             <PaperEffect colorless disabled={!optionsShown()}>
-                                <PaperButton size="large"
+                                <PaperButton
                                     type="button"
                                     onClick={prevStep}
                                     disabled={!optionsShown()}
@@ -193,8 +193,11 @@ export function PaperWizard(props: ParentProps<PaperWizardProps>) {
                     </div>
 
                     <div>
-                        <PaperEffect disabled={!optionsShown() || !canProceedCurrent()}>
-                            <PaperButton size="large"
+                        <PaperEffect
+                            variant={isLastStep() ? (local.finishVariant ?? "success") : undefined}
+                            disabled={!optionsShown() || !canProceedCurrent()}
+                        >
+                            <PaperButton
                                 type="submit"
                                 variant={isLastStep() ? (local.finishVariant ?? "success") : undefined}
                                 disabled={!optionsShown() || !canProceedCurrent()}

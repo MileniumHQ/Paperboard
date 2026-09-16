@@ -77,7 +77,7 @@ const ComputerSettings: Component<ComputerSettingsProps> = (props) => {
                         title="Remove Computer"
                         description="Forget this computer and disconnect all panels"
                     >
-                        <PaperButton size="large"
+                        <PaperButton
                             variant="danger"
                             disabled={isRemoving()}
                             onClick={() => setIsConfirmOpen(true)}
