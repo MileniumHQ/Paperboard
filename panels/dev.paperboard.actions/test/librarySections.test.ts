@@ -82,6 +82,13 @@ describe("buildLibrarySections", () => {
         expect(buildLibrarySections([], [])).toEqual([]);
     });
 
+    test("the protocol namespace is hidden even without a schema", () => {
+        const hydration = { panelId: "p", action: "__getState" };
+        const sections = buildLibrarySections([], [hydration, action("visible", "Chat")]);
+        expect(sections).toHaveLength(1);
+        expect(sections[0].actions.map((a: any) => a.action)).toEqual(["visible"]);
+    });
+
     test("internal entries are hidden but nothing else is filtered", () => {
         const internalTrigger = {
             panelId: "p",

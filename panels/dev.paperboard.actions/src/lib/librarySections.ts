@@ -16,6 +16,20 @@ export interface LibrarySection {
 
 export const UNCATEGORIZED_SECTION = "General";
 
+// Internal registry entries stay callable through the API, they just never
+// become placeable blocks. `__` is the protocol's reserved namespace (state
+// hydration and friends), kept filtered as a safety net for services that
+// register by bare name without a schema.
+export function isLibraryVisible(entry: {
+    action?: string;
+    trigger?: string;
+    schema?: { internal?: boolean } | null;
+}): boolean {
+    if (entry.schema?.internal === true) return false;
+    const id = entry.action || entry.trigger || "";
+    return !id.startsWith("__");
+}
+
 interface SectionMeta {
     name: string;
     icon?: string;
@@ -64,13 +78,11 @@ export function buildLibrarySections(
         return section;
     };
     for (const trigger of triggers) {
-        // internal registry entries stay callable, they just never become
-        // placeable blocks
-        if (trigger.schema?.internal === true) continue;
+        if (!isLibraryVisible(trigger)) continue;
         ensure(sectionMetaOf(trigger.schema?.category)).triggers.push(trigger);
     }
     for (const action of actions) {
-        if (action.schema?.internal === true) continue;
+        if (!isLibraryVisible(action)) continue;
         ensure(sectionMetaOf(action.schema?.category)).actions.push(action);
     }
     return [...sections.values()].sort((a, b) => {

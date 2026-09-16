@@ -120,11 +120,16 @@ export function definePanelService<
         emitTrigger,
     };
 
-    // internal hydration action
+    // internal hydration action: callable by the bridge, never a block
     actionsApi.register(
         STATE_GET_ACTION,
         () => currentState,
         panelId,
+        {
+            internal: true,
+            name: "Get Panel State",
+            description: "Hydrates the panel bridge with the service's state",
+        },
     ).catch((err) => {
         console.error(`[Service:${panelId}] Failed to register hydration action '${STATE_GET_ACTION}':`, err);
     });

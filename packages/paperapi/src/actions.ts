@@ -72,11 +72,15 @@ export const actionsApi = {
 
     /**
      * Registers an action handler and its schema for the current panel.
+     * The by-name form takes schema hints as `options`, so control-plane
+     * handlers (state hydration, config reload) can declare themselves
+     * internal without a full definition.
      */
     register: async (
         actionOrName: string | ActionDefinition,
         maybeHandler?: (...args: any[]) => Promise<any> | any,
         panelId?: string,
+        options?: { internal?: boolean; name?: string; description?: string },
     ): Promise<void> => {
         const pid = panelId || getPanelId();
         if (!pid) {
@@ -115,7 +119,16 @@ export const actionsApi = {
         } else {
             const actionName = actionOrName as string;
             const handler = maybeHandler || (() => {});
-            await transport.registerAction(pid, actionName, handler);
+            const schema: ActionSchema | undefined = options
+                ? {
+                      id: actionName,
+                      name: options.name || actionName,
+                      description: options.description || "",
+                      internal: options.internal,
+                      template: options.name || actionName,
+                  }
+                : undefined;
+            await transport.registerAction(pid, actionName, handler, schema);
         }
     },
 
