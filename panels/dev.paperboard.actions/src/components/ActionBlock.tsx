@@ -345,17 +345,6 @@ function ActionEditableField(fieldProps: ActionEditableFieldProps) {
         }
 
         if (range) {
-            const node = range.startContainer;
-            if (node && node.nodeType === Node.TEXT_NODE) {
-                const text = node.textContent || "";
-                const offset = range.startOffset;
-                if (offset > 0 && text[offset - 1] === "@") {
-                    node.textContent = text.slice(0, offset - 1) + text.slice(offset);
-                    range.setStart(node, offset - 1);
-                    range.setEnd(node, offset - 1);
-                }
-            }
-
             const chip = document.createElement("span");
             chip.className = "actionVariableChip";
             chip.contentEditable = "false";
@@ -423,10 +412,6 @@ function ActionEditableField(fieldProps: ActionEditableFieldProps) {
         }
 
         setCurrentText(text);
-
-        if (text.includes("@") || e.data === "@") {
-            openPicker();
-        }
     };
 
     const handleCommit = () => {
@@ -557,6 +542,9 @@ function ActionEditableField(fieldProps: ActionEditableFieldProps) {
                     }
                 }
                 saveCurrentRange();
+                // the picker is the field's variable affordance: opening it
+                // on focus, not on a typed "@" (which is now plain text)
+                openPicker();
             }}
             onKeyUp={saveCurrentRange}
             onMouseUp={saveCurrentRange}
@@ -1128,7 +1116,14 @@ export default function ActionBlock(props: ActionBlockProps) {
                         }}
                         onRequestVariablePicker={(x, y, onInsert) => {
                             if (props.id) {
-                                props.onRequestVariablePicker?.(props.id, key, x, y, onInsert);
+                                props.onRequestVariablePicker?.(
+                                    props.id,
+                                    key,
+                                    x,
+                                    y,
+                                    onInsert,
+                                    expectedTypeOf(def),
+                                );
                             }
                         }}
                     />
@@ -1154,7 +1149,14 @@ export default function ActionBlock(props: ActionBlockProps) {
                 }}
                 onRequestVariablePicker={(x, y, onInsert) => {
                     if (props.id) {
-                        props.onRequestVariablePicker?.(props.id, key, x, y, onInsert);
+                        props.onRequestVariablePicker?.(
+                            props.id,
+                            key,
+                            x,
+                            y,
+                            onInsert,
+                            expectedTypeOf(def),
+                        );
                     }
                 }}
             />
