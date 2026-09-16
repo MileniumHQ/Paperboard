@@ -102,6 +102,15 @@
     transform: scale(0.98);
 }
 
+/* tiny is low emphasis by definition: as a text button it stays subtle
+   instead of the full-contrast default, and only brightens on hover */
+.PaperButton.size-tiny.text {
+    color: var(--paper-text-subtle);
+}
+.PaperButton.size-tiny.text:hover {
+    color: var(--paper-text);
+}
+
 .PaperButton.icon {
     padding: 0;
     font-family: "Material Symbols Rounded";

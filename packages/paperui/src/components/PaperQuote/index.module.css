@@ -8,6 +8,9 @@
     color: var(--paper-text);
     position: relative;
     overflow: hidden;
+    /* an overflow-clipped flex item has min-size 0: without this a short
+       column crushes the quote into its own text */
+    min-height: max-content;
 }
 .PaperQuote::after {
     content: "";

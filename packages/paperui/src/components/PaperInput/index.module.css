@@ -5,6 +5,9 @@
     overflow: hidden;
     display: flex;
     align-items: center;
+    /* an overflow-clipped flex item has min-size 0: without this a short
+       column crushes the input into its own text */
+    min-height: max-content;
 }
 .PaperInput.fullWidth {
     width: 100%;
