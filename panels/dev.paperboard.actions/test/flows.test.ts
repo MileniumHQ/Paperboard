@@ -120,6 +120,14 @@ describe("bounded resources", () => {
         const capStep = log.steps.find((st: any) => /Variable store full/i.test(String(st.error)));
         expect(log.status).toBe("error");
         expect(String(capStep?.error)).toEqual(expect.stringMatching(/Variable store full/i));
+
+        // the store is module-global: leave it as it was found or every
+        // later test file inherits a full store
+        const cleanup = Array.from({ length: 502 }, (_, i) =>
+            blk("clear-variable", { key: `captest_${i}` }),
+        );
+        const cleanupLog = await executeFlow(trig(cleanup).block as any, {});
+        expect(cleanupLog.status).toBe("success");
     });
 
     it("clamps an over-long wait instead of parking the flow", async () => {

@@ -6,6 +6,8 @@ const MAX_CONSOLE_LOGS = 500;
 import ActionBlock from "./components/ActionBlock";
 import NoteBlock, { type CanvasNote } from "./components/NoteBlock";
 import ActionLibrary from "./components/ActionLibrary";
+import { SWITCH_CASE_SCHEMA } from "./lib/builtin/control";
+import { isDropAllowed } from "./lib/tree";
 import VariableMenu from "./components/VariableMenu";
 import ActionDropdownMenu from "./components/ActionDropdownMenu";
 import {
@@ -65,6 +67,7 @@ export default function App() {
     const [hoverDropTarget, setHoverDropTarget] = createSignal<{
         parentId: string;
         insertIndex: number;
+        accepts?: string | null;
     } | null>(null);
     const [isOverTrash, setIsOverTrash] = createSignal(false);
     const [draggingCanvasBlockId, setDraggingCanvasBlockId] = createSignal<string | null>(null);
@@ -738,7 +741,7 @@ export default function App() {
     const checkDropTarget = (
         clientX: number,
         clientY: number,
-    ): { parentId: string; insertIndex: number } | null => {
+    ): { parentId: string; insertIndex: number; accepts: string | null } | null => {
         try {
             const zones = document.querySelectorAll<HTMLElement>("[data-drop-parent]");
             for (const zone of zones) {
@@ -752,7 +755,11 @@ export default function App() {
                     const parentId = zone.getAttribute("data-drop-parent");
                     const rawIdx = zone.getAttribute("data-drop-index");
                     if (parentId !== null && rawIdx !== null) {
-                        return { parentId, insertIndex: parseInt(rawIdx, 10) };
+                        return {
+                            parentId,
+                            insertIndex: parseInt(rawIdx, 10),
+                            accepts: zone.getAttribute("data-drop-accepts"),
+                        };
                     }
                 }
             }
@@ -907,6 +914,15 @@ export default function App() {
                     (drag as any).elseChildren || (actionId === "if-else" ? [] : undefined),
             };
 
+            if (dropTarget && !drag.isTrigger && !isDropAccepted(dropTarget, actionId)) {
+                // a Switch only takes Case blocks between its cases, and a
+                // Case only lives inside a Switch: stray drops are refused
+                console.warn(
+                    `[Actions] "${droppedBlock.action.name}" cannot go there; the drop was refused.`,
+                );
+                return;
+            }
+
             if (dropTarget && !drag.isTrigger) {
                 // reject self-calls
                 const droppedFid = functionIdFromCallAction(actionId || "");
@@ -936,7 +952,7 @@ export default function App() {
                 return;
             }
 
-            if (isDropOnCanvas(e.clientX)) {
+            if (isDropOnCanvas(e.clientX) && actionId !== "switch-case") {
                 const rect = containerRef?.getBoundingClientRect();
                 const sc = viewportScroll();
                 const worldX = Math.round(
@@ -1089,6 +1105,43 @@ export default function App() {
         }
     };
 
+    // Switch cases are created and removed from the block itself: they are
+    // never dragged in from the library, so the switch owns their lifecycle
+    const handleAddSwitchCase = (switchId: string) => {
+        const owner = findBlock(blocks, switchId);
+        if (!owner) return;
+        maxZIndex += 1;
+        const caseBlock: CanvasBlock = {
+            id: `case_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+            panelId: "builtin.logic",
+            pos: { x: 0, y: 0 },
+            isTrigger: false,
+            action: SWITCH_CASE_SCHEMA as any,
+            values: { value: "" },
+            zIndex: maxZIndex,
+            children: [],
+        };
+        const updated = insertBlock(
+            blocks,
+            switchId,
+            owner.children?.length ?? 0,
+            caseBlock,
+        );
+        setBlocks(updated);
+        saveFlows(updated);
+    };
+
+    const handleRemoveSwitchCase = (caseBlockId: string) => {
+        const { blocks: updated } = removeBlock(blocks, caseBlockId);
+        setBlocks(updated);
+        saveFlows(updated);
+    };
+
+    const isDropAccepted = (
+        target: { parentId: string; accepts?: string | null } | null,
+        actionId: string | undefined,
+    ) => isDropAllowed(target, actionId, (id) => findBlock(blocks, id));
+
     const handleCanvasBlockDragEnd = (id: string) => {
         const dropTarget = hoverDropTarget();
         const overTrash = isOverTrash();
@@ -1103,7 +1156,14 @@ export default function App() {
             return;
         }
 
-        if (dropTarget && dropTarget.parentId !== id) {
+        if (
+            dropTarget &&
+            dropTarget.parentId !== id &&
+            (() => {
+                const moving = blocks.find((b) => b.id === id);
+                return isDropAccepted(dropTarget, (moving?.action as any)?.id);
+            })()
+        ) {
             const blockToInsert = blocks.find((b) => b.id === id);
             if (blockToInsert && !blockToInsert.isTrigger) {
                 const { blocks: updated, removed } = removeBlock(blocks, id);
@@ -1349,6 +1409,8 @@ export default function App() {
                             onValueChange={handleValueChange}
                             onRequestVariablePicker={handleRequestVariablePicker}
                             onRequestOptionPicker={handleRequestOptionPicker}
+                            onAddSwitchCase={handleAddSwitchCase}
+                            onRemoveSwitchCase={handleRemoveSwitchCase}
                             highlightedSourceBlockId={hoveredSourceBlockId}
                         />
                     )}

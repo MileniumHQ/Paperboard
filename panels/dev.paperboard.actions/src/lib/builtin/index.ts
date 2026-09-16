@@ -2,6 +2,7 @@ import { BUILTIN_CATEGORY_META, type BuiltinCategory, type BuiltinDef } from "./
 import { timingBuiltins } from "./timing";
 import { controlBuiltins } from "./control";
 import { variablesBuiltins } from "./variables";
+import { dataBuiltins } from "./data";
 import { mathBuiltins } from "./math";
 import { conditionBuiltins } from "./condition";
 import { datetimeBuiltins } from "./datetime";
@@ -15,6 +16,7 @@ export const BUILTIN_DEFS: BuiltinDef[] = [
     ...timingBuiltins,
     ...controlBuiltins,
     ...variablesBuiltins,
+    ...dataBuiltins,
     ...mathBuiltins,
     ...conditionBuiltins,
     ...datetimeBuiltins,

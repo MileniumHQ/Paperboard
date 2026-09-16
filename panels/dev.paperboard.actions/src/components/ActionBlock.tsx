@@ -56,6 +56,9 @@ export interface ActionBlockProps {
         onSelect: (value: any) => void,
     ) => void;
     variableName?: string | null;
+    /** Switch blocks create and remove Case children through these */
+    onAddSwitchCase?: (blockId: string) => void;
+    onRemoveSwitchCase?: (caseBlockId: string) => void;
     activeTargetBlockId?: () => string | null;
     highlightedSourceBlockId?: () => string | null;
     isVariablePickerOpen?: () => boolean;
@@ -889,8 +892,11 @@ export default function ActionBlock(props: ActionBlockProps) {
 
     const isContainerBlock = () =>
         props.action.id === "repeat" ||
+        props.action.id === "for-each" ||
         props.action.id === "if" ||
-        props.action.id === "if-else";
+        props.action.id === "if-else" ||
+        props.action.id === "switch" ||
+        props.action.id === "switch-case";
 
     const isHoverIndex = (index: number, branch?: "else") => {
         if (!props.activeDropTarget || !props.id) return false;
@@ -1254,6 +1260,18 @@ export default function ActionBlock(props: ActionBlockProps) {
                         }}
                     </For>
                 </span>
+                <Show when={props.action.id === "switch-case"}>
+                    <PaperButton size="tiny"
+                        icon
+                        title="Remove case"
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            if (props.id) props.onRemoveSwitchCase?.(props.id);
+                        }}>
+                        <PaperIcon>close</PaperIcon>
+                    </PaperButton>
+                </Show>
             </PaperFlex>
 
             <Show when={multilineKeys().length > 0}>
@@ -1330,6 +1348,7 @@ export default function ActionBlock(props: ActionBlockProps) {
                                         class={`actionInsertLine ${isHoverIndex(index()) ? "activeHover" : ""}`}
                                         data-drop-parent={props.id}
                                         data-drop-index={index()}
+                                        data-drop-accepts={props.action.id === "switch" ? "switch-case" : undefined}
                                     />
                                     <div
                                         class="nestedActionWrapper"
@@ -1368,6 +1387,8 @@ export default function ActionBlock(props: ActionBlockProps) {
                                             runningBlockIds={props.runningBlockIds}
                                             onRequestVariablePicker={props.onRequestVariablePicker}
                                             onRequestOptionPicker={props.onRequestOptionPicker}
+                                            onAddSwitchCase={props.onAddSwitchCase}
+                                            onRemoveSwitchCase={props.onRemoveSwitchCase}
                                             activeTargetBlockId={props.activeTargetBlockId}
                                             highlightedSourceBlockId={props.highlightedSourceBlockId}
                                             isVariablePickerOpen={props.isVariablePickerOpen}
@@ -1379,18 +1400,37 @@ export default function ActionBlock(props: ActionBlockProps) {
                     </div>
                 </Show>
 
-                <div
-                    class={`actionDropZone ${isHoverIndex(props.children?.length || 0) ? "activeHover" : ""}`}
-                    data-drop-parent={props.id}
-                    data-drop-index={props.children?.length || 0}
-                >
-                    <PaperIcon>add</PaperIcon>
-                    <span>Drop Actions Here</span>
-                </div>
+                <Show when={props.action.id === "switch"}>
+                    <PaperButton
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            if (props.id) props.onAddSwitchCase?.(props.id);
+                        }}>
+                        <PaperIcon>add</PaperIcon>
+                        Add Case
+                    </PaperButton>
+                    <Show when={(props.children?.length ?? 0) === 0}>
+                        <PaperText size={2} color="text-subtle">
+                            Cases compare with the value above, in order.
+                        </PaperText>
+                    </Show>
+                </Show>
 
-                    <Show when={props.action.id === "if-else"}>
+                <Show when={props.action.id !== "switch"}>
+                    <div
+                        class={`actionDropZone ${isHoverIndex(props.children?.length || 0) ? "activeHover" : ""}`}
+                        data-drop-parent={props.id}
+                        data-drop-index={props.children?.length || 0}
+                    >
+                        <PaperIcon>add</PaperIcon>
+                        <span>Drop Actions Here</span>
+                    </div>
+                </Show>
+
+                    <Show when={props.action.id === "if-else" || props.action.id === "switch"}>
                     <PaperText size={3} weight={500} class="ifElsePlain">
-                        else
+                        {props.action.id === "switch" ? "otherwise" : "else"}
                     </PaperText>
 
                     <Show when={props.elseChildren && props.elseChildren.length > 0}>
@@ -1439,6 +1479,9 @@ export default function ActionBlock(props: ActionBlockProps) {
                                                 running={Boolean(child.id && props.runningBlockIds?.().has(child.id))}
                                                 runningBlockIds={props.runningBlockIds}
                                                 onRequestVariablePicker={props.onRequestVariablePicker}
+                                                onRequestOptionPicker={props.onRequestOptionPicker}
+                                                onAddSwitchCase={props.onAddSwitchCase}
+                                                onRemoveSwitchCase={props.onRemoveSwitchCase}
                                                 activeTargetBlockId={props.activeTargetBlockId}
                                                 highlightedSourceBlockId={props.highlightedSourceBlockId}
                                                 isVariablePickerOpen={props.isVariablePickerOpen}

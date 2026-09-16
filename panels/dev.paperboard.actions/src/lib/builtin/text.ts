@@ -301,5 +301,141 @@ export const textBuiltins: BuiltinDef[] = [
                             label: "Sliced Text",
                         },
                     },
+                } },    { id: "text-split", category: "logic.text", panelId: "builtin.logic", item: {
+                    panelId: "builtin.logic",
+                    action: "text-split",
+                    schema: {
+                        id: "text-split",
+                        name: "Split Text",
+                        description: "Splits text into a list on a separator (every character when empty)",
+                        template: "Split {text} on {separator}",
+                        icon: "call_split",
+                        inputs: {
+                            text: { type: "string", label: "Text", placeholder: "Text", required: true },
+                            separator: { type: "string", label: "Separator", placeholder: "Separator" },
+                        },
+                        output: { type: "array", label: "Items" },
+                    },
+                } },
+    { id: "text-regex-match", category: "logic.text", panelId: "builtin.logic", item: {
+                    panelId: "builtin.logic",
+                    action: "text-regex-match",
+                    schema: {
+                        id: "text-regex-match",
+                        name: "Regex Match",
+                        description: "True when the text matches a regular expression",
+                        template: "Does {text} match {pattern}",
+                        icon: "regular_expression",
+                        inputs: {
+                            text: { type: "string", label: "Text", placeholder: "Text", required: true },
+                            pattern: { type: "string", label: "Pattern", placeholder: "Pattern", required: true },
+                        },
+                        output: { type: "boolean", label: "Matches" },
+                    },
+                } },
+    { id: "text-regex-extract", category: "logic.text", panelId: "builtin.logic", item: {
+                    panelId: "builtin.logic",
+                    action: "text-regex-extract",
+                    schema: {
+                        id: "text-regex-extract",
+                        name: "Regex Extract",
+                        description: "First regex match, or a capture group when Group is set",
+                        template: "Extract {pattern} from {text}",
+                        icon: "regular_expression",
+                        inputs: {
+                            text: { type: "string", label: "Text", placeholder: "Text", required: true },
+                            pattern: { type: "string", label: "Pattern", placeholder: "Pattern", required: true },
+                            group: { type: "number", label: "Capture Group", placeholder: "Capture Group", default: 0 },
+                        },
+                        output: { type: "string", label: "Match" },
+                    },
+                } },
+    { id: "text-truncate", category: "logic.text", panelId: "builtin.logic", item: {
+                    panelId: "builtin.logic",
+                    action: "text-truncate",
+                    schema: {
+                        id: "text-truncate",
+                        name: "Truncate Text",
+                        description: "Shortens text to a length, adding an ellipsis when cut",
+                        template: "Truncate {text} to {length}",
+                        icon: "content_cut",
+                        inputs: {
+                            text: { type: "string", label: "Text", placeholder: "Text", required: true },
+                            length: { type: "number", label: "Length", placeholder: "Length", default: 80, required: true },
+                            ellipsis: { type: "string", label: "Ending", placeholder: "Ending", default: "…" },
+                        },
+                        output: { type: "string", label: "Text" },
+                    },
+                } },
+    { id: "text-pad", category: "logic.text", panelId: "builtin.logic", item: {
+                    panelId: "builtin.logic",
+                    action: "text-pad",
+                    schema: {
+                        id: "text-pad",
+                        name: "Pad Text",
+                        description: "Pads text to a length with a filler character",
+                        template: "Pad {text} to {length}",
+                        icon: "format_align_left",
+                        inputs: {
+                            text: { type: "string", label: "Text", placeholder: "Text", required: true },
+                            length: { type: "number", label: "Length", placeholder: "Length", default: 8, required: true },
+                            side: {
+                                type: "select",
+                                label: "Side",
+                                default: "end",
+                                options: [
+                                    { label: "End", value: "end" },
+                                    { label: "Start", value: "start" },
+                                ],
+                            },
+                            fill: { type: "string", label: "Fill", placeholder: "Fill", default: " " },
+                        },
+                        output: { type: "string", label: "Text" },
+                    },
+                } },
+    { id: "text-to-number", category: "logic.text", panelId: "builtin.logic", item: {
+                    panelId: "builtin.logic",
+                    action: "text-to-number",
+                    schema: {
+                        id: "text-to-number",
+                        name: "To Number",
+                        description: "Reads the first number out of text; refuses when there is none",
+                        template: "Number from {text}",
+                        icon: "numbers",
+                        inputs: {
+                            text: { type: "string", label: "Text", placeholder: "Text", required: true },
+                        },
+                        output: { type: "number", label: "Number" },
+                    },
+                } },
+    { id: "text-base64-encode", category: "logic.text", panelId: "builtin.logic", item: {
+                    panelId: "builtin.logic",
+                    action: "text-base64-encode",
+                    schema: {
+                        id: "text-base64-encode",
+                        name: "Base64 Encode",
+                        description: "Encodes text as base64 (UTF-8 safe)",
+                        template: "Base64 encode {text}",
+                        icon: "lock",
+                        inputs: {
+                            text: { type: "string", label: "Text", placeholder: "Text", required: true },
+                        },
+                        output: { type: "string", label: "Base64" },
+                    },
+                } },
+    { id: "text-base64-decode", category: "logic.text", panelId: "builtin.logic", item: {
+                    panelId: "builtin.logic",
+                    action: "text-base64-decode",
+                    schema: {
+                        id: "text-base64-decode",
+                        name: "Base64 Decode",
+                        description: "Decodes base64 text back to UTF-8 text",
+                        template: "Base64 decode {text}",
+                        icon: "lock_open",
+                        inputs: {
+                            text: { type: "string", label: "Base64", placeholder: "Base64", required: true },
+                        },
+                        output: { type: "string", label: "Text" },
+                    },
                 } },
 ];

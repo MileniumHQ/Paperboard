@@ -9,6 +9,24 @@ import { Parser as ExprParser } from "expr-eval";
 import type { CanvasBlock } from "./tree";
 import { BUILTIN_DEFS } from "./builtinRegistry";
 import { ACTIONS_PANEL_ID } from "../panelId";
+import {
+    base64Decode,
+    base64Encode,
+    getField,
+    isTruthyFlowValue,
+    listLength,
+    measureDuration,
+    padText,
+    parseJson,
+    pickFromList,
+    regexExtract,
+    regexMatch,
+    splitText,
+    stringifyJson,
+    toNumber,
+    truncateText,
+} from "./builtinData";
+import { egressRefusal } from "./networkEgress";
 
 const mathParser = new ExprParser();
 
@@ -467,6 +485,18 @@ function evaluateCondition(left: any, operator: string, right: any): boolean {
     }
 }
 
+// bounded per loop: a million-item list must not park the flow forever
+export const MAX_FOREACH_ITERATIONS = 10_000;
+
+export class FlowLoopSignal extends Error {
+    readonly kind: "break" | "continue";
+    constructor(kind: "break" | "continue") {
+        super(kind === "break" ? "Break outside a loop" : "Continue outside a loop");
+        this.name = "FlowLoopSignal";
+        this.kind = kind;
+    }
+}
+
 const flowVariablesStore = new Map<string, any>();
 
 // BOUNDED: an action flow that set-variables in a loop must not be able to
@@ -511,24 +541,13 @@ function schedulePersistVariables() {
 
 // responses are text-only feature data: cap what a block will hold
 const HTTP_RESPONSE_MAX_BYTES = 10 * 1024 * 1024;
-// the manifest declares `network: { mode: "any-https" }` — service-side
-// fetches (node, beyond CSP reach) enforce the same contract here:
-// https anywhere, http only to loopback for dev
-function assertAnyHttps(rawUrl: string): void {
-    let url: URL;
-    try {
-        url = new URL(rawUrl);
-    } catch {
-        throw new Error(`Refusing fetch: malformed URL`);
+// fetch steps honor the panel's own manifest network declaration (see
+// lib/networkEgress.ts); the daemon CSP stays the enforcement boundary
+function assertNetworkAllowed(rawUrl: string): void {
+    const refusal = egressRefusal(rawUrl);
+    if (refusal) {
+        throw new Error(`Refusing fetch: ${refusal}`);
     }
-    if (url.protocol === "https:") return;
-    if (url.protocol === "http:") {
-        const host = url.hostname.toLowerCase();
-        if (host === "localhost" || host === "127.0.0.1" || host === "[::1]") return;
-    }
-    throw new Error(
-        `Refusing fetch: manifest network mode is any-https, got ${url.protocol}//${url.hostname}`,
-    );
 }
 async function fetchCappedText(res: Response): Promise<string> {
     const declared = Number(res.headers.get("content-length")) || 0;
@@ -597,6 +616,12 @@ const builtinHandlers: Record<string, BuiltinHandler> = {
     },
     "stop-flow": () => {
         throw new Error("FLOW_STOPPED");
+    },
+    break: () => {
+        throw new FlowLoopSignal("break");
+    },
+    continue: () => {
+        throw new FlowLoopSignal("continue");
     },
     "set-variable": (inputs) => {
         const key = String(inputs.key || "var");
@@ -682,7 +707,7 @@ const builtinHandlers: Record<string, BuiltinHandler> = {
     "http-get": async (inputs) => {
         const url = String(inputs.url ?? "").trim();
         if (!url) throw new Error("URL is required");
-        assertAnyHttps(url);
+        assertNetworkAllowed(url);
         const res = await fetch(url, { signal: AbortSignal.timeout(30000) });
         if (!res.ok) {
             throw new Error(`Request failed with status ${res.status}`);
@@ -692,7 +717,7 @@ const builtinHandlers: Record<string, BuiltinHandler> = {
     "http-post": async (inputs) => {
         const url = String(inputs.url ?? "").trim();
         if (!url) throw new Error("URL is required");
-        assertAnyHttps(url);
+        assertNetworkAllowed(url);
         const res = await fetch(url, {
             method: "POST",
             headers: {
@@ -706,6 +731,55 @@ const builtinHandlers: Record<string, BuiltinHandler> = {
         }
         return await fetchCappedText(res);
     },
+    "get-url-json": async (inputs) => {
+        const url = String(inputs.url ?? "").trim();
+        if (!url) throw new Error("URL is required");
+        assertNetworkAllowed(url);
+        const res = await fetch(url, {
+            headers: { Accept: "application/json" },
+            signal: AbortSignal.timeout(30000),
+        });
+        if (!res.ok) {
+            throw new Error(`Request failed with status ${res.status}`);
+        }
+        return parseJson(await fetchCappedText(res));
+    },
+    "wait-until": async (inputs) => {
+        const name = String(inputs.variable ?? "").trim();
+        if (!name) throw new Error("Wait Until needs a variable name");
+        const seconds = clampWaitValue(
+            typeof inputs.timeout === "number" ? inputs.timeout : (inputs.timeout as string),
+            "s",
+        );
+        const deadline = Date.now() + seconds * 1000;
+        // poll, don't subscribe: the store lives in this module and the
+        // step is bounded by the deadline either way
+        while (Date.now() <= deadline) {
+            if (isTruthyFlowValue(flowVariablesStore.get(name))) return true;
+            await new Promise((resolve) => setTimeout(resolve, 200));
+        }
+        throw new Error(
+            `Wait Until timed out after ${seconds}s waiting for "${name}" to become true`,
+        );
+    },
+    "measure-duration": (inputs) => measureDuration(inputs.since),
+    "throw-error": (inputs) => {
+        throw new Error(String(inputs.message ?? "Flow stopped by a Throw Error step"));
+    },
+    "text-split": (inputs) => splitText(inputs.text, inputs.separator),
+    "text-regex-match": (inputs) => regexMatch(inputs.text, inputs.pattern),
+    "text-regex-extract": (inputs) =>
+        regexExtract(inputs.text, inputs.pattern, inputs.group),
+    "text-truncate": (inputs) => truncateText(inputs.text, inputs.length, inputs.ellipsis),
+    "text-pad": (inputs) => padText(inputs.text, inputs.length, inputs.side, inputs.fill),
+    "text-to-number": (inputs) => toNumber(inputs.text),
+    "text-base64-encode": (inputs) => base64Encode(inputs.text),
+    "text-base64-decode": (inputs) => base64Decode(inputs.text),
+    "json-parse": (inputs) => parseJson(inputs.text),
+    "json-stringify": (inputs) => stringifyJson(inputs.value, inputs.pretty),
+    "get-field": (inputs) => getField(inputs.value, inputs.path),
+    "list-length": (inputs) => listLength(inputs.list),
+    "pick-from-list": (inputs) => pickFromList(inputs.list, inputs.index),
     text: (inputs) => String(inputs.value ?? ""),
     "text-join": (inputs) => `${inputs.text1 ?? ""}${inputs.text2 ?? ""}`,
     "text-replace": (inputs) => {
@@ -804,7 +878,15 @@ async function executeBuiltinAction(
 }
 
 // every registry id needs a handler or a control-flow exemption
-const BUILTIN_NO_HANDLER_IDS = new Set(["repeat", "if", "if-else", "on-play"]);
+const BUILTIN_NO_HANDLER_IDS = new Set([
+    "repeat",
+    "if",
+    "if-else",
+    "for-each",
+    "switch",
+    "switch-case",
+    "on-play",
+]);
 for (const def of BUILTIN_DEFS) {
     if (!builtinHandlers[def.id] && !BUILTIN_NO_HANDLER_IDS.has(def.id)) {
         console.warn(`[Actions Runtime] No handler for builtin "${def.id}"`);
@@ -910,6 +992,21 @@ export async function executeFlow(
     const stepOutputsByRef = new Map<string, any>();
     let lastOutput = triggerPayload;
 
+    // Break/Continue are thrown by their steps and caught by the nearest
+    // loop; anywhere else the message explains itself
+    const runLoopBody = async (
+        body: CanvasBlock[] | undefined,
+    ): Promise<"completed" | "break" | "continue"> => {
+        if (!body || body.length === 0) return "completed";
+        try {
+            await executeBlockList(body);
+            return "completed";
+        } catch (err) {
+            if (err instanceof FlowLoopSignal) return err.kind;
+            throw err;
+        }
+    };
+
     async function executeBlockList(blocksToRun: CanvasBlock[]): Promise<void> {
         for (const child of blocksToRun) {
             onStepChange?.(child.id, "start");
@@ -962,12 +1059,34 @@ export async function executeFlow(
                     stepLog.actionName = `Repeat (${count} times)`;
                     log.steps.push(stepLog);
 
+                    let ran = 0;
                     for (let r = 0; r < count; r++) {
-                        if (child.children && child.children.length > 0) {
-                            await executeBlockList(child.children);
-                        }
+                        const outcome = await runLoopBody(child.children);
+                        ran += 1;
+                        if (outcome === "break") break;
                     }
-                    result = count;
+                    result = ran;
+                } else if (actionId === "for-each") {
+                    const items = Array.isArray(resolvedInputs.list) ? resolvedInputs.list : [];
+                    const capped = Math.min(items.length, MAX_FOREACH_ITERATIONS);
+                    if (items.length > capped) {
+                        console.warn(
+                            `[Actions Runtime] For Each capped at ${MAX_FOREACH_ITERATIONS} of ${items.length} items`,
+                        );
+                    }
+                    stepLog.actionName = `For Each (${capped} items)`;
+                    log.steps.push(stepLog);
+
+                    let ran = 0;
+                    for (const item of items.slice(0, capped)) {
+                        // the current item is this block's output for the body
+                        stepOutputsByRef.set(child.id, item);
+                        lastOutput = item;
+                        const outcome = await runLoopBody(child.children);
+                        ran += 1;
+                        if (outcome === "break") break;
+                    }
+                    result = ran;
                 } else if (actionId === "if") {
                     const conditionMet = evaluateCondition(
                         resolvedInputs.left,
@@ -981,6 +1100,48 @@ export async function executeFlow(
                         await executeBlockList(child.children);
                     }
                     result = conditionMet;
+                } else if (actionId === "switch") {
+                    const strays = (child.children ?? []).filter(
+                        (c) => (c.action as any)?.id !== "switch-case",
+                    );
+                    if (strays.length > 0) {
+                        throw new Error(
+                            "Switch can only contain Case blocks; move the other blocks into a Case or out of the Switch",
+                        );
+                    }
+                    const cases = child.children ?? [];
+                    stepLog.actionName = `Switch on ${JSON.stringify(resolvedInputs.value)}`;
+                    log.steps.push(stepLog);
+
+                    let matched: CanvasBlock | null = null;
+                    for (const caseBlock of cases) {
+                        const caseInputs = resolveInputs(
+                            (caseBlock.action as any).inputs || {},
+                            caseBlock.values || {},
+                            lastOutput,
+                            triggerPayload,
+                            triggerOutputType,
+                            stepOutputsByLabel,
+                            stepOutputsByRef,
+                        );
+                        if (String(caseInputs.value) === String(resolvedInputs.value)) {
+                            matched = caseBlock;
+                            break;
+                        }
+                    }
+                    if (matched) {
+                        // a Break/Continue inside a Case belongs to the
+                        // enclosing loop, so it passes straight through
+                        await runLoopBody(matched.children);
+                        result = true;
+                    } else {
+                        await runLoopBody(child.elseChildren);
+                        result = false;
+                    }
+                } else if (actionId === "switch-case") {
+                    // Switch consumes its Case children itself; a Case that
+                    // runs on its own is misplaced and must say so
+                    throw new Error("Case blocks only run inside a Switch");
                 } else if (actionId === "if-else") {
                     const conditionMet = evaluateCondition(
                         resolvedInputs.left,
@@ -1033,6 +1194,11 @@ export async function executeFlow(
                     stepOutputsByLabel.set("result", result);
                 }
             } catch (err: any) {
+                if (err instanceof FlowLoopSignal) {
+                    // loop control is not a failure: the nearest loop
+                    // decides, other callers see the explanatory message
+                    throw err;
+                }
                 if (err?.message === "FLOW_STOPPED") {
                     log.status = "success";
                     log.message = `Flow stopped at step "${schema.name}"`;
@@ -1061,6 +1227,11 @@ export async function executeFlow(
     } catch (err: any) {
         if (err?.message !== "FLOW_STOPPED") {
             log.status = "error";
+            // loop-control signals escaped without a step entry (the step
+            // books them as failures above); the message must still say why
+            if (err instanceof FlowLoopSignal) {
+                log.message = err.message;
+            }
         }
     }
 

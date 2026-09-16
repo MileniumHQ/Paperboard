@@ -58,5 +58,27 @@ export const webBuiltins: BuiltinDef[] = [
                             label: "Response",
                         },
                     },
+                } },    { id: "get-url-json", category: "logic.web", panelId: "builtin.logic", item: {
+                    panelId: "builtin.logic",
+                    action: "get-url-json",
+                    schema: {
+                        id: "get-url-json",
+                        name: "Get URL JSON",
+                        description: "Fetches a web address and parses the response as JSON",
+                        template: "Get JSON from {url}",
+                        icon: "data_object",
+                        inputs: {
+                            url: {
+                                type: "url",
+                                label: "URL",
+                                placeholder: "URL",
+                                required: true,
+                            },
+                        },
+                        output: {
+                            type: "object",
+                            label: "JSON",
+                        },
+                    },
                 } },
 ];

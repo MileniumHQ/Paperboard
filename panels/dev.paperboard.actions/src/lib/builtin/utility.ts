@@ -34,5 +34,23 @@ export const utilityBuiltins: BuiltinDef[] = [
                         template: "Play alert sound",
                         icon: "notifications",
                     },
+                } },    { id: "throw-error", category: "logic.utility", panelId: "builtin.logic", item: {
+                    panelId: "builtin.logic",
+                    action: "throw-error",
+                    schema: {
+                        id: "throw-error",
+                        name: "Throw Error",
+                        description: "Fails the flow on purpose with your message",
+                        template: "Throw error {message}",
+                        icon: "error",
+                        inputs: {
+                            message: {
+                                type: "string",
+                                label: "Message",
+                                placeholder: "Message",
+                                required: true,
+                            },
+                        },
+                    },
                 } },
 ];

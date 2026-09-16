@@ -28,6 +28,7 @@ export const BUILTIN_CATEGORY_META: Omit<BuiltinCategory, "items">[] = [
     { id: "logic.timing", domain: "logic", name: "Timing", icon: "timer", description: "Delays, pauses, and flow control" },
     { id: "logic.control", domain: "logic", name: "Control", icon: "alt_route", description: "Conditional branching and iteration" },
     { id: "logic.variables", domain: "logic", name: "Variables", icon: "data_object", description: "Store, update, and manage state across steps" },
+    { id: "logic.data", domain: "logic", name: "Data", icon: "database", description: "JSON, fields, and list operations" },
     { id: "logic.math", domain: "logic", name: "Operators", icon: "calculate", description: "Math and numeric calculations" },
     { id: "logic.condition", domain: "logic", name: "Condition", icon: "rule", description: "Boolean checks and fallbacks" },
     { id: "logic.datetime", domain: "logic", name: "Date & Time", icon: "schedule", description: "Timestamps, formatting, and date math" },

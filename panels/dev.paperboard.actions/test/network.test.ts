@@ -44,6 +44,6 @@ describe("service-side egress is declared and enforced", () => {
         };
         const log = await executeFlow(block as any, {});
         expect(log.status).toBe("error");
-        expect(log.message).toMatch(/any-https/);
+        expect(log.message).toMatch(/loopback/);
     });
 });
