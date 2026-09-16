@@ -41,6 +41,7 @@ export const ACTION_IDS = {
     deletePlugin: "delete-plugin",
     uninstallAllPlugins: "uninstall-all-plugins",
     deletePlayerData: "delete-player-data",
+    getUsernameFromUuid: "get-username-from-uuid",
     forgetPlayerData: "forget-player-data",
     queryPlayerStats: "query-player-stats",
     queryPlayerPositions: "query-player-positions",

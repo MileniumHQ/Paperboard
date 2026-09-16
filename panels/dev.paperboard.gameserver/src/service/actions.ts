@@ -1,4 +1,5 @@
 import {
+    actionsApi,
     defineType,
     defineAction,
     defineTrigger,
@@ -22,6 +23,7 @@ import {
     queryPlayerPositions,
     forgetPlayerData,
     deletePlayerData,
+    usernameFromUuid,
 } from "./players";
 import {
     clearActiveIssue,
@@ -51,7 +53,8 @@ import { assertPlayerName, assertSingleLine } from "../core/players";
 import type { GameServerState } from "./types";
 import { ACTION_IDS, TRIGGER_IDS, PANEL_ID } from "./contract";
 import { getRequiredJavaVersion, getSoftwareDownload } from "../lib/software";
-import { isSupportedMcVersion, MIN_SUPPORTED_MC_VERSION } from "../lib/versionProfile";
+import { isSupportedMcVersion, mcAtLeast, MIN_SUPPORTED_MC_VERSION } from "../lib/versionProfile";
+import { GAMERULES } from "../generated/gamerules.generated";
 
 export const playerType = defineType({
     id: "player",
@@ -87,6 +90,114 @@ export const customTypes: CustomTypeDefinition[] = [
     commandType,
 ];
 
+// World names and version-filtered gamerule names are schema options, not
+// free text: any event that can change either list re-registers the two
+// actions so the picker's dropdowns never go stale.
+export async function republishDynamicActions(
+    ctx: ServiceContext<GameServerState>,
+): Promise<void> {
+    let worlds: string[] = [];
+    try {
+        worlds = await listWorldDirs();
+    } catch (err) {
+        console.error("[Gameserver] world list unreadable for action options:", err);
+    }
+    const version = ctx.state.serverVersion;
+    const ruleNames = GAMERULES.filter(
+        (rule) => !rule.addedIn || mcAtLeast(version, rule.addedIn),
+    ).map((rule) => rule.name);
+
+    for (const def of [
+        setActiveWorldAction(worlds),
+        setGameruleAction(ruleNames),
+    ]) {
+        const wrapped: ActionDefinition = {
+            ...def,
+            run: (_c, inputs) => def.run(ctx, inputs),
+        };
+        try {
+            await actionsApi.register(wrapped, undefined, PANEL_ID);
+        } catch (err) {
+            console.error(
+                `[Gameserver] failed to republish action "${def.id}":`,
+                err,
+            );
+        }
+    }
+}
+
+// option list for a gamerule's name input: every rule the server's version
+// knows, so a flow can never send a rule the server has never heard of
+export function gameruleNameOptions(version: string): { label: string; value: string }[] {
+    return GAMERULES.filter(
+        (rule) => !rule.addedIn || mcAtLeast(version, rule.addedIn),
+    ).map((rule) => ({ label: rule.name, value: rule.name }));
+}
+
+// Set Active World: the world name is a dropdown over the worlds on disk.
+// republishDynamicActions re-registers it whenever that list changes.
+export function setActiveWorldAction(worlds: string[]): ActionDefinition {
+    return defineAction({
+        id: ACTION_IDS.setActiveWorld,
+        name: "Set Active World",
+        description: "Makes a world the boot target (offline only, trash-safe)",
+        template: "Set active world {levelName}",
+        inputs: {
+            levelName: {
+                type: "string",
+                label: "World",
+                required: true,
+                options: worlds.map((name) => ({ label: name, value: name })),
+            },
+            seed: { type: "string", label: "Seed (new worlds only)", required: false },
+        },
+        output: { type: "object", label: "Active World" },
+        quick: false,
+        icon: "public",
+        run: async (
+            ctx: ServiceContext<GameServerState>,
+            inputs: { levelName: string; seed?: string },
+        ) => {
+            if (!inputs?.levelName) throw new Error("World name is required");
+            const result = await setActiveWorld(ctx, inputs.levelName, inputs.seed);
+            await republishDynamicActions(ctx);
+            return result;
+        },
+    });
+}
+
+// Set Game Rule: the rule name is a dropdown of the rules this server
+// version knows; republished when the installed version changes.
+export function setGameruleAction(ruleNames: string[]): ActionDefinition {
+    return defineAction({
+        id: ACTION_IDS.setGamerule,
+        name: "Set Game Rule",
+        description: "Sets a game rule live, or saves it for the next server start when offline",
+        template: "Set game rule {name} to {value}",
+        inputs: {
+            name: {
+                type: "string",
+                label: "Rule",
+                required: true,
+                options: ruleNames.map((name) => ({ label: name, value: name })),
+            },
+            value: { type: "string", label: "Value", required: true },
+        },
+        output: { type: "boolean", label: "Success" },
+        quick: false,
+        icon: "list_alt_check",
+        run: async (
+            ctx: ServiceContext<GameServerState>,
+            inputs: { name?: string; value?: string },
+        ) => {
+            if (!inputs?.name || !inputs?.value) {
+                throw new Error("Game rule name and value are required");
+            }
+            return setGamerule(ctx, inputs.name, inputs.value);
+        },
+    });
+}
+
 export const panelActions: ActionDefinition[] = [
     defineAction({
         id: ACTION_IDS.runCommand,
@@ -97,7 +208,7 @@ export const panelActions: ActionDefinition[] = [
             command: {
                 type: "string",
                 label: "Command",
-                placeholder: "say Hello!",
+                placeholder: "Command",
                 required: true,
             },
         },
@@ -175,6 +286,7 @@ export const panelActions: ActionDefinition[] = [
         id: ACTION_IDS.loadConfig,
         name: "Reload Configuration",
         description: "Reloads server properties and panel config",
+        internal: true,
         template: "Reload server configuration",
         writtenOut: "Reload server configuration",
         output: { type: "boolean", label: "Success" },
@@ -193,7 +305,7 @@ export const panelActions: ActionDefinition[] = [
             message: {
                 type: "string",
                 label: "Message",
-                placeholder: "Hello everyone!",
+                placeholder: "Message",
                 required: true,
             },
         },
@@ -446,9 +558,10 @@ export const panelActions: ActionDefinition[] = [
         id: ACTION_IDS.killConflictingProcess,
         name: "Kill Conflicting Process",
         description: "Kills the process bound to the server port",
+        internal: true,
         template: "Kill conflicting process on {port}",
         inputs: {
-            port: { type: "string", label: "Port", placeholder: "25565" },
+            port: { type: "string", label: "Port", placeholder: "Port" },
         },
         output: { type: "boolean", label: "Success" },
         quick: false,
@@ -474,7 +587,9 @@ export const panelActions: ActionDefinition[] = [
         quick: false,
         icon: "restart_alt",
         run: async (ctx: ServiceContext<GameServerState>) => {
-            return resetWorldFiles(ctx);
+            const result = await resetWorldFiles(ctx);
+            await republishDynamicActions(ctx);
+            return result;
         },
     }),
 
@@ -482,6 +597,7 @@ export const panelActions: ActionDefinition[] = [
         id: ACTION_IDS.clearActiveIssue,
         name: "Clear Active Issue",
         description: "Dismisses the currently detected server issue",
+        internal: true,
         template: "Clear active issue",
         inputs: {},
         output: { type: "boolean", label: "Success" },
@@ -497,6 +613,7 @@ export const panelActions: ActionDefinition[] = [
         id: ACTION_IDS.updatePanelConfig,
         name: "Update Panel Config",
         description: "Merges a patch into the panel config and reloads",
+        internal: true,
         template: "Update panel config",
         inputs: {
             patch: { type: "object", label: "Patch" },
@@ -538,27 +655,6 @@ export const panelActions: ActionDefinition[] = [
         icon: "public",
         run: async () => {
             return listWorlds();
-        },
-    }),
-
-    defineAction({
-        id: ACTION_IDS.setActiveWorld,
-        name: "Set Active World",
-        description: "Makes a world the boot target (offline only, trash-safe)",
-        template: "Set active world {levelName}",
-        inputs: {
-            levelName: { type: "string", label: "World Name", required: true },
-            seed: { type: "string", label: "Seed (new worlds only)", required: false },
-        },
-        output: { type: "object", label: "Active World" },
-        quick: false,
-        icon: "public",
-        run: async (
-            ctx: ServiceContext<GameServerState>,
-            inputs: { levelName: string; seed?: string },
-        ) => {
-            if (!inputs?.levelName) throw new Error("World name is required");
-            return setActiveWorld(ctx, inputs.levelName, inputs.seed);
         },
     }),
 
@@ -621,6 +717,9 @@ export const panelActions: ActionDefinition[] = [
                 },
             });
             await updatePanelConfig(ctx, { software, version });
+            // the version decides which gamerules exist: refresh the rule
+            // dropdown so the flow builder can't offer a rule this jar lacks
+            await republishDynamicActions(ctx);
             return { software, version };
         },
     }),
@@ -642,6 +741,7 @@ export const panelActions: ActionDefinition[] = [
         ) => {
             if (!inputs?.levelName) throw new Error("World name is required");
             await deleteActiveWorldDirs(ctx, inputs.levelName);
+            await republishDynamicActions(ctx);
             return true;
         },
     }),
@@ -742,17 +842,42 @@ export const panelActions: ActionDefinition[] = [
         template: "Delete data for {player}",
         inputs: {
             player: { type: "string", label: "Player", required: true },
-            uuid: { type: "string", label: "UUID", required: true },
         },
         output: { type: "boolean", label: "Success" },
         quick: false,
         icon: "person_remove",
         run: async (
             ctx: ServiceContext<GameServerState>,
-            inputs: { player: string; uuid: string },
+            // uuid stays an optional input for the panel's own player
+            // list; flow authors only ever name a player
+            inputs: { player: string; uuid?: string },
         ) => {
             await deletePlayerData(ctx, inputs?.player, inputs?.uuid);
             return true;
+        },
+    }),
+
+    defineAction({
+        id: ACTION_IDS.getUsernameFromUuid,
+        name: "Get Username from UUID",
+        description: "Resolves a player's username from a UUID via the server's player files",
+        template: "Get username for {uuid}",
+        inputs: {
+            uuid: { type: "string", label: "UUID", required: true },
+        },
+        output: { type: "string", label: "Username" },
+        quick: false,
+        icon: "badge",
+        run: async (
+            _ctx: ServiceContext<GameServerState>,
+            inputs: { uuid?: string },
+        ) => {
+            if (!inputs?.uuid) throw new Error("UUID is required");
+            const name = await usernameFromUuid(inputs.uuid);
+            if (!name) {
+                throw new Error(`No username on file for UUID ${inputs.uuid}`);
+            }
+            return name;
         },
     }),
 
@@ -879,43 +1004,18 @@ export const panelActions: ActionDefinition[] = [
     // re-apply at next boot instead of looking applied and vanishing
     defineAction({
         id: ACTION_IDS.queryGamerules,
-        name: "Query Game Rules",
-        description: "Reads current game rule values from the running server",
-        template: "Query game rules",
-        inputs: {
-            names: { type: "object", label: "Rule names" },
-        },
+        name: "List Game Rules",
+        description: "Reads the current game rule values from the running server",
+        template: "List game rules",
+        inputs: {},
         output: { type: "boolean", label: "Success" },
         quick: false,
         icon: "list_alt_check",
-        run: async (
-            ctx: ServiceContext<GameServerState>,
-            inputs: { names?: string[] },
-        ) => {
-            return queryGamerules(ctx, Array.isArray(inputs?.names) ? inputs.names : []);
-        },
-    }),
-
-    defineAction({
-        id: ACTION_IDS.setGamerule,
-        name: "Set Game Rule",
-        description: "Sets a game rule live, or saves it for the next server start when offline",
-        template: "Set game rule {name} to {value}",
-        inputs: {
-            name: { type: "string", label: "Rule", required: true },
-            value: { type: "string", label: "Value", required: true },
-        },
-        output: { type: "boolean", label: "Success" },
-        quick: false,
-        icon: "list_alt_check",
-        run: async (
-            ctx: ServiceContext<GameServerState>,
-            inputs: { name?: string; value?: string },
-        ) => {
-            if (!inputs?.name || !inputs?.value) {
-                throw new Error("Game rule name and value are required");
-            }
-            return setGamerule(ctx, inputs.name, inputs.value);
+        run: async (ctx: ServiceContext<GameServerState>) => {
+            const names = gameruleNameOptions(ctx.state.serverVersion).map(
+                (option) => option.value,
+            );
+            return queryGamerules(ctx, names);
         },
     }),
 
@@ -923,6 +1023,7 @@ export const panelActions: ActionDefinition[] = [
         id: ACTION_IDS.applyRuntimeProperties,
         name: "Apply Runtime Properties",
         description: "Applies runtime server.properties values (difficulty, gamemode) to the running server, or queues them for the next start",
+        internal: true,
         template: "Apply runtime server properties",
         inputs: {
             values: { type: "object", label: "Values" },

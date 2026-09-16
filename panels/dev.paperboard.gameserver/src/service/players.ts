@@ -21,10 +21,13 @@ import {
     type PlayerPosition,
 } from "../core/players";
 import { trashRemovePathsWith } from "../core/trash";
+import { uuidForPlayerName } from "./playerStats";
 import { resolveLevelName } from "./worlds";
 import { makeTrashRemoveDeps } from "./trashDeps";
 import { PANEL_ID } from "./types";
 import { TRIGGER_IDS } from "./contract";
+
+export { usernameFromUuid } from "./playerStats";
 
 export type { PlayerStatData };
 export { PLAYER_NAME_PATTERN, SERVER_PROC_ID, STAT_QUERIES };
@@ -291,12 +294,20 @@ const UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0
 export async function deletePlayerData(
     ctx: ServiceContext<GameServerState>,
     playerName: string,
-    uuid: string,
+    uuid?: string,
 ): Promise<void> {
     const safeName = assertPlayerName(playerName);
-    const safeUuid = String(uuid ?? "").trim();
+    let safeUuid = String(uuid ?? "").trim();
     if (!UUID_RE.test(safeUuid)) {
-        throw new Error(`Refusing player-data delete for invalid uuid: ${JSON.stringify(uuid)}`);
+        // flows name a player, not a UUID: resolve it from the server's
+        // own player files instead of asking the author to look it up
+        const resolved = await uuidForPlayerName(safeName);
+        if (!resolved) {
+            throw new Error(
+                `No UUID on file for "${safeName}" — the player must have joined this server once.`,
+            );
+        }
+        safeUuid = resolved;
     }
     const level = await resolveLevelName();
     await trashRemovePathsWith(

@@ -2,7 +2,12 @@ import { definePanelService, processApi } from "@paperboard-dev/paperapi";
 import { SERVER_PROC_ID, type GameServerState } from "./service/types";
 import { loadConfigAndProperties } from "./service/config";
 import { handleProcessData, handleProcessExit } from "./service/lifecycle";
-import { panelActions, panelTriggers, customTypes } from "./service/actions";
+import {
+    panelActions,
+    panelTriggers,
+    customTypes,
+    republishDynamicActions,
+} from "./service/actions";
 
 export * from "./service/types";
 export * from "./service/actions";
@@ -35,6 +40,9 @@ export const gameServerService = definePanelService({
     triggers: panelTriggers,
     async onInit(ctx) {
         await loadConfigAndProperties(ctx);
+        // the world and gamerule dropdowns are registered from state that
+        // only exists after the config loads
+        await republishDynamicActions(ctx);
 
         try {
             const isRunning = await processApi.exists(SERVER_PROC_ID);

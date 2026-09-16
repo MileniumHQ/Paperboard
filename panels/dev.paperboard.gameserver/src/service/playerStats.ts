@@ -41,6 +41,37 @@ function collectNames(raw: unknown, into: Map<string, string>): void {
 
 export type { PlayerStatSummary };
 
+// the { uuid, name } registries the server writes; the union keeps a player
+// whose usercache entry expired resolvable by either direction
+export async function resolvePlayerIdentities(): Promise<Map<string, string>> {
+    const [usercache, ops, whitelist, banned] = await Promise.all([
+        readJson("usercache.json"),
+        readJson("ops.json"),
+        readJson("whitelist.json"),
+        readJson("banned-players.json"),
+    ]);
+    const names = new Map<string, string>();
+    for (const raw of [usercache, ops, whitelist, banned]) collectNames(raw, names);
+    return names;
+}
+
+export async function usernameFromUuid(rawUuid: string): Promise<string | null> {
+    const uuid = String(rawUuid ?? "").trim().toLowerCase();
+    if (!uuid) return null;
+    const names = await resolvePlayerIdentities();
+    return names.get(uuid) ?? null;
+}
+
+export async function uuidForPlayerName(rawName: string): Promise<string | null> {
+    const wanted = String(rawName ?? "").trim().toLowerCase();
+    if (!wanted) return null;
+    const names = await resolvePlayerIdentities();
+    for (const [uuid, name] of names) {
+        if (name.toLowerCase() === wanted) return uuid;
+    }
+    return null;
+}
+
 // new worlds nest per-player data under players/ (26.x); older ones keep
 // stats/ at the world root. Check the modern path first.
 async function resolveStatsDir(level: string): Promise<string | null> {
@@ -59,14 +90,7 @@ export async function listPlayerStats(
     _ctx: ServiceContext<GameServerState>,
 ): Promise<PlayerStatSummary[]> {
     const level = await resolveLevelName();
-    const [usercache, ops, whitelist, banned] = await Promise.all([
-        readJson("usercache.json"),
-        readJson("ops.json"),
-        readJson("whitelist.json"),
-        readJson("banned-players.json"),
-    ]);
-    const names = new Map<string, string>();
-    for (const raw of [usercache, ops, whitelist, banned]) collectNames(raw, names);
+    const names = await resolvePlayerIdentities();
 
     const statsDir = await resolveStatsDir(level);
     if (!statsDir) return [];
