@@ -78,8 +78,11 @@ export default function VersionPicker(props: {
             gap="full"
             align="stretch"
             fullWidth
-            flex={props.fill}
-            minHeight={props.fill ? 0 : getVarCss("size-panel-height-small")}
+            style={
+                props.fill
+                    ? { flex: 1, "min-height": 0 }
+                    : { height: getVarCss("size-panel-height-small"), "min-height": 0 }
+            }
         >
             <PaperFlex
                 direction="column"
@@ -149,7 +152,7 @@ export default function VersionPicker(props: {
                 </PaperCard>
             </PaperFlex>
 
-            <PaperCard shrink={false} scrollable="y">
+            <PaperCard shrink={false} scrollable="y" style={{ width: "auto" }}>
                     <PaperFlex direction="column" gap="full" padding="full">
                         <PaperText preset="title">Version Types</PaperText>
                         <PaperFlex direction="column" gap="threefourths">
