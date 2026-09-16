@@ -115,7 +115,7 @@ describe("PaperCraneEngine package platform selection", () => {
 });
 
 describe("PaperCraneEngine app-global configs", () => {
-    it("stores shell globals in local/, panel workspaces in files/<id>/, computer keys in configs/", async () => {
+    it("stores shell globals in local/, panel configs and computer keys in configs/", async () => {
         await engine.setConfig("app-settings", { darkMode: "dark" });
         await engine.setConfig("shell-last-opened", { panelId: "x" });
         await engine.setConfig("somepanel", { a: 1 });
@@ -126,41 +126,83 @@ describe("PaperCraneEngine app-global configs", () => {
         expect(
             fs.existsSync(path.join(tmp, "local", "shell-last-opened.json")),
         ).toBe(true);
-        expect(fs.existsSync(path.join(tmp, "files", "somepanel", "data.json"))).toBe(
-            true,
-        );
         expect(
             fs.existsSync(path.join(tmp, "configs", "crane_version.json")),
         ).toBe(true);
         expect(
             fs.existsSync(path.join(tmp, "configs", "somepanel.json")),
-        ).toBe(false);
+        ).toBe(true);
+        expect(fs.existsSync(path.join(tmp, "files", "somepanel", "data.json"))).toBe(
+            false,
+        );
     });
 
-    it("reads pre-move panel data from configs/ once, then migrates", async () => {
+    it("reads the merged data.json once, then migrates it into configs/", async () => {
+        fs.mkdirSync(path.join(tmp, "files", "somepanel"), { recursive: true });
         fs.writeFileSync(
-            path.join(tmp, "configs", "somepanel.json"),
+            path.join(tmp, "files", "somepanel", "data.json"),
             JSON.stringify({ a: 2 }),
         );
         expect(await engine.getConfig("somepanel")).toEqual({ a: 2 });
         await engine.setConfig("somepanel", { a: 3 });
-        expect(fs.existsSync(path.join(tmp, "configs", "somepanel.json"))).toBe(
+        expect(fs.existsSync(path.join(tmp, "files", "somepanel", "data.json"))).toBe(
             false,
         );
         expect(await engine.getConfig("somepanel")).toEqual({ a: 3 });
     });
 
-    it("stores every panel's working data as data.json", async () => {
-        await engine.setConfig("com.example.terminal", { tabs: [] });
+    it("stores an explicit path as workspace data in the panel's files dir", async () => {
+        await engine.setConfig("com.example.terminal", { tabs: [] }, "tabs.json");
+        expect(
+            fs.existsSync(path.join(tmp, "files", "com.example.terminal", "tabs.json")),
+        ).toBe(true);
+        expect(
+            fs.existsSync(path.join(tmp, "configs", "com.example.terminal.json")),
+        ).toBe(false);
+        expect(await engine.getConfig("com.example.terminal", "tabs.json")).toEqual({
+            tabs: [],
+        });
+
+        // nested paths work the same way, still inside the panel dir
+        await engine.setConfig("com.example.actions", { flows: [] }, "workspace/canvas.json");
+        expect(
+            fs.existsSync(path.join(tmp, "files", "com.example.actions", "workspace", "canvas.json")),
+        ).toBe(true);
+    });
+
+    it("migrates data.json into the requested workspace path", async () => {
+        fs.mkdirSync(path.join(tmp, "files", "com.example.terminal"), {
+            recursive: true,
+        });
+        fs.writeFileSync(
+            path.join(tmp, "files", "com.example.terminal", "data.json"),
+            JSON.stringify({ tabs: [{ id: "t1" }] }),
+        );
+        expect(await engine.getConfig("com.example.terminal", "tabs.json")).toEqual({
+            tabs: [{ id: "t1" }],
+        });
+        await engine.setConfig("com.example.terminal", { tabs: [] }, "tabs.json");
         expect(
             fs.existsSync(path.join(tmp, "files", "com.example.terminal", "data.json")),
-        ).toBe(true);
-        await engine.setConfig("com.example.actions", { flows: [] });
+        ).toBe(false);
         expect(
-            fs.existsSync(path.join(tmp, "files", "com.example.actions", "data.json")),
+            fs.existsSync(path.join(tmp, "files", "com.example.terminal", "tabs.json")),
         ).toBe(true);
-        // Retired per-panel names still read through once, then migrate
-        // (ensure the dir exists the way a previous install left it)
+    });
+
+    it("refuses workspace paths that climb out of the panel dir", async () => {
+        await expect(
+            engine.setConfig("com.example.terminal", { x: 1 }, "../../evil.json"),
+        ).rejects.toThrow();
+        await expect(
+            engine.getConfig("com.example.terminal", "../other.json"),
+        ).rejects.toThrow();
+        expect(fs.existsSync(path.join(tmp, "files", "evil.json"))).toBe(false);
+        expect(fs.existsSync(path.join(tmp, "files", "other.json"))).toBe(false);
+    });
+
+    it("retired per-panel names still read through once, then migrate", async () => {
+        // ensure the dirs exist the way a previous install left them
         for (const [dir, file, value] of [
             ["legacypanel", "config.json", { v: 1 }],
             ["oldterminal", "tabs.json", { tabs: [] }],
@@ -174,7 +216,7 @@ describe("PaperCraneEngine app-global configs", () => {
             expect(await engine.getConfig(dir)).toEqual(value);
             await engine.setConfig(dir, value);
             expect(
-                fs.existsSync(path.join(tmp, "files", dir, "data.json")),
+                fs.existsSync(path.join(tmp, "configs", `${dir}.json`)),
             ).toBe(true);
             expect(fs.existsSync(path.join(tmp, "files", dir, file))).toBe(false);
         }

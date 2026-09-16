@@ -69,12 +69,17 @@ export async function fetchRegistryIndex(
 
 const getHost = () => getPanelId();
 
-// panel configuration persistence, scope omitted = ambient
+// panel configuration persistence, scope omitted = ambient.
+//
+// No path: the panel's config document, stored in configs/<panelId>.json.
+// With a panel-relative path (tabs.json, canvas.json): workspace data in
+// the panel's own files dir, files/<panelId>/<path>.json. Values are JSON
+// and bounded; workspaces are not a blob store.
 export const config = {
-    get: <T = any>(id?: string, scope?: string): Promise<T> =>
-        invokeIn<T>(scope, "config-get", id || getHost()),
-    set: (data: any, id?: string, scope?: string): Promise<void> =>
-        invokeIn<void>(scope, "config-set", { id: id || getHost(), data }),
+    get: <T = any>(id?: string, path?: string, scope?: string): Promise<T> =>
+        invokeIn<T>(scope, "config-get", { id: id || getHost(), path }),
+    set: (data: any, id?: string, path?: string, scope?: string): Promise<void> =>
+        invokeIn<void>(scope, "config-set", { id: id || getHost(), data, path }),
 };
 
 export const configApi = config;

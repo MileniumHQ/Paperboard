@@ -103,6 +103,66 @@ describe("config:get/set traversal refusal", () => {
         }
     });
 
+    it("RPC boundary refuses traversal or non-JSON workspace paths", async () => {
+        const c = await connect();
+        try {
+            for (const [frameId, badPath] of [
+                [1, "../../evil.json"],
+                [2, "/etc/passwd.json"],
+                [3, "notes"],
+            ] as const) {
+                send(c, {
+                    id: frameId,
+                    action: "config:set",
+                    params: {
+                        id: "com.example.terminal",
+                        data: { pwned: true },
+                        path: badPath,
+                    },
+                });
+                const resp = await waitFor(c, (f) => f.id === frameId);
+                expect(resp.error).toBeTruthy();
+                expect(resp.code).toBe("INVALID_PARAMS");
+            }
+            expect(fs.existsSync(path.join(tmp, "files", "evil.json"))).toBe(false);
+            expect(fs.existsSync(path.join(tmp, "files", "com.example.terminal", "notes"))).toBe(false);
+        } finally {
+            c.ws.terminate();
+        }
+    });
+
+    it("a workspace path round-trips into the panel's files dir", async () => {
+        const c = await connect();
+        try {
+            send(c, {
+                id: 1,
+                action: "config:set",
+                params: {
+                    id: "com.example.terminal",
+                    data: { tabs: [] },
+                    path: "tabs.json",
+                },
+            });
+            expect((await waitFor(c, (f) => f.id === 1)).error).toBeUndefined();
+
+            send(c, {
+                id: 2,
+                action: "config:get",
+                params: { id: "com.example.terminal", path: "tabs.json" },
+            });
+            expect((await waitFor(c, (f) => f.id === 2)).result).toEqual({
+                data: { tabs: [] },
+            });
+            expect(
+                fs.existsSync(
+                    path.join(tmp, "files", "com.example.terminal", "tabs.json"),
+                ),
+            ).toBe(true);
+        } finally {
+            c.ws.terminate();
+        }
+    });
+
     it("legit shell-global and panel ids still round-trip through the boundary", async () => {
         const c = await connect();
         try {

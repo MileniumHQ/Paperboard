@@ -1,6 +1,6 @@
 import type { RpcContext } from "./context";
 import { logger } from "../logger";
-import { assertId, assertPanelId, assertStr, assertOptStr, rpcErrorCode } from "./params";
+import { assertConfigPath, assertId, assertPanelId, assertStr, assertOptStr, rpcErrorCode } from "./params";
 import { forbidden } from "./errors";
 
 // Since scoped tokens shipped, the socket's token claim is the identity —
@@ -60,14 +60,15 @@ export async function handlePanels(action: string, id: unknown, params: any, ctx
             }
             case "config:get": {
                 try {
-                    // config ids are panel-scoped (configs live under the
-                    // panel's files dir); a scoped caller may only touch its
-                    // own claim. Assertion inside the try so traversal ids
-                    // are refused with the same typed INVALID_PARAMS shape
-                    // as before (see the comment history below).
+                    // config ids are panel-scoped (default config in
+                    // configs/, an explicit path in the panel's files dir);
+                    // a scoped caller may only touch its own claim.
+                    // Assertion inside the try so traversal ids and paths
+                    // are refused with the typed INVALID_PARAMS shape.
                     const requested = assertId(params?.id, "config id");
                     const panelId = effectivePanelId(requested, action, ctx);
-                    reply(id, { data: await engine.getConfig(panelId) });
+                    const configPath = assertConfigPath(params?.path);
+                    reply(id, { data: await engine.getConfig(panelId, configPath) });
                 } catch (err: any) {
                     logger.debug("[panels] config:get refused:", err?.message || err);
                     reply(id, null, err?.message || "Invalid config id", rpcErrorCode(err));
@@ -78,7 +79,8 @@ export async function handlePanels(action: string, id: unknown, params: any, ctx
                 try {
                     const requested = assertId(params?.id, "config id");
                     const panelId = effectivePanelId(requested, action, ctx);
-                    reply(id, { success: await engine.setConfig(panelId, params?.data) });
+                    const configPath = assertConfigPath(params?.path);
+                    reply(id, { success: await engine.setConfig(panelId, params?.data, configPath) });
                 } catch (err: any) {
                     logger.debug("[panels] config:set refused:", err?.message || err);
                     reply(id, null, err?.message || "Invalid config id", rpcErrorCode(err));

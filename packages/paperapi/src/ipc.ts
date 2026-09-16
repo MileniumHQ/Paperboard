@@ -167,9 +167,8 @@ export const WS_INVOKE: Record<string, WsRoute> = {
         unwrap: (r) => r.success,
     },
     "config-get": {
-        // Bare-string invoke: invoke("config-get", id)
+        // { id, path? } payload, see src/config.ts
         action: "config:get",
-        params: (args) => ({ id: args[0] }),
         unwrap: (r) => r.data,
     },
     "config-set": {

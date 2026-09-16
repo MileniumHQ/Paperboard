@@ -423,7 +423,7 @@ export const actionsService = definePanelService({
         await initVariablesStore();
 
         try {
-            const saved = await config.get<any>(ACTIONS_PANEL_ID);
+            const saved = await config.get<any>(ACTIONS_PANEL_ID, "canvas.json");
             if (saved?.flows && Array.isArray(saved.flows)) {
                 flows = saved.flows;
             }

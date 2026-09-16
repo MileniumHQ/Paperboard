@@ -63,7 +63,7 @@ function updateCounts(ctx: Ctx) {
 
 async function persistTabs(ctx: Ctx | null) {
     try {
-        await config.set({ tabs, activeTabId }, PANEL_ID);
+        await config.set({ tabs, activeTabId }, PANEL_ID, "tabs.json");
     } catch (err) {
         console.error("[TerminalService] tab config persist failed:", err);
     }
@@ -466,7 +466,7 @@ export const terminalService = definePanelService({
     triggers,
     async onInit(ctx: Ctx) {
         try {
-            const saved = await config.get<any>(PANEL_ID);
+            const saved = await config.get<any>(PANEL_ID, "tabs.json");
             if (saved?.tabs && Array.isArray(saved.tabs)) {
                 tabs = saved.tabs.filter(
                     (t: any) => t && typeof t.id === "string" && typeof t.label === "string",

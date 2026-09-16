@@ -542,7 +542,7 @@ export default function App() {
         const functionsToSave = deepClone(functions());
         clearTimeout(saveTimer);
         saveTimer = setTimeout(() => {
-            configApi.set({ flows: dataToSave, notes: notesToSave, functions: functionsToSave }, ACTIONS_PANEL_ID).catch((err) => {
+            configApi.set({ flows: dataToSave, notes: notesToSave, functions: functionsToSave }, ACTIONS_PANEL_ID, "canvas.json").catch((err) => {
                 console.error("[Actions] Failed to save flows:", err);
             });
             actionsApi
@@ -624,7 +624,7 @@ export default function App() {
 
     onMount(async () => {
         try {
-            const saved = await configApi.get<any>(ACTIONS_PANEL_ID);
+            const saved = await configApi.get<any>(ACTIONS_PANEL_ID, "canvas.json");
             if (saved?.functions && Array.isArray(saved.functions)) {
                 setFunctions(
                     saved.functions.filter(

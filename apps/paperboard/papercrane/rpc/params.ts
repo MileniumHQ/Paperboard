@@ -75,6 +75,27 @@ export function assertPanelId(value: unknown): string {
     return assertId(value, "panelId");
 }
 
+// Panel-relative JSON path for config get/set: workspaces live in the
+// panel's own files dir (config.set(data, id, "tabs.json")). Absolute
+// paths, traversal and non-JSON names are refused here so the refusal is
+// a typed INVALID_PARAMS instead of an engine-level surprise.
+export function assertConfigPath(value: unknown): string | undefined {
+    const raw = assertOptStr(value, "path", 256);
+    if (raw === undefined) return undefined;
+    const normalized = raw.trim().replace(/\\/g, "/");
+    const segments = normalized.split("/");
+    if (
+        !normalized.endsWith(".json") ||
+        normalized.startsWith("/") ||
+        segments.some((segment) => segment === "" || segment === "..")
+    ) {
+        throw new InvalidParamsError(
+            `Invalid config path: ${JSON.stringify(raw)}`,
+        );
+    }
+    return normalized;
+}
+
 export function assertNum(
     value: unknown,
     name: string,

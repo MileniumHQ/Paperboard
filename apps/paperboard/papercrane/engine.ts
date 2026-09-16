@@ -273,43 +273,52 @@ export class PaperCraneEngine {
         return `${this.sanitizeIdOrThrow(id, "config")}.json`;
     }
 
-    // globals in local/, panel working data in files/<id>/data.json
+    // globals in local/, panel configs in configs/<id>.json, and an
+    // explicit path is workspace data in files/<id>/<path>
     private isAppGlobalConfig(id: string): boolean {
         return id === "app-settings" || id.startsWith("shell-");
     }
 
-    private configFileFor(id: string): string {
+    private configFileFor(id: string, configPath?: string): string {
+        if (configPath) {
+            // panel workspace JSON: the path is panel-relative and the
+            // resolver refuses anything that climbs out of the panel dir
+            return resolveSecureTargetPath(this.filesDir, configPath, id);
+        }
         if (this.isAppGlobalConfig(id)) {
             return path.join(this.localDir, this.configFileName(id));
         }
-        if (id === "crane_version") {
-            return path.join(this.configsDir, this.configFileName(id));
-        }
-        return path.join(this.filesDir, panelFilesDirName(id), "data.json");
+        return path.join(this.configsDir, this.configFileName(id));
     }
 
-    private legacyConfigPaths(id: string): string[] {
+    private legacyConfigPaths(id: string, configPath?: string): string[] {
         // TODO(remove after v3.1): pre-move read-through locators die with
         // the first stable release after Alpha 2 installs are on this scheme
         // The id is validated up front, so every path below is built from a
         // known-safe token plus fixed legacy basenames: caller input selects
         // which known names to probe, it never shapes a path.
         const clean = this.sanitizeIdOrThrow(id, "config");
-        const current = this.configFileFor(clean);
+        const current = this.configFileFor(clean, configPath);
         const name = this.configFileName(clean);
         const dir = panelFilesDirName(clean);
         const paths: string[] = [];
-        // Pre-move locations, newest scheme first — read through once.
-        // tabs.json / workspace.json are retired per-panel names from before
-        // the filename was unified; they migrate to data.json on next write.
+        // Newest scheme first, read through once. data.json is the unified
+        // name every panel's working data was merged into; tabs.json /
+        // workspace.json / config.json are retired per-panel names from
+        // before that merge.
         const candidates = [
+            path.join(this.filesDir, dir, "data.json"),
             path.join(this.filesDir, dir, "tabs.json"),
             path.join(this.filesDir, dir, "workspace.json"),
             path.join(this.filesDir, dir, "config.json"),
-            path.join(this.filesDir, name),
-            path.join(this.configsDir, name),
-            path.join(this.localDir, name),
         ];
+        // App globals predate local/ and lived in configs/. A panel's
+        // configs/<id>.json is its live document (or its workspace write
+        // target later), never legacy data for a workspace-path call.
+        if (!configPath && this.isAppGlobalConfig(clean)) {
+            candidates.push(path.join(this.configsDir, name));
+        }
+        candidates.push(path.join(this.localDir, name));
         for (const p of candidates) {
             if (p !== current && !paths.includes(p)) paths.push(p);
         }
@@ -1125,8 +1134,9 @@ export class PaperCraneEngine {
         }
         await this.clearFiles(cleanId);
 
-        // Panel working data lives at files/<panel>/data.json (removed
-        // with the files dir above); sweep current + legacy spots anyway.
+        // The panel's config lives at configs/<panel>.json and its workspace
+        // paths die with the files dir above; sweep current + legacy spots
+        // anyway so a pre-move install leaves nothing behind.
         for (const configFile of [this.configFileFor(cleanId), ...this.legacyConfigPaths(cleanId)]) {
             if (fs.existsSync(configFile)) {
                 await fs.promises.unlink(configFile).catch((err) => logger.debug("[engine] config unlink failed:", err));
@@ -1144,12 +1154,12 @@ export class PaperCraneEngine {
         return true;
     }
 
-    public async getConfig(id: string): Promise<any> {
+    public async getConfig(id: string, configPath?: string): Promise<any> {
         // service-owned boundary: traversal ids throw before touching disk
         this.sanitizeIdOrThrow(id, "config");
         const files = [
-            this.configFileFor(id),
-            ...this.legacyConfigPaths(id),
+            this.configFileFor(id, configPath),
+            ...this.legacyConfigPaths(id, configPath),
         ];
         for (const file of files) {
             if (fs.existsSync(file)) {
@@ -1166,7 +1176,7 @@ export class PaperCraneEngine {
         return null;
     }
 
-    public async setConfig(id: string, data: any): Promise<boolean> {
+    public async setConfig(id: string, data: any, configPath?: string): Promise<boolean> {
         // service-owned boundary: traversal ids throw before touching disk
         this.sanitizeIdOrThrow(id, "config");
         // bounded payload: config is small structured state, never a blob
@@ -1177,10 +1187,10 @@ export class PaperCraneEngine {
                 `Config "${id}" exceeds ${CONFIG_MAX_BYTES} byte payload cap`,
             );
         }
-        const file = this.configFileFor(id);
+        const file = this.configFileFor(id, configPath);
         await fs.promises.mkdir(path.dirname(file), { recursive: true });
         await writeFileAtomic(file, serialized);
-        for (const legacy of this.legacyConfigPaths(id)) {
+        for (const legacy of this.legacyConfigPaths(id, configPath)) {
             await fs.promises.unlink(legacy).catch((err) => logger.debug("[engine] legacy config unlink failed:", err));
         }
         return true;
