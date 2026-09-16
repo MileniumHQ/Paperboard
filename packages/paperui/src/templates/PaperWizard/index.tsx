@@ -1,7 +1,7 @@
 import { PaperButton } from "../../components/PaperButton";
 import { PaperIcon } from "../../components/PaperIcon";
 import { PaperEffect } from "../../components/PaperEffect";
-import type { PaperButtonVariant } from "../../types";
+import type { PaperButtonVariant, PaperRole } from "../../types";
 import { PaperText } from "../../components/PaperText";
 import styles from "./index.module.css";
 import {
@@ -156,6 +156,14 @@ export function PaperWizard(props: ParentProps<PaperWizardProps>) {
     const progressPercentage = () =>
         Math.min(100, Math.round(((currentStep() + 1) / totalSteps()) * 100));
 
+    // The finish glow light takes the button's color so the two never
+    // disagree; a text variant has no surface to light, so it goes colorless.
+    const finishEffect = (): { variant?: PaperRole; colorless?: boolean } => {
+        if (!isLastStep()) return {};
+        const variant = local.finishVariant ?? "success";
+        return variant === "text" ? { colorless: true } : { variant };
+    };
+
     return (
         <WizardContext.Provider value={contextValue}>
             <form {...rest} class={className()} classList={local.classList} onSubmit={handleFormSubmit}>
@@ -194,7 +202,7 @@ export function PaperWizard(props: ParentProps<PaperWizardProps>) {
 
                     <div>
                         <PaperEffect
-                            variant={isLastStep() ? (local.finishVariant ?? "success") : undefined}
+                            {...finishEffect()}
                             disabled={!optionsShown() || !canProceedCurrent()}
                         >
                             <PaperButton
