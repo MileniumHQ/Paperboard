@@ -36,6 +36,15 @@ export const gameServerService = definePanelService({
     id: "dev.paperboard.gameserver",
     state: initialState,
     types: customTypes,
+    categories: [
+        { name: "Server", icon: "dns", order: 1 },
+        { name: "Players", icon: "group", order: 2 },
+        { name: "Worlds", icon: "public", order: 3 },
+        { name: "Game Rules", icon: "rule", order: 4 },
+        { name: "Plugins", icon: "extension", order: 5 },
+        { name: "Logs", icon: "receipt_long", order: 6 },
+        { name: "Events", icon: "bolt", order: 7 },
+    ],
     actions: panelActions,
     triggers: panelTriggers,
     async onInit(ctx) {

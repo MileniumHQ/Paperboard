@@ -140,6 +140,7 @@ export function setActiveWorldAction(worlds: string[]): ActionDefinition {
     return defineAction({
         id: ACTION_IDS.setActiveWorld,
         name: "Set Active World",
+        category: "Worlds",
         description: "Makes a world the boot target (offline only, trash-safe)",
         template: "Set active world {levelName}",
         inputs: {
@@ -172,6 +173,7 @@ export function setGameruleAction(ruleNames: string[]): ActionDefinition {
     return defineAction({
         id: ACTION_IDS.setGamerule,
         name: "Set Game Rule",
+        category: "Game Rules",
         description: "Sets a game rule live, or saves it for the next server start when offline",
         template: "Set game rule {name} to {value}",
         inputs: {
@@ -202,6 +204,7 @@ export const panelActions: ActionDefinition[] = [
     defineAction({
         id: ACTION_IDS.runCommand,
         name: "Run Command",
+        category: "Server",
         description: "Executes a raw console command on the server instance",
         template: "Execute command {command}",
         inputs: {
@@ -231,6 +234,7 @@ export const panelActions: ActionDefinition[] = [
     defineAction({
         id: ACTION_IDS.startServer,
         name: "Start the server",
+        category: "Server",
         description: "Launches the game server process",
         template: "Start the server",
         writtenOut: "Start the server",
@@ -249,6 +253,7 @@ export const panelActions: ActionDefinition[] = [
     defineAction({
         id: ACTION_IDS.stopServer,
         name: "Stop the server",
+        category: "Server",
         description: "Gracefully stops the game server",
         template: "Stop the server",
         writtenOut: "Stop the server",
@@ -267,6 +272,7 @@ export const panelActions: ActionDefinition[] = [
     defineAction({
         id: ACTION_IDS.restartServer,
         name: "Restart the server",
+        category: "Server",
         description: "Restarts the running server",
         template: "Restart the server",
         writtenOut: "Restart the server",
@@ -285,6 +291,7 @@ export const panelActions: ActionDefinition[] = [
     defineAction({
         id: ACTION_IDS.loadConfig,
         name: "Reload Configuration",
+        category: "Server",
         description: "Reloads server properties and panel config",
         internal: true,
         template: "Reload server configuration",
@@ -299,6 +306,7 @@ export const panelActions: ActionDefinition[] = [
     defineAction({
         id: ACTION_IDS.sayChat,
         name: "Send Chat Message",
+        category: "Server",
         description: "Broadcasts a chat message to all players in game",
         template: "Say {message}",
         inputs: {
@@ -330,6 +338,7 @@ export const panelActions: ActionDefinition[] = [
     defineAction({
         id: ACTION_IDS.kickPlayer,
         name: "Kick Player",
+        category: "Players",
         description: "Kicks a player from the server with an optional reason",
         template: "Kick {player}",
         inputs: {
@@ -367,6 +376,7 @@ export const panelActions: ActionDefinition[] = [
     defineAction({
         id: ACTION_IDS.banPlayer,
         name: "Ban Player",
+        category: "Players",
         description: "Bans a player from the server with an optional reason",
         template: "Ban {player}",
         inputs: {
@@ -407,6 +417,7 @@ export const panelActions: ActionDefinition[] = [
     defineAction({
         id: ACTION_IDS.opPlayer,
         name: "Op Player",
+        category: "Players",
         description: "Grants operator status to a player",
         template: "Op {player}",
         inputs: {
@@ -425,6 +436,7 @@ export const panelActions: ActionDefinition[] = [
     defineAction({
         id: ACTION_IDS.deopPlayer,
         name: "Deop Player",
+        category: "Players",
         description: "Revokes operator status from a player",
         template: "Deop {player}",
         inputs: {
@@ -443,6 +455,7 @@ export const panelActions: ActionDefinition[] = [
     defineAction({
         id: ACTION_IDS.whitelistPlayer,
         name: "Whitelist Player",
+        category: "Players",
         description: "Adds a player to the server whitelist",
         template: "Whitelist {player}",
         inputs: {
@@ -461,6 +474,7 @@ export const panelActions: ActionDefinition[] = [
     defineAction({
         id: ACTION_IDS.unwhitelistPlayer,
         name: "Unwhitelist Player",
+        category: "Players",
         description: "Removes a player from the server whitelist",
         template: "Unwhitelist {player}",
         inputs: {
@@ -479,6 +493,7 @@ export const panelActions: ActionDefinition[] = [
     defineAction({
         id: ACTION_IDS.pardonPlayer,
         name: "Pardon Player",
+        category: "Players",
         description: "Removes a player from the ban list",
         template: "Pardon {player}",
         inputs: {
@@ -497,6 +512,7 @@ export const panelActions: ActionDefinition[] = [
     defineAction({
         id: ACTION_IDS.killPlayer,
         name: "Kill Player",
+        category: "Players",
         description: "Kills an online player in-game",
         template: "Kill {player}",
         inputs: {
@@ -515,6 +531,7 @@ export const panelActions: ActionDefinition[] = [
     defineAction({
         id: ACTION_IDS.listPlayers,
         name: "List Online Players",
+        category: "Players",
         description: "Returns the usernames of currently online players",
         template: "List online players",
         writtenOut: "List online players",
@@ -534,6 +551,7 @@ export const panelActions: ActionDefinition[] = [
     defineAction({
         id: ACTION_IDS.playerCount,
         name: "Player Count",
+        category: "Players",
         description: "Returns the number of currently online players",
         template: "Count online players",
         writtenOut: "Count online players",
@@ -557,6 +575,7 @@ export const panelActions: ActionDefinition[] = [
     defineAction({
         id: ACTION_IDS.killConflictingProcess,
         name: "Kill Conflicting Process",
+        category: "Server",
         description: "Kills the process bound to the server port",
         internal: true,
         template: "Kill conflicting process on {port}",
@@ -579,6 +598,7 @@ export const panelActions: ActionDefinition[] = [
     defineAction({
         id: ACTION_IDS.resetWorldFiles,
         name: "Reset World Files",
+        category: "Worlds",
         description: "Deletes the live world directories (trash-first, recoverable on crash)",
         template: "Reset world files",
         writtenOut: "Reset world files",
@@ -596,6 +616,7 @@ export const panelActions: ActionDefinition[] = [
     defineAction({
         id: ACTION_IDS.clearActiveIssue,
         name: "Clear Active Issue",
+        category: "Server",
         description: "Dismisses the currently detected server issue",
         internal: true,
         template: "Clear active issue",
@@ -612,6 +633,7 @@ export const panelActions: ActionDefinition[] = [
     defineAction({
         id: ACTION_IDS.updatePanelConfig,
         name: "Update Panel Config",
+        category: "Server",
         description: "Merges a patch into the panel config and reloads",
         internal: true,
         template: "Update panel config",
@@ -633,6 +655,7 @@ export const panelActions: ActionDefinition[] = [
     defineAction({
         id: ACTION_IDS.listWorldDirs,
         name: "List World Directories",
+        category: "Worlds",
         description: "Lists world directories on disk",
         template: "List world directories",
         inputs: {},
@@ -647,6 +670,7 @@ export const panelActions: ActionDefinition[] = [
     defineAction({
         id: ACTION_IDS.listWorlds,
         name: "List Worlds",
+        category: "Worlds",
         description: "Lists on-disk worlds with active flag and generated dimensions",
         template: "List worlds",
         inputs: {},
@@ -661,6 +685,7 @@ export const panelActions: ActionDefinition[] = [
     defineAction({
         id: ACTION_IDS.installServerVersion,
         name: "Install Server Version",
+        category: "Server",
         description: "Downloads and replaces server.jar for a software/version (offline only)",
         template: "Install server {software} {version}",
         inputs: {
@@ -727,6 +752,7 @@ export const panelActions: ActionDefinition[] = [
     defineAction({
         id: ACTION_IDS.deleteWorld,
         name: "Delete World",
+        category: "Worlds",
         description: "Deletes a world's directories (offline only, trash-first, recoverable on crash)",
         template: "Delete world {levelName}",
         inputs: {
@@ -749,6 +775,7 @@ export const panelActions: ActionDefinition[] = [
     defineAction({
         id: ACTION_IDS.listMapRegions,
         name: "List Map Regions",
+        category: "Worlds",
         description: "Lists generated overworld region files for the active world",
         template: "List map regions",
         inputs: {},
@@ -763,6 +790,7 @@ export const panelActions: ActionDefinition[] = [
     defineAction({
         id: ACTION_IDS.renderMapTile,
         name: "Render Map Tile",
+        category: "Worlds",
         description: "Renders one 512x512 top-down map tile for a dimension and region coordinate",
         template: "Render map tile {dimension} {rx} {rz}",
         inputs: {
@@ -789,6 +817,7 @@ export const panelActions: ActionDefinition[] = [
     defineAction({
         id: ACTION_IDS.listInstalledPlugins,
         name: "List Installed Plugins",
+        category: "Plugins",
         description: "Lists installed server plugins",
         template: "List installed plugins",
         inputs: {},
@@ -803,6 +832,7 @@ export const panelActions: ActionDefinition[] = [
     defineAction({
         id: ACTION_IDS.deletePlugin,
         name: "Delete Plugin",
+        category: "Plugins",
         description: "Deletes a plugin jar (trash-first, recoverable on crash)",
         template: "Delete plugin {filename}",
         inputs: {
@@ -824,6 +854,7 @@ export const panelActions: ActionDefinition[] = [
     defineAction({
         id: ACTION_IDS.uninstallAllPlugins,
         name: "Uninstall All Plugins",
+        category: "Plugins",
         description: "Trash-first removes every jar in plugins/ and mods/",
         template: "Uninstall all plugins",
         inputs: {},
@@ -838,6 +869,7 @@ export const panelActions: ActionDefinition[] = [
     defineAction({
         id: ACTION_IDS.deletePlayerData,
         name: "Delete Player Data",
+        category: "Players",
         description: "Deletes a player's data files (trash-first, recoverable on crash)",
         template: "Delete data for {player}",
         inputs: {
@@ -860,6 +892,7 @@ export const panelActions: ActionDefinition[] = [
     defineAction({
         id: ACTION_IDS.getUsernameFromUuid,
         name: "Get Username from UUID",
+        category: "Players",
         description: "Resolves a player's username from a UUID via the server's player files",
         template: "Get username for {uuid}",
         inputs: {
@@ -884,6 +917,7 @@ export const panelActions: ActionDefinition[] = [
     defineAction({
         id: ACTION_IDS.forgetPlayerData,
         name: "Forget Player",
+        category: "Players",
         description: "Drops a player from the panel's tracked presence",
         template: "Forget player {player}",
         inputs: {
@@ -904,6 +938,7 @@ export const panelActions: ActionDefinition[] = [
     defineAction({
         id: ACTION_IDS.queryPlayerStats,
         name: "Query Player Stats",
+        category: "Players",
         description: "Queries a player's live stats from the server",
         template: "Query stats for {player}",
         inputs: {
@@ -924,6 +959,7 @@ export const panelActions: ActionDefinition[] = [
     defineAction({
         id: ACTION_IDS.queryOnlinePlayers,
         name: "Query Online Players",
+        category: "Players",
         description: "Refreshes the online player list from the server",
         template: "Query online players",
         inputs: {},
@@ -939,6 +975,7 @@ export const panelActions: ActionDefinition[] = [
     defineAction({
         id: ACTION_IDS.queryPlayerPositions,
         name: "Query Player Positions",
+        category: "Players",
         description: "Reads online players' coordinates and dimension for the map",
         template: "Query player positions",
         inputs: {},
@@ -954,6 +991,7 @@ export const panelActions: ActionDefinition[] = [
     defineAction({
         id: ACTION_IDS.listPlayerStats,
         name: "List Player Statistics",
+        category: "Players",
         description: "Reads every player's offline statistics from the world's stats files",
         template: "List player statistics",
         inputs: {},
@@ -968,6 +1006,7 @@ export const panelActions: ActionDefinition[] = [
     defineAction({
         id: ACTION_IDS.listLogFiles,
         name: "List Log Files",
+        category: "Logs",
         description: "Lists the server's log files, newest first",
         template: "List log files",
         inputs: {},
@@ -982,6 +1021,7 @@ export const panelActions: ActionDefinition[] = [
     defineAction({
         id: ACTION_IDS.readLogFile,
         name: "Read Log File",
+        category: "Logs",
         description: "Reads a server log file (tail for plain logs, full for archives)",
         template: "Read log file {name}",
         inputs: {
@@ -1005,6 +1045,7 @@ export const panelActions: ActionDefinition[] = [
     defineAction({
         id: ACTION_IDS.queryGamerules,
         name: "List Game Rules",
+        category: "Game Rules",
         description: "Reads the current game rule values from the running server",
         template: "List game rules",
         inputs: {},
@@ -1022,6 +1063,7 @@ export const panelActions: ActionDefinition[] = [
     defineAction({
         id: ACTION_IDS.applyRuntimeProperties,
         name: "Apply Runtime Properties",
+        category: "Server",
         description: "Applies runtime server.properties values (difficulty, gamemode) to the running server, or queues them for the next start",
         internal: true,
         template: "Apply runtime server properties",
@@ -1048,6 +1090,7 @@ export const panelTriggers: TriggerDefinition[] = [
     defineTrigger({
         id: TRIGGER_IDS.chatMessage,
         name: "When Chat Message Sent",
+        category: "Events",
         description: "Fires whenever an in-game player or server chat message is received",
         template: "When chat message {message} is sent",
         writtenOut: "When chat message {message} is sent",
@@ -1062,6 +1105,7 @@ export const panelTriggers: TriggerDefinition[] = [
     defineTrigger({
         id: TRIGGER_IDS.playerJoined,
         name: "When Player Joins",
+        category: "Events",
         description: "Fires when a player connects and joins the game world",
         template: "When player {player} joins the server",
         writtenOut: "When player {player} joins the server",
@@ -1076,6 +1120,7 @@ export const panelTriggers: TriggerDefinition[] = [
     defineTrigger({
         id: TRIGGER_IDS.playerLeft,
         name: "When Player Leaves",
+        category: "Events",
         description: "Fires when a player disconnects from the server",
         template: "When player {player} leaves the server",
         writtenOut: "When player {player} leaves the server",
@@ -1090,6 +1135,7 @@ export const panelTriggers: TriggerDefinition[] = [
     defineTrigger({
         id: TRIGGER_IDS.serverStarted,
         name: "When Server Starts",
+        category: "Events",
         description: "Fires when the server successfully finishes booting",
         template: "When the server starts",
         writtenOut: "When the server starts",
@@ -1103,6 +1149,7 @@ export const panelTriggers: TriggerDefinition[] = [
     defineTrigger({
         id: TRIGGER_IDS.serverStopped,
         name: "When Server Stops",
+        category: "Events",
         description: "Fires when the server process shuts down or stops",
         template: "When the server stops",
         writtenOut: "When the server stops",

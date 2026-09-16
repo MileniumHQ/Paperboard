@@ -41,6 +41,15 @@ test("contract has no orphan ids the panel never defines", () => {
     }
 });
 
+test("every action and trigger declares a library category", () => {
+    // an uncategorized definition silently lands in the General bucket,
+    // which reads as a missing tab rather than a missing category
+    for (const item of [...panelActions, ...panelTriggers]) {
+        expect(typeof (item as any).category).toBe("string");
+        expect(String((item as any).category).length).toBeGreaterThan(0);
+    }
+});
+
 test("world and gamerule actions carry their live dropdown options", () => {
     const worldAction = setActiveWorldAction(["world", "creative"]);
     expect(worldAction.id).toBe(ACTION_IDS.setActiveWorld);
