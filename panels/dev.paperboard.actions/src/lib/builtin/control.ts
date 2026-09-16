@@ -1,24 +1,5 @@
 import type { BuiltinDef } from "./types";
 
-// The schema for one Switch arm. Case blocks are created by the Switch
-// block's own "Add Case" button, never dragged from the library, so this
-// schema is exported but stays out of BUILTIN_DEFS.
-export const SWITCH_CASE_SCHEMA = {
-    id: "switch-case",
-    name: "Case",
-    description: "One match arm of a Switch",
-    template: "Case {value}",
-    icon: "call_split",
-    inputs: {
-        value: {
-            type: "string",
-            label: "Value",
-            placeholder: "Value",
-            required: true,
-        },
-    },
-} as const;
-
 export const controlBuiltins: BuiltinDef[] = [
     { id: "repeat", category: "logic.control", panelId: "builtin.logic", item: {
                     panelId: "builtin.logic",
@@ -121,36 +102,13 @@ export const controlBuiltins: BuiltinDef[] = [
                             },
                         },
                     },
-                } },    { id: "for-each", category: "logic.control", panelId: "builtin.logic", item: {
-                    panelId: "builtin.logic",
-                    action: "for-each",
-                    schema: {
-                        id: "for-each",
-                        name: "For Each",
-                        description: "Runs nested actions once per item in a list; the current item is this block's output",
-                        template: "For each item in {list}",
-                        icon: "repeat_on",
-                        inputs: {
-                            list: {
-                                type: "array",
-                                label: "List",
-                                placeholder: "List",
-                                required: true,
-                            },
-                        },
-                        output: {
-                            type: "any",
-                            label: "Item",
-                        },
-                    },
-                } },
-    { id: "break", category: "logic.control", panelId: "builtin.logic", item: {
+                } },    { id: "break", category: "logic.control", panelId: "builtin.logic", item: {
                     panelId: "builtin.logic",
                     action: "break",
                     schema: {
                         id: "break",
                         name: "Break",
-                        description: "Stops the nearest Repeat or For Each loop immediately",
+                        description: "Stops the nearest Repeat loop immediately",
                         template: "Break out of loop",
                         icon: "logout",
                     },
@@ -161,28 +119,9 @@ export const controlBuiltins: BuiltinDef[] = [
                     schema: {
                         id: "continue",
                         name: "Continue",
-                        description: "Skips to the next iteration of the nearest loop",
+                        description: "Skips to the next Repeat iteration",
                         template: "Skip to next iteration",
                         icon: "skip_next",
-                    },
-                } },
-    { id: "switch", category: "logic.control", panelId: "builtin.logic", item: {
-                    panelId: "builtin.logic",
-                    action: "switch",
-                    schema: {
-                        id: "switch",
-                        name: "Switch",
-                        description: "Runs the matching Case's actions, or the otherwise branch when none match",
-                        template: "Switch on {value}",
-                        icon: "call_split",
-                        inputs: {
-                            value: {
-                                type: "string",
-                                label: "Value",
-                                placeholder: "Value",
-                                required: true,
-                            },
-                        },
                     },
                 } },
 ];

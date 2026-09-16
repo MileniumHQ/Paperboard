@@ -485,9 +485,6 @@ function evaluateCondition(left: any, operator: string, right: any): boolean {
     }
 }
 
-// bounded per loop: a million-item list must not park the flow forever
-export const MAX_FOREACH_ITERATIONS = 10_000;
-
 export class FlowLoopSignal extends Error {
     readonly kind: "break" | "continue";
     constructor(kind: "break" | "continue") {
@@ -882,9 +879,6 @@ const BUILTIN_NO_HANDLER_IDS = new Set([
     "repeat",
     "if",
     "if-else",
-    "for-each",
-    "switch",
-    "switch-case",
     "on-play",
 ]);
 for (const def of BUILTIN_DEFS) {
@@ -1066,27 +1060,6 @@ export async function executeFlow(
                         if (outcome === "break") break;
                     }
                     result = ran;
-                } else if (actionId === "for-each") {
-                    const items = Array.isArray(resolvedInputs.list) ? resolvedInputs.list : [];
-                    const capped = Math.min(items.length, MAX_FOREACH_ITERATIONS);
-                    if (items.length > capped) {
-                        console.warn(
-                            `[Actions Runtime] For Each capped at ${MAX_FOREACH_ITERATIONS} of ${items.length} items`,
-                        );
-                    }
-                    stepLog.actionName = `For Each (${capped} items)`;
-                    log.steps.push(stepLog);
-
-                    let ran = 0;
-                    for (const item of items.slice(0, capped)) {
-                        // the current item is this block's output for the body
-                        stepOutputsByRef.set(child.id, item);
-                        lastOutput = item;
-                        const outcome = await runLoopBody(child.children);
-                        ran += 1;
-                        if (outcome === "break") break;
-                    }
-                    result = ran;
                 } else if (actionId === "if") {
                     const conditionMet = evaluateCondition(
                         resolvedInputs.left,
@@ -1100,48 +1073,6 @@ export async function executeFlow(
                         await executeBlockList(child.children);
                     }
                     result = conditionMet;
-                } else if (actionId === "switch") {
-                    const strays = (child.children ?? []).filter(
-                        (c) => (c.action as any)?.id !== "switch-case",
-                    );
-                    if (strays.length > 0) {
-                        throw new Error(
-                            "Switch can only contain Case blocks; move the other blocks into a Case or out of the Switch",
-                        );
-                    }
-                    const cases = child.children ?? [];
-                    stepLog.actionName = `Switch on ${JSON.stringify(resolvedInputs.value)}`;
-                    log.steps.push(stepLog);
-
-                    let matched: CanvasBlock | null = null;
-                    for (const caseBlock of cases) {
-                        const caseInputs = resolveInputs(
-                            (caseBlock.action as any).inputs || {},
-                            caseBlock.values || {},
-                            lastOutput,
-                            triggerPayload,
-                            triggerOutputType,
-                            stepOutputsByLabel,
-                            stepOutputsByRef,
-                        );
-                        if (String(caseInputs.value) === String(resolvedInputs.value)) {
-                            matched = caseBlock;
-                            break;
-                        }
-                    }
-                    if (matched) {
-                        // a Break/Continue inside a Case belongs to the
-                        // enclosing loop, so it passes straight through
-                        await runLoopBody(matched.children);
-                        result = true;
-                    } else {
-                        await runLoopBody(child.elseChildren);
-                        result = false;
-                    }
-                } else if (actionId === "switch-case") {
-                    // Switch consumes its Case children itself; a Case that
-                    // runs on its own is misplaced and must say so
-                    throw new Error("Case blocks only run inside a Switch");
                 } else if (actionId === "if-else") {
                     const conditionMet = evaluateCondition(
                         resolvedInputs.left,

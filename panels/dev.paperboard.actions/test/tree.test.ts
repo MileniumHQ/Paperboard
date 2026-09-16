@@ -6,7 +6,6 @@ import { describe, test, expect } from "bun:test";
 import {
     type CanvasBlock,
     findBlock,
-    isDropAllowed,
     findOwnerTrigger,
     insertBlock,
     isCanvasBlock,
@@ -160,40 +159,5 @@ describe("isCanvasBlock", () => {
         let deep: any = block({ id: "leaf" });
         for (let i = 0; i < 100; i++) deep = block({ id: `n${i}`, children: [deep] });
         expect(isCanvasBlock(deep)).toBe(false);
-    });
-});
-
-describe("isDropAllowed (switch cases)", () => {
-    const switchParent = {
-        id: "sw",
-        panelId: "builtin.logic",
-        pos: { x: 0, y: 0 },
-        isTrigger: false,
-        action: { id: "switch", name: "Switch", description: "", template: "" },
-        values: {},
-    } as any;
-    const repeatParent = {
-        ...switchParent,
-        id: "rep",
-        action: { id: "repeat", name: "Repeat", description: "", template: "" },
-    };
-    const find = (id: string) =>
-        id === "sw" ? switchParent : id === "rep" ? repeatParent : null;
-
-    test("a switch-only zone refuses anything but a case", () => {
-        expect(isDropAllowed({ parentId: "sw", accepts: "switch-case" }, "switch-case", find)).toBe(true);
-        expect(isDropAllowed({ parentId: "sw", accepts: "switch-case" }, "log-console", find)).toBe(false);
-    });
-
-    test("a case cannot land outside a switch", () => {
-        expect(isDropAllowed({ parentId: "rep", accepts: null }, "switch-case", find)).toBe(false);
-        expect(isDropAllowed({ parentId: "missing", accepts: null }, "switch-case", find)).toBe(false);
-        // the otherwise branch of the switch is still a switch slot
-        expect(isDropAllowed({ parentId: "sw:else", accepts: null }, "switch-case", find)).toBe(true);
-    });
-
-    test("ordinary blocks drop anywhere else", () => {
-        expect(isDropAllowed({ parentId: "rep", accepts: null }, "log-console", find)).toBe(true);
-        expect(isDropAllowed(null, "log-console", find)).toBe(false);
     });
 });

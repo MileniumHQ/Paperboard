@@ -30,23 +30,6 @@ export function blockVariableName(block: CanvasBlock): string | null {
 // capped so a hostile nested payload cannot blow the stack.
 const MAX_BLOCK_DEPTH = 32;
 
-// Where a dragged block may land. A zone can declare the only action id it
-// accepts (a Switch's rows take Cases), and a Case only ever lives inside a
-// Switch; the executor enforces the same rules at run time.
-export function isDropAllowed(
-    target: { parentId: string; accepts?: string | null } | null,
-    actionId: string | undefined,
-    findParent: (id: string) => CanvasBlock | null,
-): boolean {
-    if (!target) return false;
-    if (target.accepts && target.accepts !== actionId) return false;
-    if (actionId === "switch-case") {
-        const parent = findParent(target.parentId.replace(/:else$/, ""));
-        return parent?.action?.id === "switch";
-    }
-    return true;
-}
-
 export function isCanvasBlock(value: unknown, depth = 0): value is CanvasBlock {
     if (!value || typeof value !== "object") return false;
     if (depth > MAX_BLOCK_DEPTH) return false;
