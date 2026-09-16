@@ -377,6 +377,7 @@ export default function Plugins(props: { updateRequest?: number }) {
             await installProjectVersion({
                 projectId: target.projectId,
                 slug: target.slug,
+                title: target.title,
                 iconUrl: target.iconUrl,
                 versionId,
                 includeOptionalKeys: installOptional(),
@@ -496,6 +497,7 @@ export default function Plugins(props: { updateRequest?: number }) {
                                                     : undefined
                                             }
                                             title={
+                                                entry.record?.title ??
                                                 entry.record?.slug ??
                                                 entry.filename.replace(/\.jar$/i, "")
                                             }
@@ -517,7 +519,9 @@ export default function Plugins(props: { updateRequest?: number }) {
                                                     ? setDetail({
                                                           projectId: entry.record.projectId,
                                                           slug: entry.record.slug,
-                                                          title: entry.record.slug,
+                                                          title:
+                                                              entry.record.title ??
+                                                              entry.record.slug,
                                                           description: "",
                                                           iconUrl: entry.record.iconUrl,
                                                       })

@@ -646,6 +646,7 @@ async function downloadAndRecordFile(input: {
     projectId: string;
     slug: string;
     versionNumber: string;
+    title?: string;
     iconUrl?: string;
     file: { url: string; filename: string; sha1?: string; sha512?: string };
     record: boolean;
@@ -676,6 +677,7 @@ async function downloadAndRecordFile(input: {
             projectId: input.projectId,
             slug: input.slug,
             version: input.versionNumber || "latest",
+            title: input.title || undefined,
             iconUrl: input.iconUrl,
         };
         await writeInstallRecords(records);
@@ -694,10 +696,10 @@ export async function installProject(
     }
 
     // record project for icons and versions
-    let meta: { slug: string; iconUrl?: string } | null = null;
+    let meta: { slug: string; title?: string; iconUrl?: string } | null = null;
     try {
         const project = await getProject(projectId);
-        meta = { slug: project.slug, iconUrl: project.iconUrl };
+        meta = { slug: project.slug, title: project.title, iconUrl: project.iconUrl };
     } catch (err) {
         console.error("[Plugins] Failed to record install metadata:", err);
     }
@@ -706,6 +708,7 @@ export async function installProject(
         projectId,
         slug: meta?.slug ?? projectId,
         versionNumber: file.versionNumber,
+        title: meta?.title,
         iconUrl: meta?.iconUrl,
         file,
         record: meta !== null,
@@ -846,6 +849,8 @@ export async function previewInstall(
 export interface InstallVersionSelection {
     projectId: string;
     slug: string;
+    /** Modrinth project title, stored so the card survives a reload */
+    title?: string;
     iconUrl?: string;
     versionId: string;
     /** ResolvedDependency.key values of optional deps to include */
@@ -867,7 +872,7 @@ export async function installProjectVersion(
 ): Promise<InstalledFileSummary[]> {
     const preview = await previewInstall(
         selection.projectId,
-        selection.slug,
+        selection.title ?? selection.slug,
         selection.versionId,
         selection.includeOptionalKeys ?? [],
     );
@@ -903,6 +908,7 @@ export async function installProjectVersion(
                 projectId: selection.projectId,
                 slug: selection.slug,
                 versionNumber: preview.versionNumber,
+                title: preview.title,
                 iconUrl: selection.iconUrl,
                 file: preview.mainFile!,
                 record: true,
@@ -921,6 +927,7 @@ export async function installProjectVersion(
                 projectId: dep.projectId ?? selection.projectId,
                 slug: dep.name,
                 versionNumber: dep.versionNumber,
+                title: dep.name,
                 file: dep.file!,
                 record: true,
             });
@@ -972,7 +979,9 @@ export async function checkPluginUpdates(): Promise<PluginUpdateCheck[]> {
     const results: PluginUpdateCheck[] = [];
     for (const plugin of plugins) {
         const title =
-            plugin.record?.slug ?? plugin.filename.replace(/\.jar$/i, "");
+            plugin.record?.title ??
+            plugin.record?.slug ??
+            plugin.filename.replace(/\.jar$/i, "");
         if (!plugin.record?.projectId) {
             results.push({
                 filename: plugin.filename,
@@ -1043,6 +1052,7 @@ export async function updatePlugin(check: PluginUpdateCheck): Promise<void> {
         projectId: check.record.projectId,
         slug: check.record.slug,
         version: file.versionNumber || "latest",
+        title: check.record.title,
         iconUrl: check.record.iconUrl,
     };
     await writeInstallRecords(records);

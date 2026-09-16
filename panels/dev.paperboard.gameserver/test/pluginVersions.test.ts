@@ -195,6 +195,7 @@ describe("listProjectVersions + dependencies + installProjectVersion", () => {
         const installed = await installProjectVersion({
             projectId: "proj1",
             slug: "proj1",
+            title: "Project One",
             versionId: "main-v2",
         });
         const kinds = Object.fromEntries(installed.map((i) => [i.kind, i.filename]));
@@ -203,8 +204,11 @@ describe("listProjectVersions + dependencies + installProjectVersion", () => {
         expect(downloadCalls).toHaveLength(2);
         expect(records["main.jar"].projectId).toBe("proj1");
         expect(records["main.jar"].version).toBe("2.0");
+        // titles persist with the record so a reload shows names, not slugs
+        expect(records["main.jar"].title).toBe("Project One");
         expect(records["dep1.jar"].projectId).toBe("dep1");
         expect(records["dep1.jar"].version).toBe("1.0");
+        expect(records["dep1.jar"].title).toBe("Dep One");
     });
 
     test("a missing required dep fails before anything installs", async () => {

@@ -4,6 +4,8 @@ export interface InstalledRecord {
     projectId: string;
     slug: string;
     version: string;
+    /** Modrinth project title, kept so cards survive a reload without refetching */
+    title?: string;
     iconUrl?: string;
 }
 
@@ -25,6 +27,7 @@ export function isInstallRecord(value: unknown): value is InstalledRecord {
         typeof rec.projectId === "string" &&
         typeof rec.slug === "string" &&
         typeof rec.version === "string" &&
+        (rec.title === undefined || typeof rec.title === "string") &&
         (rec.iconUrl === undefined || typeof rec.iconUrl === "string")
     );
 }
