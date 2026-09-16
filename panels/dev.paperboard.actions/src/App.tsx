@@ -29,6 +29,7 @@ import {
 } from "@paperboard-dev/paperapi";
 import { ACTIONS_PANEL_ID } from "./panelId";
 import { variableFieldIcon } from "./lib/variableTypes";
+import { filterPickerItems } from "./lib/variablePicker";
 import {
     type CanvasBlock,
     removeBlock,
@@ -214,37 +215,6 @@ export default function App() {
         });
     };
 
-    // expected types that accept any variable (they interpolate into text).
-    // number and boolean are NOT here: a numeric input must only offer
-    // number-compatible variables, or a username lands in Round up value.
-    const PRIMITIVE_EXPECTED_TYPES = new Set([
-        "string",
-        "object",
-        "any",
-        "select",
-        "url",
-        "color",
-    ]);
-
-    const unwrapListType = (t: string): string => {
-        const m = t.match(/^(?:list|array)<(.+)>$/);
-        return m ? m[1] : t;
-    };
-
-    const isVarCompatibleWith = (varType: string, expected?: string): boolean => {
-        if (!expected || expected === "any") return true;
-        if (varType === expected) return true;
-        if (varType === "any") return true;
-        const expectedInner = unwrapListType(expected);
-        if (expectedInner !== expected) {
-            if (varType === expectedInner) return true;
-            if (expectedInner === "string" && varType.startsWith("discord-")) return true;
-            return false;
-        }
-        if (expected === "string" && varType.startsWith("discord-")) return true;
-        return false;
-    };
-
     const [hoveredSourceBlockId, setHoveredSourceBlockId] = createSignal<string | null>(null);
 
     const closeVariablePicker = () => {
@@ -394,18 +364,9 @@ export default function App() {
             }
         }
 
-        const isTypedExpected =
-            Boolean(expectedType) && !PRIMITIVE_EXPECTED_TYPES.has(expectedType!);
-        const filtered = isTypedExpected
-            ? available.filter((v) =>
-                  isVarCompatibleWith(v.type || "any", expectedType),
-              )
-            : available;
-
-        if (filtered.length === 0 && !isTypedExpected) {
-            closeVariablePicker();
-            return;
-        }
+        // an empty result still opens: the menu's empty state is the
+        // feedback, a silent no-op reads as a broken control
+        const filtered = filterPickerItems(available, expectedType);
 
         setVariablePicker({
             open: true,

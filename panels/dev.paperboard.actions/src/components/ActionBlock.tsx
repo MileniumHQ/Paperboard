@@ -10,6 +10,7 @@ import {
 import type { ActionSchema, TriggerSchema } from "@paperboard-dev/paperapi";
 import type { CanvasBlock } from "../lib/tree";
 import { plainTextFromClipboard, sanitizeNumberText } from "../lib/textInput";
+import { getVariableInfo, parseVariableToken } from "../lib/variableTypes";
 
 export interface ActionBlockProps {
     id?: string;
@@ -220,29 +221,6 @@ interface ActionEditableFieldProps {
         y: number,
         onInsert: (varId: string, label: string, icon: string) => void,
     ) => void;
-}
-
-function getVariableInfo(token: string): { label: string; icon: string } {
-    const raw = token.replace(/[\{\}]/g, "").trim();
-    const parts = raw.split(":");
-    const varId = parts[0].toLowerCase();
-    const label =
-        parts[1] ||
-        (varId === "player"
-            ? "Username"
-            : varId === "message"
-              ? "Message"
-              : varId === "output"
-                ? "Result"
-                : formatFallbackLabel(varId));
-    let icon = parts[2];
-    if (!icon) {
-        if (varId === "player" || varId.includes("user")) icon = "person_add";
-        else if (varId === "message" || varId.includes("chat")) icon = "chat";
-        else if (varId === "output" || varId.includes("result") || varId.includes("command")) icon = "terminal";
-        else icon = "bolt";
-    }
-    return { label, icon };
 }
 
 function renderHtmlWithChips(text: string): string {
@@ -963,23 +941,89 @@ export default function ActionBlock(props: ActionBlockProps) {
         const isRequiredError = () => !hasValue() && Boolean(def?.required) && !isTrigger && !props.static;
 
         if (def?.type === "boolean") {
+            // a boolean holds either a literal (click toggles it) or one
+            // variable (right-click opens the picker; clicking the chip
+            // replaces it, the close button clears back to a literal)
+            const boundVariable = () => parseVariableToken(val());
+
             const currentBool = () =>
                 hasValue()
                     ? Boolean(val())
                     : Boolean(def?.default ?? false);
 
+            const openPicker = (x: number, y: number) => {
+                if (props.static || !props.id) return;
+                props.onRequestVariablePicker?.(
+                    props.id,
+                    key,
+                    x,
+                    y,
+                    (varId, label, icon) => {
+                        props.onValueChange?.(props.id!, key, `{{${varId}:${label}:${icon}}}`);
+                    },
+                    "boolean",
+                );
+            };
+
+            const clearVariable = (e: MouseEvent) => {
+                if (props.static || !props.id) return;
+                e.stopPropagation();
+                props.onValueChange?.(props.id!, key, undefined);
+            };
+
             return (
                 <span
-                    class={`actionInput actionInputBool ${currentBool() ? "isTrue" : "isFalse"}`}
+                    class={`actionInput actionInputBool ${boundVariable() ? "hasVariable" : currentBool() ? "isTrue" : "isFalse"}`}
                     onPointerDown={(e) => e.stopPropagation()}
+                    onContextMenu={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        openPicker(e.clientX, e.clientY);
+                    }}
                     onClick={(e) => {
                         if (props.static || !props.id) return;
                         e.stopPropagation();
+                        const variable = boundVariable();
+                        if (variable) {
+                            if ((e.target as HTMLElement).closest?.(".actionBoolClear")) {
+                                clearVariable(e);
+                                return;
+                            }
+                            openPicker(e.clientX, e.clientY);
+                            return;
+                        }
                         props.onValueChange?.(props.id, key, !currentBool());
                     }}
-                    title={`Click to toggle (${currentBool() ? "True" : "False"})`}
+                    title={
+                        boundVariable()
+                            ? "Click to change the variable, right-click to replace it"
+                            : `Click to toggle (${currentBool() ? "True" : "False"})`
+                    }
                 >
-                    {currentBool() ? "true" : "false"}
+                    <Show
+                        when={boundVariable()}
+                        fallback={currentBool() ? "true" : "false"}
+                    >
+                        {(variable) => (
+                            <>
+                                <span
+                                    class="actionVariableChip"
+                                    data-var-id={variable().id}
+                                    data-label={variable().label}
+                                    data-icon={variable().icon}
+                                >
+                                    <span class="chipIcon">{variable().icon}</span>
+                                    <span class="chipLabel">{variable().label}</span>
+                                </span>
+                                <span
+                                    class="actionBoolClear"
+                                    title="Clear variable"
+                                >
+                                    <PaperIcon>close</PaperIcon>
+                                </span>
+                            </>
+                        )}
+                    </Show>
                 </span>
             );
         }

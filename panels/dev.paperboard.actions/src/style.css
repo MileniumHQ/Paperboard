@@ -524,6 +524,40 @@ body,
     background: color-mix(in srgb, var(--paper-contrast) 18%, transparent);
 }
 
+/* a boolean bound to a variable: the chip carries the meaning, the close
+   button is the only way back to a literal (there is no caret to delete it) */
+.actionInputBool.hasVariable {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--paper-uigap-onefourth);
+    background: transparent;
+    padding: 0;
+}
+
+.actionInputBool.hasVariable .actionVariableChip {
+    height: auto;
+}
+
+.actionInputBool.hasVariable [class*="PaperIcon"] {
+    font-size: var(--paper-text-size-2);
+}
+
+.actionBoolClear {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: var(--paper-text-subtle);
+    border-radius: var(--paper-border-radius-half);
+    padding: 0 var(--paper-uigap-onefourth);
+    transition: background var(--paper-tiny-transition) var(--paper-ease-standard);
+}
+
+.actionBoolClear:hover {
+    color: var(--paper-text);
+    background: color-mix(in srgb, var(--paper-contrast) 14%, transparent);
+}
+
 .actionInputOption {
     position: relative;
     cursor: pointer;
