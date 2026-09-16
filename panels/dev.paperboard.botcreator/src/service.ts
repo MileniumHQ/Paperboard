@@ -1629,16 +1629,24 @@ const actions = [
     }),
 ];
 
-const triggers = [
+// Typed fields each static trigger offers. Keys mirror the payloads the
+// emit sites in attachListeners send, so a variable inserted from the
+// picker always resolves to a real value (labels are the picker's names).
+export const staticTriggers = [
     defineTrigger({
         id: "on-message",
         name: "When a message is received",
         category: "Messages",
         description: "Fires whenever a message is sent in Discord",
         template: "When a message is received in Discord",
-        output: {
-            type: "object",
-            label: "Message Data",
+        output: { type: "object", label: "Message Data" },
+        outputFields: {
+            content: { type: "string", label: "Message", typeName: "Text" },
+            author: { type: "string", label: "Username", typeName: "Text" },
+            authorId: { type: "discord-user", label: "User", typeName: "User" },
+            channelId: { type: "discord-channel", label: "Channel", typeName: "Channel" },
+            guildId: { type: "string", label: "Server ID", typeName: "Text" },
+            messageId: { type: "discord-message", label: "Message ID", typeName: "Message" },
         },
         icon: "chat",
     }),
@@ -1649,9 +1657,12 @@ const triggers = [
         category: "Members",
         description: "Fires when a new member joins a server",
         template: "When a new member joins",
-        output: {
-            type: "object",
-            label: "Member Data",
+        output: { type: "object", label: "Member Data" },
+        outputFields: {
+            username: { type: "string", label: "Username", typeName: "Text" },
+            userId: { type: "discord-user", label: "User", typeName: "User" },
+            guildId: { type: "string", label: "Server ID", typeName: "Text" },
+            guildName: { type: "string", label: "Server Name", typeName: "Text" },
         },
         icon: "person_add",
     }),
@@ -1662,9 +1673,11 @@ const triggers = [
         category: "Members",
         description: "Fires when a member leaves a server",
         template: "When a member leaves",
-        output: {
-            type: "object",
-            label: "Member Data",
+        output: { type: "object", label: "Member Data" },
+        outputFields: {
+            username: { type: "string", label: "Username", typeName: "Text" },
+            userId: { type: "discord-user", label: "User", typeName: "User" },
+            guildId: { type: "string", label: "Server ID", typeName: "Text" },
         },
         icon: "person_remove",
     }),
@@ -1675,9 +1688,13 @@ const triggers = [
         category: "Reactions",
         description: "Fires when an emoji reaction is added to a message",
         template: "When an emoji reaction is added",
-        output: {
-            type: "object",
-            label: "Reaction Data",
+        output: { type: "object", label: "Reaction Data" },
+        outputFields: {
+            emoji: { type: "string", label: "Emoji", typeName: "Text" },
+            userId: { type: "discord-user", label: "User", typeName: "User" },
+            username: { type: "string", label: "Username", typeName: "Text" },
+            messageId: { type: "discord-message", label: "Message ID", typeName: "Message" },
+            channelId: { type: "discord-channel", label: "Channel", typeName: "Channel" },
         },
         icon: "add_reaction",
     }),
@@ -1688,17 +1705,17 @@ const triggers = [
         category: discordCategory("Bot"),
         description: "Fires with the typed login error when the bot fails to connect",
         template: "When the bot fails to connect",
-        output: {
-            type: "object",
-            label: "Error Data",
+        output: { type: "object", label: "Error Data" },
+        outputFields: {
+            error: { type: "string", label: "Error", typeName: "Text" },
         },
         icon: "error",
     }),
 ];
 
-// UI-only RPCs are registered with a schema whose name ends in "(Internal)":
-// the Actions library skips those, so a parameterless control call can never
-// be dragged into a flow as a block that does not describe itself
+// UI-only RPCs: internal actions stay callable through actionsApi.call for
+// the panel's own controls, and the Actions library hides them by schema
+// instead of by a name suffix
 function internalAction(
     id: string,
     name: string,
@@ -1707,9 +1724,10 @@ function internalAction(
 ) {
     return defineAction({
         id,
-        name: `${name} (Internal)`,
+        name,
         description,
-        template: `${name} (internal)`,
+        template: name,
+        internal: true,
         inputs: {},
         output: { type: "any", label: "Result" },
         run: async (_ctx, inputs) => run(inputs),
@@ -1758,7 +1776,7 @@ function parseCommandOptions(raw: unknown): SlashCommandOption[] {
 export const botService = definePanelService({
     id: "dev.paperboard.botcreator",
     actions,
-    triggers,
+    triggers: staticTriggers,
     types: customTypes,
     categories: [...DISCORD_CATEGORIES],
     async onInit(ctx: ServiceContext<any>) {

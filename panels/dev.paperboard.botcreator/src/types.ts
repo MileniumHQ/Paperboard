@@ -356,7 +356,7 @@ export function describeCommandOptionProblem(
     }
     if (!option.name.trim()) return "A parameter name is required.";
     if (!isCommandNameValid(option.name)) {
-        return "Parameter names are 1–32 characters: letters, numbers, hyphens and underscores.";
+        return "Parameter names are 1–32 lowercase characters: letters, numbers, hyphens and underscores.";
     }
     if (hasDuplicateOptionName(all, option.name)) {
         return "Parameter names must be unique.";
@@ -410,7 +410,7 @@ export function describeCommandProblem(input: {
 }): string | null {
     if (!normalizeCommandName(input.name)) return "A command name is required.";
     if (!isCommandNameValid(input.name)) {
-        return "Names are 1–32 characters: letters, numbers, hyphens and underscores.";
+        return "Names are 1–32 lowercase characters: letters, numbers, hyphens and underscores.";
     }
     if (!input.description.trim()) return "A description is required.";
     if (!isCommandDescriptionValid(input.description)) {

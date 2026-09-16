@@ -376,12 +376,15 @@ export default function Commands() {
                     <PaperFlex direction="column" gap="half">
                         <PaperInput
                             fullWidth
-                            placeholder="/command-name"
+                            placeholder="Command"
                             // one extra char so the optional leading slash fits
                             maxLength={33}
                             value={name()}
                             invalid={!isCommandNameValid(name()) || isDuplicate()}
-                            onInput={(e) => setName(e.currentTarget.value.toLowerCase())}
+                            // case is validated, never silently rewritten:
+                            // typing "Ping" shows the requirement instead of
+                            // turning into "ping" under the author's hands
+                            onInput={(e) => setName(e.currentTarget.value)}
                         />
                         <PaperInput
                             fullWidth
@@ -470,12 +473,12 @@ export default function Commands() {
                                                 >
                                                     <PaperInput
                                                         fullWidth
-                                                        placeholder="Parameter name"
+                                                        placeholder="Parameter"
                                                         value={option().name}
                                                         invalid={optionNameInvalid(index)}
                                                         onInput={(e) =>
                                                             updateOption(option().id, {
-                                                                name: e.currentTarget.value.toLowerCase(),
+                                                                name: e.currentTarget.value,
                                                             })
                                                         }
                                                     />
