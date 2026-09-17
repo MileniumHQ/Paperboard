@@ -197,7 +197,7 @@ export async function handlePanelsRoutes(
             if (!isValidPanelId(metadata.id)) {
                 return jsonResponse(
                     {
-                        error: "Invalid panel id: use 1-128 characters of [a-zA-Z0-9_-]",
+                        error: "Invalid panel id: use a lowercase dotted identifier, at most 128 characters; library, settings and landing are reserved",
                     },
                     400,
                 );
@@ -209,6 +209,9 @@ export async function handlePanelsRoutes(
                     },
                     400,
                 );
+            }
+            if (metadata.manifest?.id !== undefined && metadata.manifest.id !== metadata.id) {
+                return jsonResponse({ error: "Manifest id must match the published panel id" }, 400);
             }
 
             // Cap enforced by a stream reader: bytes past the cap are never
@@ -418,7 +421,7 @@ export async function handlePanelsRoutes(
     }
 
     const panelMatch = pathname.match(
-        /^\/panel\/([a-zA-Z0-9_\-\.]+)(?:\.json)?$/,
+        /^\/panel\/([a-zA-Z0-9_\-\.]+?)(?:\.json)?$/,
     );
     if (panelMatch && panelMatch[1]) {
         if (request.method === "GET") {

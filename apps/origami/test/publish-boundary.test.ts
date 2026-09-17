@@ -175,8 +175,9 @@ describe("O1: id/version validation at the publish boundary", () => {
     });
 
     it("accepts well-formed ids and versions", () => {
-        expect(isValidPanelId("dev.paperboard.terminal")).toBe(false); // dots are refused at publish
+        expect(isValidPanelId("dev.paperboard.terminal")).toBe(true);
         expect(isValidPanelId("dev_paperboard_terminal")).toBe(true);
+        for (const bad of ["library", "settings", "landing", "Panel.UPPER", "a..b", ".hidden"]) expect(isValidPanelId(bad)).toBe(false);
         expect(isValidPanelVersion("1.0.0-alpha.1")).toBe(true);
         expect(isValidPanelVersion("1 0")).toBe(false);
     });

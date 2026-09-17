@@ -4,6 +4,7 @@
 // numbers tell the truth). pack.ts refuses version-less too — same rule,
 // enforced at both exits.
 import { basename } from "path";
+import { requirePanelId } from "../../../packages/paperapi/src/panelIdentity";
 
 export interface PublishTarget {
     id: string;
@@ -23,6 +24,7 @@ export function resolvePublishTarget(
     const record = manifest as Record<string, unknown>;
     const boardId =
         typeof record.id === "string" && record.id ? record.id : basename(boardDir);
+    requirePanelId(boardId);
     const boardName =
         typeof record.name === "string" && record.name ? record.name : boardId;
     if (typeof record.version !== "string" || record.version.length === 0) {

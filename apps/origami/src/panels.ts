@@ -1,3 +1,5 @@
+import { isPanelId } from "../../../packages/paperapi/src/panelIdentity";
+
 export interface PanelRecord {
     id: string;
     name: string;
@@ -37,12 +39,10 @@ const TRASH_KEY_PREFIX = "trash:";
 // `id: "s:index"` become KV key `panels:index` (index overwrite) and let
 // quotes/control chars break the download header. One validator, both
 // fields, enforced at the publish boundary — never at read time.
-const ID_PATTERN = /^[a-zA-Z0-9_-]+$/;
 const VERSION_PATTERN = /^[a-zA-Z0-9._+-]+$/;
 
 export function isValidPanelId(id: unknown): id is string {
-    return typeof id === "string" && id.length >= 1 && id.length <= 128 &&
-        ID_PATTERN.test(id);
+    return isPanelId(id);
 }
 
 export function isValidPanelVersion(version: unknown): version is string {
