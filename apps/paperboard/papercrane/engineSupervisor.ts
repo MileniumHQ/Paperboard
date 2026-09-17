@@ -18,6 +18,7 @@ export async function spawnSupervisedClient(
 ): Promise<any> {
     const existing = clientsMap.get(id);
     if (existing) {
+        if (existing.isConnected()) throw new Error(`Process ${id} is already running`);
         existing.destroy();
         clientsMap.delete(id);
     }
@@ -36,7 +37,7 @@ export async function spawnSupervisedClient(
                 preListeners!.onExit!(code);
             });
 
-        await embedded.connect();
+        if (!await embedded.connect()) throw new Error(`Process ${id} could not start`);
         return embedded;
     }
 
@@ -69,5 +70,9 @@ export async function spawnSupervisedClient(
         await new Promise((r) => setTimeout(r, 50));
     }
 
+    if (!client.isConnected()) {
+        client.destroy(); clientsMap.delete(id);
+        throw new Error(`Supervisor ${id} did not become ready`);
+    }
     return client;
 }

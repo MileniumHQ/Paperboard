@@ -13,7 +13,6 @@ import {
     resolveSecureTargetPath,
     sanitizeId,
     panelFilesDirName,
-    unrefTimer,
     validatePanelManifest,
     writeJsonAtomicSync,
     writeFileAtomic,
@@ -24,9 +23,11 @@ import { logger } from "./logger";
 import { spawnSupervisedClient } from "./engineSupervisor";
 import { getDefaultShell } from "./pty";
 import { extractArchive, findBinDir } from "./engineArchives";
-import { panelServices } from "./panelServices";
+import { panelServices, PanelServicesManager } from "./panelServices";
 import { CredentialStore } from "./credentials";
 import { resolveRegistryUrl } from "./util";
+import { requirePanelId } from "../../../packages/paperapi/src/panelIdentity";
+import { migrateConfigurationV1 } from "./configMigration";
 
 export const REGISTRY_URL = resolveRegistryUrl();
 
@@ -60,8 +61,11 @@ export class PaperCraneEngine {
     private localDir: string;
     private credentialsStore: CredentialStore;
     private clients = new Map<string, SupervisedProcessClient>();
+    private operations = new Set<string>();
+    private services: PanelServicesManager;
 
-    constructor(baseDir?: string) {
+    constructor(baseDir?: string, services?: PanelServicesManager, private registryUrl = REGISTRY_URL) {
+        this.services = services ?? (baseDir ? new PanelServicesManager(baseDir) : panelServices);
         this.appDataDir = baseDir || getPaperboardDir();
         this.packagesDir = path.join(this.appDataDir, "packages");
         this.filesDir = path.join(this.appDataDir, "files");
@@ -81,6 +85,12 @@ export class PaperCraneEngine {
         }
 
         this.credentialsStore = new CredentialStore(this.appDataDir);
+        migrateConfigurationV1(this.appDataDir);
+        const ownersFile = path.join(this.localDir, "process-owners.json");
+        if (fs.existsSync(ownersFile)) {
+            const owners = JSON.parse(fs.readFileSync(ownersFile, "utf8"));
+            this.clientOwners = new Map(Object.entries(owners) as [string, string | null][]);
+        }
     }
 
     // install provenance record: one small daemon-owned JSON beside the
@@ -115,6 +125,11 @@ export class PaperCraneEngine {
         const map = this.readInstallSources();
         map[cleanId] = { source, at: new Date().toISOString() };
         this.writeInstallSources(map);
+    }
+
+    private requireRecoveryCapacity(dir: string, id: string): void {
+        const count = fs.readdirSync(dir).filter((name) => (name.startsWith(".trash-") || name.startsWith(".failed-")) && name.endsWith(`-${id}`)).length;
+        if (count >= 16) throw new LimitError(`Recovery storage for ${id} holds 16 releases. Archive or explicitly purge old recovery copies before replacing another release.`);
     }
 
     private forgetInstallSource(cleanId: string): void {
@@ -221,7 +236,11 @@ export class PaperCraneEngine {
     private clientOwners = new Map<string, string | null>();
 
     public setClientOwner(id: string, owner: string | null): void {
-        if (typeof id === "string" && id) this.clientOwners.set(id, owner ?? null);
+        if (typeof id === "string" && id) {
+            if (!this.clientOwners.has(id) && this.clientOwners.size >= 10_000) throw new LimitError("Process ownership ledger is full");
+            this.clientOwners.set(id, owner ?? null);
+            writeJsonAtomicSync(path.join(this.localDir, "process-owners.json"), Object.fromEntries(this.clientOwners), { mode: 0o600 });
+        }
     }
 
     public clientOwner(id: string): string | null {
@@ -291,40 +310,6 @@ export class PaperCraneEngine {
         return path.join(this.configsDir, this.configFileName(id));
     }
 
-    private legacyConfigPaths(id: string, configPath?: string): string[] {
-        // TODO(remove after v3.1): pre-move read-through locators die with
-        // the first stable release after Alpha 2 installs are on this scheme
-        // The id is validated up front, so every path below is built from a
-        // known-safe token plus fixed legacy basenames: caller input selects
-        // which known names to probe, it never shapes a path.
-        const clean = this.sanitizeIdOrThrow(id, "config");
-        const current = this.configFileFor(clean, configPath);
-        const name = this.configFileName(clean);
-        const dir = panelFilesDirName(clean);
-        const paths: string[] = [];
-        // Newest scheme first, read through once. data.json is the unified
-        // name every panel's working data was merged into; tabs.json /
-        // workspace.json / config.json are retired per-panel names from
-        // before that merge.
-        const candidates = [
-            path.join(this.filesDir, dir, "data.json"),
-            path.join(this.filesDir, dir, "tabs.json"),
-            path.join(this.filesDir, dir, "workspace.json"),
-            path.join(this.filesDir, dir, "config.json"),
-        ];
-        // App globals predate local/ and lived in configs/. A panel's
-        // configs/<id>.json is its live document (or its workspace write
-        // target later), never legacy data for a workspace-path call.
-        if (!configPath && this.isAppGlobalConfig(clean)) {
-            candidates.push(path.join(this.configsDir, name));
-        }
-        candidates.push(path.join(this.localDir, name));
-        for (const p of candidates) {
-            if (p !== current && !paths.includes(p)) paths.push(p);
-        }
-        return paths;
-    }
-
     // Terminal management
     public async createTerminal(
         id: string,
@@ -335,6 +320,7 @@ export class PaperCraneEngine {
         onData?: (data: string) => void,
         onExit?: (exitCode: number) => void,
     ): Promise<void> {
+        this.requireNoRuntimeReplacement();
         // platform-aware shell, don't trust $SHELL in GUI apps
         const shell =
             process.platform === "win32" ? "powershell.exe" : getDefaultShell();
@@ -355,7 +341,11 @@ export class PaperCraneEngine {
                 rows,
             },
             this.clients,
-            { onData, onExit },
+            { onData, onExit: (code) => {
+                this.clients.delete(id);
+                this.clientOwners.delete(id);
+                onExit?.(code);
+            } },
         );
     }
 
@@ -367,12 +357,10 @@ export class PaperCraneEngine {
         this.clients.get(id)?.resize(cols, rows);
     }
 
-    public destroyTerminal(id: string): void {
+    public async destroyTerminal(id: string): Promise<void> {
         const client = this.clients.get(id);
         if (client) {
-            client.kill("SIGTERM");
-            client.destroy();
-            this.clients.delete(id);
+            await this.stopOwnedClient(id, client);
         }
         this.clientOwners.delete(id);
     }
@@ -405,13 +393,22 @@ export class PaperCraneEngine {
         onStdout?: (data: string) => void,
         onStderr?: (data: string) => void,
     ): Promise<{ exitCode: number }> {
+        return (await this.startProcess(id, command, args, cwd, env, onData, onStdout, onStderr)).completion;
+    }
+
+    public async startProcess(
+        id: string, command: string, args: string[] = [], cwd?: string, env?: Record<string, string>,
+        onData?: (data: string) => void, onStdout?: (data: string) => void, onStderr?: (data: string) => void,
+    ): Promise<{ completion: Promise<{ exitCode: number }> }> {
+        this.requireNoRuntimeReplacement();
         if (!id || typeof id !== "string") {
             throw new Error("process id is required");
         }
         const resolvedCwd = this.resolveSpawnCwd(cwd);
 
-        const exitPromise = new Promise<{ exitCode: number }>((resolve) => {
-            spawnSupervisedClient(
+        let resolveExit!: (result: { exitCode: number }) => void;
+        const completion = new Promise<{ exitCode: number }>((resolve) => { resolveExit = resolve; });
+        await spawnSupervisedClient(
                 id,
                 {
                     id,
@@ -429,35 +426,30 @@ export class PaperCraneEngine {
                     onExit: (exitCode: number) => {
                         this.clients.delete(id);
                         this.clientOwners.delete(id);
-                        resolve({ exitCode });
+                        resolveExit({ exitCode });
                     },
                 },
             );
-        });
+        return { completion };
+    }
 
-        return exitPromise;
+    private requireNoRuntimeReplacement(): void {
+        if ([...this.operations].some((key) => key.startsWith("package:"))) {
+            throw new Error("A shared runtime is being installed; wait for it to finish before starting workloads");
+        }
     }
 
     public writeProcess(id: string, data: string): void {
         this.clients.get(id)?.write(data);
     }
 
-    public killProcess(id: string, signal: string = "SIGTERM"): void {
+    public async killProcess(id: string, signal: string = "SIGTERM"): Promise<void> {
         const client = this.clients.get(id);
         if (!client) {
             this.clientOwners.delete(id);
             return;
         }
-        this.clients.delete(id);
-        this.clientOwners.delete(id);
-
-        client.kill(signal);
-
-        // destroy() clears listeners, drop it after exit fires. the timer
-        // is unref'd so a killed process never holds the daemon open
-        const teardown = () => client.destroy();
-        client.on("exit", teardown);
-        unrefTimer(setTimeout(teardown, 5000));
+        await this.stopOwnedClient(id, client, signal);
     }
 
     public async isProcessRunning(id: string): Promise<boolean> {
@@ -672,9 +664,10 @@ export class PaperCraneEngine {
                 return JSON.parse(fs.readFileSync(indexFile, "utf-8"));
             } catch (err) {
                 logger.debug(
-                    "[Paperboard Server] package index.json is corrupt, treating as empty:",
+                    "[Paperboard Server] package index.json could not be read:",
                     err,
                 );
+                throw err;
             }
         }
         return {};
@@ -697,6 +690,15 @@ export class PaperCraneEngine {
         onProgress?: ProgressCallback,
         expectedSha256?: string,
     ): Promise<string> {
+        const key = `package:${this.sanitizeIdOrThrow(packageName, "package")}`;
+        if (this.operations.has(key)) throw new Error(`An operation on ${packageName} is already running`);
+        if (this.operations.size >= 8) throw new LimitError("Too many concurrent installs");
+        this.operations.add(key);
+        try { return await this.installPackageRelease(packageName, onProgress, expectedSha256); }
+        finally { this.operations.delete(key); }
+    }
+
+    private async installPackageRelease(packageName: string, onProgress?: ProgressCallback, expectedSha256?: string): Promise<string> {
         // trust boundary: same rule as installPanel — no checksum fact from
         // the anchor means no install, never proceed with sha256: undefined
         if (typeof expectedSha256 !== "string" || !/^[a-f0-9]{64}$/i.test(expectedSha256)) {
@@ -708,22 +710,21 @@ export class PaperCraneEngine {
         const log = (msg: string) =>
             logger.info(`[package:${packageName}] ${msg}`);
 
-        const pkgDir = path.join(this.packagesDir, packageName);
-        // leftover dir without bin/ is a failed install, wipe and retry
-        if (fs.existsSync(pkgDir)) {
-            if (this.findBinDir(pkgDir, 4)) {
-                onProgress?.({
-                    stage: "completed",
-                    percent: 100,
-                    message: "Already installed",
-                });
-                return pkgDir;
-            }
-            log("found incomplete previous install, removing and reinstalling...");
-            await fs.promises.rm(pkgDir, { recursive: true, force: true });
+        const targetDir = path.join(this.packagesDir, packageName);
+        this.requireRecoveryCapacity(this.packagesDir, packageName);
+        if (this.getPackageIndex()[packageName]?.sha256 === expectedSha256 && this.findBinDir(targetDir, 4)) {
+            onProgress?.({ stage: "completed", percent: 100, message: "Requested release is installed" });
+            return targetDir;
         }
+        // Runtimes are shared host resources. Until dependencies can be
+        // established for every supervised command (including shells), do
+        // not replace a runtime while a workload could still be using it.
+        if (fs.existsSync(targetDir) && this.clients.size > 0) {
+            throw new Error(`Stop running workloads before replacing shared runtime "${packageName}"`);
+        }
+        const pkgDir = `${targetDir}.staging-${Date.now()}`;
 
-        const metaUrl = `${REGISTRY_URL}/package/${encodeURIComponent(packageName)}.json`;
+        const metaUrl = `${this.registryUrl}/package/${encodeURIComponent(packageName)}.json`;
         log(`resolving ${metaUrl}`);
         onProgress?.({
             stage: "checking",
@@ -874,16 +875,26 @@ export class PaperCraneEngine {
             index[packageName] = {
                 name: packageName,
                 version: meta.version || "latest",
+                sha256: expectedSha256,
                 installedAt: new Date().toISOString(),
             };
-            writeJsonAtomicSync(path.join(this.packagesDir, "index.json"), index);
+            const trash = path.join(this.packagesDir, `.trash-${Date.now()}-${packageName}`);
+            if (fs.existsSync(targetDir)) await fs.promises.rename(targetDir, trash);
+            try {
+                await fs.promises.rename(pkgDir, targetDir);
+                writeJsonAtomicSync(path.join(this.packagesDir, "index.json"), index);
+            } catch (err) {
+                if (fs.existsSync(targetDir)) await fs.promises.rename(targetDir, path.join(this.packagesDir, `.failed-${Date.now()}-${packageName}`));
+                if (fs.existsSync(trash)) await fs.promises.rename(trash, targetDir);
+                throw err;
+            }
 
             onProgress?.({
                 stage: "completed",
                 percent: 100,
                 message: "Installed successfully",
             });
-            return pkgDir;
+            return targetDir;
         } catch (err: any) {
             log(`FAILED: ${err?.message || err}`);
             if (fs.existsSync(pkgDir) && !this.findBinDir(pkgDir, 4)) {
@@ -912,6 +923,7 @@ export class PaperCraneEngine {
         const sources = this.readInstallSources();
 
         for (const entry of entries) {
+            if (entry.startsWith(".")) continue;
             const panelPath = path.join(this.panelsDir, entry);
             const manifestPath = this.findManifestFile(panelPath);
 
@@ -954,6 +966,15 @@ export class PaperCraneEngine {
         downloadUrl: string,
         expectedSha256?: string,
     ): Promise<PanelManifest> {
+        const key = `panel:${requirePanelId(panelId)}`;
+        if (this.operations.has(key)) throw new Error(`An operation on ${panelId} is already running`);
+        if (this.operations.size >= 8) throw new LimitError("Too many concurrent installs");
+        this.operations.add(key);
+        try { return await this.installPanelRelease(panelId, downloadUrl, expectedSha256); }
+        finally { this.operations.delete(key); }
+    }
+
+    private async installPanelRelease(panelId: string, downloadUrl: string, expectedSha256?: string): Promise<PanelManifest> {
         // trust boundary: no checksum fact from the anchor means no install,
         // no matter where the URL came from
         if (typeof expectedSha256 !== "string" || !/^[a-f0-9]{64}$/i.test(expectedSha256)) {
@@ -961,8 +982,9 @@ export class PaperCraneEngine {
                 `Install refused for "${panelId}": registry did not provide a sha256 checksum`,
             );
         }
-        const cleanId = this.sanitizeIdOrThrow(panelId, "panel");
+        const cleanId = requirePanelId(panelId);
         const targetDir = path.join(this.panelsDir, cleanId);
+        this.requireRecoveryCapacity(this.panelsDir, cleanId);
 
         if (fs.existsSync(targetDir)) {
             try {
@@ -1018,6 +1040,11 @@ export class PaperCraneEngine {
                 ? validatePanelManifest(rawManifest, cleanId)
                 : { id: cleanId, name: cleanId };
 
+            await this.services.stopService(cleanId);
+            for (const [id, client] of [...this.clients]) {
+                if (this.clientOwners.get(id) === cleanId) await this.stopOwnedClient(id, client);
+            }
+
             // atomic swap into place: the live dir moves to trash first,
             // so a failed swap leaves the previous version recoverable
             // instead of deleting the working panel before its replacement
@@ -1028,22 +1055,15 @@ export class PaperCraneEngine {
             }
             try {
                 await moveFileSafe(contentDir, targetDir);
-                if (fs.existsSync(trashDir)) {
-                    await fs.promises
-                        .rm(trashDir, { recursive: true, force: true })
-                        .catch((err) => logger.debug("[engine] upgrade trash cleanup failed:", err));
-                }
+                if (this.services.startService(cleanId)) await this.services.waitUntilReady(cleanId);
             } catch (err) {
-                // swap failed: restore the previous version from trash
-                if (fs.existsSync(trashDir) && !fs.existsSync(targetDir)) {
-                    await fs.promises
-                        .rename(trashDir, targetDir)
-                        .catch((restoreErr) =>
-                            logger.error(
-                                `[engine] panel "${cleanId}" upgrade failed AND restore from trash failed; previous version survives at ${trashDir}:`,
-                                restoreErr,
-                            ),
-                        );
+                await this.services.stopService(cleanId);
+                // Retain the failed release for diagnosis without presenting
+                // it as installed. The last usable release remains recoverable.
+                if (fs.existsSync(targetDir)) await fs.promises.rename(targetDir, path.join(this.panelsDir, `.failed-${Date.now()}-${cleanId}`));
+                if (fs.existsSync(trashDir)) {
+                    await fs.promises.rename(trashDir, targetDir);
+                    if (this.services.startService(cleanId)) await this.services.waitUntilReady(cleanId);
                 }
                 throw err;
             }
@@ -1055,12 +1075,6 @@ export class PaperCraneEngine {
             // place: a failed install must not leave a Reviewed/Direct fact
             // behind for something that does not exist
             this.recordInstallSource(cleanId, resolveInstallSource(downloadUrl));
-
-            try {
-                panelServices.startService(cleanId);
-            } catch (err: any) {
-                logger.warn(`[Paperboard Server] Failed to start service for newly installed panel ${cleanId}:`, err?.message || err);
-            }
 
             return {
                 ...(manifest as PanelManifest),
@@ -1081,95 +1095,103 @@ export class PaperCraneEngine {
         }
     }
 
-    // removes stale .trash-<ts>-<id> dirs left by a crashed uninstall.
-    // Scoped to this panel id only — never a directory walk that could
-    // touch a live panel.
-    private async sweepPanelTrash(cleanId: string): Promise<void> {
-        let entries: string[];
-        try {
-            entries = await fs.promises.readdir(this.panelsDir);
-        } catch (err) {
-            logger.debug("[engine] trash sweep readdir failed:", err);
-            return;
-        }
-        const suffix = `-${cleanId}`;
-        for (const entry of entries) {
-            if (entry.startsWith(".trash-") && entry.endsWith(suffix)) {
-                await fs.promises
-                    .rm(path.join(this.panelsDir, entry), { recursive: true, force: true })
-                    .catch((err) => logger.debug("[engine] trash sweep rm failed:", err));
-            }
-        }
-    }
-
     public async uninstallPanel(panelId: string): Promise<boolean> {
-        const cleanId = sanitizeId(panelId);
-        if (!cleanId) return false;
-
+        const cleanId = requirePanelId(panelId);
+        this.requireRecoveryCapacity(this.panelsDir, cleanId);
+        const key = `panel:${cleanId}`;
+        if (this.operations.has(key)) throw new Error(`An operation on ${cleanId} is already running`);
+        this.operations.add(key);
         try {
-            panelServices.stopService(cleanId);
-        } catch (err) { logger.debug("[engine.ts] op failed:", err) }
+        await this.services.stopService(cleanId);
 
-        // exact id or owned prefix only (`panel:child`); substring matching
-        // let uninstalling "game" terminate "game2"/"retrogame" clients
+        // Resource identity comes from the ownership ledger. Legacy IDs
+        // require an explicit migration; a name is not proof of ownership.
         for (const [id, client] of this.clients.entries()) {
-            if (id === cleanId || id.startsWith(`${cleanId}:`)) {
-                client.kill("SIGTERM");
-                client.destroy();
-                this.clients.delete(id);
-                this.clientOwners.delete(id);
+            if (this.clientOwners.get(id) === cleanId) {
+                await this.stopOwnedClient(id, client);
             }
         }
 
         const panelDir = path.join(this.panelsDir, cleanId);
         if (fs.existsSync(panelDir)) {
-            // destructive boundary, recoverable: rename to trash first so
-            // a crash mid-delete leaves a clearly-marked .trash-<ts>-<id>
-            // dir instead of a half-deleted live panel. Stale trash from a
-            // previous crash is swept at the next uninstall of the same id.
-            await this.sweepPanelTrash(cleanId);
+            // Retained until an explicit archive/purge decision. Ordinary
+            // uninstall never sweeps earlier recovery copies.
             const trashDir = path.join(this.panelsDir, `.trash-${Date.now()}-${cleanId}`);
             await fs.promises.rename(panelDir, trashDir);
-            await fs.promises.rm(trashDir, { recursive: true, force: true });
         }
-        await this.clearFiles(cleanId);
-
-        // The panel's config lives at configs/<panel>.json and its workspace
-        // paths die with the files dir above; sweep current + legacy spots
-        // anyway so a pre-move install leaves nothing behind.
-        for (const configFile of [this.configFileFor(cleanId), ...this.legacyConfigPaths(cleanId)]) {
-            if (fs.existsSync(configFile)) {
-                await fs.promises.unlink(configFile).catch((err) => logger.debug("[engine] config unlink failed:", err));
-            }
-        }
-
-        this.credentialsStore.purge(cleanId);
+        // Uninstall removes code, not user data. Config, files and vault
+        // entries remain in their restricted stores for a later reinstall.
         // a removed panel stops authenticating immediately: its scoped
         // token is revoked, not left lingering in the vault
-        panelServices.revokePanel(cleanId);
+        this.services.revokePanel(cleanId);
         // and its provenance fact goes with it — a record for a panel that
         // is not installed is a lie
         this.forgetInstallSource(cleanId);
 
         return true;
+        } finally { this.operations.delete(key); }
+    }
+
+    private async stopOwnedClient(id: string, client: SupervisedProcessClient, signal = "SIGTERM"): Promise<void> {
+        if (client.isConnected()) {
+            let exited = false;
+            const onExit = () => { exited = true; };
+            client.on("exit", onExit);
+            try {
+                client.kill(signal);
+                const started = Date.now();
+                let escalated = false;
+                while (!exited) {
+                    if (!escalated && Date.now() - started >= 3000) { client.kill("SIGKILL"); escalated = true; }
+                    if (Date.now() - started >= 6000) throw new Error(`Process ${id} did not stop; removal refused`);
+                    await new Promise((resolve) => setTimeout(resolve, 25));
+                }
+            } finally { client.off("exit", onExit); }
+        }
+        client.destroy();
+        this.clients.delete(id);
+        this.clientOwners.delete(id);
+        writeJsonAtomicSync(path.join(this.localDir, "process-owners.json"), Object.fromEntries(this.clientOwners), { mode: 0o600 });
+    }
+
+    public async restorePanel(panelId: string, recoveryName: string): Promise<void> {
+        const id = requirePanelId(panelId);
+        if (path.basename(recoveryName) !== recoveryName || !recoveryName.startsWith(".trash-") || !recoveryName.endsWith(`-${id}`)) {
+            throw new Error("Invalid panel recovery record");
+        }
+        const key = `panel:${id}`;
+        if (this.operations.has(key)) throw new Error(`An operation on ${id} is already running`);
+        const target = path.join(this.panelsDir, id);
+        if (fs.existsSync(target)) throw new Error("Restore refused: a panel is already installed");
+        this.operations.add(key);
+        const recovery = path.join(this.panelsDir, recoveryName);
+        try {
+            validatePanelManifest(JSON.parse(await fs.promises.readFile(path.join(recovery, "manifest.json"), "utf8")), id);
+            await fs.promises.rename(recovery, target);
+            try {
+                if (this.services.startService(id)) await this.services.waitUntilReady(id);
+            } catch (err) {
+                await this.services.stopService(id);
+                await fs.promises.rename(target, recovery);
+                throw err;
+            }
+        } finally { this.operations.delete(key); }
     }
 
     public async getConfig(id: string, configPath?: string): Promise<any> {
         // service-owned boundary: traversal ids throw before touching disk
         this.sanitizeIdOrThrow(id, "config");
-        const files = [
-            this.configFileFor(id, configPath),
-            ...this.legacyConfigPaths(id, configPath),
-        ];
+        const files = [this.configFileFor(id, configPath)];
         for (const file of files) {
             if (fs.existsSync(file)) {
                 try {
-                    return JSON.parse(await fs.promises.readFile(file, "utf-8"));
+                    const data = JSON.parse(await fs.promises.readFile(file, "utf-8"));
+                    const current = this.configFileFor(id, configPath);
+                    if (file !== current) await writeFileAtomic(current, JSON.stringify(data));
+                    return data;
                 } catch (err) {
-                    logger.debug(
-                        `[Paperboard Server] config file for ${id} is corrupt, returning null:`,
-                        err,
-                    );
+                    logger.error(`[Paperboard Server] config read failed for ${id}:`, err);
+                    throw err;
                 }
             }
         }
@@ -1182,7 +1204,7 @@ export class PaperCraneEngine {
         // bounded payload: config is small structured state, never a blob
         // store — 1 MiB serialized refuses before the atomic write
         const serialized = JSON.stringify(data, null, 2);
-        if (serialized.length > CONFIG_MAX_BYTES) {
+        if (Buffer.byteLength(serialized, "utf8") > CONFIG_MAX_BYTES) {
             throw new LimitError(
                 `Config "${id}" exceeds ${CONFIG_MAX_BYTES} byte payload cap`,
             );
@@ -1190,9 +1212,6 @@ export class PaperCraneEngine {
         const file = this.configFileFor(id, configPath);
         await fs.promises.mkdir(path.dirname(file), { recursive: true });
         await writeFileAtomic(file, serialized);
-        for (const legacy of this.legacyConfigPaths(id, configPath)) {
-            await fs.promises.unlink(legacy).catch((err) => logger.debug("[engine] legacy config unlink failed:", err));
-        }
         return true;
     }
 

@@ -2,6 +2,9 @@ import * as fs from "fs";
 import { logger } from "./logger";
 import * as path from "path";
 import * as crypto from "crypto";
+import { requirePanelId } from "../../../packages/paperapi/src/panelIdentity";
+import { Readable, Transform } from "node:stream";
+import { pipeline } from "node:stream/promises";
 
 // one-shot timers must never hold the process open: unref and move on.
 // (bun and node both expose unref on Timeout handles)
@@ -90,7 +93,7 @@ export function writeFileAtomicSync(
     const nonce = crypto.randomBytes(6).toString("hex");
     const tmp = `${filePath}.tmp-${process.pid}-${Date.now()}-${nonce}`;
     try {
-        fs.writeFileSync(tmp, data, "utf8");
+        fs.writeFileSync(tmp, data, { encoding: "utf8", mode: options?.mode });
         // the temp becomes the file, so requested mode applies at birth
         if (options?.mode !== undefined) fs.chmodSync(tmp, options.mode);
         fs.renameSync(tmp, filePath);
@@ -186,9 +189,9 @@ export function validatePanelManifest(
     }
     const record = raw as Record<string, unknown>;
 
-    const id = sanitizeId(str(record.id, 128)) ?? sanitizeId(fallbackId);
-    if (!id) {
-        throw new Error(`Invalid panel id in manifest for ${fallbackId}`);
+    const id = requirePanelId(fallbackId);
+    if (record.id !== undefined && requirePanelId(record.id) !== id) {
+        throw new Error(`Manifest id "${record.id}" does not match requested panel id "${id}"`);
     }
 
     const name =
@@ -278,8 +281,12 @@ export function coerceRegistryRecord(
 // ─── Archive safety ──────────────────────────────────────────────────────────
 
 // Tar filter rejecting absolute paths and traversal members
-export function makeSafeTarFilter(destDir: string): (entryPath: string) => boolean {
-    return (entryPath: string) => {
+export function makeSafeTarFilter(destDir: string): (entryPath: string, entry?: { size?: number; linkpath?: string; type?: string }) => boolean {
+    let total = 0;
+    let count = 0;
+    return (entryPath: string, entry) => {
+        total += entry?.size ?? 0;
+        if (++count > 100_000 || total > 4 * 1024 * 1024 * 1024) throw new LimitError("Archive exceeds extraction budget");
         if (typeof entryPath !== "string") return false;
         const normalized = path.normalize(entryPath);
         if (path.isAbsolute(normalized)) return false;
@@ -287,6 +294,10 @@ export function makeSafeTarFilter(destDir: string): (entryPath: string) => boole
         const destWithSep = destDir.endsWith(path.sep)
             ? destDir
             : destDir + path.sep;
+        if (entry?.linkpath) {
+            const target = path.resolve(entry.type === "SymbolicLink" ? path.dirname(resolved) : destDir, entry.linkpath);
+            if (target !== destDir && !target.startsWith(destWithSep)) throw new Error("Archive link escapes destination");
+        }
         return resolved.startsWith(destWithSep);
     };
 }
@@ -317,84 +328,53 @@ export async function streamToFileWithProgress(
     onProgress?: ProgressCallback,
     expectedSha1?: string,
     expectedSha256?: string,
+    limits: { maxBytes?: number; idleMs?: number; totalMs?: number } = {},
 ): Promise<{ sha1: string; sha256: string }> {
     onProgress?.({ stage: "starting", percent: 0, message: "Connecting..." });
 
-    const res = await fetch(url);
-    if (!res.ok) {
-        throw new Error(`Failed to download from ${url} (HTTP ${res.status})`);
+    if (activeDownloads >= 8) throw new LimitError("Too many concurrent downloads (max 8)");
+    activeDownloads++;
+    const controller = new AbortController();
+    const idleMs = limits.idleMs ?? 45_000;
+    let idle = setTimeout(() => controller.abort(new Error("Download connection timed out")), idleMs);
+    const lifetime = setTimeout(() => controller.abort(new Error("Download exceeded lifetime deadline")), limits.totalMs ?? 30 * 60_000);
+    try {
+        const res = await fetch(url, { signal: controller.signal });
+        if (!res.ok || !res.body) throw new Error(`Download failed (HTTP ${res.status})`);
+        const totalBytes = Number(res.headers.get("content-length")) || 0;
+        const cap = limits.maxBytes ?? 2 * 1024 * 1024 * 1024;
+        if (totalBytes > cap) throw new LimitError("Download exceeds 2 GiB cap");
+        let loadedBytes = 0;
+        const sha1 = crypto.createHash("sha1");
+        const sha256 = crypto.createHash("sha256");
+        await fs.promises.mkdir(path.dirname(tempFilePath), { recursive: true });
+        const meter = new Transform({ transform(chunk: Buffer, _encoding, callback) {
+            clearTimeout(idle);
+            idle = setTimeout(() => controller.abort(new Error("Download stalled")), idleMs);
+            loadedBytes += chunk.length;
+            if (loadedBytes > cap) { callback(new LimitError("Download exceeds 2 GiB cap")); return; }
+            sha1.update(chunk); sha256.update(chunk);
+            try {
+                onProgress?.({ stage: "downloading", percent: totalBytes ? Math.min(99, Math.round(loadedBytes / totalBytes * 100)) : 50, bytesLoaded: loadedBytes, bytesTotal: totalBytes });
+                callback(null, chunk);
+            } catch (err) { callback(err as Error); }
+        } });
+        await pipeline(Readable.fromWeb(res.body as any), meter, fs.createWriteStream(tempFilePath), { signal: controller.signal });
+        const actualSha1 = sha1.digest("hex");
+        const actualSha256 = sha256.digest("hex");
+        if (expectedSha1 && actualSha1 !== expectedSha1.toLowerCase()) throw new Error("SHA1 mismatch");
+        if (expectedSha256 && actualSha256 !== expectedSha256.toLowerCase()) throw new Error("SHA256 mismatch");
+        return { sha1: actualSha1, sha256: actualSha256 };
+    } catch (err) {
+        controller.abort();
+        await fs.promises.rm(tempFilePath, { force: true });
+        throw err;
+    } finally {
+        clearTimeout(idle); clearTimeout(lifetime);
+        activeDownloads--;
     }
-    if (!res.body) {
-        throw new Error("No response body available for download");
-    }
-
-    const totalBytes = Number(res.headers.get("content-length")) || 0;
-    let loadedBytes = 0;
-
-    const dir = path.dirname(tempFilePath);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-
-    const fileStream = fs.createWriteStream(tempFilePath);
-    const sha1Hash = crypto.createHash("sha1");
-    const sha256Hash = crypto.createHash("sha256");
-
-    const reader = res.body.getReader();
-    const IDLE_TIMEOUT_MS = 45_000;
-    const MAX_DOWNLOAD_BYTES = 2048 * 1024 * 1024; // per-download cap
-    let idleTick: ReturnType<typeof setTimeout>;
-    while (true) {
-        // stalled connections fail loudly instead of hanging forever; the
-        // timer is cleared per iteration, not stacked per chunk
-        const readResult = await Promise.race([
-            reader.read(),
-            new Promise<never>((_, reject) => {
-                idleTick = setTimeout(
-                    () => reject(new Error("Download stalled: no data for 45s")),
-                    IDLE_TIMEOUT_MS,
-                );
-            }),
-        ]).finally(() => clearTimeout(idleTick));
-        const { done, value } = readResult as any;
-        if (done) break;
-        if (!value) continue;
-
-        // cap total bytes even when the host lies about content-length
-        loadedBytes += value.length;
-        if (loadedBytes > MAX_DOWNLOAD_BYTES) {
-            fs.rmSync(tempFilePath, { force: true });
-            throw new Error(`Download exceeds ${MAX_DOWNLOAD_BYTES} byte cap`);
-        }
-
-        fileStream.write(value);
-        sha1Hash.update(value);
-        sha256Hash.update(value);
-
-        const percent =
-            totalBytes > 0 ? Math.min(99, Math.round((loadedBytes / totalBytes) * 100)) : 50;
-        onProgress?.({
-            stage: "downloading",
-            percent,
-            bytesLoaded: loadedBytes,
-            bytesTotal: totalBytes,
-        });
-    }
-    await new Promise<void>((resolve) => fileStream.end(resolve));
-
-    const actualSha1 = sha1Hash.digest("hex").toLowerCase();
-    const actualSha256 = sha256Hash.digest("hex").toLowerCase();
-
-    if (expectedSha1 && actualSha1 !== expectedSha1.toLowerCase()) {
-        throw new Error(`SHA1 mismatch. Expected ${expectedSha1}, got ${actualSha1}`);
-    }
-    if (expectedSha256 && actualSha256 !== expectedSha256.toLowerCase()) {
-        fs.rmSync(tempFilePath, { force: true });
-        throw new Error(
-            `SHA256 mismatch. Expected ${expectedSha256}, got ${actualSha256}`,
-        );
-    }
-
-    return { sha1: actualSha1, sha256: actualSha256 };
 }
+let activeDownloads = 0;
 
 // Safely moves a file across filesystems or partitions
 export async function moveFileSafe(src: string, dest: string): Promise<void> {

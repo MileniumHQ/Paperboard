@@ -91,15 +91,16 @@ export class PaperboardLogger {
             if (LEVEL_ORDER[level] >= LEVEL_ORDER[this.minLevel]) {
                 this.writeLine(line);
             }
-        } catch (err) { logger.debug("[logger.ts] op failed:", err) }
+        } catch (err) { console.error("[logger] formatting failed:", err); }
     }
 
     private writeLine(line: string): void {
         const file = this.ensureLogFile();
         if (!file) return;
         try {
+            this.rotateIfNeeded();
             fs.appendFileSync(file, line, "utf8");
-        } catch (err) { logger.debug("[logger.ts] op failed:", err) }
+        } catch (err) { console.error("[logger] append failed:", err); }
     }
 
     private ensureLogFile(): string | null {
@@ -141,7 +142,7 @@ export class PaperboardLogger {
                     path.join(this.logDir, `${this.name}.1.log`),
                 );
             }
-        } catch (err) { logger.debug("[logger.ts] op failed:", err) }
+        } catch (err) { console.error("[logger] rotation failed:", err); }
     }
 }
 

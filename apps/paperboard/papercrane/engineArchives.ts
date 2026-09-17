@@ -31,7 +31,11 @@ export async function extractArchive(
         const dest = path.resolve(destDir);
         const destWithSep = dest.endsWith(path.sep) ? dest : dest + path.sep;
         const zip = new AdmZip(archivePath);
+        let extractedBytes = 0;
+        if (zip.getEntries().length > 100_000) throw new Error("Archive exceeds entry budget");
         for (const entry of zip.getEntries()) {
+            extractedBytes += entry.header.size;
+            if (extractedBytes > 4 * 1024 * 1024 * 1024) throw new Error("Archive exceeds extraction budget");
             const name = entry.entryName;
             if (!name || typeof name !== "string") {
                 throw new Error(`Unsafe zip entry name in ${path.basename(archivePath)}`);

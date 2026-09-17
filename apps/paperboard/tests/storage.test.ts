@@ -115,9 +115,9 @@ describe("validatePanelManifest", () => {
         expect(m.name).toBe("Terminal");
     });
 
-    it("rejects manifest with traversal id even if fallback exists? — falls back instead", () => {
-        const m = validatePanelManifest({ id: "../../evil", name: "X" }, "safe-id");
-        expect(m.id).toBe("safe-id");
+    it("refuses malformed and mismatched manifest identities without rewriting them", () => {
+        expect(() => validatePanelManifest({ id: "../../evil", name: "X" }, "safe-id")).toThrow();
+        expect(() => validatePanelManifest({ id: "panel.b" }, "panel.a")).toThrow(/does not match/);
     });
 
     it("rejects non-object manifests", () => {

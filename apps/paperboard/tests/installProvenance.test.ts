@@ -73,12 +73,11 @@ describe("install source record", () => {
         fs.mkdirSync(panelDir, { recursive: true });
         fs.writeFileSync(
             path.join(panelDir, "manifest.json"),
-            JSON.stringify({ id: "linked.panel", name: "Linked" }),
+            JSON.stringify({ id: "dev.panel", name: "Linked" }),
         );
         fs.symlinkSync(panelDir, path.join(tmp, "panels", "dev.panel"));
         const panels = await engine.listPanels();
-        // the manifest id wins over the directory name, so select the
-        // dev entry by its link flag, not by id
+        // Only the link whose directory agrees with the manifest is valid.
         const dev = panels.find((p) => p.isLinked === true);
         expect(dev?.installSource).toBe("dev");
     });

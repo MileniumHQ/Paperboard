@@ -5,6 +5,16 @@ import * as os from "os";
 import * as path from "path";
 
 describe("PaperboardLogger", () => {
+    it("rotates repeatedly during one object's lifetime", () => {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pb-rotation-"));
+        try {
+            const log = new PaperboardLogger({ name: "rotation", logDir: dir, mirrorConsole: false });
+            for (let i = 0; i < 7; i++) log.info("x".repeat(3 * 1024 * 1024));
+            expect(fs.existsSync(path.join(dir, "rotation.1.log"))).toBe(true);
+            expect(fs.statSync(path.join(dir, "rotation.log")).size).toBeLessThan(6 * 1024 * 1024);
+            expect(fs.readdirSync(dir).length).toBeLessThanOrEqual(4);
+        } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+    });
     it("writes leveled entries to a log file", () => {
         const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pb-log-"));
         try {

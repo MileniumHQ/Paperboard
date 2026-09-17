@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
+import { EventEmitter } from "events";
 import { PaperCraneEngine } from "../papercrane/engine";
 
 let tmp: string;
@@ -37,49 +38,33 @@ describe("PaperCraneEngine path containment", () => {
 });
 
 describe("PaperCraneEngine killProcess hygiene", () => {
-    it("the teardown timer never holds the process open", () => {
-        const fake = {
-            // intentional no-op stubs: the test observes the teardown
-            // timer, never the fake client's behavior
-            kill(_signal: string) {
-                /* no-op stub */
-            },
-            on(_event: string, _fn: () => void) {
-                /* no-op stub */
-            },
-            destroy() {
-                /* no-op stub */
-            },
-        };
-        (engine as any).clients.set("ghost", fake);
-        const captured: any[] = [];
-        const realSetTimeout = globalThis.setTimeout;
-        (globalThis as any).setTimeout = ((fn: any, ms: number, ...rest: any[]) => {
-            const t = realSetTimeout(fn, ms, ...rest);
-            if (ms === 5000) captured.push(t);
-            return t;
-        }) as any;
-        try {
-            engine.killProcess("ghost");
-        } finally {
-            (globalThis as any).setTimeout = realSetTimeout;
-        }
-        expect(captured).toHaveLength(1);
-        expect(captured[0].hasRef()).toBe(false);
-        clearTimeout(captured[0]);
+    it("does not drop ownership or report completion before exit", async () => {
+        const client = new EventEmitter() as any;
+        client.isConnected = () => true;
+        client.kill = () => undefined;
+        client.destroy = () => client.removeAllListeners();
+        (engine as any).clients.set("ghost", client);
+        engine.setClientOwner("ghost", "panel.a");
+        const stopping = engine.killProcess("ghost");
+        expect((engine as any).clients.has("ghost")).toBe(true);
+        expect(engine.clientOwner("ghost")).toBe("panel.a");
+        client.emit("exit", 0);
+        await stopping;
+        expect((engine as any).clients.has("ghost")).toBe(false);
+        expect(engine.clientOwner("ghost")).toBeNull();
     });
 });
 
 describe("PaperCraneEngine panels install/uninstall parity", () => {
-    it("uninstallPanel removes config and files like the local driver should", async () => {
+    it("uninstallPanel retains config and files for reinstalling", async () => {
         await engine.setConfig("somepanel", { a: 1 });
         fs.mkdirSync(path.join(tmp, "panels", "somepanel"), { recursive: true });
         await engine.uninstallPanel("somepanel");
         expect(fs.existsSync(path.join(tmp, "panels", "somepanel"))).toBe(false);
-        expect(await engine.getConfig("somepanel")).toBeNull();
+        expect(await engine.getConfig("somepanel")).toEqual({ a: 1 });
     });
 
-    it("uninstallPanel renames to trash before delete and sweeps stale trash", async () => {
+    it("uninstallPanel retains removed packages and existing recovery copies", async () => {
         fs.mkdirSync(path.join(tmp, "panels", "trashed"), { recursive: true });
         fs.writeFileSync(path.join(tmp, "panels", "trashed", "manifest.json"), "{}");
         // a previous crashed uninstall leaves a marked trash dir behind
@@ -88,8 +73,8 @@ describe("PaperCraneEngine panels install/uninstall parity", () => {
         fs.mkdirSync(path.join(tmp, "panels", "trashed2"), { recursive: true });
         expect(await engine.uninstallPanel("trashed")).toBe(true);
         expect(fs.existsSync(path.join(tmp, "panels", "trashed"))).toBe(false);
-        expect(fs.existsSync(path.join(tmp, "panels", ".trash-123-trashed"))).toBe(false);
-        expect(fs.readdirSync(path.join(tmp, "panels")).filter((e) => e.startsWith(".trash-"))).toEqual([]);
+        expect(fs.existsSync(path.join(tmp, "panels", ".trash-123-trashed"))).toBe(true);
+        expect(fs.readdirSync(path.join(tmp, "panels")).filter((e) => e.startsWith(".trash-"))).toHaveLength(2);
         expect(fs.existsSync(path.join(tmp, "panels", "trashed2"))).toBe(true);
     });
 });
@@ -137,16 +122,16 @@ describe("PaperCraneEngine app-global configs", () => {
         );
     });
 
-    it("reads the merged data.json once, then migrates it into configs/", async () => {
+    it("does not mistake an independent data.json for the default config", async () => {
         fs.mkdirSync(path.join(tmp, "files", "somepanel"), { recursive: true });
         fs.writeFileSync(
             path.join(tmp, "files", "somepanel", "data.json"),
             JSON.stringify({ a: 2 }),
         );
-        expect(await engine.getConfig("somepanel")).toEqual({ a: 2 });
+        expect(await engine.getConfig("somepanel")).toBeNull();
         await engine.setConfig("somepanel", { a: 3 });
         expect(fs.existsSync(path.join(tmp, "files", "somepanel", "data.json"))).toBe(
-            false,
+            true,
         );
         expect(await engine.getConfig("somepanel")).toEqual({ a: 3 });
     });
@@ -170,7 +155,7 @@ describe("PaperCraneEngine app-global configs", () => {
         ).toBe(true);
     });
 
-    it("migrates data.json into the requested workspace path", async () => {
+    it("does not migrate unrelated data.json into an explicitly named document", async () => {
         fs.mkdirSync(path.join(tmp, "files", "com.example.terminal"), {
             recursive: true,
         });
@@ -178,13 +163,11 @@ describe("PaperCraneEngine app-global configs", () => {
             path.join(tmp, "files", "com.example.terminal", "data.json"),
             JSON.stringify({ tabs: [{ id: "t1" }] }),
         );
-        expect(await engine.getConfig("com.example.terminal", "tabs.json")).toEqual({
-            tabs: [{ id: "t1" }],
-        });
+        expect(await engine.getConfig("com.example.terminal", "tabs.json")).toBeNull();
         await engine.setConfig("com.example.terminal", { tabs: [] }, "tabs.json");
         expect(
             fs.existsSync(path.join(tmp, "files", "com.example.terminal", "data.json")),
-        ).toBe(false);
+        ).toBe(true);
         expect(
             fs.existsSync(path.join(tmp, "files", "com.example.terminal", "tabs.json")),
         ).toBe(true);
@@ -201,7 +184,7 @@ describe("PaperCraneEngine app-global configs", () => {
         expect(fs.existsSync(path.join(tmp, "files", "other.json"))).toBe(false);
     });
 
-    it("retired per-panel names still read through once, then migrate", async () => {
+    it("ordinary writes retain every independent named document", async () => {
         // ensure the dirs exist the way a previous install left them
         for (const [dir, file, value] of [
             ["legacypanel", "config.json", { v: 1 }],
@@ -213,12 +196,12 @@ describe("PaperCraneEngine app-global configs", () => {
                 path.join(tmp, "files", dir, file),
                 JSON.stringify(value),
             );
-            expect(await engine.getConfig(dir)).toEqual(value);
+            expect(await engine.getConfig(dir)).toBeNull();
             await engine.setConfig(dir, value);
             expect(
                 fs.existsSync(path.join(tmp, "configs", `${dir}.json`)),
             ).toBe(true);
-            expect(fs.existsSync(path.join(tmp, "files", dir, file))).toBe(false);
+            expect(fs.existsSync(path.join(tmp, "files", dir, file))).toBe(true);
         }
     });
 
@@ -227,7 +210,10 @@ describe("PaperCraneEngine app-global configs", () => {
             path.join(tmp, "configs", "app-settings.json"),
             JSON.stringify({ darkMode: "light" }),
         );
-        expect(await engine.getConfig("app-settings")).toEqual({
+        // Seed an old installation before its explicit startup migration.
+        fs.unlinkSync(path.join(tmp, "local", "config-migration-v1.json"));
+        const reopened = new PaperCraneEngine(tmp);
+        expect(await reopened.getConfig("app-settings")).toEqual({
             darkMode: "light",
         });
     });

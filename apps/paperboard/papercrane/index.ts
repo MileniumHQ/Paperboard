@@ -20,7 +20,7 @@ import { writeFileAtomicSync } from "./storage";
 import { getLinuxDistroInfo } from "./util";
 import { getPaperboardDir } from "./paths";
 import { logger } from "./logger";
-import { panelServices } from "./panelServices";
+import { PanelServicesManager } from "./panelServices";
 
 export * from "./types";
 export * from "./engine";
@@ -344,7 +344,8 @@ export function startPaperCraneServer(
 
         const tryStart = (currentPort: number) => {
             let advertisement: AdvertisementHandle | null = null;
-            const engine = new PaperCraneEngine();
+            const panelServices = new PanelServicesManager(getPaperboardDir());
+            const engine = new PaperCraneEngine(undefined, panelServices);
             const auth = new PaperCraneAuth(noAuth, undefined, undefined);
             const sessions = new DavSessionStore();
             if (staticToken && !noAuth) auth.injectToken(staticToken, "host");

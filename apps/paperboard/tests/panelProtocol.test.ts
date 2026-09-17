@@ -79,13 +79,11 @@ describe("buildCraneCredentialPayload (iframe identity)", () => {
         expect(parsed.port).toBe(1);
     });
 
-    it("falls back to the master token when no scoped token is issued", () => {
+    it("refuses bootstrap rather than injecting the master when issuance is unavailable", () => {
         const parsed = JSON.parse(
             buildCraneCredentialPayload({ port: 1, token: "pc_master" }, "comp", "a", ""),
         );
-        expect(parsed.token).toBe("pc_master");
-        expect(parsed.scoped).toBe(false);
-        expect(parsed.panelId).toBe("a");
+        expect(parsed).toBeNull();
     });
 
     it("reads missing handshakes as null", () => {
