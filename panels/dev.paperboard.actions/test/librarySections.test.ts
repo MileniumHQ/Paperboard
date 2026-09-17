@@ -1,7 +1,7 @@
 // Library category grouping (bun test): panels name categories and can
 // attach an icon and order; without an order, sections sort alphabetically.
 import { describe, test, expect } from "bun:test";
-import type { ActionInfo, TriggerInfo } from "@paperboard-dev/paperapi";
+import type { ActionInfo } from "@paperboard-dev/paperapi";
 import {
     buildLibrarySections,
     UNCATEGORIZED_SECTION,
@@ -10,9 +10,9 @@ import {
 const trigger = (
     id: string,
     category?: string | { name: string; icon?: string; order?: number },
-): TriggerInfo => ({
+): ActionInfo => ({
     panelId: "dev.example",
-    trigger: id,
+    action: id,
     schema: { id, name: id, description: "", category } as any,
 });
 
@@ -34,7 +34,7 @@ describe("buildLibrarySections", () => {
         // no orders: alphabetical
         expect(sections.map((s) => s.name)).toEqual(["Bot", "Members", "Messages"]);
         const messages = sections.find((s) => s.name === "Messages")!;
-        expect(messages.triggers.map((t) => t.trigger)).toEqual(["on-message"]);
+        expect(messages.triggers.map((t) => t.action)).toEqual(["on-message"]);
         expect(messages.actions.map((a) => a.action)).toEqual(["send-message"]);
     });
 
@@ -92,7 +92,7 @@ describe("buildLibrarySections", () => {
     test("internal entries are hidden but nothing else is filtered", () => {
         const internalTrigger = {
             panelId: "p",
-            trigger: "ctl-trigger",
+            action: "ctl-trigger",
             schema: { id: "ctl-trigger", name: "Ctl", description: "", internal: true },
         };
         const internalAction = {
@@ -106,7 +106,7 @@ describe("buildLibrarySections", () => {
         );
         expect(sections).toHaveLength(1);
         expect(sections[0].name).toBe("Chat");
-        expect(sections[0].triggers.map((t: any) => t.trigger)).toEqual(["on-visible"]);
+        expect(sections[0].triggers.map((t: any) => t.action)).toEqual(["on-visible"]);
         expect(sections[0].actions.map((a: any) => a.action)).toEqual(["visible"]);
     });
 

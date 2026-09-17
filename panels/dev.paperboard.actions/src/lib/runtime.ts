@@ -427,6 +427,31 @@ function evaluateMath(expression: string): number {
     return result;
 }
 
+/**
+ * Event routing equality for parameterized triggers. Deliberately NOT the
+ * If-condition comparison: routing identity must be exact — a case
+ * difference is a different id, objects and absent fields never match, and
+ * the only concession is that a literal `"123"` matches a numeric `123`
+ * since author-typed inputs are strings. One helper, tested generically.
+ */
+export function matchHolds(expected: any, actual: any): boolean {
+    if (expected === undefined || expected === null) return false;
+    if (expected === actual) return true;
+    if (typeof expected === "object" || typeof actual === "object") return false;
+    if (actual === undefined || actual === null) return false;
+    return String(expected) === String(actual);
+}
+
+/** Plain dotted-path lookup on an event payload — no variable-resolution special cases. */
+export function payloadFieldValue(payload: any, field: string): any {
+    let current: any = payload;
+    for (const part of field.split(".")) {
+        if (current === null || typeof current !== "object") return undefined;
+        current = current[part];
+    }
+    return current;
+}
+
 function evaluateCondition(left: any, operator: string, right: any): boolean {
     const l = left !== undefined && left !== null ? String(left).trim() : "";
     const r = right !== undefined && right !== null ? String(right).trim() : "";

@@ -3,13 +3,14 @@ import type { BuiltinDef } from "./types";
 export const timingBuiltins: BuiltinDef[] = [
     { id: "on-play", category: "logic.timing", panelId: "builtin.logic", item: {
                     panelId: "builtin.logic",
-                    trigger: "on-play",
+                    action: "on-play",
                     schema: {
                         id: "on-play",
                         name: "On Play",
                         description: "Fires when the green play button in the top right is clicked",
                         template: "On play",
                         icon: "play_arrow",
+                        eventOnly: true,
                     },
                 } },
     { id: "wait", category: "logic.timing", panelId: "builtin.logic", item: {

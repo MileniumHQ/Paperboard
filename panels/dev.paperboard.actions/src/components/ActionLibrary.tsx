@@ -22,10 +22,9 @@ import {
     actions as actionsApi,
     panels as panelsApi,
     type ActionInfo,
-    type TriggerInfo,
     type PanelItem,
     type ActionSchema,
-    type TriggerSchema,} from "@paperboard-dev/paperapi";
+} from "@paperboard-dev/paperapi";
 import { createStore } from "solid-js/store";
 import ActionBlock from "./ActionBlock";
 import { BUILTIN_CATEGORIES, type BuiltinCategory } from "../lib/builtins";
@@ -46,7 +45,7 @@ import {
 
 export interface ActionLibraryProps {
     onStartDrag: (
-        item: ActionInfo | TriggerInfo,
+        item: ActionInfo,
         isTrigger: boolean,
         pos: { x: number; y: number },
         grabOffset: { x: number; y: number },
@@ -64,7 +63,7 @@ export interface PanelCategory {
     name: string;
     icon: string;
     iconUrl?: string;
-    triggers: TriggerInfo[];
+    triggers: ActionInfo[];
     actions: ActionInfo[];
     sections: LibrarySection[];
 }
@@ -76,7 +75,6 @@ export default function ActionLibrary(props: ActionLibraryProps) {
     const [search, setSearch] = createSignal("");
     const [installedPanels, setInstalledPanels] = createSignal<PanelItem[]>([]);
     const [registeredActions, setRegisteredActions] = createSignal<ActionInfo[]>([]);
-    const [registeredTriggers, setRegisteredTriggers] = createSignal<TriggerInfo[]>([]);
     const [isCollapsed, setIsCollapsed] = createSignal(false);
 
     const [createOpen, setCreateOpen] = createSignal(false);
@@ -131,9 +129,6 @@ export default function ActionLibrary(props: ActionLibraryProps) {
 
             const acts = await actionsApi.list().catch(() => []);
             setRegisteredActions(acts);
-
-            const trigs = await actionsApi.listTriggers().catch(() => []);
-            setRegisteredTriggers(trigs);
         } catch (err) {
             console.error("[ActionLibrary] Failed to load library:", err);
         }
@@ -178,34 +173,6 @@ export default function ActionLibrary(props: ActionLibraryProps) {
     const panelCategories = createMemo<PanelCategory[]>(() => {
         const map = new Map<string, PanelCategory>();
 
-        for (const trig of registeredTriggers()) {
-            // internal schemas stay callable; the library only hides them
-            if (trig.schema?.internal === true) continue;
-            const schema: TriggerSchema = trig.schema || {
-                id: trig.trigger,
-                name: trig.trigger.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
-                description: "",
-                template: `When ${trig.trigger.replace(/-/g, " ")}`,
-            };
-
-            let cat = map.get(trig.panelId);
-            if (!cat) {
-                const info = getPanelInfo(trig.panelId);
-                cat = {
-                    id: trig.panelId,
-                    domain: "panel",
-                    name: info.name,
-                    icon: "extension",
-                    iconUrl: info.iconUrl,
-                    triggers: [],
-                    actions: [],
-                    sections: [],
-                };
-                map.set(trig.panelId, cat);
-            }
-            cat.triggers.push({ ...trig, schema });
-        }
-
         for (const act of registeredActions()) {
             if (act.action.startsWith("call-function-")) continue;
             // own sync/test actions run via api, never placeable blocks
@@ -235,7 +202,13 @@ export default function ActionLibrary(props: ActionLibraryProps) {
                 };
                 map.set(act.panelId, cat);
             }
-            cat.actions.push({ ...act, schema });
+            // listen-only actions stay in the triggers lane; dual actions
+            // (run + event) stay in the actions lane and can nest in flows
+            if (schema.eventOnly === true) {
+                cat.triggers.push({ ...act, schema });
+            } else {
+                cat.actions.push({ ...act, schema });
+            }
         }
 
         const categories = Array.from(map.values());
@@ -283,7 +256,7 @@ export default function ActionLibrary(props: ActionLibraryProps) {
             categoryIcon: string;
             categoryIconUrl?: string;
             items: {
-                data: ActionInfo | TriggerInfo;
+                data: ActionInfo;
                 isTrigger: boolean;
                 iconUrl?: string;
             }[];
@@ -291,14 +264,14 @@ export default function ActionLibrary(props: ActionLibraryProps) {
 
         for (const cat of allCategories()) {
             const matchedInCat: {
-                data: ActionInfo | TriggerInfo;
+                data: ActionInfo;
                 isTrigger: boolean;
                 iconUrl?: string;
             }[] = [];
 
             if (cat.domain === "panel") {
                 for (const trig of cat.triggers) {
-                    const name = trig.schema?.name || trig.trigger;
+                    const name = trig.schema?.name || trig.action;
                     const desc = trig.schema?.description || "";
                     const template = trig.schema?.template || "";
                     if (
@@ -335,7 +308,6 @@ export default function ActionLibrary(props: ActionLibraryProps) {
                     const name =
                         item.schema?.name ||
                         (item as any).action ||
-                        (item as any).trigger ||
                         "";
                     const desc = item.schema?.description || "";
                     const template = item.schema?.template || "";
@@ -347,7 +319,8 @@ export default function ActionLibrary(props: ActionLibraryProps) {
                         matchedInCat.push({
                             data: item,
                             isTrigger: Boolean(
-                                (item as any).trigger || (item as any).isTrigger,
+                                (item.schema as any)?.eventOnly ||
+                                    (item as any).isTrigger,
                             ),
                             iconUrl: undefined,
                         });
@@ -412,7 +385,7 @@ export default function ActionLibrary(props: ActionLibraryProps) {
     const headerIcon = (section: LibrarySection) => section.icon || "category";
 
     const handlePointerDownItem = (
-        item: ActionInfo | TriggerInfo,
+        item: ActionInfo,
         isTrigger: boolean,
         e: PointerEvent,
         customIconUrl?: string,
@@ -682,9 +655,9 @@ export default function ActionLibrary(props: ActionLibraryProps) {
                                                         handlePointerDownItem(
                                                             {
                                                                 panelId: "builtin.function",
-                                                                trigger: trigSchema.id,
+                                                                action: trigSchema.id,
                                                                 schema: trigSchema,
-                                                            } as TriggerInfo,
+                                                            },
                                                             true,
                                                             e,
                                                             undefined,
@@ -773,11 +746,9 @@ export default function ActionLibrary(props: ActionLibraryProps) {
                                                             action={
                                                                 item.data.schema || {
                                                                     id:
-                                                                        (item.data as any).action ||
-                                                                        (item.data as any).trigger,
+                                                                        (item.data as any).action,
                                                                     name:
-                                                                        (item.data as any).action ||
-                                                                        (item.data as any).trigger,
+                                                                        (item.data as any).action,
                                                                     description: "",
                                                                 }
                                                             }
@@ -830,8 +801,8 @@ export default function ActionLibrary(props: ActionLibraryProps) {
                                                             <ActionBlock
                                                                 action={
                                                                     trig.schema || {
-                                                                        id: trig.trigger,
-                                                                        name: trig.trigger,
+                                                                        id: trig.action,
+                                                                        name: trig.action,
                                                                         description: "",
                                                                     }
                                                                 }
@@ -889,7 +860,8 @@ export default function ActionLibrary(props: ActionLibraryProps) {
                                     <For each={(currentCategory() as BuiltinCategory)?.items}>
                                         {(act) => {
                                             const isTrig = Boolean(
-                                                (act as any).trigger || (act as any).isTrigger,
+                                                (act.schema as any)?.eventOnly ||
+                                                    (act as any).isTrigger,
                                             );
                                             return (
                                                 <div
@@ -907,10 +879,8 @@ export default function ActionLibrary(props: ActionLibraryProps) {
                                                         action={
                                                             act.schema || {
                                                                 id:
-                                                                    (act as any).trigger ||
                                                                     (act as any).action,
                                                                 name:
-                                                                    (act as any).trigger ||
                                                                     (act as any).action,
                                                                 description: "",
                                                             }

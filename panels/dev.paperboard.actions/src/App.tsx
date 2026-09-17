@@ -25,7 +25,6 @@ import {
     actions as actionsApi,
     getType,
     type ActionInfo,
-    type TriggerInfo,
 } from "@paperboard-dev/paperapi";
 import { ACTIONS_PANEL_ID } from "./panelId";
 import { variableFieldIcon } from "./lib/variableTypes";
@@ -76,7 +75,7 @@ export default function App() {
     const [ghostDrag, setGhostDrag] = createSignal<{
         id?: string;
         panelId: string;
-        item: ActionInfo | TriggerInfo;
+        item: ActionInfo;
         isTrigger: boolean;
         iconSrc?: string;
         pos: { x: number; y: number };
@@ -249,10 +248,7 @@ export default function App() {
                 continue;
             }
 
-            const trigActionId =
-                (trig.action as any)?.id ||
-                (trig.action as any)?.trigger ||
-                "";
+            const trigActionId = (trig.action as any)?.id || "";
                     const fieldTypes =
                         functionTriggerFields(trigActionId) ||
                         (() => {
@@ -499,9 +495,7 @@ export default function App() {
         // only on-play triggers run here — silently running OTHER triggers
         // as a stand-in would be a surprising side effect, not a fallback
         const onPlay = blocks.filter(
-            (b) =>
-                b.isTrigger &&
-                (b.action?.id === "on-play" || (b.action as any)?.trigger === "on-play"),
+            (b) => b.isTrigger && b.action?.id === "on-play",
         );
         if (onPlay.length === 0) {
             appendConsoleLog({
@@ -654,11 +648,8 @@ export default function App() {
 
     const refreshBlockSchemas = async (current?: CanvasBlock[]) => {
         try {
-            const [acts, trigs] = await Promise.all([
-                actionsApi.list(),
-                actionsApi.listTriggers(),
-            ]);
-            const merged = mergeActionSchemas(current ?? blocks, acts, trigs);
+            const acts = await actionsApi.list();
+            const merged = mergeActionSchemas(current ?? blocks, acts);
             setBlocks(merged);
             saveFlows(merged);
         } catch (err) {
@@ -1125,7 +1116,7 @@ export default function App() {
     };
 
     const handleStartDragFromLibrary = (
-        item: ActionInfo | TriggerInfo,
+        item: ActionInfo,
         isTrigger: boolean,
         screenPos: { x: number; y: number },
         grabOffset: { x: number; y: number },

@@ -1,11 +1,12 @@
-import type { ActionSchema, TriggerSchema } from "@paperboard-dev/paperapi";
+import type { ActionSchema } from "@paperboard-dev/paperapi";
 
 export interface CanvasBlock {
     id: string;
     panelId: string;
     pos: { x: number; y: number };
+    /** true on flow roots: the block waits for its event to start the flow */
     isTrigger: boolean;
-    action: ActionSchema | TriggerSchema;
+    action: ActionSchema;
     iconSrc?: string;
     values: Record<string, any>;
     variableName?: string;
@@ -14,7 +15,12 @@ export interface CanvasBlock {
     elseChildren?: CanvasBlock[];
 }
 
-export function outputLabelOf(action: ActionSchema | TriggerSchema): string | null {    const out = (action as ActionSchema)?.output;
+/** listen-only action stamped by the SDK: starts flows, never nestable */
+export function isEventOnlyAction(action: { eventOnly?: boolean } | undefined | null): boolean {
+    return Boolean(action && typeof action === "object" && (action as any).eventOnly === true);
+}
+
+export function outputLabelOf(action: ActionSchema): string | null {    const out = (action as ActionSchema)?.output;
     if (!out) return null;
     if (typeof out === "string") return out;
     return (out as any).label || (out as any).type || null;
@@ -71,30 +77,25 @@ export function walkBlocks(
 }
 
 /**
- * Refreshes each block's action/trigger schema from the live registry while
- * keeping its id, position, values and name. Stored flows otherwise keep the
- * schema they were dragged with, so newly declared metadata (typed output
- * fields, categories, options) would never reach existing blocks.
+ * Refreshes each block's action schema from the live registry while keeping
+ * its id, position, values and name. Stored flows otherwise keep the schema
+ * they were dragged with, so newly declared metadata (typed output fields,
+ * categories, options) would never reach existing blocks. One registry now:
+ * event actions and dual actions list alongside plain actions, keyed
+ * `panelId:action`.
  */
 export function mergeActionSchemas(
     blocks: CanvasBlock[],
     actions: { panelId: string; action: string; schema?: ActionSchema }[],
-    triggers: { panelId: string; trigger: string; schema?: TriggerSchema }[],
 ): CanvasBlock[] {
     const actionMap = new Map<string, ActionSchema>();
     for (const entry of actions) {
         if (entry.schema) actionMap.set(`${entry.panelId}:${entry.action}`, entry.schema);
     }
-    const triggerMap = new Map<string, TriggerSchema>();
-    for (const entry of triggers) {
-        if (entry.schema) triggerMap.set(`${entry.panelId}:${entry.trigger}`, entry.schema);
-    }
     return walkBlocks(blocks, (block) => {
         const actionId = (block.action as { id?: string } | undefined)?.id;
         if (!actionId) return block;
-        const fresh = (block.isTrigger ? triggerMap : actionMap).get(
-            `${block.panelId}:${actionId}`,
-        );
+        const fresh = actionMap.get(`${block.panelId}:${actionId}`);
         if (!fresh) return block;
         return { ...block, action: fresh };
     });

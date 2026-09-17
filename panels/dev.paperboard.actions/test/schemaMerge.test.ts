@@ -29,7 +29,6 @@ describe("mergeActionSchemas", () => {
                     schema: { id: "send", name: "Send Message", description: "new" } as any,
                 },
             ],
-            [],
         );
         expect(merged[0].action.name).toBe("Send Message");
         expect(merged[0].values).toEqual({ channel: "123" });
@@ -37,19 +36,18 @@ describe("mergeActionSchemas", () => {
         expect(merged[0].variableName).toBe("MyVar");
     });
 
-    test("uses the trigger registry for trigger blocks", () => {
+    test("event-only blocks merge from the same registry", () => {
         const triggerBlock = block({
             isTrigger: true,
             action: { id: "on-message", name: "old" } as any,
         });
         const merged = mergeActionSchemas(
             [triggerBlock],
-            [],
             [
                 {
                     panelId: "dev.panel",
-                    trigger: "on-message",
-                    schema: { id: "on-message", name: "When a message arrives" } as any,
+                    action: "on-message",
+                    schema: { id: "on-message", name: "When a message arrives", eventOnly: true } as any,
                 },
             ],
         );
@@ -75,7 +73,6 @@ describe("mergeActionSchemas", () => {
                     schema: { id: "repeat", name: "Repeat (fresh)" } as any,
                 },
             ],
-            [],
         );
         expect(merged[0].action.name).toBe("Repeat (fresh)");
         expect(merged[0].children?.[0].action.name).toBe("Ghost");

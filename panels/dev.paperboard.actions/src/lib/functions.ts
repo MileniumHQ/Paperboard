@@ -1,4 +1,4 @@
-import type { ActionSchema, TriggerSchema } from "@paperboard-dev/paperapi";
+import type { ActionSchema } from "@paperboard-dev/paperapi";
 
 export interface FunctionParam {
     name: string;
@@ -73,7 +73,7 @@ export function buildCallSchema(def: FunctionDef): ActionSchema {
     } as ActionSchema;
 }
 
-export function buildTriggerSchema(def: FunctionDef): TriggerSchema {
+export function buildTriggerSchema(def: FunctionDef): ActionSchema {
     return {
         id: triggerActionId(def.id),
         name: `Function ${def.name}`,
@@ -84,5 +84,6 @@ export function buildTriggerSchema(def: FunctionDef): TriggerSchema {
             type: "object",
             label: def.name,
         },
-    } as TriggerSchema;
+        eventOnly: true,
+    } as ActionSchema;
 }

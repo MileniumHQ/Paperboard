@@ -3,6 +3,7 @@ import {
     defineAction,
     actionsApi,
     config,
+    normalizeMatchRules,
     type ServiceContext,
 } from "@paperboard-dev/paperapi";
 import {
@@ -16,10 +17,15 @@ import {
     buildCallSchema,
 } from "./lib/functions";
 import type { CanvasBlock } from "./lib/tree";
-import { isCanvasBlock } from "./lib/tree";
+import {
+    isCanvasBlock,
+    isEventOnlyAction,
+    walkBlocks,
+} from "./lib/tree";
 // canonical panel id (shared with the UI bundle); the explicit identity
 // every config/registry call below carries
 import { ACTIONS_PANEL_ID } from "./panelId";
+import { matchHolds, payloadFieldValue } from "./lib/runtime";
 
 interface ActionsServiceState {
     flowCount: number;
@@ -39,11 +45,8 @@ const registeredFunctionIds = new Set<string>();
 // internal trigger ids, never matched against user flows
 const INTERNAL_TRIGGER_IDS = ["flow-step", "flow-log", "flow-start", "flow-end"];
 
-// per-flow trigger subscriptions (see resubscribeTriggers) — identity is
-// granted per subscription, never ambient, and the legacy wildcard is
-// only opened when a stored flow actually still uses it
+// One subscription per source event, torn down when the flow set changes.
 let triggerUnsubs: Array<() => void> = [];
-let legacyWildcardUnsub: (() => void) | null = null;
 
 function serviceHooks() {
     return {
@@ -196,30 +199,36 @@ async function executeFlowGated(
 
 function handleTriggerEvent(output: any, data: any): void {
     if (!data || INTERNAL_TRIGGER_IDS.includes(data.trigger)) return;
-    // cross-panel flows must name the panel they listen to. legacy stored
-    // "*" flows AND panel-less flows still fire with a loud warning instead
-    // of honest-looking silence (they die with v3.1 — TODO(remove after v3.1))
+    // Missing source identity must never turn into cross-panel matching.
     for (const b of flows) {
         if (!b.isTrigger) continue;
-        const actionId =
-            b.action?.id || (b.action as any)?.trigger || (b as any).trigger;
+        const actionId = b.action?.id;
         const matchesTrigger = actionId === data.trigger;
-        let matchesPanel = b.panelId === data.panelId;
-        if (b.panelId === "*") {
-            matchesPanel = true;
-            console.warn(
-                `[ActionsService] flow "${b.id}" still uses wildcard panelId "*"; declare the panel explicitly (wildcards die with v3.1). TODO(remove after v3.1)`,
-            );
-        } else if (!b.panelId) {
-            matchesPanel = true;
-            console.warn(
-                `[ActionsService] flow "${b.id}" has no panelId; it fires for every panel — declare the panel explicitly (deprecated; denied after v3.1). TODO(remove after v3.1)`,
-            );
+        const matchesPanel = Boolean(b.panelId && b.panelId !== "*" && b.panelId === data.panelId);
+        if (!b.panelId || b.panelId === "*") {
+            console.warn(`[ActionsService] flow "${b.id}" refused: select an explicit source panel`);
         }
-        if (matchesTrigger && matchesPanel) {
+        if (matchesTrigger && matchesPanel && rootMatchesRules(b, output)) {
             void runStoredFlow(serviceCtx, b, output);
         }
     }
+}
+
+/**
+ * Parameterized event routing: a root fires only when every match rule its
+ * schema declares holds against the payload. The rule is declarative data
+ * (payload field ↔ block input); the comparison is one generic, exact
+ * equality — the mechanism knows nothing about what the field means.
+ */
+function rootMatchesRules(b: CanvasBlock, output: any): boolean {
+    const rules = normalizeMatchRules((b.action as any)?.match);
+    if (rules.length === 0) return true;
+    for (const rule of rules) {
+        const literal = b.values?.[rule.input];
+        const actual = payloadFieldValue(output, rule.field);
+        if (!matchHolds(literal, actual)) return false;
+    }
+    return true;
 }
 
 // exported for tests: direct access to event matching (panel-less and
@@ -241,39 +250,29 @@ export const __actionsTestState = {
 };
 
 function flowTriggerName(b: CanvasBlock): string | null {
-    const actionId =
-        b.action?.id || (b.action as any)?.trigger || (b as any).trigger;
+    const actionId = b.action?.id;
     if (typeof actionId !== "string" || actionId.length === 0) return null;
     if (INTERNAL_TRIGGER_IDS.includes(actionId)) return null;
     if (actionId.startsWith("function-trigger-")) return null;
     return actionId;
 }
 
-// every user flow is subscribed EXPLICITLY: onTrigger(panel, trigger).
-// Subscription set is rebuilt whenever the flow set changes. The
-// deprecated wildcard subscription is opened ONLY while some stored flow
-// still carries the "*" panelId — it is removed with the flows themselves
-// after v3.1 (TODO(remove after v3.1)).
+// Subscribe once per distinct source event; its handler dispatches all
+// matching flows once. Rebuild atomically when the stored flow set changes.
 function resubscribeTriggers(): void {
     for (const unsub of triggerUnsubs) unsub();
     triggerUnsubs = [];
-    if (legacyWildcardUnsub) {
-        legacyWildcardUnsub();
-        legacyWildcardUnsub = null;
-    }
+    const subscribed = new Set<string>();
     for (const b of flows) {
         if (!b.isTrigger || b.panelId === "*") continue;
         const triggerName = flowTriggerName(b);
         if (!triggerName) continue;
         const panelId = b.panelId || ACTIONS_PANEL_ID;
+        const key = `${panelId}:${triggerName}`;
+        if (subscribed.has(key)) continue;
+        subscribed.add(key);
         triggerUnsubs.push(
             actionsApi.onTrigger(panelId, triggerName, handleTriggerEvent),
-        );
-    }
-    if (flows.some((b) => b.isTrigger && b.panelId === "*")) {
-        legacyWildcardUnsub = actionsApi.onTrigger("*", handleTriggerEvent);
-        console.warn(
-            "[ActionsService] wildcard trigger subscription opened for legacy '+' flows; wildcards die with v3.1. TODO(remove after v3.1)",
         );
     }
 }
@@ -323,7 +322,7 @@ export async function runTestFlow(
     return await executeFlowGated(ctx, triggerBlock, inputs?.payload || {});
 }
 
-const actions = [
+export const actions = [
     defineAction({
         id: "sync-flows",
         name: "Sync Flows",
@@ -349,16 +348,35 @@ const actions = [
                 // boundary: stored flows are executable content — malformed
                 // blocks are dropped loudly, never trusted into the runtime
                 const valid = inputs.flows.filter(isCanvasBlock);
-                const dropped = inputs.flows.length - valid.length;
-                if (dropped > 0) {
-                    console.warn(`[ActionsService] sync-flows dropped ${dropped} malformed block(s)`);
-                }
+                if (valid.length !== inputs.flows.length) throw new Error("Flow sync refused: malformed blocks; repair them before applying");
                 for (const b of valid) {
-                    if (!b.panelId) {
-                        console.warn(
-                            `[ActionsService] stored flow "${b.id}" has no panelId; inferring it from ${ACTIONS_PANEL_ID} sync (declare it in the canvas — deprecated). TODO(remove after v3.1)`,
-                        );
-                        b.panelId = ACTIONS_PANEL_ID;
+                    if (!b.panelId || b.panelId === "*") throw new Error(`Flow "${b.id}" needs an explicit source panel`);
+                    // a parameterized trigger whose match input is empty or
+                    // a variable chip can never fire: refuse it loudly
+                    // instead of saving a dead listener
+                    for (const rule of normalizeMatchRules((b.action as any)?.match)) {
+                        const literal = b.values?.[rule.input];
+                        if (
+                            literal === undefined ||
+                            literal === null ||
+                            (typeof literal === "string" && literal.trim() === "")
+                        ) {
+                            throw new Error(
+                                `Flow "${b.id}": "${b.action.name}" needs a value for "${rule.input}" — without it this trigger would never fire`,
+                            );
+                        }
+                        if (typeof literal === "string" && literal.includes("{{")) {
+                            throw new Error(
+                                `Flow "${b.id}": "${rule.input}" on "${b.action.name}" must be a literal value, not a variable`,
+                            );
+                        }
+                    }
+                    for (const nested of walkBlocks(b.children || [], (c) => c)) {
+                        if (isEventOnlyAction(nested.action)) {
+                            throw new Error(
+                                `Flow "${b.id}": "${nested.action.name}" fires as an event and starts flows; it cannot be nested`,
+                            );
+                        }
                     }
                 }
                 flows = valid;
@@ -416,7 +434,6 @@ export const actionsService = definePanelService({
         rev: 0,
     },
     actions,
-    triggers: [],
     async onInit(ctx: Ctx) {
         serviceCtx = ctx;
 

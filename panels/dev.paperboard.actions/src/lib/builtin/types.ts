@@ -1,4 +1,4 @@
-import type { ActionInfo, TriggerInfo } from "@paperboard-dev/paperapi";
+import type { ActionInfo } from "@paperboard-dev/paperapi";
 
 // reserved synthetic panel id for core-provided actions
 export const BUILTIN_PANEL_ID = "builtin.computer";
@@ -10,18 +10,18 @@ export interface BuiltinCategory {
     icon: string;
     iconUrl?: string;
     description: string;
-    items: (ActionInfo | TriggerInfo)[];
+    items: ActionInfo[];
 }
 
 export interface BuiltinDef {
-    /** Stable builtin id (action id or trigger id). */
+    /** Stable builtin id (action id or event action id). */
     id: string;
     /** Owning category id (e.g. "logic.text", "computer.system"). */
     category: string;
     /** Panel that serves this builtin. */
     panelId: string;
     /** Registry item as consumed by the library UI. */
-    item: ActionInfo | TriggerInfo;
+    item: ActionInfo;
 }
 
 export const BUILTIN_CATEGORY_META: Omit<BuiltinCategory, "items">[] = [

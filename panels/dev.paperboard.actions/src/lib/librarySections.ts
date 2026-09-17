@@ -1,8 +1,8 @@
-// Pure grouping for the Actions library: a panel's triggers and actions are
-// grouped by the category their schema declares. Panels can attach an icon
-// and sort order to a category through PaperAPI's declared-category array;
-// without an order, categories sort alphabetically.
-import type { ActionInfo, TriggerInfo } from "@paperboard-dev/paperapi";
+// Pure grouping for the Actions library: a panel's event actions and actions
+// are grouped by the category their schema declares. Panels can attach an
+// icon and sort order to a category through PaperAPI's declared-category
+// array; without an order, categories sort alphabetically.
+import type { ActionInfo } from "@paperboard-dev/paperapi";
 
 export interface LibrarySection {
     /** stable key: the category name */
@@ -10,7 +10,7 @@ export interface LibrarySection {
     name: string;
     icon?: string;
     order?: number;
-    triggers: TriggerInfo[];
+    triggers: ActionInfo[];
     actions: ActionInfo[];
 }
 
@@ -54,7 +54,7 @@ function sectionMetaOf(
 }
 
 export function buildLibrarySections(
-    triggers: TriggerInfo[],
+    triggers: ActionInfo[],
     actions: ActionInfo[],
 ): LibrarySection[] {
     const sections = new Map<string, LibrarySection>();
