@@ -65,24 +65,6 @@ export async function handleActions(action: string, id: unknown, params: any, ct
             reply(id, { success: true });
             return true;
         }
-        case "triggers:register":
-        case "trigger:register": {
-            const panelId = assertPanelId(params?.panelId);
-            const trigger = assertStr(params?.trigger, "trigger", 256);
-            const result = actionsRegistry.registerTrigger(panelId, trigger, ws, params?.schema);
-            if (!result.ok) {
-                reply(
-                    id,
-                    null,
-                    `Registry namespace is owned by another socket: trigger "${trigger}" for panel "${panelId}" conflicts`,
-                    ErrorCode.CONFLICT,
-                );
-                return true;
-            }
-            broadcastEvent("actions:registry-updated", { type: "trigger:registered", panelId, trigger });
-            reply(id, { success: true });
-            return true;
-        }
         case "actions:unregister":
         case "action:unregister": {
             const panelId = assertPanelId(params?.panelId);
@@ -98,24 +80,6 @@ export async function handleActions(action: string, id: unknown, params: any, ct
                 return true;
             }
             broadcastEvent("actions:registry-updated", { type: "action:unregistered", panelId, action: act });
-            reply(id, { success: true });
-            return true;
-        }
-        case "triggers:unregister":
-        case "trigger:unregister": {
-            const panelId = assertPanelId(params?.panelId);
-            const trigger = assertOptStr(params?.trigger, "trigger", 256);
-            const result = actionsRegistry.unregisterTrigger(panelId, trigger, ws);
-            if (!result.ok) {
-                reply(
-                    id,
-                    null,
-                    `Registry namespace is owned by another socket: cannot unregister trigger "${trigger}" for panel "${panelId}"`,
-                    ErrorCode.CONFLICT,
-                );
-                return true;
-            }
-            broadcastEvent("actions:registry-updated", { type: "trigger:unregistered", panelId, trigger });
             reply(id, { success: true });
             return true;
         }
@@ -136,11 +100,6 @@ export async function handleActions(action: string, id: unknown, params: any, ct
         case "actions:list":
         case "action:list": {
             reply(id, { actions: actionsRegistry.list(assertOptStr(params?.panelId, "panelId", 128)) });
-            return true;
-        }
-        case "triggers:list":
-        case "trigger:list": {
-            reply(id, { triggers: actionsRegistry.listTriggers(assertOptStr(params?.panelId, "panelId", 128)) });
             return true;
         }
         case "actions:emit":

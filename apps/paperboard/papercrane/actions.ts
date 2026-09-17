@@ -20,13 +20,6 @@ export interface RegisteredAction {
     ws: WebSocket;
 }
 
-export interface RegisteredTrigger {
-    panelId: string;
-    trigger: string;
-    schema?: any;
-    ws: WebSocket;
-}
-
 export interface PendingActionCall {
     callId: string;
     panelId: string;
@@ -44,10 +37,13 @@ export type RegistryResult =
     | { ok: false; code: "CONFLICT"; owner: WebSocket };
 
 export class ActionsRegistry {
+    // ONE key space for every registrable thing: callable actions and event
+    // actions share the `panelId:action` namespace, so a callable action and
+    // an event can never shadow each other's identity. Mirrored per-kind
+    // maps were how register/unregister and socket teardown logic drifted
+    // apart.
     private actions = new Map<string, RegisteredAction>();
-    private triggers = new Map<string, RegisteredTrigger>();
     private socketActions = new Map<WebSocket, Set<string>>();
-    private socketTriggers = new Map<WebSocket, Set<string>>();
     private pendingCalls = new Map<string, PendingActionCall>();
     // per-caller outstanding call ids (teardown: handleSocketClose drops
     // the set together with pendingCalls entries)
@@ -56,10 +52,6 @@ export class ActionsRegistry {
 
     private actionKey(panelId: string, action: string): string {
         return `${panelId}:${action}`;
-    }
-
-    private triggerKey(panelId: string, trigger: string): string {
-        return `${panelId}:${trigger}`;
     }
 
     public register(
@@ -112,36 +104,6 @@ export class ActionsRegistry {
         return { ok: true };
     }
 
-    public registerTrigger(
-        panelId: string,
-        triggerName: string,
-        ws: WebSocket,
-        schema?: any,
-    ): RegistryResult {
-        const key = this.triggerKey(panelId, triggerName);
-        const existing = this.triggers.get(key);
-        if (existing && existing.ws !== ws) {
-            logger.warn(
-                `[Triggers] Refused to register trigger "${triggerName}" for panel "${panelId}": already registered by another socket`,
-            );
-            return { ok: false, code: "CONFLICT", owner: existing.ws };
-        }
-
-        this.triggers.set(key, { panelId, trigger: triggerName, schema, ws });
-
-        let set = this.socketTriggers.get(ws);
-        if (!set) {
-            set = new Set();
-            this.socketTriggers.set(ws, set);
-        }
-        set.add(key);
-
-        logger.info(
-            `[Triggers] Registered trigger "${triggerName}" for panel "${panelId}"`,
-        );
-        return { ok: true };
-    }
-
     public unregister(
         panelId: string,
         actionName?: string,
@@ -174,38 +136,6 @@ export class ActionsRegistry {
         return { ok: true };
     }
 
-    public unregisterTrigger(
-        panelId: string,
-        triggerName?: string,
-        ws?: WebSocket,
-    ): RegistryResult {
-        if (triggerName) {
-            const key = this.triggerKey(panelId, triggerName);
-            const existing = this.triggers.get(key);
-            if (existing && ws && existing.ws !== ws) {
-                logger.warn(
-                    `[Triggers] Refused to unregister trigger "${triggerName}" for panel "${panelId}": registered by another socket`,
-                );
-                return { ok: false, code: "CONFLICT", owner: existing.ws };
-            }
-            this.triggers.delete(key);
-            if (ws) {
-                this.socketTriggers.get(ws)?.delete(key);
-            }
-            return { ok: true };
-        }
-
-        for (const [key, entry] of this.triggers.entries()) {
-            if (entry.panelId === panelId && (!ws || entry.ws === ws)) {
-                this.triggers.delete(key);
-                if (ws) {
-                    this.socketTriggers.get(ws)?.delete(key);
-                }
-            }
-        }
-        return { ok: true };
-    }
-
     public handleSocketClose(ws: WebSocket): boolean {
         let changed = false;
         const keys = this.socketActions.get(ws);
@@ -214,15 +144,6 @@ export class ActionsRegistry {
                 this.actions.delete(key);
             }
             this.socketActions.delete(ws);
-            changed = true;
-        }
-
-        const trigKeys = this.socketTriggers.get(ws);
-        if (trigKeys && trigKeys.size > 0) {
-            for (const key of trigKeys) {
-                this.triggers.delete(key);
-            }
-            this.socketTriggers.delete(ws);
             changed = true;
         }
 
@@ -384,22 +305,6 @@ export class ActionsRegistry {
                 list.push({
                     panelId: entry.panelId,
                     action: entry.action,
-                    schema: entry.schema,
-                });
-            }
-        }
-        return list;
-    }
-
-    public listTriggers(
-        filterPanelId?: string,
-    ): { panelId: string; trigger: string; schema?: any }[] {
-        const list: { panelId: string; trigger: string; schema?: any }[] = [];
-        for (const entry of this.triggers.values()) {
-            if (!filterPanelId || entry.panelId === filterPanelId) {
-                list.push({
-                    panelId: entry.panelId,
-                    trigger: entry.trigger,
                     schema: entry.schema,
                 });
             }

@@ -149,22 +149,23 @@ describe("registration namespace ownership", () => {
         }
     });
 
-    it("triggers are owned like actions", async () => {
+    it("event actions are owned like actions and share one identity namespace", async () => {
         const a = await connect();
         const b = await connect();
         try {
-            send(a, { id: 1, action: "triggers:register", params: { panelId: "dev.six", trigger: "webhook" } });
+            send(a, { id: 1, action: "actions:register", params: { panelId: "dev.six", action: "webhook", schema: { id: "webhook", eventOnly: true } } });
             await waitFor(a, (f) => f.id === 1 && !f.error);
 
-            send(b, { id: 2, action: "triggers:register", params: { panelId: "dev.six", trigger: "webhook" } });
+            // a second socket cannot take the name, whichever kind it claims
+            send(b, { id: 2, action: "actions:register", params: { panelId: "dev.six", action: "webhook", schema: { id: "webhook", eventOnly: true } } });
             const resp = await waitFor(b, (f) => f.id === 2);
             expect(resp.code).toBe("CONFLICT");
 
-            send(b, { id: 3, action: "triggers:unregister", params: { panelId: "dev.six", trigger: "webhook" } });
+            send(b, { id: 3, action: "actions:unregister", params: { panelId: "dev.six", action: "webhook" } });
             const unreg = await waitFor(b, (f) => f.id === 3);
             expect(unreg.code).toBe("CONFLICT");
 
-            expect(actionsRegistry.listTriggers("dev.six")).toHaveLength(1);
+            expect(actionsRegistry.list("dev.six")).toHaveLength(1);
         } finally {
             a.ws.terminate();
             b.ws.terminate();
