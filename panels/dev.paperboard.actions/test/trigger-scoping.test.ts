@@ -1,6 +1,5 @@
-// trigger scoping (bun test): panel-less legacy flows must fire with the
-// SAME loud deprecation warning as wildcard flows, never honest-looking
-// silence (deprecated paths die with v3.1 — TODO(remove after v3.1))
+// Stored flows require a named source. Old wildcard/panel-less definitions
+// refuse execution until the author chooses that source.
 import { describe, it, expect, afterAll, beforeEach } from "bun:test";
 import { handleTriggerEventForTest, __actionsTestState } from "../src/service";
 import type { CanvasBlock } from "../src/lib/tree";
@@ -37,17 +36,16 @@ describe("handleTriggerEvent panel scoping", () => {
         emitted.length = 0;
     });
 
-    it("warns loudly and deprecates a flow with NO panelId", async () => {
+    it("refuses a flow with no source panel instead of firing for every panel", async () => {
         const warns: string[] = [];
         console.warn = (...a: any[]) => warns.push(a.map(String).join(" "));
         __actionsTestState.setFlows([flowWith(undefined)]);
         await fire();
         console.warn = origWarn;
         const joined = warns.join("\n");
-        expect(joined.includes("has no panelId")).toBe(true);
-        expect(joined.includes("TODO(remove after v3.1)")).toBe(true);
-        // the flow still fires (same leniency path as wildcards, loudly)
-        expect(emitted.some((e) => e.trigger === "flow-start")).toBe(true);
+        expect(joined.includes("select an explicit source panel")).toBe(true);
+        // No cross-panel execution is inferred from missing identity.
+        expect(emitted.some((e) => e.trigger === "flow-start")).toBe(false);
     });
 
     it("matches NOTHING when panel ids simply differ", async () => {
@@ -69,7 +67,7 @@ describe("handleTriggerEvent panel scoping", () => {
         expect(warns.join("\n").includes("no panelId")).toBe(false);
     });
 
-    it("wildcard flows fire with their existing loud warning", async () => {
+    it("wildcard flows are refused until an explicit source is selected", async () => {
         const warns: string[] = [];
         console.warn = (...a: any[]) => warns.push(a.map(String).join(" "));
         try {
@@ -78,8 +76,8 @@ describe("handleTriggerEvent panel scoping", () => {
         } finally {
             console.warn = origWarn;
         }
-        expect(warns.join("\n").includes('wildcard panelId "*"')).toBe(true);
-        expect(emitted.some((e) => e.trigger === "flow-start")).toBe(true);
+        expect(warns.join("\n").includes("select an explicit source panel")).toBe(true);
+        expect(emitted.some((e) => e.trigger === "flow-start")).toBe(false);
     });
 });
 

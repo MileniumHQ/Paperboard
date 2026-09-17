@@ -917,9 +917,8 @@ export interface FunctionCallHooks {
     getFunctionName?: (fid: string) => string;
     countFunctionBodies?: (fid: string) => number;
     captureOutput?: (output: any) => void;
+    callStack?: readonly string[];
 }
-
-const activeFunctionCalls = new Set<string>();
 
 export async function runFunctionCall(
     fid: string,
@@ -940,11 +939,12 @@ export async function runFunctionCall(
             message: `Function "${hooks.getFunctionName?.(fid) || fid}" has ${bodies} body triggers; using the first.`,
         });
     }
-    if (activeFunctionCalls.has(fid)) {
+    const callStack = hooks.callStack ?? [];
+    if (callStack.includes(fid)) {
         const name = hooks.getFunctionName?.(fid) || fid;
         throw new Error(`Recursive call of function "${name}" is not allowed`);
     }
-    activeFunctionCalls.add(fid);
+    if (callStack.length >= 32) throw new Error("Function call depth exceeds 32");
     try {
         let bodyOutput: any = undefined;
         const subTrigger = {
@@ -955,7 +955,7 @@ export async function runFunctionCall(
             },
             children: body,
         } as CanvasBlock;
-        await executeFlow(
+        const outcome = await executeFlow(
             subTrigger,
             { ...(inputs || {}) },
             undefined,
@@ -965,15 +965,15 @@ export async function runFunctionCall(
                 getFunctionBody: hooks.getFunctionBody,
                 getFunctionName: hooks.getFunctionName,
                 countFunctionBodies: hooks.countFunctionBodies,
+                callStack: [...callStack, fid],
                 captureOutput: (o) => {
                     bodyOutput = o;
                 },
             },
         );
+        if (outcome.status === "error") throw new Error(outcome.message);
         return bodyOutput;
-    } finally {
-        activeFunctionCalls.delete(fid);
-    }
+    } catch (err) { throw err; }
 }
 
 export async function executeFlow(
@@ -1068,6 +1068,7 @@ export async function executeFlow(
                     result = await runFunctionCall(fid, resolvedInputs, {
                         getFunctionBody: hooks?.getFunctionBody,
                         getFunctionName: hooks?.getFunctionName,
+                        callStack: hooks?.callStack,
                         onStepChange,
                         onConsoleLog,
                     });
@@ -1118,11 +1119,6 @@ export async function executeFlow(
                     }
                     result = conditionMet;
                 } else {
-                    console.log(
-                        `[Actions Runtime] Executing action "${actionId}" on panel "${panelId}" with inputs:`,
-                        resolvedInputs,
-                    );
-
                     const isBuiltin = Boolean(panelId && panelId.startsWith("builtin."));
                     if (isBuiltin) {
                         result = await executeBuiltinAction(actionId, resolvedInputs, onConsoleLog);
@@ -1188,6 +1184,7 @@ export async function executeFlow(
             if (err instanceof FlowLoopSignal) {
                 log.message = err.message;
             }
+            else if (!log.message.startsWith("Failed at step")) log.message = err?.message || String(err);
         }
     }
 
