@@ -4,7 +4,7 @@ import { loadConfigAndProperties } from "./service/config";
 import { handleProcessData, handleProcessExit } from "./service/lifecycle";
 import {
     panelActions,
-    panelTriggers,
+    panelEventActions,
     customTypes,
     republishDynamicActions,
 } from "./service/actions";
@@ -45,8 +45,7 @@ export const gameServerService = definePanelService({
         { name: "Logs", icon: "receipt_long", order: 6 },
         { name: "Events", icon: "bolt", order: 7 },
     ],
-    actions: panelActions,
-    triggers: panelTriggers,
+    actions: [...panelActions, ...panelEventActions],
     async onInit(ctx) {
         await loadConfigAndProperties(ctx);
         // the world and gamerule dropdowns are registered from state that

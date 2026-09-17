@@ -2,11 +2,9 @@ import {
     actionsApi,
     defineType,
     defineAction,
-    defineTrigger,
     files as fileApi,
     packages as packageApi,
     type ActionDefinition,
-    type TriggerDefinition,
     type CustomTypeDefinition,
     type ServiceContext,
 } from "@paperboard-dev/paperapi";
@@ -113,7 +111,10 @@ export async function republishDynamicActions(
     ]) {
         const wrapped: ActionDefinition = {
             ...def,
-            run: (_c, inputs) => def.run(ctx, inputs),
+            run: (_c, inputs) => {
+                if (!def.run) throw new Error(`Action "${def.id}" has no run body`);
+                return def.run(ctx, inputs);
+            },
         };
         try {
             await actionsApi.register(wrapped, undefined, PANEL_ID);
@@ -1086,8 +1087,9 @@ export const panelActions: ActionDefinition[] = [
     }),
 ];
 
-export const panelTriggers: TriggerDefinition[] = [
-    defineTrigger({
+// event actions fire as events and start flows; they are not callable
+export const panelEventActions: ActionDefinition[] = [
+    defineAction({
         id: TRIGGER_IDS.chatMessage,
         name: "When Chat Message Sent",
         category: "Events",
@@ -1102,7 +1104,7 @@ export const panelTriggers: TriggerDefinition[] = [
         icon: "chat",
     }),
 
-    defineTrigger({
+    defineAction({
         id: TRIGGER_IDS.playerJoined,
         name: "When Player Joins",
         category: "Events",
@@ -1117,7 +1119,7 @@ export const panelTriggers: TriggerDefinition[] = [
         icon: "person_add",
     }),
 
-    defineTrigger({
+    defineAction({
         id: TRIGGER_IDS.playerLeft,
         name: "When Player Leaves",
         category: "Events",
@@ -1132,7 +1134,7 @@ export const panelTriggers: TriggerDefinition[] = [
         icon: "logout",
     }),
 
-    defineTrigger({
+    defineAction({
         id: TRIGGER_IDS.serverStarted,
         name: "When Server Starts",
         category: "Events",
@@ -1146,7 +1148,7 @@ export const panelTriggers: TriggerDefinition[] = [
         icon: "play_arrow",
     }),
 
-    defineTrigger({
+    defineAction({
         id: TRIGGER_IDS.serverStopped,
         name: "When Server Stops",
         category: "Events",

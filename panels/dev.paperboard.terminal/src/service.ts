@@ -1,7 +1,6 @@
 import {
     definePanelService,
     defineAction,
-    defineTrigger,
     config,
     terminalApi,
     processApi,
@@ -201,9 +200,7 @@ export async function writeToTerminal(
     return true;
 }
 
-// trash-first: recoverable before irrecoverable. The files API has no
-// rename, so close copies to the trash name, then removes the live file.
-// Either side failing is logged loudly; the live file is still removed.
+// A failed recovery copy must leave the live source intact.
 export async function trashScrollback(id: string): Promise<void> {
     try {
         const saved = await files.read(scrollbackPath(id), PANEL_ID);
@@ -213,10 +210,12 @@ export async function trashScrollback(id: string): Promise<void> {
                 await files.write(trashName, saved, PANEL_ID);
             } catch (err) {
                 console.error(`[TerminalService] scrollback trash write failed for ${id}:`, err);
+                throw err;
             }
         }
     } catch (err) {
         console.error(`[TerminalService] scrollback trash step failed for ${id}:`, err);
+        throw err;
     }
     try {
         await files.delete(scrollbackPath(id), PANEL_ID);
@@ -457,8 +456,9 @@ const actions = [
     }),
 ];
 
-const triggers = [
-    defineTrigger({
+// event actions fire as events and start flows; they are not callable
+const eventActions = [
+    defineAction({
         id: "terminal-exit",
         name: "When Terminal Session Ends",
         category: "Events",
@@ -481,8 +481,7 @@ export const terminalService = definePanelService({
         { name: "Output", icon: "output", order: 3 },
         { name: "Events", icon: "bolt", order: 4 },
     ],
-    actions,
-    triggers,
+    actions: [...actions, ...eventActions],
     async onInit(ctx: Ctx) {
         try {
             const saved = await config.get<any>(PANEL_ID, "tabs.json");
