@@ -106,7 +106,7 @@ export function definePanelService<
                 ? patchOrUpdater(currentState)
                 : patchOrUpdater;
         currentState = { ...currentState, ...patch };
-        emit(STATE_SYNC_EVENT, { state: patch, full: currentState });
+        emit(STATE_SYNC_EVENT, { state: patch });
     };
 
     const ctx: ServiceContext<TState> = {
@@ -118,19 +118,18 @@ export function definePanelService<
         emitTrigger,
     };
 
+    const registrations: Promise<void>[] = [];
     // internal hydration action: callable by the bridge, never a block
-    actionsApi.register(
+    registrations.push(actionsApi.register(
         STATE_GET_ACTION,
-        () => currentState,
+        async () => { await ready; return currentState; },
         panelId,
         {
             internal: true,
             name: "Get Panel State",
             description: "Hydrates the panel bridge with the service's state",
         },
-    ).catch((err) => {
-        console.error(`[Service:${panelId}] Failed to register hydration action '${STATE_GET_ACTION}':`, err);
-    });
+    ));
 
     if (options.actions) {
         if (Array.isArray(options.actions)) {
@@ -149,12 +148,7 @@ export function definePanelService<
                               actionDef.listen!(ctx, emitFn)
                         : undefined,
                 };
-                actionsApi.register(wrapped, undefined, panelId).catch((err) => {
-                    console.error(
-                        `[Service:${panelId}] Failed to register action '${actionDef.id}':`,
-                        err,
-                    );
-                });
+                registrations.push(actionsApi.register(wrapped, undefined, panelId));
             }
         } else {
             const registeredActions: Record<
@@ -165,20 +159,21 @@ export function definePanelService<
                 registeredActions[actionName] = (...args: any[]) =>
                     actionFn(ctx, ...args);
             }
-            actionsApi.registerMultiple(registeredActions, panelId).catch((err) => {
-                console.error(`[Service:${panelId}] Failed to register actions:`, err);
-            });
+            registrations.push(actionsApi.registerMultiple(registeredActions, panelId));
         }
     }
 
-    if (options.onInit) {
-        Promise.resolve(options.onInit(ctx)).catch((err) => {
-            console.error(`[Service:${panelId}] onInit error:`, err);
-        });
-    }
+    const ready = Promise.all(registrations).then(async () => {
+        await options.onInit?.(ctx);
+        if (typeof process !== "undefined" && typeof process.send === "function") {
+            process.send({ type: "paperboard:service-ready", panelId });
+        }
+    });
+    void ready.catch((err) => console.error(`[Service:${panelId}] initialization failed:`, err));
 
     return {
         panelId,
+        ready,
         ctx,
         getState: () => currentState,
         setState,

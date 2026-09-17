@@ -284,6 +284,7 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
                             <PaperInput
                                 fullWidth
                                 placeholder="192.168.1.50"
+                                aria-label="Computer address"
                                 icon="language"
                                 value={host()}
                                 onInput={(e) =>
@@ -294,6 +295,7 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
                             <PaperInput
                                 fullWidth
                                 placeholder="45464"
+                                aria-label="Server port"
                                 icon="numbers"
                                 value={port()}
                                 onInput={(e) =>
@@ -341,6 +343,7 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
                             <PaperInput
                                 fullWidth
                                 placeholder="123 456"
+                                aria-label="Pairing code"
                                 icon="lock"
                                 value={code()}
                                 onInput={(e) => setCode(e.currentTarget.value)}

@@ -132,12 +132,19 @@ export function logToMain(
     // and defeat "logging must never break the caller".
     let message = "";
     try {
+        const seen = new WeakSet<object>();
         message = args
             .map((a) =>
                 a instanceof Error
                     ? a.stack ?? String(a)
                     : typeof a === "object"
-                      ? JSON.stringify(a, jsonReplacer, 2)
+                      ? JSON.stringify(a, (_key, value) => {
+                          if (value && typeof value === "object") {
+                              if (seen.has(value)) return "[Circular]";
+                              seen.add(value);
+                          }
+                          return value;
+                      }, 2)
                       : String(a),
             )
             .join(" ");
@@ -147,14 +154,3 @@ export function logToMain(
         console.warn("[shell.ts] logToMain failed (IPC unavailable):", err);
     }
 }
-
-// JSON.stringify replacer that survives circular structures: seen objects
-// become "[Circular]" instead of a TypeError
-function jsonReplacer(_key: string, value: unknown) {
-    if (typeof value === "object" && value !== null) {
-        if (jsonReplacerSeen.has(value)) return "[Circular]";
-        jsonReplacerSeen.add(value);
-    }
-    return value;
-}
-const jsonReplacerSeen = new Set<unknown>();

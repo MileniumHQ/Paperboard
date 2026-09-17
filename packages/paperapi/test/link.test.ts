@@ -1,6 +1,5 @@
 // link --force rename-to-trash discipline (T23g, bun test): the replaced
-// panel directory is renamed away before recursive delete, so destructive
-// boundaries stay recoverable.
+// panel directory remains recoverable after replacement.
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import * as fs from "fs";
 import * as os from "os";
@@ -41,9 +40,10 @@ describe("linkPanel force replace", () => {
         expect(res.id).toBe("dev.test.link");
         // the link now points at the new source
         expect(fs.readlinkSync(res.linkPath)).toBe(sourceDir);
-        // no half-destroyed remains: the entire panels dir holds only the link
+        // Recovery contains the actual previous bytes, not just a renamed entry.
         const entries = fs.readdirSync(panelsDir);
-        expect(entries).toEqual(["dev.test.link"]);
+        const recovery = entries.find((name) => name.startsWith(".trash-"))!;
+        expect(fs.readFileSync(path.join(panelsDir, recovery, "keep-me.txt"), "utf8")).toBe("old bytes");
     });
 
     test("--force on a directory without --force is refused", () => {

@@ -1,7 +1,7 @@
 import path from "path";
 import fs from "fs";
 import os from "os";
-import { PANEL_ID_REGEX } from "./pack";
+import { requirePanelId } from "./panelIdentity";
 import { debugErr } from "./debug";
 
 // dev-link target root. Same root variable the transport handshake uses
@@ -35,9 +35,7 @@ export function linkPanel(options: LinkOptions = {}): {
     }
 
     const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
-    if (!manifest.id || typeof manifest.id !== "string" || !PANEL_ID_REGEX.test(manifest.id)) {
-        throw new Error(`Invalid panel id '${manifest.id}'. Must follow reverse-domain format.`);
-    }
+    requirePanelId(manifest.id);
 
     if (!fs.existsSync(panelsDir)) {
         fs.mkdirSync(panelsDir, { recursive: true });
@@ -51,15 +49,12 @@ export function linkPanel(options: LinkOptions = {}): {
             fs.unlinkSync(linkPath);
         } else if (lstat.isDirectory()) {
             if (options.force) {
-                // recoverable destruction: rename to a trash name BEFORE
-                // rmSync — a crash mid-delete leaves a recoverable trash
-                // entry instead of a half-destroyed panel directory
+                // Keep the previous package for recovery.
                 const trashPath = path.join(
                     panelsDir,
-                    `${manifest.id}.trash-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                    `.trash-${Date.now()}-${manifest.id}`,
                 );
                 fs.renameSync(linkPath, trashPath);
-                fs.rmSync(trashPath, { recursive: true, force: true });
             } else {
                 throw new Error(`Destination ${linkPath} already exists. Use --force to replace it.`);
             }
@@ -78,6 +73,7 @@ export function linkPanel(options: LinkOptions = {}): {
 
 // removes a symlinked panel
 export function unlinkPanel(panelId: string): boolean {
+    requirePanelId(panelId);
     const panelsDir = getPanelsDir();
     const linkPath = path.join(panelsDir, panelId);
     if (!fs.existsSync(linkPath)) return false;

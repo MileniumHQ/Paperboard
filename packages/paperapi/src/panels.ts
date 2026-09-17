@@ -18,6 +18,7 @@ export interface PanelItem {
     // for panels installed before provenance shipped.
     installSource?: "registry" | "direct" | "dev";
     isLinked?: boolean;
+    installedVersion?: string;
 }
 
 // panel store and lifecycle, scope omitted = ambient
@@ -31,10 +32,10 @@ export const panelsApi = {
         try {
             installed = await panelsApi.list(scope);
         } catch (err) {
-            // installed list unavailable — logged, merge continues
-            // registry-only instead of silently pretending nothing is installed
-            console.debug("[panels] installed list unavailable, registry-only merge:", err);
-            installed = [];
+            // The caller needs the failure to show recovery, not an empty
+            // installed set that would turn Open buttons into Download.
+            console.debug("[panels] installed list unavailable:", err);
+            throw err;
         }
         const installedMap = new Map(installed.map((p) => [p.id, p]));
 
@@ -59,8 +60,7 @@ export const panelsApi = {
                         record.publisher ||
                         record.manifest?.publisher ||
                         record.manifest?.author ||
-                        localPanel?.publisher ||
-                        "Unsigned",
+                        localPanel?.publisher,
                     icon: record.icon || localPanel?.icon,
                     iconUrl:
                         record.iconUrl ||
@@ -80,6 +80,9 @@ export const panelsApi = {
                           )
                         : localPanel?.updatedAt || "Recently",
                     isInstalled: installedMap.has(id),
+                    installedVersion: localPanel?.version,
+                    installSource: localPanel?.installSource,
+                    isLinked: localPanel?.isLinked,
                 });
             }
 
@@ -92,10 +95,10 @@ export const panelsApi = {
 
             return panels;
         } catch (err) {
-            // registry unreachable: DOWN-grading, not silently — the caller
-            // must know the list is installed-only
-            console.error("[panels] registry unreachable, installed set only:", err);
-            return installed;
+            // Preserve the error so the shell can retain prior data and
+            // display its retry action.
+            console.error("[panels] registry unavailable:", err);
+            throw err;
         }
     },
 

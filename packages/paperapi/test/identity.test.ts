@@ -1,6 +1,6 @@
 // identity resolution: injected > hostname > granted boot context
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import { ambientScope, resolvePanelId, resolveDefaultPanelId } from "../src/identity";
+import { grantedComputerId, resolvePanelId, resolveDefaultPanelId } from "../src/identity";
 import { captureServiceBootContext } from "../src/boot";
 
 describe("resolvePanelId", () => {
@@ -37,10 +37,10 @@ describe("resolvePanelId", () => {
         expect(resolvePanelId()).toBe("panel.injected");
     });
 
-    test("hostname fallback resolves out of the document URL when nothing injected", () => {
+    test("a hostname never grants panel identity", () => {
         setWindowHostname("panel.myhost.local");
         const id = resolvePanelId();
-        expect(id).toBe("myhost.local");
+        expect(id).toBe("");
         expect(typeof id).toBe("string");
     });
 
@@ -61,24 +61,28 @@ describe("resolvePanelId", () => {
     test("resolveDefaultPanelId prefers the transport panelId", () => {
         setWindowHostname("panel.myhost.local");
         expect(resolveDefaultPanelId("transport.panel")).toBe("transport.panel");
-        expect(resolveDefaultPanelId(undefined)).toBe("myhost.local");
+        expect(resolveDefaultPanelId(undefined)).toBe("");
     });
 });
 
-describe("ambientScope", () => {
+describe("granted computer identity", () => {
     const savedLocation = (globalThis as any).location;
 
     afterEach(() => {
         (globalThis as any).location = savedLocation;
     });
 
-    test("computer scope is the hostname prefix", () => {
+    test("computer scope comes from injection, not the hostname prefix", () => {
         (globalThis as any).location = { hostname: "alpha.myhost.local" };
-        expect(ambientScope()).toBe("alpha");
+        const previous = (globalThis as any).__PAPERBOARD_CRANE;
+        try {
+            (globalThis as any).__PAPERBOARD_CRANE = { computerId: "granted" };
+            expect(grantedComputerId()).toBe("granted");
+        } finally { (globalThis as any).__PAPERBOARD_CRANE = previous; }
     });
 
     test("falls back to local without a document", () => {
         (globalThis as any).location = undefined;
-        expect(ambientScope()).toBe("local");
+        expect(grantedComputerId()).toBe("local");
     });
 });

@@ -2,7 +2,7 @@
 import { CraneTransport } from "./ws";
 import { debugErr } from "./debug";
 import { REGISTRY_URL, fetchRegistryIndex } from "./config";
-import { ambientScope, resolvePanelId } from "./identity";
+import { grantedComputerId, resolvePanelId } from "./identity";
 
 export interface IpcRendererLike {
     invoke<T = unknown>(channel: string, ...args: unknown[]): Promise<T>;
@@ -28,19 +28,6 @@ declare global {
     }
 }
 
-// TODO(remove after v3.1): the Electron-shim surface below (getElectronIpc
-// and the WS_INVOKE channel table it feeds) dies with the scoped-token
-// milestone — pre-namespaced dispatch rides this translation layer, and
-// scoped tokens remove the need for the shim entirely.
-export function getElectronIpc(): IpcRendererLike | undefined {
-    if (typeof window === "undefined") return undefined;
-    return window.electron?.ipcRenderer ?? window.ipcRenderer;
-}
-
-function hasIpc(): boolean {
-    return !!getElectronIpc();
-}
-
 export function unpackIpcPayload<T>(event: unknown, data: T): T | unknown {
     return data !== undefined ? data : event;
 }
@@ -54,15 +41,29 @@ export function getPanelId(): string {
 
 // one transport per computer, bound at creation
 const transports = new Map<string, CraneTransport>();
+let initializedComputerId: string | undefined;
+let hostCredentialProvider: CraneTransport["credentialProvider"] = null;
+
+/** Explicit shell bootstrap. Panels never discover Electron IPC or inherit
+ * this provider; each document/module owns its own transport registry. */
+export function configureHostConnection(provider: NonNullable<CraneTransport["credentialProvider"]>): () => void {
+    if (hostCredentialProvider) throw new Error("Host connection is already configured");
+    hostCredentialProvider = provider;
+    return () => {
+        for (const transport of transports.values()) transport.close();
+        transports.clear();
+        hostCredentialProvider = null;
+        initializedComputerId = undefined;
+    };
+}
 
 export function getTransport(scope?: string): CraneTransport {
-    const id = scope || ambientScope();
+    const id = scope || initializedComputerId || grantedComputerId();
     let transport = transports.get(id);
     if (!transport) {
         transport = new CraneTransport({ computerId: id });
-        if (hasIpc() && !transport.credentialProvider) {
-            transport.credentialProvider = createShellCredentialProvider();
-        }
+        transport.credentialProvider = hostCredentialProvider;
+        if (transports.size >= 256) throw new Error("Too many computer transports; close unused transports first");
         transports.set(id, transport);
     }
     return transport;
@@ -71,11 +72,12 @@ export function getTransport(scope?: string): CraneTransport {
 // teardown path for the transport registry: closing without removing
 // leaks one transport per scope forever
 export function closeTransport(scope?: string): void {
-    const id = scope || ambientScope();
+    const id = scope || initializedComputerId || grantedComputerId();
     const transport = transports.get(id);
     if (transport) {
         transport.close();
         transports.delete(id);
+        if (initializedComputerId === id) initializedComputerId = undefined;
     }
 }
 
@@ -90,12 +92,12 @@ export interface InitOptions {
 
 // re-init reuses the existing transport
 export function initPaperApi(opts: InitOptions = {}): Promise<void> {
-    const scope = opts.computerId || ambientScope();
+    const scope = opts.computerId || grantedComputerId();
+    initializedComputerId = scope;
+    if (transports.get(scope)?.isDisposed()) transports.delete(scope);
     if (!transports.has(scope)) {
         const transport = new CraneTransport(opts);
-        if (hasIpc() && !transport.credentialProvider) {
-            transport.credentialProvider = createShellCredentialProvider();
-        }
+        transport.credentialProvider = hostCredentialProvider;
         transports.set(scope, transport);
     } else if (
         opts.port ||
@@ -111,17 +113,8 @@ export function initPaperApi(opts: InitOptions = {}): Promise<void> {
     return getTransport(scope).ensureConnected();
 }
 
-function createShellCredentialProvider(): NonNullable<
-    CraneTransport["credentialProvider"]
-> {
-    return async () =>
-        await getElectronIpc()!.invoke<{
-            port: number;
-            token: string;
-        }>("crane-credentials");
-}
-
-// ─── Channel translation ─────────────────────────────────────────────────────
+// SDK method adapters. These only speak daemon RPC; Electron IPC is owned
+// by the application shell and never used as an SDK fallback.
 
 interface WsRoute {
     action: string;
@@ -134,10 +127,7 @@ interface WsRoute {
 // on a route waits indefinitely (see CraneTransport.call)
 const DEFAULT_ROUTE_TIMEOUT_MS = 30_000;
 
-// exported for tests: channel → WS action binding table
-// TODO(remove after v3.1): see getElectronIpc above — this table is the shim
-// half of the same deprecated surface.
-export const WS_INVOKE: Record<string, WsRoute> = {
+export const RPC_ROUTES: Record<string, WsRoute> = {
     "terminal-exists": {
         action: "term:exists",
         unwrap: (r) => r.running,
@@ -414,7 +404,7 @@ const WS_EVENTS: Record<string, EventRoute> = {
 
 // ─── Public router ───────────────────────────────────────────────────────────
 
-// route to the named computer, undefined = ambient
+// Route to the named computer or the explicitly initialized/granted one.
 export async function invokeIn<T = unknown>(
     scope: string | undefined,
     channel: string,
@@ -423,7 +413,7 @@ export async function invokeIn<T = unknown>(
     const transport = getTransport(scope);
     await transport.ensureConnected();
 
-    const route = WS_INVOKE[channel];
+    const route = RPC_ROUTES[channel];
     if (route) {
         const params: Record<string, unknown> = route.params
             ? route.params(args)

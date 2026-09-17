@@ -14,10 +14,14 @@ export async function fetchRegistryIndex(
     timeoutMs: number = REGISTRY_INDEX_TIMEOUT_MS,
     maxBytes: number = REGISTRY_INDEX_MAX_BYTES,
 ): Promise<Record<string, any>> {
+    return fetchRegistryJson(`${REGISTRY_URL}/panels/index.json`, timeoutMs, maxBytes);
+}
+
+export async function fetchRegistryJson(url: string, timeoutMs = REGISTRY_INDEX_TIMEOUT_MS, maxBytes = REGISTRY_INDEX_MAX_BYTES): Promise<Record<string, any>> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-        const res = await fetch(`${REGISTRY_URL}/panels/index.json`, {
+        const res = await fetch(url, {
             signal: controller.signal,
         });
         if (!res.ok) {

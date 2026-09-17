@@ -1,6 +1,6 @@
 // secrets channel binding tests (bun test): route table → WS action + unwrap
 import { describe, test, expect } from "bun:test";
-import { WS_INVOKE } from "../src/ipc";
+import { RPC_ROUTES as WS_INVOKE } from "../src/ipc";
 
 const RESULT = {
     "secrets-set": { success: true },

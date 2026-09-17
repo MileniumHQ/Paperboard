@@ -4,7 +4,7 @@ import type * as fsType from "fs";
 import { debug, debugErr } from "./debug";
 import { PROTOCOL_VERSION } from "./protocol";
 import { TransportRegistry } from "./transport/registry";
-import { ambientScope, resolveDefaultPanelId } from "./identity";
+import { grantedComputerId, resolveDefaultPanelId } from "./identity";
 import { serviceBootContext } from "./boot";
 
 const LOCAL_ONLY_APP_SETTINGS = "app-settings";
@@ -12,7 +12,7 @@ const LOCAL_ONLY_APP_SETTINGS = "app-settings";
 export interface TransportOptions {
     port?: number;
     token?: string;
-    /** Immutable computer scope ("local" or a paired id); defaults ambient. */
+    /** Immutable computer scope ("local" or a paired id); otherwise host-granted. */
     computerId?: string;
     /** Panel ID if running as a background service or specific panel context. */
     panelId?: string;
@@ -151,6 +151,8 @@ export class CraneTransport {
     private connecting: Promise<void> | null = null;
     private reconnectAttempts = 0;
     private closedByUser = false;
+    private authenticated = false;
+    private cancelConnection: (() => void) | null = null;
     private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     private attachedTerminals = new Set<string>();
     private attachedProcesses = new Set<string>();
@@ -166,7 +168,7 @@ export class CraneTransport {
 
     constructor(opts: TransportOptions = {}) {
         this.opts = opts;
-        this.computerId = opts.computerId || ambientScope();
+        this.computerId = opts.computerId || grantedComputerId();
     }
 
     // ── Bootstrap ───────────────────────────────────────────────────────────
@@ -253,8 +255,14 @@ export class CraneTransport {
     }
 
     public isConnected(): boolean {
+        return this.socketOpen() && this.authenticated && this.isRoutingLive();
+    }
+
+    private socketOpen(): boolean {
         return !!this.ws && this.ws.readyState === 1;
     }
+
+    public isDisposed(): boolean { return this.closedByUser; }
 
     // Remote scope needs a live tunnel, not just a socket
     private isRoutingLive(): boolean {
@@ -262,8 +270,9 @@ export class CraneTransport {
     }
 
     public async ensureConnected(): Promise<void> {
-        if (this.isConnected() && this.isRoutingLive()) return;
+        if (this.closedByUser) throw new Error("PaperCrane transport is disposed");
         if (this.connecting) return this.connecting;
+        if (this.isConnected() && this.authenticated && this.isRoutingLive()) return;
         this.connecting = this.open().finally(() => {
             this.connecting = null;
         });
@@ -272,25 +281,42 @@ export class CraneTransport {
 
     private async open(): Promise<void> {
         await this.resolveCredentials();
+        if (this.closedByUser) throw new Error("PaperCrane transport is disposed");
 
         // Reuse a live socket when only the tunnel is missing
-        if (!this.isConnected()) {
+        if (!this.socketOpen()) {
             const Ws = await getWebSocketImpl();
+            if (this.closedByUser) throw new Error("PaperCrane transport is disposed");
             await new Promise<void>((resolve, reject) => {
                 const ws = new Ws(`ws://127.0.0.1:${this.port}`);
                 let settled = false;
+                const timeout = setTimeout(() => {
+                    if (settled) return;
+                    settled = true;
+                    ws.close();
+                    reject(new Error("PaperCrane connection timed out"));
+                }, 10_000);
+                this.cancelConnection = () => {
+                    if (settled) return;
+                    settled = true; clearTimeout(timeout); ws.close();
+                    reject(new Error("PaperCrane transport disposed during connection"));
+                };
 
                 ws.on("open", () => {
+                    if (this.closedByUser || settled) { ws.close(); return; }
                     settled = true;
+                    this.cancelConnection = null;
+                    clearTimeout(timeout);
                     this.ws = ws;
                     this.reconnectAttempts = 0;
-                    this.emitStatus(true);
                     resolve();
                 });
 
                 ws.on("error", (err: Error) => {
                     if (!settled) {
                         settled = true;
+                        this.cancelConnection = null;
+                        clearTimeout(timeout);
                         reject(err);
                     }
                 });
@@ -304,7 +330,10 @@ export class CraneTransport {
                 });
 
                 ws.on("close", () => {
+                    clearTimeout(timeout);
+                    if (!settled) { settled = true; reject(new Error("PaperCrane closed before connecting")); }
                     this.ws = null;
+                    this.authenticated = false;
                     // Tunnel died with the socket; open() re-establishes it
                     this.tunnelId = null;
                     this.emitStatus(false);
@@ -314,15 +343,28 @@ export class CraneTransport {
             });
         }
 
+        if (!this.authenticated) {
+            try {
+                await this.request("auth:verify", {}, 10_000, false);
+                this.authenticated = true;
+            } catch (err) {
+                this.ws?.close();
+                this.ws = null;
+                throw err;
+            }
+        }
+
         // Remote scope requires a live tunnel before "connected"
         if (this.computerId !== "local" && !this.tunnelId) {
             await this.openTunnel(this.computerId);
         }
 
         await this.resubscribe();
+        this.emitStatus(true);
     }
 
     private scheduleReconnect(): void {
+        if (this.closedByUser || this.reconnectTimer) return;
         const delay = Math.min(
             RECONNECT_MAX_MS,
             RECONNECT_BASE_MS * Math.pow(2, this.reconnectAttempts),
@@ -333,7 +375,7 @@ export class CraneTransport {
             if (this.closedByUser) return;
             // a dropped reconnect must be recorded, not just retried:
             // debugErr is always visible, debug-trace is not
-            this.open().catch((err) => {
+            this.ensureConnected().catch((err) => {
                 debugErr("reconnect attempt failed", err);
                 this.emitStatus(false, err instanceof Error ? err.message : String(err));
                 this.scheduleReconnect();
@@ -344,12 +386,15 @@ export class CraneTransport {
     /** Stops the transport for good; safe to call repeatedly. */
     public close(): void {
         this.closedByUser = true;
+        this.cancelConnection?.();
+        this.cancelConnection = null;
         if (this.reconnectTimer) {
             clearTimeout(this.reconnectTimer);
             this.reconnectTimer = null;
         }
         this.ws?.close();
         this.ws = null;
+        this.authenticated = false;
         this.tunnelId = null;
         this.rejectAllPending("PaperCrane transport closed");
         // Full teardown: the transport is stopped for good, so its callback
@@ -382,7 +427,7 @@ export class CraneTransport {
                         const parsed = JSON.parse(msg);
                         if (
                             (parsed.type === "tunnel-open" ||
-                                parsed.type === "tunnel-closed") &&
+                                parsed.type === "tunnel-closed" || (parsed.type === "response" && parsed.error)) &&
                             parsed.id === id
                         ) {
                             clearTimeout(timeout);
@@ -393,7 +438,7 @@ export class CraneTransport {
                                 clearTimeout(timeout);
                                 reject(
                                     new Error(
-                                        `Remote tunnel failed: ${parsed.reason ?? "closed"}`,
+                                        `Remote tunnel failed: ${parsed.reason ?? parsed.error ?? "closed"}`,
                                     ),
                                 );
                             }
@@ -480,12 +525,12 @@ export class CraneTransport {
         }
 
         if (msg.type === "action_call") {
-            const { callId, action, args } = msg;
+            const { callId, panelId, action, args } = msg;
             // namespaced dispatch: unique composite owner only; ambiguous
             // bare names are refused rather than resolved last-writer-wins
-            const handler = this.registry.resolveHandler(action);
+            const handler = this.registry.getHandler(`${panelId}:${action}`);
             if (!handler) {
-                this.rawSend({
+                this.frame({
                     type: "action_reply",
                     callId,
                     error: `Handler for action '${action}' not found`,
@@ -495,14 +540,14 @@ export class CraneTransport {
             Promise.resolve()
                 .then(() => handler(...(Array.isArray(args) ? args : [])))
                 .then((result) => {
-                    this.rawSend({
+                    this.frame({
                         type: "action_reply",
                         callId,
                         result: result === undefined ? null : result,
                     });
                 })
                 .catch((err: any) => {
-                    this.rawSend({
+                    this.frame({
                         type: "action_reply",
                         callId,
                         error: err?.message || String(err),
@@ -570,7 +615,10 @@ export class CraneTransport {
 
     public async call(action: string, params: Record<string, unknown> = {}, timeoutMs: number | null = 30_000): Promise<any> {
         await this.ensureConnected();
+        return this.request(action, params, timeoutMs);
+    }
 
+    private request(action: string, params: Record<string, unknown> = {}, timeoutMs: number | null = 30_000, routed = true): Promise<any> {
         if (this.pending.size >= CraneTransport.MAX_PENDING_CALLS) {
             throw new Error(
                 `PaperCrane transport has ${this.pending.size} outstanding calls (cap ${CraneTransport.MAX_PENDING_CALLS}); refusing to queue '${action}'`,
@@ -595,7 +643,7 @@ export class CraneTransport {
             const entry = { resolve, reject, timer: timer as any };
             this.pending.set(id, entry);
             try {
-                if (this.isLocalOnlyChannel(action, finalParams)) {
+                if (!routed || this.isLocalOnlyChannel(action, finalParams)) {
                     this.ws.send(JSON.stringify({ id, action, params: finalParams }));
                 } else {
                     this.frame({ id, action, params: finalParams });
@@ -769,14 +817,14 @@ export class CraneTransport {
         this.syncSubscriptions();
 
         for (const id of this.attachedTerminals) {
-            this.call("term:attach", { id }).catch((err) => debugErr(`term:attach ${id}`, err));
+            this.request("term:attach", { id }).catch((err) => debugErr(`term:attach ${id}`, err));
         }
         for (const id of this.attachedProcesses) {
-            this.call("process:attach", { id }).catch((err) => debugErr(`process:attach ${id}`, err));
+            this.request("process:attach", { id }).catch((err) => debugErr(`process:attach ${id}`, err));
         }
 
         await this.registry.resubscribe(
-            (action, params) => this.call(action, params),
+            (action, params) => this.request(action, params),
             (label, err) => debugErr(label, err),
         );
     }

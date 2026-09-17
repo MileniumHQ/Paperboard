@@ -24,6 +24,8 @@ class MockWebSocket {
     send(data: string) {
         if (this.readyState !== 1) throw new Error("MockWebSocket not open");
         this.sent.push(data);
+        const frame = JSON.parse(data);
+        if (frame.action === "auth:verify") queueMicrotask(() => this.receive({ type: "response", id: frame.id, result: { success: true } }));
     }
 
     close() {
@@ -199,26 +201,15 @@ describe("events:subscribe auto-sync", () => {
         ws.serverDrop();
         await waitFor(() => !t.isConnected(), 3000);
 
-        // Parallel test files share globalThis and may clear the mock while we
-        // await, leaving the transport to construct a real (never-opening) ws.
-        // Re-install before each attempt and retry until the reconnect lands.
-        let reAnnounce: any = null;
-        for (let attempt = 0; attempt < 40 && !reAnnounce; attempt++) {
-            (globalThis as any).WebSocket = MockWebSocket;
-            const before = MockWebSocket.instances.length;
-            const reconnecting = t.ensureConnected();
-            try {
-                await waitFor(() => MockWebSocket.instances.length > before, 150);
-                const fresh = LAST();
-                fresh.open();
-                await reconnecting;
-                reAnnounce = subFrames(fresh).find(
-                    (f) => f.params.events.length === expected.length,
-                );
-            } catch (err) {
-                console.error(`reconnect attempt ${attempt} missed: ${err}`);
-            }
-        }
+        const before = MockWebSocket.instances.length;
+        const reconnecting = t.ensureConnected();
+        await waitFor(() => MockWebSocket.instances.length > before);
+        const fresh = LAST();
+        fresh.open();
+        await reconnecting;
+        await waitFor(() => subFrames(fresh).length > 0);
+        const reAnnounce = subFrames(fresh).at(-1)!;
+        await ackAll(fresh);
         expect([...reAnnounce.params.events].sort()).toEqual(expected);
     });
 });

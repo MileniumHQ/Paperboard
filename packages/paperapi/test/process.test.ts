@@ -22,6 +22,8 @@ class MockWebSocket {
     send(data: string) {
         if (this.readyState !== 1) throw new Error("MockWebSocket not open");
         this.sent.push(data);
+        const frame = JSON.parse(data);
+        if (frame.action === "auth:verify") queueMicrotask(() => this.receive({ type: "response", id: frame.id, result: { success: true } }));
     }
 
     close() {

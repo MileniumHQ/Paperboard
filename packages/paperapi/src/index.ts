@@ -1,4 +1,5 @@
 import { invoke, send, on, unpackIpcPayload } from "./ipc";
+import "./readiness";
 
 export * from "./ipc";
 export * from "./config";

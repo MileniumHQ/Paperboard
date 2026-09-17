@@ -1,53 +1,37 @@
-// in-process boot window (bun test): the service boot context global exists
-// ONLY between publish and clear, carries exactly the credential facts the
-// spawned env would, and never touches process.env.
-import { describe, it, expect, afterEach } from "bun:test";
-import {
-    publishServiceBootContext,
-    clearServiceBootContext,
-} from "../papercrane/panelServices";
+import { test, expect } from "bun:test";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { PanelServicesManager } from "../papercrane/panelServices";
+import { PaperCraneAuth } from "../papercrane/auth";
 
-const BOOT_KEY = "__PAPERBOARD_SERVICE_BOOT";
-
-afterEach(() => {
-    clearServiceBootContext();
-});
-
-describe("service boot window", () => {
-    it("publishes the context on the agreed global and clears it", () => {
-        expect((globalThis as any)[BOOT_KEY]).toBeUndefined();
-        publishServiceBootContext({
-            panelId: "panel.a",
-            token: "pcp_scoped",
-            port: 1234,
-        });
-        expect((globalThis as any)[BOOT_KEY]).toEqual({
-            panelId: "panel.a",
-            token: "pcp_scoped",
-            port: 1234,
-        });
-        clearServiceBootContext();
-        expect((globalThis as any)[BOOT_KEY]).toBeUndefined();
-    });
-
-    it("prefers the scoped panel token, matching the spawned env order", () => {
-        // the caller builds the context from the same env record the spawn
-        // path builds: PANEL_TOKEN || TOKEN — asserted here as the contract
-        const env = {
-            PAPERCRANE_PANEL_TOKEN: "pcp_scoped",
-            PAPERCRANE_TOKEN: "pc_master",
-            PAPERCRANE_PORT: "45319",
-        };
-        publishServiceBootContext({
-            panelId: "panel.a",
-            token: env.PAPERCRANE_PANEL_TOKEN || env.PAPERCRANE_TOKEN || "",
-            port: Number(env.PAPERCRANE_PORT) || 0,
-        });
-        expect((globalThis as any)[BOOT_KEY].token).toBe("pcp_scoped");
-    });
-
-    it("clear is idempotent and never throws", () => {
-        expect(() => clearServiceBootContext()).not.toThrow();
-        expect(() => clearServiceBootContext()).not.toThrow();
-    });
+test("two delayed child services keep separate credentials; stop waits for exit and cancels restart", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "service-lifecycle-"));
+    const auth = new PaperCraneAuth(false, path.join(root, "local"));
+    const manager = new PanelServicesManager(root);
+    manager.setAuth(auth);
+    try {
+        for (const id of ["panel.a", "panel.b"]) {
+            const dir = path.join(root, "panels", id);
+            fs.mkdirSync(dir, { recursive: true });
+            fs.writeFileSync(path.join(dir, "manifest.json"), JSON.stringify({ id, name: id, service: "service.mjs" }));
+            fs.writeFileSync(path.join(dir, "service.mjs"), `import fs from 'node:fs';
+await new Promise(r=>setTimeout(r,40));
+fs.writeFileSync('receipt.json',JSON.stringify({id:process.env.PAPERBOARD_PANEL_ID,token:process.env.PAPERCRANE_PANEL_TOKEN,master:process.env.PAPERCRANE_TOKEN}));
+process.on('SIGTERM',()=>{});
+process.send({type:'paperboard:service-ready',panelId:process.env.PAPERBOARD_PANEL_ID});
+setInterval(()=>{},1000);`);
+            expect(manager.startService(id)).toBe(true);
+        }
+        await Promise.all([manager.waitUntilReady("panel.a"), manager.waitUntilReady("panel.b")]);
+        for (const id of ["panel.a", "panel.b"]) {
+            const receipt = JSON.parse(fs.readFileSync(path.join(root, "panels", id, "receipt.json"), "utf8"));
+            expect(receipt.id).toBe(id);
+            expect(auth.matchToken(receipt.token)?.panelId).toBe(id);
+            expect(receipt.master).toBeUndefined();
+            await manager.stopService(id, 20);
+        }
+        await Bun.sleep(1100);
+        expect((manager as any).services.size).toBe(0);
+    } finally { manager.stopAll(); auth.dispose(); fs.rmSync(root, { recursive: true, force: true }); }
 });

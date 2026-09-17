@@ -3,8 +3,7 @@ import fs from "fs";
 import crypto from "crypto";
 import { spawnSync } from "child_process";
 import * as tar from "tar";
-
-export const PANEL_ID_REGEX = /^[a-zA-Z0-9_-]+(\.[a-zA-Z0-9_-]+){2,}$/;
+import { requirePanelId } from "./panelIdentity";
 
 export interface PackOptions {
     targetDir?: string;
@@ -35,11 +34,7 @@ export function packPanel(options: PackOptions = {}): PackResult {
 
     const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
 
-    if (!manifest.id || !PANEL_ID_REGEX.test(manifest.id)) {
-        throw new Error(
-            `Invalid panel id: "${manifest.id}". Must match reverse-domain pattern (e.g. ext.host.app)`,
-        );
-    }
+    requirePanelId(manifest.id);
     if (!manifest.name) {
         throw new Error("Panel manifest must specify a 'name'");
     }

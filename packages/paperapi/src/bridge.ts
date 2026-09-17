@@ -1,6 +1,7 @@
 import { actionsApi } from "./actions";
 import { getPanelId } from "./ipc";
 import { STATE_GET_ACTION, STATE_SYNC_EVENT } from "./channels";
+import { registerPanelHydrator } from "./panelHydration";
 
 export interface PanelBridgeOptions<TState extends Record<string, any>> {
     panelId?: string;
@@ -17,6 +18,7 @@ export function createPanelBridge<
     const panelId = options.panelId || getPanelId();
     let localState: TState = { ...(options.defaultState || {}) } as TState;
     const listeners = new Set<(patch: Partial<TState>, full: TState) => void>();
+    let status: { ready: boolean; error?: string } = { ready: false };
 
     // the subscription is tearable: createPanelBridge returns dispose()
     const unsubscribeSync = actionsApi.on(panelId, STATE_SYNC_EVENT, (payload: any) => {
@@ -35,6 +37,7 @@ export function createPanelBridge<
                 STATE_GET_ACTION,
             );
             if (fetched && typeof fetched === "object") {
+                status = { ready: true };
                 localState = { ...localState, ...fetched };
                 for (const cb of listeners) {
                     cb(fetched, localState);
@@ -44,11 +47,14 @@ export function createPanelBridge<
             // service may still be booting — logged, and the bridge keeps
             // serving the last-known (possibly default) state meanwhile
             console.debug(`[bridge:${panelId}] refreshState deferred, service may be booting:`, err);
+            status = { ready: false, error: err instanceof Error ? err.message : String(err) };
+            throw err;
         }
         return localState;
     };
 
-    refreshState();
+    const unregisterHydrator = registerPanelHydrator(panelId, refreshState);
+    void refreshState().catch((err) => console.debug(`[bridge:${panelId}] initial hydration failed; retry via refreshState:`, err));
 
     const onStateChange = (
         cb: (patch: Partial<TState>, full: TState) => void,
@@ -72,12 +78,14 @@ export function createPanelBridge<
     // outliving their component previously leaked the transport
     // subscription forever (bounded everything).
     const dispose = (): void => {
+        unregisterHydrator();
         unsubscribeSync();
         listeners.clear();
     };
 
     return {
         panelId,
+        getStatus: () => ({ ...status }),
         getState: () => localState,
         refreshState,
         onStateChange,
