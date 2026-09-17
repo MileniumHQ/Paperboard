@@ -277,27 +277,33 @@ app.whenReady().then(async () => {
     // clipboard granted to panel origins only
     const isPanelOrigin = (origin: string) =>
         origin.startsWith("panel://") || origin === "panel://";
+    // writeText may check "clipboard-write" or "clipboard-sanitized-write"
+    // depending on the Chromium release; readText checks "clipboard-read".
+    // All three stay panel-scoped.
+    const isClipboardPermission = (permission: string) =>
+        permission === "clipboard-read" ||
+        permission === "clipboard-sanitized-write" ||
+        permission === "clipboard-write";
     for (const ses of [session.defaultSession]) {
-        ses.setPermissionRequestHandler((_wc, permission, callback) => {
+        ses.setPermissionRequestHandler((_wc, permission, callback, details) => {
             const origin = (() => {
                 try {
-                    return new URL(_wc?.getURL() ?? "").origin;
+                    // the requesting frame's URL, not the top frame's:
+                    // _wc.getURL() is the shell for panel iframes, which
+                    // would deny every panel request evaluated here
+                    return new URL(
+                        details?.requestingUrl || _wc?.getURL() || "",
+                    ).origin;
                 } catch (err) {
                     log.debug("[Main] permission origin unparseable, denying:", err);
                     return "";
                 }
             })();
-            callback(
-                (permission === "clipboard-read" ||
-                    permission === "clipboard-sanitized-write") &&
-                    isPanelOrigin(origin),
-            );
+            callback(isClipboardPermission(permission) && isPanelOrigin(origin));
         });
         ses.setPermissionCheckHandler((_wc, permission, requestingOrigin) => {
             return (
-                (permission === "clipboard-read" ||
-                    permission === "clipboard-sanitized-write") &&
-                isPanelOrigin(requestingOrigin)
+                isClipboardPermission(permission) && isPanelOrigin(requestingOrigin)
             );
         });
     }
