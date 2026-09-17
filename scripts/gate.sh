@@ -7,6 +7,9 @@ set -u
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CATCH="$ROOT/apps/paperboard/scripts/check-no-silent-catches.sh"
 FAIL=0
+TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/paperboard-gate-XXXXXX")"
+export PAPERBOARD_DIR="$TEST_ROOT/data"
+trap 'rm -rf "$TEST_ROOT"' EXIT
 
 step() {
     local desc="$1"
@@ -25,6 +28,11 @@ run_in() {
     shift
     (cd "$dir" && "$@")
 }
+
+# Test current shared artifacts, never whatever an earlier developer built.
+step "paperapi build" run_in "$ROOT/packages/paperapi" bun run build
+step "paperui build" run_in "$ROOT/packages/paperui" bun run build
+step "packed external consumers" node "$ROOT/scripts/check-package-artifacts.mjs"
 
 # Paperboard app: node + web typechecks, full suite, lint, silent-catch gate
 step "paperboard typecheck:node" run_in "$ROOT/apps/paperboard" bun run typecheck:node

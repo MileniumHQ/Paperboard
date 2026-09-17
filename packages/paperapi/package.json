@@ -2,7 +2,7 @@
     "name": "@paperboard-dev/paperapi",
     "version": "3.0.0-alpha",
     "type": "module",
-    "main": "./dist/paperapi.cjs.js",
+    "main": "./dist/paperapi.cjs",
     "module": "./dist/paperapi.es.js",
     "types": "./dist/index.d.ts",
     "files": [
@@ -13,7 +13,7 @@
         ".": {
             "types": "./dist/index.d.ts",
             "import": "./dist/paperapi.es.js",
-            "require": "./dist/paperapi.cjs.js"
+            "require": "./dist/paperapi.cjs"
         },
         "./package.json": "./package.json"
     },

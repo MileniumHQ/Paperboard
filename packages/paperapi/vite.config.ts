@@ -12,7 +12,7 @@ export default defineConfig({
     lib: {
       entry: path.resolve(import.meta.dirname, "src/index.ts"),
       name: "paperapi",
-      fileName: (format) => `paperapi.${format}.js`,
+      fileName: (format) => format === "es" ? "paperapi.es.js" : "paperapi.cjs",
       formats: ["es", "cjs"],
     },
     rollupOptions: {

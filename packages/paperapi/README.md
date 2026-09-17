@@ -176,7 +176,8 @@ const offT = actionsApi.onTrigger(
 
 Panels are **reviewed, not sandboxed** — a reviewed panel is trusted like
 first-party code. What makes review meaningful is the registry and the
-manifest: panels declare `permissions`, and review checks what they use
-against what they declare. Install refuses without a registry-provided
+manifest: panels declare network egress (`network.hosts` / `network.mode`),
+and review checks declared hosts against what they actually fetch, with the
+panel CSP built from it. Install refuses without a registry-provided
 checksum bound to the very bytes being downloaded. See the Paperboard trust
 model docs (`AGENTS.md` in the Paperboard workspace) for the full picture.

@@ -2,10 +2,10 @@
     "name": "@paperboard-dev/paperui",
     "version": "3.0.0-alpha",
     "type": "module",
-    "main": "./dist/paperui.cjs.js",
+    "main": "./dist/paperui.cjs",
     "module": "./dist/paperui.es.js",
     "types": "./dist/index.d.ts",
-    "solid": "./src/index.ts",
+    "solid": "./dist/paperui.es.js",
     "sideEffects": [
         "**/*.css"
     ],
@@ -15,9 +15,9 @@
     "exports": {
         ".": {
             "types": "./dist/index.d.ts",
-            "solid": "./src/index.ts",
+            "solid": "./dist/paperui.es.js",
             "import": "./dist/paperui.es.js",
-            "require": "./dist/paperui.cjs.js"
+            "require": "./dist/paperui.cjs"
         },
         "./style.css": "./dist/paperui.css",
         "./panel.css": "./dist/panel.css",
