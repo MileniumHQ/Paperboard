@@ -113,6 +113,7 @@ export function PaperRailItem(props: PaperRailItemProps) {
         <div
             {...rest}
             role="radio"
+            aria-label={typeof local.label === "string" ? local.label : undefined}
             aria-checked={isSelected()}
             aria-disabled={local.disabled || undefined}
             tabIndex={local.disabled ? -1 : 0}
@@ -134,7 +135,7 @@ export function PaperRailItem(props: PaperRailItemProps) {
             }}
         >
             {typeof local.icon === "string" ? (
-                <PaperIcon class={styles.railIcon} zeroHeight>
+                <PaperIcon aria-hidden="true" class={styles.railIcon} zeroHeight>
                     {local.icon}
                 </PaperIcon>
             ) : (
@@ -179,13 +180,14 @@ export function PaperRailAction(props: PaperRailActionProps) {
     return (
         <button
             type="button"
+            aria-label={typeof local.label === "string" ? local.label : undefined}
             {...rest}
             class={className()}
             classList={local.classList}
             title={typeof local.label === "string" ? local.label : undefined}
         >
             {typeof local.icon === "string" ? (
-                <PaperIcon class={styles.railIcon} zeroHeight>
+                <PaperIcon aria-hidden="true" class={styles.railIcon} zeroHeight>
                     {local.icon}
                 </PaperIcon>
             ) : (

@@ -12,7 +12,7 @@ describe("PaperModal - Accessibility & Focus Trapping Tests", () => {
             </PaperModal>
         ));
 
-        const dialog = screen.getByRole("dialog");
+        const dialog = screen.getByRole("dialog", { name: "Test Dialog" });
         expect(dialog).toBeDefined();
         expect(dialog.getAttribute("aria-modal")).toBe("true");
         expect(screen.getByText("Test Dialog")).toBeDefined();
@@ -51,5 +51,20 @@ describe("PaperModal - Accessibility & Focus Trapping Tests", () => {
 
         setOpen(false);
         expect(open()).toBe(false);
+        expect(document.activeElement).toBe(trigger);
+    });
+
+    test("focus traversal skips disabled first and last controls", async () => {
+        render(() => <PaperModal open title="Enabled controls">
+            <button disabled>Unavailable first</button><button>Enabled first</button>
+            <button>Enabled last</button><button disabled>Unavailable last</button>
+        </PaperModal>);
+        const first = screen.getByText("Enabled first");
+        const last = screen.getByText("Enabled last");
+        last.focus();
+        await fireEvent.keyDown(window, { key: "Tab" });
+        expect(document.activeElement).toBe(first);
+        await fireEvent.keyDown(window, { key: "Tab", shiftKey: true });
+        expect(document.activeElement).toBe(last);
     });
 });

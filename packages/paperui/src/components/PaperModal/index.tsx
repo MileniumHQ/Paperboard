@@ -30,6 +30,19 @@ export interface PaperModalProps extends Omit<JSX.HTMLAttributes<HTMLDivElement>
 export function PaperModal(props: ParentProps<PaperModalProps>) {
     let modalRef: HTMLDivElement | undefined;
     const titleId = `paper-modal-title-${createUniqueId()}`;
+    const transitionCleanups = new Set<() => void>();
+    onCleanup(() => { for (const cleanup of transitionCleanups) cleanup(); transitionCleanups.clear(); });
+
+    const transition = (el: Element, done: () => void, className: string) => {
+        el.classList.add(className);
+        let ended = false;
+        const cleanup = () => { clearTimeout(timer); el.removeEventListener("animationend", finish); transitionCleanups.delete(cleanup); };
+        const finish = () => { if (ended) return; ended = true; cleanup(); done(); };
+        const timer = setTimeout(finish, 300);
+        transitionCleanups.add(cleanup);
+        el.addEventListener("animationend", finish, { once: true });
+        if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches || document.documentElement.dataset.paperuiMotion === "reduced") queueMicrotask(finish);
+    };
 
     const [local, rest] = splitProps(props, [
         "open",
@@ -67,7 +80,7 @@ export function PaperModal(props: ParentProps<PaperModalProps>) {
 
         const previousActiveElement = document.activeElement as HTMLElement | null;
 
-        requestAnimationFrame(() => {
+        const focusFrame = requestAnimationFrame(() => {
             if (modalRef) {
                 modalRef.focus();
             }
@@ -80,9 +93,9 @@ export function PaperModal(props: ParentProps<PaperModalProps>) {
             }
 
             if (e.key === "Tab" && modalRef) {
-                const focusables = modalRef.querySelectorAll<HTMLElement>(
-                    'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-                );
+                const focusables = [...modalRef.querySelectorAll<HTMLElement>(
+                    'button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])'
+                )].filter((el) => !el.matches(":disabled") && !el.hidden && !el.closest('[hidden], [inert], [aria-hidden="true"]') && el.getAttribute("aria-disabled") !== "true" && getComputedStyle(el).display !== "none" && getComputedStyle(el).visibility !== "hidden");
                 if (focusables.length === 0) {
                     e.preventDefault();
                     modalRef.focus();
@@ -109,6 +122,7 @@ export function PaperModal(props: ParentProps<PaperModalProps>) {
         window.addEventListener("keydown", handleKeyDown);
         onCleanup(() => {
             window.removeEventListener("keydown", handleKeyDown);
+            cancelAnimationFrame(focusFrame);
             previousActiveElement?.focus?.();
         });
     });
@@ -122,22 +136,8 @@ export function PaperModal(props: ParentProps<PaperModalProps>) {
     return (
         <Portal>
             <Transition
-                onEnter={(el, done) => {
-                    el.classList.add(styles.backdropTransitionIn);
-                    const handleEnd = () => {
-                        el.removeEventListener("animationend", handleEnd);
-                        done();
-                    };
-                    el.addEventListener("animationend", handleEnd, { once: true });
-                }}
-                onExit={(el, done) => {
-                    el.classList.add(styles.backdropTransitionOut);
-                    const handleEnd = () => {
-                        el.removeEventListener("animationend", handleEnd);
-                        done();
-                    };
-                    el.addEventListener("animationend", handleEnd, { once: true });
-                }}
+                onEnter={(el, done) => transition(el, done, styles.backdropTransitionIn)}
+                onExit={(el, done) => transition(el, done, styles.backdropTransitionOut)}
             >
                 <Show when={local.open}>
                     <div class={styles.backdrop} onClick={handleBackdropClick}>
@@ -146,7 +146,7 @@ export function PaperModal(props: ParentProps<PaperModalProps>) {
                             tabIndex={-1}
                             role="dialog"
                             aria-modal="true"
-                            aria-labelledby={local.title ? titleId : undefined}
+                            aria-labelledby={local.title && !local.noHeader ? titleId : undefined}
                             {...rest}
                             class={[styles.modalBox, sizeClass(), local.class]
                                 .filter(Boolean)
@@ -161,9 +161,9 @@ export function PaperModal(props: ParentProps<PaperModalProps>) {
                             >
                                 <div class={styles.header}>
                                     <Show when={local.title}>
-                                        <PaperText size={4} weight={700}>
+                                        <span id={titleId}><PaperText size={4} weight={700}>
                                             {local.title}
-                                        </PaperText>
+                                        </PaperText></span>
                                     </Show>
 
                                     <Show when={local.onClose}>
