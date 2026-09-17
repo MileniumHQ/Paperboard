@@ -2,7 +2,6 @@ import {
     Client,
     GatewayIntentBits,
     ChannelType,
-    EmbedBuilder,
     PermissionsBitField,
     ActivityType,
     MessageFlags,
@@ -12,11 +11,24 @@ import {
     type ChatInputApplicationCommandData,
     type ChatInputCommandInteraction,
     type ColorResolvable,
+    type ButtonInteraction,
+    type RepliableInteraction,
 } from "discord.js";
+import {
+    INPUTS,
+    MessageOps,
+    InteractionOps,
+    buildDiscordEmbed,
+    buildButtonComponent,
+    componentClickPayload,
+    resolveGuild,
+    resolveMember,
+    type DiscordEmbedData,
+    type DiscordComponentData,
+} from "./discordOps";
 import {
     definePanelService,
     defineAction,
-    defineTrigger,
     defineType,
     config,
     secretsApi,
@@ -87,6 +99,13 @@ export const discordEmbedType = defineType({
     base: "object",
 });
 
+export const discordComponentType = defineType({
+    id: "discord-component",
+    name: "Component",
+    description: "A Discord message component (a button) payload",
+    base: "object",
+});
+
 export const discordInteractionType = defineType({
     id: "discord-interaction",
     name: "Discord Interaction",
@@ -120,6 +139,7 @@ export const customTypes = [
     discordUserType,
     discordMessageType,
     discordEmbedType,
+    discordComponentType,
     discordInteractionType,
     discordRoleType,
     urlType,
@@ -136,72 +156,13 @@ export const DISCORD_CATEGORIES = [
     { name: "Interactions", icon: "reply", order: 5 },
     { name: "Commands", icon: "terminal", order: 6 },
     { name: "Members", icon: "group", order: 7 },
-    { name: "Bot", icon: "smart_toy", order: 8 },
+    { name: "Roles", icon: "workspace_premium", order: 8 },
+    { name: "Bot", icon: "smart_toy", order: 9 },
 ];
 
 function discordCategory(name: string): { name: string; icon: string; order: number } {
     const found = DISCORD_CATEGORIES.find((category) => category.name === name);
     return found ? { ...found } : { name, icon: "category", order: 999 };
-}
-
-export interface DiscordEmbedData {
-    title?: string;
-    description?: string;
-    color?: string;
-    url?: string;
-    footer?: string;
-    image?: string;
-}
-
-export function buildDiscordEmbed(data: DiscordEmbedData) {
-    const embed = new EmbedBuilder();
-    if (data.title) embed.setTitle(data.title);
-    if (data.description) embed.setDescription(data.description);
-    if (data.color) {
-        try {
-            embed.setColor(data.color as ColorResolvable);
-        } catch (err) {
-            console.error("[DiscordService] embed color rejected:", err);
-        }
-    }
-    if (data.url) {
-        try {
-            embed.setURL(data.url);
-        } catch (err) {
-            console.error("[DiscordService] embed url rejected:", err);
-        }
-    }
-    if (data.footer) embed.setFooter({ text: data.footer });
-    if (data.image) {
-        try {
-            embed.setImage(data.image);
-        } catch (err) {
-            console.error("[DiscordService] embed image rejected:", err);
-        }
-    }
-    return embed;
-}
-
-function normalizeEmbeds(input: unknown): DiscordEmbedData[] {
-    if (!input) return [];
-    if (Array.isArray(input)) {
-        return input.filter(
-            (e) => e && typeof e === "object",
-        ) as DiscordEmbedData[];
-    }
-    if (typeof input === "object") return [input as DiscordEmbedData];
-    if (typeof input === "string") {
-        const trimmed = input.trim();
-        if (!trimmed) return [];
-        try {
-            const parsed = JSON.parse(trimmed);
-            return normalizeEmbeds(parsed);
-        } catch (err) {
-            console.error("[DiscordService] embeds JSON unparseable, ignoring:", err);
-            return [];
-        }
-    }
-    return [];
 }
 
 let client: Client | null = null;
@@ -343,7 +304,7 @@ export function buildHealth(bot: Client | null = client): Health {
 // token expires). Bounded: oldest entries are dropped at the cap and every
 // entry's timer is cleared on removal or disconnect.
 interface PendingInteraction {
-    interaction: ChatInputCommandInteraction;
+    interaction: RepliableInteraction;
     timer: ReturnType<typeof setTimeout>;
 }
 
@@ -353,7 +314,7 @@ export function pendingInteractionCount(): number {
     return pendingInteractions.size;
 }
 
-export function rememberInteraction(interaction: ChatInputCommandInteraction): void {
+export function rememberInteraction(interaction: RepliableInteraction): void {
     const key = interaction.id;
     const existing = pendingInteractions.get(key);
     if (existing) clearTimeout(existing.timer);
@@ -378,7 +339,7 @@ export function rememberInteraction(interaction: ChatInputCommandInteraction): v
     pendingInteractions.set(key, { interaction, timer });
 }
 
-export function takeInteraction(interactionId: string): ChatInputCommandInteraction {
+export function takeInteraction(interactionId: string): RepliableInteraction {
     const entry = pendingInteractions.get(interactionId);
     if (!entry) {
         throw new Error(
@@ -391,6 +352,30 @@ export function takeInteraction(interactionId: string): ChatInputCommandInteract
 export function clearPendingInteractions(): void {
     for (const entry of pendingInteractions.values()) clearTimeout(entry.timer);
     pendingInteractions.clear();
+}
+
+// A button click must be acknowledged within ~3 seconds or the user sees
+// "interaction failed". The flow that handles the click may still be queued
+// or running, so this panel acks on the bot's behalf: after the delay the
+// interaction is deferred (an update ack, no visible spinner) unless it was
+// already answered. Respond/Follow Up keep working afterwards via
+// editReply/followUp. One fire-once timer per live click, never a
+// persistent structure — the click rate bounds these naturally.
+const COMPONENT_ACK_DELAY_MS = 2_500;
+
+export function scheduleComponentAck(interaction: ButtonInteraction): void {
+    const timer = setTimeout(() => {
+        if (interaction.deferred || interaction.replied) return;
+        interaction
+            .deferUpdate()
+            .catch((err: unknown) =>
+                console.error(
+                    "[DiscordService] component auto-ack failed:",
+                    errorToMessage(err),
+                ),
+            );
+    }, COMPONENT_ACK_DELAY_MS);
+    (timer as unknown as { unref?: () => void }).unref?.();
 }
 
 // discord presence statuses — the only legal values for set-status
@@ -533,8 +518,117 @@ function attachListeners(bot: Client, ctx: ServiceContext<any>) {
         });
     });
 
+    bot.on("messageReactionRemove", (reaction, user) => {
+        if (user.bot) return;
+        if (!ownsSession()) return;
+        ctx.emitTrigger("on-reaction-removed", {
+            emoji: reaction.emoji.name || reaction.emoji.id,
+            userId: user.id,
+            username: user.username,
+            messageId: reaction.message.id,
+            channelId: reaction.message.channelId,
+        });
+    });
+
+    bot.on("messageUpdate", (oldMsg, newMsg) => {
+        if (!ownsSession()) return;
+        const apply = async () => {
+            const msg = newMsg.partial ? await newMsg.fetch().catch((err: unknown) => {
+                console.error(
+                    "[DiscordService] edited message fetch failed:",
+                    errorToMessage(err),
+                );
+                return null;
+            }) : newMsg;
+            if (!msg || msg.author?.bot) return;
+            ctx.emitTrigger("on-message-edited", {
+                content: msg.content ?? "",
+                author: msg.author?.username ?? "",
+                authorId: msg.author?.id ?? "",
+                channelId: msg.channelId,
+                guildId: msg.guildId,
+                messageId: msg.id,
+            });
+        };
+        void apply();
+    });
+
+    bot.on("messageDelete", (msg) => {
+        if (!ownsSession()) return;
+        ctx.emitTrigger("on-message-deleted", {
+            messageId: msg.id,
+            channelId: msg.channelId,
+            guildId: msg.guildId ?? "",
+        });
+    });
+
+    bot.on("guildBanAdd", (ban) => {
+        if (!ownsSession()) return;
+        ctx.emitTrigger("on-member-banned", {
+            userId: ban.user.id,
+            username: ban.user.username,
+            reason: ban.reason ?? "",
+            guildId: ban.guild.id,
+        });
+    });
+
+    bot.on("guildMemberUpdate", (oldMember, newMember) => {
+        if (!ownsSession()) return;
+        const before = new Set((oldMember?.roles?.cache?.keys?.() ?? []) as Iterable<string>);
+        for (const roleId of newMember.roles.cache.keys()) {
+            if (!before.has(roleId)) {
+                ctx.emitTrigger("on-role-added", {
+                    userId: newMember.user.id,
+                    username: newMember.user.username,
+                    roleId,
+                    guildId: newMember.guild.id,
+                });
+            }
+        }
+        for (const roleId of before) {
+            if (!newMember.roles.cache.has(roleId)) {
+                ctx.emitTrigger("on-role-removed", {
+                    userId: newMember.user.id,
+                    username: newMember.user.username,
+                    roleId,
+                    guildId: newMember.guild.id,
+                });
+            }
+        }
+    });
+
+    bot.on("threadCreate", (thread) => {
+        if (!ownsSession()) return;
+        ctx.emitTrigger("on-thread-created", {
+            threadId: thread.id,
+            name: thread.name ?? "",
+            channelId: thread.parentId ?? "",
+            ownerId: thread.ownerId ?? "",
+            guildId: thread.guildId,
+        });
+    });
+
+    bot.on("voiceStateUpdate", (oldState, newState) => {
+        if (!ownsSession()) return;
+        ctx.emitTrigger("on-voice-state-change", {
+            userId: newState.id,
+            username: newState.member?.user?.username ?? "",
+            channelId: newState.channelId ?? "",
+            previousChannelId: oldState?.channelId ?? "",
+            guildId: newState.guild.id,
+        });
+    });
+
     bot.on("interactionCreate", (interaction) => {
         if (!ownsSession()) return;
+        // buttons first: clicks route through the parameterized
+        // interaction-triggered event by custom id
+        if (interaction.isMessageComponent() && interaction.isButton()) {
+            rememberInteraction(interaction);
+            scheduleComponentAck(interaction);
+            ctx.emitTrigger("interaction-triggered", componentClickPayload(interaction));
+            return;
+        }
         if (!interaction.isChatInputCommand()) return;
         commandsReceived++;
 
@@ -826,7 +920,7 @@ export function commandTriggerDefinition(command: SlashCommandDefinition) {
         };
     }
 
-    return defineTrigger({
+    return defineAction({
         id: commandTriggerId(command),
         name: `When /${command.name} is used`,
         category: discordCategory("Commands"),
@@ -857,14 +951,14 @@ export function commandTriggerDefinition(command: SlashCommandDefinition) {
     });
 }
 
-// one trigger per command: registering is part of creating the command, so a
-// command whose trigger is missing is reported, never quietly half-created
+// one event action per command: registering is part of creating the command, so a
+// command whose event action is missing is reported, never quietly half-created
 async function registerCommandTrigger(command: SlashCommandDefinition): Promise<void> {
     try {
-        await actionsApi.registerTrigger(commandTriggerDefinition(command), PANEL_ID);
+        await actionsApi.register(commandTriggerDefinition(command), undefined, PANEL_ID);
     } catch (err) {
         console.error(
-            `[DiscordService] trigger registration failed for /${command.name}:`,
+            `[DiscordService] event action registration failed for /${command.name}:`,
             err,
         );
         throw new Error(
@@ -875,10 +969,10 @@ async function registerCommandTrigger(command: SlashCommandDefinition): Promise<
 
 async function unregisterCommandTrigger(command: SlashCommandDefinition): Promise<void> {
     try {
-        await actionsApi.unregisterTrigger(commandTriggerId(command), PANEL_ID);
+        await actionsApi.unregister(commandTriggerId(command), PANEL_ID);
     } catch (err) {
         console.error(
-            `[DiscordService] trigger removal failed for /${command.name}:`,
+            `[DiscordService] event action removal failed for /${command.name}:`,
             err,
         );
         throw new Error(
@@ -1118,7 +1212,7 @@ export function buildMemberSummaries(members: Iterable<any>): MemberSummary[] {
     }));
 }
 
-const actions = [
+export const actions = [
     defineAction({
         id: "get-channel",
         name: "Get Channel",
@@ -1278,28 +1372,11 @@ const actions = [
         description: "Sends a text message to a Discord channel",
         template: "Send message {content} to {channel}",
         inputs: {
-            channel: {
-                type: "discord-channel",
-                label: "Channel",
-                placeholder: "Channel",
-                required: true,
-            },
-            content: {
-                type: "string",
-                label: "Content",
-                placeholder: "Content",
-                required: true,
-            },
-            reply: {
-                type: "discord-message",
-                label: "Reply",
-                placeholder: "Message",
-            },
-            embeds: {
-                type: "list<discord-embed>",
-                label: "Embeds",
-                placeholder: "Embed",
-            },
+            channel: INPUTS.channel,
+            content: { ...INPUTS.content, required: true },
+            reply: { ...INPUTS.message, label: "Reply", required: false },
+            embeds: INPUTS.embeds,
+            components: INPUTS.components,
         },
         output: {
             type: "discord-message",
@@ -1313,34 +1390,14 @@ const actions = [
                 content: string;
                 reply?: string;
                 embeds?: unknown;
+                components?: unknown;
             },
         ) => {
-            const bot = getClient();
-            const channel = await bot.channels.fetch(inputs.channel);
-            if (!channel) {
-                throw new Error(`Channel ${inputs.channel} not found`);
+            const ops = new MessageOps(getClient());
+            if (inputs.reply) {
+                return ops.reply(inputs.channel, inputs.reply, inputs);
             }
-            const embedPayloads = normalizeEmbeds(inputs.embeds).map((data) =>
-                buildDiscordEmbed(data),
-            );
-            if (inputs.reply && channel && "messages" in channel) {
-                const target = await (channel as any).messages.fetch(
-                    inputs.reply,
-                );
-                const reply = await target.reply({
-                    content: inputs.content,
-                    embeds: embedPayloads,
-                });
-                return reply.id;
-            }
-            if (channel && "send" in channel) {
-                const sent = await (channel as any).send({
-                    content: inputs.content,
-                    embeds: embedPayloads,
-                });
-                return sent.id;
-            }
-            throw new Error(`Channel ${inputs.channel} not found or not text-based`);
+            return ops.send(inputs.channel, inputs);
         },
     }),
 
@@ -1351,18 +1408,10 @@ const actions = [
         description: "Sends a private direct message to a Discord user",
         template: "Send DM {content} to {user}",
         inputs: {
-            user: {
-                type: "discord-user",
-                label: "User",
-                placeholder: "User",
-                required: true,
-            },
-            content: {
-                type: "string",
-                label: "Content",
-                placeholder: "Content",
-                required: true,
-            },
+            user: INPUTS.user,
+            content: { ...INPUTS.content, required: true },
+            embeds: INPUTS.embeds,
+            components: INPUTS.components,
         },
         output: {
             type: "discord-message",
@@ -1370,10 +1419,8 @@ const actions = [
         },
         icon: "person",
         run: async (_ctx, inputs: { user: string; content: string }) => {
-            const bot = getClient();
-            const user = await bot.users.fetch(inputs.user);
-            const sent = await user.send(inputs.content);
-            return sent.id;
+            const ops = new MessageOps(getClient());
+            return ops.dm(inputs.user, inputs);
         },
     }),
 
@@ -1384,48 +1431,19 @@ const actions = [
         description: "Adds an emoji reaction to a Discord message",
         template: "Add reaction {emoji} to {message}",
         inputs: {
-            channel: {
-                type: "discord-channel",
-                label: "Channel",
-                placeholder: "Channel",
-                required: true,
-            },
-            message: {
-                type: "discord-message",
-                label: "Message",
-                placeholder: "Message",
-                required: true,
-            },
-            emoji: {
-                type: "string",
-                label: "Emoji",
-                placeholder: "Emoji",
-                required: true,
-            },
+            channel: INPUTS.channel,
+            message: INPUTS.message,
+            emoji: INPUTS.emoji,
         },
         output: {
             type: "boolean",
             label: "Success",
         },
         icon: "add_reaction",
-        run: async (
-            _ctx,
-            inputs: {
-                channel: string;
-                message: string;
-                emoji: string;
-            },
-        ) => {
-            const bot = getClient();
-            const channel = await bot.channels.fetch(inputs.channel);
-            if (channel && "messages" in channel) {
-                const target = await (channel as any).messages.fetch(
-                    inputs.message,
-                );
-                await target.react(inputs.emoji);
-                return true;
-            }
-            throw new Error(`Channel ${inputs.channel} not found`);
+        run: async (_ctx, inputs: { channel: string; message: string; emoji: string }) => {
+            const ops = new MessageOps(getClient());
+            await ops.react(inputs.channel, inputs.message, inputs.emoji);
+            return true;
         },
     }),
 
@@ -1479,17 +1497,8 @@ const actions = [
             "Acknowledges a slash command so the bot can answer later without hitting Discord's 3-second timeout",
         template: "Defer interaction {interactionId}",
         inputs: {
-            interactionId: {
-                type: "discord-interaction",
-                label: "Interaction",
-                placeholder: "Interaction",
-                required: true,
-            },
-            ephemeral: {
-                type: "boolean",
-                label: "Only visible to the user",
-                default: false,
-            },
+            interactionId: INPUTS.interaction,
+            ephemeral: INPUTS.ephemeral,
         },
         output: {
             type: "boolean",
@@ -1500,10 +1509,8 @@ const actions = [
             _ctx,
             inputs: { interactionId: string; ephemeral?: boolean },
         ) => {
-            const interaction = takeInteraction(inputs.interactionId.trim());
-            await interaction.deferReply({
-                flags: inputs.ephemeral ? MessageFlags.Ephemeral : undefined,
-            });
+            const ops = new InteractionOps(takeInteraction);
+            await ops.defer(inputs.interactionId, inputs.ephemeral);
             return true;
         },
     }),
@@ -1514,29 +1521,13 @@ const actions = [
         category: "Interactions",
         description:
             "Replies to a slash command; edits the reply when the interaction was deferred",
-        template: "Respond to interaction {interactionId}",
+        template: "Respond to interaction {interactionId} with {content}",
         inputs: {
-            interactionId: {
-                type: "discord-interaction",
-                label: "Interaction",
-                placeholder: "Interaction",
-                required: true,
-            },
-            content: {
-                type: "string",
-                label: "Content",
-                placeholder: "Content",
-            },
-            embeds: {
-                type: "list<discord-embed>",
-                label: "Embeds",
-                placeholder: "Embed",
-            },
-            ephemeral: {
-                type: "boolean",
-                label: "Only visible to the user",
-                default: false,
-            },
+            interactionId: INPUTS.interaction,
+            content: INPUTS.content,
+            embeds: INPUTS.embeds,
+            components: INPUTS.components,
+            ephemeral: INPUTS.ephemeral,
         },
         output: {
             type: "discord-interaction",
@@ -1552,23 +1543,8 @@ const actions = [
                 ephemeral?: boolean;
             },
         ) => {
-            const interaction = takeInteraction(inputs.interactionId.trim());
-            const embedPayloads = normalizeEmbeds(inputs.embeds).map((data) =>
-                buildDiscordEmbed(data),
-            );
-            const payload = {
-                content: inputs.content ?? "",
-                embeds: embedPayloads,
-            };
-            if (interaction.deferred || interaction.replied) {
-                await interaction.editReply(payload);
-            } else {
-                await interaction.reply({
-                    ...payload,
-                    flags: inputs.ephemeral ? MessageFlags.Ephemeral : undefined,
-                });
-            }
-            return interaction.id;
+            const ops = new InteractionOps(takeInteraction);
+            return ops.respond(inputs.interactionId, inputs);
         },
     }),
 
@@ -1577,29 +1553,13 @@ const actions = [
         name: "Follow Up to Interaction",
         category: "Interactions",
         description: "Sends an additional message after a slash command reply",
-        template: "Follow up to interaction {interactionId}",
+        template: "Follow up to interaction {interactionId} with {content}",
         inputs: {
-            interactionId: {
-                type: "discord-interaction",
-                label: "Interaction",
-                placeholder: "Interaction",
-                required: true,
-            },
-            content: {
-                type: "string",
-                label: "Content",
-                placeholder: "Content",
-            },
-            embeds: {
-                type: "list<discord-embed>",
-                label: "Embeds",
-                placeholder: "Embed",
-            },
-            ephemeral: {
-                type: "boolean",
-                label: "Only visible to the user",
-                default: false,
-            },
+            interactionId: INPUTS.interaction,
+            content: INPUTS.content,
+            embeds: INPUTS.embeds,
+            components: INPUTS.components,
+            ephemeral: INPUTS.ephemeral,
         },
         output: {
             type: "discord-message",
@@ -1615,16 +1575,686 @@ const actions = [
                 ephemeral?: boolean;
             },
         ) => {
-            const interaction = takeInteraction(inputs.interactionId.trim());
-            const embedPayloads = normalizeEmbeds(inputs.embeds).map((data) =>
-                buildDiscordEmbed(data),
-            );
-            const sent = await interaction.followUp({
-                content: inputs.content ?? "",
-                embeds: embedPayloads,
-                flags: inputs.ephemeral ? MessageFlags.Ephemeral : undefined,
+            const ops = new InteractionOps(takeInteraction);
+            return ops.followUp(inputs.interactionId, inputs);
+        },
+    }),
+
+    defineAction({
+        id: "create-button",
+        name: "Create Button",
+        category: "Interactions",
+        description: "Builds a button for a message's component row",
+        template: "Create button {label}",
+        inputs: {
+            label: {
+                type: "string",
+                label: "Label",
+                placeholder: "Label",
+                required: true,
+            },
+            style: {
+                type: "string",
+                label: "Style",
+                placeholder: "Button style",
+                default: "primary",
+                options: [
+                    { label: "Primary", value: "primary" },
+                    { label: "Secondary", value: "secondary" },
+                    { label: "Success", value: "success" },
+                    { label: "Danger", value: "danger" },
+                    { label: "Link", value: "link" },
+                ],
+            },
+            customId: {
+                type: "string",
+                label: "Interaction ID",
+                placeholder: "Interaction ID",
+            },
+            url: {
+                type: "url",
+                label: "URL",
+                placeholder: "URL",
+            },
+            emoji: {
+                type: "string",
+                label: "Emoji",
+                placeholder: "Emoji",
+            },
+            disabled: {
+                type: "boolean",
+                label: "Disabled",
+                default: false,
+            },
+        },
+        output: {
+            type: "discord-component",
+            label: "Button",
+        },
+        icon: "smart_button",
+        run: async (_ctx, inputs: DiscordComponentData) =>
+            buildButtonComponent(inputs || {}),
+    }),
+
+    defineAction({
+        id: "edit-message",
+        name: "Edit Message",
+        category: "Messages",
+        description: "Edits a message the bot previously sent",
+        template: "Edit message {message} to {content}",
+        inputs: {
+            channel: INPUTS.channel,
+            message: INPUTS.message,
+            content: INPUTS.content,
+            embeds: INPUTS.embeds,
+            components: INPUTS.components,
+        },
+        output: {
+            type: "discord-message",
+            label: "Message",
+        },
+        icon: "edit",
+        run: async (
+            _ctx,
+            inputs: {
+                channel: string;
+                message: string;
+                content?: string;
+                embeds?: unknown;
+            },
+        ) => {
+            const ops = new MessageOps(getClient());
+            return ops.edit(inputs.channel, inputs.message, inputs);
+        },
+    }),
+
+    defineAction({
+        id: "delete-message",
+        name: "Delete Message",
+        category: "Messages",
+        description: "Deletes a message from a Discord channel",
+        template: "Delete message {message}",
+        inputs: {
+            channel: INPUTS.channel,
+            message: INPUTS.message,
+        },
+        output: {
+            type: "boolean",
+            label: "Success",
+        },
+        icon: "delete",
+        run: async (
+            _ctx,
+            inputs: { channel: string; message: string },
+        ) => {
+            const ops = new MessageOps(getClient());
+            await ops.delete(inputs.channel, inputs.message);
+            return true;
+        },
+    }),
+
+    defineAction({
+        id: "purge-messages",
+        name: "Purge Messages",
+        category: "Messages",
+        description: "Deletes the newest messages in a channel",
+        template: "Purge {count} messages in {channel}",
+        inputs: {
+            channel: INPUTS.channel,
+            count: INPUTS.count,
+        },
+        output: {
+            type: "number",
+            label: "Deleted",
+        },
+        icon: "delete_sweep",
+        run: async (_ctx, inputs: { channel: string; count?: number }) => {
+            const ops = new MessageOps(getClient());
+            return ops.bulkDelete(inputs.channel, inputs.count);
+        },
+    }),
+
+    defineAction({
+        id: "pin-message",
+        name: "Pin Message",
+        category: "Messages",
+        description: "Pins a message in its channel",
+        template: "Pin message {message}",
+        inputs: {
+            channel: INPUTS.channel,
+            message: INPUTS.message,
+        },
+        output: {
+            type: "boolean",
+            label: "Success",
+        },
+        icon: "push_pin",
+        run: async (_ctx, inputs: { channel: string; message: string }) => {
+            const ops = new MessageOps(getClient());
+            await ops.pin(inputs.channel, inputs.message);
+            return true;
+        },
+    }),
+
+    defineAction({
+        id: "unpin-message",
+        name: "Unpin Message",
+        category: "Messages",
+        description: "Removes a message from the channel's pinned messages",
+        template: "Unpin message {message}",
+        inputs: {
+            channel: INPUTS.channel,
+            message: INPUTS.message,
+        },
+        output: {
+            type: "boolean",
+            label: "Success",
+        },
+        icon: "keep_off",
+        run: async (_ctx, inputs: { channel: string; message: string }) => {
+            const ops = new MessageOps(getClient());
+            await ops.unpin(inputs.channel, inputs.message);
+            return true;
+        },
+    }),
+
+    defineAction({
+        id: "crosspost-message",
+        name: "Crosspost Message",
+        category: "Messages",
+        description: "Publishes a message in an announcement channel to all servers following it",
+        template: "Crosspost message {message}",
+        inputs: {
+            channel: INPUTS.channel,
+            message: INPUTS.message,
+        },
+        output: {
+            type: "boolean",
+            label: "Success",
+        },
+        icon: "podcasts",
+        run: async (_ctx, inputs: { channel: string; message: string }) => {
+            const ops = new MessageOps(getClient());
+            await ops.crosspost(inputs.channel, inputs.message);
+            return true;
+        },
+    }),
+
+    defineAction({
+        id: "remove-reaction",
+        name: "Remove Reaction",
+        category: "Reactions",
+        description: "Removes an emoji reaction from a message, optionally only from one user",
+        template: "Remove reaction {emoji} from {message}",
+        inputs: {
+            channel: INPUTS.channel,
+            message: INPUTS.message,
+            emoji: INPUTS.emoji,
+            user: { ...INPUTS.user, required: false },
+        },
+        output: {
+            type: "boolean",
+            label: "Success",
+        },
+        icon: "heart_broken",
+        run: async (
+            _ctx,
+            inputs: { channel: string; message: string; emoji: string; user?: string },
+        ) => {
+            const ops = new MessageOps(getClient());
+            await ops.removeReaction(inputs.channel, inputs.message, inputs.emoji, inputs.user);
+            return true;
+        },
+    }),
+
+    defineAction({
+        id: "add-role",
+        name: "Add Role",
+        category: "Roles",
+        description: "Gives a role to a member",
+        template: "Add role {role} to {user}",
+        inputs: {
+            user: INPUTS.user,
+            role: INPUTS.role,
+            guildId: INPUTS.guildId,
+        },
+        output: {
+            type: "boolean",
+            label: "Success",
+        },
+        icon: "how_to_reg",
+        run: async (
+            _ctx,
+            inputs: { user: string; role: string; guildId?: string },
+        ) => {
+            const bot = getClient();
+            const member = await resolveMember(bot, inputs.user, inputs.guildId);
+            await member.roles.add(inputs.role.trim());
+            return true;
+        },
+    }),
+
+    defineAction({
+        id: "remove-role",
+        name: "Remove Role",
+        category: "Roles",
+        description: "Takes a role away from a member",
+        template: "Remove role {role} from {user}",
+        inputs: {
+            user: INPUTS.user,
+            role: INPUTS.role,
+            guildId: INPUTS.guildId,
+        },
+        output: {
+            type: "boolean",
+            label: "Success",
+        },
+        icon: "do_not_disturb_on",
+        run: async (
+            _ctx,
+            inputs: { user: string; role: string; guildId?: string },
+        ) => {
+            const bot = getClient();
+            const member = await resolveMember(bot, inputs.user, inputs.guildId);
+            await member.roles.remove(inputs.role.trim());
+            return true;
+        },
+    }),
+
+    defineAction({
+        id: "create-role",
+        name: "Create Role",
+        category: "Roles",
+        description: "Creates a server role and returns its id",
+        template: "Create role {name}",
+        inputs: {
+            name: INPUTS.name,
+            color: INPUTS.color,
+            guildId: INPUTS.guildId,
+        },
+        output: {
+            type: "discord-role",
+            label: "Role",
+        },
+        icon: "add_moderator",
+        run: async (
+            _ctx,
+            inputs: { name: string; color?: string; guildId?: string },
+        ) => {
+            const bot = getClient();
+            const guild = await resolveGuild(bot, inputs.guildId);
+            const role = await guild.roles.create({
+                name: inputs.name.trim(),
+                ...(inputs.color ? { color: inputs.color as ColorResolvable } : {}),
             });
-            return sent.id;
+            return role.id;
+        },
+    }),
+
+    defineAction({
+        id: "delete-role",
+        name: "Delete Role",
+        category: "Roles",
+        description: "Deletes a role from the server",
+        template: "Delete role {role}",
+        inputs: {
+            role: INPUTS.role,
+            guildId: INPUTS.guildId,
+        },
+        output: {
+            type: "boolean",
+            label: "Success",
+        },
+        icon: "remove_moderator",
+        run: async (_ctx, inputs: { role: string; guildId?: string }) => {
+            const bot = getClient();
+            const guild = await resolveGuild(bot, inputs.guildId);
+            const role = await guild.roles.fetch(inputs.role.trim());
+            if (!role) {
+                throw new Error(`Role ${inputs.role} not found`);
+            }
+            await role.delete();
+            return true;
+        },
+    }),
+
+    defineAction({
+        id: "ban-member",
+        name: "Ban Member",
+        category: "Members",
+        description: "Bans a user from the server",
+        template: "Ban {user}",
+        inputs: {
+            user: INPUTS.user,
+            deleteDays: INPUTS.deleteDays,
+            reason: INPUTS.reason,
+            guildId: INPUTS.guildId,
+        },
+        output: {
+            type: "boolean",
+            label: "Success",
+        },
+        icon: "block",
+        run: async (
+            _ctx,
+            inputs: { user: string; deleteDays?: number; reason?: string; guildId?: string },
+        ) => {
+            const bot = getClient();
+            const guild = await resolveGuild(bot, inputs.guildId);
+            const days = Math.max(0, Math.min(7, Math.floor(Number(inputs.deleteDays ?? 0))));
+            await guild.members.ban(inputs.user.trim(), {
+                deleteMessageSeconds: days * 86_400,
+                ...(inputs.reason ? { reason: inputs.reason } : {}),
+            });
+            return true;
+        },
+    }),
+
+    defineAction({
+        id: "unban-member",
+        name: "Unban User",
+        category: "Members",
+        description: "Lifts a ban for a user",
+        template: "Unban {user}",
+        inputs: {
+            user: INPUTS.user,
+            guildId: INPUTS.guildId,
+        },
+        output: {
+            type: "boolean",
+            label: "Success",
+        },
+        icon: "person_remove",
+        run: async (_ctx, inputs: { user: string; guildId?: string }) => {
+            const bot = getClient();
+            const guild = await resolveGuild(bot, inputs.guildId);
+            await guild.members.unban(inputs.user.trim());
+            return true;
+        },
+    }),
+
+    defineAction({
+        id: "kick-member",
+        name: "Kick Member",
+        category: "Members",
+        description: "Removes a member from the server",
+        template: "Kick {user}",
+        inputs: {
+            user: INPUTS.user,
+            reason: INPUTS.reason,
+            guildId: INPUTS.guildId,
+        },
+        output: {
+            type: "boolean",
+            label: "Success",
+        },
+        icon: "logout",
+        run: async (
+            _ctx,
+            inputs: { user: string; reason?: string; guildId?: string },
+        ) => {
+            const bot = getClient();
+            const member = await resolveMember(bot, inputs.user, inputs.guildId);
+            await member.kick(inputs.reason ?? undefined);
+            return true;
+        },
+    }),
+
+    defineAction({
+        id: "timeout-member",
+        name: "Timeout Member",
+        category: "Members",
+        description: "Mutes a member for a set number of minutes",
+        template: "Timeout {user} for {minutes} minutes",
+        inputs: {
+            user: INPUTS.user,
+            minutes: INPUTS.minutes,
+            reason: INPUTS.reason,
+            guildId: INPUTS.guildId,
+        },
+        output: {
+            type: "boolean",
+            label: "Success",
+        },
+        icon: "timer",
+        run: async (
+            _ctx,
+            inputs: { user: string; minutes?: number; reason?: string; guildId?: string },
+        ) => {
+            const bot = getClient();
+            const member = await resolveMember(bot, inputs.user, inputs.guildId);
+            const minutes = Math.max(1, Math.min(40_320, Math.floor(Number(inputs.minutes ?? 10))));
+            await member.timeout(minutes * 60_000, inputs.reason ?? undefined);
+            return true;
+        },
+    }),
+
+    defineAction({
+        id: "create-channel",
+        name: "Create Channel",
+        category: "Channels",
+        description: "Creates a text, voice, announcement, or category channel",
+        template: "Create channel {name}",
+        inputs: {
+            name: INPUTS.name,
+            kind: INPUTS.kind,
+            topic: INPUTS.topic,
+            guildId: INPUTS.guildId,
+        },
+        output: {
+            type: "discord-channel",
+            label: "Channel",
+        },
+        icon: "add_comment",
+        run: async (
+            _ctx,
+            inputs: { name: string; kind?: string; topic?: string; guildId?: string },
+        ) => {
+            const bot = getClient();
+            const guild = await resolveGuild(bot, inputs.guildId);
+            const kindMap: Record<
+                string,
+                typeof ChannelType.GuildText | typeof ChannelType.GuildVoice | typeof ChannelType.GuildAnnouncement | typeof ChannelType.GuildCategory
+            > = {
+                text: ChannelType.GuildText,
+                voice: ChannelType.GuildVoice,
+                announcement: ChannelType.GuildAnnouncement,
+                category: ChannelType.GuildCategory,
+            };
+            const kind = kindMap[(inputs.kind || "text").toLowerCase()];
+            if (kind === undefined) {
+                throw new Error(`Unknown channel kind "${inputs.kind}"`);
+            }
+            const channel = await guild.channels.create({
+                name: inputs.name.trim(),
+                type: kind,
+                ...(inputs.topic && kind === ChannelType.GuildText
+                    ? { topic: inputs.topic }
+                    : {}),
+            });
+            return channel.id;
+        },
+    }),
+
+    defineAction({
+        id: "delete-channel",
+        name: "Delete Channel",
+        category: "Channels",
+        description: "Deletes a channel",
+        template: "Delete channel {channel}",
+        inputs: {
+            channel: INPUTS.channel,
+        },
+        output: {
+            type: "boolean",
+            label: "Success",
+        },
+        icon: "delete_forever",
+        run: async (_ctx, inputs: { channel: string }) => {
+            const ops = new MessageOps(getClient());
+            const channel = await ops.fetchChannel(inputs.channel);
+            await channel.delete();
+            return true;
+        },
+    }),
+
+    defineAction({
+        id: "edit-channel",
+        name: "Edit Channel",
+        category: "Channels",
+        description: "Renames a channel or changes its topic or slowmode",
+        template: "Edit channel {channel}",
+        inputs: {
+            channel: INPUTS.channel,
+            name: { ...INPUTS.name, required: false },
+            topic: INPUTS.topic,
+            slowmode: INPUTS.slowmode,
+        },
+        output: {
+            type: "boolean",
+            label: "Success",
+        },
+        icon: "tune",
+        run: async (
+            _ctx,
+            inputs: { channel: string; name?: string; topic?: string; slowmode?: number },
+        ) => {
+            const ops = new MessageOps(getClient());
+            const channel = await ops.fetchChannel(inputs.channel);
+            if (
+                inputs.name === undefined &&
+                inputs.topic === undefined &&
+                inputs.slowmode === undefined
+            ) {
+                throw new Error("Edit Channel needs a name, topic, or slowmode to change");
+            }
+            await (channel as any).edit({
+                ...(inputs.name !== undefined ? { name: inputs.name } : {}),
+                ...(inputs.topic !== undefined ? { topic: inputs.topic } : {}),
+                ...(inputs.slowmode !== undefined
+                    ? { rateLimitPerUser: Math.max(0, Math.min(21_600, Math.floor(Number(inputs.slowmode)))) }
+                    : {}),
+            });
+            return true;
+        },
+    }),
+
+    defineAction({
+        id: "create-thread",
+        name: "Create Thread",
+        category: "Channels",
+        description: "Starts a thread from a message",
+        template: "Create thread {name} from {message}",
+        inputs: {
+            channel: INPUTS.channel,
+            message: INPUTS.message,
+            name: INPUTS.name,
+        },
+        output: {
+            type: "discord-channel",
+            label: "Thread",
+        },
+        icon: "forum",
+        run: async (
+            _ctx,
+            inputs: { channel: string; message: string; name: string },
+        ) => {
+            const ops = new MessageOps(getClient());
+            return ops.startThread(inputs.channel, inputs.message, inputs.name);
+        },
+    }),
+
+    defineAction({
+        id: "move-member",
+        name: "Move Member",
+        category: "Members",
+        description: "Moves a connected member to another voice channel",
+        template: "Move {user} to {channel}",
+        inputs: {
+            user: INPUTS.user,
+            channel: INPUTS.channel,
+            guildId: INPUTS.guildId,
+        },
+        output: {
+            type: "boolean",
+            label: "Success",
+        },
+        icon: "swap_horiz",
+        run: async (
+            _ctx,
+            inputs: { user: string; channel: string; guildId?: string },
+        ) => {
+            const bot = getClient();
+            const member = await resolveMember(bot, inputs.user, inputs.guildId);
+            if (!member.voice.channel) {
+                throw new Error(
+                    `User ${inputs.user} is not connected to a voice channel`,
+                );
+            }
+            await member.voice.setChannel(inputs.channel.trim());
+            return true;
+        },
+    }),
+
+    defineAction({
+        id: "disconnect-member",
+        name: "Disconnect Member",
+        category: "Members",
+        description: "Disconnects a member from voice",
+        template: "Disconnect {user}",
+        inputs: {
+            user: INPUTS.user,
+            guildId: INPUTS.guildId,
+        },
+        output: {
+            type: "boolean",
+            label: "Success",
+        },
+        icon: "voice_over_off",
+        run: async (
+            _ctx,
+            inputs: { user: string; guildId?: string },
+        ) => {
+            const bot = getClient();
+            const member = await resolveMember(bot, inputs.user, inputs.guildId);
+            if (!member.voice.channel) {
+                throw new Error(
+                    `User ${inputs.user} is not connected to a voice channel`,
+                );
+            }
+            await member.voice.disconnect();
+            return true;
+        },
+    }),
+
+    defineAction({
+        id: "create-invite",
+        name: "Create Invite",
+        category: "Channels",
+        description: "Creates an invite link for a channel",
+        template: "Create invite for {channel}",
+        inputs: {
+            channel: INPUTS.channel,
+            maxUses: INPUTS.maxUses,
+        },
+        output: {
+            type: "url",
+            label: "Invite",
+        },
+        icon: "link",
+        run: async (_ctx, inputs: { channel: string; maxUses?: number }) => {
+            const ops = new MessageOps(getClient());
+            const channel = await ops.fetchChannel(inputs.channel);
+            if (!("createInvite" in channel)) {
+                throw new Error(`Channel ${inputs.channel} cannot have invites`);
+            }
+            const maxUses = Math.max(0, Math.min(100, Math.floor(Number(inputs.maxUses ?? 0))));
+            const invite = await (channel as any).createInvite({
+                maxUses,
+                maxAge: 0,
+                unique: true,
+            });
+            return invite.url;
         },
     }),
 ];
@@ -1632,8 +2262,9 @@ const actions = [
 // Typed fields each static trigger offers. Keys mirror the payloads the
 // emit sites in attachListeners send, so a variable inserted from the
 // picker always resolves to a real value (labels are the picker's names).
+// event actions fire as events and start flows; they are not callable
 export const staticTriggers = [
-    defineTrigger({
+    defineAction({
         id: "on-message",
         name: "When a message is received",
         category: "Messages",
@@ -1651,7 +2282,7 @@ export const staticTriggers = [
         icon: "chat",
     }),
 
-    defineTrigger({
+    defineAction({
         id: "on-member-join",
         name: "When member joins server",
         category: "Members",
@@ -1667,7 +2298,7 @@ export const staticTriggers = [
         icon: "person_add",
     }),
 
-    defineTrigger({
+    defineAction({
         id: "on-member-leave",
         name: "When member leaves server",
         category: "Members",
@@ -1682,7 +2313,7 @@ export const staticTriggers = [
         icon: "person_remove",
     }),
 
-    defineTrigger({
+    defineAction({
         id: "on-reaction-add",
         name: "When a reaction is added",
         category: "Reactions",
@@ -1699,7 +2330,7 @@ export const staticTriggers = [
         icon: "add_reaction",
     }),
 
-    defineTrigger({
+    defineAction({
         id: "on-connection-error",
         name: "When the bot connection fails",
         category: discordCategory("Bot"),
@@ -1710,6 +2341,197 @@ export const staticTriggers = [
             error: { type: "string", label: "Error", typeName: "Text" },
         },
         icon: "error",
+    }),
+
+    // Buttons only in v1; other component kinds come later
+    defineAction({
+        id: "interaction-triggered",
+        name: "When an Interaction is Triggered",
+        category: discordCategory("Interactions"),
+        description: "Fires when a user clicks a button this bot sent",
+        template: "When interaction {customId} is triggered",
+        inputs: {
+            customId: {
+                type: "string",
+                label: "Interaction ID",
+                placeholder: "Interaction ID",
+                required: true,
+            },
+        },
+        match: { field: "customId", input: "customId" },
+        output: { type: "object", label: "Interaction Data" },
+        outputFields: {
+            customId: { type: "string", label: "Interaction ID", typeName: "Text" },
+            interactionId: {
+                type: "discord-interaction",
+                label: "Interaction",
+                typeName: "Interaction",
+            },
+            userId: { type: "discord-user", label: "User", typeName: "User" },
+            username: { type: "string", label: "Username", typeName: "Text" },
+            channelId: {
+                type: "discord-channel",
+                label: "Channel",
+                typeName: "Channel",
+            },
+            guildId: { type: "string", label: "Server ID", typeName: "Text" },
+            messageId: {
+                type: "discord-message",
+                label: "Message",
+                typeName: "Message",
+            },
+        },
+        icon: "touch_app",
+    }),
+
+    defineAction({
+        id: "on-message-edited",
+        name: "When a message is edited",
+        category: discordCategory("Messages"),
+        description: "Fires when a message is edited in Discord",
+        template: "When a message is edited",
+        output: { type: "object", label: "Message Data" },
+        outputFields: {
+            content: { type: "string", label: "Message", typeName: "Text" },
+            author: { type: "string", label: "Username", typeName: "Text" },
+            authorId: { type: "discord-user", label: "User", typeName: "User" },
+            channelId: { type: "discord-channel", label: "Channel", typeName: "Channel" },
+            guildId: { type: "string", label: "Server ID", typeName: "Text" },
+            messageId: { type: "discord-message", label: "Message ID", typeName: "Message" },
+        },
+        icon: "edit_note",
+    }),
+
+    defineAction({
+        id: "on-message-deleted",
+        name: "When a message is deleted",
+        category: discordCategory("Messages"),
+        description: "Fires when a message is deleted in Discord",
+        template: "When a message is deleted",
+        output: { type: "object", label: "Message Data" },
+        outputFields: {
+            messageId: { type: "discord-message", label: "Message ID", typeName: "Message" },
+            channelId: { type: "discord-channel", label: "Channel", typeName: "Channel" },
+            guildId: { type: "string", label: "Server ID", typeName: "Text" },
+        },
+        icon: "delete",
+    }),
+
+    defineAction({
+        id: "on-reaction-removed",
+        name: "When a reaction is removed",
+        category: discordCategory("Reactions"),
+        description: "Fires when a user's reaction is taken off a message",
+        template: "When a reaction is removed",
+        output: { type: "object", label: "Reaction Data" },
+        outputFields: {
+            emoji: { type: "string", label: "Emoji", typeName: "Text" },
+            userId: { type: "discord-user", label: "User", typeName: "User" },
+            username: { type: "string", label: "Username", typeName: "Text" },
+            messageId: { type: "discord-message", label: "Message ID", typeName: "Message" },
+            channelId: { type: "discord-channel", label: "Channel", typeName: "Channel" },
+        },
+        icon: "heart_broken",
+    }),
+
+    defineAction({
+        id: "on-member-banned",
+        name: "When a member is banned",
+        category: discordCategory("Members"),
+        description: "Fires when a user is banned from a server the bot is in",
+        template: "When a member is banned",
+        output: { type: "object", label: "Ban Data" },
+        outputFields: {
+            userId: { type: "discord-user", label: "User", typeName: "User" },
+            username: { type: "string", label: "Username", typeName: "Text" },
+            reason: { type: "string", label: "Reason", typeName: "Text" },
+            guildId: { type: "string", label: "Server ID", typeName: "Text" },
+        },
+        icon: "block",
+    }),
+
+    defineAction({
+        id: "on-role-added",
+        name: "When a member gets a role",
+        category: discordCategory("Roles"),
+        description: "Fires when a role is granted to a member",
+        template: "When a member gets a role",
+        output: { type: "object", label: "Role Data" },
+        outputFields: {
+            userId: { type: "discord-user", label: "User", typeName: "User" },
+            username: { type: "string", label: "Username", typeName: "Text" },
+            roleId: { type: "discord-role", label: "Role", typeName: "Role" },
+            guildId: { type: "string", label: "Server ID", typeName: "Text" },
+        },
+        icon: "how_to_reg",
+    }),
+
+    defineAction({
+        id: "on-role-removed",
+        name: "When a member loses a role",
+        category: discordCategory("Roles"),
+        description: "Fires when a role is taken away from a member",
+        template: "When a member loses a role",
+        output: { type: "object", label: "Role Data" },
+        outputFields: {
+            userId: { type: "discord-user", label: "User", typeName: "User" },
+            username: { type: "string", label: "Username", typeName: "Text" },
+            roleId: { type: "discord-role", label: "Role", typeName: "Role" },
+            guildId: { type: "string", label: "Server ID", typeName: "Text" },
+        },
+        icon: "do_not_disturb_on",
+    }),
+
+    defineAction({
+        id: "on-thread-created",
+        name: "When a thread is created",
+        category: discordCategory("Channels"),
+        description: "Fires when a thread is started in a channel",
+        template: "When a thread is created",
+        output: { type: "object", label: "Thread Data" },
+        outputFields: {
+            threadId: { type: "discord-channel", label: "Thread", typeName: "Channel" },
+            name: { type: "string", label: "Name", typeName: "Text" },
+            channelId: { type: "discord-channel", label: "Parent Channel", typeName: "Channel" },
+            ownerId: { type: "discord-user", label: "Owner", typeName: "User" },
+            guildId: { type: "string", label: "Server ID", typeName: "Text" },
+        },
+        icon: "forum",
+    }),
+
+    defineAction({
+        id: "on-voice-state-change",
+        name: "When a voice state changes",
+        category: discordCategory("Members"),
+        description: "Fires when a member joins, moves, or leaves voice",
+        template: "When a voice state changes",
+        output: { type: "object", label: "Voice Data" },
+        outputFields: {
+            userId: { type: "discord-user", label: "User", typeName: "User" },
+            username: { type: "string", label: "Username", typeName: "Text" },
+            channelId: { type: "discord-channel", label: "Channel", typeName: "Channel" },
+            previousChannelId: {
+                type: "discord-channel",
+                label: "Previous Channel",
+                typeName: "Channel",
+            },
+            guildId: { type: "string", label: "Server ID", typeName: "Text" },
+        },
+        icon: "spatial_audio",
+    }),
+
+    defineAction({
+        id: "on-bot-ready",
+        name: "When the bot becomes ready",
+        category: discordCategory("Bot"),
+        description: "Fires when the bot's gateway session is live",
+        template: "When the bot becomes ready",
+        output: { type: "object", label: "Bot Data" },
+        outputFields: {
+            userId: { type: "discord-user", label: "Bot User", typeName: "User" },
+            username: { type: "string", label: "Bot Name", typeName: "Text" },
+        },
+        icon: "verified",
     }),
 ];
 
@@ -1775,8 +2597,7 @@ function parseCommandOptions(raw: unknown): SlashCommandOption[] {
 
 export const botService = definePanelService({
     id: "dev.paperboard.botcreator",
-    actions,
-    triggers: staticTriggers,
+    actions: [...actions, ...staticTriggers],
     types: customTypes,
     categories: [...DISCORD_CATEGORIES],
     async onInit(ctx: ServiceContext<any>) {

@@ -10,6 +10,24 @@ const EMITTED_KEYS: Record<string, string[]> = {
     "on-member-leave": ["username", "userId", "guildId"],
     "on-reaction-add": ["emoji", "userId", "username", "messageId", "channelId"],
     "on-connection-error": ["error"],
+    "interaction-triggered": [
+        "customId",
+        "interactionId",
+        "userId",
+        "username",
+        "channelId",
+        "guildId",
+        "messageId",
+    ],
+    "on-message-edited": ["content", "author", "authorId", "channelId", "guildId", "messageId"],
+    "on-message-deleted": ["messageId", "channelId", "guildId"],
+    "on-reaction-removed": ["emoji", "userId", "username", "messageId", "channelId"],
+    "on-member-banned": ["userId", "username", "reason", "guildId"],
+    "on-role-added": ["userId", "username", "roleId", "guildId"],
+    "on-role-removed": ["userId", "username", "roleId", "guildId"],
+    "on-thread-created": ["threadId", "name", "channelId", "ownerId", "guildId"],
+    "on-voice-state-change": ["userId", "username", "channelId", "previousChannelId", "guildId"],
+    "on-bot-ready": ["userId", "username"],
 };
 
 describe("static trigger output fields", () => {
