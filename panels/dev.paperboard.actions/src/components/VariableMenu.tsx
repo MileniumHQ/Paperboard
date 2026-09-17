@@ -30,6 +30,7 @@ const TYPE_BADGE_LABELS: Record<string, string> = {
     "discord-role": "Role",
     "discord-message": "Message",
     "discord-embed": "Embed",
+    "discord-component": "Component",
     "discord-interaction": "Interaction",
     string: "Text",
     number: "Number",

@@ -7,14 +7,14 @@ import {
     PaperSelectMenu,
     PaperSelectMenuItem,
 } from "@paperboard-dev/paperui";
-import type { ActionSchema, TriggerSchema } from "@paperboard-dev/paperapi";
+import type { ActionSchema } from "@paperboard-dev/paperapi";
 import type { CanvasBlock } from "../lib/tree";
 import { plainTextFromClipboard, sanitizeNumberText } from "../lib/textInput";
 import { getVariableInfo, parseVariableToken } from "../lib/variableTypes";
 
 export interface ActionBlockProps {
     id?: string;
-    action: ActionSchema | TriggerSchema;
+    action: ActionSchema;
     isTrigger?: boolean;
     pos?: { x: number; y: number };
     zIndex?: number;
@@ -135,6 +135,9 @@ const FRIENDLY_TYPE_NAMES: Record<string, string> = {
     "discord-user": "User",
     "discord-message": "Message",
     "discord-embed": "Embed",
+    "discord-component": "Component",
+    "discord-role": "Role",
+    "discord-interaction": "Interaction",
 };
 
 function friendlyTypeName(t?: string): string {
@@ -804,25 +807,24 @@ export default function ActionBlock(props: ActionBlockProps) {
 
     const paramsMap = createMemo(() => {
         const act = props.action as ActionSchema;
-        const trig = props.action as TriggerSchema;
         const map: Record<string, any> = {
             ...(act?.inputs || {}),
         };
-        if (trig?.output) {
-            if (typeof trig.output === "string") {
-                map[trig.output] = {
-                    label: formatFallbackLabel(trig.output),
-                    type: trig.output,
+        if (act?.output) {
+            if (typeof act.output === "string") {
+                map[act.output] = {
+                    label: formatFallbackLabel(act.output),
+                    type: act.output,
                 };
-                map["output"] = { label: "Output", type: trig.output };
-            } else if (typeof trig.output === "object") {
-                const outType = (trig.output as any).type || "output";
+                map["output"] = { label: "Output", type: act.output };
+            } else if (typeof act.output === "object") {
+                const outType = (act.output as any).type || "output";
                 map[outType] = {
-                    label: (trig.output as any).label || formatFallbackLabel(outType),
+                    label: (act.output as any).label || formatFallbackLabel(outType),
                     type: outType,
                 };
                 map["output"] = {
-                    label: (trig.output as any).label || "Output",
+                    label: (act.output as any).label || "Output",
                     type: outType,
                 };
             }
@@ -1296,7 +1298,7 @@ export default function ActionBlock(props: ActionBlockProps) {
                                                 key,
                                                 label: def?.label || formatFallbackLabel(key),
                                             },
-                                            friendlyTypeName(def?.type),
+                                            def?.typeName || friendlyTypeName(def?.type),
                                         )}
                                     </div>
                                 );
