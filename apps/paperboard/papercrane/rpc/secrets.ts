@@ -1,7 +1,8 @@
 import { logger } from "../logger";
 import type { RpcContext } from "./context";
 import { assertPanelId, rpcErrorCode } from "./params";
-import { forbidden, invalidParams } from "./errors";
+import { invalidParams } from "./errors";
+import { resourcePanelId } from "../principal";
 
 // every secrets call names its panel explicitly; the vault's isolation is
 // panel-id-scoped at this boundary
@@ -19,20 +20,7 @@ function validatePanelId(params: any, action: string): string {
 // carry no claim and keep the explicit-parameter behavior.
 function effectivePanelId(params: any, action: string, ctx: RpcContext): string {
     const requested = validatePanelId(params, action);
-    const claim = ctx.callerPanelId();
-    if (claim && claim !== requested) {
-        // TODO(deny after v3.2): the mismatch log below becomes the only
-        // behavior — unscoped master-token callers start carrying claims
-        // and every disagreement is denied after v3.2.
-        logger.warn(
-            `[secrets] cross-panel access refused: token claim "${claim}" ` +
-            `requested "${requested}" secrets via "${action}"`,
-        );
-        throw forbidden(
-            `Cross-panel secrets access refused: credential is scoped to "${claim}"`,
-        );
-    }
-    return requested;
+    return resourcePanelId(ctx.callerPanelId(), requested, action)!;
 }
 
 export async function handleSecrets(action: string, id: unknown, params: any, ctx: RpcContext): Promise<boolean> {

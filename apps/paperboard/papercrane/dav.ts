@@ -28,6 +28,7 @@ const BLOCKED_FILE_NAMES = new Set([
     "authorized_tokens.json",
     "paired_computers.json",
     "machine-id.json",
+    "vault-recovery",
 ]);
 
 const KEY_MATERIAL_RE = /\.(key|pem|crt)$/i;
@@ -41,7 +42,7 @@ export function davMaxUploadBytes(): number {
 }
 
 function isBlockedFileName(name: string): boolean {
-    return BLOCKED_FILE_NAMES.has(name.toLowerCase()) || KEY_MATERIAL_RE.test(name);
+    return BLOCKED_FILE_NAMES.has(name.toLowerCase()) || name.toLowerCase().startsWith("secrets.json.") || KEY_MATERIAL_RE.test(name);
 }
 
 export interface DavSession {
@@ -50,13 +51,15 @@ export interface DavSession {
     createdAt: number;
     lastActiveAt: number;
     idleMs: number;
+    issuerToken?: string;
 }
 
 export class DavSessionStore {
     private byUser = new Map<string, DavSession>();
     private secrets = new Set<string>();
 
-    issue(idleMs = DEFAULT_IDLE_MS): DavSession {
+    issue(idleMs = DEFAULT_IDLE_MS, issuerToken?: string): DavSession {
+        this.sweep();
         if (this.byUser.size >= MAX_SESSIONS) {
             throw new Error(
                 `Session store is full (${MAX_SESSIONS} active sessions). Revoke one before opening another.`,
@@ -69,6 +72,7 @@ export class DavSessionStore {
             createdAt: now,
             lastActiveAt: now,
             idleMs: clamped,
+            issuerToken,
         };
         this.byUser.set(s.user, s);
         this.secrets.add(s.pass);
@@ -94,9 +98,13 @@ export class DavSessionStore {
     }
 
     /** Session for Basic user+pass, or null */
-    useBasic(user: string, pass: string): DavSession | null {
+    useBasic(user: string, pass: string, auth?: PaperCraneAuth): DavSession | null {
         const s = this.byUser.get(user);
         if (!s) return null;
+        if (s.issuerToken && !auth?.verifyHostToken(s.issuerToken)) {
+            this.revoke(user);
+            return null;
+        }
         if (Date.now() - s.lastActiveAt > s.idleMs) {
             this.revoke(user);
             return null;
@@ -143,7 +151,7 @@ function isMainToken(auth: PaperCraneAuth | undefined, secret: string): boolean 
     try {
         // hash-index lookup + one constant-time compare (auth.matchToken),
         // no per-entry scan
-        return auth.matchToken(secret) !== null;
+        return auth.verifyHostToken(secret);
     } catch (err) {
         logger.debug("[dav] main-token check failed:", err);
         return false;
@@ -164,7 +172,7 @@ export function checkDavAuth(
     }
     const basic = parseBasic(header);
     if (!basic) return null;
-    if (sessions.useBasic(basic.user, basic.pass)) return { kind: "session" };
+    if (sessions.useBasic(basic.user, basic.pass, auth)) return { kind: "session" };
     if (sessions.isSessionSecret(basic.pass)) return null;
     return isMainToken(auth, basic.pass) ? { kind: "main" } : null;
 }
@@ -771,7 +779,7 @@ export async function handleDavSessionIssue(
     }
     const s = (() => {
         try {
-            return sessions.issue(idleMs);
+            return sessions.issue(idleMs, token);
         } catch (err) {
             // capped store: loud refusal, never a hung connection
             logger.warn("[dav] session issue refused:", (err as Error)?.message ?? err);

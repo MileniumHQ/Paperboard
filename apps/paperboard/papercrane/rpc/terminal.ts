@@ -59,7 +59,7 @@ export async function handleTerminal(action: string, id: unknown, params: any, c
         case "term:destroy": {
             const termId = assertStr(params?.id, "id", 128);
             checkClientOwnership(termId, ctx, "term:destroy");
-            engine.destroyTerminal(termId);
+            await engine.destroyTerminal(termId);
             reply(id, { success: true });
             return true;
         }

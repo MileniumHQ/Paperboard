@@ -1,26 +1,10 @@
 import type { RpcContext } from "./context";
 import { logger } from "../logger";
 import { assertConfigPath, assertId, assertPanelId, assertStr, assertOptStr, rpcErrorCode } from "./params";
-import { forbidden } from "./errors";
+import { requireHost, resourcePanelId } from "../principal";
 
-// Since scoped tokens shipped, the socket's token claim is the identity —
-// mirrors rpc/secrets.ts exactly (same shape, same typed errors): a
-// panel-scoped caller naming any other panel is refused outright, master
-// /host callers carry no claim and keep explicit-parameter behavior.
 function effectivePanelId(requested: string, action: string, ctx: RpcContext): string {
-    const claim = ctx.callerPanelId();
-    if (claim && claim !== requested) {
-        // TODO(deny after v3.2): the mismatch log below becomes the only
-        // behavior — every disagreement is denied after v3.2.
-        logger.warn(
-            `[panels] cross-panel access refused: token claim "${claim}" ` +
-            `requested "${requested}" via "${action}"`,
-        );
-        throw forbidden(
-            `Cross-panel access refused: scope is limited to "${claim}"`,
-        );
-    }
-    return requested;
+    return resourcePanelId(ctx.callerPanelId(), requested, action)!;
 }
 
 export async function handlePanels(action: string, id: unknown, params: any, ctx: RpcContext): Promise<boolean> {
@@ -35,9 +19,7 @@ export async function handlePanels(action: string, id: unknown, params: any, ctx
                 const panelId = assertPanelId(params?.panelId);
                 // installing a panel is a host action, never panel equipment:
                 // a scoped token grants one panel claim and no wider reach
-                if (ctx.callerPanelId()) {
-                    throw forbidden("panel:install is host-only; scoped panel tokens may not install");
-                }
+                requireHost(ctx.callerPanelId(), action);
                 const downloadUrl = assertStr(params?.downloadUrl, "downloadUrl", 8192);
                 const sha256 = assertOptStr(params?.sha256, "sha256", 128);
                 const manifest = await engine.installPanel(panelId, downloadUrl, sha256);
@@ -56,6 +38,12 @@ export async function handlePanels(action: string, id: unknown, params: any, ctx
                 } catch (err: any) {
                     reply(id, null, `Uninstall failed: ${err?.message}`);
                 }
+                return true;
+            }
+            case "panel:restore": {
+                requireHost(ctx.callerPanelId(), action);
+                await engine.restorePanel(assertPanelId(params?.panelId), assertStr(params?.recoveryName, "recoveryName", 256));
+                reply(id, { success: true });
                 return true;
             }
             case "config:get": {

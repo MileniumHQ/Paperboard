@@ -23,6 +23,13 @@ afterEach(() => {
 });
 
 describe("panel-scoped token claims", () => {
+    it("panel tokens do not consume the paired-device budget", () => {
+        const auth = new PaperCraneAuth(false, dir);
+        try {
+            for (let i = 0; i < 200; i++) auth.issuePanelToken(`panel.${i}`);
+            expect(auth.pair(auth.startPairing(), "fixture-device").success).toBe(true);
+        } finally { auth.dispose(); }
+    });
     it("injectToken stores a panelId claim readable via resolveToken", () => {
         const auth = new PaperCraneAuth(false, dir);
         try {

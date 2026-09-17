@@ -148,7 +148,7 @@ describe("uninstall revokes the panel's scoped tokens", () => {
     });
 
     it("engine.uninstallPanel revokes the panel credential", async () => {
-        const engine = new PaperCraneEngine(dir);
+        const engine = new PaperCraneEngine(dir, panelServices);
         const seen: string[] = [];
         const orig = panelServices.revokePanel.bind(panelServices);
         (panelServices as any).revokePanel = (id: string) => {
@@ -217,7 +217,7 @@ describe("spawn boundaries refuse loudly", () => {
                 engine: {
                     clientOwner: (id: string) => owners.get(id) ?? null,
                     setClientOwner: (id: string, o: string | null) => owners.set(id, o),
-                    runProcess: () => Promise.resolve({ exitCode: 0 }),
+                    startProcess: () => Promise.resolve({ completion: Promise.resolve({ exitCode: 0 }) }),
                 },
                 callerPanelId: () => claim,
         sendEvent: () => undefined,
@@ -265,9 +265,9 @@ describe("spawn boundaries refuse loudly", () => {
     it("benign env (JAVA_HOME) passes the guard", async () => {
         const f = procCtx("a");
         const ran: any[] = [];
-        (f.ctx.engine as any).runProcess = (...a: any[]) => {
+        (f.ctx.engine as any).startProcess = (...a: any[]) => {
             ran.push(a);
-            return Promise.resolve({ exitCode: 0 });
+            return Promise.resolve({ completion: Promise.resolve({ exitCode: 0 }) });
         };
         await handleProcess(
             "process:run",
@@ -322,4 +322,3 @@ describe("payload caps refuse instead of slurping", () => {
         expect(fs.existsSync(orphan)).toBe(false);
     });
 });
-

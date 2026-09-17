@@ -7,6 +7,7 @@ import {
 } from "./storage";
 import { getLocalDir } from "./paths";
 import { secretsMatch } from "./secretCompare";
+import { requirePanelId } from "../../../packages/paperapi/src/panelIdentity";
 
 export interface AuthorizedToken {
     token: string;
@@ -26,6 +27,7 @@ const LOCKOUT_ESCALATION_THRESHOLD = 3;
 // token vault cap: refusals for NEW pairing only, never automatic eviction
 // of already-trusted credentials
 const MAX_TOKENS = 200;
+const MAX_PANEL_TOKENS = 10_000;
 
 // pairing auth and token store
 export class PaperCraneAuth extends EventEmitter {
@@ -41,6 +43,7 @@ export class PaperCraneAuth extends EventEmitter {
     // constant-time (one secretsMatch against the found entry). Rebuilt
     // whenever the vault mutates; teardown = map replaced, no timers.
     private tokenIndex: Map<string, AuthorizedToken> = new Map();
+    private panelTokenIndex = new Map<string, AuthorizedToken>();
     public noAuth: boolean = false;
 
     // injectable clock for testable lockouts
@@ -71,6 +74,9 @@ export class PaperCraneAuth extends EventEmitter {
             index.set(this.tokenHash(entry.token), entry);
         }
         this.tokenIndex = index;
+        this.panelTokenIndex = new Map(
+            [...this.authorizedTokens.values()].filter((entry) => entry.panelId).map((entry) => [entry.panelId!, entry]),
+        );
     }
 
     // identity index lookup: hash the presented token, one Map probe, then
@@ -97,6 +103,14 @@ export class PaperCraneAuth extends EventEmitter {
     // caller-supplied parameter.
     public injectToken(token: string, clientName = "local", panelId?: string): void {
         if (this.authorizedTokens.has(token)) return;
+        if (panelId) requirePanelId(panelId);
+        // Host tokens represent the current daemon session, not another
+        // paired device on every restart. Old host sessions are revoked.
+        if (!panelId && clientName === "host") {
+            for (const entry of [...this.authorizedTokens.values()]) {
+                if (!entry.panelId && entry.clientName === "host") this.revokeToken(entry.token);
+            }
+        }
         const entry: AuthorizedToken = {
             token,
             clientName,
@@ -112,9 +126,10 @@ export class PaperCraneAuth extends EventEmitter {
     // token per panel id — bounded by the panel count, never by the pairing
     // budget, so a thousand panels cannot evict user pairings.
     public issuePanelToken(panelId: string): string {
-        for (const entry of this.authorizedTokens.values()) {
-            if (entry.panelId === panelId) return entry.token;
-        }
+        requirePanelId(panelId);
+        const existing = this.panelTokenIndex.get(panelId);
+        if (existing) return existing.token;
+        if (this.panelTokenIndex.size >= MAX_PANEL_TOKENS) throw new Error("Panel credential store is full");
         const token = "pcp_" + crypto.randomBytes(24).toString("hex");
         const entry: AuthorizedToken = {
             token,
@@ -179,6 +194,9 @@ export class PaperCraneAuth extends EventEmitter {
             });
         } catch (err) {
             console.error("[auth] token store write failed:", err);
+            this.authorizedTokens = new Map([...this.tokenIndex.values()].map((entry) => [entry.token, entry]));
+            this.tokensDirty = true;
+            throw err;
         }
         // keep the hash index in lockstep with the vault
         this.rebuildIndex();
@@ -192,7 +210,8 @@ export class PaperCraneAuth extends EventEmitter {
         if (this.lastSeenFlushTimer) return;
         this.lastSeenFlushTimer = setTimeout(() => {
             this.lastSeenFlushTimer = null;
-            this.flushTokenStore();
+            try { this.flushTokenStore(); }
+            catch (err) { console.error("[auth] deferred token metadata save failed:", err); }
         }, this.lastSeenFlushMs);
         (this.lastSeenFlushTimer as unknown as { unref?: () => void })?.unref?.();
     }
@@ -277,7 +296,8 @@ export class PaperCraneAuth extends EventEmitter {
 
         this.failedAttempts = 0;
 
-        if (this.authorizedTokens.size >= MAX_TOKENS) {
+        const pairedCount = [...this.authorizedTokens.values()].filter((entry) => !entry.panelId && entry.clientName !== "host").length;
+        if (pairedCount >= MAX_TOKENS) {
             return {
                 success: false,
                 error: `Token vault is full (${MAX_TOKENS} paired clients). Revoke a device before pairing another.`,
@@ -305,6 +325,13 @@ export class PaperCraneAuth extends EventEmitter {
     public verifyToken(token?: string): boolean {
         if (this.noAuth) return true;
         return this.resolveToken(token) !== null;
+    }
+
+    /** HTTP host surfaces must not mistake a valid panel token for a host. */
+    public verifyHostToken(token?: string): boolean {
+        if (this.noAuth) return Boolean(token);
+        const entry = this.matchToken(token);
+        return entry !== null && entry.panelId === undefined;
     }
 
     // identity lookup: returns the stored entry (claims included) instead
@@ -345,8 +372,9 @@ export class PaperCraneAuth extends EventEmitter {
         }
         if (revoked > 0) {
             this.saveTokens();
-            this.emit("panel-revoked", panelId, revoked);
         }
+        // Scoped relay sockets have a host issuer, not a stored panel token.
+        this.emit("panel-revoked", panelId, revoked);
         return revoked;
     }
 }

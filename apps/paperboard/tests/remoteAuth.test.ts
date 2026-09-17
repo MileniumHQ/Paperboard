@@ -106,7 +106,7 @@ describe("pre-auth remote tunnel gating", () => {
         const c = await connect();
         try {
             send(c, { type: "remote:open", tunnelId: "t-unauth", computerId: "peer1" });
-            const resp = await waitFor(c, (f) => f.type === "response" && f.id === "t-unauth");
+            const resp = await waitFor(c, (f) => f.type === "tunnel-closed" && f.id === "t-unauth");
             expect(resp.error).toBeTruthy();
             expect(resp.code).toBe("AUTH_REQUIRED");
 

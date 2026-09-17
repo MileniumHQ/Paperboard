@@ -2,7 +2,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import * as os from "os";
 import { WebSocket as UpstreamWebSocket } from "ws";
 import { PaperCraneEngine } from "./engine";
-import { PaperCraneAuth } from "./auth";
+import { PaperCraneAuth, type AuthorizedToken } from "./auth";
 import { readRemotes } from "./remotes";
 import { getDetailedOsInfo } from "./index";
 import { logger } from "./logger";
@@ -17,7 +17,8 @@ import { handleActions } from "./rpc/actions";
 import { handleSystem } from "./rpc/system";
 import { handleSecrets } from "./rpc/secrets";
 import { PROTOCOL_VERSION, ErrorCode } from "./protocol";
-import { rpcErrorCode } from "./rpc/params";
+import { rpcErrorCode, assertPanelId, assertStr } from "./rpc/params";
+import { requireHost } from "./principal";
 
 // strict origin allowlist, exact hostname match
 export function isAllowedOrigin(origin: string): boolean {
@@ -66,6 +67,11 @@ const MAX_EVENT_SUBS = 512;
 // per-socket tunnel cap: each tunnel is a live upstream socket, so an
 // authenticated socket may not open an unbounded number of them
 const MAX_TUNNELS_PER_SOCKET = 32;
+export const MAX_WS_PAYLOAD = 20 * 1024 * 1024;
+const MAX_CONNECTIONS = 4096;
+const MAX_UNAUTHENTICATED = 128;
+const MAX_IN_FLIGHT_PER_SOCKET = 1024;
+const HANDSHAKE_TIMEOUT_MS = 10_000;
 
 export function setupWebSocketServer(
     wss: WebSocketServer,
@@ -75,8 +81,39 @@ export function setupWebSocketServer(
 ) {
     // broadcast interest per socket: socket → declared event names
     const socketSubscriptions = new Map<WebSocket, Set<string>>();
+    const byToken = new Map<string, Set<WebSocket>>();
+    const byPanel = new Map<string, Set<WebSocket>>();
+    let unauthenticated = 0;
+    let inFlightTotal = 0;
+    wss.options.maxPayload = Math.min(wss.options.maxPayload ?? MAX_WS_PAYLOAD, MAX_WS_PAYLOAD);
+    const revokeSockets = (sockets?: Set<WebSocket>) => {
+        for (const socket of sockets ?? []) {
+            socketSubscriptions.delete(socket);
+            socket.close(4401, "Credential revoked");
+        }
+    };
+    const onRevoked = (entry: AuthorizedToken) => revokeSockets(byToken.get(entry.token));
+    const onPanelRevoked = (panelId: string) => revokeSockets(byPanel.get(panelId));
+    auth.on("revoked", onRevoked);
+    auth.on("panel-revoked", onPanelRevoked);
+    wss.once("close", () => {
+        auth.off("revoked", onRevoked);
+        auth.off("panel-revoked", onPanelRevoked);
+        byToken.clear();
+        byPanel.clear();
+        socketSubscriptions.clear();
+    });
 
     wss.on("connection", (ws: WebSocket, req: any) => {
+        // Parser errors happen before a message event; contain them here.
+        ws.on("error", (err) => {
+            logger.warn("[ws] connection refused/closed after socket error:", err.message);
+            ws.terminate();
+        });
+        if (wss.clients.size > MAX_CONNECTIONS || (!auth.noAuth && unauthenticated >= MAX_UNAUTHENTICATED)) {
+            ws.close(4429, "Connection limit reached");
+            return;
+        }
         const origin = (req.headers.origin || "").toLowerCase();
         // absent Origin is a non-browser client, browsers always send one
         if (origin && !isAllowedOrigin(origin)) {
@@ -90,9 +127,42 @@ export function setupWebSocketServer(
         // granted panel identity for this socket (token claim, never a
         // caller parameter). Null = full-authority master/host caller.
         let authedPanelId: string | null = null;
+        let inFlight = 0;
+        let countedUnauthenticated = !auth.noAuth;
+        if (countedUnauthenticated) unauthenticated++;
+        const handshakeTimer = setTimeout(() => {
+            if (!isAuthenticated) ws.close(4401, "Authentication timed out");
+        }, HANDSHAKE_TIMEOUT_MS);
+        handshakeTimer.unref?.();
+        const unindex = (index: Map<string, Set<WebSocket>>, key: string | null) => {
+            if (!key) return;
+            const sockets = index.get(key);
+            sockets?.delete(ws);
+            if (!sockets?.size) index.delete(key);
+        };
+        const indexSocket = (index: Map<string, Set<WebSocket>>, key: string | null) => {
+            if (!key) return;
+            const sockets = index.get(key) ?? new Set<WebSocket>();
+            sockets.add(ws);
+            index.set(key, sockets);
+        };
+        const grantIdentity = (token: string | null, panelId: string | null) => {
+            unindex(byToken, authedToken);
+            unindex(byPanel, authedPanelId);
+            authedToken = token;
+            authedPanelId = panelId;
+            isAuthenticated = true;
+            indexSocket(byToken, token);
+            indexSocket(byPanel, panelId);
+            clearTimeout(handshakeTimer);
+            if (countedUnauthenticated) {
+                unauthenticated--;
+                countedUnauthenticated = false;
+            }
+        };
 
         // tunnels to paired remotes, keyed by tunnel id
-        const tunnels = new Map<string, UpstreamWebSocket>();
+        const tunnels = new Map<string, { socket: UpstreamWebSocket; ready: boolean; timer: ReturnType<typeof setTimeout> }>();
 
         // one teardown shape for every tunnel exit: map removal lives
         // here, not scattered across event handlers. Notify-once falls out
@@ -102,11 +172,12 @@ export function setupWebSocketServer(
             tunnelId: string,
             opts: { reason?: string; notify?: boolean } = {},
         ): void => {
-            const upstream = tunnels.get(tunnelId);
-            if (!upstream) return;
+            const tunnel = tunnels.get(tunnelId);
+            if (!tunnel) return;
             tunnels.delete(tunnelId);
+            clearTimeout(tunnel.timer);
             try {
-                upstream.close();
+                tunnel.socket.terminate();
             } catch (err) {
                 logger.debug(`[tunnel ${tunnelId}] close failed:`, err);
             }
@@ -122,6 +193,7 @@ export function setupWebSocketServer(
         };
 
         const sendEvent = (event: string, payload: any) => {
+            if (ws.bufferedAmount > 32 * 1024 * 1024) { ws.close(4429, "Slow event consumer"); return; }
             if (ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({ type: "event", event, payload }));
             }
@@ -131,6 +203,7 @@ export function setupWebSocketServer(
             const msg = JSON.stringify({ type: "event", event, payload });
             for (const client of wss.clients) {
                 if (client.readyState !== WebSocket.OPEN) continue;
+                if (client.bufferedAmount > 32 * 1024 * 1024) { client.close(4429, "Slow event consumer"); continue; }
                 // scope broadcasts to sockets that declared interest; a socket
                 // that never subscribed gets nothing, closing the blast radius
                 const subs = socketSubscriptions.get(client);
@@ -141,6 +214,10 @@ export function setupWebSocketServer(
         };
 
         ws.on("close", () => {
+            clearTimeout(handshakeTimer);
+            if (countedUnauthenticated) unauthenticated--;
+            unindex(byToken, authedToken);
+            unindex(byPanel, authedPanelId);
             socketSubscriptions.delete(ws);
             const registryChanged = actionsRegistry.handleSocketClose(ws);
             if (registryChanged) {
@@ -153,6 +230,17 @@ export function setupWebSocketServer(
         });
 
         ws.on("message", async (raw: any) => {
+            if (ws.readyState !== WebSocket.OPEN) return;
+            if (isAuthenticated && authedToken && !auth.verifyToken(authedToken)) {
+                ws.close(4401, "Credential revoked");
+                return;
+            }
+            if (inFlight >= MAX_IN_FLIGHT_PER_SOCKET || inFlightTotal >= 4096) {
+                ws.close(4429, "Too many concurrent requests");
+                return;
+            }
+            inFlight++;
+            inFlightTotal++;
             // kept for the catch below so failures always answer
             let failedId: unknown = null;
             try {
@@ -173,9 +261,9 @@ export function setupWebSocketServer(
 
                 // tunneled frames bypass the local pipeline
                 if (maybe && typeof maybe === "object" && maybe.type === "tunnel") {
-                    const upstream = tunnels.get(maybe.id);
-                    if (upstream && upstream.readyState === UpstreamWebSocket.OPEN) {
-                        upstream.send(typeof maybe.payload === "string" ? maybe.payload : JSON.stringify(maybe.payload));
+                    const tunnel = tunnels.get(maybe.id);
+                    if (isAuthenticated && tunnel?.ready && tunnel.socket.readyState === UpstreamWebSocket.OPEN) {
+                        tunnel.socket.send(typeof maybe.payload === "string" ? maybe.payload : JSON.stringify(maybe.payload));
                     }
                     return;
                 }
@@ -189,17 +277,19 @@ export function setupWebSocketServer(
                         const refusedId = maybe.tunnelId ?? maybe.id ?? null;
                         if (ws.readyState === WebSocket.OPEN) {
                             ws.send(JSON.stringify({
-                                type: "response",
+                                type: "tunnel-closed",
                                 id: refusedId,
                                 result: null,
                                 error: "Unauthorized. Authentication required.",
+                                reason: "Authentication required before opening a tunnel",
                                 code: ErrorCode.AUTH_REQUIRED,
                             }));
                         }
                         return;
                     }
-                    const tunnelId = maybe.tunnelId ?? maybe.id;
-                    const computerId = maybe.computerId;
+                    const tunnelId = assertStr(maybe.tunnelId ?? maybe.id, "tunnel id", 128);
+                    const computerId = assertStr(maybe.computerId, "computerId", 128);
+                    if (tunnels.has(tunnelId)) throw new Error("Tunnel id is already open");
                     // identity first: exact id match wins. A bare name only
                     // resolves when it is unambiguous — with two remotes
                     // sharing a name, first-match-wins could tunnel to the
@@ -227,8 +317,19 @@ export function setupWebSocketServer(
                         return;
                     }
                     try {
-                        const upstream = new UpstreamWebSocket(`ws://${entry.host}:${entry.port}`);
-                        tunnels.set(tunnelId, upstream);
+                        const upstream = new UpstreamWebSocket(`ws://${entry.host}:${entry.port}`, {
+                            maxPayload: MAX_WS_PAYLOAD, handshakeTimeout: HANDSHAKE_TIMEOUT_MS,
+                        });
+                        const timer = setTimeout(() => closeTunnel(tunnelId, { reason: "Remote authentication timed out" }), HANDSHAKE_TIMEOUT_MS);
+                        timer.unref?.();
+                        const tunnel = { socket: upstream, ready: false, timer };
+                        tunnels.set(tunnelId, tunnel);
+                        const opened = () => {
+                            if (!tunnels.has(tunnelId) || ws.readyState !== WebSocket.OPEN) return;
+                            clearTimeout(timer);
+                            tunnel.ready = true;
+                            ws.send(JSON.stringify({ type: "tunnel-open", id: tunnelId }));
+                        };
                         upstream.on("open", () => {
                             upstream.send(JSON.stringify({
                                 id: "__tunnel-auth",
@@ -243,9 +344,18 @@ export function setupWebSocketServer(
                                 if (m?.id === "__tunnel-auth") {
                                     if (m.error) {
                                         closeTunnel(tunnelId, { reason: "auth-failed" });
+                                    } else if (authedPanelId) {
+                                        // The paired host GRANTS a narrower socket identity. No
+                                        // host credential is delivered to the panel or its tunnel.
+                                        upstream.send(JSON.stringify({ id: "__tunnel-scope", action: "auth:scope", params: { panelId: authedPanelId } }));
                                     } else {
-                                        ws.send(JSON.stringify({ type: "tunnel-open", id: tunnelId }));
+                                        opened();
                                     }
+                                    return;
+                                }
+                                if (m?.id === "__tunnel-scope") {
+                                    if (m.error) closeTunnel(tunnelId, { reason: `Remote scope grant failed: ${m.error}` });
+                                    else opened();
                                     return;
                                 }
                             } catch (err) {
@@ -255,7 +365,9 @@ export function setupWebSocketServer(
                                     err,
                                 );
                             }
-                            ws.send(JSON.stringify({ type: "tunnel", id: tunnelId, payload: data.toString("utf8") }));
+                            if (tunnel.ready && ws.readyState === WebSocket.OPEN) {
+                                ws.send(JSON.stringify({ type: "tunnel", id: tunnelId, payload: data.toString("utf8") }));
+                            }
                         });
                         upstream.on("close", () => {
                             closeTunnel(tunnelId);
@@ -348,9 +460,13 @@ export function setupWebSocketServer(
 
                 // auth handshake
                 if (action === "auth:pair") {
+                    if (isAuthenticated) {
+                        reply(null, "Pairing requires a new unauthenticated connection", ErrorCode.FORBIDDEN);
+                        return;
+                    }
                     const result = auth.pair(params?.code, params?.clientName);
                     if (result.success && result.token) {
-                        isAuthenticated = true;
+                        grantIdentity(result.token, null);
                         const osInfo = await getDetailedOsInfo();
                         reply({
                             success: true,
@@ -372,9 +488,11 @@ export function setupWebSocketServer(
                     const entry = auth.resolveToken(params?.token);
                     const valid = auth.noAuth || entry !== null;
                     if (valid) {
-                        isAuthenticated = true;
-                        authedToken = params?.token ?? null;
-                        authedPanelId = entry?.panelId ?? null;
+                        if (authedPanelId && entry?.panelId !== authedPanelId) {
+                            reply(null, "A scoped connection cannot broaden or change its identity", ErrorCode.FORBIDDEN);
+                            return;
+                        }
+                        grantIdentity(params?.token ?? null, entry?.panelId ?? null);
                         const osInfo = await getDetailedOsInfo();
                         reply({
                             success: true,
@@ -395,9 +513,7 @@ export function setupWebSocketServer(
                     if (params?.token) {
                         const entry = auth.resolveToken(params.token);
                         if (entry !== null || auth.noAuth) {
-                            isAuthenticated = true;
-                            authedToken = params.token;
-                            authedPanelId = entry?.panelId ?? null;
+                            grantIdentity(params.token, entry?.panelId ?? null);
                         } else {
                             reply(null, "Unauthorized. Authentication required.", ErrorCode.AUTH_REQUIRED);
                             return;
@@ -408,17 +524,35 @@ export function setupWebSocketServer(
                     }
                 }
 
-                // revoke-self is socket-bound, no token parameter
+                // A paired host can narrow this connection permanently. The
+                // issuing host token remains attached for live revocation.
+                if (action === "auth:scope") {
+                    requireHost(authedPanelId, action);
+                    grantIdentity(authedToken, assertPanelId(params?.panelId));
+                    reply({ success: true });
+                    return;
+                }
+                if (action === "auth:panel-token") {
+                    requireHost(authedPanelId, action);
+                    reply({ token: auth.issuePanelToken(assertPanelId(params?.panelId)) });
+                    return;
+                }
+
+                // revoke-self is socket-bound, no token parameter. Scoped
+                // relays must not revoke their host's pairing credential.
                 if (action === "auth:revoke-self") {
+                    if (authedPanelId && auth.matchToken(authedToken ?? undefined)?.panelId !== authedPanelId) {
+                        reply(null, "A scoped relay cannot revoke its issuing host", ErrorCode.FORBIDDEN);
+                        return;
+                    }
                     if (!authedToken) {
                         reply(null, "Unauthorized. Authentication required.", ErrorCode.AUTH_REQUIRED);
                         return;
                     }
-                    const revoked = auth.revokeToken(authedToken);
-                    authedToken = null;
-                    authedPanelId = null;
+                    const token = authedToken;
+                    reply({ revoked: true });
+                    auth.revokeToken(token);
                     isAuthenticated = false;
-                    reply({ revoked });
                     return;
                 }
 
@@ -477,6 +611,10 @@ export function setupWebSocketServer(
                     logger.debug("[Paperboard Server:RPC] error reply failed:", replyErr);
                 }
                 console.error("[Paperboard Server:RPC:Error]", err?.message || err);
+                if (err instanceof SyntaxError) ws.close(1007, "Malformed RPC frame");
+            } finally {
+                inFlight--;
+                inFlightTotal--;
             }
         });
     });

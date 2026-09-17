@@ -5,6 +5,7 @@
 // of an INTERNAL crash for a malformed call.
 import { sanitizeId } from "../storage";
 import { ErrorCode } from "../protocol";
+import { isPanelId } from "../../../../packages/paperapi/src/panelIdentity";
 
 export class InvalidParamsError extends Error {
     constructor(message: string) {
@@ -72,7 +73,8 @@ export function assertId(value: unknown, name = "id"): string {
 }
 
 export function assertPanelId(value: unknown): string {
-    return assertId(value, "panelId");
+    if (!isPanelId(value)) throw new InvalidParamsError(`Invalid panelId: ${JSON.stringify(value)}`);
+    return value;
 }
 
 // Panel-relative JSON path for config get/set: workspaces live in the

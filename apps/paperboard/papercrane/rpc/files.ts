@@ -1,7 +1,6 @@
-import { logger } from "../logger";
 import type { RpcContext } from "./context";
 import { assertStr, assertOptStr } from "./params";
-import { forbidden } from "./errors";
+import { resourcePanelId } from "../principal";
 
 // single-frame write cap: 16 MiB of parsed content is far past any
 // legitimate panel state file; larger blobs ride file:download, which
@@ -14,20 +13,7 @@ const FILE_WRITE_MAX = 16 * 1024 * 1024;
 // explicit-parameter behavior.
 function effectiveAppId(params: any, action: string, ctx: RpcContext): string | undefined {
     const requested = assertOptStr(params?.appId, "appId", 128);
-    const claim = ctx.callerPanelId();
-    if (claim && requested && claim !== requested) {
-        // TODO(deny after v3.2): same tombstone as secrets — unscoped
-        // master-token callers start carrying claims and every disagreement
-        // is denied after v3.2.
-        logger.warn(
-            `[files] cross-panel access refused: token claim "${claim}" ` +
-            `requested "${requested}" files via "${action}"`,
-        );
-        throw forbidden(
-            `Cross-panel files access refused: credential is scoped to "${claim}"`,
-        );
-    }
-    return requested ?? claim ?? undefined;
+    return resourcePanelId(ctx.callerPanelId(), requested, action);
 }
 
 export async function handleFiles(action: string, id: unknown, params: any, ctx: RpcContext): Promise<boolean> {

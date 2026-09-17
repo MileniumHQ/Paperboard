@@ -23,7 +23,7 @@ export async function handleProcess(action: string, id: unknown, params: any, ct
             });
             const env = assertEnvMap(params?.env, "env");
             checkSpawnEnv(env, ctx, "process:run");
-            engine.runProcess(
+            const started = await engine.startProcess(
                 procId,
                 command,
                 args,
@@ -32,7 +32,8 @@ export async function handleProcess(action: string, id: unknown, params: any, ct
                 undefined, // onData omitted — stdout & stderr are individually routed below
                 (stdout) => sendEvent("process:data", { id: procId, data: stdout, stream: "stdout" }),
                 (stderr) => sendEvent("process:data", { id: procId, data: stderr, stream: "stderr" }),
-            ).then(({ exitCode }) => {
+            );
+            void started.completion.then(({ exitCode }) => {
                 sendEvent("process:exit", { id: procId, exitCode });
             }).catch((err) => {
                 sendEvent("process:data", { id: procId, data: `\n[Process Error] ${err.message}\n`, stream: "stderr" });
@@ -51,7 +52,7 @@ export async function handleProcess(action: string, id: unknown, params: any, ct
         case "process:kill": {
             const procId = assertStr(params?.id, "id", 128);
             checkClientOwnership(procId, ctx, "process:kill");
-            engine.killProcess(procId, assertOptStr(params?.signal, "signal", 32) ?? "SIGTERM");
+            await engine.killProcess(procId, assertOptStr(params?.signal, "signal", 32) ?? "SIGTERM");
             reply(id, { success: true });
             return true;
         }
