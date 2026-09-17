@@ -2,7 +2,7 @@
     "name": "__PANEL_NAME__",
     "id": "__PANEL_ID__",
     "version": "0.1.0",
-    "description": "__PANEL_NAME__ panel",
+    "description": "__PANEL_DESC__",
     "publisher": "Paperboard",
     "base": "./dist/index.html",
     "service": "./dist/service.js"
