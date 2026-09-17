@@ -933,8 +933,8 @@ body,
     position: fixed;
     bottom: var(--paper-uigap-sixfourths);
     right: var(--paper-uigap-sixfourths);
-    width: var(--paper-control-size-xlarge);
-    height: var(--paper-control-size-xlarge);
+    width: var(--paper-control-size-large);
+    height: var(--paper-control-size-large);
     border-radius: var(--paper-border-radius);
     background: var(--paper-surface);
     border: var(--paper-border-width) solid var(--paper-border);
@@ -950,9 +950,9 @@ body,
 }
 
 .trash-zone [class*="PaperIcon"] {
-    font-size: var(--paper-icon-size-huge);
-    width: var(--paper-icon-size-huge);
-    height: var(--paper-icon-size-huge);
+    font-size: var(--paper-icon-size-large);
+    width: var(--paper-icon-size-large);
+    height: var(--paper-icon-size-large);
 }
 
 .trash-zone.is-dragging {
