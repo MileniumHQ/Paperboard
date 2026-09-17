@@ -1,13 +1,13 @@
-// Action/trigger/type schema DSL (bun test). Lives here because the code
+// Action/type schema DSL (bun test). Lives here because the code
 // lives here (src/schema.ts, src/actions.ts) — it was previously a
 // misplaced test in the gameserver panel, which imports the DSL but owns
 // none of it.
 import { describe, test, expect } from "bun:test";
 import {
     defineAction,
-    defineTrigger,
     defineType,
     isTypeCompatible,
+    validateActionDefinition,
 } from "../src/actions";
 
 describe("schema DSL", () => {
@@ -43,7 +43,7 @@ describe("schema DSL", () => {
             },
             output: { type: "message", label: "Sent Message" },
             quick: true,
-            run: async (_ctx, inputs: any) => ({
+            run: async (_ctx: any, inputs: any) => ({
                 id: "msg-123",
                 text: inputs.content,
                 recipient: inputs.recipient,
@@ -56,8 +56,8 @@ describe("schema DSL", () => {
         expect(act.quick).toBe(true);
     });
 
-    test("trigger definition schema structure", () => {
-        const trig = defineTrigger({
+    test("event action definition schema structure", () => {
+        const trig = defineAction({
             id: "player-joined",
             name: "When Player Joins",
             description: "Fires when a player joins",
@@ -68,5 +68,62 @@ describe("schema DSL", () => {
         expect(trig.id).toBe("player-joined");
         expect(trig.template).toBe("When player {player} joins");
         expect(trig.output).toBeDefined();
+        expect(trig.run).toBeUndefined();
+    });
+
+    describe("validateActionDefinition", () => {
+        const eventDef = (overrides: any = {}) =>
+            defineAction({
+                id: "item-ready",
+                name: "When Item Ready",
+                description: "",
+                inputs: { itemId: { type: "string", label: "Item" } },
+                ...overrides,
+            });
+
+        test("match rules on an event action with declared inputs are valid", () => {
+            expect(() =>
+                validateActionDefinition(
+                    eventDef({ match: { field: "itemId", input: "itemId" } }) as any,
+                ),
+            ).not.toThrow();
+        });
+
+        test("match on a callable action is refused: routing is not for executors", () => {
+            expect(() =>
+                validateActionDefinition(
+                    eventDef({ run: () => {}, match: { field: "itemId", input: "itemId" } }) as any,
+                ),
+            ).toThrow(/not an event source/);
+        });
+
+        test("a match naming an undeclared input is refused", () => {
+            expect(() =>
+                validateActionDefinition(eventDef({ match: { field: "itemId", input: "ghost" } }) as any),
+            ).toThrow(/undeclared input/);
+        });
+
+        test("a match without a payload field is refused", () => {
+            expect(() =>
+                validateActionDefinition(eventDef({ match: { input: "itemId" } }) as any),
+            ).toThrow(/without a payload field/);
+        });
+
+        test("multiple rules AND together and stay valid", () => {
+            expect(() =>
+                validateActionDefinition(
+                    eventDef({
+                        inputs: {
+                            itemId: { type: "string", label: "Item" },
+                            channel: { type: "string", label: "Channel" },
+                        },
+                        match: [
+                            { field: "itemId", input: "itemId" },
+                            { field: "channelId", input: "channel" },
+                        ],
+                    }) as any,
+                ),
+            ).not.toThrow();
+        });
     });
 });

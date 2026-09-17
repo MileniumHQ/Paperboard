@@ -747,16 +747,6 @@ export class CraneTransport {
         await this.call("actions:register", { panelId, action: actionName, schema });
     }
 
-    public async registerTrigger(
-        panelId: string,
-        triggerName: string,
-        schema?: any,
-    ): Promise<void> {
-        this.registry.addTrigger(panelId, triggerName, schema);
-        await this.ensureConnected();
-        await this.call("triggers:register", { panelId, trigger: triggerName, schema });
-    }
-
     public async registerMultipleActions(
         panelId: string,
         actionsMap: Record<string, (...args: any[]) => Promise<any> | any>,
@@ -770,12 +760,6 @@ export class CraneTransport {
         this.registry.removeAction(panelId, actionName);
         await this.ensureConnected();
         await this.call("actions:unregister", { panelId, action: actionName });
-    }
-
-    public async unregisterTrigger(panelId: string, triggerName: string): Promise<void> {
-        this.registry.removeTrigger(panelId, triggerName);
-        await this.ensureConnected();
-        await this.call("triggers:unregister", { panelId, trigger: triggerName });
     }
 
     // replays attachments and registrations after reconnect

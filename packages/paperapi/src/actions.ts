@@ -4,14 +4,12 @@ import { warnOnce } from "./identity";
 import {
     type ActionDefinition,
     type ActionSchema,
-    type TriggerDefinition,
-    type TriggerSchema,
     type CustomTypeDefinition,
     defineType,
     listTypes,
     isTypeCompatible,
     defineAction,
-    defineTrigger,
+    validateActionDefinition,
 } from "./schema";
 
 export * from "./schema";
@@ -20,12 +18,6 @@ export interface ActionInfo {
     panelId: string;
     action: string;
     schema?: ActionSchema;
-}
-
-export interface TriggerInfo {
-    panelId: string;
-    trigger: string;
-    schema?: TriggerSchema;
 }
 
 export interface ActionEventPayload<T = unknown> {
@@ -42,8 +34,6 @@ export interface TriggerEventPayload<T = unknown> {
 
 export const actionsApi = {
     defineAction,
-
-    defineTrigger,
 
     defineType,
 
@@ -75,6 +65,11 @@ export const actionsApi = {
      * The by-name form takes schema hints as `options`, so control-plane
      * handlers (state hydration, config reload) can declare themselves
      * internal without a full definition.
+     *
+     * One kind, two shapes:
+     * - `run` → a plain callable action.
+     * - `listen` (or neither) → an event action: it fires events and
+     *   starts flows, is not callable and cannot nest (stamped `eventOnly`).
      */
     register: async (
         actionOrName: string | ActionDefinition,
@@ -94,6 +89,7 @@ export const actionsApi = {
 
         if (typeof actionOrName === "object" && actionOrName !== null) {
             const def = actionOrName as ActionDefinition;
+            validateActionDefinition(def);
             const actionName = def.id;
             const schema: ActionSchema = {
                 id: def.id,
@@ -108,14 +104,24 @@ export const actionsApi = {
                 outputFields: def.outputFields,
                 quick: def.quick,
                 icon: def.icon,
+                eventOnly: def.run ? undefined : true,
+                match: def.match,
             };
 
-            await transport.registerAction(
-                pid,
-                actionName,
-                (inputs: any) => def.run({ panelId: pid }, inputs),
-                schema,
-            );
+            const handler = def.run
+                ? (inputs: any) => def.run!({ panelId: pid }, inputs)
+                : () => {
+                      throw new Error(
+                          `Action "${actionName}" fires as an event and is not callable`,
+                      );
+                  };
+            await transport.registerAction(pid, actionName, handler, schema);
+
+            if (def.listen) {
+                def.listen({ panelId: pid }, (output) => {
+                    actionsApi.emitTrigger(def.id, output, pid);
+                });
+            }
         } else {
             const actionName = actionOrName as string;
             const handler = maybeHandler || (() => {});
@@ -129,45 +135,6 @@ export const actionsApi = {
                   }
                 : undefined;
             await transport.registerAction(pid, actionName, handler, schema);
-        }
-    },
-
-    /**
-     * Registers a trigger schema for the current panel.
-     */
-    registerTrigger: async (
-        triggerDef: TriggerDefinition,
-        panelId?: string,
-    ): Promise<void> => {
-        const pid = panelId || getPanelId();
-        if (!pid) {
-            throw new Error(
-                "Cannot register trigger without a panel context (panel ID not found)",
-            );
-        }
-
-        const transport = getTransport();
-        await transport.ensureConnected();
-
-        const schema: TriggerSchema = {
-            id: triggerDef.id,
-            name: triggerDef.name,
-            description: triggerDef.description || "",
-            internal: triggerDef.internal,
-            template: triggerDef.template || triggerDef.writtenOut,
-            writtenOut: triggerDef.writtenOut || triggerDef.template,
-            category: triggerDef.category,
-            output: triggerDef.output,
-            outputFields: triggerDef.outputFields,
-            icon: triggerDef.icon,
-        };
-
-        await transport.registerTrigger(pid, triggerDef.id, schema);
-
-        if (triggerDef.listen) {
-            triggerDef.listen({ panelId: pid }, (output) => {
-                actionsApi.emitTrigger(triggerDef.id, output, pid);
-            });
         }
     },
 
@@ -202,15 +169,6 @@ export const actionsApi = {
     },
 
     /**
-     * Unregisters a trigger from the current panel.
-     */
-    unregisterTrigger: async (triggerName: string, panelId?: string): Promise<void> => {
-        const pid = panelId || getPanelId();
-        const transport = getTransport();
-        await transport.unregisterTrigger(pid, triggerName);
-    },
-
-    /**
      * Subscribes to changes in the action/trigger registry.
      */
     onRegistryChange: (callback: (data?: any) => void): (() => void) => {
@@ -226,7 +184,9 @@ export const actionsApi = {
     },
 
     /**
-     * Lists all registered actions across panels with rich schemas.
+     * Lists all registered actions across panels with rich schemas. Event
+     * actions (stamped `eventOnly`) and dual actions (carrying `event`) are
+     * part of the same registry and list.
      */
     list: async (filterPanelId?: string): Promise<ActionInfo[]> => {
         const transport = getTransport();
@@ -235,18 +195,6 @@ export const actionsApi = {
             panelId: filterPanelId,
         });
         return (res?.actions || []) as ActionInfo[];
-    },
-
-    /**
-     * Lists all registered event triggers across panels with schemas.
-     */
-    listTriggers: async (filterPanelId?: string): Promise<TriggerInfo[]> => {
-        const transport = getTransport();
-        await transport.ensureConnected();
-        const res = await transport.call("triggers:list", {
-            panelId: filterPanelId,
-        });
-        return (res?.triggers || []) as TriggerInfo[];
     },
 
     /**
@@ -338,11 +286,13 @@ export const actionsApi = {
             }
         };
 
-        transport.subscribeEvent("actions:event", listener);
+        const source = targetPanel === "*" || targetEvent === "*" ? "actions:event" : `actions:${targetPanel}:${targetEvent}`;
+        const scopedListener = source === "actions:event" ? listener : (payload: any) => callback(payload);
+        transport.subscribeEvent(source, scopedListener);
         transport.ensureConnected().catch((err) => debugErr("ensure connected on subscribe", err));
 
         return () => {
-            transport.unsubscribeEvent("actions:event", listener);
+            transport.unsubscribeEvent(source, scopedListener);
         };
     },
 
@@ -401,11 +351,13 @@ export const actionsApi = {
             }
         };
 
-        transport.subscribeEvent("triggers:event", listener);
+        const source = targetPanel === "*" || targetTrigger === "*" ? "triggers:event" : `triggers:${targetPanel}:${targetTrigger}`;
+        const scopedListener = source === "triggers:event" ? listener : (output: T) => callback(output, { panelId: targetPanel, trigger: targetTrigger, output });
+        transport.subscribeEvent(source, scopedListener);
         transport.ensureConnected().catch((err) => debugErr("ensure connected on subscribe", err));
 
         return () => {
-            transport.unsubscribeEvent("triggers:event", listener);
+            transport.unsubscribeEvent(source, scopedListener);
         };
     },
 };

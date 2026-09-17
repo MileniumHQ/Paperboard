@@ -5,7 +5,6 @@ import {
     type ActionCategory,
     type ActionCategoryDefinition,
     type ActionDefinition,
-    type TriggerDefinition,
     type CustomTypeDefinition,
     defineType,
 } from "./schema";
@@ -49,7 +48,6 @@ export interface DefinePanelServiceOptions<
     id?: string;
     state?: TState;
     actions?: TActions;
-    triggers?: TriggerDefinition[];
     types?: CustomTypeDefinition[];
     /**
      * Section metadata for the Actions library. An action/trigger names a
@@ -143,7 +141,13 @@ export function definePanelService<
                         actionDef.category,
                         options.categories,
                     ),
-                    run: (_c, inputs) => actionDef.run(ctx, inputs),
+                    run: actionDef.run
+                        ? (_c: any, inputs: any) => actionDef.run!(ctx, inputs)
+                        : undefined,
+                    listen: actionDef.listen
+                        ? (_c: any, emitFn: (output: any) => void) =>
+                              actionDef.listen!(ctx, emitFn)
+                        : undefined,
                 };
                 actionsApi.register(wrapped, undefined, panelId).catch((err) => {
                     console.error(
@@ -163,27 +167,6 @@ export function definePanelService<
             }
             actionsApi.registerMultiple(registeredActions, panelId).catch((err) => {
                 console.error(`[Service:${panelId}] Failed to register actions:`, err);
-            });
-        }
-    }
-
-    if (options.triggers) {
-        for (const triggerDef of options.triggers) {
-            const wrapped: TriggerDefinition = {
-                ...triggerDef,
-                category: resolveItemCategory(
-                    triggerDef.category,
-                    options.categories,
-                ),
-                listen: triggerDef.listen
-                    ? (_c, emitFn) => triggerDef.listen!(ctx, emitFn)
-                    : undefined,
-            };
-            actionsApi.registerTrigger(wrapped, panelId).catch((err) => {
-                console.error(
-                    `[Service:${panelId}] Failed to register trigger '${triggerDef.id}':`,
-                    err,
-                );
             });
         }
     }

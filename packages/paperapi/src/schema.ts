@@ -37,6 +37,8 @@ export interface ActionParamDefinition {
     optional?: boolean;
     options?: { label: string; value: any }[];
     multiline?: boolean;
+    /** display name for the type badge; defaults to the raw type id */
+    typeName?: string;
 }
 
 export interface ActionOutputDefinition {
@@ -73,6 +75,21 @@ export interface ActionCategoryDefinition {
 
 export type ActionCategory = string | ActionCategoryDefinition;
 
+/**
+ * One routing rule for a parameterized event action: when the event fires,
+ * a root block only accepts it if `payload[field]` equals the block's
+ * literal `values[input]`. Fully declarative — the panel names the payload
+ * field and the input; the flow owner applies one generic comparison, so
+ * nothing here (or anywhere in the mechanism) knows what an "interaction"
+ * or a "customId" is. Arrays of rules are ANDed.
+ */
+export interface ActionMatchDefinition {
+    /** payload field to compare, dotted path allowed */
+    field: string;
+    /** declared input whose literal value the payload field must equal */
+    input: string;
+}
+
 export interface ActionSchema {
     id: string;
     name: string;
@@ -90,34 +107,78 @@ export interface ActionSchema {
     outputFields?: Record<string, ActionOutputFieldDefinition | DataType>;
     quick?: boolean;
     icon?: string;
+    /**
+     * Stamped by the SDK on listen-only actions: they fire as events and
+     * start flows, but are not callable and cannot nest.
+     */
+    eventOnly?: boolean;
+    /**
+     * Parameterized event routing (event actions only): roots of this
+     * action fire only when every rule holds. Without it, the event
+     * fans out to every root, as before.
+     */
+    match?: ActionMatchDefinition | ActionMatchDefinition[];
 }
 
 export interface ActionDefinition<
     TInputs = any,
     TOutput = any,
 > extends ActionSchema {
-    run: (
+    /** Executes when a flow run reaches the block. Absent on event actions. */
+    run?: (
         ctx: any,
         inputs: TInputs,
     ) => Promise<TOutput> | TOutput;
+    /** Arms an event action: wires its source to `emit` until unsubscribed. */
+    listen?: (
+        ctx: any,
+        emit: (output: TInputs) => void,
+    ) => () => void;
 }
 
-export interface TriggerSchema {
-    id: string;
-    name: string;
-    description: string;
-    /** Hidden from the Actions library, still emitted and subscribable. */
-    internal?: boolean;
-    template?: string;
-    writtenOut?: string;
-    category?: ActionCategory;
-    output?: ActionOutputDefinition | DataType;
-    outputFields?: Record<string, ActionOutputFieldDefinition | DataType>;
-    icon?: string;
+/**
+ * The single validator for a panel-authored action definition, applied at
+ * registration (the boundary that owns the schema contract). Exported pure
+ * so tests and callers share one implementation.
+ */
+export function validateActionDefinition(def: ActionDefinition): void {
+    if (!def || typeof def !== "object" || typeof def.id !== "string" || !def.id) {
+        throw new Error("An action definition requires an id");
+    }
+    const label = `Action "${def.id}"`;
+    if (def.run && def.listen) {
+        throw new Error(
+            `${label} declares both run and listen; an action either executes or fires, never both`,
+        );
+    }
+    const matches = normalizeMatchRules(def.match);
+    if (matches.length > 0 && def.run) {
+        throw new Error(
+            `${label} declares match rules but is callable; matching routes events, and a callable action is not an event source`,
+        );
+    }
+    for (const rule of matches) {
+        if (typeof rule.field !== "string" || !rule.field.trim()) {
+            throw new Error(`${label} declares a match rule without a payload field`);
+        }
+        const input = rule.input;
+        if (typeof input !== "string" || !(def.inputs as any)?.[input]) {
+            throw new Error(
+                `${label} declares a match on undeclared input "${String(input)}"`,
+            );
+        }
+    }
 }
 
-export interface TriggerDefinition<TOutput = any> extends TriggerSchema {
-    listen?: (ctx: any, emit: (output: TOutput) => void) => () => void;
+export function normalizeMatchRules(
+    match: ActionSchema["match"],
+): ActionMatchDefinition[] {
+    if (!match) return [];
+    const list = Array.isArray(match) ? match : [match];
+    return list.filter(
+        (rule): rule is ActionMatchDefinition =>
+            Boolean(rule) && typeof rule === "object",
+    );
 }
 
 // in-memory type registry
@@ -183,15 +244,6 @@ export function formatValueToString(val: any, typeName?: string): string {
 export function defineAction<TInputs = any, TOutput = any>(
     def: ActionDefinition<TInputs, TOutput>,
 ): ActionDefinition<TInputs, TOutput> {
-    if (!def.template && def.writtenOut) {
-        def.template = def.writtenOut;
-    }
-    return def;
-}
-
-export function defineTrigger<TOutput = any>(
-    def: TriggerDefinition<TOutput>,
-): TriggerDefinition<TOutput> {
     if (!def.template && def.writtenOut) {
         def.template = def.writtenOut;
     }

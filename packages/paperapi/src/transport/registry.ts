@@ -4,12 +4,6 @@ export interface RegisteredAction {
     schema?: any;
 }
 
-export interface RegisteredTrigger {
-    panelId: string;
-    trigger: string;
-    schema?: any;
-}
-
 export type ActionHandler = (...args: any[]) => Promise<any> | any;
 
 import { warnOnce } from "../identity";
@@ -23,7 +17,6 @@ export class TransportRegistry {
     // die together with the pre-namespaced read-through
     public readonly actionHandlers = new Map<string, ActionHandler>();
     public readonly registeredActions = new Map<string, RegisteredAction>();
-    public readonly registeredTriggers = new Map<string, RegisteredTrigger>();
     private readonly registeredBare = new Map<string, string>();
 
     constructor(private readonly resolveDefaultPanelId: () => string) {}
@@ -133,18 +126,6 @@ export class TransportRegistry {
         }
     }
 
-    public addTrigger(panelId: string, triggerName: string, schema?: any): void {
-        this.registeredTriggers.set(`${panelId}:${triggerName}`, {
-            panelId,
-            trigger: triggerName,
-            schema,
-        });
-    }
-
-    public removeTrigger(panelId: string, triggerName: string): void {
-        this.registeredTriggers.delete(`${panelId}:${triggerName}`);
-    }
-
     // replay registrations after reconnect
     public async resubscribe(
         call: (action: string, params: Record<string, unknown>) => Promise<any>,
@@ -176,14 +157,6 @@ export class TransportRegistry {
                     onError(`actions:register bare resubscribe ${actionName}`, err),
                 );
             }
-        }
-
-        for (const [key, entry] of this.registeredTriggers.entries()) {
-            call("triggers:register", {
-                panelId: entry.panelId,
-                trigger: entry.trigger,
-                schema: entry.schema,
-            }).catch((err) => onError(`triggers:register resubscribe ${key}`, err));
         }
     }
 }
