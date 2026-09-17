@@ -10,6 +10,7 @@ export type { UpdateTask, UpdateTaskType } from "./updatePlan";
 import { readJsonFileSync, writeFileAtomicSync } from "../../papercrane/storage";
 import { getLocalDir } from "../../papercrane/paths";
 import { logger, getLogger } from "../../papercrane/logger";
+import { fetchRegistryJson } from "../../../../packages/paperapi/src/config";
 
 // registry override policy shared with the daemon: env override honored only
 // outside production (dev/preview here) or with --allow-registry-override
@@ -91,10 +92,7 @@ async function fetchIndex(
     url: string,
 ): Promise<Record<string, any>> {
     try {
-        const res = await fetch(url, {
-            signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-        });
-        return res.ok ? ((await res.json()) ?? {}) : {};
+        return await fetchRegistryJson(url, FETCH_TIMEOUT_MS);
     } catch (err: any) {
         const aborted =
             err?.name === "TimeoutError" || err?.name === "AbortError";
@@ -104,7 +102,7 @@ async function fetchIndex(
                 ? `aborted after ${FETCH_TIMEOUT_MS}ms timeout`
                 : err?.message ?? err,
         );
-        return {};
+        throw err;
     }
 }
 
@@ -145,6 +143,10 @@ export async function runUpdateOrchestrator(
     orchestratorRunning = true;
     try {
         await runOrchestratorInner(win);
+    } catch (err) {
+        logger.error("[Updater] update check failed:", err);
+        sendProgress(win, null, "Could not check for updates. Try again when the registry is reachable", true);
+        recordRunOutcome(1);
     } finally {
         orchestratorRunning = false;
     }
@@ -249,22 +251,20 @@ async function runOrchestratorInner(
         sysInfo: any;
     }
     const computerStates: ComputerState[] = [];
+    let unavailableComputers = 0;
 
-    await Promise.allSettled(
-        computers.map(async ({ id, name }) => {
+    for (let offset = 0; offset < computers.length; offset += 8) {
+    await Promise.all(
+        computers.slice(offset, offset + 8).map(async ({ id, name }) => {
             try {
                 const driver = connectionPool.getDriver(id);
                 const [panels, packages, sysInfo] = await Promise.all([
-                    withTimeout(driver.listPanels(), PING_TIMEOUT_MS).catch(
-                        (err) => { appUpdaterLog.debug("[Updater] ping panels failed:", err); return [] as any[]; },
-                    ),
+                    withTimeout(driver.listPanels(), PING_TIMEOUT_MS),
                     withTimeout(
                         driver.getPackageIndex(),
                         PING_TIMEOUT_MS,
-                    ).catch((err) => { appUpdaterLog.debug("[Updater] ping packages failed:", err); return {} as Record<string, any>; }),
-                    withTimeout(driver.getSystemInfo(), PING_TIMEOUT_MS).catch(
-                        (err) => { appUpdaterLog.debug("[Updater] ping sysinfo failed:", err); return null; },
                     ),
+                    withTimeout(driver.getSystemInfo(), PING_TIMEOUT_MS),
                 ]);
                 computerStates.push({
                     id,
@@ -275,6 +275,7 @@ async function runOrchestratorInner(
                     sysInfo,
                 });
             } catch (err) {
+                unavailableComputers++;
                 logger.debug(
                     `[Updater] computer ${id} (${name}) unreachable during ping:`,
                     err,
@@ -282,6 +283,7 @@ async function runOrchestratorInner(
             }
         }),
     );
+    }
 
     sendProgress(win, null, "Planning updates…");
     // planning is electron-free (updatePlan.ts) so the checksum-gate tests
@@ -319,12 +321,12 @@ async function runOrchestratorInner(
 
     const total = tasks.length;
     if (total === 0) {
-        sendProgress(win, 100, "Everything is up to date!");
-        saveCleanRun();
+        sendProgress(win, 100, unavailableComputers ? `Could not check ${unavailableComputers} computer(s). Reconnect and try again` : "Everything is up to date!", unavailableComputers > 0);
+        recordRunOutcome(unavailableComputers);
         return;
     }
 
-    let failures = 0;
+    let failures = unavailableComputers;
 
     for (let i = 0; i < tasks.length; i++) {
         const task = tasks[i];

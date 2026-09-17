@@ -32,7 +32,6 @@ import {
     buildPanelCsp,
     remotePanelHtmlCsp,
 } from "./panelAssets";
-import { panelServices } from "../../papercrane/panelServices";
 import icon from "../../resources/icon.png?asset";
 
 const log = logger;
@@ -112,16 +111,18 @@ const readCraneCreds = readCraneHandshake;
 // inject computer-scoped creds; scope comes from serving URL.
 // panelId travels with the credentials: identity is a granted fact,
 // never parsed from a URL after the fact. The token is the panel's own
-// scoped credential when the embedded daemon has issued one; the master
-// handshake token is the fallback so panels load before/​without the
-// issuer wiring — never a denial here; claim mismatches deny after v3.2.
-const injectCraneCreds = (
+// scoped credential issued by the authenticated local daemon. An unavailable
+// issuer refuses the document rather than substituting a master token.
+const injectCraneCreds = async (
     html: string,
     comp: string,
     panelId?: string,
-): string => {
+): Promise<string> => {
     const creds = readCraneCreds();
-    const scoped = panelId ? panelServices.tokenForPanel(panelId) : "";
+    if (!panelId) throw new Error("Panel credential injection requires an explicit panel id");
+    const granted = await connectionPool.getClient("local").call<{ token: string }>("auth:panel-token", { panelId });
+    const scoped = granted?.token;
+    if (typeof scoped !== "string" || !scoped) throw new Error("Daemon did not issue a panel credential");
     const payload = buildCraneCredentialPayload(creds, comp, panelId, scoped);
     const bootstrap = `<script>window.__PAPERBOARD_CRANE=${payload};</script>`;
     if (/<head[^>]*>/i.test(html)) {
@@ -395,7 +396,7 @@ app.whenReady().then(async () => {
                                 headers["Cache-Control"] = "no-store";
                                 const html = injectCspNonce(
                                     injectUnselectable(
-                                        injectCraneCreds(
+                                        await injectCraneCreds(
                                             buffer.toString("utf8"),
                                             comp,
                                             cleanPanelId,
@@ -458,7 +459,7 @@ app.whenReady().then(async () => {
                     remotePanelHtmlCsp(served);
                 responseBody = injectCspNonce(
                     injectUnselectable(
-                        injectCraneCreds(
+                        await injectCraneCreds(
                             new TextDecoder().decode(buffer),
                             comp,
                             cleanPanelId,

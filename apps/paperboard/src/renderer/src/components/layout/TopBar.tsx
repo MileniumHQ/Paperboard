@@ -144,6 +144,7 @@ const TopBar: Component<{
                 <PaperButton size="tiny"
                     icon
                     title="Open panel folder"
+                    aria-label="Open panel folder"
                     onClick={handleFolder}>
                     <PaperIcon>folder_open</PaperIcon>
                 </PaperButton>

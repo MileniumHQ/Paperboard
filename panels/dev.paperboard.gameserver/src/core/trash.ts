@@ -1,21 +1,19 @@
 import { isWindowsTarget } from "../lib/platform";
 
-// Recoverable deletion, one implementation for every destructive path in
-// this panel (worlds, world reset, plugins, player data). The daemon's
-// discipline — rename to trash before delete — applied through a pty:
+// Recoverable removal for worlds, world reset, plugins and player data.
+// The source is moved into retained storage, not recursively deleted:
 //
-//   posix: mkdir -p .trash-<ts> && (move each existing path) && rm -rf .trash-<ts>
-//   win:   mkdir .trash-<ts> && (move each existing path) && rmdir /s /q .trash-<ts>
+//   mkdir .trash-<ts> && (move each existing path)
+// Retained recovery directories can be restored from the server folder.
 //
 // Each path is moved only if it exists: a world may not have a
 // `_nether`/`_the_end` directory until those dimensions are entered, and a
 // missing sibling must not abort the whole chain (which left the trash dir
 // staged and the delete reported as failed). A path that EXISTS but fails
-// to move still aborts before the remove, so the trash dir remains the
-// recovery point.
+// to move aborts the operation. Already moved entries remain recoverable.
 //
-// A crash between the move and the remove leaves a clearly-marked trash
-// dir instead of a half-deleted live tree. Every path is pre-validated by
+// An interruption leaves a clearly-marked trash dir with the moved entries
+// and the remaining sources intact. Every path is pre-validated by
 // the caller (world/plugin/uuid patterns); quoting is single-quote on
 // posix (only ' is unsafe there, and the patterns exclude it) and
 // double-quote on Windows (only " and % are unsafe there, excluded too).
@@ -125,7 +123,7 @@ export function buildTrashRemoveCommand(
     if (isWin) {
         // each path is moved only when present; a missing sibling is
         // skipped, a present-but-unmovable path still breaks the chain
-        // before the remove. `&` separates unconditionally: DONE is printed
+        // before success. `&` separates unconditionally: DONE is printed
         // even when an earlier link fails; OK only prints after the whole
         // chain. The ^ escapes keep the echoed command line from containing
         // the bare markers, so a failed chain's echo cannot fake success.
@@ -133,7 +131,7 @@ export function buildTrashRemoveCommand(
         const moves = paths
             .map((p) => `if exist ${q(p)} move ${q(p)} ${q(trashDir)}`)
             .join(" && ");
-        return `mkdir ${q(trashDir)} && ${moves} && rmdir /s /q ${q(trashDir)} && echo TRASH_REMOVE_O^K & echo TRASH_REMOVE_D^ONE`;
+        return `mkdir ${q(trashDir)} && ${moves} && echo TRASH_REMOVE_O^K & echo TRASH_REMOVE_D^ONE`;
     }
     // "; echo DONE" separates unconditionally. The 'ok'/'done' fragments
     // drop their quotes in OUTPUT but stay in the echoed typed line.
@@ -141,7 +139,7 @@ export function buildTrashRemoveCommand(
     const moves = paths
         .map((p) => `( [ ! -e ${q(p)} ] || mv ${q(p)} ${q(trashDir)} )`)
         .join(" && ");
-    return `mkdir -p ${q(trashDir)} && ${moves} && rm -rf ${q(trashDir)} && echo TRASH_REMOVE_'OK' ; echo TRASH_REMOVE_'DONE'`;
+    return `mkdir -p ${q(trashDir)} && ${moves} && echo TRASH_REMOVE_'OK' ; echo TRASH_REMOVE_'DONE'`;
 }
 
 export async function trashRemovePathsWith(

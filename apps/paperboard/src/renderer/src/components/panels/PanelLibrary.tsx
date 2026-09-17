@@ -29,32 +29,26 @@ export interface PanelItem {
     // daemon-recorded install provenance (absent for pre-provenance installs)
     installSource?: "registry" | "direct" | "dev";
     isLinked?: boolean;
+    installedVersion?: string;
 }
 
-// The word under a panel card is a trust fact, so it must be true:
-// - a declared publisher is named;
-// - registry installs are reviewed (closed registry, human review) — that
-//   is what "Reviewed by Paperboard" claims, no more;
-// - direct-URL installs are checksum-verified but NOT reviewed;
-// - dev links are the developer's own build;
-// - panels installed before provenance shipped stay "Unsigned" until
-//   reinstalled, because "we don't know" is the honest answer for them.
+// Publisher, install source and review evidence are independent facts.
+// A missing publisher is not a signature status; registry origin is not
+// proof of review. Unknown facts stay explicitly unknown.
 function publisherLabel(panel: PanelItem): string {
     if (panel.publisher) return panel.publisher;
-    if (panel.isLinked) return "Dev link";
-    if (panel.installSource === "registry") return "Reviewed by Paperboard";
-    if (panel.installSource === "direct") return "Direct install";
-    return "Unsigned";
+    return "Publisher not provided";
 }
 
 // where the bytes came from — a different fact from who published them
 function installSourceLabel(panel: PanelItem): string {
+    if (!panel.isInstalled) return "Not installed on this computer";
     if (panel.isLinked) return "Dev link (local build)";
     if (panel.installSource === "registry")
-        return "Paperboard Registry (reviewed)";
+        return "Paperboard Registry";
     if (panel.installSource === "direct")
         return "Direct URL (checksum verified)";
-    return "Unknown (installed before provenance was recorded)";
+    return "Install source not recorded";
 }
 
 interface PanelLibraryProps {
@@ -221,6 +215,7 @@ const PanelLibrary: Component<PanelLibraryProps> = (props) => {
 
             <PaperModal
                 open={selectedPanel() !== null}
+                aria-label={selectedPanel() ? `${selectedPanel()!.name} details` : "Panel details"}
                 onClose={() => setSelectedPanel(null)}
                 size="large"
                 noHeader
@@ -324,6 +319,8 @@ const PanelLibrary: Component<PanelLibraryProps> = (props) => {
                                             <th>Identifier</th>
                                             <td>{panel().id}</td>
                                         </tr>
+                                        <tr><th>Review</th><td>No review attestation recorded for this release</td></tr>
+                                        <Show when={panel().isInstalled}><tr><th>Installed version</th><td>{panel().installedVersion || panel().version || "Not recorded"}</td></tr></Show>
                                         <tr>
                                             <th>Version</th>
                                             <td>

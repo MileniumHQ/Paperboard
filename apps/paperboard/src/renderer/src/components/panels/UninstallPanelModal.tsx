@@ -59,9 +59,10 @@ const UninstallPanelModal: Component<UninstallPanelModalProps> = (props) => {
                             <strong>{target().panel.name}</strong>?
                         </PaperText>
                         <PaperText size={2} color="text-subtle">
-                            This will permanently delete the panel package,
-                            its configuration file, all stored data files,
-                            and terminate any running operations.
+                            This stops the panel and removes its installed code.
+                            Your configuration, files and saved credentials are
+                            kept for reinstalling. The removed package is retained
+                            in the computer’s panel recovery folder.
                         </PaperText>
                         <Show when={props.error}>
                             <PaperText size={2} color="danger">

@@ -146,15 +146,15 @@ describe("level-name validation", () => {
 });
 
 describe("buildTrashRemoveCommand", () => {
-    test("posix moves each existing path to trash, then removes the trash", () => {
+    test("posix moves each existing path to retained recovery", () => {
         expect(buildTrashRemoveCommand(["world", "My World_nether"], ".trash-1", false)).toBe(
-            "mkdir -p '.trash-1' && ( [ ! -e 'world' ] || mv 'world' '.trash-1' ) && ( [ ! -e 'My World_nether' ] || mv 'My World_nether' '.trash-1' ) && rm -rf '.trash-1' && echo TRASH_REMOVE_'OK' ; echo TRASH_REMOVE_'DONE'",
+            "mkdir -p '.trash-1' && ( [ ! -e 'world' ] || mv 'world' '.trash-1' ) && ( [ ! -e 'My World_nether' ] || mv 'My World_nether' '.trash-1' ) && echo TRASH_REMOVE_'OK' ; echo TRASH_REMOVE_'DONE'",
         );
     });
 
-    test("windows moves each existing path to trash, then removes the trash", () => {
+    test("windows moves each existing path to retained recovery", () => {
         expect(buildTrashRemoveCommand(["world", "My Plugin.jar"], ".trash-1", true)).toBe(
-            'mkdir ".trash-1" && if exist "world" move "world" ".trash-1" && if exist "My Plugin.jar" move "My Plugin.jar" ".trash-1" && rmdir /s /q ".trash-1" && echo TRASH_REMOVE_O^K & echo TRASH_REMOVE_D^ONE',
+            'mkdir ".trash-1" && if exist "world" move "world" ".trash-1" && if exist "My Plugin.jar" move "My Plugin.jar" ".trash-1" && echo TRASH_REMOVE_O^K & echo TRASH_REMOVE_D^ONE',
         );
     });
 

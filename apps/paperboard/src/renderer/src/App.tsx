@@ -726,6 +726,7 @@ const App: Component = () => {
 
             <PaperModal
                 open={isSetupOpen()}
+                aria-label="Connect a computer"
                 onClose={() => setIsSetupOpen(false)}
                 noHeader
                 noPadding

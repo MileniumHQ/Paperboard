@@ -113,14 +113,14 @@ describe("CredentialStore", () => {
 });
 
 describe("Engine integration", () => {
-    it("exposes the vault through the engine and purges on uninstall", async () => {
+    it("keeps credentials in the restricted vault on uninstall for reinstalling", async () => {
         const etmp = fs.mkdtempSync(path.join(os.tmpdir(), "secrets-engine-"));
         const engine = new PaperCraneEngine(etmp);
         engine.setSecret("tok", "v", "dev.test.panel");
         expect(engine.getSecret("tok", "dev.test.panel")).toEqual({ found: true, value: "v" });
         expect(engine.listSecrets("dev.test.panel")).toEqual(["dev.test.panel/tok"]);
         await engine.uninstallPanel("dev.test.panel");
-        expect(engine.getSecret("tok", "dev.test.panel")).toEqual({ found: false, value: null });
+        expect(engine.getSecret("tok", "dev.test.panel")).toEqual({ found: true, value: "v" });
         fs.rmSync(etmp, { recursive: true, force: true });
     });
 });

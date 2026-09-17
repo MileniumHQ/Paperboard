@@ -49,9 +49,8 @@ export interface CraneCreds {
     token: string;
 }
 
-// credential payload for panel iframes: the panel's scoped token wins,
-// the master handshake token is the fallback so panels load before the
-// issuer wiring exists. The panelId travels WITH the credential —
+// Credential payload for panel iframes: issuance failure refuses bootstrap.
+// A master token is never substituted. The panelId travels WITH the credential —
 // identity is a granted fact, never parsed from a URL after the fact.
 //
 // The payload lands inside a <script> block in served HTML, so `<` is
@@ -64,10 +63,10 @@ export function buildCraneCredentialPayload(
     panelId: string | undefined,
     scopedToken: string,
 ): string {
-    if (!creds) return "null";
+    if (!creds || !scopedToken) return "null";
     return JSON.stringify({
         ...creds,
-        token: scopedToken || creds.token,
+        token: scopedToken,
         scoped: Boolean(scopedToken),
         computerId,
         panelId: panelId || "",
