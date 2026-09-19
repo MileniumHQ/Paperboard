@@ -5,7 +5,12 @@
   "packageManager": "bun@1.4.0",
   "workspaces": ["apps/*", "packages/*", "panels/*"],
   "scripts": {
-    "gate": "bash scripts/gate.sh"
+    "gate": "bash scripts/gate.sh",
+    "setup": "bun scripts/dev.ts setup",
+    "build:panels": "bun scripts/dev.ts build",
+    "link:panels": "bun scripts/dev.ts link",
+    "unlink:panels": "bun scripts/dev.ts unlink",
+    "panels:status": "bun scripts/dev.ts status"
   },
   "patchedDependencies": {
     "@solid-primitives/refs@1.1.4": "patches/@solid-primitives%2Frefs@1.1.4.patch",
