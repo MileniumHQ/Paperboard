@@ -252,7 +252,7 @@ app.whenReady().then(async () => {
         app.setAboutPanelOptions({
             applicationName: "Paperboard",
             applicationVersion: app.getVersion(),
-            copyright: "2026 Milenium",
+            copyright: "2026 Milenium LLC",
             ...(iconPath ? { icon: nativeImage.createFromPath(iconPath) } : {}),
         });
     }

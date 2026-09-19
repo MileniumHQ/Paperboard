@@ -93,7 +93,7 @@ export function Footer() {
             </div>
             <div class={styles.bottom}>
                 <PaperText size={2} class={styles.copyright}>
-                    &copy; {new Date().getFullYear()} Milenium
+                    &copy; {new Date().getFullYear()} Milenium LLC
                 </PaperText>
                 <div class={styles.right}>
                     <a

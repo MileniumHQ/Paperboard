@@ -4,7 +4,7 @@
   "version": "3.0.0-alpha",
   "description": "Run and manage tools locally.",
   "main": "./out/main/index.js",
-  "author": "Milenium <contact@paperboard.dev>",
+  "author": "Milenium LLC <contact@paperboard.dev>",
   "homepage": "https://paperboard.dev",
   "license": "PolyForm-Noncommercial-1.0.0",
   "keywords": [
