@@ -4,7 +4,7 @@ import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
-import { linkPanel } from "../src/link";
+import { linkAllPanels, linkPanel } from "../src/link";
 
 let homeTmp: string;
 let sourceDir: string;
@@ -54,5 +54,54 @@ describe("linkPanel force replace", () => {
         expect(() => linkPanel({ targetDir: sourceDir })).toThrow(
             /already exists/,
         );
+    });
+});
+
+describe("linkAllPanels", () => {
+    function makePanel(root: string, id: string): string {
+        const dir = path.join(root, id);
+        fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(
+            path.join(dir, "manifest.json"),
+            JSON.stringify({ id, name: id }),
+        );
+        return dir;
+    }
+
+    test("links every manifest directory and ignores non-panels", () => {
+        const panelsRoot = path.join(homeTmp, "source-panels");
+        makePanel(panelsRoot, "dev.test.one");
+        makePanel(panelsRoot, "dev.test.two");
+        fs.mkdirSync(path.join(panelsRoot, "not-a-panel"), { recursive: true });
+
+        const result = linkAllPanels(panelsRoot);
+
+        expect(result.skipped).toEqual([]);
+        expect(result.linked.map((entry) => entry.id).sort()).toEqual([
+            "dev.test.one",
+            "dev.test.two",
+        ]);
+        expect(
+            fs.readlinkSync(path.join(homeTmp, "panels", "dev.test.one")),
+        ).toBe(path.join(panelsRoot, "dev.test.one"));
+    });
+
+    test("reports a physical target conflict instead of swallowing it", () => {
+        const panelsRoot = path.join(homeTmp, "conflict-panels");
+        makePanel(panelsRoot, "dev.test.conflict");
+        // a registry install already occupies the target
+        fs.mkdirSync(path.join(homeTmp, "panels", "dev.test.conflict"), {
+            recursive: true,
+        });
+
+        const result = linkAllPanels(panelsRoot);
+
+        expect(result.linked).toEqual([]);
+        expect(result.skipped).toHaveLength(1);
+        expect(result.skipped[0].reason).toMatch(/already exists/);
+        // --force replaces it recoverably
+        const forced = linkAllPanels(panelsRoot, { force: true });
+        expect(forced.skipped).toEqual([]);
+        expect(forced.linked[0].id).toBe("dev.test.conflict");
     });
 });

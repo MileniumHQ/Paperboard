@@ -71,6 +71,38 @@ export function linkPanel(options: LinkOptions = {}): {
     };
 }
 
+export interface LinkAllResult {
+    linked: { id: string; linkPath: string }[];
+    skipped: { dir: string; reason: string }[];
+}
+
+// links every panel directory under panelsRoot. A directory without a
+// manifest is not a panel and is not a candidate. A candidate that cannot be
+// linked (bad id, physical target without --force) is reported in `skipped`,
+// never swallowed; the caller decides whether that is fatal.
+export function linkAllPanels(
+    panelsRoot: string,
+    options: { force?: boolean } = {},
+): LinkAllResult {
+    const linked: LinkAllResult["linked"] = [];
+    const skipped: LinkAllResult["skipped"] = [];
+    for (const entry of fs.readdirSync(panelsRoot)) {
+        const dir = path.join(panelsRoot, entry);
+        if (!fs.statSync(dir).isDirectory()) continue;
+        if (!fs.existsSync(path.join(dir, "manifest.json"))) continue;
+        try {
+            const res = linkPanel({ targetDir: dir, force: options.force });
+            linked.push({ id: res.id, linkPath: res.linkPath });
+        } catch (err) {
+            skipped.push({
+                dir,
+                reason: err instanceof Error ? err.message : String(err),
+            });
+        }
+    }
+    return { linked, skipped };
+}
+
 // removes a symlinked panel
 export function unlinkPanel(panelId: string): boolean {
     requirePanelId(panelId);

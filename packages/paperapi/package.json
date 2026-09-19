@@ -7,10 +7,12 @@
     "types": "./dist/index.d.ts",
     "files": [
         "dist",
-        "bin"
+        "bin",
+        "src"
     ],
     "exports": {
         ".": {
+            "bun": "./src/index.ts",
             "types": "./dist/index.d.ts",
             "import": "./dist/paperapi.es.js",
             "require": "./dist/paperapi.cjs"
