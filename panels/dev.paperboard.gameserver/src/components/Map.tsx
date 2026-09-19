@@ -519,9 +519,10 @@ export default function MapView() {
                         border: `${getVarCss("border-width")} solid ${getVarCss("border")}`,
                     }}
                 >
-                    <PaperFlex minWidth={getVarCss("size-field")}>
+                    <PaperFlex minWidth={getVarCss("size-field-small")}>
                         <PaperInput
                             placeholder="X"
+                            size={9}
                             value={coordX()}
                             invalid={
                                 coordX().trim() !== "" && !Number.isFinite(Number(coordX()))
@@ -532,9 +533,10 @@ export default function MapView() {
                             }}
                         />
                     </PaperFlex>
-                    <PaperFlex minWidth={getVarCss("size-field")}>
+                    <PaperFlex minWidth={getVarCss("size-field-small")}>
                         <PaperInput
                             placeholder="Z"
+                            size={9}
                             value={coordZ()}
                             invalid={
                                 coordZ().trim() !== "" && !Number.isFinite(Number(coordZ()))
