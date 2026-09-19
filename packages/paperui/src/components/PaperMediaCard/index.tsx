@@ -1,6 +1,7 @@
 import { getVarCss } from "../../utils/theme";
 import styles from "./index.module.css";
 import { splitProps, Show, type JSX, type ParentProps } from "solid-js";
+import { Dynamic } from "solid-js/web";
 import { PaperText } from "../PaperText";
 import { PaperIcon } from "../PaperIcon";
 import { PaperEffect } from "../PaperEffect";
@@ -20,6 +21,16 @@ export interface PaperMediaCardProps
     interactive?: boolean;
     disabled?: boolean;
     effect?: boolean;
+    /**
+     * Render icon images without the framed badge chrome (no background,
+     * border, radius, or shadow) and slightly larger. Glyph icons are
+     * unaffected — they never had a frame outside banners.
+     */
+    plainIcon?: boolean;
+    /** When set, the card renders as an anchor and navigates. */
+    href?: string;
+    target?: JSX.AnchorHTMLAttributes<HTMLAnchorElement>["target"];
+    rel?: string;
     onClick?: (e: MouseEvent) => void;
 }
 
@@ -38,6 +49,10 @@ export function PaperMediaCard(props: ParentProps<PaperMediaCardProps>) {
         "interactive",
         "disabled",
         "effect",
+        "plainIcon",
+        "href",
+        "target",
+        "rel",
         "onClick",
         "class",
         "classList",
@@ -45,7 +60,9 @@ export function PaperMediaCard(props: ParentProps<PaperMediaCardProps>) {
     ]);
 
     const isInteractive = () =>
-        !local.disabled && (local.interactive ?? Boolean(local.onClick));
+        !local.disabled && (local.interactive ?? Boolean(local.onClick || local.href));
+
+    const isLink = () => Boolean(local.href);
 
     const hasBanner = () => Boolean(local.banner);
     const hasOverlappingIcon = () => hasBanner() && Boolean(local.icon);
@@ -73,16 +90,22 @@ export function PaperMediaCard(props: ParentProps<PaperMediaCardProps>) {
     };
 
     const cardContent = () => (
-        <div
+        <Dynamic
+            component={isLink() ? "a" : "div"}
             {...rest}
-            role={isInteractive() ? "button" : undefined}
-            tabIndex={isInteractive() ? 0 : undefined}
+            href={local.href}
+            target={local.target}
+            rel={local.rel}
+            role={!isLink() && isInteractive() ? "button" : undefined}
+            tabIndex={!isLink() && isInteractive() ? 0 : undefined}
+            aria-disabled={local.disabled ? true : undefined}
             onClick={handleClick}
-            onKeyDown={handleKeyDown}
+            onKeyDown={isLink() ? undefined : handleKeyDown}
             class={[
                 styles.card,
                 isInteractive() ? styles.interactive : "",
                 local.disabled ? styles.disabled : "",
+                local.plainIcon ? styles.iconPlain : "",
                 local.class,
             ]
                 .filter(Boolean)
@@ -149,13 +172,7 @@ export function PaperMediaCard(props: ParentProps<PaperMediaCardProps>) {
                                 <img
                                     src={local.icon}
                                     alt=""
-                                    style={{
-                                        width: `${getVarCss("media-icon-size")}`,
-                                        height: `${getVarCss("media-icon-size")}`,
-                                        "border-radius":
-                                            `${getVarCss("border-radius")}`,
-                                        display: "block",
-                                    }}
+                                    class={styles.iconStandalone}
                                 />
                             ) : (
                                 <PaperIcon class={styles.iconGlyph}>
@@ -204,7 +221,7 @@ export function PaperMediaCard(props: ParentProps<PaperMediaCardProps>) {
                     </div>
                 </Show>
             </div>
-        </div>
+        </Dynamic>
     );
 
     return (

@@ -6,6 +6,7 @@
     border-radius: var(--paper-border-radius);
     cursor: pointer;
     outline: none;
+    text-decoration: none;
     transition:
         transform var(--paper-tiny-transition),
         box-shadow var(--paper-tiny-transition),
@@ -34,6 +35,16 @@
 
 .PaperButton.size-medium [class*="PaperIcon"] {
     font-size: var(--paper-icon-size-medium);
+}
+
+.PaperButton.size-large {
+    padding: var(--paper-uigap-threefourths) var(--paper-uigap-double);
+    font-size: var(--paper-text-size-4);
+    gap: var(--paper-uigap-half);
+}
+
+.PaperButton.size-large [class*="PaperIcon"] {
+    font-size: var(--paper-icon-size-large);
 }
 
 .PaperButton.size-small {

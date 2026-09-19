@@ -1,16 +1,21 @@
 import styles from "./index.module.css";
 import { splitProps, type JSX } from "solid-js";
+import { Dynamic } from "solid-js/web";
 import { roleVars, isPaperRole } from "../../utils/colors";
 import type { PaperButtonVariant } from "../../types";
 
-export type PaperButtonSize = "tiny" | "small" | "medium";
+export type PaperButtonSize = "tiny" | "small" | "medium" | "large";
 
 export interface PaperButtonProps extends JSX.ButtonHTMLAttributes<HTMLButtonElement> {
     icon?: boolean;
-    /** medium is the default; tiny is a low-emphasis control */
+    /** medium is the default; large is the hero CTA, tiny a low-emphasis control */
     size?: PaperButtonSize;
     variant?: PaperButtonVariant;
     ref?: HTMLButtonElement | ((el: HTMLButtonElement) => void);
+    /** When set, renders an anchor styled as a button instead of a button. */
+    href?: string;
+    target?: JSX.AnchorHTMLAttributes<HTMLAnchorElement>["target"];
+    rel?: string;
 }
 
 export function PaperButton(props: PaperButtonProps) {
@@ -25,6 +30,9 @@ export function PaperButton(props: PaperButtonProps) {
         "type",
         "ref",
         "style",
+        "href",
+        "target",
+        "rel",
     ]);
 
     const className = () =>
@@ -48,8 +56,12 @@ export function PaperButton(props: PaperButtonProps) {
         props["aria-label"] ?? (local.icon && typeof props.children === "string" ? props.children : undefined);
 
     return (
-        <button
-            type={local.type ?? "button"}
+        <Dynamic
+            component={local.href ? "a" : "button"}
+            type={local.href ? undefined : (local.type ?? "button")}
+            href={local.href}
+            target={local.target}
+            rel={local.rel}
             {...rest}
             ref={local.ref}
             class={className()}
@@ -58,10 +70,10 @@ export function PaperButton(props: PaperButtonProps) {
                 ...roleStyle(),
                 ...(typeof local.style === "object" ? local.style : {}),
             }}
-            disabled={local.disabled}
+            disabled={local.href ? undefined : local.disabled}
             aria-label={ariaLabel()}
         >
             {local.children}
-        </button>
+        </Dynamic>
     );
 }

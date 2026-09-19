@@ -65,4 +65,53 @@ describe("PaperMediaCard Component Tests", () => {
         fireEvent.click(card);
         expect(handleClick).not.toHaveBeenCalled();
     });
+
+    it("renders a plain icon image without frame chrome", () => {
+        const { container } = render(() => (
+            <PaperMediaCard
+                icon="/section.png"
+                title="Plain Icon Card"
+                plainIcon
+            />
+        ));
+
+        const card = container.firstChild as HTMLElement;
+        expect(card.className).toContain("iconPlain");
+
+        const img = container.querySelector("img");
+        expect(img?.getAttribute("src")).toBe("/section.png");
+        expect(img?.className).toContain("iconStandalone");
+        expect(img?.getAttribute("style")).toBeNull();
+    });
+
+    it("frames standalone icon images by default", () => {
+        const { container } = render(() => (
+            <PaperMediaCard icon="/section.png" title="Framed Icon Card" />
+        ));
+
+        const card = container.firstChild as HTMLElement;
+        expect(card.className).not.toContain("iconPlain");
+    });
+
+    it("renders a link (not a button) when href is set", () => {
+        const { container } = render(() => (
+            <PaperMediaCard href="/paperui" title="PaperUI" />
+        ));
+
+        const link = container.querySelector("a");
+        expect(link?.getAttribute("href")).toBe("/paperui");
+        expect(container.querySelector('[role="button"]')).toBeNull();
+    });
+
+    it("keeps button semantics for onClick-only cards", () => {
+        const { container } = render(() => (
+            <PaperMediaCard
+                title="Selectable"
+                onClick={() => void 0}
+            />
+        ));
+
+        expect(container.querySelector("a")).toBeNull();
+        expect(container.querySelector('[role="button"]')).not.toBeNull();
+    });
 });

@@ -1,6 +1,7 @@
 import { describe, test, expect, vi, afterEach } from "vitest";
 import { render } from "@solidjs/testing-library";
 import { PaperAvatar } from "../components/PaperAvatar";
+import { PaperButton } from "../components/PaperButton";
 import { PaperEmptyState } from "../components/PaperEmptyState";
 import { PaperKeyValueList, PaperKeyValue } from "../components/PaperKeyValueList";
 import { PaperSectionHeader } from "../components/PaperSectionHeader";
@@ -23,6 +24,40 @@ describe("PaperAvatar", () => {
         ));
         expect(container.querySelector("img")).toBeNull();
         expect(container.textContent).toContain("dns");
+    });
+});
+
+describe("PaperButton", () => {
+    test("applies the large hero size", () => {
+        const { container } = render(() => (
+            <PaperButton size="large">Download</PaperButton>
+        ));
+        expect(container.firstElementChild!.className).toContain("large");
+    });
+
+    test("medium is the default size", () => {
+        const { container } = render(() => (
+            <PaperButton>Download</PaperButton>
+        ));
+        expect(container.firstElementChild!.className).toContain("medium");
+    });
+
+    test("renders an anchor when href is set", () => {
+        const { container } = render(() => (
+            <PaperButton
+                href="https://paperboard.dev"
+                target="_blank"
+                rel="noopener noreferrer"
+            >
+                Download
+            </PaperButton>
+        ));
+        const el = container.firstElementChild as HTMLAnchorElement;
+        expect(el.tagName).toBe("A");
+        expect(el.getAttribute("href")).toBe("https://paperboard.dev");
+        expect(el.getAttribute("target")).toBe("_blank");
+        expect(el.getAttribute("rel")).toContain("noopener");
+        expect(el.className).toContain("PaperButton");
     });
 });
 
