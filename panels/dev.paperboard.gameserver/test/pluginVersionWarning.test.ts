@@ -4,7 +4,9 @@ import { describe, expect, test, mock } from "bun:test";
 
 mock.module("../src/lib/server", () => ({
     serverSoftware: () => "paper",
+    setServerSoftware: () => {},
     serverVersion: () => "",
+    setServerVersion: () => {},
     updatePanelConfig: async () => {},
     serverBridge: {
         call: async () => ({}),
