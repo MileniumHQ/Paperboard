@@ -1,37 +1,20 @@
+// PTY backends: exactly one per runtime, chosen by the runtime itself.
+//
+//   Bun (standalone Paperboard Server, i.e. the crane) -> Bun.Terminal
+//   Node / Electron (the desktop app)                  -> node-pty
+//
+// Bun.Terminal is POSIX-only, so a Bun runtime on Windows takes the node-pty
+// path just like Node does. There is no fallback chain: if the selected
+// backend cannot start, spawnPty throws. A shell on pipes is not a terminal,
+// so substituting one silently would be a lie.
 import * as fs from "fs";
-import * as cp from "child_process";
-import * as os from "os";
 import * as path from "path";
 import { IPtyProcess } from "./types";
 import { logger } from "./logger";
 
-let ffiLibc: any = null;
-let ffiPtr: any = null;
-const isDarwin = process.platform === "darwin";
-const TIOCSWINSZ = isDarwin ? 0x80087467 : 0x5414;
+const BunRuntime = (globalThis as { Bun?: any }).Bun;
 
-// FFI symbols for native pseudo-terminals
-try {
-    const { dlopen, FFIType, ptr } = require("bun:ffi");
-    ffiPtr = ptr;
-    const libPath = isDarwin ? "libSystem.B.dylib" : "libc.so.6";
-    ffiLibc = dlopen(libPath, {
-        openpty: {
-            args: [FFIType.ptr, FFIType.ptr, FFIType.ptr, FFIType.ptr, FFIType.ptr],
-            returns: FFIType.i32,
-        },
-        ioctl: {
-            args: [FFIType.i32, FFIType.u64, FFIType.ptr],
-            returns: FFIType.i32,
-        },
-        close: {
-            args: [FFIType.i32],
-            returns: FFIType.i32,
-        },
-    });
-} catch (err) { logger.debug("[pty.ts] op failed:", err) }
-
-// restore exec bit on native helpers, copies strip it
+// restore exec bit on node-pty's macOS spawn-helper, copies strip it
 export function ensureNativeHelpersExecutable(): void {
     if (process.platform === "win32") return;
     try {
@@ -52,8 +35,8 @@ export function ensureNativeHelpersExecutable(): void {
                 fs.chmodSync(helper, st.mode | 0o755);
                 logger.info(`[pty] restored executable bit on ${helper} (stripped by copy)`);
             }
-        } catch (err) { logger.debug("[pty.ts] op failed:", err) }
-    } catch (err) { logger.debug("[pty.ts] op failed:", err) }
+        } catch (err) { logger.debug("[pty.ts] spawn-helper not present:", err) }
+    } catch (err) { logger.debug("[pty.ts] node-pty not resolvable:", err) }
 }
 
 // Resolves default system shell per platform
@@ -74,109 +57,118 @@ export function getDefaultShell(): string {
     return "/bin/sh";
 }
 
-// native pty via FFI, then node-pty, then pipe fallback
 export function spawnPty(
     shell: string,
     cols: number,
     rows: number,
     cwd: string,
     env: Record<string, string>,
+    args: string[] = [],
 ): IPtyProcess {
-    // Bun FFI native openpty
-    if (ffiLibc && ffiPtr && process.platform !== "win32") {
-        const primaryBuf = new Int32Array(1);
-        const secondaryBuf = new Int32Array(1);
-        const winSize = new Uint16Array([rows, cols, 0, 0]);
-
-        const res = ffiLibc.symbols.openpty(
-            ffiPtr(primaryBuf),
-            ffiPtr(secondaryBuf),
-            null,
-            null,
-            ffiPtr(winSize),
-        );
-
-        if (res === 0) {
-            logger.debug(`[pty] using bun-ffi backend for ${shell}`);
-            const primaryFd = primaryBuf[0];
-            const secondaryFd = secondaryBuf[0];
-            const safeCwd = cwd && fs.existsSync(cwd) ? cwd : os.homedir();
-
-            const proc = cp.spawn(shell, [], {
-                stdio: [secondaryFd, secondaryFd, secondaryFd],
-                cwd: safeCwd,
-                env,
-                detached: true,
-                windowsHide: true,
-            });
-
-            try {
-                ffiLibc.symbols.close(secondaryFd);
-            } catch (err) { logger.debug("[pty.ts] op failed:", err) }
-
-            const inStream = fs.createReadStream("", { fd: primaryFd, autoClose: false });
-            const outStream = fs.createWriteStream("", { fd: primaryFd, autoClose: false });
-            inStream.on("error", (err) => logger.debug("[pty.ts] fd pipe error:", err));
-            outStream.on("error", (err) => logger.debug("[pty.ts] fd pipe error:", err));
-
-            let isCleanedUp = false;
-            const cleanup = () => {
-                if (isCleanedUp) return;
-                isCleanedUp = true;
-                try { inStream.destroy(); } catch (err) { logger.debug("[pty.ts] op failed:", err) }
-                try { outStream.destroy(); } catch (err) { logger.debug("[pty.ts] op failed:", err) }
-                try { ffiLibc.symbols.close(primaryFd); } catch (err) { logger.debug("[pty.ts] op failed:", err) }
-            };
-
-            return {
-                write(data: string) {
-                    if (!isCleanedUp) try { outStream.write(data); } catch (err) { logger.debug("[pty.ts] op failed:", err) }
-                },
-                resize(newCols: number, newRows: number) {
-                    if (!isCleanedUp && newCols > 0 && newRows > 0) {
-                        try {
-                            const ws = new Uint16Array([newRows, newCols, 0, 0]);
-                            ffiLibc.symbols.ioctl(primaryFd, TIOCSWINSZ, ffiPtr(ws));
-                        } catch (err) { logger.debug("[pty.ts] op failed:", err) }
-                    }
-                },
-                onData(cb: (data: string) => void) {
-                    inStream.on("data", (chunk: any) => {
-                        try { cb(chunk.toString("utf8")); } catch (err) { logger.debug("[pty.ts] op failed:", err) }
-                    });
-                },
-                onExit(cb: (code: number) => void) {
-                    proc.on("close", (code) => {
-                        cleanup();
-                        try { cb(code ?? 0); } catch (err) { logger.debug("[pty.ts] op failed:", err) }
-                    });
-                    proc.on("error", () => {
-                        cleanup();
-                        try { cb(1); } catch (err) { logger.debug("[pty.ts] op failed:", err) }
-                    });
-                },
-                kill() {
-                    try { proc.kill(); } catch (err) { logger.debug("[pty.ts] op failed:", err) }
-                    cleanup();
-                },
-            };
-        } else {
-            logger.warn(`[pty] bun-ffi openpty failed (rc=${res}), trying node-pty`);
-        }
+    if (BunRuntime && process.platform !== "win32") {
+        return spawnBunPty(shell, args, cols, rows, cwd, env);
     }
+    return spawnNodePty(shell, args, cols, rows, cwd, env);
+}
 
-// collect loadable node-pty copies, callers spawn-test each in turn
-function loadNodePtyCandidates(): { label: string; mod: any }[] {
-    const out: { label: string; mod: any }[] = [];
+// Bun.Terminal hands data to one constructor callback, so early output is
+// buffered until onData subscribes and flushed in order.
+function spawnBunPty(
+    shell: string,
+    args: string[],
+    cols: number,
+    rows: number,
+    cwd: string,
+    env: Record<string, string>,
+): IPtyProcess {
+    const decoder = new TextDecoder();
+    let onData: ((data: string) => void) | null = null;
+    const buffered: string[] = [];
+
+    const terminal = new BunRuntime.Terminal({
+        cols,
+        rows,
+        name: env.TERM || "xterm-256color",
+        data: (_term: unknown, data: Uint8Array) => {
+            const text = decoder.decode(data, { stream: true });
+            if (!text) return;
+            if (onData) onData(text);
+            else buffered.push(text);
+        },
+    });
+    const proc = BunRuntime.spawn([shell, ...args], { terminal, cwd, env });
+
+    let closed = false;
+    const close = () => {
+        if (closed) return;
+        closed = true;
+        try { terminal.close(); } catch (err) { logger.debug("[pty] terminal close failed:", err) }
+    };
+
+    return {
+        pid: proc.pid,
+        write(data: string) {
+            if (!closed) terminal.write(data);
+        },
+        resize(newCols: number, newRows: number) {
+            if (!closed && newCols > 0 && newRows > 0) terminal.resize(newCols, newRows);
+        },
+        onData(callback: (data: string) => void) {
+            onData = callback;
+            for (const text of buffered.splice(0)) callback(text);
+        },
+        onExit(callback: (code: number) => void) {
+            proc.exited
+                .then((code: number) => callback(code ?? 0))
+                .catch((err: unknown) => {
+                    logger.debug("[pty] process exit wait failed:", err);
+                    callback(1);
+                })
+                .finally(close);
+        },
+        kill() {
+            try { proc.kill(); } catch (err) { logger.debug("[pty] kill failed:", err) }
+            close();
+        },
+    };
+}
+
+function spawnNodePty(
+    shell: string,
+    args: string[],
+    cols: number,
+    rows: number,
+    cwd: string,
+    env: Record<string, string>,
+): IPtyProcess {
+    const nodePty = loadNodePty();
+    const term = nodePty.spawn(shell, args, {
+        name: env.TERM || "xterm-256color",
+        cols,
+        rows,
+        cwd,
+        env,
+    });
+    return {
+        pid: term.pid,
+        write: (data: string) => term.write(data),
+        resize: (newCols: number, newRows: number) => term.resize(newCols, newRows),
+        onData: (callback: (data: string) => void) => term.onData(callback),
+        onExit: (callback: (code: number) => void) =>
+            term.onExit(({ exitCode }: { exitCode: number }) =>
+                callback(exitCode ?? 0),
+            ),
+        kill: () => term.kill(),
+    };
+}
+
+// A compiled Bun binary (the Windows crane) cannot resolve node_modules, so
+// publish.ts places a node-pty copy beside the executable and this resolves it
+// by absolute path. Anywhere else, the bundled copy is the answer.
+function loadNodePty(): any {
     try {
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
-        const mod = require("node-pty");
-        logger.debug(`[pty] node-pty resolved via bundled require`);
-        out.push({ label: "bundled", mod });
-    } catch (err: any) {
-        logger.debug(`[pty] bundled node-pty unavailable (${err?.message ?? err}), trying sidecar…`);
-    }
-    try {
+        return require("node-pty");
+    } catch (bundledErr: any) {
         const sidecar = path.join(
             path.dirname(process.execPath),
             "node-pty",
@@ -184,58 +176,12 @@ function loadNodePtyCandidates(): { label: string; mod: any }[] {
             "index.js",
         );
         if (!fs.existsSync(sidecar)) {
-            logger.debug(`[pty] no node-pty sidecar at ${sidecar}`);
-        } else {
-            // eslint-disable-next-line @typescript-eslint/no-var-requires
-            const mod = require(sidecar);
-            logger.debug(`[pty] node-pty resolved via sidecar ${sidecar}`);
-            out.push({ label: `sidecar ${sidecar}`, mod });
+            throw new Error(
+                `node-pty is unavailable (bundled: ${bundledErr?.message ?? bundledErr}); ` +
+                    `no sidecar at ${sidecar}`,
+            );
         }
-    } catch (err: any) {
-        logger.warn(`[pty] node-pty sidecar unavailable:`, err?.message ?? err);
+        logger.debug(`[pty] node-pty resolved via sidecar ${sidecar}`);
+        return require(sidecar);
     }
-    return out;
-}
-    // node-pty backends
-    for (const { label, mod: nodePty } of loadNodePtyCandidates()) {
-        try {
-            logger.debug(`[pty] using node-pty backend (${label}) for ${shell}`);
-            const term = nodePty.spawn(shell, [], {
-                name: env.TERM || "xterm-256color",
-                cols,
-                rows,
-                cwd,
-                env,
-            });
-
-        return {
-            write: (d: string) => term.write(d),
-            resize: (c: number, r: number) => term.resize(c, r),
-            onData: (cb: (d: string) => void) => term.onData(cb),
-            onExit: (cb: (code: number) => void) =>
-                term.onExit(({ exitCode }: { exitCode: number }) => cb(exitCode ?? 0)),
-            kill: () => term.kill(),
-        };
-    } catch (err: any) {
-        logger.warn(`[pty] node-pty (${label}) spawn failed, trying next backend for ${shell}:`, err?.message ?? err);
-    }
-    }
-
-    // pipe fallback, no real pty
-    logger.warn(`[pty] no pty backend available, shell ${shell} runs without a terminal`);
-    const proc = cp.spawn(shell, process.platform === "win32" ? [] : ["-i"], { cwd, env, windowsHide: true });
-    return {
-        write: (d: string) => proc.stdin?.write(d),
-        // no terminal to resize in the pipe fallback
-        resize: () => {
-            /* nothing to resize without a real pty */
-        },
-        onData: (cb: (d: string) => void) => {
-            proc.stdout?.on("data", (chunk: any) => cb(chunk.toString("utf8")));
-            proc.stderr?.on("data", (chunk: any) => cb(chunk.toString("utf8")));
-        },
-        onExit: (cb: (code: number) => void) =>
-            proc.on("close", (code) => cb(code ?? 0)),
-        kill: () => proc.kill(),
-    };
 }

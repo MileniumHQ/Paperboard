@@ -1,9 +1,11 @@
-// in-process supervision for embedded hosts, single daemon lifetime
-// node-pty resolved lazily, standalone daemons use FFI instead
+// in-process supervision for embedded hosts, single daemon lifetime.
+// PTYs go through pty.ts like every other host; this file only chooses
+// between a pty and plain pipes.
 import * as cp from "child_process";
 import * as fs from "fs";
 import { logger } from "./logger";
 import * as os from "os";
+import { spawnPty } from "./pty";
 import type { PaperCraneClientLike } from "./supervisorTypes";
 
 export function isEmbeddedHost(): boolean {
@@ -86,8 +88,6 @@ export class EmbeddedSupervisor implements PaperCraneClientLike {
 
         try {
             if (this.config.type === "pty" || this.config.isPty) {
-                // eslint-disable-next-line @typescript-eslint/no-var-requires
-                const pty = require("node-pty");
                 // args are honored for pty spawns too: an argv array of
                 // strings only — anything else is a bug, dropped args would
                 // silently change what the child runs
@@ -99,13 +99,14 @@ export class EmbeddedSupervisor implements PaperCraneClientLike {
                     );
                     ptyArgs = [];
                 }
-                this.proc = pty.spawn(this.config.command, ptyArgs, {
-                    name: "xterm-256color",
-                    cols: this.config.cols || 80,
-                    rows: this.config.rows || 24,
-                    cwd: cwd || os.homedir(),
-                    env: buildEnv(this.config),
-                });
+                this.proc = spawnPty(
+                    this.config.command,
+                    this.config.cols || 80,
+                    this.config.rows || 24,
+                    cwd || os.homedir(),
+                    buildEnv(this.config),
+                    ptyArgs,
+                );
             } else {
                 this.proc = cp.spawn(
                     this.config.command,
@@ -125,9 +126,9 @@ export class EmbeddedSupervisor implements PaperCraneClientLike {
 
             if (this.isPty) {
                 this.proc.onData((data: string) => this.emit("data", data));
-                this.proc.onExit((e: { exitCode?: number }) => {
+                this.proc.onExit((code: number) => {
                     this.alive = false;
-                    this.emit("exit", e.exitCode ?? 0);
+                    this.emit("exit", code);
                 });
             } else {
                 this.proc.stdout?.on("data", (chunk: Buffer) =>

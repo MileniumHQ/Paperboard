@@ -370,7 +370,16 @@ export async function runSupervisor(procId: string): Promise<void> {
                 ...(config.env || {}),
             };
 
-            ptyInstance = spawnPty(shell, cols, rows, finalCwd, finalEnv);
+            try {
+                ptyInstance = spawnPty(shell, cols, rows, finalCwd, finalEnv);
+            } catch (err) {
+                // no tty backend available is a spawn failure, not a pipe shell
+                const msg = `[supervisor:${procId}] could not start pty: ${(err as Error).message}`;
+                logger.error(msg);
+                broadcast({ type: "data", stream: "stderr", data: `\n${msg}\n` });
+                cleanupAndExit(1);
+                return;
+            }
             ptyInstance.onData((data) => {
                 ringBuffer.push(data);
                 broadcast({ type: "data", stream: "stdout", data });

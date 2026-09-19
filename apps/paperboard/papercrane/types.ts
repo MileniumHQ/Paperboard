@@ -29,6 +29,8 @@ export interface PanelManifest {
 export type BoardManifest = PanelManifest;
 
 export interface IPtyProcess {
+    // pid of the shell process, when the backend exposes it
+    pid?: number;
     write(data: string): void;
     resize(cols: number, rows: number): void;
     onData(callback: (data: string) => void): void;
