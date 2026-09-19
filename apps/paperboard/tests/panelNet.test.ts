@@ -6,6 +6,7 @@ import * as path from "path";
 import { buildPanelCsp, parseNetworkEgress, panelCspForEgress } from "../papercrane/panelNet";
 
 let tmp = "";
+let savedDir: string | undefined;
 
 beforeAll(() => {
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), "panel-net-"));
@@ -14,11 +15,13 @@ beforeAll(() => {
         path.join(tmp, "panels", "dev.allow", "manifest.json"),
         JSON.stringify({ id: "dev.allow", name: "T", network: { hosts: ["api.example.com", "extra.example.com"] } }),
     );
+    savedDir = process.env.PAPERBOARD_DIR;
     process.env.PAPERBOARD_DIR = tmp;
 });
 
 afterAll(() => {
-    delete process.env.PAPERBOARD_DIR;
+    if (savedDir === undefined) delete process.env.PAPERBOARD_DIR;
+    else process.env.PAPERBOARD_DIR = savedDir;
     fs.rmSync(tmp, { recursive: true, force: true });
 });
 

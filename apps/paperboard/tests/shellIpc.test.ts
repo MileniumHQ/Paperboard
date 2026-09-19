@@ -2,7 +2,7 @@
 // shelldata refuses panel-origin frames with the typed PANEL_IPC_REFUSED —
 // the guard unit test proves the predicate, this proves the wiring. Electron
 // is stubbed; handlers throw before touching any real side effect.
-import { describe, it, expect, mock, beforeAll } from "bun:test";
+import { describe, it, expect, mock, beforeAll, afterAll } from "bun:test";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
@@ -48,9 +48,19 @@ function fakeIpcMain() {
     };
 }
 
+let tmp = "";
+let savedDir: string | undefined;
+
 beforeAll(() => {
-    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "pb-shellipc-"));
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), "pb-shellipc-"));
+    savedDir = process.env.PAPERBOARD_DIR;
     process.env.PAPERBOARD_DIR = tmp;
+});
+
+afterAll(() => {
+    if (savedDir === undefined) delete process.env.PAPERBOARD_DIR;
+    else process.env.PAPERBOARD_DIR = savedDir;
+    fs.rmSync(tmp, { recursive: true, force: true });
 });
 
 describe("shell IPC panel-origin refusal", () => {

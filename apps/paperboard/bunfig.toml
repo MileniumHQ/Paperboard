@@ -1,0 +1,5 @@
+# Hermetic tests: tests/setup.ts gives the whole test process a throwaway
+# PAPERBOARD_DIR with the standard subdirectories, so no suite reads or writes
+# the developer's real ~/.paperboard. See tests/setup.ts for why this matters.
+[test]
+preload = ["./tests/setup.ts"]
