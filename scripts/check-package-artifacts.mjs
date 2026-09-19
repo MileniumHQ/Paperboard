@@ -16,15 +16,26 @@ try {
     const dependencies = { "solid-js": "1.9.13", vite: "7.3.1", "vite-plugin-solid": "2.11.14" };
     for (const name of ["paperapi", "paperui"]) {
         const dir = path.join(root, "packages", name);
-        const [packed] = JSON.parse(run("npm", ["pack", "--ignore-scripts", "--json", "--pack-destination", tmp], dir));
+        // bun pm pack prints "packed <size> <path>" per file and the tarball
+        // path on its own line, so one pack yields both the file list and the
+        // archive name. npm is not required on the machine running the gate.
+        const output = run("bun", ["pm", "pack", "--ignore-scripts", "--destination", tmp], dir);
+        const files = new Set();
+        let tarball = null;
+        for (const line of output.split("\n")) {
+            const packed = line.match(/^packed \S+ (.+)$/);
+            if (packed) { files.add(packed[1]); continue; }
+            if (line.startsWith(tmp + path.sep) && line.endsWith(".tgz")) tarball = line.trim();
+        }
+        if (!tarball) throw new Error(`bun pm pack did not report a tarball for ${name}`);
+        if (files.size === 0) throw new Error(`bun pm pack reported no files for ${name}`);
         const manifest = JSON.parse(fs.readFileSync(path.join(dir, "package.json"), "utf8"));
-        const files = new Set(packed.files.map((entry) => entry.path));
         const check = (value) => {
             if (typeof value === "string" && value.startsWith("./") && !files.has(value.slice(2))) throw new Error(`${manifest.name} exports a missing file: ${value}`);
             if (value && typeof value === "object") Object.values(value).forEach(check);
         };
         check(manifest.exports);
-        dependencies[manifest.name] = `file:${path.join(tmp, packed.filename)}`;
+        dependencies[manifest.name] = `file:${tarball}`;
     }
     fs.writeFileSync(path.join(tmp, "package.json"), JSON.stringify({ private: true, type: "module", dependencies, scripts: { build: "vite build" } }));
     fs.writeFileSync(path.join(tmp, "index.html"), '<div id="root"></div><script type="module" src="/main.tsx"></script>');
