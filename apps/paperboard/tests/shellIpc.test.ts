@@ -15,7 +15,7 @@ mock.module("electron", () => ({
         requestSingleInstanceLock: () => true,
         on: () => undefined,
     },
-    clipboard: { readText: () => "", writeText: () => undefined },
+    clipboard: { readText: async () => "", writeText: async () => undefined },
     shell: { openPath: async () => "" },
     BrowserWindow: class {},
     Menu: {},

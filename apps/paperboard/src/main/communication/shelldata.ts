@@ -23,13 +23,17 @@ export default function registerShellIpc(ipcMain: IpcMain) {
         return { ...creds, computerId: "local" };
     });
 
-    ipcMain.handle("clipboard-read", (event) => {
+    // Electron 44 rearchitected the clipboard module to the W3C shape: the
+    // read/write methods now return Promises. Awaiting is correct on both the
+    // old and new APIs (await on a non-Promise resolves it), so write success
+    // reflects the actual write instead of reporting true unconditionally.
+    ipcMain.handle("clipboard-read", async (event) => {
         assertShellFrame(event, "clipboard-read");
-        return clipboard.readText();
+        return await clipboard.readText();
     });
-    ipcMain.handle("clipboard-write", (event, text: string) => {
+    ipcMain.handle("clipboard-write", async (event, text: string) => {
         assertShellFrame(event, "clipboard-write");
-        clipboard.writeText(text);
+        await clipboard.writeText(text);
         return true;
     });
 
