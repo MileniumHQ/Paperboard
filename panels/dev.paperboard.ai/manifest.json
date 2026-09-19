@@ -1,0 +1,10 @@
+{
+    "name": "AI",
+    "id": "dev.paperboard.ai",
+    "version": "0.1.0",
+    "description": "Local language models with panel actions",
+    "publisher": "Paperboard",
+    "base": "./dist/index.html",
+    "service": "./dist/service.js",
+    "icon": "./branding/icon.png"
+}
