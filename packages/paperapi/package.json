@@ -52,7 +52,8 @@
     "homepage": "https://paperboard.dev",
     "repository": {
         "type": "git",
-        "url": "git+https://github.com/paperboard-dev/PaperAPI.git"
+        "url": "git+https://github.com/MileniumHQ/Paperboard.git",
+        "directory": "packages/paperapi"
     },
     "license": "MIT",
     "publishConfig": {

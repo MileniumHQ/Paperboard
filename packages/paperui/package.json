@@ -60,7 +60,8 @@
     "homepage": "https://paperboard.dev",
     "repository": {
         "type": "git",
-        "url": "git+https://github.com/paperboard-dev/PaperUI.git"
+        "url": "git+https://github.com/MileniumHQ/Paperboard.git",
+        "directory": "packages/paperui"
     },
     "license": "MIT",
     "publishConfig": {
