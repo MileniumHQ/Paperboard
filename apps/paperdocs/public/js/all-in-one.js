@@ -36,9 +36,9 @@
     return o;
   }
 
-  // builds the group, loads placeholder.png as the 4:3 screen map
+  // builds the group, loads screens/gameserver.png as the default 4:3 screen map
   function createAllInOne(THREE, opts = {}) {
-    const texUrl = opts.screenUrl || 'placeholder.png';
+    const texUrl = opts.screenUrl || 'screens/gameserver.png';
     const g = new THREE.Group();
     g.name = 'aio-computer';
 

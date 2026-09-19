@@ -12,7 +12,7 @@ const FILES: Record<string, { body: string; type: string }> = {
     },
     "/css/style.css": { body: "body{}", type: "text/css" },
     "/js/vendor/three.module.js": { body: "export {}", type: "text/javascript" },
-    "/placeholder.png": { body: "png", type: "image/png" },
+    "/screens/paperconsole-docs.png": { body: "png", type: "image/png" },
     "/docs/index.html": {
         body: "<!doctype html><title>PaperDocs</title>",
         type: "text/html",
