@@ -4,13 +4,14 @@ import {
     PaperContextMenuItem,
     PaperFlex,
     PaperIcon,
-    PaperInput,
     PaperSpacer,
     PaperText,
     useContextMenuState,
 } from "@paperboard-dev/paperui";
 import { For, Show } from "solid-js";
 import { metaSections, sectionKey, sectionMeta } from "../utils/routeUtils";
+import { withBase } from "../utils/base";
+import { DocsSearch } from "./DocsSearch";
 
 interface TopbarProps {
     theme: "dark" | "light";
@@ -28,17 +29,14 @@ export function Topbar(props: TopbarProps) {
                 class="topbar"
                 align="center"
             >
-                <PaperFlex
-                    direction="row"
-                    align="center"
-                    gap="threefourths"
-                    style={{ cursor: "pointer" }}
-                    onClick={() => {
-                        window.location.href = `/${sectionKey}`;
-                    }}
+                <a
+                    class="topbar-brand"
+                    href={withBase(sectionKey === "/" ? "/" : `/${sectionKey}`)}
                 >
                     <img
-                        src={`/${sectionKey != "/" ? sectionKey : "paperdocs"}.png`}
+                        src={withBase(
+                            `/${sectionKey != "/" ? sectionKey : "paperdocs"}.png`,
+                        )}
                         class="logo"
                     />
                     <PaperText rounded weight={800} size={5}>
@@ -47,31 +45,34 @@ export function Topbar(props: TopbarProps) {
                             <PaperText weight={600}>docs</PaperText>
                         </Show>
                     </PaperText>
-                </PaperFlex>
-                <PaperFlex gap="half" direction="row">
+                </a>
+                <PaperFlex gap="half" direction="row" class="topbar-links">
+                    <PaperButton variant="text" size="tiny">
+                        Learn <PaperIcon zeroHeight>expand_more</PaperIcon>
+                    </PaperButton>
                     <PaperButton
                         variant="text"
-                        tiny
+                        size="tiny"
                         onClick={(e) => docsMenu.openBelow(e)}
                     >
                         Docs <PaperIcon zeroHeight>expand_more</PaperIcon>
                     </PaperButton>
-                    <PaperButton variant="text" tiny>
-                        Learn <PaperIcon zeroHeight>expand_more</PaperIcon>
+                    <PaperButton variant="text" size="tiny" href="/blog">
+                        Blog
                     </PaperButton>
-                    <PaperButton tiny>Blog</PaperButton>
                 </PaperFlex>
                 <PaperSpacer></PaperSpacer>
-                <PaperFlex direction="row" align="center" gap="threefourths">
-                    <PaperInput
-                        placeholder="Search..."
-                        icon="search"
-                        compact
-                    ></PaperInput>
+                <PaperFlex
+                    direction="row"
+                    align="center"
+                    gap="threefourths"
+                    class="topbar-actions"
+                >
+                    <DocsSearch class="topbar-search" />
                     <PaperButton
                         icon
                         variant="text"
-                        tiny
+                        size="tiny"
                         onClick={props.toggleTheme}
                     >
                         {props.theme === "dark" ? "dark_mode" : "light_mode"}
@@ -90,7 +91,7 @@ export function Topbar(props: TopbarProps) {
                         <PaperContextMenuItem
                             icon={
                                 meta.image ? (
-                                    <PaperIcon src={meta.image} />
+                                    <PaperIcon src={withBase(meta.image)} />
                                 ) : (
                                     <PaperIcon>
                                         {meta.icon || "description"}
@@ -100,7 +101,7 @@ export function Topbar(props: TopbarProps) {
                             description={meta.description}
                             onClick={() => {
                                 docsMenu.close();
-                                window.location.href = `/${key}`;
+                                window.location.href = withBase(`/${key}`);
                             }}
                         >
                             {meta.name}

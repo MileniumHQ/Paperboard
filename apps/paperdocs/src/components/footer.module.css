@@ -1,0 +1,134 @@
+.footer {
+    width: 100%;
+    background-color: var(--paper-surface-raised);
+    border-top: var(--paper-border-width) solid var(--paper-border);
+    z-index: 10;
+    flex-shrink: 0;
+}
+
+.inner {
+    width: 100%;
+    max-width: var(--paper-page-width);
+    margin: 0 auto;
+    box-sizing: border-box;
+    padding: var(--paper-uigap-quadruple) var(--paper-uigap-double)
+        var(--paper-uigap-double);
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--paper-uigap-double);
+}
+
+.column {
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap-half);
+    min-width: 0;
+}
+
+.heading {
+    margin: 0 0 var(--paper-uigap-onefourth);
+}
+
+.link {
+    color: var(--paper-text-subtle);
+    text-decoration: none;
+    font-size: var(--paper-text-size-2);
+    line-height: 1.5;
+    width: fit-content;
+}
+
+.link:hover {
+    color: var(--paper-text);
+}
+
+.bottom {
+    max-width: var(--paper-page-width);
+    margin: 0 auto;
+    box-sizing: border-box;
+    padding: var(--paper-uigap) var(--paper-uigap-double)
+        var(--paper-uigap-double);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: var(--paper-uigap-half);
+}
+
+.copyright {
+    margin: 0;
+}
+
+.right {
+    display: flex;
+    align-items: center;
+    gap: var(--paper-uigap-threefourths);
+}
+
+.separator {
+    width: var(--paper-border-width);
+    height: 14px;
+    background: var(--paper-border);
+    flex-shrink: 0;
+}
+
+.social {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--paper-text-subtle);
+}
+
+/* Icon viewBoxes are trimmed to each glyph's ink box, so a shared height
+   aligns their optical size instead of their 24x24 padding. */
+.social svg {
+    display: block;
+    height: 14px;
+    width: auto;
+}
+
+.social:hover {
+    color: var(--paper-text);
+}
+
+.mileniumLink {
+    display: inline-flex;
+    align-items: center;
+    color: var(--paper-text-subtle);
+}
+
+.mileniumLink:hover {
+    color: var(--paper-text);
+}
+
+/* The wordmark is a white SVG used as an alpha mask, so it takes the current
+   text color and stays a token. */
+.milenium {
+    display: inline-block;
+    height: 14px;
+    aspect-ratio: 444 / 86;
+    background-color: currentColor;
+    -webkit-mask-repeat: no-repeat;
+    -webkit-mask-position: center;
+    -webkit-mask-size: contain;
+    mask-repeat: no-repeat;
+    mask-position: center;
+    mask-size: contain;
+}
+
+@media (max-width: 700px) {
+    .inner {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        padding-top: var(--paper-uigap-triple);
+    }
+}
+
+@media (max-width: 480px) {
+    .inner {
+        grid-template-columns: minmax(0, 1fr);
+        gap: var(--paper-uigap-triple);
+    }
+
+    .bottom {
+        justify-content: flex-start;
+    }
+}

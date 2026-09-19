@@ -1,0 +1,14 @@
+<svg>
+    <defs>
+        <filter id="bg-mono-noise" x="0%" y="0%" width="100%" height="100%">
+            <feTurbulence
+                type="fractalNoise"
+                baseFrequency="1.3"
+                numOctaves="3"
+                stitchTiles="stitch"
+            />
+            <feColorMatrix type="saturate" values="0" />
+        </filter>
+    </defs>
+    <rect width="100%" height="100%" filter="url(#bg-mono-noise)" />
+</svg>

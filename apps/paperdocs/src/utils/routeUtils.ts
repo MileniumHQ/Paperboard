@@ -1,12 +1,23 @@
-import { lazy } from "solid-js";
+import { lazy, type Component } from "solid-js";
 import index from "../docs/index.json";
 import type { SectionMeta, Subsection } from "../types/docs";
+import { BASE, withBase } from "./base";
 
 export const metaSections: Record<string, SectionMeta> =
     (index as any).meta?.sections || {};
 export const sectionKeys = Object.keys(metaSections);
 
-export const rawPath = window.location.pathname
+// Strip the deployment base ("/docs" or "") before routing so the section is
+// the first segment after the mount point, not the mount point itself.
+const basePath = BASE.replace(/\/+$/, "");
+const pathname = window.location.pathname;
+const relativePath =
+    basePath &&
+    (pathname === basePath || pathname.startsWith(`${basePath}/`))
+        ? pathname.slice(basePath.length)
+        : pathname;
+
+export const rawPath = relativePath
     .split("/")
     .filter(Boolean)
     .map((p) => p.toLowerCase());
@@ -42,7 +53,9 @@ if (
     allPages.length > 0 &&
     typeof window !== "undefined"
 ) {
-    window.location.replace(`/${sectionKey}/${allPages[0].pageKey}`);
+    window.location.replace(
+        withBase(`/${sectionKey}/${allPages[0].pageKey}`),
+    );
 }
 
 export const requestedPageKey = rawPath.length > 1 ? rawPath[1] : undefined;
@@ -59,7 +72,7 @@ export const nextPage =
         ? allPages[currentPageIndex + 1]
         : null;
 
-export const DocComponent =
+export const DocComponent: Component | null =
     sectionMeta && currentPage
         ? lazy(
               () =>

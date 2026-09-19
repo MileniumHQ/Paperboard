@@ -1,0 +1,67 @@
+<svg width="{{totalW}}" height="{{totalH}}" viewBox="{{viewBox}}" preserveAspectRatio="xMidYMid meet">
+    <defs>
+        <filter id="{{idDrop}}" x="-50%" y="-50%" width="200%" height="200%">
+            <feDropShadow dx="0" dy="0" stdDeviation="{{dropBlur}}" flood-color="#000000" flood-opacity="0.35" />
+        </filter>
+
+        <filter id="{{idInner}}" x="-30%" y="-30%" width="160%" height="160%">
+            <feComponentTransfer in="SourceAlpha" result="invertedAlpha">
+                <feFuncA type="linear" slope="-1" intercept="1" />
+            </feComponentTransfer>
+            <feOffset in="invertedAlpha" dx="{{innerOffset}}" dy="{{innerOffset}}" result="shiftedInverted" />
+            <feGaussianBlur in="shiftedInverted" stdDeviation="{{innerBlur}}" result="blurredEdge" />
+            <feComposite in="blurredEdge" in2="SourceAlpha" operator="in" result="innerEdgeMask" />
+            <feFlood flood-color="#5CA8FF" flood-opacity="0.4" result="shadowColor" />
+            <feComposite in="shadowColor" in2="innerEdgeMask" operator="in" result="coloredInnerShadow" />
+            <feMerge>
+                <feMergeNode in="SourceGraphic" />
+                <feMergeNode in="coloredInnerShadow" />
+            </feMerge>
+        </filter>
+
+        <filter id="{{idNoise}}" x="0%" y="0%" width="100%" height="100%">
+            <feTurbulence type="fractalNoise" baseFrequency="{{noiseFreq}}" numOctaves="3" stitchTiles="stitch" result="noiseOut" />
+            <feColorMatrix type="matrix" in="noiseOut" values="
+                0 0 0 0 0
+                0 0 0 0 0
+                0 0 0 0 0
+                0.33 0.33 0.33 0 0" result="monoAlpha" />
+            <feComponentTransfer in="monoAlpha" result="attenuatedAlpha">
+                <feFuncA type="linear" slope="0.10" />
+            </feComponentTransfer>
+            <feFlood flood-color="#000000" result="blackFlood" />
+            <feComposite in="blackFlood" in2="attenuatedAlpha" operator="in" result="coloredNoise" />
+            <feComposite in="coloredNoise" in2="SourceAlpha" operator="in" result="noiseInsideText" />
+        </filter>
+    </defs>
+
+    <g filter="url(#{{idDrop}})">
+        <text
+            id="mainText"
+            x="0"
+            y="0"
+            text-anchor="middle"
+            dominant-baseline="central"
+            font-family="'Nunito', sans-serif"
+            font-weight="800"
+            font-size="{{fontSize}}"
+            fill="#FFFFFF"
+            letter-spacing="-0.01em"
+            filter="url(#{{idInner}})"
+        >{{text}}</text>
+
+        <text
+            x="0"
+            y="0"
+            text-anchor="middle"
+            dominant-baseline="central"
+            font-family="'Nunito', sans-serif"
+            font-weight="800"
+            font-size="{{fontSize}}"
+            fill="#000000"
+            letter-spacing="-0.01em"
+            filter="url(#{{idNoise}})"
+            pointer-events="none"
+        >{{text}}</text>
+    </g>
+</svg>

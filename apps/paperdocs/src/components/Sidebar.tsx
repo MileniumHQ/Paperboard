@@ -1,12 +1,13 @@
 import { PaperMenu, PaperMenuItem, PaperMenuSection } from "@paperboard-dev/paperui";
 import { For } from "solid-js";
 import { currentPage, sectionKey, subsections } from "../utils/routeUtils";
+import { withBase } from "../utils/base";
 
 export function Sidebar() {
     return (
         <PaperMenu
             name="nav"
-            class="sticky-sidebar"
+            class="sticky-sidebar docs-sidebar"
             value={currentPage?.pageKey}
         >
             <For each={subsections}>
@@ -17,7 +18,9 @@ export function Sidebar() {
                                 <PaperMenuItem
                                     value={p.pageKey}
                                     onClick={() => {
-                                        window.location.href = `/${sectionKey}/${p.pageKey}`;
+                                        window.location.href = withBase(
+                                            `/${sectionKey}/${p.pageKey}`,
+                                        );
                                     }}
                                 >
                                     {p.name}

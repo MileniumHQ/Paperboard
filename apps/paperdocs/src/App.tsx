@@ -20,6 +20,7 @@ import {
     prevPage,
     sectionKey,
 } from "./utils/routeUtils";
+import { withBase } from "./utils/base";
 
 export function App() {
     const [tocItems, setTocItems] = createSignal<TocItem[]>([]);
@@ -35,6 +36,15 @@ export function App() {
         setTheme(next);
         if (typeof localStorage !== "undefined") {
             localStorage.setItem("paper-docs-theme", next);
+        }
+        // Update the document root alongside the provider so the canvas and
+        // scrollbars swap in the same frame, with no flash between them.
+        if (typeof document !== "undefined") {
+            document.documentElement.setAttribute(
+                "data-paperui-theme",
+                next,
+            );
+            document.documentElement.style.colorScheme = next;
         }
     };
 
@@ -161,6 +171,7 @@ export function App() {
                             direction="row"
                             fullWidth
                             justify="space-between"
+                            class="docs-layout"
                             style={{ flex: "1 0 auto" }}
                         >
                             <Sidebar />
@@ -177,7 +188,12 @@ export function App() {
                                     "box-sizing": "border-box",
                                 }}
                             >
-                                <DocComponent />
+                                <Show when={DocComponent}>
+                                    {(Doc) => {
+                                        const Component = Doc();
+                                        return <Component />;
+                                    }}
+                                </Show>
 
                                 <Show when={prevPage || nextPage}>
                                     <PaperSeparator />
@@ -195,7 +211,9 @@ export function App() {
                                                 icon="arrow_back"
                                                 description={prevPage!.name}
                                                 onClick={() => {
-                                                    window.location.href = `/${sectionKey}/${prevPage!.pageKey}`;
+                                                    window.location.href = withBase(
+                                                        `/${sectionKey}/${prevPage!.pageKey}`,
+                                                    );
                                                 }}
                                             >
                                                 Back
@@ -208,7 +226,9 @@ export function App() {
                                                 reverse
                                                 description={nextPage!.name}
                                                 onClick={() => {
-                                                    window.location.href = `/${sectionKey}/${nextPage!.pageKey}`;
+                                                    window.location.href = withBase(
+                                                        `/${sectionKey}/${nextPage!.pageKey}`,
+                                                    );
                                                 }}
                                             >
                                                 Next

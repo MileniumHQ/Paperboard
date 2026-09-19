@@ -12,7 +12,7 @@ export function TableOfContents(props: TableOfContentsProps) {
     return (
         <PaperMenu
             name="tableofcontents"
-            class="sticky-sidebar"
+            class="sticky-sidebar docs-toc"
             value={props.activeTocId}
         >
             <PaperText preset="section">Table of Contents</PaperText>

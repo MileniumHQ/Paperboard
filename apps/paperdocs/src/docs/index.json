@@ -1,83 +1,79 @@
 {
     "meta": {
         "sections": {
-            "paperui": {
-                "name": "PaperUI",
-                "icon": "palette",
-                "image": "/paperui.png",
-                "description": "Build interfaces with PaperUI components and templates."
+            "paperboard": {
+                "name": "Paperboard",
+                "icon": "dashboard",
+                "image": "/paperboard.png",
+                "description": "Learn to use wonderful tools that empower you to do more with your computer."
             },
             "paperapi": {
                 "name": "PaperAPI",
                 "icon": "api",
                 "image": "/paperapi.png",
-                "description": "Extend Paperboard with JavaScript APIs."
+                "group": "dev",
+                "description": "Create simple, unique and useful panels for the Paperboard platform."
+            },
+            "paperui": {
+                "name": "PaperUI",
+                "icon": "palette",
+                "image": "/paperui.png",
+                "group": "dev",
+                "description": "Build interactive interfaces for your panels with beautiful components and styles."
             }
         }
     },
     "paperui": {
         "subsections": {
-            "getting-started": {
-                "name": "Getting started",
-                "icon": "rocket_launch",
+            "general": {
+                "name": "General",
+                "icon": "info",
                 "pages": {
-                    "introduction": {
-                        "index": 0,
-                        "name": "Introduction",
-                        "file": "00-introduction"
+                    "overview": {
+                        "name": "Overview",
+                        "file": "overview",
+                        "index": 0
                     },
-                    "quick-start": {
-                        "index": 1,
+                    "quickstart": {
                         "name": "Quick start",
-                        "file": "01-quick-start"
+                        "file": "quickstart",
+                        "index": 1
+                    },
+                    "design-language": {
+                        "name": "Design language",
+                        "file": "design-language",
+                        "index": 2
                     }
                 }
             },
-            "foundations": {
-                "name": "Foundations",
-                "icon": "format_paint",
+            "variables": {
+                "name": "Tokens",
+                "icon": "tune",
                 "pages": {
                     "colors": {
-                        "index": 0,
                         "name": "Colors",
-                        "file": "colors"
+                        "file": "colors",
+                        "index": 0
+                    },
+                    "surfaces": {
+                        "name": "Surfaces and borders",
+                        "file": "surfaces",
+                        "index": 1
                     },
                     "typography": {
-                        "index": 1,
-                        "name": "Typography and fonts",
-                        "file": "typography"
+                        "name": "Typography",
+                        "file": "typography",
+                        "index": 2
                     },
-                    "variables": {
-                        "index": 2,
-                        "name": "Variables and spacing",
-                        "file": "variables"
+                    "spacing": {
+                        "name": "Spacing and layout",
+                        "file": "spacing",
+                        "index": 3
                     },
-                    "theming": {
-                        "index": 3,
-                        "name": "Theming",
-                        "file": "theming"
-                    }
-                }
-            },
-            "templates": {
-                "name": "Templates",
-                "icon": "dashboard_customize",
-                "sort": "alphabetical",
-                "pages": {
-                    "papercenteredinterface": {
-                        "name": "PaperCenteredInterface"
-                    },
-                    "paperflex": {
-                        "name": "PaperFlex"
-                    },
-                    "paperinterfacegroup": {
-                        "name": "PaperInterfaceGroup"
-                    },
-                    "papersettinglist": {
-                        "name": "PaperSettingList"
-                    },
-                    "paperwizard": {
-                        "name": "PaperWizard"
+                    "motion": {
+                        "name": "Motion and effects",
+                        "file": "motion",
+                        "index": 4
                     }
                 }
             },
@@ -86,92 +82,192 @@
                 "icon": "widgets",
                 "sort": "alphabetical",
                 "pages": {
-                    "paperbadge": {
-                        "name": "PaperBadge"
+                    "paper-avatar": {
+                        "name": "PaperAvatar",
+                        "file": "paper-avatar"
                     },
-                    "paperbutton": {
-                        "name": "PaperButton"
+                    "paper-badge": {
+                        "name": "PaperBadge",
+                        "file": "paper-badge"
                     },
-                    "papercheckbox": {
-                        "name": "PaperCheckbox"
+                    "paper-button": {
+                        "name": "PaperButton",
+                        "file": "paper-button"
                     },
-                    "papercode": {
-                        "name": "PaperCode"
+                    "paper-card": {
+                        "name": "PaperCard",
+                        "file": "paper-card"
                     },
-                    "paperconsole": {
-                        "name": "PaperConsole"
+                    "paper-checkbox": {
+                        "name": "PaperCheckbox",
+                        "file": "paper-checkbox"
                     },
-                    "papercontainer": {
-                        "name": "PaperContainer"
+                    "paper-code": {
+                        "name": "PaperCode",
+                        "file": "paper-code"
                     },
-                    "papercontextmenu": {
-                        "name": "PaperContextMenu"
+                    "paper-console": {
+                        "name": "PaperConsole",
+                        "file": "paper-console"
                     },
-                    "papereffect": {
-                        "name": "PaperEffect"
+                    "paper-context-menu": {
+                        "name": "PaperContextMenu",
+                        "file": "paper-context-menu"
                     },
-                    "papericon": {
-                        "name": "PaperIcon"
+                    "paper-copy-button": {
+                        "name": "PaperCopyButton",
+                        "file": "paper-copy-button"
                     },
-                    "paperinput": {
-                        "name": "PaperInput"
+                    "paper-effect": {
+                        "name": "PaperEffect",
+                        "file": "paper-effect"
                     },
-                    "paperkbd": {
-                        "name": "PaperKbd"
+                    "paper-empty-state": {
+                        "name": "PaperEmptyState",
+                        "file": "paper-empty-state"
                     },
-                    "paperlink": {
-                        "name": "PaperLink"
+                    "paper-grid": {
+                        "name": "PaperGrid",
+                        "file": "paper-grid"
                     },
-                    "paperlist": {
-                        "name": "PaperList"
+                    "paper-icon": {
+                        "name": "PaperIcon",
+                        "file": "paper-icon"
                     },
-                    "paperloader": {
-                        "name": "PaperLoader"
+                    "paper-input": {
+                        "name": "PaperInput",
+                        "file": "paper-input"
                     },
-                    "papermediacard": {
-                        "name": "PaperMediaCard"
+                    "paper-kbd": {
+                        "name": "PaperKbd",
+                        "file": "paper-kbd"
                     },
-                    "papermenu": {
-                        "name": "PaperMenu"
+                    "paper-key-value-list": {
+                        "name": "PaperKeyValueList",
+                        "file": "paper-key-value-list"
                     },
-                    "papermodal": {
-                        "name": "PaperModal"
+                    "paper-link": {
+                        "name": "PaperLink",
+                        "file": "paper-link"
                     },
-                    "paperprogress": {
-                        "name": "PaperProgress"
+                    "paper-list": {
+                        "name": "PaperList",
+                        "file": "paper-list"
                     },
-                    "paperprovider": {
-                        "name": "PaperProvider"
+                    "paper-loader": {
+                        "name": "PaperLoader",
+                        "file": "paper-loader"
                     },
-                    "paperquote": {
-                        "name": "PaperQuote"
+                    "paper-media-card": {
+                        "name": "PaperMediaCard",
+                        "file": "paper-media-card"
                     },
-                    "paperrail": {
-                        "name": "PaperRail"
+                    "paper-menu": {
+                        "name": "PaperMenu",
+                        "file": "paper-menu"
                     },
-                    "paperselector": {
-                        "name": "PaperSelector"
+                    "paper-modal": {
+                        "name": "PaperModal",
+                        "file": "paper-modal"
                     },
-                    "paperselectmenu": {
-                        "name": "PaperSelectMenu"
+                    "paper-page-header": {
+                        "name": "PaperPageHeader",
+                        "file": "paper-page-header"
                     },
-                    "paperseparator": {
-                        "name": "PaperSeparator"
+                    "paper-progress": {
+                        "name": "PaperProgress",
+                        "file": "paper-progress"
                     },
-                    "paperspacer": {
-                        "name": "PaperSpacer"
+                    "paper-prose": {
+                        "name": "PaperProse",
+                        "file": "paper-prose"
                     },
-                    "papertable": {
-                        "name": "PaperTable"
+                    "paper-provider": {
+                        "name": "PaperProvider",
+                        "file": "paper-provider"
                     },
-                    "papertext": {
-                        "name": "PaperText"
+                    "paper-quote": {
+                        "name": "PaperQuote",
+                        "file": "paper-quote"
                     },
-                    "papertextlist": {
-                        "name": "PaperTextList"
+                    "paper-rail": {
+                        "name": "PaperRail",
+                        "file": "paper-rail"
                     },
-                    "papertoggle": {
-                        "name": "PaperToggle"
+                    "paper-section-header": {
+                        "name": "PaperSectionHeader",
+                        "file": "paper-section-header"
+                    },
+                    "paper-selector": {
+                        "name": "PaperSelector",
+                        "file": "paper-selector"
+                    },
+                    "paper-select-menu": {
+                        "name": "PaperSelectMenu",
+                        "file": "paper-select-menu"
+                    },
+                    "paper-separator": {
+                        "name": "PaperSeparator",
+                        "file": "paper-separator"
+                    },
+                    "paper-spacer": {
+                        "name": "PaperSpacer",
+                        "file": "paper-spacer"
+                    },
+                    "paper-swatch": {
+                        "name": "PaperSwatch",
+                        "file": "paper-swatch"
+                    },
+                    "paper-table": {
+                        "name": "PaperTable",
+                        "file": "paper-table"
+                    },
+                    "paper-text": {
+                        "name": "PaperText",
+                        "file": "paper-text"
+                    },
+                    "paper-text-list": {
+                        "name": "PaperTextList",
+                        "file": "paper-text-list"
+                    },
+                    "paper-toggle": {
+                        "name": "PaperToggle",
+                        "file": "paper-toggle"
+                    }
+                }
+            },
+            "templates": {
+                "name": "Templates",
+                "icon": "dashboard_customize",
+                "sort": "alphabetical",
+                "pages": {
+                    "paper-centered-interface": {
+                        "name": "PaperCenteredInterface",
+                        "file": "paper-centered-interface"
+                    },
+                    "paper-flex": {
+                        "name": "PaperFlex",
+                        "file": "paper-flex"
+                    },
+                    "paper-interface-group": {
+                        "name": "PaperInterfaceGroup",
+                        "file": "paper-interface-group"
+                    },
+                    "paper-page": {
+                        "name": "PaperPage",
+                        "file": "paper-page"
+                    },
+                    "paper-panel": {
+                        "name": "PaperPanel",
+                        "file": "paper-panel"
+                    },
+                    "paper-setting-list": {
+                        "name": "PaperSettingList",
+                        "file": "paper-setting-list"
+                    },
+                    "paper-wizard": {
+                        "name": "PaperWizard",
+                        "file": "paper-wizard"
                     }
                 }
             }
@@ -179,71 +275,81 @@
     },
     "paperapi": {
         "subsections": {
-            "getting-started": {
-                "name": "Getting started",
-                "icon": "rocket_launch",
+            "general": {
+                "name": "General",
+                "icon": "info",
                 "pages": {
-                    "introduction": {
-                        "index": 0,
-                        "name": "Introduction",
-                        "file": "00-introduction"
+                    "overview": {
+                        "name": "Overview",
+                        "file": "overview",
+                        "index": 0
                     },
-                    "quick-start": {
-                        "index": 1,
-                        "name": "Quick start",
-                        "file": "01-quick-start"
+                    "creating-panels": {
+                        "name": "Creating panels",
+                        "file": "creating-panels",
+                        "index": 1
                     }
                 }
             },
-            "api": {
-                "name": "APIs",
-                "icon": "api",
+            "actions": {
+                "name": "Actions",
+                "icon": "bolt",
+                "sort": "alphabetical",
                 "pages": {
                     "actions": {
-                        "index": 0,
                         "name": "Actions API",
                         "file": "actions"
                     },
-                    "terminal": {
-                        "index": 1,
-                        "name": "Terminal API",
-                        "file": "terminal"
+                    "bridge": {
+                        "name": "Bridge API",
+                        "file": "bridge"
                     },
-                    "process": {
-                        "index": 2,
-                        "name": "Process API",
-                        "file": "process"
-                    },
-                    "package": {
-                        "index": 3,
-                        "name": "Package API",
-                        "file": "package"
-                    },
-                    "files": {
-                        "index": 4,
-                        "name": "Files API",
-                        "file": "files"
-                    },
-                    "config": {
-                        "index": 5,
-                        "name": "Config API",
-                        "file": "config"
-                    },
-                    "system": {
-                        "index": 6,
-                        "name": "System API",
-                        "file": "system"
+                    "service": {
+                        "name": "Service API",
+                        "file": "service"
                     }
                 }
             },
-            "cli": {
-                "name": "CLI",
-                "icon": "terminal",
+            "apis": {
+                "name": "APIs",
+                "icon": "code",
+                "sort": "alphabetical",
                 "pages": {
-                    "overview": {
-                        "index": 0,
-                        "name": "Overview",
-                        "file": "overview"
+                    "config": {
+                        "name": "Config API",
+                        "file": "config"
+                    },
+                    "file": {
+                        "name": "File API",
+                        "file": "file"
+                    },
+                    "package": {
+                        "name": "Package API",
+                        "file": "package"
+                    },
+                    "panels": {
+                        "name": "Panels API",
+                        "file": "panels"
+                    },
+                    "process": {
+                        "name": "Process API",
+                        "file": "process"
+                    },
+                    "secrets": {
+                        "name": "Secrets API",
+                        "file": "secrets"
+                    },
+                    "shell": {
+                        "name": "Shell API",
+                        "file": "shell"
+                    },
+                    "system": {
+                        "name": "System API",
+                        "file": "system"
+                    },
+                    "terminal": {
+                        "name": "Terminal API",
+                        "file": "terminal"
                     }
                 }
             }

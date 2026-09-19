@@ -1,4 +1,5 @@
 import { PaperFlex, PaperLink, PaperText } from "@paperboard-dev/paperui";
+import { withBase } from "../utils/base";
 
 export function NotFound() {
     return (
@@ -17,7 +18,7 @@ export function NotFound() {
             <PaperText>
                 You've wandered far and wide, and gotten nowhere.
             </PaperText>
-            <PaperLink href="/">Go somewhere</PaperLink>
+            <PaperLink href={withBase("/")}>Go somewhere</PaperLink>
         </PaperFlex>
     );
 }

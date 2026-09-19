@@ -11,5 +11,9 @@
     "noEmit": true,
     "strict": true
   },
-  "include": ["vite.config.ts"]
+  "include": [
+    "vite.config.ts",
+    "vite-plugin-docs-search.ts",
+    "vite-plugin-nest-docs-entry.ts"
+  ]
 }

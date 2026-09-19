@@ -2,9 +2,50 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>paperdocs</title>
+    <meta name="color-scheme" content="dark light" />
+    <meta name="theme-color" content="#27282b" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <title>PaperDocs</title>
+    <meta
+      name="description"
+      content="Documentation for Paperboard, PaperAPI, and PaperUI. Learn to build panels, use the panel APIs, and style interfaces with PaperUI."
+    />
+    <link rel="canonical" href="https://paperboard.dev/docs/" />
+    <link rel="icon" type="image/png" href="/paperdocs.png" />
+    <link rel="apple-touch-icon" href="/paperdocs.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="PaperDocs" />
+    <meta property="og:title" content="PaperDocs" />
+    <meta
+      property="og:description"
+      content="Documentation for Paperboard, PaperAPI, and PaperUI. Learn to build panels, use the panel APIs, and style interfaces with PaperUI."
+    />
+    <meta property="og:image" content="https://paperboard.dev/docs/paperdocs.png" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="PaperDocs" />
+    <meta
+      name="twitter:description"
+      content="Documentation for Paperboard, PaperAPI, and PaperUI. Learn to build panels, use the panel APIs, and style interfaces with PaperUI."
+    />
+    <script>
+      // Resolve the theme before first paint. Without this the document has no
+      // theme tokens until the app mounts, and the browser paints its default
+      // white canvas, which flashes on load and overscroll. `color-scheme`
+      // repaints the canvas without hardcoding a surface value.
+      (function () {
+        try {
+          var theme = localStorage.getItem("paper-docs-theme");
+          if (theme !== "light" && theme !== "dark") theme = "dark";
+          var root = document.documentElement;
+          root.setAttribute("data-paperui-theme", theme);
+          root.style.colorScheme = theme;
+        } catch (e) {
+          document.documentElement.style.colorScheme = "dark";
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

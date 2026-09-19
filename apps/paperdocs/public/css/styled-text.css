@@ -1,0 +1,15 @@
+:host {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    max-width: 95vw;
+    line-height: 1;
+}
+
+svg {
+    display: block;
+    width: auto;
+    max-width: 100%;
+    height: auto;
+    overflow: visible;
+}

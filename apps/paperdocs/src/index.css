@@ -2,6 +2,12 @@
     width: 30px;
 }
 
+html {
+    /* Fallback for the pre-CSS canvas when the inline theme script has not
+       run (no JS). Matches the default dark theme instead of white. */
+    color-scheme: dark;
+}
+
 html,
 body {
     background-color: var(--paper-surface-raised);
@@ -27,6 +33,16 @@ body[data-paperui-theme],
     background-color: var(--paper-surface-raised);
 }
 
+.paperui-root .topbar-brand {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: var(--paper-uigap-threefourths);
+    text-decoration: none;
+    color: var(--paper-text);
+    flex-shrink: 0;
+}
+
 .paperui-root .sticky-sidebar {
     position: sticky;
     top: 45px;
@@ -37,13 +53,51 @@ body[data-paperui-theme],
     flex-shrink: 0;
 }
 
-.docs-footer {
-    width: 100%;
-    background-color: var(--paper-surface-raised);
-    z-index: 10;
-    flex-shrink: 0;
-}
-
 [id] {
     scroll-margin-top: 75px;
+}
+
+@media (max-width: 720px) {
+    .paperui-root .topbar {
+        gap: var(--paper-uigap-half);
+    }
+
+    .paperui-root .topbar-links {
+        display: none !important;
+    }
+
+    .paperui-root .topbar-search {
+        width: 130px;
+    }
+}
+
+@media (max-width: 900px) {
+    /* Docs run single column: the sidebar stacks above the content and the
+       table of contents steps aside. */
+    .paperui-root .docs-layout {
+        flex-direction: column !important;
+        min-width: 0;
+    }
+
+    .paperui-root .sticky-sidebar {
+        position: static;
+        top: auto;
+        height: auto;
+        max-height: none;
+        overflow-y: visible;
+    }
+
+    .paperui-root .docs-sidebar {
+        align-self: stretch;
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+        box-sizing: border-box;
+        border-bottom: var(--paper-border-width) solid var(--paper-border);
+        padding-bottom: var(--paper-uigap-half);
+    }
+
+    .paperui-root .docs-toc {
+        display: none;
+    }
 }

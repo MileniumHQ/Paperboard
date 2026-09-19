@@ -1,0 +1,673 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Paperboard</title>
+        <link rel="stylesheet" href="css/style.css" />
+    </head>
+    <body>
+        <header class="site-topbar">
+            <div class="site-topbar__bar">
+                <a class="site-topbar__brand" href="/">
+                    <img
+                        class="site-topbar__logo"
+                        src="/paperboard.png"
+                        alt=""
+                    />
+                    <span class="site-topbar__name">Paperboard</span>
+                </a>
+                <nav class="site-topbar__nav" aria-label="Primary">
+                    <div class="site-topbar__menu" data-topbar-menu>
+                        <button
+                            class="site-topbar__trigger"
+                            type="button"
+                            aria-expanded="false"
+                        >
+                            Learn
+                            <span
+                                class="icon icon-expand site-topbar__caret"
+                                aria-hidden="true"
+                            ></span>
+                        </button>
+                        <div class="site-topbar__dropdown" role="menu">
+                            <a
+                                class="site-topbar__item"
+                                role="menuitem"
+                                href="/actions"
+                            >
+                                <img
+                                    class="site-topbar__item-icon"
+                                    src="pictures/blocks.png"
+                                    alt=""
+                                />
+                                <span class="site-topbar__item-text"
+                                    ><strong>Actions</strong
+                                    ><small
+                                        >Lorem ipsum dolor sit amet, consectetur
+                                        adipiscing elit.</small
+                                    ></span
+                                >
+                            </a>
+                            <a
+                                class="site-topbar__item"
+                                role="menuitem"
+                                href="/game-server"
+                            >
+                                <img
+                                    class="site-topbar__item-icon"
+                                    src="pictures/game-server.png"
+                                    alt=""
+                                />
+                                <span class="site-topbar__item-text"
+                                    ><strong>Game Server</strong
+                                    ><small
+                                        >Sed do eiusmod tempor incididunt ut
+                                        labore et dolore.</small
+                                    ></span
+                                >
+                            </a>
+                            <a
+                                class="site-topbar__item"
+                                role="menuitem"
+                                href="/bot-creator"
+                            >
+                                <img
+                                    class="site-topbar__item-icon"
+                                    src="pictures/discord-bot.png"
+                                    alt=""
+                                />
+                                <span class="site-topbar__item-text"
+                                    ><strong>Bot Creator</strong
+                                    ><small
+                                        >Ut enim ad minim veniam, quis nostrud
+                                        exercitation.</small
+                                    ></span
+                                >
+                            </a>
+                            <a
+                                class="site-topbar__item"
+                                role="menuitem"
+                                href="/ai"
+                            >
+                                <img
+                                    class="site-topbar__item-icon"
+                                    src="pictures/ai.png"
+                                    alt=""
+                                />
+                                <span class="site-topbar__item-text"
+                                    ><strong>Local AI</strong
+                                    ><small
+                                        >Duis aute irure dolor in reprehenderit
+                                        in voluptate.</small
+                                    ></span
+                                >
+                            </a>
+                        </div>
+                    </div>
+                    <div class="site-topbar__menu" data-topbar-menu>
+                        <button
+                            class="site-topbar__trigger"
+                            type="button"
+                            aria-expanded="false"
+                        >
+                            Docs
+                            <span
+                                class="icon icon-expand site-topbar__caret"
+                                aria-hidden="true"
+                            ></span>
+                        </button>
+                        <div class="site-topbar__dropdown" role="menu">
+                            <a
+                                class="site-topbar__item"
+                                role="menuitem"
+                                href="/docs/paperboard"
+                            >
+                                <img
+                                    class="site-topbar__item-icon"
+                                    src="/paperboard.png"
+                                    alt=""
+                                />
+                                <span class="site-topbar__item-text"
+                                    ><strong>Paperboard</strong
+                                    ><small
+                                        >Learn to use wonderful tools that
+                                        empower you to do more with your
+                                        computer.</small
+                                    ></span
+                                >
+                            </a>
+                            <a
+                                class="site-topbar__item"
+                                role="menuitem"
+                                href="/docs/paperapi"
+                            >
+                                <img
+                                    class="site-topbar__item-icon"
+                                    src="/paperapi.png"
+                                    alt=""
+                                />
+                                <span class="site-topbar__item-text"
+                                    ><strong>PaperAPI</strong
+                                    ><small
+                                        >Create simple, unique and useful panels
+                                        for the Paperboard platform.</small
+                                    ></span
+                                >
+                            </a>
+                            <a
+                                class="site-topbar__item"
+                                role="menuitem"
+                                href="/docs/paperui"
+                            >
+                                <img
+                                    class="site-topbar__item-icon"
+                                    src="/paperui.png"
+                                    alt=""
+                                />
+                                <span class="site-topbar__item-text"
+                                    ><strong>PaperUI</strong
+                                    ><small
+                                        >Build interactive interfaces with
+                                        beautiful components and styles.</small
+                                    ></span
+                                >
+                            </a>
+                        </div>
+                    </div>
+                    <a class="site-topbar__link" href="/blog">Blog</a>
+                </nav>
+                <div class="site-topbar__actions">
+                    <PaperButton
+                        class="site-topbar__download"
+                        variant="brand"
+                        href="/downloads"
+                    >
+                        <span
+                            class="icon icon-download"
+                            aria-hidden="true"
+                        ></span>
+                        <span>Download</span>
+                    </PaperButton>
+                </div>
+            </div>
+        </header>
+
+        <BgOverlay></BgOverlay>
+
+        <div class="stage-fixed" aria-hidden="true">
+            <canvas id="aio-stage"></canvas>
+            <div class="stage-dash" aria-hidden="true"></div>
+        </div>
+
+        <main class="page-layout">
+            <section class="hero-section">
+                <StyledText size="90">Do more with your computer.</StyledText>
+                <PaperButton variant="brand" size="large">
+                    <span class="icon icon-download" aria-hidden="true"></span>
+                    <span>Download</span>
+                </PaperButton>
+            </section>
+
+            <section class="showcase-section">
+                <div class="preview-card">
+                    <div class="card-texture-layer">
+                        <svg width="100%" height="100%">
+                            <defs>
+                                <filter
+                                    id="card-noise"
+                                    x="0%"
+                                    y="0%"
+                                    width="100%"
+                                    height="100%"
+                                >
+                                    <feTurbulence
+                                        type="fractalNoise"
+                                        baseFrequency="1.3"
+                                        numOctaves="3"
+                                        stitchTiles="stitch"
+                                    />
+                                    <feColorMatrix type="saturate" values="0" />
+                                </filter>
+                            </defs>
+                            <rect
+                                width="100%"
+                                height="100%"
+                                filter="url(#card-noise)"
+                            />
+                        </svg>
+                    </div>
+
+                    <div class="card-image-frame">
+                        <div class="card-slides-track">
+                            <img
+                                src="screens/gameserver.png"
+                                alt="Game Server panel"
+                                class="card-slide-image"
+                            />
+                            <img
+                                src="screens/botcreator.png"
+                                alt="Bot Creator panel"
+                                class="card-slide-image"
+                            />
+                            <img
+                                src="screens/actions.png"
+                                alt="Actions panel"
+                                class="card-slide-image"
+                            />
+                            <img
+                                src="screens/panel-library.png"
+                                alt="Panel Library"
+                                class="card-slide-image"
+                            />
+                            <img
+                                src="screens/terminal.png"
+                                alt="Terminal panel"
+                                class="card-slide-image"
+                            />
+                        </div>
+                    </div>
+
+                    <div class="card-caption">
+                        <span class="caption-title">Lorem ipsum</span>
+                        <span class="caption-separator">—</span>
+                        <span class="caption-desc">dolor sit amet</span>
+                    </div>
+                </div>
+
+                <div class="dots-bar">
+                    <div class="card-texture-layer">
+                        <svg width="100%" height="100%">
+                            <rect
+                                width="100%"
+                                height="100%"
+                                filter="url(#card-noise)"
+                            />
+                        </svg>
+                    </div>
+                    <button class="dot" aria-label="Slide 1">
+                        <div class="dot-progress"></div>
+                    </button>
+                    <button class="dot" aria-label="Slide 2">
+                        <div class="dot-progress"></div>
+                    </button>
+                    <button class="dot" aria-label="Slide 3">
+                        <div class="dot-progress"></div>
+                    </button>
+                    <button class="dot" aria-label="Slide 4">
+                        <div class="dot-progress"></div>
+                    </button>
+                    <button class="dot" aria-label="Slide 5">
+                        <div class="dot-progress"></div>
+                    </button>
+                </div>
+
+                <div class="showcase-content">
+                    <StyledText size="54"
+                        >Your local-first tool for everything.</StyledText
+                    >
+                    <p>
+                        Paperboard has various apps (called panels) that
+                        simplify a variety of local tasks into simple, clean
+                        interfaces that run entirely on your computer. You don't
+                        need any terminal knowledge or programming experience;
+                        Paperboard works instantaneously and can be set up
+                        faster than you can read this paragraph.
+                    </p>
+                </div>
+            </section>
+
+            <section class="stage-section">
+                <div class="stage-copy">
+                    <StyledText size="54">Paperboard runs anywhere.</StyledText>
+                    <p>
+                        Paperboard is 100% compatible with macOS, Windows, and
+                        Linux on both x86 and ARM. You can run Paperboard on a
+                        VPS, an old laptop, or a Raspberry Pi and control it as
+                        if it were running locally on your primary desktop.
+                    </p>
+                </div>
+            </section>
+
+            <section class="chart-section">
+                <div class="chart-shell">
+                    <div class="chart-intro">
+                        <StyledText size="54"
+                            >Easier, Better, Faster, Stronger</StyledText
+                        >
+                        <p>
+                            Paperboard is designed from scratch to be intuitive,
+                            fast, and incredibly easy to use. And it's not just
+                            words, we can prove it.
+                        </p>
+                    </div>
+                    <div class="chart-tabs" role="tablist" aria-label="Charts">
+                        <button
+                            class="chart-tab"
+                            id="chart-tab-lorem"
+                            type="button"
+                            role="tab"
+                            aria-selected="true"
+                            aria-controls="chart-panel"
+                            data-chart="lorem"
+                            tabindex="0"
+                        >
+                            Lorem
+                        </button>
+                        <button
+                            class="chart-tab"
+                            id="chart-tab-ipsum"
+                            type="button"
+                            role="tab"
+                            aria-selected="false"
+                            aria-controls="chart-panel"
+                            data-chart="ipsum"
+                            tabindex="-1"
+                        >
+                            Ipsum
+                        </button>
+                        <button
+                            class="chart-tab"
+                            id="chart-tab-dolar"
+                            type="button"
+                            role="tab"
+                            aria-selected="false"
+                            aria-controls="chart-panel"
+                            data-chart="dolar"
+                            tabindex="-1"
+                        >
+                            Dolar
+                        </button>
+                    </div>
+
+                    <div
+                        class="chart-card"
+                        id="chart-panel"
+                        role="tabpanel"
+                        aria-labelledby="chart-tab-lorem"
+                    >
+                        <div class="card-texture-layer">
+                            <svg width="100%" height="100%">
+                                <rect
+                                    width="100%"
+                                    height="100%"
+                                    filter="url(#card-noise)"
+                                />
+                            </svg>
+                        </div>
+                        <div class="chart-head">
+                            <h2 class="chart-title">Lorem ipsum dolor</h2>
+                            <p class="chart-subtitle">lower is better</p>
+                        </div>
+                        <div class="chart-rows"></div>
+                    </div>
+
+                    <div class="chart-details is-open">
+                        <button
+                            class="chart-details-toggle"
+                            type="button"
+                            aria-expanded="true"
+                            aria-controls="chart-details-body"
+                        >
+                            <span
+                                class="icon icon-expand chart-details-chevron"
+                                aria-hidden="true"
+                            ></span>
+                            <span class="chart-details-label"
+                                >Hide Details</span
+                            >
+                        </button>
+                        <div class="chart-details-body" id="chart-details-body">
+                            <div>
+                                <p>
+                                    Lorem ipsum dolor sit amet, consectetur
+                                    adipiscing elit. Sed do eiusmod tempor
+                                    incididunt ut labore et dolore magna aliqua.
+                                    Ut enim ad minim veniam, quis nostrud
+                                    exercitation ullamco laboris nisi ut aliquip
+                                    ex ea commodo consequat.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="cta-section">
+                <div class="cta-shell">
+                    <div class="cta-copy">
+                        <StyledText size="54">Devs: We're Open!</StyledText>
+                        <p>
+                            Paperboard's APIs are completely documented and MIT
+                            licensed, so developers can create their own panels
+                            with ease. Just run a command and get started with a
+                            panel template in seconds.
+                        </p>
+                        <div class="cta-actions">
+                            <PaperButton variant="brand" href="/docs/">
+                                <span>View Docs</span>
+                                <span
+                                    class="icon icon-north-east"
+                                    aria-hidden="true"
+                                ></span>
+                            </PaperButton>
+                            <PaperButton
+                                variant="black"
+                                href="https://github.com/MileniumHQ/Paperboard"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                            >
+                                <span
+                                    class="icon icon-github"
+                                    aria-hidden="true"
+                                ></span>
+                                <span>GitHub</span>
+                            </PaperButton>
+                        </div>
+                    </div>
+                    <div class="cta-card">
+                        <div class="card-texture-layer">
+                            <svg width="100%" height="100%">
+                                <rect
+                                    width="100%"
+                                    height="100%"
+                                    filter="url(#card-noise)"
+                                />
+                            </svg>
+                        </div>
+                        <img class="cta-image" src="placeholder.png" alt="" />
+                    </div>
+                </div>
+            </section>
+
+            <section class="outro-section" data-play-field>
+                <div class="outro-copy">
+                    <StyledText size="72">All this and more.</StyledText>
+                    <PaperButton variant="brand" size="large">
+                        <span
+                            class="icon icon-download"
+                            aria-hidden="true"
+                        ></span>
+                        <span>Download</span>
+                    </PaperButton>
+                </div>
+                <img
+                    class="play-icon"
+                    src="pictures/ai.png"
+                    alt=""
+                    draggable="false"
+                />
+                <img
+                    class="play-icon"
+                    src="pictures/blocks.png"
+                    alt=""
+                    draggable="false"
+                />
+                <img
+                    class="play-icon"
+                    src="pictures/crane.png"
+                    alt=""
+                    draggable="false"
+                />
+                <img
+                    class="play-icon"
+                    src="pictures/discord-bot.png"
+                    alt=""
+                    draggable="false"
+                />
+                <img
+                    class="play-icon"
+                    src="pictures/game-server.png"
+                    alt=""
+                    draggable="false"
+                />
+                <img
+                    class="play-icon"
+                    src="pictures/panel-library.png"
+                    alt=""
+                    draggable="false"
+                />
+                <img
+                    class="play-icon"
+                    src="pictures/paperapi.png"
+                    alt=""
+                    draggable="false"
+                />
+            </section>
+        </main>
+
+        <footer class="site-footer">
+            <div class="site-footer__inner">
+                <nav class="site-footer__column" aria-label="Learn">
+                    <StyledText size="18">Learn</StyledText>
+                    <a class="site-footer__link" href="/">About Paperboard</a>
+                    <a class="site-footer__link" href="/actions">Actions</a>
+                    <a class="site-footer__link" href="/game-server"
+                        >Game Server</a
+                    >
+                    <a class="site-footer__link" href="/bot-creator"
+                        >Bot Creator</a
+                    >
+                    <a class="site-footer__link" href="/ai">Local AI</a>
+                </nav>
+                <nav class="site-footer__column" aria-label="Docs">
+                    <StyledText size="18">Docs</StyledText>
+                    <a class="site-footer__link" href="/docs/paperboard"
+                        >Paperboard</a
+                    >
+                    <a class="site-footer__link" href="/docs/paperapi"
+                        >PaperAPI</a
+                    >
+                    <a class="site-footer__link" href="/docs/paperui"
+                        >PaperUI</a
+                    >
+                </nav>
+                <nav class="site-footer__column" aria-label="Site">
+                    <StyledText size="18">Site</StyledText>
+                    <a class="site-footer__link" href="/blog">Blog</a>
+                    <a class="site-footer__link" href="/brand">Brand</a>
+                    <a class="site-footer__link" href="/contact">Contact</a>
+                    <a class="site-footer__link" href="/downloads">Downloads</a>
+                    <a class="site-footer__link" href="/terms">Terms of Use</a>
+                    <a class="site-footer__link" href="/privacy"
+                        >Privacy Policy</a
+                    >
+                </nav>
+            </div>
+            <div class="site-footer__bottom">
+                <span class="site-footer__copyright" data-year></span>
+                <div class="site-footer__right">
+                    <a
+                        class="site-footer__social"
+                        href="https://x.com/PaperboardHQ"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label="X"
+                    >
+                        <svg
+                            viewBox="1.254 2.25 21.573 19.5"
+                            fill="currentColor"
+                            aria-hidden="true"
+                        >
+                            <path
+                                d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24h-6.657l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231 5.451-6.231Zm-1.161 17.52h1.833L7.084 4.126H5.117L17.083 19.77Z"
+                            />
+                        </svg>
+                    </a>
+                    <a
+                        class="site-footer__social"
+                        href="https://github.com/MileniumHQ/Paperboard"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label="GitHub"
+                    >
+                        <svg
+                            viewBox="0.5 0.5 23 22.443"
+                            fill="currentColor"
+                            aria-hidden="true"
+                        >
+                            <path
+                                d="M12 .5C5.73.5.5 5.73.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.56v-2.17c-3.2.7-3.88-1.37-3.88-1.37-.53-1.34-1.29-1.7-1.29-1.7-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11.1 11.1 0 0 1 5.8 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.42-2.69 5.39-5.25 5.68.41.36.78 1.07.78 2.16v3.2c0 .31.21.68.8.56A11.51 11.51 0 0 0 23.5 12C23.5 5.73 18.27.5 12 .5Z"
+                            />
+                        </svg>
+                    </a>
+                    <a
+                        class="site-footer__social"
+                        href="https://discord.gg/DdnpP3pPfT"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label="Discord"
+                    >
+                        <svg
+                            viewBox="0 2.853 24 18.295"
+                            fill="currentColor"
+                            aria-hidden="true"
+                        >
+                            <path
+                                d="M20.317 4.369a19.79 19.79 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.211.375-.444.865-.608 1.249a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.036A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.058a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.1 13.1 0 0 1-1.872-.892.077.077 0 0 1-.008-.128c.126-.094.252-.192.372-.291a.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.061 0a.074.074 0 0 1 .078.009c.12.099.246.198.373.292a.077.077 0 0 1-.006.127 12.3 12.3 0 0 1-1.873.891.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.029 19.84 19.84 0 0 0 6.002-3.03.077.077 0 0 0 .032-.056c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.028ZM8.02 15.331c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.418 2.157-2.418 1.211 0 2.176 1.094 2.157 2.418 0 1.334-.955 2.419-2.157 2.419Zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.418 2.157-2.418 1.211 0 2.176 1.094 2.157 2.418 0 1.334-.946 2.419-2.157 2.419Z"
+                            />
+                        </svg>
+                    </a>
+                    <span
+                        class="site-footer__separator"
+                        aria-hidden="true"
+                    ></span>
+                    <a
+                        class="site-footer__milenium-link"
+                        href="https://mileniumhq.com"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label="Milenium"
+                    >
+                        <span
+                            class="site-footer__milenium"
+                            aria-hidden="true"
+                        ></span>
+                    </a>
+                </div>
+            </div>
+        </footer>
+
+        <script src="js/bg-overlay.js"></script>
+        <script src="js/styled-text.js"></script>
+        <script src="js/paper-button.js"></script>
+        <script src="js/topbar.js"></script>
+        <script src="js/card-scroll.js"></script>
+        <script src="js/dots-bar.js"></script>
+        <script src="js/all-in-one.js"></script>
+        <script src="js/flight.js"></script>
+        <script src="js/bar-chart.js"></script>
+        <script src="js/cta.js"></script>
+        <script src="js/icon-play.js"></script>
+        <script src="js/footer.js"></script>
+        <script type="importmap">
+            {
+                "imports": {
+                    "three": "./js/vendor/three.module.js",
+                    "three/addons/": "./js/vendor/addons/"
+                }
+            }
+        </script>
+        <script type="module" src="js/aio-stage.js"></script>
+    </body>
+</html>

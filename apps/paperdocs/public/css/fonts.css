@@ -1,0 +1,39 @@
+@font-face {
+    font-family: 'Nunito';
+    font-style: normal;
+    font-weight: 200 1000;
+    font-display: swap;
+    src: url('../fonts/Nunito.woff2') format('woff2');
+}
+
+@font-face {
+    font-family: 'Nunito';
+    font-style: italic;
+    font-weight: 200 1000;
+    font-display: swap;
+    src: url('../fonts/NunitoItalic.woff2') format('woff2');
+}
+
+@font-face {
+    font-family: 'Nunito Sans';
+    font-style: normal;
+    font-weight: 200 1000;
+    font-display: swap;
+    src: url('../fonts/NunitoSans.woff2') format('woff2');
+}
+
+@font-face {
+    font-family: 'Nunito Sans';
+    font-style: italic;
+    font-weight: 200 1000;
+    font-display: swap;
+    src: url('../fonts/NunitoSansItalic.woff2') format('woff2');
+}
+
+@font-face {
+    font-family: 'SUSE Mono';
+    font-style: normal;
+    font-weight: 400 700;
+    font-display: swap;
+    src: url('../fonts/SuseMono.woff2') format('woff2');
+}
