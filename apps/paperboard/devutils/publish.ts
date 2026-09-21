@@ -1,122 +1,343 @@
 #!/usr/bin/env bun
 /**
- * publish.ts: build and (optionally) publish Paperboard, the Paperboard Server, or any panel to Origami
+ * publish.ts: interactive build & publish console for Paperboard.
  *
- * Builds by default. Nothing leaves the machine unless --publish is passed.
+ *   bun devutils/publish.ts        # interactive menu (needs a TTY)
+ *   bun devutils/publish.ts usb    # headless USB test bundle (bun run usb)
  *
- * Usage:
- *   ./publish.ts pb                            # Build Paperboard desktop app
- *   ./publish.ts crane                         # Build Paperboard Server daemon binary
- *   ./publish.ts dev.paperboard.terminal       # Build a panel
- *   ./publish.ts gameserver                    # Also matches ../dev.paperboard.gameserver
- *   ./publish.ts usb                           # Build everything into ../usb/ for sneakernet testing
- *   ./publish.ts pb --all --publish            # Build + upload Paperboard for every target
+ * Nothing leaves the machine except through the Publish flows, and each of
+ * those confirms twice before any upload. Pure release-math (tags, asset
+ * names, URLs, latest.yml, KV merges) lives in publishLib.ts, tested in
+ * publishLib.test.ts — this file is the interactive shell around it.
+ *
+ * Auth is per-run and never stored:
+ *   Cloudflare (KV + R2) … wrangler login session (wrangler whoami/login)
+ *   GitHub (releases) …… gh auth login session (gh auth status/login)
+ *   Origami panels ……… prompt once per run, never written to disk
+ * There are no key files. .dev.vars / R2_* env keys are gone on purpose.
  */
 
-import { $, S3Client } from "bun";
-import { readFileSync, existsSync, readdirSync, writeFileSync, unlinkSync, mkdirSync, rmSync, cpSync, statSync } from "fs";
-import { join, basename, resolve } from "path";
+import * as p from "@clack/prompts";
+import { Presets, SingleBar } from "cli-progress";
+import { $ } from "bun";
+import AdmZip from "adm-zip";
+import {
+    readFileSync,
+    existsSync,
+    readdirSync,
+    writeFileSync,
+    unlinkSync,
+    mkdirSync,
+    rmSync,
+    cpSync,
+    statSync,
+    chmodSync,
+} from "fs";
+import { join, basename } from "path";
 import { tmpdir } from "os";
 import * as tar from "tar";
 import { resolvePublishTarget } from "./publishManifest";
-
-const targetArg = process.argv[2];
-if (!targetArg || targetArg === "--help" || targetArg === "-h") {
-    console.error(`
-Usage:
-  ./publish.ts pb                         Build Paperboard app binary
-  ./publish.ts crane                      Build Paperboard Server daemon binary
-  ./publish.ts <panel-id | folder-name>   Build a panel
-  ./publish.ts usb                        Build everything into ../usb/ for testing
-
-  --publish     Upload the result (R2 / Origami). Without it, artifacts stay local.
-  --all         All targets, including linux-arm64.
-`);
-    process.exit(1);
-}
+import {
+    ALL_TARGETS,
+    BUN_TARGET_MAP,
+    DL_HOST,
+    GH_REPO,
+    KV_PACKAGES_BINDING,
+    PAPERDL_R2_BUCKET,
+    assetFileName,
+    buildLatestYml,
+    dlFileUrl,
+    isValidVersionSegment,
+    kvKeyFor,
+    mergeVersionRecord,
+    osOf,
+    releaseAssetUrl,
+    tagFor,
+    ymlKeyFor,
+    type DlApp,
+    type DlAppRecord,
+    type Os,
+    type Target,
+    type VersionFileEntry,
+    type YmlEntry,
+} from "./publishLib";
 
 const HERE = join(import.meta.dir, "..");
+const ORIGAMI_DIR = join(HERE, "..", "origami");
 const ORIGAMI_URL = process.env.ORIGAMI_URL || "https://origami.ariapis.com";
 
-// Publishing is opt-in: plain builds never touch the network.
-const doPublish = process.argv.includes("--publish");
-
-// ─── Auth ─────────────────────────────────────────────────────────────────────
-
-// Credentials come from the environment ONLY. Reading them from
-// Origami/.dev.vars was the reason live R2 keys sat on disk in a repo
-// about to become a monorepo — secrets never live in files a VCS might
-// swallow (AGENTS.md trust model). Set ORIGAMI_AUTH_KEY and the R2_* vars
-// in your shell or a secret store.
-const authKey = process.env.ORIGAMI_AUTH_KEY ?? "";
-if (doPublish && !authKey) {
-    console.error("❌ No auth key. Set ORIGAMI_AUTH_KEY in your environment.");
-    process.exit(1);
-}
-if (!doPublish) {
-    console.log("   (build-only mode — pass --publish to upload)\n");
-}
-
-const appLower = targetArg.toLowerCase();
-
-// ─── R2 (S3 API, multipart-capable) ───────────────────────────────────────────
-
-const r2AccountId =
-    process.env.R2_ACCOUNT_ID ?? process.env.CLOUDFLARE_ACCOUNT_ID;
-const r2AccessKeyId = process.env.R2_ACCESS_KEY_ID;
-const r2SecretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
-if (doPublish && (!r2AccountId || !r2AccessKeyId || !r2SecretAccessKey)) {
-    console.error(
-        "❌ Missing R2 S3 credentials. Set R2_ACCOUNT_ID, R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY in your environment.",
-    );
-    console.error("   Create an API token in Cloudflare → R2 → Manage API Tokens.");
-    process.exit(1);
-}
-
-// Lazily created: build-only runs never construct it (no creds needed).
-let r2: S3Client | null = null;
-function getR2(): S3Client {
-    if (!r2) {
-        r2 = new S3Client({
-            accessKeyId: r2AccessKeyId!,
-            secretAccessKey: r2SecretAccessKey!,
-            bucket: "paperboard-paperdl",
-            endpoint: `https://${r2AccountId}.r2.cloudflarestorage.com`,
-            partSize: 64 * 1024 * 1024,
-        });
+const version = (
+    JSON.parse(readFileSync(join(HERE, "package.json"), "utf8")) as {
+        version: string;
     }
-    return r2;
+).version;
+
+// ─── Small helpers ──────────────────────────────────────────────────────────
+
+function cancelled(): never {
+    p.cancel("Cancelled — nothing was uploaded.");
+    process.exit(0);
 }
 
-// ─── Shared build targets ───────────────────────────────────────────────────
+function checkCancel<T>(v: T | symbol): T {
+    if (p.isCancel(v)) cancelled();
+    return v as T;
+}
 
-type Target =
-    | "linux-x64"
-    | "linux-arm64"
-    | "macos-x64"
-    | "macos-arm64"
-    | "windows-x64";
+function fail(msg: string): never {
+    p.cancel(msg);
+    process.exit(1);
+}
 
-// Every shipped target, including linux-arm64 (untested but non-negotiable).
-const ALL_TARGETS: Target[] = [
-    "linux-x64",
-    "linux-arm64",
-    "macos-x64",
-    "macos-arm64",
-    "windows-x64",
-];
+const hex = (b: ArrayBuffer) =>
+    Array.from(new Uint8Array(b))
+        .map((x) => x.toString(16).padStart(2, "0"))
+        .join("");
 
-const BUN_TARGET_MAP: Record<Target, string> = {
-    "linux-x64": "bun-linux-x64",
-    "linux-arm64": "bun-linux-arm64",
-    "macos-x64": "bun-darwin-x64",
-    "macos-arm64": "bun-darwin-arm64",
-    "windows-x64": "bun-windows-x64",
+const mb = (bytes: number) => (bytes / 1024 / 1024).toFixed(1);
+
+// Run a command. Loud (inherited stdio) for long builds so their own
+// progress shows; quiet (captured) for plumbing where only the exit code
+// and output matter. argv arrays only — never a shell string.
+async function sh(
+    cmd: string[],
+    opts: { cwd?: string; quiet?: boolean } = {},
+): Promise<string> {
+    const quiet = opts.quiet ?? false;
+    const proc = Bun.spawn(cmd, {
+        cwd: opts.cwd ?? HERE,
+        stdout: quiet ? "pipe" : "inherit",
+        stderr: quiet ? "pipe" : "inherit",
+    });
+    const out = quiet && proc.stdout ? await new Response(proc.stdout).text() : "";
+    const errText =
+        quiet && proc.stderr ? await new Response(proc.stderr).text() : "";
+    const code = await proc.exited;
+    if (code !== 0) {
+        throw new Error(
+            `\`${cmd.join(" ")}\` exited ${code}${errText.trim() ? `\n${errText.trim()}` : ""}`,
+        );
+    }
+    return out.trim();
+}
+
+async function cmdOk(cmd: string[], cwd?: string): Promise<boolean> {
+    try {
+        const code = await Bun.spawn(cmd, {
+            cwd: cwd ?? HERE,
+            stdout: "ignore",
+            stderr: "ignore",
+        }).exited;
+        return code === 0;
+    } catch (err) {
+        // Spawn itself failed (binary missing, not a non-zero exit):
+        // false is the honest answer, and the trace stays in the log.
+        console.debug(`probe ${cmd[0]} unavailable:`, String(err));
+        return false;
+    }
+}
+
+async function hashFile(
+    path: string,
+): Promise<{ sha256: string; sha512: string; size: number }> {
+    const bytes = await Bun.file(path).arrayBuffer();
+    const [sha256, sha512] = await Promise.all([
+        crypto.subtle.digest("SHA-256", bytes).then(hex),
+        crypto.subtle.digest("SHA-512", bytes).then(hex),
+    ]);
+    return { sha256, sha512, size: bytes.byteLength };
+}
+
+function printTable(rows: string[][]): void {
+    const widths = rows[0].map((_, i) => Math.max(...rows.map((r) => r[i].length)));
+    for (const r of rows) {
+        console.log(
+            `  ${r.map((c, i) => c.padEnd(widths[i])).join("   ")}`,
+        );
+    }
+}
+
+function bar(total: number): SingleBar {
+    const b = new SingleBar(
+        { format: "  {bar} {percentage}% | {value}/{total} | {task}" },
+        Presets.shades_classic,
+    );
+    b.start(total, 0, { task: "" });
+    return b;
+}
+
+// ─── Auth (per-run sessions, nothing stored) ────────────────────────────────
+
+let wranglerBin: string[] | null = null;
+
+async function wrBin(): Promise<string[]> {
+    if (!wranglerBin) {
+        if (await cmdOk(["wrangler", "--version"])) {
+            wranglerBin = ["wrangler"];
+        } else {
+            p.log.warn(
+                "wrangler is not on PATH — running it via `bun x wrangler` (downloads on first use).",
+            );
+            wranglerBin = [process.execPath, "x", "wrangler"];
+        }
+    }
+    return wranglerBin;
+}
+
+async function wr(args: string[]): Promise<string> {
+    return sh([...(await wrBin()), ...args], { cwd: ORIGAMI_DIR, quiet: true });
+}
+
+async function ensureCloudflareAuth(): Promise<void> {
+    const bin = await wrBin();
+    if (await cmdOk([...bin, "whoami"], ORIGAMI_DIR)) {
+        p.log.success("Cloudflare: already logged in.");
+        return;
+    }
+    p.log.warn("Cloudflare: not logged in — opening `wrangler login`…");
+    await sh([...bin, "login"], { cwd: ORIGAMI_DIR, quiet: false });
+    if (!(await cmdOk([...bin, "whoami"], ORIGAMI_DIR))) {
+        fail("Cloudflare login did not complete. Aborting before anything uploads.");
+    }
+    p.log.success("Cloudflare: logged in.");
+}
+
+async function ensureGithubAuth(): Promise<void> {
+    if (!(await cmdOk(["gh", "--version"]))) {
+        fail("GitHub CLI (gh) not found. Install it from https://cli.github.com, then re-run.");
+    }
+    if (await cmdOk(["gh", "auth", "status"])) {
+        p.log.success("GitHub: already authenticated.");
+        return;
+    }
+    p.log.warn("GitHub: not authenticated — opening `gh auth login`…");
+    await sh(["gh", "auth", "login"], { quiet: false });
+    if (!(await cmdOk(["gh", "auth", "status"]))) {
+        fail("GitHub login did not complete. Aborting before anything uploads.");
+    }
+    p.log.success("GitHub: authenticated.");
+}
+
+// ─── Cloudflare state (KV version DB + R2 metadata) ─────────────────────────
+
+async function kvReadRecord(app: DlApp): Promise<DlAppRecord | null> {
+    // List-then-get: a missing key is a legitimate "no record yet", but an
+    // unreadable record must never be silently treated as empty and
+    // overwritten (that would drop every previous version).
+    const key = kvKeyFor(app);
+    let listed: { name: string }[];
+    try {
+        listed = JSON.parse(
+            await wr(["kv", "key", "list", "--binding", KV_PACKAGES_BINDING, "--prefix", key]),
+        );
+    } catch (err) {
+        throw new Error(
+            `Could not list KV keys: ${err instanceof Error ? err.message : String(err)}`,
+        );
+    }
+    if (!listed.some((k) => k.name === key)) return null;
+    const raw = await wr(["kv", "key", "get", "--binding", KV_PACKAGES_BINDING, key]);
+    let rec: unknown;
+    try {
+        rec = JSON.parse(raw);
+    } catch {
+        fail(
+            `KV record ${key} exists but is not valid JSON. Refusing to overwrite it — inspect it with \`wrangler kv key get --binding ${KV_PACKAGES_BINDING} "${key}"\` first.`,
+        );
+    }
+    if (
+        typeof rec !== "object" ||
+        rec === null ||
+        typeof (rec as DlAppRecord).latest !== "string" ||
+        typeof (rec as DlAppRecord).versions !== "object"
+    ) {
+        fail(`KV record ${key} has an unexpected shape. Refusing to overwrite it.`);
+    }
+    return rec as DlAppRecord;
+}
+
+async function kvWriteRecord(app: DlApp, rec: DlAppRecord): Promise<void> {
+    await wr([
+        "kv",
+        "key",
+        "put",
+        "--binding",
+        KV_PACKAGES_BINDING,
+        kvKeyFor(app),
+        JSON.stringify(rec),
+    ]);
+}
+
+async function r2Put(key: string, filePath: string, contentType: string): Promise<void> {
+    await wr([
+        "r2",
+        "object",
+        "put",
+        `${PAPERDL_R2_BUCKET}/${key}`,
+        "--file",
+        filePath,
+        "--content-type",
+        contentType,
+    ]);
+}
+
+// ─── GitHub releases ────────────────────────────────────────────────────────
+
+async function ghReleaseEnsure(tag: string, title: string): Promise<void> {
+    if (await cmdOk(["gh", "release", "view", tag, "--repo", GH_REPO])) {
+        p.log.info(`Release ${tag} already exists — uploading assets into it.`);
+        return;
+    }
+    await sh([
+        "gh",
+        "release",
+        "create",
+        tag,
+        "--repo",
+        GH_REPO,
+        "--title",
+        title,
+        "--notes",
+        `${title} (${new Date().toISOString().slice(0, 10)})`,
+    ]);
+}
+
+// ─── Builds ─────────────────────────────────────────────────────────────────
+
+const PB_BUILD_SCRIPT: Record<Target, string> = {
+    "linux-x64": "build:linux",
+    "linux-arm64": "build:linux-arm64",
+    "macos-x64": "build:mac-x64",
+    "macos-arm64": "build:mac-arm64",
+    "windows-x64": "build:win",
 };
 
-type Os = "macos" | "windows" | "linux";
-const osOf = (t: Target): Os =>
-    t.startsWith("macos") ? "macos" : t.startsWith("windows") ? "windows" : "linux";
+const distDir = join(HERE, "dist");
+
+function findPaperboardArtifact(target: Target): string {
+    const os = osOf(target);
+    const exts =
+        os === "macos" ? [".zip", ".dmg"] : os === "windows" ? ["-setup.exe"] : [".AppImage"];
+    let files = readdirSync(distDir).filter((f) => exts.some((e) => f.endsWith(e)));
+    if (!files.length) throw new Error(`No artifact found in ${distDir}`);
+    if (os === "macos" || os === "linux") {
+        const isArm = target.endsWith("arm64");
+        files = files.filter((f) =>
+            isArm ? f.includes("arm64") : !f.includes("arm64"),
+        );
+        if (!files.length)
+            throw new Error(
+                `No ${target} artifact found in ${distDir}. Got: ${readdirSync(distDir).join(", ")}`,
+            );
+    }
+    // Newest first so stale artifacts from earlier builds never win
+    files.sort(
+        (a, b) =>
+            Bun.file(join(distDir, b)).lastModified -
+            Bun.file(join(distDir, a)).lastModified,
+    );
+    return join(distDir, files[0]);
+}
 
 // Windows metadata for standalone crane binaries. Bun only accepts these
 // flags when compiling ON Windows (cross-compiles from other hosts reject
@@ -130,361 +351,516 @@ function craneCompileFlags(target: Target): string[] {
     return flags;
 }
 
-const hex = (b: ArrayBuffer) =>
-    Array.from(new Uint8Array(b)).map((x) => x.toString(16).padStart(2, "0")).join("");
-
-const version = (JSON.parse(readFileSync(join(HERE, "package.json"), "utf8")) as { version: string }).version;
-
-// ─── BOARD / PANEL PUBLISHING ─────────────────────────────────────────────────
-
-// USB test bundle: never publishes; assembles installers + crane binaries +
-// panels into ../usb/. Dispatched here so all shared declarations above exist.
-if (appLower === "usb") {
-    await buildUsbFolder();
-    process.exit(0);
-}
-
-if (appLower !== "pb" && appLower !== "crane" && appLower !== "paperboard") {
-    function findBoardDir(name: string): string {
-        const candidates = [
-            join(HERE, "..", "..", "panels", name),
-            join(HERE, "..", "..", "panels", `dev.paperboard.${name}`),
-            resolve(name),
-        ];
-        for (const c of candidates) {
-            if (existsSync(join(c, "manifest.json"))) return c;
-        }
-        throw new Error(
-            `Could not find board directory with manifest.json for "${name}". Tried:\n${candidates.join("\n")}`,
-        );
-    }
-
-    const boardDir = findBoardDir(targetArg);
-    const manifestPath = join(boardDir, "manifest.json");
-    const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
-
-    const { id: boardId, name: boardName, version: boardVersion } =
-        resolvePublishTarget(manifest, boardDir);
-
-    console.log(`\n📦 Building panel \x1b[1m${boardName}\x1b[0m (${boardId} v${boardVersion})…\n`);
-
-    // 1. Build panel
-    await $`bun run build`.cwd(boardDir);
-
-    // 2. Pack archive into tmp
-    const outDir = join(tmpdir(), `paperboard-pack-${Date.now()}`);
-    mkdirSync(outDir, { recursive: true });
-    const archiveName = `${boardId}-${boardVersion}.tar.gz`;
-    const archivePath = join(outDir, archiveName);
-
-    const entriesToPack = ["manifest.json"];
-    if (existsSync(join(boardDir, "dist"))) entriesToPack.push("dist");
-    if (existsSync(join(boardDir, "branding"))) entriesToPack.push("branding");
-    else if (existsSync(join(boardDir, "icon.png"))) entriesToPack.push("icon.png");
-
-    tar.create(
-        {
-            gzip: true,
-            file: archivePath,
-            cwd: boardDir,
-            sync: true,
-        },
-        entriesToPack,
-    );
-
-    const archiveBytes = readFileSync(archivePath);
-    const sha256Buf = await crypto.subtle.digest("SHA-256", archiveBytes);
-    const sha256 = Array.from(new Uint8Array(sha256Buf))
-        .map((b) => b.toString(16).padStart(2, "0"))
-        .join("");
-
-    const mb = (archiveBytes.byteLength / 1024 / 1024).toFixed(2);
-
-    const boardMeta = {
-        id: boardId,
-        name: boardName,
-        version: boardVersion,
-        description: manifest.description,
-        icon: manifest.icon,
-        sha256,
-        sizeBytes: archiveBytes.byteLength,
-        manifest,
-    };
-
-    if (!doPublish) {
-        const localOut = join(HERE, "dist", "panels");
-        mkdirSync(localOut, { recursive: true });
-        const localArchive = join(localOut, archiveName);
-        writeFileSync(localArchive, archiveBytes);
-        writeFileSync(join(localOut, `${boardId}-${boardVersion}.json`), JSON.stringify(boardMeta, null, 2));
-        try { unlinkSync(archivePath); } catch (err) { console.debug("temp archive already gone:", String(err)); }
-        console.log(`\n✅ Built (not published) \x1b[1m${boardName}\x1b[0m (${boardId}@${boardVersion}, ${mb} MB)`);
-        console.log(`   ${localArchive}\n`);
-        process.exit(0);
-    }
-
-    console.log(`\n📤 Uploading ${archiveName} (${mb} MB) to Origami…`);
-
-    const formData = new FormData();
-    formData.append("archive", new Blob([archiveBytes], { type: "application/gzip" }), archiveName);
-    formData.append(
-        "metadata",
-        JSON.stringify(boardMeta),
-    );
-
-    if (manifest.icon) {
-        const iconPath = join(boardDir, manifest.icon.replace(/^\.\//, ""));
-        if (existsSync(iconPath)) {
-            const iconBuffer = readFileSync(iconPath);
-            const ext = basename(iconPath).split(".").pop()?.toLowerCase();
-            const mimeType = ext === "svg" ? "image/svg+xml" : ext === "webp" ? "image/webp" : "image/png";
-            formData.append("icon", new Blob([iconBuffer], { type: mimeType }), basename(iconPath));
-        }
-    }
-
-    const res = await fetch(`${ORIGAMI_URL}/panel/publish`, {
-        method: "POST",
-        headers: {
-            Authorization: `Bearer ${authKey}`,
-            "X-Auth-Key": authKey,
-        },
-        body: formData,
-    });
-
-    try { unlinkSync(archivePath); } catch (err) { console.debug("temp archive already gone:", String(err)); }
-
-    if (!res.ok) {
-        throw new Error(`Publish failed (${res.status} ${res.statusText}): ${await res.text()}`);
-    }
-
-    console.log(`\n✅ Successfully published \x1b[1m${boardName}\x1b[0m (${boardId}@${boardVersion})`);
-    console.log(`   ${ORIGAMI_URL}/panel/${boardId}/download\n`);
-    process.exit(0);
-}
-
-// ─── PAPERBOARD & CRANE PUBLISHING ────────────────────────────────────────────
-
-const hostPlatform =
-    process.platform === "win32" ? "windows"
-    : process.platform === "darwin" ? "macos"
-    : "linux";
-const hostArch = process.arch === "arm64" ? "arm64" : "x64";
-const defaultTarget = `${hostPlatform}-${hostArch}` as Target;
-
-const flagArgs = process.argv.slice(3);
-let selectedTargets: Target[] = [];
-
-for (const arg of flagArgs) {
-    if (arg === "--all") {
-        selectedTargets = [...ALL_TARGETS];
-        break;
-    }
-    const clean = arg.replace(/^--/, "").toLowerCase();
-    if (clean === "macos-x64" || clean === "darwin-x64" || clean === "mac-x64") {
-        selectedTargets.push("macos-x64");
-    } else if (clean === "macos-arm64" || clean === "darwin-arm64" || clean === "mac-arm64") {
-        selectedTargets.push("macos-arm64");
-    } else if (clean === "windows-x64" || clean === "win-x64") {
-        selectedTargets.push("windows-x64");
-    } else if (clean === "linux-x64") {
-        selectedTargets.push("linux-x64");
-    } else if (clean === "linux-arm64") {
-        selectedTargets.push("linux-arm64");
-    }
-}
-
-if (selectedTargets.length === 0) {
-    selectedTargets = [defaultTarget];
-}
-
-const appName = appLower === "pb" || appLower === "paperboard" ? "paperboard" : "crane";
-
-console.log(`\n🪁 ${doPublish ? "Publishing" : "Building"} ${appName} v${version}`);
-console.log(`   Targets: ${selectedTargets.join(", ")}\n`);
-
-const distDir = join(HERE, "dist");
-const builtOses = new Set<Os>();
-let filePath: string;
-const results: {
+interface BuiltBinary {
+    app: DlApp;
     target: Target;
+    filePath: string;
     filename: string;
     sha256: string;
     sha512: string;
-    sizeBytes: number;
-}[] = [];
-
-// Accumulated for the local index.json when building without --publish.
-const localIndex: Record<string, unknown> = {};
-
-function loadLocalIndex(indexPath: string): Record<string, unknown> {
-    try {
-        return JSON.parse(readFileSync(indexPath, "utf8")) as Record<string, unknown>;
-    } catch (err) {
-        console.debug("no local index yet, starting empty:", String(err));
-        return {};
-    }
+    size: number;
 }
 
-function findPaperboardArtifact(target: Target): string {
-    const os = osOf(target);
-    const exts =
-        os === "macos" ? [".zip", ".dmg"] : os === "windows" ? ["-setup.exe"] : [".AppImage"];
-    let files = readdirSync(distDir).filter((f) => exts.some((e) => f.endsWith(e)));
-    if (!files.length) throw new Error(`No artifact found in ${distDir}`);
-    if (os === "macos" || os === "linux") {
-        const isArm = target.endsWith("arm64");
-        files = files.filter((f) => (isArm ? f.includes("arm64") : !f.includes("arm64")));
-        if (!files.length)
-            throw new Error(`No ${target} artifact found in ${distDir}. Got: ${readdirSync(distDir).join(", ")}`);
-    }
-    // Newest first so stale artifacts from earlier builds never win
-    files.sort(
-        (a, b) =>
-            Bun.file(join(distDir, b)).lastModified - Bun.file(join(distDir, a)).lastModified,
+async function buildPbTarget(target: Target): Promise<BuiltBinary> {
+    await sh([process.execPath, "run", PB_BUILD_SCRIPT[target]], { quiet: false });
+    const filePath = findPaperboardArtifact(target);
+    const { sha256, sha512, size } = await hashFile(filePath);
+    return { app: "pb", target, filePath, filename: basename(filePath), sha256, sha512, size };
+}
+
+async function buildCraneTarget(target: Target): Promise<BuiltBinary> {
+    const bunTarget = BUN_TARGET_MAP[target];
+    const outName =
+        osOf(target) === "windows" ? `papercrane-${target}.exe` : `papercrane-${target}`;
+    await sh(
+        [
+            process.execPath,
+            "build",
+            "--compile",
+            `--target=${bunTarget}`,
+            ...craneCompileFlags(target),
+            "./papercrane/main.ts",
+            "--outfile",
+            `./dist/${outName}`,
+        ],
+        { quiet: false },
     );
-    return join(distDir, files[0]);
+    const filePath = join(distDir, outName);
+    if (!existsSync(filePath))
+        throw new Error(`No Paperboard Server binary found at ${filePath}`);
+    const { sha256, sha512, size } = await hashFile(filePath);
+    return { app: "crane", target, filePath, filename: basename(filePath), sha256, sha512, size };
 }
 
-for (const target of selectedTargets) {
-    const os = osOf(target);
-
-    console.log(`\n🔨 Building ${appName} v${version} for ${target}…\n`);
-
-    if (appName === "paperboard") {
-        // Linux builds one arch per invocation; macOS and Windows cover
-        // all their archs in a single build.
-        const buildKey = os === "linux" ? target : os;
-        if (!builtOses.has(buildKey as Os)) {
-            const script =
-                os === "macos"
-                    ? "build:mac"
-                    : os === "windows"
-                      ? "build:win"
-                      : target.endsWith("arm64")
-                        ? "build:linux-arm64"
-                        : "build:linux";
-            await $`bun run ${script}`.cwd(HERE);
-            builtOses.add(buildKey as Os);
+// Stage release assets under dist/release/: pb artifacts copied to their
+// canonical versionless names, crane binaries packed (tar.gz on posix to
+// preserve the exec bit, zip on Windows) and hashed as shipped.
+async function stageReleaseAssets(built: BuiltBinary[]): Promise<BuiltBinary[]> {
+    const stagedDir = join(distDir, "release");
+    rmSync(stagedDir, { recursive: true, force: true });
+    mkdirSync(stagedDir, { recursive: true });
+    const staged: BuiltBinary[] = [];
+    for (const b of built) {
+        const file = assetFileName(b.app, b.target);
+        const outPath = join(stagedDir, file);
+        if (b.app === "pb") {
+            cpSync(b.filePath, outPath);
         } else {
-            console.log(`   (already built for ${buildKey}, reusing artifacts)`);
+            // tar preserves the mode the extractor needs; make it explicit
+            // first so the archive never ships a non-executable binary.
+            chmodSync(b.filePath, 0o755);
+            if (osOf(b.target) === "windows") {
+                const zip = new AdmZip();
+                zip.addFile(b.filename, readFileSync(b.filePath));
+                zip.writeZip(outPath);
+            } else {
+                tar.create(
+                    { gzip: true, file: outPath, cwd: distDir, sync: true },
+                    [b.filename],
+                );
+            }
         }
-        filePath = findPaperboardArtifact(target);
-    } else {
-        const bunTarget = BUN_TARGET_MAP[target];
-        const outName = os === "windows" ? `papercrane-${target}.exe` : `papercrane-${target}`;
-        await $`bun build --compile --target=${bunTarget} ${craneCompileFlags(target)} ./papercrane/main.ts --outfile ./dist/${outName}`.cwd(HERE);
-        filePath = join(distDir, outName);
-        if (!existsSync(filePath)) throw new Error(`No Paperboard Server binary found at ${filePath}`);
+        const { sha256, sha512, size } = await hashFile(outPath);
+        staged.push({ ...b, filePath: outPath, filename: file, sha256, sha512, size });
     }
-
-    const filename = basename(filePath);
-    const mb = (Bun.file(filePath).size / 1024 / 1024).toFixed(1);
-
-    // Hash locally
-    process.stdout.write(`   Hashing ${filename} (${mb} MB)… `);
-    const bytes = await Bun.file(filePath).arrayBuffer();
-    const [sha256, sha512] = await Promise.all([
-        crypto.subtle.digest("SHA-256", bytes).then(hex),
-        crypto.subtle.digest("SHA-512", bytes).then(hex),
-    ]);
-    console.log("done");
-
-    // Write metadata index to R2
-    const downloadUrl = `https://origami.ariapis.com/paperdl/${appName}/${target}/download`;
-    const metadata = { target, version, filename, sha256, sha512, sizeBytes: bytes.byteLength, downloadUrl, publishedAt: new Date().toISOString() };
-
-    if (doPublish) {
-        console.log(`\n📤 Uploading ${filename} (${mb} MB) for ${target}…`);
-        // Upload binary directly to Cloudflare R2 (S3 API, automatic multipart)
-        await getR2().write(`${appName}/${target}`, Bun.file(filePath), {
-            type: "application/octet-stream",
-        });
-
-        const indexTmp = join(tmpdir(), `paperdl-index-${Date.now()}-${target}.json`);
-        try {
-            let index: Record<string, unknown> = {};
-            try {
-                const existing = await fetch(`https://origami.ariapis.com/paperdl/${appName}/index.json`);
-                if (existing.ok) index = (await existing.json()) as Record<string, unknown>;
-} catch (err) { console.debug("no existing index to merge, starting empty:", String(err)); }
-            index[target] = metadata;
-            writeFileSync(indexTmp, JSON.stringify(index, null, 2));
-            await getR2().write(`${appName}/index.json`, Bun.file(indexTmp), {
-                type: "application/json",
-            });
-        } finally {
-            try { unlinkSync(indexTmp); } catch (err) { console.debug("temp index already gone:", String(err)); }
-        }
-
-        console.log(`\n✅ ${appName} v${version} (${target}) published`);
-        console.log(`   ${downloadUrl}\n`);
-    } else {
-        localIndex[target] = metadata;
-        console.log(`\n✅ ${appName} v${version} (${target}) built (not published)`);
-        console.log(`   ${filePath}\n`);
-    }
-
-    results.push({ target, filename, sha256, sha512, sizeBytes: bytes.byteLength });
+    return staged;
 }
 
-// Write electron-updater YAML feeds (paperboard only) — one feed per OS
-// covering ALL architectures of that OS, so no feed clobbers another.
-// Always written locally; uploaded only with --publish.
-if (appName === "paperboard") {
-    const byOs = new Map<Os, typeof results>();
-    for (const r of results) {
-        const os = osOf(r.target);
-        if (!byOs.has(os)) byOs.set(os, []);
-        byOs.get(os)!.push(r);
+// ─── Flow: build binaries (local only) ──────────────────────────────────────
+
+async function flowBuildBinaries(): Promise<void> {
+    p.intro(`Build binaries (v${version}, local only — nothing uploads)`);
+    const picked = checkCancel(
+        await p.multiselect({
+            message: "Which binaries to build?",
+            options: [
+                ...ALL_TARGETS.map((t) => ({
+                    value: `pb:${t}`,
+                    label: `Paperboard · ${t}`,
+                    hint: `v${version}`,
+                })),
+                ...ALL_TARGETS.map((t) => ({
+                    value: `crane:${t}`,
+                    label: `Paperboard Server · ${t}`,
+                    hint: `v${version}`,
+                })),
+            ],
+            required: true,
+        }),
+    );
+
+    const jobs = (picked as string[]).map((v) => {
+        const [app, target] = v.split(":") as [DlApp, Target];
+        return { app, target };
+    });
+
+    const progress = bar(jobs.length);
+    const built: BuiltBinary[] = [];
+    for (const j of jobs) {
+        const b =
+            j.app === "pb" ? await buildPbTarget(j.target) : await buildCraneTarget(j.target);
+        built.push(b);
+        progress.increment(1, { task: `${b.app} ${b.target}` });
+    }
+    progress.stop();
+
+    // Local record (informational; the USB bundle rebuilds from scratch).
+    for (const app of ["pb", "crane"] as DlApp[]) {
+        const mine = built.filter((b) => b.app === app);
+        if (!mine.length) continue;
+        const record: Record<string, unknown> = {};
+        for (const b of mine) {
+            record[b.target] = {
+                file: b.filename,
+                path: b.filePath,
+                sha256: b.sha256,
+                sha512: b.sha512,
+                size: b.size,
+            };
+        }
+        writeFileSync(
+            join(distDir, `build-${app}-${version}.json`),
+            JSON.stringify({ version, builtAt: new Date().toISOString(), targets: record }, null, 2),
+        );
     }
 
-    const releaseDate = new Date().toISOString();
-    for (const [os, entries] of byOs) {
-        const ymlKey = os === "windows" ? "latest.yml" : os === "macos" ? "latest-mac.yml" : "latest-linux.yml";
-        const yamlLines = [`version: ${version}`, `files:`];
-        for (const e of entries) {
-            yamlLines.push(
-                `  - url: https://origami.ariapis.com/paperdl/paperboard/${e.target}/download`,
-                `    sha512: ${e.sha512}`,
-                `    size: ${e.sizeBytes}`,
-            );
-        }
-        const primary = entries[0];
-        yamlLines.push(
-            `path: https://origami.ariapis.com/paperdl/paperboard/${primary.target}/download`,
-            `sha512: ${primary.sha512}`,
-            `releaseDate: '${releaseDate}'`,
+    p.log.success(`Built ${built.length} binary(ies):`);
+    printTable([
+        ["app", "target", "size", "sha256"],
+        ...built.map((b) => [b.app, b.target, `${mb(b.size)} MB`, b.sha256.slice(0, 16)]),
+    ]);
+    p.outro("Done — artifacts are in dist/.");
+}
+
+// ─── Flow: publish binaries (GitHub Releases + live index) ──────────────────
+
+async function flowPublishBinaries(): Promise<void> {
+    p.intro("Publish binaries");
+    if (!isValidVersionSegment(version)) {
+        fail(
+            `Refusing to publish version ${JSON.stringify(version)}: it is not a safe URL/tag segment. Fix package.json first.`,
         );
+    }
+    p.log.info(`Paperboard v${version} + Paperboard Server v${version}`);
+    p.log.warn("Publishing is a big step: GitHub Releases are created and the live download index moves.");
+    if (!checkCancel(await p.confirm({ message: `Build all 10 binaries for v${version}?`, initialValue: false }))) {
+        cancelled();
+    }
 
-        const yamlText = yamlLines.join("\n");
-        const localYml = join(distDir, ymlKey);
-        writeFileSync(localYml, yamlText);
-        console.log(`\n📝 Wrote ${ymlKey} (targets: ${entries.map((e) => e.target).join(", ")}) → ${localYml}`);
+    const jobs: { app: DlApp; target: Target }[] = [
+        ...ALL_TARGETS.map((target) => ({ app: "pb" as DlApp, target })),
+        ...ALL_TARGETS.map((target) => ({ app: "crane" as DlApp, target })),
+    ];
+    const progress = bar(jobs.length);
+    const built: BuiltBinary[] = [];
+    for (const j of jobs) {
+        const b =
+            j.app === "pb" ? await buildPbTarget(j.target) : await buildCraneTarget(j.target);
+        built.push(b);
+        progress.increment(1, { task: `${b.app} ${b.target}` });
+    }
+    progress.stop();
 
-        if (doPublish) {
-            const yamlTmp = join(tmpdir(), `paperdl-${ymlKey}-${Date.now()}.yml`);
+    p.log.step("Staging canonical release assets in dist/release/…");
+    const staged = await stageReleaseAssets(built);
+
+    p.log.info("Built and hashed as-shipped:");
+    printTable([
+        ["file", "size", "sha256"],
+        ...staged.map((b) => [b.filename, `${mb(b.size)} MB`, b.sha256.slice(0, 16)]),
+    ]);
+    if (
+        !checkCancel(
+            await p.confirm({
+                message: `Upload ${staged.length} files and move the live "latest" pointer to v${version}?`,
+                initialValue: false,
+            }),
+        )
+    ) {
+        cancelled();
+    }
+
+    await ensureGithubAuth();
+    await ensureCloudflareAuth();
+
+    // GitHub releases (one line per app; tags carry the app).
+    for (const app of ["pb", "crane"] as DlApp[]) {
+        const tag = tagFor(app, version);
+        const files = staged.filter((b) => b.app === app).map((b) => b.filePath);
+        const title = app === "pb" ? `Paperboard v${version}` : `Paperboard Server v${version}`;
+        await ghReleaseEnsure(tag, title);
+        const up = bar(files.length);
+        for (const f of files) {
+            await sh(["gh", "release", "upload", tag, f, "--clobber", "--repo", GH_REPO], {
+                quiet: true,
+            });
+            up.increment(1, { task: basename(f) });
+        }
+        up.stop();
+        p.log.success(`${tag}: ${files.length} asset(s) uploaded.`);
+    }
+
+    // KV version database: record this version's files, move latest.
+    for (const app of ["pb", "crane"] as DlApp[]) {
+        const prev = await kvReadRecord(app);
+        const files: VersionFileEntry[] = staged
+            .filter((b) => b.app === app)
+            .map((b) => ({ file: b.filename, sha256: b.sha256, sha512: b.sha512, size: b.size }));
+        const next = mergeVersionRecord(prev, version, files);
+        await kvWriteRecord(app, next);
+        p.log.success(
+            `Index ${kvKeyFor(app)}: recorded v${version} (${prev ? Object.keys(prev.versions).length : 0} → ${Object.keys(next.versions).length} versions, latest → v${version}).`,
+        );
+    }
+
+    // electron-updater feeds (paperboard only) stay on Origami/R2; their
+    // file URLs point at the dl "latest" alias, which 302s to GitHub.
+    const releaseDate = new Date().toISOString();
+    const byOs = new Map<Os, YmlEntry[]>();
+    for (const b of staged) {
+        if (b.app !== "pb") continue;
+        const os = osOf(b.target);
+        if (!byOs.has(os)) byOs.set(os, []);
+        byOs.get(os)!.push({ target: b.target, file: b.filename, sha512: b.sha512, size: b.size });
+    }
+    for (const [os, entries] of byOs) {
+        const { key, text } = buildLatestYml(os, version, entries, releaseDate);
+        const tmp = join(tmpdir(), `pb-${ymlKeyFor(os)}-${Date.now()}.yml`);
+        try {
+            writeFileSync(tmp, text);
+            await r2Put(key, tmp, "text/yaml");
+            p.log.success(`Feed ${key} uploaded.`);
+        } finally {
             try {
-                writeFileSync(yamlTmp, yamlText);
-                process.stdout.write(`📤 Uploading ${ymlKey}… `);
-                await getR2().write(`paperboard/${ymlKey}`, Bun.file(yamlTmp), {
-                    type: "text/yaml",
-                });
-                console.log("done");
-            } finally {
-                try { unlinkSync(yamlTmp); } catch (err) { console.debug("temp yaml already gone:", String(err)); }
+                unlinkSync(tmp);
+            } catch (err) {
+                console.debug("temp yml already gone:", String(err));
             }
         }
     }
+
+    p.log.success("Published:");
+    printTable([
+        ["what", "url"],
+        [`release pb`, `https://github.com/${GH_REPO}/releases/tag/${tagFor("pb", version)}`],
+        [`release crane`, `https://github.com/${GH_REPO}/releases/tag/${tagFor("crane", version)}`],
+        [`latest pb`, dlFileUrl("pb", "latest", assetFileName("pb", "macos-arm64"))],
+        [`latest crane`, dlFileUrl("crane", "latest", assetFileName("crane", "linux-x64"))],
+    ]);
+    p.outro(`Paperboard v${version} is live.`);
 }
 
-if (!doPublish) {
-    // Build-only runs still get a local index for the USB bundle.
-    const localIndexPath = join(distDir, `paperdl-${appName}-index.json`);
-    writeFileSync(localIndexPath, JSON.stringify({ ...loadLocalIndex(localIndexPath), ...localIndex }, null, 2));
-    console.log(`\n📝 Wrote ${appName} index → ${localIndexPath}`);
+// ─── Flow: publish panels ───────────────────────────────────────────────────
+
+interface PanelInfo {
+    dir: string;
+    id: string;
+    name: string;
+    version: string;
 }
 
-// ─── USB TEST BUNDLE ──────────────────────────────────────────────────────────
+function listPanels(): PanelInfo[] {
+    const panelsRoot = join(HERE, "..", "..", "panels");
+    const out: PanelInfo[] = [];
+    if (!existsSync(panelsRoot)) return out;
+    for (const e of readdirSync(panelsRoot, { withFileTypes: true })) {
+        if (!e.isDirectory()) continue;
+        const manifestPath = join(panelsRoot, e.name, "manifest.json");
+        if (!existsSync(manifestPath)) continue;
+        try {
+            const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+            const t = resolvePublishTarget(manifest, join(panelsRoot, e.name));
+            out.push({ dir: join(panelsRoot, e.name), ...t });
+        } catch (err) {
+            p.log.warn(
+                `Skipping ${e.name}: ${err instanceof Error ? err.message : String(err)}`,
+            );
+        }
+    }
+    return out.sort((a, b) => a.id.localeCompare(b.id));
+}
+
+interface PackedPanel {
+    info: PanelInfo;
+    archivePath: string;
+    bytes: Buffer;
+    sha256: string;
+    meta: Record<string, unknown>;
+}
+
+async function packPanel(info: PanelInfo): Promise<PackedPanel> {
+    await sh([process.execPath, "run", "build"], { cwd: info.dir, quiet: false });
+    const outDir = join(tmpdir(), `paperboard-pack-${Date.now()}-${info.id}`);
+    mkdirSync(outDir, { recursive: true });
+    const archiveName = `${info.id}-${info.version}.tar.gz`;
+    const archivePath = join(outDir, archiveName);
+
+    const entriesToPack = ["manifest.json"];
+    if (existsSync(join(info.dir, "dist"))) entriesToPack.push("dist");
+    if (existsSync(join(info.dir, "branding"))) entriesToPack.push("branding");
+    else if (existsSync(join(info.dir, "icon.png"))) entriesToPack.push("icon.png");
+
+    tar.create({ gzip: true, file: archivePath, cwd: info.dir, sync: true }, entriesToPack);
+
+    const bytes = readFileSync(archivePath);
+    const sha256 = hex(await crypto.subtle.digest("SHA-256", bytes));
+    const manifest = JSON.parse(readFileSync(join(info.dir, "manifest.json"), "utf8"));
+    return {
+        info,
+        archivePath,
+        bytes,
+        sha256,
+        meta: {
+            id: info.id,
+            name: info.name,
+            version: info.version,
+            description: manifest.description,
+            icon: manifest.icon,
+            sha256,
+            sizeBytes: bytes.byteLength,
+            manifest,
+        },
+    };
+}
+
+async function uploadPanel(packed: PackedPanel, authKey: string): Promise<void> {
+    const { info, bytes, meta } = packed;
+    const archiveName = `${info.id}-${info.version}.tar.gz`;
+    const formData = new FormData();
+    formData.append("archive", new Blob([bytes], { type: "application/gzip" }), archiveName);
+    formData.append("metadata", JSON.stringify(meta));
+    if (meta["icon"]) {
+        const iconPath = join(info.dir, String(meta["icon"]).replace(/^\.\//, ""));
+        if (existsSync(iconPath)) {
+            const iconBuffer = readFileSync(iconPath);
+            const ext = basename(iconPath).split(".").pop()?.toLowerCase();
+            const mimeType =
+                ext === "svg" ? "image/svg+xml" : ext === "webp" ? "image/webp" : "image/png";
+            formData.append("icon", new Blob([iconBuffer], { type: mimeType }), basename(iconPath));
+        }
+    }
+    const res = await fetch(`${ORIGAMI_URL}/panel/publish`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${authKey}`, "X-Auth-Key": authKey },
+        body: formData,
+    });
+    if (!res.ok) {
+        throw new Error(`Publish failed (${res.status} ${res.statusText}): ${await res.text()}`);
+    }
+}
+
+async function flowPublishPanels(): Promise<void> {
+    p.intro("Publish panels");
+    const panels = listPanels();
+    if (!panels.length) fail("No panels with a valid manifest.json found under panels/.");
+    const pickedIds = checkCancel(
+        await p.multiselect({
+            message: "Which panels to publish?",
+            options: panels.map((x) => ({
+                value: x.id,
+                label: x.name,
+                hint: `${x.id} v${x.version}`,
+            })),
+            required: true,
+        }),
+    ) as string[];
+    const picked = panels.filter((x) => pickedIds.includes(x.id));
+
+    const packBar = bar(picked.length);
+    const packed: PackedPanel[] = [];
+    for (const info of picked) {
+        p.log.step(`Packing ${info.name} (${info.id} v${info.version})…`);
+        packed.push(await packPanel(info));
+        packBar.increment(1, { task: info.id });
+    }
+    packBar.stop();
+
+    p.log.info("Ready to upload:");
+    printTable([
+        ["panel", "version", "size", "sha256"],
+        ...packed.map((x) => [
+            x.info.id,
+            `v${x.info.version}`,
+            `${mb(x.bytes.byteLength)} MB`,
+            x.sha256.slice(0, 16),
+        ]),
+    ]);
+    if (!checkCancel(await p.confirm({ message: `Publish ${packed.length} panel(s) to the registry?`, initialValue: false }))) {
+        cancelled();
+    }
+
+    // The registry key is prompted once per run and never stored anywhere.
+    const authKey = checkCancel(
+        await p.password({ message: "Origami registry key (asked once, never stored)" }),
+    );
+    if (!authKey) fail("No registry key given. Aborting before anything uploads.");
+
+    const upBar = bar(packed.length);
+    for (const x of packed) {
+        await uploadPanel(x, authKey);
+        try {
+            unlinkSync(x.archivePath);
+        } catch (err) {
+            console.debug("temp archive already gone:", String(err));
+        }
+        upBar.increment(1, { task: x.info.id });
+    }
+    upBar.stop();
+
+    p.log.success("Published:");
+    printTable(packed.map((x) => [x.info.id, `${ORIGAMI_URL}/panel/${x.info.id}/download`]));
+    p.outro("Registry updated. Previous panel versions are retained server-side.");
+}
+
+// ─── Flow: publish npm packages ─────────────────────────────────────────────
+
+interface NpmPackage {
+    dir: string;
+    name: string;
+    version: string;
+}
+
+function listPackages(): NpmPackage[] {
+    const pkgsRoot = join(HERE, "..", "..", "packages");
+    const out: NpmPackage[] = [];
+    if (!existsSync(pkgsRoot)) return out;
+    for (const e of readdirSync(pkgsRoot, { withFileTypes: true })) {
+        if (!e.isDirectory()) continue;
+        const pkgPath = join(pkgsRoot, e.name, "package.json");
+        if (!existsSync(pkgPath)) continue;
+        try {
+            const pkg = JSON.parse(readFileSync(pkgPath, "utf8")) as {
+                name?: unknown;
+                version?: unknown;
+                private?: unknown;
+                scripts?: Record<string, string>;
+            };
+            if (pkg.private) continue;
+            if (typeof pkg.name !== "string" || typeof pkg.version !== "string") continue;
+            if (!pkg.scripts?.build) continue;
+            out.push({ dir: join(pkgsRoot, e.name), name: pkg.name, version: pkg.version });
+        } catch (err) {
+            p.log.warn(
+                `Skipping ${e.name}: ${err instanceof Error ? err.message : String(err)}`,
+            );
+        }
+    }
+    return out.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+async function flowPublishPackages(): Promise<void> {
+    p.intro("Publish npm packages");
+    const pkgs = listPackages();
+    if (!pkgs.length) fail("No publishable packages found under packages/ (need name, version, and a build script).");
+    const pickedNames = checkCancel(
+        await p.multiselect({
+            message: "Which packages to publish?",
+            options: pkgs.map((x) => ({ value: x.name, label: x.name, hint: `v${x.version}` })),
+            required: true,
+        }),
+    ) as string[];
+    const picked = pkgs.filter((x) => pickedNames.includes(x.name));
+
+    const buildBar = bar(picked.length);
+    for (const x of picked) {
+        p.log.step(`Building ${x.name} v${x.version}…`);
+        await sh([process.execPath, "run", "build"], { cwd: x.dir, quiet: false });
+        buildBar.increment(1, { task: x.name });
+    }
+    buildBar.stop();
+
+    p.log.info("Ready to publish:");
+    printTable(picked.map((x) => [x.name, `v${x.version}`]));
+    if (!checkCancel(await p.confirm({ message: `Publish ${picked.length} package(s) to npm?`, initialValue: false }))) {
+        cancelled();
+    }
+
+    if (!(await cmdOk(["npm", "--version"]))) {
+        fail("npm not found on PATH. Install Node.js/npm, then re-run.");
+    }
+    if (!(await cmdOk(["npm", "whoami"]))) {
+        p.log.warn("npm: not logged in — opening `npm login`…");
+        await sh(["npm", "login"], { quiet: false });
+        if (!(await cmdOk(["npm", "whoami"]))) {
+            fail("npm login did not complete. Aborting before anything publishes.");
+        }
+    }
+
+    const pubBar = bar(picked.length);
+    for (const x of picked) {
+        await sh(["npm", "publish"], { cwd: x.dir, quiet: false });
+        pubBar.increment(1, { task: x.name });
+    }
+    pubBar.stop();
+
+    p.log.success("Published:");
+    printTable(
+        picked.map((x) => [x.name, `https://www.npmjs.com/package/${x.name}/v/${x.version}`]),
+    );
+    p.outro("npm updated.");
+}
+
+// ─── USB test bundle (unchanged behavior, headless-capable) ─────────────────
 // Builds Paperboard installers + crane binaries + all panels into ../usb/:
 //
 //   usb/
@@ -497,7 +873,7 @@ if (!doPublish) {
 // Never publishes anything. Copy the folder onto a USB stick and test anywhere.
 async function buildUsbFolder() {
     const USB = join(HERE, "..", "usb");
-    const distDir = join(HERE, "dist");
+    const usbDistDir = join(HERE, "dist");
     const installersDir = join(USB, "installers");
     const craneDir = join(USB, "crane");
     const panelsDir = join(USB, "panels");
@@ -528,16 +904,16 @@ async function buildUsbFolder() {
     const snapshotDist = () => Date.now();
     const copyNew = (buildStart: number, dest: string, match: (f: string) => boolean) => {
         // Rebuilds overwrite the same filename, so freshness is by mtime.
-        const fresh = readdirSync(distDir).filter((f) => {
+        const fresh = readdirSync(usbDistDir).filter((f) => {
             if (!match(f)) return false;
             try {
-                return statSync(join(distDir, f)).mtimeMs >= buildStart - 5000;
+                return statSync(join(usbDistDir, f)).mtimeMs >= buildStart - 5000;
             } catch (err) {
                 console.debug("stat raced deletion, skipping:", String(err));
                 return false;
             }
         });
-        for (const f of fresh) cpSync(join(distDir, f), join(dest, f));
+        for (const f of fresh) cpSync(join(usbDistDir, f), join(dest, f));
         return fresh;
     };
 
@@ -553,7 +929,7 @@ async function buildUsbFolder() {
         const before = snapshotDist();
         await $`bun run ${script}`.cwd(HERE);
         const fresh = copyNew(before, installersDir, match);
-        if (!fresh.length) throw new Error(`No fresh installer found in ${distDir} after ${script}`);
+        if (!fresh.length) throw new Error(`No fresh installer found in ${usbDistDir} after ${script}`);
         installerFiles.push(...fresh.map((f) => `installers/${f}`));
         console.log(`   → ${fresh.join(", ")}`);
     }
@@ -567,8 +943,8 @@ async function buildUsbFolder() {
         console.log(`\n🔨 Building Paperboard for macos…\n`);
         await $`bun run build:mac`.cwd(HERE);
         const macApps: { dir: string; arch: string }[] = [
-            { dir: join(distDir, "mac"), arch: "x64" },
-            { dir: join(distDir, "mac-arm64"), arch: "arm64" },
+            { dir: join(usbDistDir, "mac"), arch: "x64" },
+            { dir: join(usbDistDir, "mac-arm64"), arch: "arm64" },
         ];
         for (const { dir, arch } of macApps) {
             const appPath = join(dir, "Paperboard.app");
@@ -588,7 +964,7 @@ async function buildUsbFolder() {
         const outName = os === "windows" ? `papercrane-${target}.exe` : `papercrane-${target}`;
         console.log(`\n🔨 Building Paperboard Server for ${target}…`);
         await $`bun build --compile --target=${bunTarget} ${craneCompileFlags(target)} ./papercrane/main.ts --outfile ./dist/${outName}`.cwd(HERE);
-        const built = join(distDir, outName);
+        const built = join(usbDistDir, outName);
         if (!existsSync(built)) throw new Error(`No Paperboard Server binary found at ${built}`);
         cpSync(built, join(craneDir, outName));
         craneFiles.push(`crane/${outName}`);
@@ -778,6 +1154,55 @@ ${panelEntries.map((p) => `  ${p.id} (${p.name} v${p.version})`).join("\n")}
     console.log(`   Copy the folder onto a USB stick and run ./link-panels.sh on the test machine.\n`);
 }
 
+// ─── Menu ───────────────────────────────────────────────────────────────────
 
+async function main(): Promise<void> {
+    const argv = process.argv.slice(2);
+    if (argv[0] === "usb") {
+        await buildUsbFolder();
+        return;
+    }
+    if (!process.stdin.isTTY || !process.stdout.isTTY) {
+        console.error("publish.ts is interactive — run it in a terminal (or `bun devutils/publish.ts usb` headless).");
+        process.exit(1);
+    }
 
+    p.intro("Paperboard publisher");
+    const choice = checkCancel(
+        await p.select({
+            message: "What would you like to do?",
+            options: [
+                { value: "build", label: "Build binaries", hint: "local only — pick app/server targets" },
+                { value: "publish-bin", label: "Publish binaries", hint: "build all, confirm twice, upload" },
+                { value: "panels", label: "Publish panels", hint: "pick panels, pack, upload to registry" },
+                { value: "packages", label: "Publish packages", hint: "pick npm packages, build, npm publish" },
+                { value: "usb", label: "Build USB test bundle", hint: "sneakernet testing, never uploads" },
+            ],
+        }),
+    );
 
+    switch (choice) {
+        case "build":
+            await flowBuildBinaries();
+            break;
+        case "publish-bin":
+            await flowPublishBinaries();
+            break;
+        case "panels":
+            await flowPublishPanels();
+            break;
+        case "packages":
+            await flowPublishPackages();
+            break;
+        case "usb":
+            await buildUsbFolder();
+            break;
+        default:
+            cancelled();
+    }
+}
+
+main().catch((err) => {
+    console.error(`\n❌ ${err instanceof Error ? err.message : String(err)}`);
+    process.exit(1);
+});
