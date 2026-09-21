@@ -6,7 +6,7 @@ A quick brief on what Paperboard is - it's essentially a home for your server. T
 
 Each tool in Paperboard is a panel, a self-contained project that can be instantly downloaded through the official registry and interacts with the rest of the app using APIs.
 
-Almost all code here is written in TypeScript, CSS and SolidJS. I'll explain everything here briefly, but for more information on each part of this repo, I have placed another README in each project (no not yet actually in the coming couple days). Additionally, developing new panels has extensive docs at https://paperboard.dev/docs. That's the definitive place to go if you are looking to develop a new panel.
+Almost all code here is written in TypeScript, CSS and SolidJS. I'll explain everything here briefly, but for more information on each part of this repo, I have placed another README in each project. Additionally, developing new panels has extensive docs at https://paperboard.dev/docs. That's the definitive place to go if you are looking to develop a new panel.
 
 ## Definitions
 
@@ -25,6 +25,18 @@ And of course, the panels:
 - **AI** (`dev.paperboard.ai`) is incomplete, but will provide an interface for using AI language models locally with the capability to trigger actions (with the user's consent) through tool calls.
 - **Terminal** (`dev.paperboard.terminal`) is a basic Terminal for when you want to use a Terminal in Paperboard. There isn't much to this one.
 
+## Development
+
+Paperboard is a Bun workspace. Install [Bun](https://bun.com/get), then clone the repository and run the setup command from the root:
+
+```zsh
+git clone https://github.com/MileniumHQ/Paperboard
+cd Paperboard
+bun run setup
+```
+
+`setup` installs every workspace's dependencies and builds the shared libraries and panels. After that, each project has its own README with dev and build instructions — for the app, that's [apps/paperboard](apps/paperboard/README.md).
+
 ## Agents & Contributing
 
 More information about contributing is available in [CONTRIBUTING.md](CONTRIBUTING.md). PRs welcome!
@@ -34,3 +46,7 @@ The overwhelming majority of this codebase is built with agents, therefore it's 
 The code license varies by project, but most code here is under PolyForm Noncommercial...with exceptions! PaperUI, PaperAPI, PaperConvert, and PaperDocs are all MIT licensed.
 
 Thanks for taking a look. Let's build the future of Paperboard together!
+
+___
+
+© 2026 Milenium LLC
