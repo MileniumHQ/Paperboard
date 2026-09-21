@@ -1,8 +1,8 @@
 import { PaperInput } from "@paperboard-dev/paperui";
 import { createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import records from "virtual:docs-search";
-import { withBase } from "../utils/base";
 import { searchDocs } from "../utils/search";
+import { withBase } from "../utils/base";
 import styles from "./docsSearch.module.css";
 
 const MAX_RESULTS = 12;
