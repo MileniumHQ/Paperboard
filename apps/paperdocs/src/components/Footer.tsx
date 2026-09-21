@@ -19,9 +19,6 @@ const LEARN_LINKS: FooterLink[] = [
 ];
 
 const DOCS_LINKS: FooterLink[] = [
-    { label: "Getting Started", href: withBase("/paperboard/getting-started") },
-    { label: "Actions", href: withBase("/paperboard/actions") },
-    { label: "Support", href: withBase("/paperboard/support") },
     { label: "PaperAPI", href: withBase("/paperapi") },
     { label: "PaperUI", href: withBase("/paperui") },
 ];

@@ -1,12 +1,6 @@
 {
     "meta": {
         "sections": {
-            "paperboard": {
-                "name": "Paperboard",
-                "icon": "dashboard",
-                "image": "/paperboard.png",
-                "description": "Learn to use wonderful tools that empower you to do more with your computer."
-            },
             "paperapi": {
                 "name": "PaperAPI",
                 "icon": "api",
