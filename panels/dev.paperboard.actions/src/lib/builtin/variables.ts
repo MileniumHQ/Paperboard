@@ -38,7 +38,7 @@ export const variablesBuiltins: BuiltinDef[] = [
                         name: "Increment Variable",
                         description: "Increments a numeric variable by an amount",
                         template: "Increment {key} by {amount}",
-                        icon: "add_circle_outline",
+                        icon: "add_circle",
                         inputs: {
                             key: {
                                 type: "string",

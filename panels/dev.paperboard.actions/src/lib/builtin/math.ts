@@ -179,7 +179,7 @@ export const mathBuiltins: BuiltinDef[] = [
                         name: "Absolute Value",
                         description: "Returns the distance of a number from zero",
                         template: "Absolute value of {value}",
-                        icon: "plus_one",
+                        icon: "functions",
                         inputs: {
                             value: {
                                 type: "number",

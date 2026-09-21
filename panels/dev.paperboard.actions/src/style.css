@@ -322,7 +322,9 @@ body,
 }
 
 .actionVariableChip .chipIcon {
-    font-family: "Material Symbols Rounded", sans-serif !important;
+    /* Icon font via the PaperUI token (single source of truth in
+       paperui/src/styles). */
+    font-family: var(--paper-icon-font-family) !important;
     font-size: 0.8125rem;
     width: 0.8125rem;
     height: 0.8125rem;

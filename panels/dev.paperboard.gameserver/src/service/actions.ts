@@ -483,7 +483,7 @@ export const panelActions: ActionDefinition[] = [
         },
         output: { type: "boolean", label: "Success" },
         quick: false,
-        icon: "user_off",
+        icon: "person_off",
         run: async (ctx: ServiceContext<GameServerState>, inputs: { player: string }) => {
             const name = assertPlayerName(inputs?.player);
             await sendServerCommand(ctx, `whitelist remove ${name}`);
