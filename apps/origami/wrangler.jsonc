@@ -8,6 +8,10 @@
         {
             "pattern": "origami.ariapis.com",
             "custom_domain": true
+        },
+        {
+            "pattern": "i.paperboard.dev",
+            "custom_domain": true
         }
     ],
     "kv_namespaces": [

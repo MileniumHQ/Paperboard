@@ -29,7 +29,7 @@ win:
               - x64
     publish:
         - provider: generic
-          url: https://origami.ariapis.com/paperdl/paperboard
+          url: https://i.paperboard.dev/pb
           channel: latest
 nsis:
     artifactName: ${name}-${version}-windows-x64-setup.${ext}
@@ -49,7 +49,7 @@ mac:
               - arm64
     publish:
         - provider: generic
-          url: https://origami.ariapis.com/paperdl/paperboard
+          url: https://i.paperboard.dev/pb
           channel: latest
     extendInfo:
         - NSCameraUsageDescription: Application requests access to the device's camera.
@@ -67,7 +67,7 @@ linux:
               - arm64
     publish:
         - provider: generic
-          url: https://origami.ariapis.com/paperdl/paperboard
+          url: https://i.paperboard.dev/pb
           channel: latest
     maintainer: Milenium LLC <contact@paperboard.dev>
     category: Utility

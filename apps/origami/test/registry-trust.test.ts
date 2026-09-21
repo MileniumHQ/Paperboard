@@ -421,83 +421,227 @@ describe("publish icon extension", () => {
     });
 });
 
-describe("paperdl filename sanitization", () => {
-    function envWithPaperdl(objects: Record<string, { body: Uint8Array; filename?: string }>): Env {
+describe("download redirects", () => {
+    // Binaries live on GitHub Releases; Origami only 302-redirects to
+    // them (plus the small latest.yml feeds from R2). The KV version
+    // database is the source of truth: unknown versions and unrecorded
+    // files are 404s, never fabricated redirects.
+    const PB_RECORD = {
+        latest: "3.0.0-alpha",
+        versions: {
+            "2.0.0-alpha": {
+                files: [{ file: "paperboard-macos-x64.zip", sha256: "old", size: 1 }],
+            },
+            "3.0.0-alpha": {
+                files: [
+                    { file: "paperboard-macos-x64.zip", sha256: "aaa", sha512: "bbb", size: 10 },
+                    { file: "paperboard-linux-x64.AppImage", sha256: "ccc", sha512: "ddd", size: 20 },
+                ],
+            },
+        },
+    };
+    const CRANE_RECORD = {
+        latest: "2.0.0-alpha",
+        versions: {
+            "2.0.0-alpha": {
+                files: [{ file: "crane-linux-arm64.tar.gz", sha256: "eee", size: 5 }],
+            },
+        },
+    };
+
+    function envWithDownloads(withRecords = true, withBucket = true): Env {
+        const objects: Record<string, string> = {
+            "pb/latest.yml": "version: 3.0.0-alpha\n",
+            "pb/latest-mac.yml": "version: 3.0.0-alpha\n",
+            "pb/latest-linux.yml": "version: 3.0.0-alpha\n",
+            "paperboard/index.json": JSON.stringify({ frozen: true }),
+        };
         const dl = {
             async get(key: string) {
-                const o = objects[key];
-                if (!o) return null;
+                const text = objects[key];
+                if (!text) return null;
                 return {
-                    body: o.body,
+                    body: text,
                     httpEtag: '"mock-etag"',
-                    customMetadata: o.filename ? { filename: o.filename } : {},
+                    customMetadata: {},
                     writeHttpMetadata(headers: Headers) {
                         headers.set("Content-Type", "application/octet-stream");
+                    },
+                    async text() {
+                        return text;
                     },
                 };
             },
         } as unknown as R2Bucket;
-        return { PACKAGES: createMockKV(), PAPERDL_BUCKET: dl, AUTH_KEY } as unknown as Env;
+        const kvData = withRecords ? { "dl/pb": PB_RECORD, "dl/crane": CRANE_RECORD } : {};
+        return {
+            PACKAGES: createMockKV(kvData),
+            ...(withBucket ? { PAPERDL_BUCKET: dl } : {}),
+            AUTH_KEY,
+        } as unknown as Env;
     }
 
-    it("strips control characters from a decoded trailing filename instead of throwing", async () => {
-        const env = envWithPaperdl({
-            "crane/app": { body: new Uint8Array([1, 2, 3]) },
-        });
-        // %0A decodes to \n — a raw newline inside Content-Disposition used
-        // to throw inside Headers.set and surface as a 500
-        const res = await worker.fetch(
-            new Request("http://localhost/paperdl/crane/app/download/foo%0Abar"),
+    const dl = (path: string) => `https://i.paperboard.dev${path}`;
+    const get = (url: string, env: Env, init?: RequestInit) =>
+        worker.fetch(new Request(url, init), env, {} as any);
+
+    it("302s a versioned file to its GitHub release asset, immutably", async () => {
+        const env = envWithDownloads();
+        const res = await get(
+            dl("/pb/3.0.0-alpha/paperboard-macos-x64.zip"),
             env,
-            {} as any,
         );
+        expect(res.status).toBe(302);
+        expect(res.headers.get("Location")).toBe(
+            "https://github.com/MileniumHQ/Paperboard/releases/download/pb-v3.0.0-alpha/paperboard-macos-x64.zip",
+        );
+        expect(res.headers.get("Cache-Control")).toContain("immutable");
+    });
+
+    it("resolves the latest alias from KV without caching it", async () => {
+        const env = envWithDownloads();
+        const res = await get(dl("/crane/latest/crane-linux-arm64.tar.gz"), env);
+        expect(res.status).toBe(302);
+        expect(res.headers.get("Location")).toBe(
+            "https://github.com/MileniumHQ/Paperboard/releases/download/crane-v2.0.0-alpha/crane-linux-arm64.tar.gz",
+        );
+        expect(res.headers.get("Cache-Control")).toBe("no-cache");
+    });
+
+    it("keeps serving previous versions after latest moves", async () => {
+        const env = envWithDownloads();
+        const res = await get(dl("/pb/2.0.0-alpha/paperboard-macos-x64.zip"), env);
+        expect(res.status).toBe(302);
+        expect(res.headers.get("Location")).toBe(
+            "https://github.com/MileniumHQ/Paperboard/releases/download/pb-v2.0.0-alpha/paperboard-macos-x64.zip",
+        );
+    });
+
+    it("404s unknown versions, unrecorded files, and hostile segments", async () => {
+        const env = envWithDownloads();
+        for (const path of [
+            "/pb/9.9.9/paperboard-macos-x64.zip", // version not in the DB
+            "/pb/3.0.0-alpha/evil.exe", // file not recorded for that version
+            "/pb/3.0.0-alpha/paperboard-macos-x64.zip/extra", // too many segments
+            "/pb/3.0.0-alpha/a%20b", // encoded space: not a clean segment
+            "/pb/%2e%2e/x", // encoded traversal: not a clean segment
+            "/pb/latest", // alias without a file
+            "/pb", // app without version/file
+            "/", // bare root
+            "/panel/some-id/download", // registry routes are unreachable here
+            "/package/java-26.json",
+            "/health",
+            "/paperdl/pb/latest/paperboard-macos-x64.zip", // prefixed scheme belongs on the main host
+        ]) {
+            const res = await get(dl(path), env);
+            expect(res.status).toBe(404);
+        }
+    });
+
+    it("refuses non-GET methods on the download host", async () => {
+        const env = envWithDownloads();
+        const res = await get(dl("/pb/3.0.0-alpha/paperboard-macos-x64.zip"), env, {
+            method: "POST",
+        });
+        expect(res.status).toBe(404);
+    });
+
+    it("404s when the version database has no record", async () => {
+        const env = envWithDownloads(false);
+        const res = await get(dl("/pb/latest/paperboard-macos-x64.zip"), env);
+        expect(res.status).toBe(404);
+    });
+
+    it("serves the updater feeds from R2 on the download host", async () => {
+        const env = envWithDownloads();
+        const res = await get(dl("/pb/latest-mac.yml"), env);
         expect(res.status).toBe(200);
-        expect(res.headers.get("Content-Disposition")).toBe(
-            'attachment; filename="foobar"',
+        expect(res.headers.get("Content-Type")).toContain("text/yaml");
+        expect(await res.text()).toContain("version: 3.0.0-alpha");
+    });
+
+    it("500s the feed when the bucket is unconfigured", async () => {
+        const res = await get(dl("/pb/latest.yml"), envWithDownloads(true, false));
+        expect(res.status).toBe(500);
+    });
+
+    it("404s a missing feed object instead of an empty body", async () => {
+        const env = {
+            PACKAGES: createMockKV({}),
+            PAPERDL_BUCKET: { async get() { return null; } },
+            AUTH_KEY,
+        } as unknown as Env;
+        const res = await get(dl("/pb/latest.yml"), env);
+        expect(res.status).toBe(404);
+    });
+
+    it("mirrors the versioned scheme under /paperdl/ on the main host", async () => {
+        const env = envWithDownloads();
+        const versioned = await get(
+            "http://localhost/paperdl/pb/3.0.0-alpha/paperboard-macos-x64.zip",
+            env,
+        );
+        expect(versioned.status).toBe(302);
+        expect(versioned.headers.get("Location")).toBe(
+            "https://github.com/MileniumHQ/Paperboard/releases/download/pb-v3.0.0-alpha/paperboard-macos-x64.zip",
+        );
+        const latest = await get(
+            "http://localhost/paperdl/crane/latest/crane-linux-arm64.tar.gz",
+            env,
+        );
+        expect(latest.status).toBe(302);
+        expect(latest.headers.get("Location")).toBe(
+            "https://github.com/MileniumHQ/Paperboard/releases/download/crane-v2.0.0-alpha/crane-linux-arm64.tar.gz",
+        );
+        const feed = await get("http://localhost/paperdl/pb/latest.yml", env);
+        expect(feed.status).toBe(200);
+        expect(await feed.text()).toContain("version: 3.0.0-alpha");
+    });
+
+    it("redirects legacy per-target downloads to the canonical latest file", async () => {
+        const env = envWithDownloads();
+        const mac = await get("http://localhost/paperdl/paperboard/macos-x64/download", env);
+        expect(mac.status).toBe(302);
+        expect(mac.headers.get("Location")).toBe(
+            "https://i.paperboard.dev/pb/latest/paperboard-macos-x64.zip",
+        );
+        const crane = await get("http://localhost/paperdl/crane/linux-x64/download", env);
+        expect(crane.status).toBe(302);
+        expect(crane.headers.get("Location")).toBe(
+            "https://i.paperboard.dev/crane/latest/crane-linux-x64.tar.gz",
         );
     });
 
-    it("returns 400 for an undecodable trailing filename", async () => {
-        const env = envWithPaperdl({
-            "crane/app": { body: new Uint8Array([1, 2, 3]) },
-        });
-        const res = await worker.fetch(
-            new Request("http://localhost/paperdl/crane/app/download/%zz"),
-            env,
-            {} as any,
-        );
-        expect(res.status).toBe(400);
-        const body = await res.json();
-        expect(body.error).toMatch(/filename/i);
+    it("404s legacy downloads for unknown targets instead of fabricating", async () => {
+        const env = envWithDownloads();
+        for (const url of [
+            "http://localhost/paperdl/crane/app/download",
+            "http://localhost/paperdl/paperboard/solaris-sparc/download",
+        ]) {
+            expect((await get(url, env)).status).toBe(404);
+        }
     });
 
-    it("returns 400 for a trailing filename that sanitizes to nothing", async () => {
-        const env = envWithPaperdl({
-            "crane/app": { body: new Uint8Array([1, 2, 3]) },
-        });
-        // %0A%0A decodes to two newlines: every byte is a control character
-        const res = await worker.fetch(
-            new Request("http://localhost/paperdl/crane/app/download/%0A%0A"),
-            env,
-            {} as any,
-        );
-        expect(res.status).toBe(400);
-        const body = await res.json();
-        expect(body.error).toMatch(/filename/i);
-    });
-
-    it("keeps serving a stored metadata filename when no trailing name is given", async () => {
-        const env = envWithPaperdl({
-            "crane/app": { body: new Uint8Array([1, 2, 3]), filename: "app-1.2.3.jar" },
-        });
-        const res = await worker.fetch(
-            new Request("http://localhost/paperdl/crane/app/download"),
-            env,
-            {} as any,
-        );
+    it("serves the current feed from the legacy yml path so old installs keep updating", async () => {
+        const env = envWithDownloads();
+        const res = await get("http://localhost/paperdl/paperboard/latest-mac.yml", env);
         expect(res.status).toBe(200);
-        expect(res.headers.get("Content-Disposition")).toBe(
-            'attachment; filename="app-1.2.3.jar"',
+        expect(await res.text()).toContain("version: 3.0.0-alpha");
+    });
+
+    it("keeps serving the frozen legacy index.json", async () => {
+        const env = envWithDownloads();
+        const res = await get("http://localhost/paperdl/paperboard/index.json", env);
+        expect(res.status).toBe(200);
+        expect(await res.json()).toEqual({ frozen: true });
+    });
+
+    it("does not serve short routes on the main host", async () => {
+        const env = envWithDownloads();
+        const res = await get(
+            "http://localhost/pb/latest/paperboard-macos-x64.zip",
+            env,
         );
+        expect(res.status).toBe(404);
     });
 });

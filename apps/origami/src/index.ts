@@ -2,7 +2,11 @@ import { CORS_HEADERS, jsonResponse, type Env } from "./lib";
 import { handleJavaRoutes } from "./routes/java";
 import { handlePanelsRoutes } from "./routes/panels";
 import { handlePackagesRoutes } from "./routes/packages";
-import { handlePaperdlRoutes } from "./routes/paperdl";
+import {
+    handleDownloadHostRoutes,
+    handlePaperdlRoutes,
+    isDownloadHost,
+} from "./routes/paperdl";
 
 export type { Env };
 export type { PackageMetadata } from "./lib";
@@ -25,6 +29,15 @@ export default {
         const pathname = url.pathname;
 
         try {
+            // i.paperboard.dev is downloads-only: short routes and feeds,
+            // everything else is a 404 (no registry, panels, java, publish,
+            // or health on this host).
+            if (isDownloadHost(url.hostname)) {
+                const dlRes = await handleDownloadHostRoutes(request, env, pathname);
+                if (dlRes) return dlRes;
+                return jsonResponse({ error: "Not Found" }, 404);
+            }
+
             if (pathname === "/" || pathname === "/health") {
                 return jsonResponse({
                     service: "Origami Package & Panel Registry",
@@ -42,6 +55,11 @@ export default {
                         "/paperdl/paperboard/latest.yml",
                         "/paperdl/paperboard/latest-mac.yml",
                         "/paperdl/paperboard/latest-linux.yml",
+                        "/paperdl/:dlapp/latest/:file",
+                        "/paperdl/:dlapp/:version/:file",
+                        "/paperdl/pb/latest.yml",
+                        "/paperdl/pb/latest-mac.yml",
+                        "/paperdl/pb/latest-linux.yml",
                     ],
                 });
             }
