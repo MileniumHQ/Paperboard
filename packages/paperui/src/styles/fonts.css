@@ -3,14 +3,14 @@
     font-style: normal;
     font-weight: 200 1000;
     font-display: swap;
-    src: url(../font/Nunito.woff2) format("woff2");
+    src: url(../font/Nunito.woff2?no-inline) format("woff2");
 }
 @font-face {
     font-family: "Nunito";
     font-style: italic;
     font-weight: 200 1000;
     font-display: swap;
-    src: url(../font/NunitoItalic.woff2) format("woff2");
+    src: url(../font/NunitoItalic.woff2?no-inline) format("woff2");
 }
 @font-face {
     font-family: "Nunito Sans";
@@ -18,7 +18,7 @@
     font-weight: 200 1000;
     font-stretch: 75% 125%;
     font-display: swap;
-    src: url(../font/NunitoSans.woff2) format("woff2");
+    src: url(../font/NunitoSans.woff2?no-inline) format("woff2");
 }
 @font-face {
     font-family: "Nunito Sans";
@@ -26,25 +26,34 @@
     font-weight: 200 1000;
     font-stretch: 75% 125%;
     font-display: swap;
-    src: url(../font/NunitoSansItalic.woff2) format("woff2");
+    src: url(../font/NunitoSansItalic.woff2?no-inline) format("woff2");
 }
 @font-face {
     font-family: "SUSE Mono";
     font-style: normal;
     font-weight: 100 800;
     font-display: swap;
-    src: url(../font/SuseMono.woff2) format("woff2");
+    src: url(../font/SuseMono.woff2?no-inline) format("woff2");
 }
 @font-face {
     font-family: "SUSE Mono";
     font-style: italic;
     font-weight: 100 800;
     font-display: swap;
-    src: url(../font/SUSEMonoItalic.woff2) format("woff2");
+    src: url(../font/SUSEMonoItalic.woff2?no-inline) format("woff2");
 }
 @font-face {
     font-family: "Material Symbols Rounded";
     font-style: normal;
     font-weight: 100 700;
-    src: url(../font/MaterialSymbolsRounded.woff2) format("woff2");
+    /* Instanced build of MaterialSymbolsRounded.woff2 next to it: all 4164
+       icons and every ligature are kept, but the axes PaperUI never varies
+       are pinned so the font drops from ~5MB to ~0.6MB. Only FILL stays
+       variable (PaperIcon uses FILL 1; outline FILL 0 still works).
+       Re-instance from the full font if PaperUI starts varying wght/GRAD/opsz:
+         fonttools varLib.instancer MaterialSymbolsRounded.woff2 \
+           GRAD=0 opsz=20 wght=500 --output=MaterialSymbolsRounded.instanced.woff2
+       ?no-inline defeats library-mode's forced base64 embedding so the font
+       emits as a file. */
+    src: url(../font/MaterialSymbolsRounded.instanced.woff2?no-inline) format("woff2");
 }

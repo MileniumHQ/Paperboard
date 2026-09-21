@@ -2,6 +2,7 @@ import styles from "./index.module.css";
 import { splitProps, type JSX } from "solid-js";
 import { Dynamic } from "solid-js/web";
 import { roleVars, isPaperRole } from "../../utils/colors";
+import { PaperIcon } from "../PaperIcon";
 import type { PaperButtonVariant } from "../../types";
 
 export type PaperButtonSize = "tiny" | "small" | "medium" | "large";
@@ -73,7 +74,11 @@ export function PaperButton(props: PaperButtonProps) {
             disabled={local.href ? undefined : local.disabled}
             aria-label={ariaLabel()}
         >
-            {local.children}
+            {local.icon && typeof local.children === "string" ? (
+                <PaperIcon>{local.children}</PaperIcon>
+            ) : (
+                local.children
+            )}
         </Dynamic>
     );
 }

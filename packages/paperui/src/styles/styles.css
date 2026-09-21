@@ -11,6 +11,10 @@
         "Nunito", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
         Helvetica, Arial, sans-serif;
     --paper-font-family-code: "SUSE Mono", monospace;
+    /* Icon glyphs. The family name is written exactly twice in this repo:
+       here (the token) and in fonts.css (@font-face). Everything else
+       renders icons through PaperIcon or consumes this token. */
+    --paper-icon-font-family: "Material Symbols Rounded", sans-serif;
     --paper-focus-ring: var(--paper-thick-border-width) solid var(--paper-primary);
     --paper-focus-offset: 2px;
 }

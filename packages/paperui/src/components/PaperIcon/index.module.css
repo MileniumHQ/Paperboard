@@ -1,5 +1,5 @@
 .PaperIcon {
-    font-family: "Material Symbols Rounded", sans-serif;
+    font-family: var(--paper-icon-font-family);
     display: inline-flex;
     align-items: center;
     justify-content: center;

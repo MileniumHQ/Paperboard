@@ -4,6 +4,10 @@ import dts from "vite-plugin-dts";
 import path from "path";
 
 export default defineConfig({
+    // Relative asset URLs: paperui.css is consumed from node_modules into
+    // apps served under subpaths (/docs/) and custom protocols
+    // (Electron) — root-absolute font URLs would 404 everywhere but /.
+    base: "./",
     plugins: [
         solidPlugin(),
         dts({
@@ -18,6 +22,10 @@ export default defineConfig({
     build: {
         target: "esnext",
         cssCodeSplit: false,
+        // NOTE: library mode unconditionally base64-inlines assets
+        // (Vite checks build.lib before assetsInlineLimit, so setting it
+        // does nothing). Fonts opt out per-URL with ?no-inline in
+        // src/styles/fonts.css — do not remove those markers.
         lib: {
             entry: path.resolve(__dirname, "src/index.ts"),
             name: "PaperUI",

@@ -124,8 +124,10 @@
 
 .PaperButton.icon {
     padding: 0;
-    font-family: "Material Symbols Rounded";
-    font-variation-settings: "FILL" 1;
+    /* The glyph itself renders through PaperIcon (which carries the icon
+       font and its variation settings); this variant only squares the hit
+       area. Sizing still inherits: .size-* font-size flows into the glyph,
+       and the [class*="PaperIcon"] rules below size embedded icons. */
 }
 
 .PaperButton.icon.size-medium {

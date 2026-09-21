@@ -1,6 +1,7 @@
 import styles from "./index.module.css";
 import { splitProps, Show, type JSX } from "solid-js";
 import { LoaderStatus } from "../../types";
+import { PaperIcon } from "../PaperIcon";
 import { PaperText } from "../PaperText";
 
 export type PaperLoaderSize = "small" | "medium" | "large";
@@ -97,7 +98,15 @@ export function PaperLoader(props: PaperLoaderProps) {
                         [styles.full]: isFull(),
                         [styles.error]: isError(),
                     }}
-                ></span>
+                >
+                    {/* The finisher glyph renders through PaperIcon like
+                        every other icon, not a pseudo-element ligature. */}
+                    <Show when={isFull()}>
+                        <PaperIcon class={styles.finisherIcon}>
+                            {isError() ? "close" : "check"}
+                        </PaperIcon>
+                    </Show>
+                </span>
             </span>
             <Show when={local.label}>
                 <PaperText size={4} class={styles.labelWrapper}>
