@@ -14,12 +14,36 @@ export interface SystemInfo {
     username?: string;
 }
 
+export type GpuVendor = "nvidia" | "amd" | "intel" | "apple" | "other";
+
+export interface GpuInfo {
+    name: string;
+    vendor: GpuVendor;
+    /** dedicated memory, or system memory when unifiedMemory is true */
+    memoryTotalBytes?: number;
+    memoryFreeBytes?: number;
+    /** the GPU shares system RAM (Apple Silicon) */
+    unifiedMemory?: boolean;
+    driver?: string;
+    /** where the facts came from: "nvidia-smi", "sysfs", "system_profiler", "registry" */
+    source: string;
+}
+
+export interface GpuReport {
+    gpus: GpuInfo[];
+    /** probes that failed; non-empty means `gpus` may be incomplete */
+    errors: string[];
+}
+
 export const systemApi = {
     /** primary LAN IPv4 address */
     getLocalIP: (): Promise<string> => invoke<string>("system-get-ip"),
 
     /** full system info */
     getInfo: (): Promise<SystemInfo> => invoke<SystemInfo>("system-info"),
+
+    /** GPUs of the computer, with memory where the OS reports it */
+    getGpus: (): Promise<GpuReport> => invoke<GpuReport>("system-gpus"),
 
     /** OS notification with fallback */
     notify: (title: string, message: string): Promise<unknown> =>

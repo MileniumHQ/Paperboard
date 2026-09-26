@@ -8,6 +8,7 @@ import { logger } from "../logger";
 import type { RpcContext } from "./context";
 import { rpcErrorCode } from "./params";
 import { forbidden } from "./errors";
+import { getGpuReport } from "../gpu";
 
 // self-update URL must be https or loopback http
 function isSafeUpdateUrl(rawUrl: string): boolean {
@@ -52,6 +53,10 @@ export async function handleSystem(action: string, id: unknown, params: any, ctx
                 ip: getNetworkIp(),
                 username: process.env.USER || os.userInfo().username,
             });
+            return true;
+        }
+        case "system:gpus": {
+            reply(id, await getGpuReport());
             return true;
         }
         case "system:update": {

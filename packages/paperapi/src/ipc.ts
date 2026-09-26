@@ -222,6 +222,10 @@ export const RPC_ROUTES: Record<string, WsRoute> = {
         action: "system:info",
         unwrap: (r) => r,
     },
+    "system-gpus": {
+        action: "system:gpus",
+        unwrap: (r) => ({ gpus: Array.isArray(r?.gpus) ? r.gpus : [], errors: Array.isArray(r?.errors) ? r.errors : [] }),
+    },
     "system-notify": {
         action: "system:notify",
         unwrap: (r) => r,
