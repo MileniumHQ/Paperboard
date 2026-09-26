@@ -2,14 +2,12 @@
 import path from "path";
 import fs from "fs";
 import os from "os";
-import * as tar from "tar";
 import { SupervisedProcessClient, getSupervisorSocketPath } from "./supervisor";
 import { PanelManifest } from "./types";
 import {
     ProgressCallback,
     streamToFileWithProgress,
     moveFileSafe,
-    makeSafeTarFilter,
     resolveSecureTargetPath,
     sanitizeId,
     panelFilesDirName,
@@ -22,7 +20,7 @@ import { getSocketsDir, getPaperboardDir } from "./paths";
 import { logger } from "./logger";
 import { spawnSupervisedClient } from "./engineSupervisor";
 import { getDefaultShell } from "./pty";
-import { extractArchive, findBinDir } from "./engineArchives";
+import { extractArchive, extractPackageArchive, findBinDir, packageArchiveSuffix, parsePackageLayout } from "./engineArchives";
 import { panelServices, PanelServicesManager } from "./panelServices";
 import { CredentialStore } from "./credentials";
 import { resolveRegistryUrl } from "./util";
@@ -768,15 +766,11 @@ export class PaperCraneEngine {
             }
         }
 
+        // refused before any download: a layout this daemon does not know
+        // would install binaries where no caller looks for them
+        const layout = parsePackageLayout(downloadInfo.layout);
         // keep the URL extension so extraction dispatches on format
-        let urlExt = "";
-        try {
-            const urlBase = path.basename(new URL(downloadInfo.url).pathname).toLowerCase();
-            if (urlBase.endsWith(".zip")) urlExt = ".zip";
-            else if (urlBase.endsWith(".tgz")) urlExt = ".tgz";
-            else if (urlBase.endsWith(".tar.gz")) urlExt = ".tar.gz";
-            else if (urlBase.endsWith(".tar")) urlExt = ".tar";
-        } catch (err) { logger.debug("[engine.ts] op failed:", err) }
+        const urlExt = packageArchiveSuffix(downloadInfo.url);
         const tempArchive = path.join(
             this.packagesDir,
             `${packageName}-archive.tmp-${Date.now()}${urlExt}`,
@@ -820,45 +814,7 @@ export class PaperCraneEngine {
             });
 
             if (!fs.existsSync(pkgDir)) fs.mkdirSync(pkgDir, { recursive: true });
-
-            // zips via bundled unzipper, tarballs keep strip handling
-            if (urlExt === ".zip") {
-                await extractArchive(tempArchive, pkgDir);
-            } else {
-                // strip a single top-level wrapper dir, fallback to flat
-                try {
-                    await tar.extract({
-                        file: tempArchive,
-                        cwd: pkgDir,
-                        strip: 1,
-                        filter: makeSafeTarFilter(path.resolve(pkgDir)),
-                    });
-                    if (!fs.existsSync(path.join(pkgDir, "bin"))) {
-                        // no wrapper at top level, re-extract flat
-                        await fs.promises.rm(pkgDir, { recursive: true, force: true });
-                        fs.mkdirSync(pkgDir, { recursive: true });
-                        await tar.extract({
-                            file: tempArchive,
-                            cwd: pkgDir,
-                            strip: 0,
-                            filter: makeSafeTarFilter(path.resolve(pkgDir)),
-                        });
-                    }
-                } catch (err) {
-                    logger.debug(
-                        `[package:${packageName}] initial tar extraction failed; retrying flat:`,
-                        err,
-                    );
-                    await fs.promises.rm(pkgDir, { recursive: true, force: true });
-                    fs.mkdirSync(pkgDir, { recursive: true });
-                    await tar.extract({
-                        file: tempArchive,
-                        cwd: pkgDir,
-                        strip: 0,
-                        filter: makeSafeTarFilter(path.resolve(pkgDir)),
-                    });
-                }
-            }
+            await extractPackageArchive(tempArchive, pkgDir, layout, urlExt);
             log(
                 `extraction complete; bin present: ${this.findBinDir(pkgDir, 4) !== null}`,
             );
