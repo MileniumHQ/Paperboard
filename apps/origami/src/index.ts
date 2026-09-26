@@ -1,5 +1,4 @@
 import { CORS_HEADERS, jsonResponse, type Env } from "./lib";
-import { handleJavaRoutes } from "./routes/java";
 import { handlePanelsRoutes } from "./routes/panels";
 import { handlePackagesRoutes } from "./routes/packages";
 import {
@@ -30,7 +29,7 @@ export default {
 
         try {
             // i.paperboard.dev is downloads-only: short routes and feeds,
-            // everything else is a 404 (no registry, panels, java, publish,
+            // everything else is a 404 (no registry, panels, publish,
             // or health on this host).
             if (isDownloadHost(url.hostname)) {
                 const dlRes = await handleDownloadHostRoutes(request, env, pathname);
@@ -49,7 +48,6 @@ export default {
                         "/panel/:id.json",
                         "/panel/:id/download",
                         "/panel/publish",
-                        "/update/java",
                         "/paperdl/:app/index.json",
                         "/paperdl/:app/:target/download",
                         "/paperdl/paperboard/latest.yml",
@@ -63,9 +61,6 @@ export default {
                     ],
                 });
             }
-
-            const javaRes = await handleJavaRoutes(request, env, url, pathname);
-            if (javaRes) return javaRes;
 
             const panelsRes = await handlePanelsRoutes(
                 request,

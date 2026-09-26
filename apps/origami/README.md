@@ -35,6 +35,23 @@ bun run typecheck
 bun run deploy
 ```
 
+## Package records
+
+Package records (`java-<N>`, `ollama`) are written by operator scripts, never by a worker route. They write straight to the production `PACKAGES` namespace through wrangler, so sign in first with `bunx wrangler login`.
+
+```bash
+# every Adoptium feature release (or name them: -- 21 25)
+bun run update:java
+
+# latest stable Ollama release
+bun run update:ollama
+
+# print the records without writing
+bun run update:ollama -- --dry-run
+```
+
+Every platform entry carries a `sha256` from the upstream authority (Adoptium's API, GitHub's asset digest cross-checked against `sha256sum.txt`). A platform without one is dropped (Java) or fails the whole record (Ollama). The daemon refuses to install without it. `layout` tells the daemon how the archive maps onto the package directory: `wrapped` (default, one top-level folder around `bin/`), `root` (archive root holds `bin/`), or `bin` (archive root *is* `bin/`).
+
 ## Configuration
 
 KV binding is defined in `wrangler.jsonc`:

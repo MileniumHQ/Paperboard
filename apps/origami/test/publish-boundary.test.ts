@@ -397,21 +397,18 @@ describe("O8: method confusion closed", () => {
         expect(res.status).toBe(405);
     });
 
-    it("java update refuses GET and requires POST + auth", async () => {
+    it("package records have no worker write path, even authenticated", async () => {
+        // records are written by scripts/update-*.ts through the operator's
+        // wrangler login; the worker only serves them
         const { env } = envWith();
-        const get = await worker.fetch(
-            authed("http://localhost/update/java", { method: "GET" }),
-            env,
-            {} as any,
-        );
-        expect(get.status).toBe(405);
-
-        const noAuth = await worker.fetch(
-            new Request("http://localhost/update/java", { method: "POST" }),
-            env,
-            {} as any,
-        );
-        expect(noAuth.status).toBe(401);
+        for (const url of [
+            "http://localhost/update/java",
+            "http://localhost/update/java/21",
+            "http://localhost/update/ollama",
+        ]) {
+            const res = await worker.fetch(authed(url, { method: "POST" }), env, {} as any);
+            expect(res.status).toBe(404);
+        }
     });
 });
 

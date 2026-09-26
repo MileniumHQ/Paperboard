@@ -9,7 +9,9 @@
         "dev": "wrangler dev",
         "deploy": "wrangler deploy -c wrangler.jsonc --no-autoconfig",
         "types": "wrangler types",
-        "typecheck": "tsc --noEmit"
+        "typecheck": "tsc --noEmit",
+        "update:java": "bun scripts/update-java.ts",
+        "update:ollama": "bun scripts/update-ollama.ts"
     },
     "devDependencies": {
         "@cloudflare/workers-types": "^5.20260818.1",

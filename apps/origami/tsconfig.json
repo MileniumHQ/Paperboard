@@ -15,5 +15,5 @@
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true
   },
-  "include": ["src/**/*", "worker-configuration.d.ts"]
+  "include": ["src/**/*", "scripts/**/*", "worker-configuration.d.ts"]
 }
