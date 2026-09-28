@@ -102,8 +102,12 @@ export function Example() {
 
             <PaperText preset="subheader" id="behavior">Behavior</PaperText>
             <PaperText preset="body">
+                The popup is the same menu element as PaperContextMenu: same panel surface, item layout, hover and
+                keyboard behavior. A PaperSelectMenuItem may declare a description, which renders as a second line
+                the way a context menu item does.
                 The popup portal measures window boundaries to flip above the trigger if screen space below is insufficient.
-                Pressing ArrowDown or ArrowUp steps through options; Enter commits the selection.
+                Pressing ArrowDown or ArrowUp steps through options; Home and End jump to the ends; Enter commits the selection.
+                When the selected PaperSelectMenuItem declares an icon, the trigger mirrors it next to the label, so logos and glyphs stay visible while the menu is closed.
             </PaperText>
 
             <PaperText preset="subheader" id="recipes">Recipes</PaperText>

@@ -94,7 +94,13 @@ export function Example() {
                             <td><PaperCode>false</PaperCode></td>
                             <td>Arranges menu items along a horizontal axis.</td>
                         </tr>
-                    </tbody>
+                                            <tr>
+                            <td><PaperCode>embedded</PaperCode></td>
+                            <td><PaperCode>boolean</PaperCode></td>
+                            <td><PaperCode>false</PaperCode></td>
+                            <td>Drops the trailing divider, surface and internal scrolling so a host sidebar can supply its own frame.</td>
+                        </tr>
+</tbody>
                 </PaperTable>
 
             <PaperText preset="subheader" id="behavior">Behavior</PaperText>

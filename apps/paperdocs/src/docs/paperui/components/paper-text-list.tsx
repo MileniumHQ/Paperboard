@@ -61,6 +61,12 @@ export function Example() {
                     </thead>
                     <tbody>
                         <tr>
+                            <td><PaperCode>preset</PaperCode></td>
+                            <td><PaperCode>PaperTextPreset</PaperCode></td>
+                            <td><PaperCode>undefined</PaperCode></td>
+                            <td>Typography preset matching the PaperText scale (e.g. body, caption, section).</td>
+                        </tr>
+                        <tr>
                             <td><PaperCode>ordered</PaperCode></td>
                             <td><PaperCode>boolean</PaperCode></td>
                             <td><PaperCode>false</PaperCode></td>
@@ -77,6 +83,36 @@ export function Example() {
                             <td><PaperCode>number</PaperCode></td>
                             <td><PaperCode>3</PaperCode></td>
                             <td>Typography size index matching the PaperText scale.</td>
+                        </tr>
+                        <tr>
+                            <td><PaperCode>weight</PaperCode></td>
+                            <td><PaperCode>number</PaperCode></td>
+                            <td><PaperCode>400</PaperCode></td>
+                            <td>Font weight numeric value.</td>
+                        </tr>
+                        <tr>
+                            <td><PaperCode>color</PaperCode></td>
+                            <td><PaperCode>PaperColor</PaperCode></td>
+                            <td><PaperCode>undefined</PaperCode></td>
+                            <td>Semantic color role or token name applied to list items.</td>
+                        </tr>
+                        <tr>
+                            <td><PaperCode>family</PaperCode></td>
+                            <td><PaperCode>"body" | "code"</PaperCode></td>
+                            <td><PaperCode>"body"</PaperCode></td>
+                            <td>Switches typography family to monospace code when set.</td>
+                        </tr>
+                        <tr>
+                            <td><PaperCode>rounded</PaperCode></td>
+                            <td><PaperCode>boolean</PaperCode></td>
+                            <td><PaperCode>false</PaperCode></td>
+                            <td>Applies rounded font family styling.</td>
+                        </tr>
+                        <tr>
+                            <td><PaperCode>breakWord</PaperCode></td>
+                            <td><PaperCode>boolean</PaperCode></td>
+                            <td><PaperCode>false</PaperCode></td>
+                            <td>Enables word-breaking and overflow-wrapping.</td>
                         </tr>
                         <tr>
                             <td><PaperCode>type</PaperCode></td>

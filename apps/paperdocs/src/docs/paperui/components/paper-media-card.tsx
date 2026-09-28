@@ -85,7 +85,13 @@ export function Example() {
                             <td><PaperCode>description</PaperCode></td>
                             <td><PaperCode>string | JSX.Element</PaperCode></td>
                             <td><PaperCode>undefined</PaperCode></td>
-                            <td>Body explanation text.</td>
+                            <td>Body explanation text, clamped to three lines.</td>
+                        </tr>
+                        <tr>
+                            <td><PaperCode>descriptionExtra</PaperCode></td>
+                            <td><PaperCode>JSX.Element</PaperCode></td>
+                            <td><PaperCode>undefined</PaperCode></td>
+                            <td>Content below the description, outside its line clamp and pinned to the card's bottom edge so cards in a row align. Use it for meters or status rows.</td>
                         </tr>
                         <tr>
                             <td><PaperCode>icon</PaperCode></td>

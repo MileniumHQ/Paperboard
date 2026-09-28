@@ -100,6 +100,52 @@ export function Example() {
                     </tbody>
                 </PaperTable>
 
+            <PaperText preset="body">
+                PaperListItem accepts the per-row configuration below.
+            </PaperText>
+            <PaperTable>
+                    <thead>
+                        <tr>
+                            <th>Prop</th>
+                            <th>Type</th>
+                            <th>Default</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><PaperCode>value</PaperCode></td>
+                            <td><PaperCode>string | number</PaperCode></td>
+                            <td>No default</td>
+                            <td>Value identifying this row in the list's selection.</td>
+                        </tr>
+                        <tr>
+                            <td><PaperCode>icon</PaperCode></td>
+                            <td><PaperCode>string | JSX.Element</PaperCode></td>
+                            <td><PaperCode>undefined</PaperCode></td>
+                            <td>Leading icon ligature or element.</td>
+                        </tr>
+                        <tr>
+                            <td><PaperCode>description</PaperCode></td>
+                            <td><PaperCode>string | JSX.Element</PaperCode></td>
+                            <td><PaperCode>undefined</PaperCode></td>
+                            <td>Secondary line rendered under the row title.</td>
+                        </tr>
+                        <tr>
+                            <td><PaperCode>actions</PaperCode></td>
+                            <td><PaperCode>JSX.Element</PaperCode></td>
+                            <td><PaperCode>undefined</PaperCode></td>
+                            <td>Trailing controls such as a menu button. They must stop their own pointer events so the row does not select.</td>
+                        </tr>
+                        <tr>
+                            <td><PaperCode>closeable</PaperCode></td>
+                            <td><PaperCode>boolean</PaperCode></td>
+                            <td><PaperCode>false</PaperCode></td>
+                            <td>Renders the built-in close button; onClose receives a cancellable close event.</td>
+                        </tr>
+                    </tbody>
+                </PaperTable>
+
             <PaperText preset="subheader" id="behavior">Behavior</PaperText>
             <PaperText preset="body">
                 Items manage selection through hidden radio inputs to ensure accessible screen reader announcements.

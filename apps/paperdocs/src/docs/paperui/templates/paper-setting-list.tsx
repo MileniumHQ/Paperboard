@@ -104,6 +104,12 @@ export function Example() {
                             <td><PaperCode>false</PaperCode></td>
                             <td>Allows rows to expand vertically rather than maintaining fixed row heights.</td>
                         </tr>
+                        <tr>
+                            <td><PaperCode>flat</PaperCode></td>
+                            <td><PaperCode>boolean</PaperCode></td>
+                            <td><PaperCode>false</PaperCode></td>
+                            <td>Drops the card border and rounding for full-bleed panes, such as the Paperboard settings screen.</td>
+                        </tr>
                     </tbody>
                 </PaperTable>
 

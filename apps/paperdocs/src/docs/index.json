@@ -152,6 +152,10 @@
                         "name": "PaperLoader",
                         "file": "paper-loader"
                     },
+                    "paper-markdown": {
+                        "name": "PaperMarkdown",
+                        "file": "paper-markdown"
+                    },
                     "paper-media-card": {
                         "name": "PaperMediaCard",
                         "file": "paper-media-card"
@@ -167,6 +171,10 @@
                     "paper-page-header": {
                         "name": "PaperPageHeader",
                         "file": "paper-page-header"
+                    },
+                    "paper-pagination": {
+                        "name": "PaperPagination",
+                        "file": "paper-pagination"
                     },
                     "paper-progress": {
                         "name": "PaperProgress",

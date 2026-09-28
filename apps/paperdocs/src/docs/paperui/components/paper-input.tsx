@@ -12,8 +12,9 @@ export default function PaperInputDoc() {
         <PaperFlex direction="column" gap="double" fullWidth>
             <PaperText preset="header">PaperInput</PaperText>
             <PaperText preset="body">
-                PaperInput renders a single-line text input field with optional leading icons and built-in validation states.
+                PaperInput renders a text field with optional leading icons and built-in validation states.
                 Reach for PaperInput when gathering user text, searching lists, or configuring numeric properties.
+                Set multiline to render a textarea instead, keeping every other prop unchanged.
                 The field displays custom focus rings, error outlines, and compact dimension variants.
             </PaperText>
 
@@ -96,13 +97,62 @@ export function Example() {
                             <td><PaperCode>""</PaperCode></td>
                             <td>Initial text value for uncontrolled operation.</td>
                         </tr>
+                        <tr>
+                            <td><PaperCode>multiline</PaperCode></td>
+                            <td><PaperCode>boolean</PaperCode></td>
+                            <td><PaperCode>false</PaperCode></td>
+                            <td>Renders a textarea in place of the single-line field. Every other prop behaves the same.</td>
+                        </tr>
+                        <tr>
+                            <td><PaperCode>rows</PaperCode></td>
+                            <td><PaperCode>number</PaperCode></td>
+                            <td><PaperCode>4</PaperCode></td>
+                            <td>Visible text rows when multiline is set. Ignored otherwise.</td>
+                        </tr>
+                        <tr>
+                            <td><PaperCode>resize</PaperCode></td>
+                            <td><PaperCode>boolean</PaperCode></td>
+                            <td><PaperCode>true</PaperCode></td>
+                            <td>Whether the browser resize affordance is available when multiline is set.</td>
+                        </tr>
                     </tbody>
                 </PaperTable>
 
+            <PaperText preset="subheader" id="multiline">Multiline</PaperText>
+            <PaperText preset="body">
+                Set multiline to collect text that spans more than one line.
+                The field keeps the icon slot, the validation contract, and the disabled and compact variants of the single-line form.
+                Pass rows to control the visible height, and resize to remove the drag handle when the surrounding layout should stay fixed.
+            </PaperText>
+            <PaperCode block language="tsx">
+{`import { PaperCard, PaperFlex, PaperInput } from "@paperboard-dev/paperui";
+
+export function Example() {
+    return (
+        <PaperCard padding="double" surface="front">
+            <PaperFlex direction="column" gap="full">
+                <PaperInput multiline rows={4} placeholder="Notes" fullWidth />
+                <PaperInput multiline rows={2} resize={false} placeholder="Fixed height" fullWidth />
+                <PaperInput multiline icon="search" rows={3} placeholder="Multiline with icon" fullWidth />
+            </PaperFlex>
+        </PaperCard>
+    );
+}`}
+            </PaperCode>
+            <PaperCard padding="double" surface="front">
+                <PaperFlex direction="column" gap="full">
+                    <PaperInput multiline rows={4} placeholder="Notes" fullWidth />
+                    <PaperInput multiline rows={2} resize={false} placeholder="Fixed height" fullWidth />
+                    <PaperInput multiline icon="search" rows={3} placeholder="Multiline with icon" fullWidth />
+                </PaperFlex>
+            </PaperCard>
+
             <PaperText preset="subheader" id="behavior">Behavior</PaperText>
             <PaperText preset="body">
-                When validation fails, data-invalid is set to true and aria-invalid is added to the native input element.
+                When validation fails, data-invalid is set to true and aria-invalid is added to the native field element.
                 Focus states project an outer focus ring using var(--paper-primary).
+                A multiline field fills the width of its parent, because a textarea has no natural single-line width to fit.
+                Attributes that only exist on an input, such as type, min, max, step, pattern and size, have no effect in multiline mode.
             </PaperText>
 
             <PaperText preset="subheader" id="recipes">Recipes</PaperText>
