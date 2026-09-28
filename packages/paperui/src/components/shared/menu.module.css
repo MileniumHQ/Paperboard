@@ -1,0 +1,200 @@
+/* Shared menu element styles: PaperContextMenu, PaperSelectMenu and every
+   other menu-like surface read from this one file so a context menu item and
+   a dropdown option are the same element, not two lookalikes. */
+
+.menu {
+    position: fixed;
+    z-index: 2000;
+    font-family: var(--paper-font-family);
+    background: var(--paper-surface-raised);
+    border: var(--paper-border-width) solid var(--paper-border);
+    border-radius: var(--paper-border-radius);
+    box-shadow: var(--paper-heavy-element-shadow);
+    padding: var(--paper-uigap-half);
+    min-width: calc(var(--paper-size-sidebar) * 0.7);
+    max-width: min(var(--paper-size-menu-max), calc(100vw - var(--paper-uigap-double)));
+    max-height: calc(var(--paper-control-size-medium) * 7);
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--paper-border) transparent;
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap-onefourth);
+    box-sizing: border-box;
+    user-select: none;
+    touch-action: none;
+    transform: translateZ(0);
+}
+
+.menu::-webkit-scrollbar {
+    width: var(--paper-uigap-half);
+}
+
+.menu::-webkit-scrollbar-thumb {
+    background: var(--paper-border);
+    border-radius: var(--paper-border-radius-half);
+}
+
+.menu::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.menu.closed {
+    display: none;
+}
+
+.header {
+    padding: var(--paper-uigap-half) var(--paper-uigap-threefourths)
+        var(--paper-uigap-onefourth);
+    font-size: var(--paper-text-size-1);
+    font-weight: 700;
+    color: var(--paper-text-subtle);
+    text-transform: uppercase;
+    user-select: none;
+    pointer-events: none;
+}
+
+.item {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: var(--paper-uigap-threefourths);
+    padding: var(--paper-uigap-half) var(--paper-uigap-threefourths);
+    border-radius: var(--paper-border-radius-half);
+    cursor: pointer;
+    font-family: inherit;
+    font-size: var(--paper-text-size-3);
+    color: var(--paper-text);
+    transition:
+        background var(--paper-tiny-transition) ease,
+        color var(--paper-tiny-transition) ease;
+    text-decoration: none;
+}
+
+.item:hover,
+.item.highlighted {
+    background: color-mix(
+        in srgb,
+        var(--paper-contrast) 6%,
+        var(--paper-surface-raised)
+    );
+}
+
+.item.danger {
+    color: var(--paper-danger);
+}
+
+.item.danger:hover,
+.item.danger.highlighted {
+    background: color-mix(in srgb, var(--paper-danger) 12%, transparent);
+}
+
+.item.disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+.itemIcon {
+    font-size: var(--paper-icon-size-medium);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--paper-primary-deep);
+    flex-shrink: 0;
+}
+
+.item.danger .itemIcon {
+    color: var(--paper-danger);
+}
+
+.itemContent {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+}
+
+.itemLabel {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.itemDescription {
+    color: var(--paper-text-subtle);
+    font-size: var(--paper-text-size-1);
+    font-weight: normal;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.itemKeybind {
+    margin-left: auto;
+    color: var(--paper-text-subtle);
+    font-size: var(--paper-text-size-2);
+    font-family: inherit;
+    padding-left: var(--paper-uigap);
+    white-space: nowrap;
+    opacity: 0.85;
+}
+
+.itemCheck {
+    margin-left: auto;
+    flex-shrink: 0;
+    font-size: var(--paper-icon-size-small);
+    color: var(--paper-primary);
+}
+
+.itemKeybind + .itemCheck {
+    margin-left: 0;
+}
+
+.subMenuIndicator {
+    margin-left: auto;
+    font-size: var(--paper-icon-size-small);
+    color: var(--paper-text-subtle);
+    display: inline-flex;
+    align-items: center;
+}
+
+.subMenuPanel {
+    position: absolute;
+    top: calc(var(--paper-uigap-half) * -1);
+    left: calc(100% + var(--paper-uigap-half));
+    z-index: 1001;
+    background: var(--paper-surface-raised);
+    border: var(--paper-border-width) solid var(--paper-border);
+    border-radius: var(--paper-border-radius);
+    box-shadow: var(--paper-heavy-element-shadow);
+    padding: var(--paper-uigap-half);
+    min-width: calc(var(--paper-size-sidebar) * 0.7);
+    display: flex;
+    flex-direction: column;
+    transform: translateZ(0);
+}
+
+.subMenuPanel::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: calc((var(--paper-uigap-half) + var(--paper-uigap-onefourth)) * -1);
+    width: var(--paper-uigap);
+}
+
+.subMenuPanel.flipX {
+    left: auto;
+    right: calc(100% + var(--paper-uigap-half));
+}
+
+.subMenuPanel.flipX::before {
+    left: auto;
+    right: calc((var(--paper-uigap-half) + var(--paper-uigap-onefourth)) * -1);
+}
+
+.subMenuPanel.flipY {
+    top: auto;
+    bottom: calc(var(--paper-uigap-half) * -1);
+}

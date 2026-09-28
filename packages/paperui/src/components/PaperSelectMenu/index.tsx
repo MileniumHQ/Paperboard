@@ -1,18 +1,18 @@
 import styles from "./index.module.css";
+import { MenuItem } from "../shared/MenuItem";
+import { PaperContextMenu } from "../PaperContextMenu";
 import {
     splitProps,
     createSignal,
     createContext,
-    createEffect,
     useContext,
-    onMount,
     onCleanup,
+    onMount,
     Show,
     type ParentProps,
     type JSX,
     type Accessor,
 } from "solid-js";
-import { Portal } from "solid-js/web";
 import { PaperIcon } from "../PaperIcon";
 import {
     SelectionProvider,
@@ -20,15 +20,20 @@ import {
     useSelectionItem,
     type SelectionProviderProps,
 } from "../contexts/selection";
-
+import { useContextMenu } from "../PaperContextMenu";
 
 interface RegisteredOption {
     value: string | number;
     label: Accessor<JSX.Element>;
+    icon: Accessor<JSX.Element | string | undefined>;
 }
 
 interface SelectMenuContextType {
-    register: (value: string | number, label: Accessor<JSX.Element>) => void;
+    register: (
+        value: string | number,
+        label: Accessor<JSX.Element>,
+        icon: Accessor<JSX.Element | string | undefined>,
+    ) => void;
     unregister: (value: string | number) => void;
     close: () => void;
     commit: (value: string | number) => void;
@@ -62,8 +67,6 @@ export function PaperSelectMenu(props: ParentProps<PaperSelectMenuProps>) {
         "children",
     ]);
 
-    let containerRef: HTMLDivElement | undefined;
-
     return (
         <SelectionProvider
             name={local.name}
@@ -71,18 +74,17 @@ export function PaperSelectMenu(props: ParentProps<PaperSelectMenuProps>) {
             defaultValue={local.defaultValue}
             onValueChange={local.onValueChange}
         >
-                <SelectMenuInner
-                    {...rest}
-                    placeholder={local.placeholder}
-                    disabled={local.disabled}
-                    fullWidth={local.fullWidth}
-                    name={local.name}
-                    containerRef={(el) => (containerRef = el)}
-                    class={local.class}
-                    classList={local.classList}
-                >
-                    {local.children}
-                </SelectMenuInner>
+            <SelectMenuInner
+                {...rest}
+                placeholder={local.placeholder}
+                disabled={local.disabled}
+                fullWidth={local.fullWidth}
+                name={local.name}
+                class={local.class}
+                classList={local.classList}
+            >
+                {local.children}
+            </SelectMenuInner>
         </SelectionProvider>
     );
 }
@@ -94,7 +96,6 @@ function SelectMenuInner(
             disabled?: boolean;
             fullWidth?: boolean;
             name?: string;
-            containerRef: (el: HTMLDivElement) => void;
         }
     >,
 ) {
@@ -103,7 +104,6 @@ function SelectMenuInner(
         "disabled",
         "fullWidth",
         "name",
-        "containerRef",
         "class",
         "classList",
         "children",
@@ -111,14 +111,16 @@ function SelectMenuInner(
 
     const selection = useSelectionContext();
     const [open, setOpen] = createSignal(false);
-    const [highlighted, setHighlighted] = createSignal<string | number | null>(null);
     const [options, setOptions] = createSignal<RegisteredOption[]>([]);
+    let containerEl: HTMLDivElement | undefined;
+    let hiddenInputRef: HTMLInputElement | undefined;
+    let triggerEl: HTMLButtonElement | undefined;
 
     const menuContext: SelectMenuContextType = {
-        register: (value, label) => {
+        register: (value, label, icon) => {
             setOptions((prev) => [
                 ...prev.filter((o) => o.value !== value),
-                { value, label },
+                { value, label, icon },
             ]);
         },
         unregister: (value) => {
@@ -129,46 +131,21 @@ function SelectMenuInner(
         disabled: () => Boolean(local.disabled),
     };
 
-    let hiddenInputRef: HTMLInputElement | undefined;
-    let triggerEl: HTMLButtonElement | undefined;
-    let menuEl: HTMLDivElement | undefined;
-
-    // portal floats above everything without a scroll parent
-    const [menuPos, setMenuPos] = createSignal({ left: 0, top: 0, width: 0 });
-
-    const positionMenu = () => {
-        if (!triggerEl || !menuEl || !open()) return;
-        const rect = triggerEl.getBoundingClientRect();
-        const gap = 4;
-        const margin = 8;
-        const menuRect = menuEl.getBoundingClientRect();
-        let top = rect.bottom + gap;
-        if (top + menuRect.height > window.innerHeight - margin) {
-            top = Math.max(margin, rect.top - gap - menuRect.height);
-        }
-        let left = Math.min(
-            Math.max(margin, rect.left),
-            Math.max(margin, window.innerWidth - menuRect.width - margin),
-        );
-        setMenuPos({ left: Math.round(left), top: Math.round(top), width: Math.round(rect.width) });
-    };
-
-    const scrollActiveIntoView = () => {
-        const value = highlighted();
-        if (value === null || !menuEl) return;
-        const target = menuEl.querySelector(
-            `[data-select-value="${CSS.escape(String(value))}"]`,
-        ) as HTMLElement | null;
-        target?.scrollIntoView?.({ block: "nearest" });
-    };
-
     const currentValue = () => selection.currentValue();
-    const selectedLabel = () => {
+    const selectedOption = () => {
         const current = currentValue();
         if (current === undefined || current === "") return undefined;
-        const registered = options().find((o) => o.value === current);
-        return registered ? registered.label() : String(current);
+        return options().find((o) => o.value === current);
     };
+    const selectedLabel = () => {
+        const registered = selectedOption();
+        if (registered) return registered.label();
+        const current = currentValue();
+        return current === undefined || current === "" ? undefined : String(current);
+    };
+    // the trigger mirrors the selected option's icon, so a maker logo or
+    // glyph is visible without opening the menu
+    const selectedIcon = () => selectedOption()?.icon();
 
     const commitValue = (value: string | number) => {
         if (local.disabled) return;
@@ -182,43 +159,26 @@ function SelectMenuInner(
         }
     };
 
-    const selectValue = (value: string | number) => commitValue(value);
-
     const toggleOpen = () => {
         if (local.disabled) return;
-        const willOpen = !open();
-        setOpen(willOpen);
-        // signals fire synchronously, capture intent first
-        if (willOpen) {
-            setHighlighted(currentValue() ?? options()[0]?.value ?? null);
-        }
-    };
-
-    const moveHighlight = (delta: number) => {
-        const values = options().map((o) => o.value);
-        if (values.length === 0) return;
-        const index = values.indexOf(highlighted() as never);
-        const next =
-            index === -1
-                ? delta > 0
-                    ? 0
-                    : values.length - 1
-                : Math.min(values.length - 1, Math.max(0, index + delta));
-        setHighlighted(values[next]);
-        scrollActiveIntoView();
+        setOpen(!open());
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {
         if (local.disabled) return;
         switch (e.key) {
             case "Enter":
-            case " ": {
-                e.preventDefault();
+            case " ":
+            case "ArrowDown":
+            case "ArrowUp": {
                 if (open()) {
-                    if (highlighted() !== null) selectValue(highlighted() as string | number);
-                } else {
-                    toggleOpen();
+                    // while open the shared menu owns highlight, navigation
+                    // and selection; this key must reach its window handler
+                    return;
                 }
+                e.preventDefault();
+                e.stopPropagation();
+                toggleOpen();
                 break;
             }
             case "Escape": {
@@ -228,56 +188,14 @@ function SelectMenuInner(
                 }
                 break;
             }
-            case "ArrowDown": {
-                e.preventDefault();
-                if (!open()) toggleOpen();
-                else moveHighlight(1);
-                break;
-            }
-            case "ArrowUp": {
-                e.preventDefault();
-                if (!open()) toggleOpen();
-                else moveHighlight(-1);
-                break;
-            }
-            case "Home": {
-                if (open()) {
-                    e.preventDefault();
-                    setHighlighted(options()[0]?.value ?? null);
-                }
-                break;
-            }
-            case "End": {
-                if (open()) {
-                    e.preventDefault();
-                    setHighlighted(options()[options().length - 1]?.value ?? null);
-                }
-                break;
-            }
         }
     };
-
-    // menu needs a frame to measure before positioning
-    createEffect(() => {
-        if (!open()) return;
-        requestAnimationFrame(positionMenu);
-        const reposition = (e: Event) => {
-            if (menuEl && menuEl.contains(e.target as Node)) return;
-            positionMenu();
-        };
-        window.addEventListener("scroll", reposition, true);
-        window.addEventListener("resize", positionMenu);
-        onCleanup(() => {
-            window.removeEventListener("scroll", reposition, true);
-            window.removeEventListener("resize", positionMenu);
-        });
-    });
 
     onMount(() => {
         const handleOutsidePointer = (e: PointerEvent) => {
             if (!open()) return;
             const target = e.target as Node;
-            if (containerEl && !containerEl.contains(target) && !menuEl?.contains(target)) {
+            if (containerEl && !containerEl.contains(target)) {
                 setOpen(false);
             }
         };
@@ -286,8 +204,6 @@ function SelectMenuInner(
             document.removeEventListener("pointerdown", handleOutsidePointer, true),
         );
     });
-
-    let containerEl: HTMLDivElement | undefined;
 
     const className = () =>
         [
@@ -301,79 +217,79 @@ function SelectMenuInner(
 
     return (
         <SelectMenuContext.Provider value={menuContext}>
-        <div
-            {...rest}
-            ref={(el) => {
-                containerEl = el;
-                local.containerRef(el);
-            }}
-            class={className()}
-            classList={local.classList}
-            onKeyDown={handleKeyDown}
-        >
-            <Show when={local.name}>
-                <input
-                    ref={hiddenInputRef}
-                    type="text"
-                    name={local.name}
-                    value={String(currentValue() ?? "")}
-                    tabindex={-1}
-                    aria-hidden="true"
-                    style={{
-                        position: "absolute",
-                        width: "0.0625rem",
-                        height: "0.0625rem",
-                        opacity: "0",
-                        "pointer-events": "none",
-                    }}
-                />
-            </Show>
-
-            <button
-                type="button"
-                ref={triggerEl}
-                class={styles.trigger}
-                disabled={local.disabled}
-                onClick={() => toggleOpen()}
-                aria-haspopup="listbox"
-                aria-expanded={open()}
+            <div
+                {...rest}
+                ref={(el) => (containerEl = el)}
+                class={className()}
+                classList={local.classList}
+                onKeyDown={handleKeyDown}
             >
-                <span class={styles.triggerLabel}>
-                    <Show
-                        when={selectedLabel()}
-                        fallback={
-                            <span class={styles.placeholder}>
-                                {local.placeholder ?? "Select…"}
-                            </span>
-                        }
-                    >
-                        {selectedLabel()}
-                    </Show>
-                </span>
-                <PaperIcon zeroHeight class={styles.chevron}>
-                    expand_more
-                </PaperIcon>
-            </button>
+                <Show when={local.name}>
+                    <input
+                        ref={hiddenInputRef}
+                        type="text"
+                        name={local.name}
+                        value={String(currentValue() ?? "")}
+                        tabindex={-1}
+                        aria-hidden="true"
+                        style={{
+                            position: "absolute",
+                            width: "0.0625rem",
+                            height: "0.0625rem",
+                            opacity: "0",
+                            "pointer-events": "none",
+                        }}
+                    />
+                </Show>
 
-            {/* always mounted so labels register for the trigger */}
-            <Portal>
-                <div
-                    ref={menuEl}
-                    class={[styles.menu, open() ? "" : styles.menuClosed]
-                        .filter(Boolean)
-                        .join(" ")}
+                <button
+                    type="button"
+                    ref={triggerEl}
+                    class={styles.trigger}
+                    disabled={local.disabled}
+                    onClick={() => toggleOpen()}
+                    aria-haspopup="listbox"
+                    aria-expanded={open()}
+                >
+                    <span class={styles.triggerLabel}>
+                        <Show when={selectedIcon()}>
+                            {typeof selectedIcon() === "string" ? (
+                                <PaperIcon zeroHeight class={styles.triggerIcon}>
+                                    {selectedIcon() as string}
+                                </PaperIcon>
+                            ) : (
+                                <span class={styles.triggerIcon}>{selectedIcon()}</span>
+                            )}
+                        </Show>
+                        <Show
+                            when={selectedLabel()}
+                            fallback={
+                                <span class={styles.placeholder}>
+                                    {local.placeholder ?? "Select…"}
+                                </span>
+                            }
+                        >
+                            {selectedLabel()}
+                        </Show>
+                    </span>
+                    <PaperIcon zeroHeight class={styles.chevron}>
+                        expand_more
+                    </PaperIcon>
+                </button>
+
+                <PaperContextMenu
+                    open={open()}
+                    target={triggerEl}
+                    placement="below"
                     role="listbox"
-                    aria-hidden={!open()}
-                    style={{
-                        left: `${menuPos().left}px`,
-                        top: `${menuPos().top}px`,
-                        width: `${Math.max(menuPos().width, 160)}px`,
-                    }}
+                    keepMounted
+                    matchTargetWidth
+                    initialHighlight={currentValue() ?? null}
+                    onClose={() => setOpen(false)}
                 >
                     {local.children}
-                </div>
-            </Portal>
-        </div>
+                </PaperContextMenu>
+            </div>
         </SelectMenuContext.Provider>
     );
 }
@@ -382,6 +298,8 @@ export interface PaperSelectMenuItemProps
     extends JSX.HTMLAttributes<HTMLDivElement> {
     value: string | number;
     icon?: JSX.Element | string;
+    /** Second line under the label, like a context menu item's description. */
+    description?: JSX.Element | string;
     disabled?: boolean;
 }
 
@@ -391,6 +309,7 @@ export function PaperSelectMenuItem(
     const [local, rest] = splitProps(props, [
         "value",
         "icon",
+        "description",
         "disabled",
         "class",
         "classList",
@@ -398,56 +317,45 @@ export function PaperSelectMenuItem(
     ]);
 
     const menu = useSelectMenu();
+    const ctx = useContextMenu();
     const { isSelected } = useSelectionItem(local.value, local.disabled);
 
-    let optionEl: HTMLDivElement | undefined;
-
     const label: Accessor<JSX.Element> = () => local.children as JSX.Element;
+    const itemValue = () => String(local.value);
+    const isHighlighted = () => ctx?.highlightedItem() === itemValue();
 
     onMount(() => {
-        menu?.register(local.value, label);
+        menu?.register(local.value, label, () => local.icon);
         onCleanup(() => menu?.unregister(local.value));
     });
 
-    const className = () =>
-        [
-            styles.option,
-            isSelected() ? styles.optionSelected : "",
-            local.disabled ? styles.optionDisabled : "",
-            local.class,
-        ]
-            .filter(Boolean)
-            .join(" ");
-
     return (
-        <div
+        <MenuItem
             {...rest}
-            ref={optionEl}
             role="option"
             aria-selected={isSelected()}
+            data-context-item={itemValue()}
+            data-disabled={local.disabled ? "true" : "false"}
             data-select-value={local.value}
-            class={className()}
+            icon={local.icon}
+            description={local.description}
+            disabled={local.disabled}
+            highlighted={isHighlighted()}
+            checked={isSelected()}
+            class={local.class}
             classList={local.classList}
             onClick={() => {
                 if (local.disabled) return;
                 menu?.commit(local.value);
             }}
+            onPointerEnter={() => ctx?.setHighlightedItem(itemValue())}
+            onPointerLeave={() => {
+                if (ctx?.highlightedItem() === itemValue()) {
+                    ctx?.setHighlightedItem(null);
+                }
+            }}
         >
-            <Show when={local.icon}>
-                {typeof local.icon === "string" ? (
-                    <PaperIcon zeroHeight class={styles.optionIcon}>
-                        {local.icon}
-                    </PaperIcon>
-                ) : (
-                    <span class={styles.optionIcon}>{local.icon}</span>
-                )}
-            </Show>
-            <span class={styles.optionLabel}>{local.children}</span>
-            <Show when={isSelected()}>
-                <PaperIcon zeroHeight class={styles.optionCheck}>
-                    check
-                </PaperIcon>
-            </Show>
-        </div>
+            {local.children}
+        </MenuItem>
     );
 }

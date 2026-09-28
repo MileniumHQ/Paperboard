@@ -1,3 +1,6 @@
+/* Trigger styles only: the popup panel and its options are the shared menu
+   elements from ../shared/menu.module.css. */
+
 .PaperSelectMenu {
     position: relative;
     display: inline-flex;
@@ -38,10 +41,21 @@
 }
 
 .triggerLabel {
+    display: flex;
+    align-items: center;
+    gap: var(--paper-uigap-half);
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     font-weight: 500;
+}
+
+.triggerIcon {
+    display: inline-flex;
+    align-items: center;
+    flex-shrink: 0;
+    font-size: var(--paper-icon-size-medium);
 }
 
 .placeholder {
@@ -61,91 +75,4 @@
 .disabled .trigger {
     opacity: 0.45;
     cursor: not-allowed;
-}
-
-.menu {
-    position: fixed;
-    min-width: var(--paper-size-field);
-    max-height: calc(var(--paper-control-size-medium) * 7);
-    overflow-y: auto;
-    scrollbar-width: thin;
-    scrollbar-color: var(--paper-border) transparent;
-    z-index: 3000;
-    display: flex;
-    flex-direction: column;
-    gap: var(--paper-uigap-onefourth);
-    padding: var(--paper-uigap-half);
-    box-sizing: border-box;
-    font-family: var(--paper-font-family);
-    font-size: var(--paper-text-size-3);
-    color: var(--paper-text);
-    background: var(--paper-surface-raised);
-    border: var(--paper-border-width) solid var(--paper-border);
-    border-radius: var(--paper-border-radius);
-    box-shadow: var(--paper-heavy-element-shadow);
-}
-
-.menu::-webkit-scrollbar {
-    width: var(--paper-uigap-half);
-}
-
-.menu::-webkit-scrollbar-thumb {
-    background: var(--paper-border);
-    border-radius: var(--paper-border-radius-half);
-}
-
-.menu::-webkit-scrollbar-track {
-    background: transparent;
-}
-
-.option {
-    display: flex;
-    align-items: center;
-    gap: var(--paper-uigap-half);
-    padding: var(--paper-uigap-half) var(--paper-uigap-half)
-        var(--paper-uigap-half) var(--paper-uigap-threefourths);
-    border-radius: var(--paper-border-radius-half);
-    cursor: pointer;
-    font-size: var(--paper-text-size-3);
-    color: var(--paper-text);
-    user-select: none;
-    transition: background var(--paper-tiny-transition) ease;
-}
-
-.option:hover:not(.optionDisabled) {
-    background: var(--paper-surface-sunken);
-}
-
-.optionSelected {
-    color: var(--paper-primary);
-    font-weight: 600;
-}
-
-.optionDisabled {
-    opacity: 0.45;
-    cursor: not-allowed;
-}
-
-.optionIcon {
-    display: inline-flex;
-    align-items: center;
-    color: inherit;
-    font-size: var(--paper-icon-size-medium);
-    line-height: 1;
-}
-
-.optionLabel {
-    flex: 1;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.optionCheck {
-    flex-shrink: 0;
-    margin-left: auto;
-}
-
-.menuClosed {
-    display: none;
 }

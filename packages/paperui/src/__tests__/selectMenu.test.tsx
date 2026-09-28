@@ -31,6 +31,19 @@ describe("PaperSelectMenu", () => {
         expect(within(getTrigger()).getByText("Dark")).toBeDefined();
     });
 
+    test("mirrors the selected option's icon on the trigger", () => {
+        render(() => (
+            <PaperSelectMenu name="model" value="a">
+                <PaperSelectMenuItem value="a" icon="rocket">Alpha</PaperSelectMenuItem>
+                <PaperSelectMenuItem value="b" icon="public">Beta</PaperSelectMenuItem>
+            </PaperSelectMenu>
+        ));
+
+        const trigger = getTrigger();
+        expect(within(trigger).getByText("rocket")).toBeDefined();
+        expect(within(trigger).getByText("Alpha")).toBeDefined();
+    });
+
     test("shows placeholder when nothing is selected", () => {
         render(() => (
             <PaperSelectMenu name="theme" placeholder="Pick one">
@@ -185,6 +198,82 @@ describe("PaperSelectMenu", () => {
             within(screen.getByRole("listbox", { hidden: true })).getByText("Dark"),
         );
         expect(changed).toBe(false);
+    });
+
+    test("a wide menu near the right edge keeps its right edge on the trigger", async () => {
+        const rect = (left: number, top: number, width: number, height: number) =>
+            ({
+                left,
+                top,
+                width,
+                height,
+                right: left + width,
+                bottom: top + height,
+                x: left,
+                y: top,
+                toJSON: () => ({}),
+            }) as DOMRect;
+
+        render(() => (
+            <PaperSelectMenu name="personality" value="standard">
+                <PaperSelectMenuItem value="standard" description="Friendly and clear.">
+                    Standard
+                </PaperSelectMenuItem>
+            </PaperSelectMenu>
+        ));
+
+        const trigger = getTrigger();
+        trigger.getBoundingClientRect = () => rect(700, 100, 200, 30);
+        const menu = screen.getByRole("listbox", { hidden: true });
+        // wider than the space to the right of the trigger's left edge
+        menu.getBoundingClientRect = () => rect(0, 0, 400, 200);
+
+        fireEvent.click(trigger);
+        await new Promise((resolve) =>
+            requestAnimationFrame(() => requestAnimationFrame(() => resolve(null))),
+        );
+
+        // jsdom's viewport is 1024 wide: 700 + 400 overflows, so the menu
+        // grows leftward with its right edge (900) on the trigger's
+        expect(menu.style.left).toBe("500px");
+    });
+
+    test("renders option descriptions in the shared menu item", () => {
+        render(() => (
+            <PaperSelectMenu name="personality" value="standard">
+                <PaperSelectMenuItem
+                    value="standard"
+                    description="Friendly and clear. The default."
+                >
+                    Standard
+                </PaperSelectMenuItem>
+                <PaperSelectMenuItem
+                    value="quirky"
+                    description="Playful and opinionated, with puns."
+                >
+                    Quirky
+                </PaperSelectMenuItem>
+            </PaperSelectMenu>
+        ));
+
+        fireEvent.click(getTrigger());
+        expect(
+            within(getListbox()).getByText("Playful and opinionated, with puns."),
+        ).toBeDefined();
+    });
+
+    test("the selected option is marked in the listbox", () => {
+        render(() => (
+            <PaperSelectMenu name="personality" value="quirky">
+                <PaperSelectMenuItem value="standard">Standard</PaperSelectMenuItem>
+                <PaperSelectMenuItem value="quirky">Quirky</PaperSelectMenuItem>
+            </PaperSelectMenu>
+        ));
+
+        fireEvent.click(getTrigger());
+        const options = screen.getAllByRole("option");
+        expect(options[0].getAttribute("aria-selected")).toBe("false");
+        expect(options[1].getAttribute("aria-selected")).toBe("true");
     });
 
     test("controlled component does not change without external state update", () => {

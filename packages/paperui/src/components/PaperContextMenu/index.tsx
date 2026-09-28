@@ -1,4 +1,6 @@
 import styles from "./index.module.css";
+import menuStyles from "../shared/menu.module.css";
+import { MenuItem } from "../shared/MenuItem";
 import {
     createContext,
     useContext,
@@ -41,6 +43,20 @@ export interface PaperContextMenuProps extends JSX.HTMLAttributes<HTMLDivElement
     onClose?: () => void;
     closeOnEsc?: boolean;
     closeOnClick?: boolean;
+    /**
+     * Keeps the panel mounted while closed (display:none) so children that
+     * register themselves — dropdown options labeling their trigger — survive
+     * dismissal.
+     */
+    keepMounted?: boolean;
+    /**
+     * Makes the panel at least as wide as its target element (dropdowns
+     * matching their trigger), still growing for wider items like
+     * descriptions.
+     */
+    matchTargetWidth?: boolean;
+    /** Item highlighted as soon as the menu opens (dropdowns start on the chosen value). */
+    initialHighlight?: string | number | null;
 }
 
 export function positionFromTarget(
@@ -59,19 +75,10 @@ export function positionFromTarget(
         return { x: target.x, y: target.y };
     }
 
-    const resolvedEl =
-        target instanceof HTMLElement
-            ? target
-            : typeof target === "object" &&
-                ("currentTarget" in target || "target" in target)
-              ? (((target as any).currentTarget ||
-                    (target as any).target) as HTMLElement | null)
-              : null;
+    const resolvedEl = elementFromTarget(target);
 
-    if (resolvedEl && typeof resolvedEl.getBoundingClientRect === "function") {
-        if (placement !== "mouse") {
-            return getElementPosition(resolvedEl, placement);
-        }
+    if (resolvedEl && placement !== "mouse") {
+        return getElementPosition(resolvedEl, placement);
     }
 
     if (
@@ -84,10 +91,21 @@ export function positionFromTarget(
         }
     }
 
-    if (resolvedEl && typeof resolvedEl.getBoundingClientRect === "function") {
+    if (resolvedEl) {
         return getElementPosition(resolvedEl, placement);
     }
 
+    return null;
+}
+
+function elementFromTarget(target: ContextMenuTarget): HTMLElement | null {
+    if (!target) return null;
+    if (target instanceof HTMLElement) return target;
+    if (typeof target === "object" && ("currentTarget" in target || "target" in target)) {
+        const el = ((target as any).currentTarget ||
+            (target as any).target) as HTMLElement | null;
+        return el && typeof el.getBoundingClientRect === "function" ? el : null;
+    }
     return null;
 }
 
@@ -109,6 +127,31 @@ function getElementPosition(
         default:
             return { x: rect.left, y: rect.bottom };
     }
+}
+
+/**
+ * Horizontal placement for a floating menu: anchored by its left edge to the
+ * target's left edge. When the menu would run past the right edge of the
+ * viewport, it is anchored by its right edge to the target's right edge
+ * instead. Clamping to the viewport is the last resort — a menu with no room
+ * on either side of its target, or a mouse-positioned menu with no target
+ * edge to anchor to.
+ */
+export function resolveMenuLeft(
+    targetLeft: number,
+    targetRight: number | null,
+    menuWidth: number,
+    viewportWidth: number,
+    padding = 12,
+): number {
+    let left = targetLeft;
+    if (left + menuWidth > viewportWidth - padding) {
+        left =
+            targetRight === null
+                ? viewportWidth - menuWidth - padding
+                : targetRight - menuWidth;
+    }
+    return Math.max(padding, left);
 }
 
 function resolveTargetElement(
@@ -194,6 +237,13 @@ interface SubMenuLevelContextType {
 
 const SubMenuLevelContext = createContext<SubMenuLevelContextType>();
 
+function escapeAttributeValue(value: string): string {
+    if (typeof CSS !== "undefined" && typeof CSS.escape === "function") {
+        return CSS.escape(value);
+    }
+    return value.replace(/["\\]/g, "\\$&");
+}
+
 export function PaperContextMenu(props: ParentProps<PaperContextMenuProps>) {
     let menuRef: HTMLDivElement | undefined;
 
@@ -206,6 +256,9 @@ export function PaperContextMenu(props: ParentProps<PaperContextMenuProps>) {
         "onClose",
         "closeOnEsc",
         "closeOnClick",
+        "keepMounted",
+        "matchTargetWidth",
+        "initialHighlight",
         "class",
         "classList",
         "children",
@@ -220,6 +273,18 @@ export function PaperContextMenu(props: ParentProps<PaperContextMenuProps>) {
 
     const updatePosition = () => {
         if (!menuRef) return;
+
+        const resolvedEl = elementFromTarget(local.target ?? null);
+        if (local.matchTargetWidth && resolvedEl) {
+            // a floor, not a fixed width: the panel still grows for wider
+            // items (descriptions), it just never looks narrower than the
+            // control it belongs to
+            const width = Math.max(
+                160,
+                Math.round(resolvedEl.getBoundingClientRect().width),
+            );
+            menuRef.style.minWidth = `${width}px`;
+        }
 
         let targetX = local.x;
         let targetY = local.y;
@@ -240,35 +305,25 @@ export function PaperContextMenu(props: ParentProps<PaperContextMenuProps>) {
         }
 
         const rect = menuRef.getBoundingClientRect();
+        const targetRect = resolvedEl?.getBoundingClientRect() ?? null;
         const padding = 12;
 
-        let left = targetX;
+        const left = resolveMenuLeft(
+            targetX,
+            targetRect?.right ?? null,
+            rect.width,
+            window.innerWidth,
+            padding,
+        );
         let top = targetY;
 
         const placementMode = local.placement || "mouse";
         const isBelowMode = placementMode.startsWith("below");
 
-        if (left + rect.width > window.innerWidth - padding) {
-            left = Math.max(padding, window.innerWidth - rect.width - padding);
-        }
-        if (left < padding) {
-            left = padding;
-        }
-
         if (isBelowMode && top + rect.height > window.innerHeight - padding) {
-            if (local.target) {
-                const evt = local.target as any;
-                const el = (evt?.currentTarget ||
-                    evt?.target ||
-                    (local.target instanceof HTMLElement
-                        ? local.target
-                        : null)) as HTMLElement | null;
-                if (el && typeof el.getBoundingClientRect === "function") {
-                    const elRect = el.getBoundingClientRect();
-                    top = Math.max(padding, elRect.top - rect.height);
-                } else {
-                    top = Math.max(padding, top - rect.height);
-                }
+            if (resolvedEl) {
+                const elRect = resolvedEl.getBoundingClientRect();
+                top = Math.max(padding, elRect.top - rect.height);
             } else {
                 top = Math.max(
                     padding,
@@ -292,10 +347,27 @@ export function PaperContextMenu(props: ParentProps<PaperContextMenuProps>) {
         local.onClose?.();
     };
 
-    createEffect(() => {
-        if (!local.open) return;
+    const scrollHighlightedIntoView = () => {
+        const value = highlightedItem();
+        if (value === null || !menuRef) return;
+        const target = menuRef.querySelector(
+            `[data-context-item="${escapeAttributeValue(String(value))}"]`,
+        ) as HTMLElement | null;
+        target?.scrollIntoView?.({ block: "nearest" });
+    };
 
-        requestAnimationFrame(updatePosition);
+    createEffect(() => {
+        if (!local.open) {
+            setActiveSubMenu(null);
+            return;
+        }
+
+        const initial = local.initialHighlight;
+        setHighlightedItem(initial === undefined || initial === null ? null : String(initial));
+        requestAnimationFrame(() => {
+            updatePosition();
+            scrollHighlightedIntoView();
+        });
 
         let pointerMoveRaf: number | null = null;
 
@@ -325,6 +397,7 @@ export function PaperContextMenu(props: ParentProps<PaperContextMenuProps>) {
                 const nextVal =
                     items[nextIdx].getAttribute("data-context-item");
                 if (nextVal) setHighlightedItem(nextVal);
+                scrollHighlightedIntoView();
             } else if (e.key === "ArrowUp") {
                 e.preventDefault();
                 const prevIdx =
@@ -332,6 +405,19 @@ export function PaperContextMenu(props: ParentProps<PaperContextMenuProps>) {
                 const prevVal =
                     items[prevIdx].getAttribute("data-context-item");
                 if (prevVal) setHighlightedItem(prevVal);
+                scrollHighlightedIntoView();
+            } else if (e.key === "Home") {
+                e.preventDefault();
+                const first = items[0].getAttribute("data-context-item");
+                if (first) setHighlightedItem(first);
+                scrollHighlightedIntoView();
+            } else if (e.key === "End") {
+                e.preventDefault();
+                const last = items[items.length - 1].getAttribute(
+                    "data-context-item",
+                );
+                if (last) setHighlightedItem(last);
+                scrollHighlightedIntoView();
             } else if (e.key === "Enter" || e.key === " ") {
                 e.preventDefault();
                 if (currentIndex >= 0) {
@@ -373,6 +459,15 @@ export function PaperContextMenu(props: ParentProps<PaperContextMenuProps>) {
             }
         };
 
+        // pointerdown, not just the overlay click: a menu must dismiss on the
+        // press that starts elsewhere even when the press never becomes a click
+        const handleOutsidePointerDown = (e: PointerEvent) => {
+            if (!menuRef) return;
+            const target = e.target instanceof Node ? e.target : null;
+            if (target && menuRef.contains(target)) return;
+            handleClose();
+        };
+
         const handleScroll = (e: Event) => {
             const targetNode = e.target instanceof Node ? e.target : null;
             if (menuRef && (!targetNode || !menuRef.contains(targetNode))) {
@@ -384,6 +479,7 @@ export function PaperContextMenu(props: ParentProps<PaperContextMenuProps>) {
         window.addEventListener("pointermove", handleGlobalPointerMove);
         window.addEventListener("pointerup", handleGlobalPointerUp);
         window.addEventListener("scroll", handleScroll, true);
+        document.addEventListener("pointerdown", handleOutsidePointerDown, true);
 
         onCleanup(() => {
             if (pointerMoveRaf) cancelAnimationFrame(pointerMoveRaf);
@@ -391,6 +487,7 @@ export function PaperContextMenu(props: ParentProps<PaperContextMenuProps>) {
             window.removeEventListener("pointermove", handleGlobalPointerMove);
             window.removeEventListener("pointerup", handleGlobalPointerUp);
             window.removeEventListener("scroll", handleScroll, true);
+            document.removeEventListener("pointerdown", handleOutsidePointerDown, true);
         });
     });
 
@@ -423,9 +520,11 @@ export function PaperContextMenu(props: ParentProps<PaperContextMenuProps>) {
     };
 
     return (
-        <Show when={local.open}>
+        <Show when={local.open || local.keepMounted}>
             <Portal>
-                <div class={styles.contextMenuOverlay} onClick={handleClose} />
+                <Show when={local.open}>
+                    <div class={styles.contextMenuOverlay} onClick={handleClose} />
+                </Show>
                 <SubMenuLevelContext.Provider value={subMenuContextValue}>
                     <ContextMenuContext.Provider value={contextValue}>
                         <div
@@ -436,8 +535,9 @@ export function PaperContextMenu(props: ParentProps<PaperContextMenuProps>) {
                             role="menu"
                             tabIndex={-1}
                             aria-activedescendant={activeDescendantId()}
+                            aria-hidden={!local.open}
                             {...rest}
-                            class={[styles.PaperContextMenu, local.class]
+                            class={[menuStyles.menu, local.open ? "" : menuStyles.closed, local.class]
                                 .filter(Boolean)
                                 .join(" ")}
                             classList={local.classList}
@@ -460,6 +560,8 @@ export interface PaperContextMenuItemProps extends JSX.HTMLAttributes<HTMLDivEle
     shortcut?: string;
     danger?: boolean;
     disabled?: boolean;
+    /** Trailing check mark, for menus that choose the current value. */
+    checked?: boolean;
 }
 
 export function PaperContextMenuItem(
@@ -473,6 +575,7 @@ export function PaperContextMenuItem(
         "shortcut",
         "danger",
         "disabled",
+        "checked",
         "class",
         "classList",
         "onClick",
@@ -497,26 +600,22 @@ export function PaperContextMenuItem(
 
     const keybindText = () => local.keybind ?? local.shortcut;
 
-    const className = () =>
-        [
-            styles.PaperContextMenuItem,
-            local.danger ? styles.danger : "",
-            local.disabled ? styles.disabled : "",
-            isHighlighted() ? styles.highlighted : "",
-            local.class,
-        ]
-            .filter(Boolean)
-            .join(" ");
-
     return (
-        <div
+        <MenuItem
             id={`paper-menuitem-${itemValue()}`}
             role="menuitem"
             data-context-item={itemValue()}
             data-disabled={local.disabled ? "true" : "false"}
             tabIndex={-1}
             {...rest}
-            class={className()}
+            icon={local.icon}
+            description={local.description}
+            keybind={keybindText()}
+            danger={local.danger}
+            disabled={local.disabled}
+            highlighted={isHighlighted()}
+            checked={local.checked}
+            class={local.class}
             classList={local.classList}
             onClick={handleClick}
             onPointerEnter={() => {
@@ -529,25 +628,8 @@ export function PaperContextMenuItem(
                 }
             }}
         >
-            <Show when={local.icon}>
-                {typeof local.icon === "string" ? (
-                    <PaperIcon class={styles.itemIcon}>{local.icon}</PaperIcon>
-                ) : (
-                    <span class={styles.itemIcon}>{local.icon}</span>
-                )}
-            </Show>
-
-            <div class={styles.itemContent}>
-                <span class={styles.itemLabel}>{local.children}</span>
-                <Show when={local.description}>
-                    <span class={styles.itemDescription}>{local.description}</span>
-                </Show>
-            </div>
-
-            <Show when={keybindText()}>
-                <span class={styles.itemKeybind}>{keybindText()}</span>
-            </Show>
-        </div>
+            {local.children}
+        </MenuItem>
     );
 }
 
@@ -624,9 +706,9 @@ export function PaperContextMenuSub(
 
     const subClassName = () =>
         [
-            styles.subMenuPanel,
-            flipX() ? styles.flipX : "",
-            flipY() ? styles.flipY : "",
+            menuStyles.subMenuPanel,
+            flipX() ? menuStyles.flipX : "",
+            flipY() ? menuStyles.flipY : "",
         ]
             .filter(Boolean)
             .join(" ");
@@ -635,8 +717,8 @@ export function PaperContextMenuSub(
         <div
             {...rest}
             class={[
-                styles.PaperContextMenuItem,
-                isOpen() ? styles.highlighted : "",
+                menuStyles.item,
+                isOpen() ? menuStyles.highlighted : "",
                 local.class,
             ]
                 .filter(Boolean)
@@ -647,14 +729,14 @@ export function PaperContextMenuSub(
         >
             <Show when={local.icon}>
                 {typeof local.icon === "string" ? (
-                    <PaperIcon class={styles.itemIcon}>{local.icon}</PaperIcon>
+                    <PaperIcon class={menuStyles.itemIcon}>{local.icon}</PaperIcon>
                 ) : (
-                    <span class={styles.itemIcon}>{local.icon}</span>
+                    <span class={menuStyles.itemIcon}>{local.icon}</span>
                 )}
             </Show>
 
-            <span class={styles.itemLabel}>{subLabel()}</span>
-            <PaperIcon class={styles.subMenuIndicator} zeroHeight>chevron_right</PaperIcon>
+            <span class={menuStyles.itemLabel}>{subLabel()}</span>
+            <PaperIcon class={menuStyles.subMenuIndicator} zeroHeight>chevron_right</PaperIcon>
 
             <Show when={isOpen()}>
                 <SubMenuLevelContext.Provider value={childSubMenuContextValue}>
@@ -678,7 +760,7 @@ export function PaperContextMenuHeader(props: ParentProps<PaperContextMenuHeader
     const [local, rest] = splitProps(props, ["class", "classList", "children"]);
 
     const className = () =>
-        [styles.PaperContextMenuHeader, local.class].filter(Boolean).join(" ");
+        [menuStyles.header, local.class].filter(Boolean).join(" ");
 
     return (
         <div {...rest} class={className()} classList={local.classList}>
@@ -686,4 +768,3 @@ export function PaperContextMenuHeader(props: ParentProps<PaperContextMenuHeader
         </div>
     );
 }
-
