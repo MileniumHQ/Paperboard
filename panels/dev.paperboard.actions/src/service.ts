@@ -25,7 +25,7 @@ import {
 // canonical panel id (shared with the UI bundle); the explicit identity
 // every config/registry call below carries
 import { ACTIONS_PANEL_ID } from "./panelId";
-import { matchHolds, payloadFieldValue } from "./lib/runtime";
+import { isBlankMatchInput, matchHolds, payloadFieldValue } from "./lib/runtime";
 
 interface ActionsServiceState {
     flowCount: number;
@@ -224,7 +224,10 @@ function rootMatchesRules(b: CanvasBlock, output: any): boolean {
     const rules = normalizeMatchRules((b.action as any)?.match);
     if (rules.length === 0) return true;
     for (const rule of rules) {
+        const def = (b.action as any)?.inputs?.[rule.input];
         const literal = b.values?.[rule.input];
+        // an unselected clearable input means "(any)": the rule filters nothing
+        if (def?.allowEmpty && isBlankMatchInput(literal)) continue;
         const actual = payloadFieldValue(output, rule.field);
         if (!matchHolds(literal, actual)) return false;
     }
@@ -351,16 +354,16 @@ export const actions = [
                 if (valid.length !== inputs.flows.length) throw new Error("Flow sync refused: malformed blocks; repair them before applying");
                 for (const b of valid) {
                     if (!b.panelId || b.panelId === "*") throw new Error(`Flow "${b.id}" needs an explicit source panel`);
-                    // a parameterized trigger whose match input is empty or
-                    // a variable chip can never fire: refuse it loudly
-                    // instead of saving a dead listener
+                    // a match input is either a literal (filters) or, when
+                    // the schema declares allowEmpty, unselected ("(any)"):
+                    // the trigger fires for every payload. A variable chip can
+                    // never be routing identity: refuse it loudly instead of
+                    // saving a dead listener.
                     for (const rule of normalizeMatchRules((b.action as any)?.match)) {
+                        const def = (b.action as any)?.inputs?.[rule.input];
                         const literal = b.values?.[rule.input];
-                        if (
-                            literal === undefined ||
-                            literal === null ||
-                            (typeof literal === "string" && literal.trim() === "")
-                        ) {
+                        if (isBlankMatchInput(literal)) {
+                            if (def?.allowEmpty) continue;
                             throw new Error(
                                 `Flow "${b.id}": "${b.action.name}" needs a value for "${rule.input}" — without it this trigger would never fire`,
                             );

@@ -442,14 +442,26 @@ export function matchHolds(expected: any, actual: any): boolean {
     return String(expected) === String(actual);
 }
 
-/** Plain dotted-path lookup on an event payload — no variable-resolution special cases. */
+/**
+ * Plain dotted-path lookup on an event payload — no variable-resolution
+ * special cases. The field `"$"` addresses the payload itself, so an event
+ * whose whole output is a scalar (a model name, a player name) can still be
+ * filtered without reshaping the payload its flows already read.
+ */
 export function payloadFieldValue(payload: any, field: string): any {
+    if (field === "$") return payload;
     let current: any = payload;
     for (const part of field.split(".")) {
         if (current === null || typeof current !== "object") return undefined;
         current = current[part];
     }
     return current;
+}
+
+/** An empty match input: unselected, or cleared to nothing. */
+export function isBlankMatchInput(value: unknown): boolean {
+    if (value === undefined || value === null) return true;
+    return typeof value === "string" && value.trim() === "";
 }
 
 function evaluateCondition(left: any, operator: string, right: any): boolean {

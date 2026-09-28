@@ -37,6 +37,11 @@ describe("generic match comparison", () => {
         expect(payloadFieldValue(payload, "top")).toBe("t");
         expect(payloadFieldValue(payload, "missing.deep")).toBeUndefined();
     });
+
+    it("addresses a scalar payload itself with $", () => {
+        expect(payloadFieldValue("qwen3:8b", "$")).toBe("qwen3:8b");
+        expect(matchHolds("qwen3:8b", payloadFieldValue("qwen3:8b", "$"))).toBe(true);
+    });
 });
 
 describe("parameterized event routing", () => {
@@ -101,6 +106,46 @@ describe("parameterized event routing", () => {
         await Bun.sleep(20);
         expect(emitted.some((e) => e.trigger === "flow-start")).toBe(false);
     });
+
+    it("an unselected clearable input is (any): the root fires for every value", async () => {
+        const anyRoot: CanvasBlock = {
+            ...rootWith("any", undefined),
+            action: {
+                id: "item-ready",
+                name: "When Item Ready",
+                inputs: { itemId: { type: "string", label: "Item", allowEmpty: true } },
+                match: { field: "itemId", input: "itemId" },
+            },
+            values: {},
+        };
+        __actionsTestState.setFlows([anyRoot]);
+        await fire("whatever");
+        expect(emitted.some((e) => e.trigger === "flow-start" && e.output?.triggerBlockId === "flow_any")).toBe(true);
+    });
+
+    it("a scalar payload can be filtered through $", async () => {
+        const modelRoot: CanvasBlock = {
+            ...rootWith("a", "qwen3:8b"),
+            action: {
+                id: "item-ready",
+                name: "When Model Downloaded",
+                inputs: { model: { type: "string", label: "Model", allowEmpty: true } },
+                match: { field: "$", input: "model" },
+            },
+            values: { model: "qwen3:8b" },
+        };
+        __actionsTestState.setFlows([modelRoot]);
+
+        emitted.length = 0;
+        handleTriggerEventForTest("qwen3:8b", { panelId: "dev.example", trigger: "item-ready" });
+        await Bun.sleep(20);
+        expect(emitted.some((e) => e.trigger === "flow-start")).toBe(true);
+
+        emitted.length = 0;
+        handleTriggerEventForTest("llama3:8b", { panelId: "dev.example", trigger: "item-ready" });
+        await Bun.sleep(20);
+        expect(emitted.some((e) => e.trigger === "flow-start")).toBe(false);
+    });
 });
 
 describe("sync-flows validation for event actions", () => {
@@ -144,7 +189,7 @@ describe("sync-flows validation for event actions", () => {
         expect((caught as Error)?.message).toContain("cannot be nested");
     });
 
-    it("refuses a parameterized trigger whose match input is empty", async () => {
+    it("refuses a parameterized trigger whose match input is empty and not clearable", async () => {
         let caught: unknown = null;
         try {
             await syncFlows.run(ctx, { flows: [root({ values: {} })] });
@@ -152,6 +197,20 @@ describe("sync-flows validation for event actions", () => {
             caught = err;
         }
         expect((caught as Error)?.message).toContain("would never fire");
+    });
+
+    it("accepts an empty match input the schema declares clearable: (any)", async () => {
+        const clearable = root({
+            action: {
+                id: "item-ready",
+                name: "When Item Ready",
+                inputs: { itemId: { type: "string", label: "Item", allowEmpty: true } },
+                match: { field: "itemId", input: "itemId" },
+            },
+            values: {},
+        });
+        const result = await syncFlows.run(ctx, { flows: [clearable] });
+        expect(result.flows).toBe(1);
     });
 
     it("refuses a variable chip as a match value: routing must be a literal", async () => {
