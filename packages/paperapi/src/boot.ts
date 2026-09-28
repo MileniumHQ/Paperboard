@@ -8,8 +8,7 @@
 //   init — inside that window — so the service owns its credentials for
 //   its whole lifetime, immune to later boots or env changes.
 // - Spawned services (own process): the daemon sets PAPERBOARD_PANEL_ID,
-//   PAPERCRANE_PANEL_TOKEN (scoped `pcp_`, preferred) / PAPERCRANE_TOKEN
-//   (master, deprecated — daemon warns loudly) and PAPERCRANE_PORT in the
+//   PAPERCRANE_PANEL_TOKEN (scoped `pcp_`) and PAPERCRANE_PORT in the
 //   child env. The env is fixed for the process lifetime, so capturing it
 //   once at init is equivalent to injection.
 //
@@ -17,9 +16,8 @@
 // any panel build), so this module-scoped capture is per-service by
 // construction: two in-process services cannot see each other's context,
 // and no code path reads identity or credentials back out of process.env
-// after init. The scoped token is preferred everywhere; the master token
-// is accepted only as the deprecated fallback the daemon already warns
-// about, dying after v0.3.
+// after init. Only the scoped panel token is accepted: the master token is
+// not panel equipment, and the daemon strips it from service envs.
 
 export interface ServiceBootContext {
     panelId: string;
@@ -64,11 +62,8 @@ function fromEnv(): ServiceBootContext | null {
     if (!panelId || !portRaw) return null;
     const port = Number(portRaw);
     if (!Number.isInteger(port) || port <= 0) return null;
-    // scoped token first: a service authenticates as its panel, not as the
-    // host. The master token is the deprecated fallback (daemon-side loud
-    // warning, denied after v0.3).
-    const token =
-        process.env.PAPERCRANE_PANEL_TOKEN || process.env.PAPERCRANE_TOKEN;
+    // a service authenticates as its panel, never as the host
+    const token = process.env.PAPERCRANE_PANEL_TOKEN;
     if (!token) return null;
     return { panelId, token, port };
 }

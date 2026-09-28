@@ -52,7 +52,7 @@ describe("serviceBootContext", () => {
         expect(serviceBootContext()).toEqual(ctx);
     });
 
-    test("prefers the scoped panel token over the deprecated master token", () => {
+    test("uses the scoped panel token and ignores a master token", () => {
         process.env.PAPERBOARD_PANEL_ID = "panel.b";
         process.env.PAPERCRANE_PANEL_TOKEN = "pcp_scoped";
         process.env.PAPERCRANE_TOKEN = "pc_master";
@@ -62,11 +62,11 @@ describe("serviceBootContext", () => {
         expect(ctx?.panelId).toBe("panel.b");
     });
 
-    test("falls back to the master token only when no scoped token exists", () => {
+    test("refuses to boot on the master token alone", () => {
         process.env.PAPERBOARD_PANEL_ID = "panel.b";
         process.env.PAPERCRANE_TOKEN = "pc_master";
         process.env.PAPERCRANE_PORT = "999";
-        expect(captureServiceBootContext()?.token).toBe("pc_master");
+        expect(captureServiceBootContext()).toBeNull();
     });
 
     test("refuses a malformed boot window fail-closed", () => {
