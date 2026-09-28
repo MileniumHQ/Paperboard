@@ -9,12 +9,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 24
+      # the silent-catch and TODO-expiry gates scan with ripgrep, which the
+      # runner image does not ship
+      - run: sudo apt-get update && sudo apt-get install -y ripgrep
       - run: bun install --frozen-lockfile
       - run: bun run gate
