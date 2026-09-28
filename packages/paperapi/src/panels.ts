@@ -19,6 +19,8 @@ export interface PanelItem {
     installSource?: "registry" | "direct" | "dev";
     isLinked?: boolean;
     installedVersion?: string;
+    /** newest release the registry offers; `version` is the installed one when installed */
+    latestVersion?: string;
 }
 
 // panel store and lifecycle, scope omitted = ambient
@@ -45,23 +47,26 @@ export const panelsApi = {
             const panels: PanelItem[] = [];
             for (const [id, record] of Object.entries(registryData)) {
                 const localPanel = installedMap.get(id);
+                // An installed panel describes itself: its own manifest is
+                // what runs on this computer. The registry record only adds
+                // what the install lacks and the newest release it offers.
                 panels.push({
                     id,
-                    name: record.name || localPanel?.name || id,
+                    name: localPanel?.name || record.name || id,
                     description:
-                        record.description ||
                         localPanel?.description ||
+                        record.description ||
                         record.manifest?.description,
-                    version:
-                        record.version ||
-                        localPanel?.version ||
-                        record.manifest?.version,
-                    publisher:
-                        record.publisher ||
-                        record.manifest?.publisher ||
-                        record.manifest?.author ||
-                        localPanel?.publisher,
-                    icon: record.icon || localPanel?.icon,
+                    version: localPanel
+                        ? localPanel.version
+                        : record.version || record.manifest?.version,
+                    latestVersion: record.version || record.manifest?.version,
+                    publisher: localPanel
+                        ? localPanel.publisher
+                        : record.publisher ||
+                          record.manifest?.publisher ||
+                          record.manifest?.author,
+                    icon: localPanel?.icon || record.icon,
                     iconUrl:
                         record.iconUrl ||
                         `${REGISTRY_URL}/panel/${id}/icon`,
