@@ -156,7 +156,7 @@ export class CraneTransport {
     private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     private attachedTerminals = new Set<string>();
     private attachedProcesses = new Set<string>();
-    private registry = new TransportRegistry(() => this.resolveDefaultPanelId());
+    private registry = new TransportRegistry();
     // null tunnel means remote frames must fail
     private tunnelId: string | null = null;
     private isNode =
@@ -773,15 +773,6 @@ export class CraneTransport {
     // loud-warning discipline the fallback carries everywhere else
     public getDefaultPanelId(): string {
         return this.resolveDefaultPanelId();
-    }
-
-    public setActionHandler(
-        actionName: string,
-        handler: (...args: any[]) => Promise<any> | any,
-        panelId?: string,
-        schema?: any,
-    ): void {
-        this.registry.setActionHandler(actionName, handler, panelId, schema);
     }
 
     public async registerAction(
