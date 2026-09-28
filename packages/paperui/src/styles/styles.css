@@ -23,6 +23,18 @@
  * [data-paperui-theme]. Document-level resets (html/body margin) belong to
  * the consuming app, not the library — see the shell's own shell.css. */
 
+/* Form controls do not inherit colour or font from their ancestors, so a bare
+ * <button> inside the root paints in the UA's ButtonText colour, which is black
+ * even in a dark theme. Reset the inherited properties once, here.
+ *
+ * :where() contributes zero specificity, so every component rule still wins.
+ * This must stay in :where() — a plain `.paperui-root button` selector would
+ * outrank `.PaperButton` and repaint filled buttons with the body text colour. */
+:where(.paperui-root, [data-paperui-theme]) :where(button, input, select, textarea) {
+    color: inherit;
+    font: inherit;
+}
+
 .paperui-root,
 [data-paperui-theme] {
     margin: 0;
