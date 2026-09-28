@@ -2,7 +2,7 @@
 // The engine keeps the ledger (id → creating panel claim); these helpers
 // are the only RPC-layer readers/writers. A scoped caller touching an id
 // owned by another panel logs loudly and stays allowed — deprecation now,
-// enforcement after v3.2 (TODO deny after v3.2), zero broken flows.
+// enforcement after v0.3 (TODO deny after v0.3), zero broken flows.
 // Unclaimed ids (master-created, pre-ledger) stay shared.
 import { logger } from "../logger";
 import type { RpcContext } from "./context";
@@ -17,7 +17,7 @@ export function claimClient(id: unknown, ctx: RpcContext, what: string): void {
     if (claim && owner && claim !== owner) {
         logger.warn(
             `[${what}] id "${id}" owned by panel "${owner}" re-created by scoped caller "${claim}". ` +
-            `TODO(deny after v3.2): ownership mismatches are denied after v3.2.`,
+            `TODO(deny after v0.3): ownership mismatches are denied after v0.3.`,
         );
     }
     ctx.engine.setClientOwner(id, claim);
@@ -31,7 +31,7 @@ export function checkClientOwnership(id: unknown, ctx: RpcContext, what: string)
     if (claim && owner && claim !== owner) {
         logger.warn(
             `[${what}] id "${id}" owned by panel "${owner}" touched by scoped caller "${claim}". ` +
-            `TODO(deny after v3.2): ownership mismatches are denied after v3.2.`,
+            `TODO(deny after v0.3): ownership mismatches are denied after v0.3.`,
         );
     }
 }
@@ -39,7 +39,7 @@ export function checkClientOwnership(id: unknown, ctx: RpcContext, what: string)
 // credential-bearing env keys no caller may plant in a spawned child.
 // A scoped caller overriding these is refused outright (no legitimate
 // flow re-issues its own credential — services already inherit it). A
-// master/host caller warns loudly, tombstoned to deny after v3.2.
+// master/host caller warns loudly, tombstoned to deny after v0.3.
 const RESERVED_ENV_KEYS = new Set([
     "PAPERCRANE_TOKEN",
     "PAPERCRANE_PANEL_TOKEN",
@@ -65,7 +65,7 @@ export function checkSpawnEnv(
         }
         logger.warn(
             `[${what}] master caller overriding "${key}" in a child env. ` +
-            `TODO(deny after v3.2): credential overrides are denied after v3.2.`,
+            `TODO(deny after v0.3): credential overrides are denied after v0.3.`,
         );
     }
 }

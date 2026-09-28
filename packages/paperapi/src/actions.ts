@@ -272,7 +272,7 @@ export const actionsApi = {
             // client must warn too — the deprecation has two ends of the wire.
             warnOnce(
                 "paperapi:wildcard-on",
-                '[paperapi] actions.on with "*" panel/event is deprecated and will be refused after v3.1; subscribe to explicit panel:event names instead.',
+                '[paperapi] actions.on with "*" panel/event is deprecated and will be refused after v0.2; subscribe to explicit panel:event names instead.',
             );
         }
 
@@ -338,7 +338,7 @@ export const actionsApi = {
             // TODO(remove after v0.2): see actions.on above.
             warnOnce(
                 "paperapi:wildcard-onTrigger",
-                '[paperapi] actions.onTrigger with "*" panel/trigger is deprecated and will be refused after v3.1; subscribe to explicit panel:trigger names instead.',
+                '[paperapi] actions.onTrigger with "*" panel/trigger is deprecated and will be refused after v0.2; subscribe to explicit panel:trigger names instead.',
             );
         }
 

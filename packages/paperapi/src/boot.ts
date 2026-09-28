@@ -19,7 +19,7 @@
 // and no code path reads identity or credentials back out of process.env
 // after init. The scoped token is preferred everywhere; the master token
 // is accepted only as the deprecated fallback the daemon already warns
-// about, dying after v3.2.
+// about, dying after v0.3.
 
 export interface ServiceBootContext {
     panelId: string;
@@ -66,7 +66,7 @@ function fromEnv(): ServiceBootContext | null {
     if (!Number.isInteger(port) || port <= 0) return null;
     // scoped token first: a service authenticates as its panel, not as the
     // host. The master token is the deprecated fallback (daemon-side loud
-    // warning, denied after v3.2).
+    // warning, denied after v0.3).
     const token =
         process.env.PAPERCRANE_PANEL_TOKEN || process.env.PAPERCRANE_TOKEN;
     if (!token) return null;

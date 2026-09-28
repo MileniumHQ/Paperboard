@@ -53,7 +53,7 @@ export class TransportRegistry {
         // together with the read-through)
         warnOnce(
             "paperapi:bare-action-readthrough",
-            `[paperapi] action '${actionName}' registered as a bare name by panel '${pid}' — bare names are deprecated and will be refused after v3.1; the panel:action namespace is the supported form.`,
+            `[paperapi] action '${actionName}' registered as a bare name by panel '${pid}' — bare names are deprecated and will be refused after v0.2; the panel:action namespace is the supported form.`,
         );
         // composite key is always owned; the bare key is the read-through
         this.actionHandlers.set(this.compositeKey(panelId, actionName), handler);

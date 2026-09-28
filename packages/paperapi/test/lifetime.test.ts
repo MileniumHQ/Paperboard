@@ -204,8 +204,8 @@ describe("refused invokes clean up progress listeners", () => {
             (console as any).warn = orig;
         }
         expect(warnings.length).toBe(2);
-        expect(String(warnings[0][0])).toContain("v3.1");
-        expect(String(warnings[1][0])).toContain("v3.1");
+        expect(String(warnings[0][0])).toContain("v0.2");
+        expect(String(warnings[1][0])).toContain("v0.2");
     });
 });
 
