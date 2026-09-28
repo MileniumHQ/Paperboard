@@ -96,10 +96,10 @@
     display: block;
 }
 
-/* Plain icons drop all image chrome and render slightly larger. */
+/* Plain icons drop all image chrome and render larger. */
 .iconPlain .iconStandalone {
-    width: calc(var(--paper-media-icon-size) * 1.5);
-    height: calc(var(--paper-media-icon-size) * 1.5);
+    width: calc(var(--paper-media-icon-size) * 2);
+    height: calc(var(--paper-media-icon-size) * 2);
     border-radius: 0;
 }
 
@@ -169,6 +169,13 @@
     overflow: hidden;
     text-overflow: ellipsis;
     color: var(--paper-text-subtle);
+}
+
+/* Pinned to the bottom of the body: cards in a row share a baseline for
+   their meters/status rows instead of each ending wherever its text does. */
+.descriptionExtra {
+    margin-top: auto;
+    display: block;
 }
 
 .contentArea {

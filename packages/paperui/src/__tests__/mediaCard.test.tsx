@@ -17,6 +17,22 @@ describe("PaperMediaCard Component Tests", () => {
         expect(getByText("A test description of a board.")).toBeTruthy();
     });
 
+    it("renders descriptionExtra outside the clamped description text", () => {
+        const { getByText, container } = render(() => (
+            <PaperMediaCard
+                title="Fit Card"
+                description="A model description."
+                descriptionExtra={<span>Runs on your GPU</span>}
+            />
+        ));
+
+        expect(getByText("Runs on your GPU")).toBeTruthy();
+        const description = getByText("A model description.");
+        expect(description.className).toContain("description");
+        expect(description.contains(getByText("Runs on your GPU"))).toBe(false);
+        expect(container.textContent).toContain("Runs on your GPU");
+    });
+
     it("renders banner image and icon badge when supplied", () => {
         const { container } = render(() => (
             <PaperMediaCard

@@ -15,6 +15,12 @@ export interface PaperMediaCardProps
     title: string | JSX.Element;
     subtitle?: string | JSX.Element;
     description?: string | JSX.Element;
+    /**
+     * Extra content rendered directly under the description, outside its
+     * line clamp. Use it for meters or status rows that belong with the
+     * description but must never be truncated.
+     */
+    descriptionExtra?: JSX.Element;
     footerLeft?: JSX.Element;
     footerRight?: JSX.Element;
     badge?: JSX.Element;
@@ -43,6 +49,7 @@ export function PaperMediaCard(props: ParentProps<PaperMediaCardProps>) {
         "title",
         "subtitle",
         "description",
+        "descriptionExtra",
         "footerLeft",
         "footerRight",
         "badge",
@@ -206,6 +213,12 @@ export function PaperMediaCard(props: ParentProps<PaperMediaCardProps>) {
                     <PaperText size={2} class={styles.description}>
                         {local.description}
                     </PaperText>
+                </Show>
+
+                <Show when={local.descriptionExtra}>
+                    <div class={styles.descriptionExtra}>
+                        {local.descriptionExtra}
+                    </div>
                 </Show>
 
                 <Show when={local.children}>
