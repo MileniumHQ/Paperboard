@@ -43,6 +43,7 @@
     },
     "dependencies": {
         "anser": "^2.3.5",
+        "marked": "^18.0.14",
         "prismjs": "^1.30.0",
         "solid-transition-group": "^0.3.0"
     },

@@ -1,0 +1,33 @@
+.PaperMarkdown {
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap-half);
+    min-width: 0;
+    font-size: var(--paper-text-size-3);
+    line-height: var(--paper-console-line-height);
+    color: var(--paper-text);
+    overflow-wrap: anywhere;
+}
+
+.PaperMarkdown img {
+    max-width: 100%;
+    height: auto;
+    border-radius: var(--paper-border-radius-half);
+}
+
+/* the flex gap is the only block spacing: browser margins on paragraphs and
+   headings, and the list's own bottom margin, would stack on top of it */
+.PaperMarkdown :is(p, h1, h2, h3, h4, h5, h6, ul, ol) {
+    margin: 0;
+}
+
+/* the root's line height is an em length, which children inherit as a
+   fixed pixel value sized for body text: a wrapped heading would overlap
+   itself, so headings get a unitless height relative to their own size */
+.PaperMarkdown :is(h1, h2, h3, h4, h5, h6) {
+    line-height: 1.2;
+}
+
+.PaperMarkdown > :is(h1, h2, h3, h4, h5, h6):not(:first-child) {
+    margin-top: var(--paper-uigap-half);
+}
