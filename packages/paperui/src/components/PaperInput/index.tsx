@@ -2,14 +2,26 @@ import styles from "./index.module.css";
 import { splitProps, Show, createSignal, createEffect, type JSX } from "solid-js";
 import { PaperIcon } from "../PaperIcon";
 
-export interface PaperInputProps extends JSX.InputHTMLAttributes<HTMLInputElement> {
+/**
+ * `ref` is re-declared because the multiline form hands back a textarea, which
+ * the inherited input signature cannot express. Attributes that only exist on
+ * an input (`type`, `min`, `max`, `step`, `pattern`, `size`) have no effect on a
+ * multiline field and are ignored.
+ */
+export interface PaperInputProps extends Omit<JSX.InputHTMLAttributes<HTMLInputElement>, "ref"> {
     icon?: JSX.Element | string;
     compact?: boolean;
     fullWidth?: boolean;
     invalid?: boolean;
     validate?: (value: string) => boolean;
     defaultValue?: string | number;
-    ref?: HTMLInputElement | ((el: HTMLInputElement) => void);
+    ref?: HTMLInputElement | HTMLTextAreaElement | ((el: HTMLInputElement) => void);
+    /** Renders a textarea instead of a single-line field. Every other prop behaves the same. */
+    multiline?: boolean;
+    /** Visible text rows when multiline. Ignored otherwise. */
+    rows?: number;
+    /** Whether the browser resize affordance is available when multiline. */
+    resize?: boolean;
 }
 
 export function PaperInput(props: PaperInputProps) {
@@ -28,12 +40,15 @@ export function PaperInput(props: PaperInputProps) {
         "onInput",
         "onChange",
         "ref",
+        "multiline",
+        "rows",
+        "resize",
     ]);
 
     const [internalValue, setInternalValue] = createSignal(
         String(local.value ?? local.defaultValue ?? "")
     );
-    
+
     createEffect(() => {
         if (local.value !== undefined) {
             setInternalValue(String(local.value));
@@ -48,24 +63,28 @@ export function PaperInput(props: PaperInputProps) {
         return false;
     };
 
-    const handleInput: JSX.InputEventHandler<HTMLInputElement, InputEvent> = (e) => {
+    const handleInput: JSX.InputEventHandler<HTMLInputElement | HTMLTextAreaElement, InputEvent> = (e) => {
         if (local.value === undefined) {
             setInternalValue(e.currentTarget.value);
         }
         if (typeof local.onInput === "function") {
-            (local.onInput as JSX.InputEventHandler<HTMLInputElement, InputEvent>)(e);
+            (local.onInput as JSX.InputEventHandler<HTMLInputElement, InputEvent>)(e as never);
         }
     };
 
-    const handleChange: JSX.EventHandler<HTMLInputElement, Event> = (e) => {
+    const handleChange: JSX.EventHandler<HTMLInputElement | HTMLTextAreaElement, Event> = (e) => {
         if (local.value === undefined) {
             setInternalValue(e.currentTarget.value);
         }
         if (typeof local.onChange === "function") {
-            (local.onChange as JSX.EventHandler<HTMLInputElement, Event>)(e);
+            (local.onChange as JSX.EventHandler<HTMLInputElement, Event>)(e as never);
         }
     };
 
+    const isMultiline = () => Boolean(local.multiline);
+
+    // width:fit-content assumes a single-line field; a textarea should fill the
+    // frame it is given, and its resize handle must not be clipped.
     const className = () =>
         [
             styles.PaperInput,
@@ -74,6 +93,8 @@ export function PaperInput(props: PaperInputProps) {
             local.icon ? styles.hasIcon : "",
             isInvalid() ? styles.invalid : "",
             local.disabled ? styles.disabled : "",
+            isMultiline() ? styles.multiline : "",
+            isMultiline() && local.resize === false ? styles.fixedSize : "",
             local.class,
         ]
             .filter(Boolean)
@@ -95,16 +116,32 @@ export function PaperInput(props: PaperInputProps) {
                     <span class={styles.inputIcon}>{local.icon}</span>
                 )}
             </Show>
-            <input
-                {...rest}
-                type={local.type ?? "text"}
-                disabled={local.disabled}
-                ref={local.ref}
-                value={currentValue()}
-                aria-invalid={isInvalid() ? "true" : undefined}
-                onInput={handleInput}
-                onChange={handleChange}
-            />
+            <Show
+                when={isMultiline()}
+                fallback={
+                    <input
+                        {...rest}
+                        type={local.type ?? "text"}
+                        disabled={local.disabled}
+                        ref={local.ref as never}
+                        value={currentValue()}
+                        aria-invalid={isInvalid() ? "true" : undefined}
+                        onInput={handleInput as never}
+                        onChange={handleChange as never}
+                    />
+                }
+            >
+                <textarea
+                    {...(rest as unknown as JSX.TextareaHTMLAttributes<HTMLTextAreaElement>)}
+                    rows={local.rows ?? 4}
+                    disabled={local.disabled}
+                    ref={local.ref as never}
+                    value={currentValue()}
+                    aria-invalid={isInvalid() ? "true" : undefined}
+                    onInput={handleInput as never}
+                    onChange={handleChange as never}
+                />
+            </Show>
         </div>
     );
 }

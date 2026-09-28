@@ -39,14 +39,32 @@
     font-size: var(--paper-icon-size-medium);
 }
 
-.PaperInput.hasIcon input {
+.PaperInput.multiline {
+    align-items: stretch;
+    width: 100%;
+}
+.PaperInput.multiline textarea {
+    display: block;
+    box-sizing: border-box;
+    resize: vertical;
+}
+.PaperInput.multiline.fixedSize textarea {
+    resize: none;
+}
+.PaperInput.multiline .inputIcon {
+    top: var(--paper-uigap-threefourths);
+}
+
+.PaperInput.hasIcon input,
+.PaperInput.hasIcon textarea {
     padding-left: calc(
         var(--paper-uigap-threefourths) + var(--paper-icon-size-medium) +
             var(--paper-uigap-onefourth)
     );
 }
 
-.PaperInput.compact input {
+.PaperInput.compact input,
+.PaperInput.compact textarea {
     padding: var(--paper-uigap-half) var(--paper-uigap-threefourths);
     font-size: var(--paper-text-size-2);
     border-radius: var(--paper-border-radius-half);
@@ -58,14 +76,16 @@
     line-height: 0.9;
 }
 
-.PaperInput.compact.hasIcon input {
+.PaperInput.compact.hasIcon input,
+.PaperInput.compact.hasIcon textarea {
     padding-left: calc(
         var(--paper-uigap-half) + var(--paper-icon-size-small) +
             var(--paper-uigap-onefourth)
     );
 }
 
-.PaperInput input {
+.PaperInput input,
+.PaperInput textarea {
     font-family: var(--paper-font-family);
     padding: var(--paper-uigap-threefourths) var(--paper-uigap);
     border-radius: var(--paper-border-radius);
@@ -73,7 +93,7 @@
     font-size: var(--paper-text-size-3);
     cursor: text;
     outline: none;
-    background: var(--paper-surface-raised);
+    background: var(--paper-field-well);
     color: var(--paper-text);
     -webkit-user-select: text;
     user-select: text;
@@ -83,26 +103,30 @@
     width: 100%;
 }
 
-.PaperInput input:focus-visible {
+.PaperInput input:focus-visible,
+.PaperInput textarea:focus-visible {
     border-color: var(--paper-primary);
     outline: var(--paper-focus-ring);
     outline-offset: var(--paper-focus-offset);
 }
 
-.PaperInput input:focus {
+.PaperInput input:focus,
+.PaperInput textarea:focus {
     cursor: text;
     border: var(--paper-border-width) solid var(--paper-border-emphasis);
     outline: none;
 }
 
-.PaperInput:has(input:focus)::after {
+.PaperInput:has(input:focus)::after,
+.PaperInput:has(textarea:focus)::after {
     height: var(--paper-thickest-border-width);
 }
 .PaperInput.compact:has(input:focus)::after {
     height: var(--paper-thick-border-width);
 }
 
-.PaperInput input::placeholder {
+.PaperInput input::placeholder,
+.PaperInput textarea::placeholder {
     font-family: var(--paper-font-family-rounded);
     color: var(--paper-text-faint);
     opacity: 1;
@@ -115,13 +139,17 @@
 }
 
 .PaperInput.invalid input,
-.PaperInput input:invalid {
+.PaperInput input:invalid,
+.PaperInput.invalid textarea,
+.PaperInput textarea:invalid {
     color: var(--paper-danger);
     border: var(--paper-border-width) solid var(--paper-danger);
 }
 
 .PaperInput input:disabled,
-.PaperInput.disabled input {
+.PaperInput.disabled input,
+.PaperInput textarea:disabled,
+.PaperInput.disabled textarea {
     background: var(--paper-surface-inset);
     color: var(--paper-text-faint);
     cursor: not-allowed;
@@ -129,7 +157,9 @@
 }
 
 .PaperInput input:disabled::placeholder,
-.PaperInput.disabled input::placeholder {
+.PaperInput.disabled input::placeholder,
+.PaperInput textarea:disabled::placeholder,
+.PaperInput.disabled textarea::placeholder {
     color: var(--paper-text-faint);
 }
 

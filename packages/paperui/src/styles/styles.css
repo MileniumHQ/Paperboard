@@ -146,6 +146,8 @@ body[data-unselectable="true"],
 
     --paper-element-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
     --paper-heavy-element-shadow: 0 2px 6px 1px rgba(0, 0, 0, 0.2);
+    /* recessed field well: a translucent shade reads on any surface */
+    --paper-field-well: rgba(0, 0, 0, 0.06);
     --paper-blur-light: blur(5px);
     --paper-blur-medium: blur(10px);
     --paper-blur-heavy: blur(15px);
