@@ -1,6 +1,6 @@
 appId: dev.paperboard.paperboard
 productName: Paperboard
-copyright: 2026 Milenium LLC
+copyright: 2026 Milenium
 directories:
     buildResources: build
 files:
@@ -69,7 +69,7 @@ linux:
         - provider: generic
           url: https://i.paperboard.dev/pb
           channel: latest
-    maintainer: Milenium LLC <contact@paperboard.dev>
+    maintainer: Milenium <contact@paperboard.dev>
     category: Utility
     synopsis: Run and manage tools locally.
     description: Run and manage tools locally.
