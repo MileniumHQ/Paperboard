@@ -30,6 +30,7 @@ export interface PanelItem {
     installSource?: "registry" | "direct" | "dev";
     isLinked?: boolean;
     installedVersion?: string;
+    latestVersion?: string;
 }
 
 // Publisher, install source and review evidence are independent facts.
@@ -320,15 +321,22 @@ const PanelLibrary: Component<PanelLibraryProps> = (props) => {
                                             <td>{panel().id}</td>
                                         </tr>
                                         <tr><th>Review</th><td>No review attestation recorded for this release</td></tr>
-                                        <Show when={panel().isInstalled}><tr><th>Installed version</th><td>{panel().installedVersion || panel().version || "Not recorded"}</td></tr></Show>
+                                        {/* installed panels report their own manifest's version;
+                                            the registry's newest release is a separate fact */}
                                         <tr>
-                                            <th>Version</th>
+                                            <th>{panel().isInstalled ? "Installed version" : "Version"}</th>
                                             <td>
                                                 {panel().version
                                                     ? `v${panel().version}`
-                                                    : "–"}
+                                                    : "Not recorded"}
                                             </td>
                                         </tr>
+                                        <Show when={panel().isInstalled && panel().latestVersion}>
+                                            <tr>
+                                                <th>Latest release</th>
+                                                <td>v{panel().latestVersion}</td>
+                                            </tr>
+                                        </Show>
                                         <Show
                                             when={
                                                 panel().size &&
