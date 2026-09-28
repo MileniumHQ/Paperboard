@@ -19,7 +19,7 @@ export interface PaperTextProps extends JSX.HTMLAttributes<HTMLElement> {
     truncate?: boolean | number;
 }
 
-const PRESETS: Record<string, { size: number; weight: number }> = {
+export const PRESETS: Record<string, { size: number; weight: number }> = {
     headline: { size: 12, weight: 800 },
     header: { size: 10, weight: 700 },
     subheader: { size: 7, weight: 600 },

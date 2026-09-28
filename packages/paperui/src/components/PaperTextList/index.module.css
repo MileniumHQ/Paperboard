@@ -21,3 +21,32 @@
 .PaperTextList.relaxed > * + * {
     margin-top: var(--paper-uigap);
 }
+
+.PaperTextList.rounded {
+    font-family: var(--paper-font-family-rounded);
+}
+
+.PaperTextList.code {
+    font-family: var(--paper-font-family-code);
+}
+
+.PaperTextList.section {
+    text-transform: uppercase;
+    letter-spacing: var(--paper-text-tracking);
+    color: var(--paper-text-subtle);
+}
+
+.PaperTextList.body {
+    line-height: 1.75;
+}
+
+.PaperTextList.breakWord {
+    word-break: break-word;
+    overflow-wrap: break-word;
+}
+
+.PaperTextList.truncate {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
