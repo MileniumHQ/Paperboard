@@ -83,6 +83,35 @@
     );
 }
 
+/* A tiny control is transparent by definition, but a toggle still has to show
+   its state. aria-pressed restores the role fill instead of inventing a new
+   treatment, so a selected tiny button reads the same as any other selected
+   button. Placed after :hover/:active so a pressed control stays pressed. */
+.PaperButton.size-tiny[aria-pressed="true"] {
+    background: var(--role-base, var(--paper-primary));
+    color: var(--paper-on-color);
+}
+
+.PaperButton.size-tiny[aria-pressed="true"]:hover {
+    background: color-mix(
+        in srgb,
+        var(--paper-contrast) 8%,
+        var(--role-base, var(--paper-primary))
+    );
+}
+
+.PaperButton.size-tiny[aria-pressed="true"]:active {
+    background: color-mix(
+        in srgb,
+        var(--paper-contrast) 14%,
+        var(--role-base, var(--paper-primary))
+    );
+}
+
+.PaperButton.size-tiny[aria-pressed="true"] [class*="PaperIcon"] {
+    color: var(--paper-on-color);
+}
+
 .PaperButton.size-tiny [class*="PaperIcon"] {
     font-size: var(--paper-icon-size-small);
 }
