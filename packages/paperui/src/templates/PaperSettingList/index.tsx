@@ -16,6 +16,8 @@ export interface PaperSettingListProps
     defaultValue?: Record<string, any>;
     onValueChange?: (values: Record<string, any>) => void;
     autoHeight?: boolean;
+    /** Drop the card border and rounding for full-bleed panes. */
+    flat?: boolean;
     flex?: boolean | number | JSX.CSSProperties["flex"];
 }
 
@@ -27,6 +29,7 @@ export function PaperSettingList(props: ParentProps<PaperSettingListProps>) {
         "defaultValue",
         "onValueChange",
         "autoHeight",
+        "flat",
         "flex",
         "class",
         "classList",
@@ -66,6 +69,7 @@ export function PaperSettingList(props: ParentProps<PaperSettingListProps>) {
         [
             styles.PaperSettingList,
             local.autoHeight ? styles.autoHeight : "",
+            local.flat ? styles.flat : "",
             local.class,
         ]
             .filter(Boolean)

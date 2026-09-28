@@ -13,7 +13,15 @@
 
 .PaperSettingList.autoHeight {
     height: auto;
-    overflow-y: visible;
+    /* still clip: the row surfaces must not paint square corners over the
+       rounded border just because the list sizes to its content */
+    overflow: hidden;
+}
+
+/* full-bleed pane usage: no card edge to clip, so no border or rounding */
+.PaperSettingList.flat {
+    border: none;
+    border-radius: 0;
 }
 
 .PaperSettingItem:nth-child(odd) {

@@ -4,6 +4,7 @@ import { PaperFlex } from "../templates/PaperFlex";
 import { PaperText } from "../components/PaperText";
 import { PaperSettingList } from "../templates/PaperSettingList";
 import { PaperList, PaperListItem } from "../components/PaperList";
+import settingListStyles from "../templates/PaperSettingList/index.module.css";
 
 describe("PaperLayout and Components Layout Enhancements", () => {
     it("renders PaperFlex with flex, shrink, and layout props", () => {
@@ -54,6 +55,17 @@ describe("PaperLayout and Components Layout Enhancements", () => {
 
         const el = getByTestId("setting-list");
         expect(el.className).toBeTruthy();
+    });
+
+    it("renders PaperSettingList flat for full-bleed panes", () => {
+        const { getByTestId } = render(() => (
+            <PaperSettingList data-testid="flat-list" flat>
+                Items
+            </PaperSettingList>
+        ));
+
+        const el = getByTestId("flat-list");
+        expect(el.classList.contains(settingListStyles.flat)).toBe(true);
     });
 
     it("renders PaperList with borderless, fullWidth, and scrollable props", () => {
