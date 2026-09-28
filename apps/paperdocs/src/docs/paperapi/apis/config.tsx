@@ -28,11 +28,13 @@ interface UserPreferences {
     refreshInterval: number;
 }
 
-// Persist settings for the current panel
-await configApi.set({ theme: "dark", refreshInterval: 5000 });
+const PANEL_ID = "dev.example.panel";
+
+// Persist settings for this panel (the id is always explicit)
+await configApi.set({ theme: "dark", refreshInterval: 5000 }, PANEL_ID);
 
 // Read stored settings
-const prefs = await configApi.get<UserPreferences>();`}
+const prefs = await configApi.get<UserPreferences>(PANEL_ID);`}
             </PaperCode>
 
             <PaperText preset="subheader" id="methods-and-signatures">Methods and signatures</PaperText>
@@ -51,12 +53,12 @@ const prefs = await configApi.get<UserPreferences>();`}
                 <tbody>
                     <tr>
                         <td><PaperCode>get</PaperCode></td>
-                        <td><PaperCode>get&lt;T&gt;(id?, path?, scope?): Promise&lt;T&gt;</PaperCode></td>
-                        <td>Reads stored JSON data. Defaults to the current panel ID and root config file.</td>
+                        <td><PaperCode>get&lt;T&gt;(id, path?, scope?): Promise&lt;T&gt;</PaperCode></td>
+                        <td>Reads stored JSON data. The id is required (usually your panel id); omitting it throws.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>set</PaperCode></td>
-                        <td><PaperCode>set(data, id?, path?, scope?): Promise&lt;void&gt;</PaperCode></td>
+                        <td><PaperCode>set(data, id, path?, scope?): Promise&lt;void&gt;</PaperCode></td>
                         <td>Writes JSON data to the target document.</td>
                     </tr>
                     <tr>
@@ -80,7 +82,7 @@ const prefs = await configApi.get<UserPreferences>();`}
             </PaperText>
             <PaperCode block language="tsx">
 {`// Persist distinct layout state without overwriting root config
-await configApi.set({ openTabs: ["home", "logs"] }, undefined, "workspace.json");`}
+await configApi.set({ openTabs: ["home", "logs"] }, PANEL_ID, "workspace.json");`}
             </PaperCode>
         </PaperFlex>
     );

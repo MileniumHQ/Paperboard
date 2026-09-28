@@ -160,6 +160,7 @@ describe("refused invokes clean up progress listeners", () => {
         const running = fileApi.download({
             url: "https://example.com/x.bin",
             targetPath: "/tmp/x.bin",
+            appId: "dev.test.panel",
             onProgress(p) {
                 stages.push(p.stage);
             },

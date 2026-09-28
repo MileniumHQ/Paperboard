@@ -1,7 +1,10 @@
-import { invoke, on, getPanelId } from "./ipc";
+import { invoke, on } from "./ipc";
 import { newClientId } from "./channels";
+import { requirePanelId } from "./panelIdentity";
 
-const getHost = () => getPanelId();
+// every file call names the panel whose storage it touches: an omitted id
+// used to fall back to "whoever this document is", which is ambient identity
+const owner = (appId: unknown): string => requirePanelId(appId);
 
 export interface FileDownloadProgress {
     downloadId: string;
@@ -15,7 +18,7 @@ export interface FileDownloadProgress {
 export interface FileDownloadOptions {
     url: string;
     targetPath: string;
-    appId?: string;
+    appId: string;
     sha1?: string;
     sha256?: string;
     checksum?: {
@@ -27,22 +30,8 @@ export interface FileDownloadOptions {
 
 // panel file storage and downloads
 export const fileApi = {
-    download: async (
-        optionsOrUrl: FileDownloadOptions | string,
-        targetPathOrProgress?: string | ((progress: FileDownloadProgress) => void),
-        maybeProgress?: (progress: FileDownloadProgress) => void,
-    ): Promise<string> => {
-        const opts: FileDownloadOptions =
-            typeof optionsOrUrl === "string"
-                ? {
-                      url: optionsOrUrl,
-                      targetPath: typeof targetPathOrProgress === "string" ? targetPathOrProgress : "",
-                      onProgress:
-                          typeof targetPathOrProgress === "function"
-                              ? targetPathOrProgress
-                              : maybeProgress,
-                  }
-                : optionsOrUrl;
+    download: async (opts: FileDownloadOptions): Promise<string> => {
+        const appId = owner(opts.appId);
 
         const downloadId = newClientId("file");
 
@@ -66,7 +55,7 @@ export const fileApi = {
             return await invoke("file-download", {
                 url: opts.url,
                 targetPath: opts.targetPath,
-                appId: opts.appId || getHost(),
+                appId,
                 downloadId,
                 sha1: opts.sha1,
                 sha256: opts.sha256,
@@ -78,23 +67,23 @@ export const fileApi = {
         }
     },
 
-    getPath: (targetPath: string, appId?: string): Promise<string> =>
-        invoke("file-get-path", { targetPath, appId: appId || getHost() }),
+    getPath: (targetPath: string, appId: string): Promise<string> =>
+        invoke("file-get-path", { targetPath, appId: owner(appId) }),
 
-    exists: (targetPath: string, appId?: string): Promise<boolean> =>
-        invoke("file-exists", { targetPath, appId: appId || getHost() }),
+    exists: (targetPath: string, appId: string): Promise<boolean> =>
+        invoke("file-exists", { targetPath, appId: owner(appId) }),
 
-    write: (targetPath: string, content: string, appId?: string): Promise<string> =>
-        invoke("file-write", { targetPath, content, appId: appId || getHost() }),
+    write: (targetPath: string, content: string, appId: string): Promise<string> =>
+        invoke("file-write", { targetPath, content, appId: owner(appId) }),
 
-    read: (targetPath: string, appId?: string): Promise<string | null> =>
-        invoke("file-read", { targetPath, appId: appId || getHost() }),
+    read: (targetPath: string, appId: string): Promise<string | null> =>
+        invoke("file-read", { targetPath, appId: owner(appId) }),
 
-    delete: (targetPath: string, appId?: string): Promise<boolean> =>
-        invoke("file-delete", { targetPath, appId: appId || getHost() }),
+    delete: (targetPath: string, appId: string): Promise<boolean> =>
+        invoke("file-delete", { targetPath, appId: owner(appId) }),
 
-    clear: (appId?: string): Promise<boolean> =>
-        invoke("file-clear", { appId: appId || getHost() }),
+    clear: (appId: string): Promise<boolean> =>
+        invoke("file-clear", { appId: owner(appId) }),
 };
 
 export const files = fileApi;
