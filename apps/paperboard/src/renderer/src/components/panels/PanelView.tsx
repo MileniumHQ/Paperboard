@@ -37,6 +37,7 @@ const PanelFrame: Component<{ panelKey: string; current: boolean; reload: number
     return <div style={{ position: "absolute", inset: "0", display: props.current ? "block" : "none" }}>
         <iframe ref={frame} data-panel-key={props.panelKey} title={panelId}
             sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+            allow="clipboard-read; clipboard-write"
             onLoad={() => frame?.contentWindow?.postMessage({ type: "paperboard:initialize", generation }, "*")}
             style={{ width: "100%", height: "100%", border: "none", "border-left": `${getVarCss("border-width")} solid ${getVarCss("border")}`, visibility: ready() && !failure() ? "visible" : "hidden" }} />
         <Show when={!ready() || failure()}><PaperFlex direction="column" center fullWidth fullHeight gap="half" style={{ position: "absolute", inset: "0" }}>
