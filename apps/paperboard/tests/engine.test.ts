@@ -24,6 +24,13 @@ describe("PaperCraneEngine path containment", () => {
         );
     });
 
+    it("creates a fresh panel's home when its path is handed out", () => {
+        const home = path.join(tmp, "files", "dev.paperboard.gameserver");
+        expect(fs.existsSync(home)).toBe(false);
+        expect(engine.getFilePath("", "dev.paperboard.gameserver")).toBe(home);
+        expect(fs.statSync(home).isDirectory()).toBe(true);
+    });
+
     it("rejects traversal", async () => {
         await expect(engine.writeFile("../../escape.txt", "x", "srv")).rejects.toThrow();
         expect(() => engine.getFilePath("../other", "srv")).toThrow();

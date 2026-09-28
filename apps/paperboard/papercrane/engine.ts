@@ -475,7 +475,12 @@ export class PaperCraneEngine {
 
     // Panel file management
     public getFilePath(targetPath: string, appId?: string): string {
-        return this.resolveSecureTargetPath(targetPath, appId);
+        const resolved = this.resolveSecureTargetPath(targetPath, appId);
+        // a panel's home belongs to the panel from the start: handing out a
+        // path to a home that does not exist made a fresh panel's first
+        // spawn/listing fail with "spawn cwd does not exist"
+        this.resolveAppFilesDir(appId);
+        return resolved;
     }
 
     // Deletes a file inside isolated storage, files only
