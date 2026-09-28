@@ -1,9 +1,6 @@
 import { createSignal } from "solid-js";
-import { panelsApi, config, type PanelItem } from "@paperboard-dev/paperapi";
+import { panelsApi, type PanelItem } from "@paperboard-dev/paperapi";
 import { logToMain } from "../lib/shell";
-
-// last opened local panel, persisted across launches
-export const LAST_OPENED_ID = "shell-last-opened";
 
 // placeholder divs render per opened key (PanelView), so the list itself
 // must be bounded: most-recent-first, oldest dropped past the cap.
@@ -58,11 +55,6 @@ export function usePanels() {
                     ? next.slice(next.length - MAX_OPENED_PANELS)
                     : next;
             });
-            if (compId === "local") {
-                config
-                    .set({ panelId: tab }, LAST_OPENED_ID)
-                    .catch((err) => console.error("[usePanels] failed to persist last opened panel:", err));
-            }
         }
     };
 

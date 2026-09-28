@@ -12,7 +12,6 @@ import {
 } from "@paperboard-dev/paperui";
 import {
     panelsApi,
-    config,
     type PanelItem,
 } from "@paperboard-dev/paperapi";
 import {
@@ -38,7 +37,7 @@ import ComputerContextMenu from "./components/computer/ComputerContextMenu";
 import TopBar from "./components/layout/TopBar";
 import { useAppSettings } from "./hooks/useAppSettings";
 import { useComputers } from "./hooks/useComputers";
-import { usePanels, LAST_OPENED_ID } from "./hooks/usePanels";
+import { usePanels } from "./hooks/usePanels";
 
 export type { ComputerItem };
 const App: Component = () => {
@@ -185,34 +184,9 @@ const App: Component = () => {
         // Load application-wide settings before anything depends on them
         await loadAppSettings();
 
-        // Honor the default panel on local: a pinned panel, else the
-        // persisted last-opened panel, else the first installed panel.
-        const localPanels = panelsByComputer()["local"] || [];
-        const def =
-            appSettings().defaultPanel &&
-            appSettings().defaultPanel !== "last"
-                ? appSettings().defaultPanel
-                : null;
-        if (def && localPanels.some((p) => p.id === def)) {
-            setComputerTab("local", def);
-        } else {
-            let target: string | null = null;
-            try {
-                const last = await config.get<{ panelId?: string }>(
-                    LAST_OPENED_ID,
-                );
-                if (
-                    last?.panelId &&
-                    localPanels.some((p) => p.id === last.panelId)
-                ) {
-                    target = last.panelId;
-                }
-            } catch (err) { console.error("[App] op failed:", err); }
-            if (!target && localPanels.length > 0) {
-                target = localPanels[0].id;
-            }
-            if (target) setComputerTab("local", target);
-        }
+        // Launch always lands on the splash, never on a panel: opening the
+        // last-used panel on boot made a misbehaving panel the first thing
+        // the user saw, with no deliberate action to blame.
 
         // R1: the unsubscribe is kept and torn down. shell.onChanged's
         // contract returns an unsubscribe; discarding it invites every
@@ -433,9 +407,6 @@ const App: Component = () => {
                                 <AppSettings
                                     settings={appSettings()}
                                     onChange={handleAppSettingsChange}
-                                    panels={(panelsByComputer()["local"] || []).map(
-                                        (p) => ({ id: p.id, name: p.name }),
-                                    )}
                                 />
                             </PaperFlex>
                         }

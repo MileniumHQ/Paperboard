@@ -36,7 +36,6 @@ export function useAppSettings() {
             );
             if (stored) {
                 const merged = { ...APP_SETTINGS_DEFAULTS, ...stored };
-                if (!merged.defaultPanel) merged.defaultPanel = "last";
                 setAppSettings(merged);
             }
         } catch (err) { console.error("[useAppSettings] load failed:", err); }
@@ -59,7 +58,7 @@ export function useAppSettings() {
         // (their display follows the value prop), and the theme/motion effects
         // read this signal, so a successful persist must update it or the UI
         // keeps showing the previous selection.
-        setAppSettings({ ...next, defaultPanel: next.defaultPanel || "last" });
+        setAppSettings(next);
         notifyAppSettingsChanged();
     };
 

@@ -15,14 +15,12 @@ export interface AppSettings {
     darkMode: "system" | "light" | "dark";
     reducedMotion: boolean;
     runOnStartup: boolean;
-    defaultPanel: string;
 }
 
 const DEFAULTS: AppSettings = {
     darkMode: "system",
     reducedMotion: false,
     runOnStartup: false,
-    defaultPanel: "last",
 };
 
 // the daemon's paths module owns this fact (one implementation) — the
