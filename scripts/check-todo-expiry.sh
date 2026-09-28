@@ -16,6 +16,15 @@ if [ -z "$CUR_MAJOR" ] || [ -z "$CUR_MINOR" ]; then
     exit 1
 fi
 
+# rg exits 1 when nothing matches; anything above means the scan never
+# ran, which must fail rather than read as "zero expired TODOs"
+MATCHES="$(rg -n --pcre2 -g '!node_modules' -g '!dist' -g '!build' -g '!out' -g '!*.md' -g '!.git' 'TODO\((remove|deny) after v[0-9]+\.[0-9]+' "$ROOT")"
+RG_STATUS=$?
+if [ "$RG_STATUS" -gt 1 ]; then
+    echo "FAIL: ripgrep could not run the scan (exit $RG_STATUS); install ripgrep" >&2
+    exit 2
+fi
+
 FAIL=0
 while IFS= read -r line; do
     # line shape: path:lineno: ... TODO(remove|deny after vMAJOR.MINOR) ...
@@ -35,7 +44,7 @@ while IFS= read -r line; do
             FAIL=1
         fi
     fi
-done < <(rg -n --pcre2 -g '!node_modules' -g '!dist' -g '!build' -g '!out' -g '!*.md' -g '!.git' 'TODO\((remove|deny) after v[0-9]+\.[0-9]+' "$ROOT" || true)
+done < <(printf '%s\n' "$MATCHES" | grep -v '^$')
 
 if [ "$FAIL" -ne 0 ]; then
     exit 1

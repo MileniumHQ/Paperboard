@@ -31,18 +31,30 @@ else
 fi
 GLOBS=(--glob '!node_modules' --glob '!dist' --glob '!out' --glob '!build')
 FAIL=0
+# rg exits 0 on a match, 1 on none, and anything else when it could not
+# search at all (missing binary, bad pattern, unreadable path). Only 1 is
+# "clean": a scan that never ran must not report zero silent catches.
+scan() {
+    rg "$@"
+    local status=$?
+    if [ "$status" -gt 1 ]; then
+        echo "FAIL: ripgrep could not run the scan (exit $status); install ripgrep" >&2
+        exit 2
+    fi
+    return "$status"
+}
 # shellcheck disable=SC2086
-if rg -U --pcre2 -n "${GLOBS[@]}" 'catch\s*(\([^)]*\))?\s*\{\s*\}|catch\s*(\([^)]*\))?\s*\{\s*/\*[^}]*\*/\s*\}' $DIRS; then
+if scan -U --pcre2 -n "${GLOBS[@]}" 'catch\s*(\([^)]*\))?\s*\{\s*\}|catch\s*(\([^)]*\))?\s*\{\s*/\*[^}]*\*/\s*\}' $DIRS; then
     echo "FAIL: empty or comment-only catch bodies found above" >&2
     FAIL=1
 fi
 # shellcheck disable=SC2086
-if rg -U --pcre2 -n "${GLOBS[@]}" 'catch\s*(\([^)]*\))?\s*\{(?![^{}]*\b(logToMain|logger\.|\blog\s*\.|\blog\s*\(|console\.|debugErr|debug\s*\(|throw\b|emitTrigger|\bemit\s*\(|reply\s*\(|reject\s*\(|set[A-Z]\w*|res\.end|jsonResponse|onError|onVerifyError))[^{}]*\breturn\b\s*[^;{}]*;\s*\}' $DIRS; then
+if scan -U --pcre2 -n "${GLOBS[@]}" 'catch\s*(\([^)]*\))?\s*\{(?![^{}]*\b(logToMain|logger\.|\blog\s*\.|\blog\s*\(|console\.|debugErr|debug\s*\(|throw\b|emitTrigger|\bemit\s*\(|reply\s*\(|reject\s*\(|set[A-Z]\w*|res\.end|jsonResponse|onError|onVerifyError))[^{}]*\breturn\b\s*[^;{}]*;\s*\}' $DIRS; then
     echo "FAIL: value-returning catches with no log found above" >&2
     FAIL=1
 fi
 # shellcheck disable=SC2086
-if rg -n "${GLOBS[@]}" '\.catch\(\(\s*\)\s*=>\s*\{\s*\}\)|\.catch\(\(\s*_\s*\)\s*=>\s*\{\s*\}\)|\.catch\([A-Za-z_$][\w$]*\s*=>\s*\{\s*\}\)' $DIRS; then
+if scan -n "${GLOBS[@]}" '\.catch\(\(\s*\)\s*=>\s*\{\s*\}\)|\.catch\(\(\s*_\s*\)\s*=>\s*\{\s*\}\)|\.catch\([A-Za-z_$][\w$]*\s*=>\s*\{\s*\}\)' $DIRS; then
     echo "FAIL: empty promise-arrow catches found above" >&2
     FAIL=1
 fi
