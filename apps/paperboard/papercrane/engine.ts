@@ -16,6 +16,7 @@ import {
     writeFileAtomic,
     LimitError,
 } from "./storage";
+import { PAPERBOARD_USER_AGENT } from "./userAgent";
 import { getSocketsDir, getPaperboardDir } from "./paths";
 import { logger } from "./logger";
 import { spawnSupervisedClient } from "./engineSupervisor";
@@ -735,7 +736,9 @@ export class PaperCraneEngine {
             message: `Resolving package ${packageName}...`,
         });
 
-        const metaRes = await fetch(metaUrl);
+        const metaRes = await fetch(metaUrl, {
+            headers: { "User-Agent": PAPERBOARD_USER_AGENT },
+        });
         if (!metaRes.ok) {
             throw new Error(
                 `Package ${packageName} not found in repository (HTTP ${metaRes.status})`,

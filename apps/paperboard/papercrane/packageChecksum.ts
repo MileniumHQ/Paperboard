@@ -9,6 +9,7 @@
 // sha256: undefined.
 import { resolveRegistryUrl } from "./util";
 import { logger } from "./logger";
+import { PAPERBOARD_USER_AGENT } from "./userAgent";
 
 const REGISTRY_URL = resolveRegistryUrl();
 
@@ -71,7 +72,7 @@ export async function resolvePackageSha256(
         const timer = setTimeout(() => ctrl.abort(), METADATA_TIMEOUT_MS);
         try {
             res = await fetchFn(url, {
-                headers: { "User-Agent": "PaperCrane/1.0 (package-checksum)" },
+                headers: { "User-Agent": PAPERBOARD_USER_AGENT },
                 signal: ctrl.signal,
             });
         } finally {

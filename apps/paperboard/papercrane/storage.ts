@@ -5,6 +5,7 @@ import * as crypto from "crypto";
 import { requirePanelId } from "../../../packages/paperapi/src/panelIdentity";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
+import { PAPERBOARD_USER_AGENT } from "./userAgent";
 
 // one-shot timers must never hold the process open: unref and move on.
 // (bun and node both expose unref on Timeout handles)
@@ -339,7 +340,10 @@ export async function streamToFileWithProgress(
     let idle = setTimeout(() => controller.abort(new Error("Download connection timed out")), idleMs);
     const lifetime = setTimeout(() => controller.abort(new Error("Download exceeded lifetime deadline")), limits.totalMs ?? 30 * 60_000);
     try {
-        const res = await fetch(url, { signal: controller.signal });
+        const res = await fetch(url, {
+            signal: controller.signal,
+            headers: { "User-Agent": PAPERBOARD_USER_AGENT },
+        });
         if (!res.ok || !res.body) throw new Error(`Download failed (HTTP ${res.status})`);
         const totalBytes = Number(res.headers.get("content-length")) || 0;
         const cap = limits.maxBytes ?? 2 * 1024 * 1024 * 1024;

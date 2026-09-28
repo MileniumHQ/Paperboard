@@ -8,6 +8,7 @@ import {
     resolvePackageSha256,
     validSha256,
 } from "../papercrane/packageChecksum";
+import { PAPERBOARD_USER_AGENT } from "../papercrane/userAgent";
 
 const SHA = "e58fcdcd637b25c03ca84cbbcefc70d11efb8f4b4cbd05decc9f661769d77f94";
 
@@ -94,6 +95,24 @@ describe("resolvePackageSha256", () => {
                 arch: "x64",
             }),
         ).rejects.toThrow(/unreachable/);
+    });
+
+    it("identifies Paperboard on the registry request", async () => {
+        let seen: string | null = null;
+        const fetchFn: any = async (_url: string, init?: RequestInit) => {
+            seen = new Headers(init?.headers).get("User-Agent");
+            return {
+                ok: true,
+                status: 200,
+                text: async () => JSON.stringify(META),
+            };
+        };
+        await resolvePackageSha256("java-25", {
+            fetchFn,
+            platform: "linux",
+            arch: "x64",
+        });
+        expect(seen).toBe(PAPERBOARD_USER_AGENT);
     });
 
     it("refuses invalid package names before any fetch", async () => {
