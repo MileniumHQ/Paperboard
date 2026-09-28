@@ -10,7 +10,7 @@ import { PaperCraneAuth } from "../papercrane/auth";
 import { PanelServicesManager } from "../papercrane/panelServices";
 import { handleSecrets } from "../papercrane/rpc/secrets";
 import { handleTerminal } from "../papercrane/rpc/terminal";
-import { claimClient, checkClientOwnership } from "../papercrane/rpc/ownership";
+import { claimClient, checkClientOwnership, checkSpawnEnv } from "../papercrane/rpc/ownership";
 
 let dir = "";
 
@@ -201,14 +201,30 @@ describe("terminal/process id ownership", () => {
         expect(engine.owners.get("t1")).toBe("a");
     });
 
-    it("a mismatched scoped caller is warned but not broken (warn-phase)", async () => {
+    it("a scoped caller cannot touch another panel's terminal", async () => {
         const engine = stubEngine();
         engine.owners.set("t1", "gameserver");
         const f = termCtx(engine, "botcreator");
-        const handled = await handleTerminal("term:write", 1, { id: "t1", data: "x" }, f.ctx as any);
-        expect(handled).toBe(true);
-        expect(engine.writes).toEqual(["t1"]);
-        expect(f.replies[0]).toEqual({ result: { success: true }, error: undefined, code: undefined });
+        await expect(handleTerminal("term:write", 1, { id: "t1", data: "x" }, f.ctx as any)).rejects.toMatchObject({
+            code: "FORBIDDEN",
+        });
+        expect(engine.writes).toEqual([]);
+    });
+
+    it("a scoped caller cannot re-create another panel's id to take it over", () => {
+        const engine = stubEngine();
+        engine.owners.set("t1", "gameserver");
+        expect(() => claimClient("t1", termCtx(engine, "botcreator").ctx as any, "term:create")).toThrow(/another panel/);
+        expect(engine.owners.get("t1")).toBe("gameserver");
+    });
+
+    it("no caller, master included, may plant a credential in a child env", () => {
+        for (const claim of ["a", null]) {
+            expect(() =>
+                checkSpawnEnv({ PAPERCRANE_TOKEN: "x" }, termCtx(stubEngine(), claim).ctx as any, "process:run"),
+            ).toThrow(/refused/);
+        }
+        expect(() => checkSpawnEnv({ PATH: "/bin" }, termCtx(stubEngine(), null).ctx as any, "process:run")).not.toThrow();
     });
 
     it("owner and unclaimed ids proceed without a mismatch", () => {

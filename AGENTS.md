@@ -77,7 +77,7 @@ A per-item cap is not a system budget. Bound concurrency, queued bytes, connecti
 
 - **Identity is granted, never ambient.** Panel tokens carry a `panelId` claim issued at spawn/injection; vault, configuration and file resources derive the caller's panel from that claim. Cross-panel disagreement is refused. Host-issued scoped relay sessions cannot broaden themselves. The registry remains closed to public panel uploads; source publication is a different decision.
 - The session's master token (`PAPERCRANE_TOKEN`, daemon host) is not panel equipment: panel services get `PAPERCRANE_PANEL_TOKEN`; broadening a credential's reach in any code path is rejected.
-- Process ownership still has a dated migration gate in `rpc/ownership.ts`; do not copy its warn-only behavior into new resource boundaries. The `permissions` array remains deleted. No manifest capability badge may imply dispatch enforcement that does not exist.
+- Process and terminal ownership is enforced in `rpc/ownership.ts`: a scoped caller cannot touch or re-create another panel's id. The `permissions` array remains deleted. No manifest capability badge may imply dispatch enforcement that does not exist.
 
 ## The approval test
 

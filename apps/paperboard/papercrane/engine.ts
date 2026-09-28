@@ -230,8 +230,8 @@ export class PaperCraneEngine {
     // ownership ledger: supervised id → creating panel claim (null =
     // master/host-created or pre-ledger). One entry per live client id,
     // deleted with the client — bounded by the client map itself. The RPC
-    // layer records the socket claim on create and warns on mismatches
-    // (rpc/ownership.ts); enforcement lands after v0.3.
+    // layer records the socket claim on create and refuses mismatches
+    // (rpc/ownership.ts).
     private clientOwners = new Map<string, string | null>();
 
     public setClientOwner(id: string, owner: string | null): void {
