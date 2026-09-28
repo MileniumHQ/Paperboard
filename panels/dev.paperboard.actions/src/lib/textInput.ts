@@ -18,11 +18,15 @@ export function sanitizeNumberText(text: string): string {
     return out;
 }
 
-/** Single-line fields must not receive the newlines rich pastes carry. */
+/**
+ * Single-line fields must not receive the newlines rich pastes carry, so
+ * they collapse to spaces. Multiline fields keep their line breaks (CRLF is
+ * normalized to LF and no other whitespace is touched).
+ */
 export function plainTextFromClipboard(
     raw: string | null | undefined,
-    multiline: boolean,
+    multiline = false,
 ): string {
-    const text = raw ?? "";
+    const text = (raw ?? "").replace(/\r\n?/g, "\n");
     return multiline ? text : text.replace(/\s*\n\s*/g, " ");
 }

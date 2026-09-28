@@ -19,6 +19,11 @@ export interface VariableMenuProps {
     x: number;
     y: number;
     items: VariableMenuItem[];
+    /**
+     * The field the menu is editing. Clicks and scrolls inside it are edits,
+     * not dismissals: while the field is focused the menu stays available.
+     */
+    anchor?: HTMLElement | null;
     onSelect: (item: VariableMenuItem) => void;
     onClose: () => void;
     onHoverItem?: (sourceBlockId: string | null) => void;
@@ -98,8 +103,14 @@ export default function VariableMenu(props: VariableMenuProps) {
         `${item.sourceBlockId || ""}:${item.id}:${item.label}`;
 
     onMount(() => {
+        const inside = (target: EventTarget | null): boolean => {
+            if (!(target instanceof Node)) return false;
+            if (menuRef?.contains(target)) return true;
+            return Boolean(props.anchor?.contains(target));
+        };
+
         const handlePointerDown = (e: PointerEvent) => {
-            if (props.open && menuRef && !menuRef.contains(e.target as Node)) {
+            if (props.open && menuRef && !inside(e.target)) {
                 props.onClose();
             }
         };
@@ -115,8 +126,7 @@ export default function VariableMenu(props: VariableMenuProps) {
         // inside the menu itself is how you reach the rest of the list.
         const handleScroll = (e: Event) => {
             if (!props.open) return;
-            const target = e.target;
-            if (menuRef && target instanceof Node && menuRef.contains(target)) return;
+            if (inside(e.target)) return;
             props.onClose();
         };
 
@@ -187,6 +197,7 @@ export default function VariableMenu(props: VariableMenuProps) {
                                                 onClick={(e) => {
                                                     e.preventDefault();
                                                     e.stopPropagation();
+                                                    setActiveKey(null);
                                                     props.onHoverItem?.(null);
                                                     props.onSelect(item);
                                                 }}

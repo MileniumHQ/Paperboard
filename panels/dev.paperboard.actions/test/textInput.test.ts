@@ -1,6 +1,6 @@
 // contenteditable input hygiene (bun test): number fields must never hold
-// text that turns into NaN on blur, and single-line fields must never hold
-// a pasted newline.
+// text that turns into NaN on blur; single-line action values must never
+// receive a pasted newline, while multiline fields keep their line breaks.
 import { describe, test, expect } from "bun:test";
 import {
     plainTextFromClipboard,
@@ -27,21 +27,24 @@ describe("sanitizeNumberText", () => {
 });
 
 describe("plainTextFromClipboard", () => {
-    test("collapses pasted newlines in single-line fields", () => {
-        expect(plainTextFromClipboard("line one\nline two", false)).toBe(
+    test("collapses pasted newlines to spaces", () => {
+        expect(plainTextFromClipboard("line one\nline two")).toBe(
             "line one line two",
         );
-        expect(plainTextFromClipboard("a\n\nb", false)).toBe("a b");
+        expect(plainTextFromClipboard("a\n\nb")).toBe("a b");
     });
 
-    test("preserves newlines in multiline fields", () => {
+    test("multiline fields keep their line breaks and normalize CRLF", () => {
         expect(plainTextFromClipboard("line one\nline two", true)).toBe(
             "line one\nline two",
         );
+        expect(plainTextFromClipboard("a\r\nb\rc", true)).toBe("a\nb\nc");
+        expect(plainTextFromClipboard("  indented\n", true)).toBe("  indented\n");
     });
 
     test("missing clipboard data is empty, not an exception", () => {
-        expect(plainTextFromClipboard(undefined, false)).toBe("");
-        expect(plainTextFromClipboard(null, true)).toBe("");
+        expect(plainTextFromClipboard(undefined)).toBe("");
+        expect(plainTextFromClipboard(null)).toBe("");
+        expect(plainTextFromClipboard(undefined, true)).toBe("");
     });
 });

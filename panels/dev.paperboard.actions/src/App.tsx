@@ -29,6 +29,7 @@ import {
 import { ACTIONS_PANEL_ID } from "./panelId";
 import { variableFieldIcon } from "./lib/variableTypes";
 import { filterPickerItems } from "./lib/variablePicker";
+import { BUILTIN_SCHEMA_ENTRIES } from "./lib/builtins";
 import {
     type CanvasBlock,
     removeBlock,
@@ -125,6 +126,7 @@ export default function App() {
             type?: string;
         }[];
         onInsert?: (varId: string, label: string, icon: string) => void;
+        anchor?: HTMLElement | null;
     }>({
         open: false,
         blockId: "",
@@ -132,6 +134,7 @@ export default function App() {
         x: 0,
         y: 0,
         availableVariables: [],
+        anchor: null,
     });
 
     interface TriggerFieldInfo {
@@ -229,6 +232,7 @@ export default function App() {
         onInsert?: (varId: string, label: string, icon: string) => void,
         expectedType?: string,
         _isArray?: boolean,
+        anchor?: HTMLElement,
     ) => {
         const available: {
             id: string;
@@ -372,6 +376,7 @@ export default function App() {
             y,
             availableVariables: filtered,
             onInsert,
+            anchor: anchor ?? null,
         });
     };
 
@@ -382,7 +387,8 @@ export default function App() {
         } else if (picker.blockId && picker.paramKey) {
             handleValueChange(picker.blockId, picker.paramKey, `{{${v.id}:${v.label}:${v.icon || "bolt"}}}`);
         }
-        closeVariablePicker();
+        // the picker stays up while its field is being edited: inserting a
+        // second variable must not cost another click on the field
     };
 
     const [optionPicker, setOptionPicker] = createSignal<{
@@ -391,9 +397,10 @@ export default function App() {
         paramKey?: string;
         x: number;
         y: number;
-        options: { label: string; value: any; icon?: string }[];
+        options: { label: string; value: any; icon?: string; description?: string }[];
         selectedValue?: any;
         onSelect?: (value: any) => void;
+        anchor?: HTMLElement;
     }>({
         open: false,
         x: 0,
@@ -406,9 +413,10 @@ export default function App() {
         paramKey: string,
         x: number,
         y: number,
-        options: { label: string; value: any; icon?: string }[],
+        options: { label: string; value: any; icon?: string; description?: string }[],
         selectedValue: any,
         onSelect: (value: any) => void,
+        anchor?: HTMLElement,
     ) => {
         setOptionPicker({
             open: true,
@@ -419,6 +427,7 @@ export default function App() {
             options,
             selectedValue,
             onSelect,
+            anchor,
         });
     };
 
@@ -649,7 +658,12 @@ export default function App() {
     const refreshBlockSchemas = async (current?: CanvasBlock[]) => {
         try {
             const acts = await actionsApi.list();
-            const merged = mergeActionSchemas(current ?? blocks, acts);
+            // builtins are served by this panel, not the daemon registry:
+            // merge their live schemas too so stored blocks pick up changes
+            const merged = mergeActionSchemas(current ?? blocks, [
+                ...acts,
+                ...BUILTIN_SCHEMA_ENTRIES,
+            ]);
             setBlocks(merged);
             saveFlows(merged);
         } catch (err) {
@@ -1412,6 +1426,7 @@ export default function App() {
                 x={variablePicker().x}
                 y={variablePicker().y}
                 items={variablePicker().availableVariables}
+                anchor={variablePicker().anchor}
                 onSelect={selectVariable}
                 onClose={closeVariablePicker}
                 onHoverItem={(sourceId) => setHoveredSourceBlockId(sourceId)}

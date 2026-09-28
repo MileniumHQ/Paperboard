@@ -10,7 +10,17 @@ import {
 import type { ActionSchema } from "@paperboard-dev/paperapi";
 import type { CanvasBlock } from "../lib/tree";
 import { plainTextFromClipboard, sanitizeNumberText } from "../lib/textInput";
-import { getVariableInfo, parseVariableToken } from "../lib/variableTypes";
+import { parseVariableToken } from "../lib/variableTypes";
+import {
+    appendVariableChip,
+    commitEditableDom,
+    deleteVariableChip,
+    extractTextWithVariables,
+    insertVariableChip,
+    placeCaretAtEnd,
+    pruneStrandedAnchors,
+    renderHtmlWithChips,
+} from "../lib/richText";
 
 export interface ActionBlockProps {
     id?: string;
@@ -45,15 +55,17 @@ export interface ActionBlockProps {
         onInsert: (varId: string, label: string, icon: string) => void,
         expectedType?: string,
         isArray?: boolean,
+        anchor?: HTMLElement,
     ) => void;
     onRequestOptionPicker?: (
         blockId: string,
         paramKey: string,
         x: number,
         y: number,
-        options: { label: string; value: any; icon?: string }[],
+        options: { label: string; value: any; icon?: string; description?: string }[],
         selectedValue: any,
         onSelect: (value: any) => void,
+        anchor?: HTMLElement,
     ) => void;
     variableName?: string | null;
     activeTargetBlockId?: () => string | null;
@@ -223,36 +235,8 @@ interface ActionEditableFieldProps {
         x: number,
         y: number,
         onInsert: (varId: string, label: string, icon: string) => void,
+        anchor?: HTMLElement,
     ) => void;
-}
-
-function renderHtmlWithChips(text: string): string {
-    if (!text) return "";
-    return text.replace(/\{\{([^{}]+)\}\}/g, (_match, token) => {
-        const info = getVariableInfo(token);
-        const varId = token.split(":")[0];
-        return `\u200B<span class="actionVariableChip" contenteditable="false" data-var-id="${varId}" data-label="${info.label}" data-icon="${info.icon}"><span class="chipIcon">${info.icon}</span><span class="chipLabel">${info.label}</span></span>\u200B`;
-    });
-}
-
-function extractTextWithVariables(element: HTMLElement, preserveNewlines = false): string {
-    let result = "";
-    for (const node of Array.from(element.childNodes)) {
-        if (node.nodeType === Node.TEXT_NODE) {
-            result += (node.textContent || "").replace(/[\u200B\uFEFF]/g, "");
-        } else if (node.nodeType === Node.ELEMENT_NODE) {
-            const el = node as HTMLElement;
-            if (el.classList.contains("actionVariableChip")) {
-                const varId = el.getAttribute("data-var-id") || "output";
-                const label = el.getAttribute("data-label") || varId;
-                const icon = el.getAttribute("data-icon") || "";
-                result += `{{${varId}:${label}:${icon}}}`;
-            } else {
-                result += (el.textContent || "").replace(/[\u200B\uFEFF]/g, "");
-            }
-        }
-    }
-    return preserveNewlines ? result.trim() : result.replace(/\n/g, "").trim();
 }
 
 // contenteditable accepts rich HTML on paste by default; this panel only
@@ -310,8 +294,23 @@ function placeCaret(
 
 function ActionEditableField(fieldProps: ActionEditableFieldProps) {
     let spanRef: HTMLSpanElement | undefined;
+    let wrapRef: HTMLSpanElement | undefined;
     let savedRange: Range | null = null;
     let lastCommittedVal = fieldProps.initialValue;
+    // focusing already opened the picker; a click only reopens it when the
+    // field was focused before the press
+    let focusedBeforePress = false;
+
+    // while editing, the row keeps the pill's blurred footprint: the value
+    // spills over the card instead of reflowing it as you type
+    const lockWrapWidth = () => {
+        if (!wrapRef || fieldProps.multiline) return;
+        wrapRef.style.width = `${wrapRef.getBoundingClientRect().width}px`;
+    };
+
+    const releaseWrapWidth = () => {
+        if (wrapRef) wrapRef.style.width = "";
+    };
 
     const [currentText, setCurrentText] = createSignal(
         fieldProps.initialValue !== undefined && fieldProps.initialValue !== null
@@ -336,7 +335,7 @@ function ActionEditableField(fieldProps: ActionEditableFieldProps) {
 
     const insertChipAtCursor = (varId: string, label: string, icon: string) => {
         if (!spanRef) return;
-        spanRef.focus({ preventScroll: true });
+        const chip = { varId, label, icon };
 
         const sel = window.getSelection();
         let range: Range | null = savedRange;
@@ -348,32 +347,9 @@ function ActionEditableField(fieldProps: ActionEditableFieldProps) {
         }
 
         if (range) {
-            const chip = document.createElement("span");
-            chip.className = "actionVariableChip";
-            chip.contentEditable = "false";
-            chip.setAttribute("data-var-id", varId);
-            chip.setAttribute("data-label", label);
-            chip.setAttribute("data-icon", icon);
-            chip.innerHTML = `<span class="chipIcon">${icon}</span><span class="chipLabel">${label}</span>`;
-
-            range.deleteContents();
-
-            const leading = document.createTextNode("\u200B");
-            range.insertNode(leading);
-            range.setStartAfter(leading);
-
-            range.insertNode(chip);
-
-            const trailing = document.createTextNode("\u200B");
-            chip.after(trailing);
-
-            range.setStart(trailing, 1);
-            range.setEnd(trailing, 1);
-            sel?.removeAllRanges();
-            sel?.addRange(range);
+            insertVariableChip(spanRef, range, chip);
         } else {
-            const chipHtml = `\u200B<span class="actionVariableChip" contenteditable="false" data-var-id="${varId}" data-label="${label}" data-icon="${icon}"><span class="chipIcon">${icon}</span><span class="chipLabel">${label}</span></span>\u200B`;
-            spanRef.innerHTML += chipHtml;
+            appendVariableChip(spanRef, chip);
         }
 
         savedRange = null;
@@ -390,11 +366,15 @@ function ActionEditableField(fieldProps: ActionEditableFieldProps) {
             (varId, label, icon) => {
                 insertChipAtCursor(varId, label, icon);
             },
+            spanRef,
         );
     };
 
     const handleInput = (e: InputEvent) => {
         if (!spanRef) return;
+        // a chip deleted through a selection (cut, drag, range backspace)
+        // can leave its invisible anchors behind; they die with it
+        pruneStrandedAnchors(spanRef);
         saveCurrentRange();
         let text = spanRef.innerText || "";
 
@@ -435,7 +415,8 @@ function ActionEditableField(fieldProps: ActionEditableFieldProps) {
                     lastCommittedVal !== undefined && lastCommittedVal !== null
                         ? String(lastCommittedVal)
                         : "";
-                spanRef.innerHTML = restored ? renderHtmlWithChips(restored) : "";
+                commitEditableDom(spanRef, restored, { focused: true, force: true });
+                placeCaretAtEnd(spanRef);
                 setCurrentText(restored);
                 parsed = lastCommittedVal;
             } else {
@@ -447,7 +428,13 @@ function ActionEditableField(fieldProps: ActionEditableFieldProps) {
             parsed === undefined || parsed === null ? "" : String(parsed);
         lastCommittedVal = parsed;
         setCurrentText(display);
-        spanRef.innerHTML = display ? renderHtmlWithChips(display) : "";
+        // While the field has focus its DOM already IS the display (chips
+        // included). commitEditableDom skips the rebuild then, which keeps
+        // the caret where the user left it (e.g. right after an inserted
+        // variable or after the number restore above). On blur it rewrites.
+        commitEditableDom(spanRef, display, {
+            focused: document.activeElement === spanRef,
+        });
         fieldProps.onCommit?.(parsed);
     };
 
@@ -456,7 +443,7 @@ function ActionEditableField(fieldProps: ActionEditableFieldProps) {
         e.preventDefault();
         let text = plainTextFromClipboard(
             e.clipboardData?.getData("text/plain"),
-            Boolean(fieldProps.multiline),
+            fieldProps.multiline,
         );
         if (fieldProps.isNumber) text = sanitizeNumberText(text);
         if (!text) return;
@@ -495,14 +482,25 @@ function ActionEditableField(fieldProps: ActionEditableFieldProps) {
 
     return (
         <span
+            ref={wrapRef}
+            class={`actionEditableWrap ${fieldProps.multiline ? "isMultiline" : ""}`}
+        >
+        <span
             ref={spanRef}
             contenteditable={!fieldProps.disabled}
+            onFocus={() => {
+                lockWrapWidth();
+                // the picker is up whenever the field is focused, however
+                // focus arrived (click, tab, programmatic)
+                openPicker();
+            }}
             class={`actionInput actionEditable ${fieldProps.multiline ? "actionEditableMultiline" : ""} ${isColorless() ? "colorless" : ""} ${isRequiredError() ? "requiredError" : ""}`}
             data-placeholder={fieldProps.placeholder}
             inputmode={fieldProps.inputMode as "url" | undefined}
             spellcheck={fieldProps.spellcheck}
             onPointerDown={(e) => {
                 e.stopPropagation();
+                focusedBeforePress = document.activeElement === spanRef;
             }}
             onClick={(e) => {
                 e.stopPropagation();
@@ -511,14 +509,10 @@ function ActionEditableField(fieldProps: ActionEditableFieldProps) {
                     ".actionVariableChip",
                 ) as HTMLElement | null;
                 if (chip) {
-                    // double-click replaces the variable, single click just
-                    // places the caret on the side you clicked so you can
-                    // keep typing next to it
-                    if (e.detail >= 2) {
-                        saveCurrentRange();
-                        openPicker();
-                        return;
-                    }
+                    // clicking a chip places the caret on the side you
+                    // clicked so you can keep typing next to it, and keeps
+                    // the variable picker up: it is the field's affordance
+                    // while editing, not a one-shot popup
                     const rect = chip.getBoundingClientRect();
                     placeCaret(
                         spanRef,
@@ -526,6 +520,7 @@ function ActionEditableField(fieldProps: ActionEditableFieldProps) {
                         chip,
                     );
                     saveCurrentRange();
+                    if (focusedBeforePress) openPicker();
                     return;
                 }
                 // clicking the padding before/after the content lands the
@@ -547,7 +542,7 @@ function ActionEditableField(fieldProps: ActionEditableFieldProps) {
                 saveCurrentRange();
                 // the picker is the field's variable affordance: opening it
                 // on focus, not on a typed "@" (which is now plain text)
-                openPicker();
+                if (focusedBeforePress) openPicker();
             }}
             onKeyUp={saveCurrentRange}
             onMouseUp={saveCurrentRange}
@@ -557,20 +552,33 @@ function ActionEditableField(fieldProps: ActionEditableFieldProps) {
                 if (!fieldProps.isNumber || fieldProps.disabled || !spanRef) return;
                 const data = (e as InputEvent).data;
                 if (data === null || data === undefined) return;
-                const current = extractTextWithVariables(spanRef, false);
+                const current = extractTextWithVariables(spanRef);
                 // a keystroke that sanitizes away (a letter, a second dot)
                 // must never enter the field
                 if (sanitizeNumberText(current + data) === current) {
                     e.preventDefault();
                 }
             }}
-            onBlur={handleCommit}
+            onBlur={() => {
+                releaseWrapWidth();
+                handleCommit();
+            }}
             onKeyDown={(e) => {
                 e.stopPropagation();
 
-                if (e.key === "Enter" && !fieldProps.multiline) {
+                if (e.key === "Enter") {
+                    if (!fieldProps.multiline) {
+                        e.preventDefault();
+                        spanRef?.blur();
+                        return;
+                    }
+                    // a multiline value keeps the line the user typed
                     e.preventDefault();
-                    spanRef?.blur();
+                    if (spanRef) {
+                        insertPlainTextAtCaret(spanRef, "\n");
+                        saveCurrentRange();
+                        handleCommit();
+                    }
                     return;
                 }
                 if (e.key === "Escape") {
@@ -578,85 +586,15 @@ function ActionEditableField(fieldProps: ActionEditableFieldProps) {
                     return;
                 }
 
-                if (e.key === "Backspace") {
-                    const sel = window.getSelection();
-                    if (sel && sel.rangeCount > 0 && spanRef && spanRef.contains(sel.anchorNode)) {
-                        const range = sel.getRangeAt(0);
-                        if (range.collapsed) {
-                            const node = range.startContainer;
-                            const offset = range.startOffset;
-
-                            if (node.nodeType === Node.TEXT_NODE) {
-                                const textBefore = (node.textContent || "").slice(0, offset);
-                                if (textBefore.replace(/[\u200B\uFEFF]/g, "") === "") {
-                                    let prev = node.previousSibling;
-                                    while (
-                                        prev &&
-                                        prev.nodeType === Node.TEXT_NODE &&
-                                        (prev.textContent || "").replace(/[\u200B\uFEFF]/g, "") === ""
-                                    ) {
-                                        prev = prev.previousSibling;
-                                    }
-                                    if (prev && (prev as HTMLElement).classList?.contains("actionVariableChip")) {
-                                        e.preventDefault();
-                                        prev.remove();
-                                        handleCommit();
-                                        return;
-                                    }
-                                }
-                            } else if (node === spanRef && offset > 0) {
-                                const prev = spanRef.childNodes[offset - 1];
-                                if (prev && (prev as HTMLElement).classList?.contains("actionVariableChip")) {
-                                    e.preventDefault();
-                                    prev.remove();
-                                    handleCommit();
-                                    return;
-                                }
-                            }
-                        }
-                    }
-                }
-
-                if (e.key === "Delete") {
-                    const sel = window.getSelection();
-                    if (sel && sel.rangeCount > 0 && spanRef && spanRef.contains(sel.anchorNode)) {
-                        const range = sel.getRangeAt(0);
-                        if (range.collapsed) {
-                            const node = range.startContainer;
-                            const offset = range.startOffset;
-
-                            if (node.nodeType === Node.TEXT_NODE) {
-                                const textAfter = (node.textContent || "").slice(offset);
-                                if (textAfter.replace(/[\u200B\uFEFF]/g, "") === "") {
-                                    let next = node.nextSibling;
-                                    while (
-                                        next &&
-                                        next.nodeType === Node.TEXT_NODE &&
-                                        (next.textContent || "").replace(/[\u200B\uFEFF]/g, "") === ""
-                                    ) {
-                                        next = next.nextSibling;
-                                    }
-                                    if (next && (next as HTMLElement).classList?.contains("actionVariableChip")) {
-                                        e.preventDefault();
-                                        next.remove();
-                                        handleCommit();
-                                        return;
-                                    }
-                                }
-                            } else if (node === spanRef && offset < spanRef.childNodes.length) {
-                                const next = spanRef.childNodes[offset];
-                                if (next && (next as HTMLElement).classList?.contains("actionVariableChip")) {
-                                    e.preventDefault();
-                                    next.remove();
-                                    handleCommit();
-                                    return;
-                                }
-                            }
-                        }
+                if (e.key === "Backspace" || e.key === "Delete") {
+                    if (spanRef && deleteVariableChip(spanRef, e.key)) {
+                        e.preventDefault();
+                        handleCommit();
                     }
                 }
             }}
         />
+        </span>
     );
 }
 
@@ -676,6 +614,7 @@ interface TypedVariablePillProps {
         onInsert: (varId: string, label: string, icon: string) => void,
         expectedType?: string,
         isArray?: boolean,
+        anchor?: HTMLElement,
     ) => void;
 }
 
@@ -715,19 +654,8 @@ function TypedVariablePill(pillProps: TypedVariablePillProps) {
             },
             expectedType(),
             isArray(),
+            pillRef,
         );
-    };
-
-    const placeCaretAtEnd = () => {
-        const el = pillRef;
-        if (!el) return;
-        el.focus({ preventScroll: true });
-        const sel = window.getSelection();
-        const range = document.createRange();
-        range.selectNodeContents(el);
-        range.collapse(false);
-        sel?.removeAllRanges();
-        sel?.addRange(range);
     };
 
     const removeLastChip = () => {
@@ -740,7 +668,9 @@ function TypedVariablePill(pillProps: TypedVariablePillProps) {
             .replace(/\s{2,}/g, " ")
             .trim();
         pillProps.onChange?.(next);
-        requestAnimationFrame(placeCaretAtEnd);
+        requestAnimationFrame(() => {
+            if (pillRef) placeCaretAtEnd(pillRef);
+        });
     };
 
     const handlePillClick = (e: MouseEvent) => {
@@ -801,6 +731,7 @@ function TypedVariablePill(pillProps: TypedVariablePillProps) {
 
 export default function ActionBlock(props: ActionBlockProps) {
     const [isDragging, setIsDragging] = createSignal(false);
+    const [isEditing, setIsEditing] = createSignal(false);
     const [showMoreOptions, setShowMoreOptions] = createSignal(false);
     let dragStart = { x: 0, y: 0 };
     let posStart = { x: 0, y: 0 };
@@ -1018,15 +949,27 @@ export default function ActionBlock(props: ActionBlockProps) {
             );
         }
 
-        if (def?.options && def.options.length > 0) {
+        if (Array.isArray(def?.options) && (def.options.length > 0 || def.allowEmpty)) {
+            // a clearable dropdown can be unselected: the empty entry is
+            // offered in the picker and shown on the pill as "(any)" (or the
+            // schema's own emptyLabel), never auto-replaced by the first option
+            const allowEmpty = Boolean(def.allowEmpty);
+            const emptyLabel = def.emptyLabel || "(any)";
+            const optionList = () => (def.options ?? []) as { label: string; value: any; icon?: string; description?: string }[];
             const selectedVal = () =>
                 hasValue()
                     ? val()
-                    : (def.default ?? def.options[0]?.value);
-            const selectedOption = () =>
-                def.options.find((o: any) => o.value === selectedVal());
+                    : allowEmpty
+                      ? null
+                      : (def.default ?? optionList()[0]?.value);
+            const selectedOption = () => optionList().find((o: any) => o.value === selectedVal());
             const displayLabel = () =>
-                selectedOption()?.label || (hasValue() ? String(val()) : placeholderText());
+                selectedOption()?.label ||
+                (hasValue()
+                    ? String(val())
+                    : allowEmpty
+                      ? emptyLabel
+                      : placeholderText());
 
             return (
                 <span
@@ -1042,14 +985,18 @@ export default function ActionBlock(props: ActionBlockProps) {
                             key,
                             Math.round(rect.left),
                             Math.round(rect.bottom + 4),
-                            def.options,
+                            [
+                                ...(allowEmpty ? [{ label: emptyLabel, value: null }] : []),
+                                ...optionList(),
+                            ],
                             selectedVal(),
                             (newVal) => {
-                                props.onValueChange?.(props.id!, key, newVal);
+                                props.onValueChange?.(props.id!, key, newVal === null ? undefined : newVal);
                             },
+                            target,
                         );
                     }}
-                    title={`Select ${token.label}`}
+                    title={allowEmpty ? `Select ${token.label} (${emptyLabel})` : `Select ${token.label}`}
                 >
                     <span>{displayLabel()}</span>
                     <PaperIcon class="dropdownChevronIcon">expand_more</PaperIcon>
@@ -1073,7 +1020,7 @@ export default function ActionBlock(props: ActionBlockProps) {
                             props.onValueChange?.(props.id, key, newVal);
                         }
                     }}
-                    onRequestVariablePicker={(x, y, onInsert, expectedType, isArray) => {
+                    onRequestVariablePicker={(x, y, onInsert, expectedType, isArray, anchor) => {
                         if (props.id) {
                             props.onRequestVariablePicker?.(
                                 props.id,
@@ -1083,6 +1030,7 @@ export default function ActionBlock(props: ActionBlockProps) {
                                 onInsert,
                                 expectedType,
                                 isArray,
+                                anchor,
                             );
                         }
                     }}
@@ -1107,7 +1055,6 @@ export default function ActionBlock(props: ActionBlockProps) {
                         blockId={props.id}
                         paramKey={key}
                         isNumber={false}
-                        multiline={false}
                         initialValue={val()}
                         placeholder={placeholderText()}
                         isTrigger={isTrigger}
@@ -1116,7 +1063,7 @@ export default function ActionBlock(props: ActionBlockProps) {
                         onCommit={(newVal) => {
                             props.onValueChange?.(props.id!, key, newVal);
                         }}
-                        onRequestVariablePicker={(x, y, onInsert) => {
+                        onRequestVariablePicker={(x, y, onInsert, anchor) => {
                             if (props.id) {
                                 props.onRequestVariablePicker?.(
                                     props.id,
@@ -1125,6 +1072,8 @@ export default function ActionBlock(props: ActionBlockProps) {
                                     y,
                                     onInsert,
                                     expectedTypeOf(def),
+                                    false,
+                                    anchor,
                                 );
                             }
                         }}
@@ -1149,7 +1098,7 @@ export default function ActionBlock(props: ActionBlockProps) {
                 onCommit={(newVal) => {
                     props.onValueChange?.(props.id!, key, newVal);
                 }}
-                onRequestVariablePicker={(x, y, onInsert) => {
+                onRequestVariablePicker={(x, y, onInsert, anchor) => {
                     if (props.id) {
                         props.onRequestVariablePicker?.(
                             props.id,
@@ -1158,6 +1107,8 @@ export default function ActionBlock(props: ActionBlockProps) {
                             y,
                             onInsert,
                             expectedTypeOf(def),
+                            false,
+                            anchor,
                         );
                     }
                 }}
@@ -1165,6 +1116,11 @@ export default function ActionBlock(props: ActionBlockProps) {
         );
     };
 
+    const schemaInputs = () => (props.action as ActionSchema)?.inputs || {};
+
+    // A multiline input is declared by its own schema flag and gets a
+    // wrapping block row under the header instead of an inline pill. Today
+    // only the builtin Text action declares it.
     const multilineKeys = () => {
         const keys: { key: string; label: string }[] = [];
         for (const t of tokens()) {
@@ -1175,7 +1131,6 @@ export default function ActionBlock(props: ActionBlockProps) {
         return keys;
     };
 
-    const schemaInputs = () => (props.action as ActionSchema)?.inputs || {};
     const templateKeySet = () => {
         const set = new Set<string>();
         for (const t of tokens()) {
@@ -1207,6 +1162,15 @@ export default function ActionBlock(props: ActionBlockProps) {
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
             onPointerCancel={handlePointerUp}
+            onFocusIn={() => setIsEditing(true)}
+            onFocusOut={(e) => {
+                // focus moves between the card's own fields while editing;
+                // only a focus leaving the card ends the editing state
+                const next = e.relatedTarget as Node | null;
+                if (!next || !(e.currentTarget as HTMLElement).contains(next)) {
+                    setIsEditing(false);
+                }
+            }}
             onContextMenu={(e) => {
                 if (props.static || !props.id) return;
                 e.preventDefault();
@@ -1217,7 +1181,11 @@ export default function ActionBlock(props: ActionBlockProps) {
                 ...(props.pos
                     ? {
                           transform: `translate3d(${props.pos.x}px, ${props.pos.y}px, 0)`,
-                          "z-index": props.zIndex !== undefined ? props.zIndex : "auto",
+                          "z-index": isEditing()
+                              ? 999999
+                              : props.zIndex !== undefined
+                                ? props.zIndex
+                                : "auto",
                       }
                     : {}),
             }}

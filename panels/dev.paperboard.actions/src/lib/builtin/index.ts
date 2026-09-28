@@ -29,3 +29,12 @@ export const BUILTIN_CATEGORIES: BuiltinCategory[] = BUILTIN_CATEGORY_META.map((
     ...meta,
     items: BUILTIN_DEFS.filter((d) => d.category === meta.id).map((d) => d.item),
 }));
+
+// Registry-shaped entries for the stored-block schema merge: a flow saved
+// before a builtin gained metadata (like the Text action's multiline field)
+// picks the current schema up on load instead of keeping a stale one.
+export const BUILTIN_SCHEMA_ENTRIES = BUILTIN_DEFS.flatMap((def) =>
+    def.item.schema
+        ? [{ panelId: def.item.panelId, action: def.item.action, schema: def.item.schema }]
+        : [],
+);

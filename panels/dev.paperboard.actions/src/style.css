@@ -38,6 +38,9 @@ body,
     top: 0;
     left: 0;
     pointer-events: none;
+    /* block z-indices (raised while editing) stay inside the canvas, so
+       menus rendered after it always stack above every flow */
+    isolation: isolate;
 }
 
 .action.isContainer {
@@ -232,27 +235,77 @@ body,
     background: color-mix(in srgb, var(--paper-danger) 25%, transparent);
 }
 
+/* the wrap is the pill's box in the row: it hugs the value up to the cap,
+   so the pill never takes a line of its own */
+.actionEditableWrap {
+    display: inline-flex;
+    /* as a flex item the wrap must not take the focused value's width as
+       its automatic minimum; that would defeat the locked footprint */
+    min-width: 0;
+    /* a plain length: a percentage cap is ignored when the card measures
+       its content, so a long hidden value would still widen the flow */
+    max-width: 12rem;
+    vertical-align: middle;
+}
+
+.actionEditableWrap.isMultiline {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+}
+
 .actionInput.actionEditable {
+    flex: none;
     min-width: 1ch;
     max-width: 100%;
-    display: inline-flex;
-    align-items: center;
-    vertical-align: middle;
+    display: block;
     outline: none;
     cursor: text;
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
+    /* one line forever: a long value ellipsizes instead of wrapping the
+       card into extra rows (which used to push options/footers around) */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
     padding: 0 0.25rem;
     border-radius: var(--paper-border-radius-half);
     font-weight: 400;
     line-height: 1.375rem;
-    min-height: 1.375rem;
+    height: 1.375rem;
     font-size: inherit;
     border: none;
     box-sizing: border-box;
     transition: background 0.1s ease, color 0.1s ease;
 }
 
+/* the chip rides the pill's top edge; middle alignment shoved it down and
+   clipped it against the pill's fixed height */
+.actionInput.actionEditable .actionVariableChip {
+    vertical-align: top;
+}
+
+/* editing keeps the pill in the row at its blurred footprint (the component
+   locks the wrap width); a longer value spills over the card, and the
+   screen if it must, instead of reflowing the flow. Long inputs belong in
+   a multiline Text action */
+.actionInput.actionEditable:not(.actionEditableMultiline):focus {
+    position: relative;
+    z-index: 1;
+    width: max-content;
+    min-width: 100%;
+    max-width: none;
+    overflow: visible;
+    text-overflow: clip;
+}
+
+.actionInput.actionEditable:focus {
+    background: var(--paper-surface-raised);
+    color: var(--paper-text);
+    outline: var(--paper-focus-ring);
+    outline-offset: var(--paper-focus-offset);
+}
+
+/* multiline inputs (the builtin Text action) wrap in their own full-width
+   row; they are the one field that is allowed to grow downwards */
 .action:has(.actionEditableMultiline) {
     min-width: calc(var(--paper-uigap) * 22);
 }
@@ -265,13 +318,16 @@ body,
 .actionInput.actionEditableMultiline {
     display: block;
     width: 100%;
+    max-width: 100%;
     height: auto;
     min-height: calc(var(--paper-uigap) * 5);
     line-height: 1.45;
     white-space: pre-wrap;
+    overflow: visible;
     overflow-wrap: anywhere;
-    cursor: text;
+    text-overflow: clip;
     text-align: left;
+    cursor: text;
 }
 
 .actionColorWrap {
@@ -286,13 +342,6 @@ body,
     border-radius: 50%;
     border: var(--paper-border-width) solid var(--paper-border);
     flex-shrink: 0;
-}
-
-.actionInput.actionEditable:focus {
-    background: var(--paper-surface-raised);
-    color: var(--paper-text);
-    outline: var(--paper-focus-ring);
-    outline-offset: var(--paper-focus-offset);
 }
 
 .actionInput.actionEditable[data-placeholder]:empty::before {
@@ -492,16 +541,6 @@ body,
     font-weight: 500;
     color: var(--paper-text);
     white-space: nowrap;
-}
-
-.actionVariableMenuItemDescription {
-    font-size: var(--paper-text-size-1);
-    color: var(--paper-text-subtle);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    text-align: right;
-    max-width: 8.125rem;
 }
 
 .actionInputBool {
