@@ -7,6 +7,7 @@ import {
     buildWindowsMountCommand,
     buildMacMountScript,
     macMountScriptPath,
+    remoteFolderSupported,
 } from "../src/main/remoteFolderMount";
 
 const USER = "dav-user-9";
@@ -37,5 +38,11 @@ describe("remote folder mount credential hygiene", () => {
         const tricky = buildMacMountScript('a"b', "c\\d", "h", 1);
         expect(tricky).toContain('a\\"b');
         expect(tricky).toContain("c\\\\d");
+    });
+
+    it("mounts only where the credential stays out of argv", () => {
+        expect(remoteFolderSupported("win32")).toBe(true);
+        expect(remoteFolderSupported("darwin")).toBe(true);
+        expect(remoteFolderSupported("linux")).toBe(false);
     });
 });

@@ -5,12 +5,16 @@
 // Windows maps with PowerShell New-PSDrive -Persist and a PSCredential
 // built from child-only env vars — argv carries a static script plus a
 // non-secret URL. macOS mounts through a 0600 temp osascript file that is
-// unlinked right after use. Linux xdg-open takes the credential-bearing
-// URI by mechanism (gvfs offers no authfile/stdin mount path), so the
-// Linux argv still carries it — residual, same-user-only on typical
-// single-user boxes, revisit with secret-service integration.
+// unlinked right after use. Linux has no mount path here: the only one
+// it had put the password in the xdg-open argv (visible in ps), so it was
+// removed rather than kept as a leak.
 import * as os from "os";
 import * as path from "path";
+
+// platforms with a credential-safe mount path above
+export function remoteFolderSupported(platform: NodeJS.Platform): boolean {
+    return platform === "win32" || platform === "darwin";
+}
 
 export interface WindowsMountPlan {
     args: string[];

@@ -7,6 +7,7 @@ import {
     buildWindowsMountCommand,
     buildMacMountScript,
     macMountScriptPath,
+    remoteFolderSupported,
 } from "./remoteFolderMount";
 
 // remote data dir over WebDAV with ephemeral session; teardown on explorer close
@@ -82,18 +83,6 @@ async function unmount(s: ActiveSession): Promise<void> {
             } catch {
                 await execAsync("diskutil", ["unmount", s.mount], 20_000);
             }
-        } else if (process.platform === "linux") {
-            const uid = process.getuid?.() ?? 1000;
-            const gvfs = `/run/user/${uid}/gvfs`;
-            try {
-                const entries = fs.readdirSync(gvfs);
-                const hit = entries.find(
-                    (e) => e.startsWith("dav:host=") && e.includes(`,user=${s.davUser}`),
-                );
-                if (hit) {
-                    await execAsync("gio", ["mount", "-u", `dav://${s.host}:${s.port}/dav/`], 20_000);
-                }
-            } catch (err) { logger.debug("[remoteFolder.ts] op failed:", err) }
         }
     } catch (err: any) {
         logger.warn("[RemoteFolder] unmount failed:", err?.message ?? err);
@@ -165,6 +154,8 @@ export async function openRemoteFolder(
     computerId: string,
     panelId?: string,
 ): Promise<{ ok: boolean; error?: string }> {
+    // checked before a DAV session is minted: nothing to mount it with
+    if (!remoteFolderSupported(process.platform)) return { ok: false, error: "unsupported-platform" };
     const client = connectionPool.getClient(computerId);
     const status = client.getStatus();
     if (!status.isRemote) return { ok: false, error: "not-remote" };
@@ -277,15 +268,7 @@ export async function openRemoteFolder(
             return { ok: true };
         }
 
-        // linux: no window API to watch; rely on server expiry + quit cleanup
-        // TODO(remove after v0.3): the credential-bearing dav URI in argv is
-        // a documented residual — xdg-open passes it to ps output. Loan
-        // expired; it is denied (like every other credential-in-argv path)
-        // after v0.3.
-        const uri = `dav://${encodeURIComponent(session.user)}:${encodeURIComponent(session.pass)}@${host}:${port}/dav/${subDir ? subDir + "/" : ""}`;
-        active.set(computerId, rec);
-        spawn("xdg-open", [uri], { detached: true, stdio: "ignore" }).unref();
-        return { ok: true };
+        return await fail("unsupported-platform");
     } catch (err: any) {
         logger.warn("[RemoteFolder] open failed:", err?.message ?? err);
         return await fail(`mount: ${err?.message ?? err}`);
