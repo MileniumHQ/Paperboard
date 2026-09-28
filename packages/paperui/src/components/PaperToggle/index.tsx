@@ -30,7 +30,11 @@ export function PaperToggle(props: PaperToggleProps) {
 
     const isChecked = () => local.checked ?? internalChecked();
 
-    const handleToggle = () => {
+    const handleToggle = (e?: MouseEvent) => {
+        // A wrapping label forwards its activation to the hidden checkbox,
+        // whose click then bubbles back here. Toggling on both passes would
+        // cancel out and leave the switch stuck.
+        if (e?.target === inputRef) return;
         if (local.disabled) return;
         const next = !isChecked();
 

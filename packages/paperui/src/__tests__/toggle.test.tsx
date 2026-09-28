@@ -55,6 +55,25 @@ describe("PaperToggle - Accessibility & State Tests", () => {
         expect(toggle.getAttribute("aria-checked")).toBe("true");
     });
 
+    test("toggles once when wrapped in a label", async () => {
+        // the label forwards its activation to the hidden checkbox, whose
+        // click bubbles back; that must not cancel the toggle
+        const handleChange = vi.fn();
+        const { getByRole } = render(() => (
+            <label>
+                <PaperToggle onChange={handleChange} />
+                Think
+            </label>
+        ));
+        const toggle = getByRole("switch");
+
+        await fireEvent.click(toggle);
+
+        expect(handleChange).toHaveBeenCalledTimes(1);
+        expect(handleChange).toHaveBeenCalledWith(true);
+        expect(toggle.getAttribute("aria-checked")).toBe("true");
+    });
+
     test("prevents interaction when disabled", async () => {
         const handleChange = vi.fn();
         const { getByRole } = render(() => <PaperToggle disabled onChange={handleChange} />);
