@@ -21,6 +21,7 @@ import {
 import {
     actions as actionsApi,
     panels as panelsApi,
+    panelAssetUrl,
     type ActionInfo,
     type PanelItem,
     type ActionSchema,
@@ -147,10 +148,9 @@ export default function ActionLibrary(props: ActionLibraryProps) {
     const getPanelIcon = (panelId: string): string => {
         const found = installedPanels().find((p) => p.id === panelId);
         if (found?.iconUrl) return found.iconUrl;
-        if (found?.icon) {
-            return `panel://local.${found.id}/${found.icon.replace(/^\.\//, "")}`;
-        }
-        return `panel://local.${panelId}/branding/icon.png`;
+        // the sibling's own origin on this panel's computer, in whichever
+        // host (desktop or browser mode) this panel runs
+        return panelAssetUrl(panelId, found?.icon || "branding/icon.png");
     };
 
     const getPanelInfo = (panelId: string) => {
