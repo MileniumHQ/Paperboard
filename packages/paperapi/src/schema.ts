@@ -36,6 +36,15 @@ export interface ActionParamDefinition {
     required?: boolean;
     optional?: boolean;
     options?: { label: string; value: any }[];
+    /**
+     * The dropdown offers an unselected entry (an empty value). For a match
+     * input an unselected entry means "any": the rule holds whatever the
+     * payload carries. `emptyLabel` names it where "(any)" would be wrong
+     * ("Default model", for example).
+     */
+    allowEmpty?: boolean;
+    emptyLabel?: string;
+    /** the editor renders a wrapping multi-line value field for this input */
     multiline?: boolean;
     /** display name for the type badge; defaults to the raw type id */
     typeName?: string;
@@ -84,7 +93,10 @@ export type ActionCategory = string | ActionCategoryDefinition;
  * or a "customId" is. Arrays of rules are ANDed.
  */
 export interface ActionMatchDefinition {
-    /** payload field to compare, dotted path allowed */
+    /**
+     * Payload field to compare, dotted path allowed. `"$"` means the payload
+     * itself, for events whose whole output is the value (a model name).
+     */
     field: string;
     /** declared input whose literal value the payload field must equal */
     input: string;
