@@ -51,7 +51,9 @@ export function panelCspForEgress(egress: PanelNetworkEgress): string {
     // declared hosts are usable for images too — the manifest lists hosts the
     // panel may talk to, and avatars/thumbnails are part of that story. closed
     // mode stays closed: zero remote image beacons.
-    const img = ["'self'", "panel:", "data:", "blob:"];
+    // panel: and *.paperboard.localhost are the same thing in two hosts:
+    // sibling panel origins (Electron and browser mode, loopback-only)
+    const img = ["'self'", "panel:", "http://*.paperboard.localhost:*", "data:", "blob:"];
     if (egress.mode === "any-https") {
         connect.push("https:");
         img.push("https:");

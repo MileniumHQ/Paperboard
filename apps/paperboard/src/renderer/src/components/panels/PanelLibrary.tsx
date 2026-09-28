@@ -12,7 +12,7 @@ import {
     getVarCss,
 } from "@paperboard-dev/paperui";
 import bannerImg from "../../assets/PanelLibraryBanner.png";
-import { logToMain } from "../../lib/shell";
+import { logToMain, panelUrl } from "../../lib/shell";
 
 export interface PanelItem {
     id: string;
@@ -75,7 +75,7 @@ const PanelLibrary: Component<PanelLibraryProps> = (props) => {
             return panel.iconUrl;
         }
         if (panel.icon?.includes(".")) {
-            return `panel://${props.computerId}.${panel.id}/${panel.icon.replace(/^\.\//, "")}`;
+            return panelUrl(props.computerId, panel.id, panel.icon);
         }
         return null;
     };

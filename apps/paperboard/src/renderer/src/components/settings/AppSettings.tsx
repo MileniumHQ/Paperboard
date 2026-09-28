@@ -8,6 +8,8 @@ import {
     PaperButton,
     PaperIcon,
 } from "@paperboard-dev/paperui";
+import { Show } from "solid-js";
+import { isBrowserShell, shellIpc } from "../../lib/shell";
 
 export interface AppSettingsData {
     darkMode: "system" | "light" | "dark";
@@ -81,6 +83,8 @@ export default function AppSettings(props: {
                 />
             </PaperSettingItem>
 
+            {/* browser mode has no updater window to restart into */}
+            <Show when={!isBrowserShell()}>
             <PaperSettingItem
                 title="Updates"
                 description="Runs a full update sweep right now: every panel, package, and Paperboard Server daemon on every connected computer is checked and updated, then Paperboard restarts."
@@ -88,15 +92,14 @@ export default function AppSettings(props: {
                 <PaperEffect variant="primary">
                     <PaperButton
                         onClick={() =>
-                            window.electron?.ipcRenderer?.send(
-                                "relaunch-for-update",
-                            )
+                            shellIpc().send("relaunch-for-update")
                         }>
                         <PaperIcon>restart_alt</PaperIcon>
                         Update everything now
                     </PaperButton>
                 </PaperEffect>
             </PaperSettingItem>
+            </Show>
         </PaperSettingList>
     );
 }

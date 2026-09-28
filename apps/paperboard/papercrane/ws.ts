@@ -41,6 +41,9 @@ export function isAllowedOrigin(origin: string): boolean {
         const url = new URL(lower);
         return (
             url.hostname === "localhost" ||
+            // *.localhost is loopback by definition (browsers never send it
+            // to DNS); browser mode serves the shell and each panel there
+            url.hostname.endsWith(".localhost") ||
             url.hostname === "127.0.0.1" ||
             url.hostname === "::1" ||
             url.hostname === "[::1]"

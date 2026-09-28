@@ -83,10 +83,17 @@ describe("isAllowedOrigin", () => {
         expect(isAllowedOrigin("http://127.0.0.1:3000")).toBe(true);
     });
 
+    it("allows *.localhost loopback names (browser-mode shell and panels)", () => {
+        expect(isAllowedOrigin("http://paperboard.localhost:41234")).toBe(true);
+        expect(isAllowedOrigin("http://local.dev.paperboard.terminal.paperboard.localhost:41234")).toBe(true);
+    });
+
     it("rejects lookalike hosts", () => {
         expect(isAllowedOrigin("http://evil-localhost.attacker.com")).toBe(false);
         expect(isAllowedOrigin("http://127.0.0.1.evil.com")).toBe(false);
         expect(isAllowedOrigin("https://localhost.evil.io")).toBe(false);
+        expect(isAllowedOrigin("http://evillocalhost")).toBe(false);
+        expect(isAllowedOrigin("http://paperboard.localhost.evil.io")).toBe(false);
     });
 
     it("allows app custom schemes", () => {

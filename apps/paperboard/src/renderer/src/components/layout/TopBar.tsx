@@ -1,12 +1,10 @@
 import { type Component, createSignal, onMount, onCleanup, Show } from "solid-js";
 import { PaperText, PaperButton, PaperIcon, getVarCss } from "@paperboard-dev/paperui";
-import { shellApi, logToMain } from "../../lib/shell";
+import { shellApi, logToMain, shellIpc, isBrowserShell } from "../../lib/shell";
+import { leftReserve, rightReserve, type OverlayLike } from "./titlebarInsets";
 
 // Tabs that have no panel files dir — the folder button opens .paperboard/ for these
 const NON_PANEL_TABS = new Set(["landing", "library", "settings"]);
-
-// width of OS caption buttons overlaying the bar edge
-const WINDOWS_CAPTION_FALLBACK = 140;
 
 const TopBar: Component<{
     getComputerId: () => string;
@@ -14,47 +12,33 @@ const TopBar: Component<{
 }> = (props) => {
     const [updateReady, setUpdateReady] = createSignal<string | null>(null);
     const [captionReserve, setCaptionReserve] = createSignal(0);
-    const [leftReserve, setLeftReserve] = createSignal(12);
+    const [labelInset, setLabelInset] = createSignal(12);
     const [versionLabel, setVersionLabel] = createSignal<string | null>(null);
 
     onMount(() => {
-        const ipc = (window as any).electron?.ipcRenderer;
-        if (ipc?.on) {
-            const handler = (_: any, data: { version?: string | null }) => {
+        // browser mode has no updater: the app updates when it next runs
+        // as a window, so there is nothing to listen for
+        if (!isBrowserShell()) {
+            const ipc = shellIpc();
+            const handler = (_: unknown, data: { version?: string | null }) => {
                 setUpdateReady(data?.version ?? "new version");
             };
             ipc.on("app-update-downloaded", handler);
-            onCleanup(() => ipc.removeListener?.("app-update-downloaded", handler));
+            onCleanup(() => ipc.removeListener("app-update-downloaded", handler));
         }
 
         // Window Controls Overlay: exact caption-button geometry so the
-        // buttons sit left of minimize/maximize/close instead of under them.
-        const wco = (navigator as any).windowControlsOverlay;
-        if (wco?.getTitlebarAreaRect) {
-            const update = () => {
-                try {
-                    const rect = wco.getTitlebarAreaRect();
-                    setCaptionReserve(
-                        Math.max(0, window.innerWidth - rect.x - rect.width),
-                    );
-                } catch (err) { console.error("[TopBar] op failed:", err); }
-            };
-            update();
-            wco.addEventListener?.("geometrychange", update);
-            onCleanup(() => wco.removeEventListener?.("geometrychange", update));
-        } else if (navigator.userAgent.includes("Windows")) {
-            setCaptionReserve(WINDOWS_CAPTION_FALLBACK);
-        }
-
-        // Left side: macOS traffic lights overlay the bar's top-left, so the
-        // version label starts after them; everywhere else it hugs the edge.
-        const wcoRect =
-            (navigator as any).windowControlsOverlay?.getTitlebarAreaRect?.();
-        if (wcoRect && typeof wcoRect.x === "number" && wcoRect.x > 0) {
-            setLeftReserve(wcoRect.x + 12);
-        } else if (navigator.userAgent.includes("Mac")) {
-            setLeftReserve(84);
-        }
+        // buttons sit left of minimize/maximize/close instead of under them;
+        // macOS traffic lights push the version label right instead.
+        const wco = (navigator as any).windowControlsOverlay as OverlayLike | undefined;
+        const update = () => {
+            setCaptionReserve(rightReserve(wco, window.innerWidth, navigator.userAgent));
+            setLabelInset(leftReserve(wco, navigator.userAgent));
+        };
+        update();
+        const target = wco as unknown as EventTarget | undefined;
+        target?.addEventListener?.("geometrychange", update);
+        onCleanup(() => target?.removeEventListener?.("geometrychange", update));
 
         // "3.0.0-alpha" -> "Alpha 3" (trailing .0s trimmed, tag capitalized)
         shellApi
@@ -120,7 +104,7 @@ const TopBar: Component<{
                 <div
                     style={{
                         position: "absolute",
-                        left: `${leftReserve()}px`,
+                        left: `${labelInset()}px`,
                         display: "flex",
                         "align-items": "center",
                         "-webkit-app-region": "no-drag",
@@ -152,7 +136,7 @@ const TopBar: Component<{
                     <PaperButton
                         title={`Restart to install ${updateReady()}`}
                         onClick={() =>
-                            (window as any).electron?.ipcRenderer?.send("quit-and-install")
+                            shellIpc().send("quit-and-install")
                         }>
                         Restart to update
                     </PaperButton>

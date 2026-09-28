@@ -1,6 +1,7 @@
 import { PaperFlex, PaperText, PaperButton, getVarCss } from "@paperboard-dev/paperui";
 import { type Component, createEffect, createSignal, For, Show, onCleanup, onMount } from "solid-js";
 import { recordUse, liveKeys, MAX_LIVE_IFRAMES } from "./panelLru";
+import { panelUrl } from "../../lib/shell";
 
 export interface PanelViewProps {
     activePanel: string;
@@ -20,7 +21,7 @@ const PanelFrame: Component<{ panelKey: string; current: boolean; reload: number
         const reload = props.reload;
         generation = crypto.randomUUID();
         setReady(false); setFailure("");
-        if (frame) frame.src = `panel://${computerId}.${panelId}/?_r=${reload}&generation=${generation}`;
+        if (frame) frame.src = panelUrl(computerId, panelId, `?_r=${reload}&generation=${generation}`);
         const timer = setTimeout(() => setFailure("The panel did not finish connecting to its service."), 25_000);
         const receive = (event: MessageEvent) => {
             if (event.source !== frame?.contentWindow || event.data?.generation !== generation) return;
@@ -33,7 +34,7 @@ const PanelFrame: Component<{ panelKey: string; current: boolean; reload: number
         window.addEventListener("message", receive);
         onCleanup(() => { clearTimeout(timer); window.removeEventListener("message", receive); });
     });
-    onMount(() => { if (frame) frame.src = `panel://${computerId}.${panelId}/?_r=${props.reload}&generation=${generation}`; });
+    onMount(() => { if (frame) frame.src = panelUrl(computerId, panelId, `?_r=${props.reload}&generation=${generation}`); });
     return <div style={{ position: "absolute", inset: "0", display: props.current ? "block" : "none" }}>
         <iframe ref={frame} data-panel-key={props.panelKey} title={panelId}
             sandbox="allow-scripts allow-same-origin allow-forms allow-popups"

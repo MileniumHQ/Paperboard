@@ -11,6 +11,17 @@ export {
     PANEL_TRAVERSAL_VECTORS,
 } from "../../papercrane/panelAssets";
 
+// panel://<computerId>.<panelId>/<path> — scope is part of the origin.
+// Browser mode puts the same "<computerId>.<panelId>" prefix in front of its
+// host suffix, so both hosts split it here.
+export function parsePanelHost(
+    hostname: string,
+): { comp: string; panelId: string } | null {
+    const dot = hostname.indexOf(".");
+    if (dot <= 0) return null;
+    return { comp: hostname.slice(0, dot), panelId: hostname.slice(dot + 1) };
+}
+
 // per-launch nonce for panel script tags; electron-local, never leaves
 // the shell process
 export const PANEL_CSP_NONCE = crypto.randomBytes(16).toString("base64");

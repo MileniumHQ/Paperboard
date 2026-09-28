@@ -17,6 +17,7 @@ import {
 import {
     computersApi,
     logToMain,
+    panelUrl,
     type ComputerInfo as ComputerItem,
 } from "./lib/shell";
 import AppSettings from "./components/settings/AppSettings";
@@ -351,7 +352,7 @@ const App: Component = () => {
         if (panel.icon?.includes(".")) {
             return (
                 <img
-                    src={`panel://${compId}.${panel.id}/${panel.icon.replace(/^\.\//, "")}`}
+                    src={panelUrl(compId, panel.id, panel.icon)}
                     alt={panel.name}
                     style={style}
                 />

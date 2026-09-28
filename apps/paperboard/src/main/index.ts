@@ -8,30 +8,28 @@ import {
     nativeTheme,
     nativeImage,
     session,
+    Tray,
 } from "electron";
 import * as fs from "fs";
 import * as path from "path";
 import { electronApp, optimizer, is } from "@electron-toolkit/utils";
-import { startCommunicator } from "./communication/communication";
+import { startCommunicator, logRendererMessage } from "./communication/communication";
 import { isRefusedFrame } from "./communication/shellGuard";
 import connectionPool from "./communication/papercrane/ConnectionPool";
 import { shouldSkipUpdate, runUpdateOrchestrator } from "./updater";
 import { initAppSettingsSync } from "./appSettings";
 import { logger } from "../../papercrane/logger";
-import { getPanelsDir } from "../../papercrane/paths";
-import { readCraneHandshake } from "../../papercrane/handshake";import {
+import {
     TITLEBAR_OVERLAY_COLORS,
     TITLEBAR_SYMBOL_COLORS,
     WINDOW_BACKGROUND_COLORS,
 } from "../../papercrane/themeConstants";
-import { sanitizeId } from "../../papercrane/storage";
-import {
-    resolveLocalPanelFile,
-    buildCraneCredentialPayload,
-    PANEL_CSP_NONCE as PANEL_ASSETS_NONCE,
-    buildPanelCsp,
-    remotePanelHtmlCsp,
-} from "./panelAssets";
+import { parsePanelHost, servePanelAsset } from "./panelServe";
+import { startBrowserHost, type BrowserHost } from "./browserHost";
+import { createShellInvokeHandlers, SHARED_SHELL_INVOKE_CHANNELS } from "./communication/shellHandlers";
+import { applySavedAppSettings } from "./communication/shelldata";
+import { addShellPushSink } from "./communication/shellPush";
+import { keepAliveWithoutWindows, secondLaunchAction } from "./instancePolicy";
 import icon from "../../resources/icon.png?asset";
 
 const log = logger;
@@ -40,6 +38,10 @@ let mainWindowRef: BrowserWindow | null = null;
 // communicator teardown, captured when the shell boots; fired in before-quit
 let stopCommunicator: (() => void) | null = null;
 
+// `--browser`: no windows; the shell opens in the user's browser, served by
+// browserHost.ts. `--browser-port=<n>` pins the port (default: any free one).
+const browserMode = app.commandLine.hasSwitch("browser");
+
 if (!app.requestSingleInstanceLock()) {
     app.quit();
     // app.quit() does not stop synchronous module evaluation: without this
@@ -47,10 +49,21 @@ if (!app.requestSingleInstanceLock()) {
     // window hooks below for a process that is already quitting
     process.exit(0);
 }
-app.on("second-instance", () => {
-    if (mainWindowRef && !mainWindowRef.isDestroyed()) {
-        if (mainWindowRef.isMinimized()) mainWindowRef.restore();
-        mainWindowRef.focus();
+app.on("second-instance", (_event, argv) => {
+    // `--browser` asks for the browser shell; anything else is the desktop
+    // app, even when this process is in browser mode. Otherwise a stale
+    // browser session would silently swallow every later launch.
+    switch (secondLaunchAction(argv, Boolean(mainWindowRef && !mainWindowRef.isDestroyed()))) {
+        case "browser":
+            void openInBrowser();
+            return;
+        case "focus":
+            if (mainWindowRef!.isMinimized()) mainWindowRef!.restore();
+            mainWindowRef!.focus();
+            return;
+        case "window":
+            createWindow();
+            return;
     }
 });
 
@@ -87,52 +100,6 @@ function getTitleBarOverlayOptions() {
         height: 38,
     };
 }
-
-// per-launch nonce + CSP builders live in panelAssets.ts (shared with the
-// iframe credential payload builder and its tests)
-const PANEL_CSP_NONCE = PANEL_ASSETS_NONCE;
-
-const injectCspNonce = (html: string) =>
-    html.replaceAll("<script", `<script nonce="${PANEL_CSP_NONCE}"`);
-
-// panels render outside shell styles; keep the same no-select baseline
-const injectUnselectable = (html: string): string => {
-    const style = `<style>html{-webkit-user-select:none;user-select:none}input,textarea,select,[contenteditable="true"],[contenteditable=""]{-webkit-user-select:text;user-select:text}code,pre,kbd,samp,[data-selectable="true"]{-webkit-user-select:text;user-select:text}</style>`;
-    if (/<head[^>]*>/i.test(html)) {
-        return html.replace(/<head[^>]*>/i, (m) => `${m}${style}`);
-    }
-    return `${style}${html}`;
-};
-
-// one reader for the crane.json handshake (papercrane/handshake.ts) — the
-// transport, the panel injector and the shell IPC surface share it
-const readCraneCreds = readCraneHandshake;
-
-// inject computer-scoped creds; scope comes from serving URL.
-// panelId travels with the credentials: identity is a granted fact,
-// never parsed from a URL after the fact. The token is the panel's own
-// scoped credential issued by the authenticated local daemon. An unavailable
-// issuer refuses the document rather than substituting a master token.
-const injectCraneCreds = async (
-    html: string,
-    comp: string,
-    panelId?: string,
-): Promise<string> => {
-    const creds = readCraneCreds();
-    if (!panelId) throw new Error("Panel credential injection requires an explicit panel id");
-    const granted = await connectionPool.getClient("local").call<{ token: string }>("auth:panel-token", { panelId });
-    const scoped = granted?.token;
-    if (typeof scoped !== "string" || !scoped) throw new Error("Daemon did not issue a panel credential");
-    const payload = buildCraneCredentialPayload(creds, comp, panelId, scoped);
-    const bootstrap = `<script>window.__PAPERBOARD_CRANE=${payload};</script>`;
-    if (/<head[^>]*>/i.test(html)) {
-        return html.replace(/<head[^>]*>/i, (m) => `${m}${bootstrap}`);
-    }
-    // no <head> — prepend; scripts run before body anyway
-    return `${bootstrap}${html}`;
-};
-
-import { lookupMime as lookupMimeType } from "../../papercrane/mime";
 
 function commonWebPreferences() {
     return {
@@ -210,6 +177,89 @@ function createWindow(): void {
     }
 }
 
+// ── Browser mode ────────────────────────────────────────────────────────────
+
+let browserHost: BrowserHost | null = null;
+let browserHostStarting: Promise<BrowserHost> | null = null;
+let removeBrowserPushSink: (() => void) | null = null;
+let browserTray: Tray | null = null;
+
+function browserPortSwitch(): number {
+    const raw = app.commandLine.getSwitchValue("browser-port");
+    if (!raw) return 0;
+    const port = Number(raw);
+    if (!Number.isInteger(port) || port < 1 || port > 65535) {
+        throw new Error(`--browser-port must be a port number (1-65535), got "${raw}"`);
+    }
+    return port;
+}
+
+function ensureBrowserHost(): Promise<BrowserHost> {
+    if (browserHost) return Promise.resolve(browserHost);
+    browserHostStarting ??= (async () => {
+        const shared = createShellInvokeHandlers({
+            appVersion: () => app.getVersion(),
+            openPath: (dir) => shell.openPath(dir),
+        });
+        const invoke: Record<string, (args: unknown) => unknown> = {};
+        for (const channel of SHARED_SHELL_INVOKE_CHANNELS) invoke[channel] = shared[channel];
+        const host = await startBrowserHost({
+            port: browserPortSwitch(),
+            rendererDir: path.join(__dirname, "../renderer"),
+            rendererDevUrl: is.dev ? process.env["ELECTRON_RENDERER_URL"] : undefined,
+            invoke,
+            send: {
+                "renderer-log": (level, message) => logRendererMessage(level, message),
+                "app-settings-changed": () => applySavedAppSettings(),
+            },
+            servePanel: servePanelAsset,
+        });
+        removeBrowserPushSink = addShellPushSink((channel, payload) => host.push(channel, payload));
+        createBrowserTray();
+        browserHost = host;
+        log.info(`[Browser] shell served at ${host.origin}`);
+        return host;
+    })().finally(() => {
+        browserHostStarting = null;
+    });
+    return browserHostStarting;
+}
+
+// every open mints a new single-use launch link; the printed copy is for
+// terminals where no browser opens (it never goes to the log file)
+async function openInBrowser(): Promise<void> {
+    try {
+        const host = await ensureBrowserHost();
+        const url = host.mintLaunchUrl();
+        console.log(`\nPaperboard is running at ${host.origin}\nSign-in link (single use, 2 minutes): ${url}\n`);
+        await shell.openExternal(url);
+    } catch (err: any) {
+        log.error("[Browser] could not open Paperboard in the browser:", err?.message || err);
+        if (browserMode && !browserHost) {
+            // nothing is serving and there are no windows: exit visibly but
+            // through quit, so before-quit can stop children and sockets
+            console.error(`Paperboard could not start browser mode: ${err?.message || err}`);
+            process.exitCode = 1;
+            app.quit();
+        }
+    }
+}
+
+// a windowless app still needs a way back in and a way out
+function createBrowserTray(): void {
+    if (browserTray) return;
+    browserTray = new Tray(nativeImage.createFromPath(icon).resize({ width: 16, height: 16 }));
+    browserTray.setToolTip("Paperboard");
+    browserTray.setContextMenu(
+        Menu.buildFromTemplate([
+            { label: "Open in browser", click: () => void openInBrowser() },
+            { type: "separator" },
+            { label: "Quit Paperboard", click: () => app.quit() },
+        ]),
+    );
+    browserTray.on("click", () => void openInBrowser());
+}
+
 function createUpdaterWindow(): BrowserWindow {
     const updaterWindow = new BrowserWindow({
         width: 380,
@@ -252,7 +302,7 @@ app.whenReady().then(async () => {
         app.setAboutPanelOptions({
             applicationName: "Paperboard",
             applicationVersion: app.getVersion(),
-            copyright: "2026 Milenium LLC",
+            copyright: "2026 Milenium",
             ...(iconPath ? { icon: nativeImage.createFromPath(iconPath) } : {}),
         });
     }
@@ -330,160 +380,30 @@ app.whenReady().then(async () => {
     stopCommunicator = startCommunicator(ipcMain);
     initAppSettingsSync();
 
-    // panel://<computerId>.<panelId>/<path> — scope is part of origin
-    const parsePanelHost = (
-        hostname: string,
-    ): { comp: string; panelId: string } | null => {
-        const dot = hostname.indexOf(".");
-        if (dot <= 0) return null;
-        return { comp: hostname.slice(0, dot), panelId: hostname.slice(dot + 1) };
-    };
-
+    // panel://<computerId>.<panelId>/<path> — serving is shared with the
+    // browser-mode host (panelServe.ts)
     const handlePanelProtocol = async (request: Request) => {
-        try {
-            const parsedUrl = new URL(request.url);
-            const parsedHost = parsePanelHost(parsedUrl.hostname);
-            if (!parsedHost) {
-                return new Response(
-                    `Malformed panel URL: missing computer scope prefix`,
-                    { status: 400 },
-                );
-            }
-            const { comp: urlComp, panelId } = parsedHost;
-
-            // deliberately no fallback to active computer
-            const comp = urlComp === "local" || connectionPool.getComputer(urlComp) ? urlComp : null;
-            if (!comp) {
-                return new Response(`Unknown computer: ${urlComp}`, {
-                    status: 404,
-                });
-            }
-
-            let subpath = parsedUrl.pathname.replace(/^\/+/, "");
-            if (!subpath) subpath = "index.html";
-
-            const cleanPanelId = sanitizeId(panelId);
-            if (!cleanPanelId) {
-                return new Response(`Invalid panel id`, { status: 400 });
-            }
-
-            const assetComp = comp;
-
-            // Local machine: serve straight from the panels directory
-            if (assetComp === "local") {
-                // containment lives in panelAssets so tests prove it headless
-                const resolution = resolveLocalPanelFile(
-                    getPanelsDir(),
-                    cleanPanelId,
-                    subpath,
-                );
-                if (resolution.kind === "forbidden") {
-                    return new Response(`Forbidden`, { status: 403 });
-                }
-                if (resolution.kind === "ok") {
-                    const targetFile: string = resolution.file;
-                    try {
-                        if (fs.statSync(targetFile).isFile()) {
-                            const buffer = await fs.promises.readFile(
-                                targetFile,
-                            );
-                            const ext = path.extname(targetFile).toLowerCase();
-                            const contentType = lookupMimeType(ext);
-                            const headers: Record<string, string> = {
-                                "Content-Type": contentType,
-                                "X-Content-Type-Options": "nosniff",
-                                // no ACAO: panel:// content loads same-origin
-                                // into its panel:// iframe frame
-                                "Cache-Control": "no-store",
-                            };
-                            if (ext === ".html") {
-                                headers["Content-Security-Policy"] =
-                                    buildPanelCsp(cleanPanelId);
-                                headers["Cache-Control"] = "no-store";
-                                const html = injectCspNonce(
-                                    injectUnselectable(
-                                        await injectCraneCreds(
-                                            buffer.toString("utf8"),
-                                            comp,
-                                            cleanPanelId,
-                                        ),
-                                    ),
-                                );
-                                return new Response(html, { headers });
-                            }
-                            return new Response(buffer, { headers });
-                        }
-                    } catch (err) {
-                        // lost race with deletion — fall through to 404
-                        log.debug("[PanelProtocol] panel asset vanished mid-serve:", String(err));
-                    }
-                }
-                return new Response(
-                    `Panel file not found: ${cleanPanelId}/${subpath}`,
-                    { status: 404 },
-                );
-            }
-
-            const client = connectionPool.getClient(assetComp);
-            const httpUrl = client.getHttpUrl(`panel/${cleanPanelId}/${subpath}`);
-            // /panel/ is authenticated-only on the daemon: attach the same
-            // main-token Bearer header the DAV surface uses
-            const assetToken = client.getToken();
-            const res = await fetch(httpUrl, {
-                ...(assetToken ? { headers: { Authorization: `Bearer ${assetToken}` } } : {}),
-            }).catch((err) => {
-                log.debug("[PanelProtocol] asset fetch failed:", err?.message || err);
-                return null;
-            });
-            if (!res || !res.ok) {
-                return new Response(res ? res.statusText : "Not Found", {
-                    status: res ? res.status : 404,
-                });
-            }
-            const buffer = await res.arrayBuffer();
-            const remoteExt = path.extname(subpath).toLowerCase();
-            const contentType =
-                res.headers.get("content-type") || lookupMimeType(remoteExt);
-            const headers: Record<string, string> = {
-                "Content-Type": contentType,
-                "X-Content-Type-Options": "nosniff",
-                // no ACAO: panel:// content loads same-origin into its
-                // panel:// iframe frame; the remote /panel/ route is
-                // Bearer-authenticated too
-                // parity with the local branch: panels can update underneath
-                // a cached remote asset, so nothing here may be cached
-                "Cache-Control": "no-store",
-            };
-            let responseBody: BodyInit = buffer;
-            if (remoteExt === ".html") {
-                // CSP comes from the machine that serves the panel: the
-                // daemon derived it from the manifest IT installed and
-                // review approved. Deriving egress from the local manifest
-                // would give a remote panel the wrong machine's policy.
-                const served = res.headers.get("content-security-policy");
-                headers["Content-Security-Policy"] =
-                    remotePanelHtmlCsp(served);
-                responseBody = injectCspNonce(
-                    injectUnselectable(
-                        await injectCraneCreds(
-                            new TextDecoder().decode(buffer),
-                            comp,
-                            cleanPanelId,
-                        ),
-                    ),
-                );
-            }
-
-            return new Response(responseBody, { headers });
-        } catch (err: any) {
-            log.error("[PanelProtocol] error:", err?.message || err);
-            return new Response(`Error: ${err?.message || err}`, { status: 500 });
+        const parsedUrl = new URL(request.url);
+        const parsedHost = parsePanelHost(parsedUrl.hostname);
+        if (!parsedHost) {
+            return new Response(
+                `Malformed panel URL: missing computer scope prefix`,
+                { status: 400 },
+            );
         }
+        return servePanelAsset(parsedHost.comp, parsedHost.panelId, parsedUrl.pathname);
     };
 
     protocol.handle("panel", handlePanelProtocol);
 
-    if (shouldSkipUpdate(process.argv)) {
+    if (browserMode) {
+        // no updater pass either: it restarts into a window. Updates apply
+        // on the next windowed launch.
+        for (const signal of ["SIGINT", "SIGTERM"] as const) {
+            process.on(signal, () => app.quit());
+        }
+        await openInBrowser();
+    } else if (shouldSkipUpdate(process.argv)) {
         createWindow();
     } else {
         const updaterWindow = createUpdaterWindow();
@@ -522,12 +442,16 @@ app.whenReady().then(async () => {
     }
 
     app.on("activate", function () {
+        if (browserMode) {
+            void openInBrowser();
+            return;
+        }
         if (BrowserWindow.getAllWindows().length === 0) createWindow();
     });
 });
 
 app.on("window-all-closed", () => {
-    if (process.platform !== "darwin") {
+    if (!keepAliveWithoutWindows(process.platform, browserMode)) {
         app.quit();
     }
 });
@@ -540,6 +464,14 @@ app.on("before-quit", () => {
     } catch (err: any) {
         log.warn("[Paperboard] cleanup warning:", err?.message);
     }
+    removeBrowserPushSink?.();
+    removeBrowserPushSink = null;
+    browserTray?.destroy();
+    browserTray = null;
+    void browserHost
+        ?.close()
+        .catch((err) => log.warn("[Paperboard] browser host close failed:", err));
+    browserHost = null;
     // the mDNS browser cannot outlive the app either
     try {
         stopCommunicator?.();

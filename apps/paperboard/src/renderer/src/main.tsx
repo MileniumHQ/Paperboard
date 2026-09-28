@@ -4,9 +4,10 @@ import "./shell.css";
 import { render } from "solid-js/web";
 import App from "./App";
 import { configureHostConnection, initPaperApi } from "@paperboard-dev/paperapi";
+import { shellIpc } from "./lib/shell";
 
 async function startShell() {
-    const close = configureHostConnection(() => window.electron!.ipcRenderer!.invoke<{ port: number; token: string }>("crane-credentials"));
+    const close = configureHostConnection(() => shellIpc().invoke<{ port: number; token: string }>("crane-credentials"));
     window.addEventListener("pagehide", close, { once: true });
     await initPaperApi({ computerId: "local" });
     render(() => <App />, document.getElementById("root") as HTMLElement);

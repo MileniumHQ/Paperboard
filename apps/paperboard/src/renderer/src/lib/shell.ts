@@ -1,4 +1,5 @@
 // Privileged shell-only IPC; panels speak PaperCrane directly over WebSocket.
+import { createBrowserBridge, type ShellIpc } from "./browserBridge";
 
 export interface ComputerInfo {
     id: string;
@@ -40,12 +41,30 @@ export interface DiscoveredComputer {
     os?: string;
 }
 
-const ipc = () => window.electron?.ipcRenderer;
+// Electron windows get the preload bridge; browser mode (`--browser`) has
+// no preload and talks to the host over HTTP with the same surface.
+let browserBridge: ShellIpc | null = null;
 
-function requireIpc() {
-    const bridge = ipc();
-    if (!bridge) throw new Error("[shell] Electron IPC bridge unavailable");
-    return bridge;
+export function isBrowserShell(): boolean {
+    return !window.electron?.ipcRenderer;
+}
+
+export function shellIpc(): ShellIpc {
+    const electron = window.electron?.ipcRenderer;
+    if (electron) return electron as unknown as ShellIpc;
+    browserBridge ??= createBrowserBridge();
+    return browserBridge;
+}
+
+const requireIpc = shellIpc;
+
+// Where a panel's documents and assets load from. Electron serves each
+// panel from its own panel:// origin; browser mode gives each panel its own
+// subdomain of the shell's host — the same scope prefix in both.
+export function panelUrl(computerId: string, panelId: string, subpath = ""): string {
+    const rest = subpath.replace(/^\.?\//, "");
+    if (!isBrowserShell()) return `panel://${computerId}.${panelId}/${rest}`;
+    return `${location.protocol}//${computerId}.${panelId}.${location.host}/${rest}`;
 }
 
 export const computersApi = {

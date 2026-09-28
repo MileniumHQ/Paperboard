@@ -90,8 +90,12 @@ describe("panelCspForEgress", () => {
 
     it("closed mode is genuinely closed: no remote images either — holy closed!", () => {
         const csp = panelCspForEgress({ mode: "closed", hosts: [] });
-        expect(csp).toContain("img-src 'self' panel: data: blob:");
-        expect(csp).not.toContain("img-src 'self' panel: data: blob: https:");
+        // local sources only: self, sibling panel origins (panel: in
+        // Electron, loopback *.paperboard.localhost in browser mode), inline
+        expect(imgSrc(csp).trim()).toBe(
+            "img-src 'self' panel: http://*.paperboard.localhost:* data: blob:",
+        );
+        expect(imgSrc(csp)).not.toContain("https");
         expect(csp).toContain("script-src 'self'");
         expect(csp).not.toContain("'unsafe-eval'");
     });

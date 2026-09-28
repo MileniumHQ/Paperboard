@@ -4,7 +4,7 @@
   "version": "3.0.0-alpha",
   "description": "Run and manage tools locally.",
   "main": "./out/main/index.js",
-  "author": "Milenium LLC <contact@paperboard.dev>",
+  "author": "Milenium <contact@paperboard.dev>",
   "homepage": "https://paperboard.dev",
   "license": "PolyForm-Noncommercial-1.0.0",
   "keywords": [
@@ -20,6 +20,7 @@
     "gates": "bun run typecheck && bun test && bunx biome lint && bash scripts/check-no-silent-catches.sh",
     "start": "bun scripts/launch.ts preview",
     "dev": "bun scripts/launch.ts dev",
+    "dev:browser": "bun scripts/launch.ts dev -- --browser",
     "build": "bun run typecheck && electron-vite build",
     "build:unpack": "bun run build && electron-builder --dir",
     "build:win": "bun run build && electron-builder --win",
