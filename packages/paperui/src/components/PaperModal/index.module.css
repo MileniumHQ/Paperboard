@@ -1,9 +1,13 @@
 .backdrop {
+    /* inset rather than 100vw/100vh: viewport units include the scrollbar, and
+       with content-box padding the backdrop ended up wider than the screen, so
+       centring pushed the modal off the right edge and the page scrolled
+       sideways. */
     position: fixed;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
+    inset: 0;
+    width: auto;
+    height: auto;
+    box-sizing: border-box;
     background: var(--paper-scrim);
     backdrop-filter: var(--paper-blur-light);
     display: flex;
@@ -11,8 +15,12 @@
     justify-content: center;
     z-index: 1000;
     padding: var(--paper-uigap-double);
+    /* a modal taller than the viewport scrolls instead of running off it */
+    overflow-y: auto;
+    overscroll-behavior: contain;
     transform: translateZ(0);
 }
+
 
 .modalBox {
     background: var(--paper-surface-raised);
