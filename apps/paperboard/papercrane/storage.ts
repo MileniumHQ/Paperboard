@@ -6,6 +6,7 @@ import { requirePanelId } from "../../../packages/paperapi/src/panelIdentity";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { PAPERBOARD_USER_AGENT } from "./userAgent";
+import { parseNetworkEgress } from "./panelNet";
 
 // one-shot timers must never hold the process open: unref and move on.
 // (bun and node both expose unref on Timeout handles)
@@ -236,13 +237,12 @@ export function validatePanelManifest(
         manifest.autostart = record.autostart;
     }
 
-    // network egress declaration: bounded host list or any-https mode.
-    // factual clip here; interpretation lives in panelNet
-    if (record.network && typeof record.network === "object" && !Array.isArray(record.network)) {
-        // TODO(remove after v0.2): legacy unpackaged panels may surface raw
-        // network shapes; importing keeps manifests reviewable via one path
-        manifest.network = record.network;
-    }
+    // network egress declaration: panelNet owns the one parser (host
+    // syntax, cap, modes); only its normalized result is stored, so the
+    // manifest never carries a shape the CSP builder would read differently
+    const egress = parseNetworkEgress(record);
+    if (egress.mode === "any-https") manifest.network = { mode: "any-https" };
+    else if (egress.mode === "declared-hosts") manifest.network = { hosts: egress.hosts };
 
     // NOTE: the `permissions` array was deleted — it was declared,
     // validated, and displayed, but nothing ever dispatched on it, so it
