@@ -45,6 +45,10 @@ step "paperboard silent-catches" run_in "$ROOT/apps/paperboard" bash "$CATCH"
 step "paperconvert typecheck" run_in "$ROOT/apps/paperconvert" bun run typecheck
 step "paperconvert silent-catches" run_in "$ROOT/apps/paperconvert" bash "$CATCH" src
 
+# paperdocs: tests plus the static site build (typecheck, docs SPA, prerender)
+step "paperdocs tests" run_in "$ROOT/apps/paperdocs" bun test
+step "paperdocs build" run_in "$ROOT/apps/paperdocs" bun run build
+
 # shared libraries
 step "paperapi typecheck" run_in "$ROOT/packages/paperapi" bunx tsc --noEmit
 step "paperapi tests" run_in "$ROOT/packages/paperapi" bun test
@@ -59,7 +63,7 @@ step "origami tests" run_in "$ROOT/apps/origami" bun test
 step "origami silent-catches" run_in "$ROOT/apps/origami" bash "$CATCH" src test
 
 # first-party panels: suite, typecheck, silent-catch gate each
-for panel in panels/dev.paperboard.actions panels/dev.paperboard.botcreator panels/dev.paperboard.gameserver panels/dev.paperboard.terminal; do
+for panel in panels/dev.paperboard.actions panels/dev.paperboard.ai panels/dev.paperboard.botcreator panels/dev.paperboard.gameserver panels/dev.paperboard.terminal; do
     step "$panel tests" run_in "$ROOT/$panel" bun test
     step "$panel typecheck" run_in "$ROOT/$panel" bunx tsc --noEmit
     step "$panel silent-catches" run_in "$ROOT/$panel" bash "$CATCH" src test
