@@ -1,0 +1,14 @@
+.PaperPagination {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: var(--paper-uigap-onefourth);
+    width: 100%;
+}
+
+.gap {
+    color: var(--paper-text-subtle);
+    padding: 0 var(--paper-uigap-onefourth);
+    user-select: none;
+}
