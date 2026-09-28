@@ -23,11 +23,14 @@ export async function listMapRegions(): Promise<MapRegionsResult> {
     const result = await serverBridge.call<Partial<MapRegionsResult>>(
         ACTION_IDS.listMapRegions,
     );
-    // tolerate an older service that returned a single `regions` array:
-    // never let a shape mismatch crash the renderer
+    // the service and this UI ship together; an unrecognized shape is a
+    // failure, not "no terrain" — coercing it to empty hid real errors
+    if (!result || !Array.isArray(result.dimensions)) {
+        throw new Error("The map service returned an unrecognized region listing");
+    }
     return {
-        levelName: result?.levelName ?? "",
-        dimensions: Array.isArray(result?.dimensions) ? result.dimensions : [],
+        levelName: result.levelName ?? "",
+        dimensions: result.dimensions,
     };
 }
 

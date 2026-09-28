@@ -3,13 +3,17 @@ import { gunzipSync, inflateSync } from "node:zlib";
 import nbt from "prismarine-nbt";
 import { PNG } from "pngjs";
 import { files as fileApi, type ServiceContext } from "@paperboard-dev/paperapi";
-import { listDirectory } from "../lib/filesystem";
+import { tryListDirectory } from "../lib/filesystem";
+import { resolveVersionProfile, worldPathsFor, type VersionProfile } from "../lib/versionProfile";
 import {
     blockColor,
     heightmapBits,
     isSurfaceBlock,
+    longPairToBigInt,
+    paletteEntryName,
     parseRegionFileName,
     regionFileName,
+    sectionLayerIndex,
     surfaceYFromStored,
     unpackPackedLongs,
     MAP_DIMENSIONS,
@@ -25,6 +29,8 @@ import { resolveLevelName } from "./worlds";
 // Minimum build height per dimension: heightmap values are stored relative
 // to it (overworld surface y=72 with a -64 floor is stored as 137; nether
 // and end floors are 0). Wrong by 16 → map is wrong by a multiple of 16.
+// The map is only offered from 1.18 (supports("mapRendering")), so the
+// overworld floor is -64 even when the server version is not yet known.
 const DIMENSION_MIN_BUILD: Record<MapDimension, number> = {
     overworld: -64,
     the_nether: 0,
@@ -35,6 +41,10 @@ const DIMENSION_MIN_BUILD: Record<MapDimension, number> = {
 // chunk's decompressed size so a crafted .mca cannot exhaust the daemon
 const MAX_REGION_BYTES = 64 * 1024 * 1024;
 const MAX_CHUNK_BYTES = 16 * 1024 * 1024;
+// one dimension holding more than this many generated regions (16M chunks)
+// is beyond a dashboard map; refuse loudly instead of building an unbounded
+// availability list and an unbounded request fan-out
+const MAX_REGIONS_PER_DIMENSION = 8192;
 
 export interface MapDimensionRegions {
     dimension: MapDimension;
@@ -49,36 +59,58 @@ export interface MapRegionsResult {
 interface Section {
     Y: number;
     block_states?: {
-        palette?: { Name: string }[];
+        palette?: unknown[];
         data?: [number, number][];
     };
 }
 
 interface ChunkNbt {
+    /** pre-26.4 spelling; 26.4 renames it to `status` */
     Status?: string;
+    status?: string;
     sections?: Section[];
     Heightmaps?: Record<string, [number, number][]>;
 }
 
-// new worlds nest dimensions under dimensions/minecraft/<id>/region; older
-// ones use the world root / DIM-1 / DIM1. Check modern first.
-function regionDirCandidates(levelName: string, dimension: MapDimension): string[] {
-    const modern = `${levelName}/dimensions/minecraft/${dimension}/region`;
-    switch (dimension) {
-        case "overworld":
-            return [modern, `${levelName}/region`];
-        case "the_nether":
-            return [modern, `${levelName}/DIM-1/region`];
-        case "the_end":
-            return [modern, `${levelName}/DIM1/region`];
-    }
+// Where each dimension's region directory lives. worldPathsFor owns the
+// layout (vanilla-split, bukkit-split, dimensions/), and the world layouts a
+// server may have migrated through are kept as fallbacks so an upgraded
+// server does not lose its map.
+function regionDirCandidates(
+    profile: VersionProfile,
+    levelName: string,
+    dimension: MapDimension,
+): string[] {
+    const paths = worldPathsFor(profile, levelName);
+    const layout =
+        dimension === "overworld"
+            ? paths.overworld
+            : dimension === "the_nether"
+              ? paths.nether
+              : paths.end;
+    const modern = `${levelName}/dimensions/minecraft/${dimension}`;
+    const legacy =
+        dimension === "overworld"
+            ? levelName
+            : dimension === "the_nether"
+              ? `${levelName}/DIM-1`
+              : `${levelName}/DIM1`;
+    const split =
+        dimension === "overworld"
+            ? levelName
+            : dimension === "the_nether"
+              ? `${levelName}_nether`
+              : `${levelName}_the_end`;
+    const dirs = new Set([layout, modern, legacy, split]);
+    return [...dirs].map((dir) => `${dir}/region`);
 }
 
 async function resolveRegionDir(
+    profile: VersionProfile,
     levelName: string,
     dimension: MapDimension,
 ): Promise<string | null> {
-    for (const candidate of regionDirCandidates(levelName, dimension)) {
+    for (const candidate of regionDirCandidates(profile, levelName, dimension)) {
         try {
             if (await fileApi.exists(candidate, PANEL_ID)) return candidate;
         } catch (err) {
@@ -90,18 +122,34 @@ async function resolveRegionDir(
 
 const DIMENSION_ORDER = MAP_DIMENSIONS;
 
+function profileOf(ctx: ServiceContext<GameServerState>): VersionProfile {
+    return resolveVersionProfile(ctx.state.serverSoftware, ctx.state.serverVersion);
+}
+
 export async function listMapRegions(
-    _ctx: ServiceContext<GameServerState>,
+    ctx: ServiceContext<GameServerState>,
 ): Promise<MapRegionsResult> {
     const levelName = await resolveLevelName();
+    const profile = profileOf(ctx);
     const dimensions: MapDimensionRegions[] = [];
     for (const dimension of DIMENSION_ORDER) {
-        const dir = await resolveRegionDir(levelName, dimension);
+        const dir = await resolveRegionDir(profile, levelName, dimension);
         if (!dir) continue;
+        // a listing failure is not an empty directory: an error here would
+        // otherwise render as "No generated terrain to map yet"
+        const listing = await tryListDirectory(dir);
+        if (listing.error) {
+            throw new Error(listing.error);
+        }
         const regions: RegionCoord[] = [];
-        for (const entry of await listDirectory(dir)) {
+        for (const entry of listing.entries) {
             const coord = parseRegionFileName(entry);
             if (coord) regions.push(coord);
+        }
+        if (regions.length > MAX_REGIONS_PER_DIMENSION) {
+            throw new Error(
+                `Too many regions to map in ${dimension} (${regions.length}); the map is limited to ${MAX_REGIONS_PER_DIMENSION}`,
+            );
         }
         if (regions.length === 0) continue;
         regions.sort((a, b) => a.x - b.x || a.z - b.z);
@@ -115,17 +163,17 @@ function blockNameAt(sections: Map<number, Section>, x: number, y: number, z: nu
     const palette = section?.block_states?.palette;
     if (!palette || palette.length === 0) return "minecraft:air";
     if (palette.length === 1 || !section?.block_states?.data) {
-        return palette[0]?.Name ?? "minecraft:air";
+        return paletteEntryName(palette[0]);
     }
     const bits = Math.max(4, Math.ceil(Math.log2(palette.length)));
     const perLong = Math.floor(64 / bits);
-    const index = (y % 16) * 256 + z * CHUNK_SIZE + x;
+    const index = sectionLayerIndex(y) * 256 + z * CHUNK_SIZE + x;
     const value = Number(
-        (longPair(section.block_states.data[Math.floor(index / perLong)]) >>
+        (longPairToBigInt(section.block_states.data[Math.floor(index / perLong)] ?? [0, 0]) >>
             BigInt((index % perLong) * bits)) &
             ((1n << BigInt(bits)) - 1n),
     );
-    return palette[value]?.Name ?? "minecraft:air";
+    return paletteEntryName(palette[value]);
 }
 
 // WORLD_SURFACE is the topmost non-air block, which in the Nether is the
@@ -149,13 +197,8 @@ function surfaceBlockAt(
     return "minecraft:air";
 }
 
-// prismarine-nbt long arrays are [high, low] pairs; local so the hot loop
-// avoids re-importing the core helper with its type gymnastics
-function longPair(pair: [number, number] | undefined): bigint {
-    if (!pair) return 0n;
-    return (BigInt(pair[0] >>> 0) << 32n) | BigInt(pair[1] >>> 0);
-}
-
+// prismarine-nbt long arrays are [high, low] pairs; longPairToBigInt in
+// core/map.ts owns the conversion (and its test)
 async function parseChunk(buffer: Buffer): Promise<ChunkNbt | null> {
     try {
         const parsed = await nbt.parse(buffer);
@@ -194,7 +237,7 @@ export interface RenderedTile {
 }
 
 export async function renderMapTile(
-    _ctx: ServiceContext<GameServerState>,
+    ctx: ServiceContext<GameServerState>,
     dimension: MapDimension,
     rx: number,
     rz: number,
@@ -206,7 +249,8 @@ export async function renderMapTile(
         throw new Error("Invalid region coordinates");
     }
     const levelName = await resolveLevelName();
-    const dir = await resolveRegionDir(levelName, dimension);
+    const profile = profileOf(ctx);
+    const dir = await resolveRegionDir(profile, levelName, dimension);
     if (!dir) throw new Error(`No region directory for dimension ${dimension}`);
 
     const relative = `${dir}/${regionFileName({ x: rx, z: rz })}`;
@@ -227,11 +271,29 @@ export async function renderMapTile(
 
     const buffer = fs.readFileSync(absolute);
     const png = new PNG({ width: REGION_BLOCKS, height: REGION_BLOCKS });
-    const minBuildHeight = DIMENSION_MIN_BUILD[dimension];
+    const minY = DIMENSION_MIN_BUILD[dimension];
+    let paintedChunks = 0;
+    const unsupportedCompression = new Set<number>();
     for (let cx = 0; cx < REGION_CHUNKS; cx++) {
         for (let cz = 0; cz < REGION_CHUNKS; cz++) {
-            await paintChunk(png, buffer, cx, cz, minBuildHeight);
+            const chunk = readChunkBuffer(buffer, cx, cz);
+            if (!chunk) continue;
+            if (chunk.unsupported !== undefined) {
+                unsupportedCompression.add(chunk.unsupported);
+                continue;
+            }
+            if (await paintChunk(png, chunk.buffer, cx, cz, minY)) {
+                paintedChunks++;
+            }
         }
+    }
+    // a tile where every chunk was skipped because the compression is not
+    // understood is a failure, not empty terrain: say so instead of serving
+    // a transparent tile that reads as "nothing generated here"
+    if (paintedChunks === 0 && unsupportedCompression.size > 0) {
+        throw new Error(
+            `Region ${regionFileName({ x: rx, z: rz })} uses unsupported chunk compression (type ${[...unsupportedCompression].join(", ")})`,
+        );
     }
 
     const dataUrl = `data:image/png;base64,${PNG.sync.write(png).toString("base64")}`;
@@ -239,7 +301,13 @@ export async function renderMapTile(
     return { dataUrl, dimension, rx, rz };
 }
 
-function readChunkBuffer(region: Buffer, cx: number, cz: number): Buffer | null {
+interface ChunkBuffer {
+    buffer: Buffer;
+    /** compression type the reader does not implement (e.g. LZ4 = 4) */
+    unsupported?: number;
+}
+
+function readChunkBuffer(region: Buffer, cx: number, cz: number): ChunkBuffer | null {
     const headerIndex = (cx & 31) + (cz & 31) * 32;
     const location = headerIndex * 4;
     const offset = region.readUIntBE(location, 3) * 4096;
@@ -250,34 +318,39 @@ function readChunkBuffer(region: Buffer, cx: number, cz: number): Buffer | null 
     const payload = region.subarray(offset + 5, offset + 4 + length);
     try {
         if (compression === 1)
-            return gunzipSync(payload, { maxOutputLength: MAX_CHUNK_BYTES });
+            return {
+                buffer: gunzipSync(payload, { maxOutputLength: MAX_CHUNK_BYTES }),
+            };
         if (compression === 2)
-            return inflateSync(payload, { maxOutputLength: MAX_CHUNK_BYTES });
-        if (compression === 3) return Buffer.from(payload);
+            return {
+                buffer: inflateSync(payload, { maxOutputLength: MAX_CHUNK_BYTES }),
+            };
+        if (compression === 3) return { buffer: Buffer.from(payload) };
     } catch (err) {
         console.debug("[Service:Map] chunk decompress failed:", String(err));
         return null;
     }
-    return null;
+    // 4 = LZ4 (server option region-file-compression=lz4) and 127+ are
+    // custom; the tile reports the type instead of silently skipping
+    return { buffer: Buffer.alloc(0), unsupported: compression };
 }
 
 async function paintChunk(
     png: PNG,
-    region: Buffer,
+    chunkBuffer: Buffer,
     cx: number,
     cz: number,
     minBuildHeight: number,
-): Promise<void> {
-    const chunkBuffer = readChunkBuffer(region, cx, cz);
-    if (!chunkBuffer) return;
+): Promise<boolean> {
     const root = await parseChunk(chunkBuffer);
-    if (!root || root.Status !== "minecraft:full" || !root.sections || !root.Heightmaps) {
-        return;
-    }
+    if (!root || !root.sections || !root.Heightmaps) return false;
+    // `Status` was renamed to `status` in 26.4; accept both spellings
+    const status = root.Status ?? root.status;
+    if (status !== undefined && status !== "minecraft:full") return false;
     const heightmap = root.Heightmaps.WORLD_SURFACE ?? root.Heightmaps.MOTION_BLOCKING;
-    if (!heightmap) return;
+    if (!heightmap) return false;
     const bits = heightmapBits(heightmap.length);
-    if (bits <= 0) return;
+    if (bits <= 0) return false;
     const heights = unpackPackedLongs(heightmap, bits, 256);
     const sections = new Map<number, Section>(root.sections.map((s) => [s.Y, s]));
 
@@ -297,4 +370,5 @@ async function paintChunk(
             png.data[di + 3] = 255;
         }
     }
+    return true;
 }

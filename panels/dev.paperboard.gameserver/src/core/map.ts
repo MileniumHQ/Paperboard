@@ -80,6 +80,27 @@ export function parseRegionFileName(name: string): RegionCoord | null {
     return { x: Number(match[1]), z: Number(match[2]) };
 }
 
+// Palette entry shape moved across versions: 1.18–1.21.x write a compound
+// with `Name` (newer builds `id`, and blocks with no properties compress to
+// an empty key), while 26.x writes bare name strings. One reader handles
+// every shape so a chunk never silently reads as air.
+export function paletteEntryName(entry: unknown): string {
+    if (typeof entry === "string") return entry;
+    if (entry && typeof entry === "object") {
+        const record = entry as Record<string, unknown>;
+        const named = record.Name ?? record.id ?? record[""];
+        if (typeof named === "string" && named) return named;
+    }
+    return "minecraft:air";
+}
+
+// A section is 16 blocks tall, and y goes negative in the overworld (down to
+// -64): JS % keeps the sign, so a raw (y % 16) indexes the wrong layer below
+// y=0. This is the only conversion from a world y to a section layer.
+export function sectionLayerIndex(y: number): number {
+    return ((y % 16) + 16) % 16;
+}
+
 export function regionFileName(coord: RegionCoord): string {
     return `r.${coord.x}.${coord.z}.mca`;
 }

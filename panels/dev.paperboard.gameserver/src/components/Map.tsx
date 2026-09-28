@@ -41,6 +41,12 @@ const MAX_SCALE = 3;
 const ZOOM_STEP = 1.2;
 const POSITION_POLL_MS = 2000;
 const TILE_REFRESH_MS = 5000;
+// new regions appear while the server generates; re-list on a slower clock
+// so the map can show terrain beyond what existed when the tab opened
+const REGION_REFRESH_MS = 15000;
+// decoded tiles held in the renderer; panning across a world must not grow
+// memory without a bound
+const MAX_TILE_CACHE = 256;
 
 interface TileState {
     image: HTMLImageElement;
@@ -68,6 +74,7 @@ export default function MapView() {
 
     let canvas: HTMLCanvasElement | undefined;
     let wrapper: HTMLDivElement | undefined;
+    let centeredView = false;
     const tiles = new Map<string, TileState>();
     const pending = new Set<string>();
     const headImages = new Map<string, HTMLImageElement>();
@@ -114,7 +121,13 @@ export default function MapView() {
                 if (existing && existing.src === result.dataUrl) return;
                 const image = new Image();
                 image.onload = () => {
+                    tiles.delete(key);
                     tiles.set(key, { image, src: result.dataUrl });
+                    while (tiles.size > MAX_TILE_CACHE) {
+                        const oldest = tiles.keys().next().value;
+                        if (oldest === undefined) break;
+                        tiles.delete(oldest);
+                    }
                     setRevision((v) => v + 1);
                 };
                 image.onerror = () => {
@@ -268,22 +281,34 @@ export default function MapView() {
     };
 
     const loadRegions = async () => {
-        setError("");
         try {
             const result = await listMapRegions();
             setInfo(result);
+            setError("");
             const dims = result.dimensions;
             if (dims.length === 0) return;
-            const dim =
-                dims.find((d) => d.dimension === "overworld") ?? dims[0];
-            setDimension(dim.dimension);
-            const closest = dim.regions.reduce((best, r) =>
-                Math.hypot(r.x, r.z) < Math.hypot(best.x, best.z) ? r : best,
-            );
-            centerOnRegion(closest.x, closest.z);
+            // keep the user's dimension on a refresh; fall back to the
+            // overworld (or whatever exists) only when it disappeared
+            const current = dims.find((d) => d.dimension === dimension());
+            const target =
+                current ??
+                dims.find((d) => d.dimension === "overworld") ??
+                dims[0];
+            if (!centeredView || !current) {
+                setDimension(target.dimension);
+                const closest = target.regions.reduce((best, r) =>
+                    Math.hypot(r.x, r.z) < Math.hypot(best.x, best.z) ? r : best,
+                );
+                centerOnRegion(closest.x, closest.z);
+            }
+            centeredView = true;
         } catch (err) {
             console.error("[Map] Failed to list regions:", err);
-            setError("Could not read the world's region files. Check the console for details.");
+            setError(
+                err instanceof Error
+                    ? `Could not read the world's region files: ${err.message}`
+                    : "Could not read the world's region files.",
+            );
         }
     };
 
@@ -363,11 +388,14 @@ export default function MapView() {
             () => setTileRefresh((v) => v + 1),
             TILE_REFRESH_MS,
         );
+        // regions generated since mount become visible without a reload
+        const regionPoll = setInterval(() => void loadRegions(), REGION_REFRESH_MS);
 
         onCleanup(() => {
             observer.disconnect();
             clearInterval(positionPoll);
             clearInterval(tilePoll);
+            clearInterval(regionPoll);
             canvas?.removeEventListener("pointerdown", onPointerDown);
             canvas?.removeEventListener("pointermove", onPointerMove);
             canvas?.removeEventListener("pointerup", onPointerUp);

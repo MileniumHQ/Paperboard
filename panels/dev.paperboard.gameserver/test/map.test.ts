@@ -7,8 +7,10 @@ import {
     heightmapBits,
     isSurfaceBlock,
     longPairToBigInt,
+    paletteEntryName,
     parseRegionFileName,
     regionFileName,
+    sectionLayerIndex,
     surfaceYFromStored,
     unpackPackedLongs,
 } from "../src/core/map";
@@ -46,6 +48,42 @@ describe("surfaceYFromStored", () => {
     test("applies the minimum build height offset", () => {
         expect(surfaceYFromStored(137, -64)).toBe(72);
         expect(surfaceYFromStored(65, -64)).toBe(0);
+    });
+});
+
+describe("paletteEntryName", () => {
+    test("reads every palette shape Minecraft has shipped", () => {
+        // 1.18–1.21.x compound form
+        expect(paletteEntryName({ Name: "minecraft:oak_log" })).toBe(
+            "minecraft:oak_log",
+        );
+        // newer compound form: `id` with inlined properties
+        expect(
+            paletteEntryName({
+                id: "minecraft:glow_lichen",
+                properties: { north: "true" },
+            }),
+        ).toBe("minecraft:glow_lichen");
+        // property-less blocks compress to an empty key
+        expect(paletteEntryName({ "": "minecraft:air" })).toBe("minecraft:air");
+        // 26.x stores bare name strings
+        expect(paletteEntryName("minecraft:deepslate")).toBe(
+            "minecraft:deepslate",
+        );
+        // unknown shapes must not be mistaken for a real block
+        expect(paletteEntryName(undefined)).toBe("minecraft:air");
+        expect(paletteEntryName({})).toBe("minecraft:air");
+    });
+});
+
+describe("sectionLayerIndex", () => {
+    test("wraps negative world y into the section layer", () => {
+        expect(sectionLayerIndex(0)).toBe(0);
+        expect(sectionLayerIndex(15)).toBe(15);
+        expect(sectionLayerIndex(16)).toBe(0);
+        expect(sectionLayerIndex(-1)).toBe(15);
+        expect(sectionLayerIndex(-16)).toBe(0);
+        expect(sectionLayerIndex(-64)).toBe(0);
     });
 });
 
