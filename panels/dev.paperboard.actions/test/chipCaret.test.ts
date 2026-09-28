@@ -173,5 +173,7 @@ describe("variable chip caret", () => {
                 rmSync(dir, { recursive: true, force: true });
             }
         },
+        // a cold headless Chrome on a CI runner takes several seconds to start
+        65_000,
     );
 });

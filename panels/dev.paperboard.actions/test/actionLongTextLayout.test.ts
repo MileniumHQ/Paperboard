@@ -24,6 +24,8 @@ const paperStylesDir = resolve(repoRoot, "packages/paperui/src/styles");
 // the blurred single-line cap: min(12rem, 100%) at the default 16px root
 const BLURRED_CAP_PX = 12 * 16 + 4;
 
+const CHROME_TIMEOUT_MS = 60_000;
+
 function findChrome(): string | null {
     const candidates = [
         process.env.PAPERBOARD_CHROME,
@@ -298,7 +300,7 @@ function measureInChrome(chrome: string): LayoutResults {
                 "--dump-dom",
                 `file://${fixture}`,
             ],
-            { stdout: "pipe", stderr: "pipe", timeout: 60_000 },
+            { stdout: "pipe", stderr: "pipe", timeout: CHROME_TIMEOUT_MS },
         );
         const dom = proc.stdout.toString();
         const match = dom.match(/RESULT:([A-Za-z0-9+/=]+)/);
@@ -439,5 +441,8 @@ describe("action input long-value layout", () => {
                 ).toBeLessThanOrEqual(1);
             }
         },
+        // a cold headless Chrome on a CI runner takes several seconds to
+        // start; the spawn itself is bounded at CHROME_TIMEOUT_MS
+        CHROME_TIMEOUT_MS + 5_000,
     );
 });
