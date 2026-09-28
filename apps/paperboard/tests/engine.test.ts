@@ -211,17 +211,4 @@ describe("PaperCraneEngine app-global configs", () => {
             expect(fs.existsSync(path.join(tmp, "files", dir, file))).toBe(true);
         }
     });
-
-    it("reads pre-move app globals from configs/ once", async () => {
-        fs.writeFileSync(
-            path.join(tmp, "configs", "app-settings.json"),
-            JSON.stringify({ darkMode: "light" }),
-        );
-        // Seed an old installation before its explicit startup migration.
-        fs.unlinkSync(path.join(tmp, "local", "config-migration-v1.json"));
-        const reopened = new PaperCraneEngine(tmp);
-        expect(await reopened.getConfig("app-settings")).toEqual({
-            darkMode: "light",
-        });
-    });
 });

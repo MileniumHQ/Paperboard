@@ -26,7 +26,6 @@ import { panelServices, PanelServicesManager } from "./panelServices";
 import { CredentialStore } from "./credentials";
 import { resolveRegistryUrl } from "./util";
 import { requirePanelId } from "../../../packages/paperapi/src/panelIdentity";
-import { migrateConfigurationV1 } from "./configMigration";
 
 export const REGISTRY_URL = resolveRegistryUrl();
 
@@ -84,7 +83,6 @@ export class PaperCraneEngine {
         }
 
         this.credentialsStore = new CredentialStore(this.appDataDir);
-        migrateConfigurationV1(this.appDataDir);
         const ownersFile = path.join(this.localDir, "process-owners.json");
         if (fs.existsSync(ownersFile)) {
             const owners = JSON.parse(fs.readFileSync(ownersFile, "utf8"));

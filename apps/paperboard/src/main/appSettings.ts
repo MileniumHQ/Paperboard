@@ -31,23 +31,17 @@ export function appSettingsPath(): string {
     return path.join(paperboardDir(), "local", "app-settings.json");
 }
 
-// TODO(remove after v0.2): legacy pre-meaningful-location settings path,
-// kept only for read-through; dies in one release
-function legacyAppSettingsPath(): string {
-    return path.join(paperboardDir(), "configs", "app-settings.json");
-}
-
 export function readAppSettings(): AppSettings {
-    for (const file of [appSettingsPath(), legacyAppSettingsPath()]) {
-        try {
-            const raw = JSON.parse(fs.readFileSync(file, "utf8"));
-            return { ...DEFAULTS, ...raw };
-        } catch (err) {
-            // missing or corrupt — try next location, else defaults
-            logger.debug("[appSettings] ignoring unreadable settings file:", err);
+    try {
+        const raw = JSON.parse(fs.readFileSync(appSettingsPath(), "utf8"));
+        return { ...DEFAULTS, ...raw };
+    } catch (err: any) {
+        // missing is a fresh install; unreadable is reported, not hidden
+        if (err?.code !== "ENOENT") {
+            logger.warn("[appSettings] settings file unreadable, using defaults:", err?.message ?? err);
         }
+        return { ...DEFAULTS };
     }
-    return { ...DEFAULTS };
 }
 
 export function applyNativeTheme(): void {
