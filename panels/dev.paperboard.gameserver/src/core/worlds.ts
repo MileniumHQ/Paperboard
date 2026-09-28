@@ -73,7 +73,7 @@ export async function deleteWorldDirs(
 export interface WorldInfo {
     name: string;
     active: boolean;
-    // level.dat present on disk. A configured-but-never-started world is
+    // level.dat present on disk. A created-but-never-started world is
     // listed with generated=false instead of being hidden.
     generated: boolean;
     hasNether: boolean;
@@ -106,10 +106,22 @@ export interface ActivationPlan {
     name: string;
 }
 
-// one decision point for "make this world active": already active is a
-// noop (no restart prompt), an existing directory is a switch, anything
-// else is a fresh generation on next boot. Case-insensitive — the server
-// resolves level-name against a case-insensitive filesystem on some
+// case-insensitive duplicate check shared by the New World dialog and any
+// future caller: the server may treat level-name case-insensitively, so
+// "World" vs "world" must not create a second world.
+export function isWorldNameTaken(names: string[], proposed: string): boolean {
+    const clean = String(proposed ?? "").trim().toLowerCase();
+    if (!clean) return false;
+    return names.some((name) => name.toLowerCase() === clean);
+}
+
+// one decision point for "make this world active": the active world on
+// disk is a noop (no restart prompt), an existing directory is a switch,
+// anything else is a fresh generation on next boot. The configured
+// level-name with no directory (fresh server, or its world was deleted)
+// is a create too: its seed must apply and it must be remembered as a
+// created world, not silently dropped as a noop. Case-insensitive — the
+// server resolves level-name against a case-insensitive filesystem on some
 // platforms, so "World" vs "world" must not fork two generations.
 export function planWorldActivation(
     requested: string,
@@ -119,17 +131,19 @@ export function planWorldActivation(
     const name = String(requested ?? "").trim();
     if (!name) throw new Error("World name is required");
     const lower = name.toLowerCase();
-    if (lower === active.toLowerCase()) return { kind: "noop-active", name };
     const match = existing.find((e) => e.toLowerCase() === lower);
+    if (match && lower === active.toLowerCase()) return { kind: "noop-active", name: match };
     if (match) return { kind: "switch", name: match };
     return { kind: "create", name: assertCreatableWorldName(name) };
 }
 
-// merges on-disk worlds with the active level-name into renderable cards.
-// A configured world that has not generated yet (no directory / no
-// level.dat) still appears, flagged generated:false, so "I made a world
-// and nothing showed up" cannot happen. Active sorts first, then
-// alphabetically.
+// merges on-disk worlds and created-but-ungenerated worlds into renderable
+// cards, flagging the one matching the active level-name. The level-name
+// alone does not make a card: after its directories are deleted it names
+// nothing, and listing it kept a deleted world on screen until the user
+// switched away. Created worlds come in as candidates (generated:false),
+// so "I made a world and nothing showed up" still cannot happen. Active
+// sorts first, then alphabetically.
 export function buildWorldInfos(
     candidates: WorldCandidate[],
     active: string,
@@ -144,16 +158,6 @@ export function buildWorldInfos(
             name: candidate.name,
             active: key === active.toLowerCase(),
             generated: candidate.generated,
-            hasNether: false,
-            hasEnd: false,
-        });
-    }
-    const activeKey = active.toLowerCase();
-    if (active && !seen.has(activeKey)) {
-        infos.push({
-            name: active,
-            active: true,
-            generated: false,
             hasNether: false,
             hasEnd: false,
         });

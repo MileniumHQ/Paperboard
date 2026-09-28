@@ -6,6 +6,7 @@ import { describe, test, expect } from "bun:test";
 import {
     assertCreatableWorldName,
     buildWorldInfos,
+    isWorldNameTaken,
     planWorldActivation,
 } from "../src/core/worlds";
 
@@ -45,6 +46,13 @@ describe("planWorldActivation", () => {
         expect(() => planWorldActivation("has space", ["world"], "world")).toThrow(/Refusing/);
     });
 
+    test("the configured world with no directory is a create", () => {
+        expect(planWorldActivation("World", ["creative"], "world")).toEqual({
+            kind: "create",
+            name: "World",
+        });
+    });
+
     test("empty request refuses instead of booting a default", () => {
         expect(() => planWorldActivation("  ", ["world"], "world")).toThrow(/required/);
     });
@@ -70,8 +78,22 @@ describe("buildWorldInfos", () => {
         expect(infos[0].active).toBe(true);
     });
 
-    test("a configured world that never generated still appears", () => {
-        const infos = buildWorldInfos([{ name: "alpha", generated: true }], "brand_new");
+    // the level-name alone names no world: a deleted active world must not
+    // come back as a placeholder card (created worlds arrive as candidates)
+    test("a level-name with no candidate adds no card", () => {
+        const infos = buildWorldInfos([{ name: "alpha", generated: true }], "deleted_one");
+        expect(infos.map((i) => i.name)).toEqual(["alpha"]);
+        expect(infos[0].active).toBe(false);
+    });
+
+    test("a created world that never generated still appears", () => {
+        const infos = buildWorldInfos(
+            [
+                { name: "alpha", generated: true },
+                { name: "brand_new", generated: false },
+            ],
+            "brand_new",
+        );
         expect(infos.map((i) => i.name)).toEqual(["brand_new", "alpha"]);
         expect(infos[0]).toMatchObject({ active: true, generated: false });
     });
@@ -82,5 +104,18 @@ describe("buildWorldInfos", () => {
             "other",
         );
         expect(infos[0].generated).toBe(false);
+    });
+});
+
+describe("isWorldNameTaken", () => {
+    test("matches case-insensitively after trimming", () => {
+        expect(isWorldNameTaken(["world", "creative"], "World")).toBe(true);
+        expect(isWorldNameTaken(["world"], "  WORLD  ")).toBe(true);
+        expect(isWorldNameTaken(["world"], "survival")).toBe(false);
+    });
+
+    test("an empty proposal never counts as taken", () => {
+        expect(isWorldNameTaken(["world"], "")).toBe(false);
+        expect(isWorldNameTaken(["world"], "   ")).toBe(false);
     });
 });

@@ -24,29 +24,23 @@ export type { WorldInfo };
 // not vanish on switch.
 const MAX_PENDING_WORLDS = 100;
 
+// A missing config reads as null (no created worlds yet). An unreadable
+// one throws: listing it as "no created worlds" would hide them, and
+// writing over it would replace the whole panel config (software,
+// version, …) with just this list.
 async function readPendingWorlds(): Promise<string[]> {
-    try {
-        const saved = await config.get<Record<string, unknown>>(PANEL_ID);
-        const list = saved?.pendingWorlds;
-        if (!Array.isArray(list)) return [];
-        return list.filter(
-            (name): name is string =>
-                typeof name === "string" && WORLD_NAME_PATTERN.test(name),
-        );
-    } catch (err) {
-        console.debug("[Service:Worlds] pending worlds read failed:", String(err));
-        return [];
-    }
+    const saved = await config.get<Record<string, unknown> | null>(PANEL_ID);
+    const list = saved?.pendingWorlds;
+    if (!Array.isArray(list)) return [];
+    return list.filter(
+        (name): name is string =>
+            typeof name === "string" && WORLD_NAME_PATTERN.test(name),
+    );
 }
 
 async function writePendingWorlds(names: string[]): Promise<void> {
-    let saved: Record<string, unknown> = {};
-    try {
-        const current = await config.get<Record<string, unknown>>(PANEL_ID);
-        if (current && typeof current === "object") saved = current;
-    } catch (err) {
-        console.debug("[Service:Worlds] no saved panel config yet:", String(err));
-    }
+    const current = await config.get<Record<string, unknown> | null>(PANEL_ID);
+    const saved = current && typeof current === "object" ? current : {};
     await config.set(
         { ...saved, pendingWorlds: names.slice(0, MAX_PENDING_WORLDS) },
         PANEL_ID,
@@ -103,8 +97,8 @@ export async function listWorlds(): Promise<WorldInfo[]> {
             console.debug("[Service:Worlds] pending prune failed:", String(err)),
         );
     }
-    // every generated directory, every not-yet-generated created world, and
-    // the configured active world (shown generated:false before its first start)
+    // every generated directory and every not-yet-generated created world;
+    // the level-name only marks which of them is active
     const infos = buildWorldInfos(
         [
             ...generated.map((name) => ({ name, generated: true })),
@@ -141,20 +135,31 @@ export interface SetActiveWorldResult {
 // a fresh name generates on next start (with the given seed when set).
 // seed on an existing world is refused — level-seed only applies to
 // generation, silently writing it would lie about what it does.
+// createOnly refuses an existing name outright: the New World flow must
+// never degrade into a silent switch when its listing was stale.
 export async function setActiveWorld(
     ctx: ServiceContext<GameServerState>,
     levelName: string,
     seed?: string,
+    createOnly = false,
 ): Promise<SetActiveWorldResult> {
     assertServerOffline(ctx);
     const [existing, active] = await Promise.all([listWorldDirs(), resolveLevelName()]);
     const plan = planWorldActivation(levelName, existing, active);
     if (plan.kind === "noop-active") {
+        if (createOnly) {
+            throw new Error(`A world named "${plan.name}" already exists`);
+        }
         return { activated: plan.name, created: false };
     }
     const cleanSeed = String(seed ?? "").trim();
-    if (plan.kind === "switch" && cleanSeed) {
-        throw new Error(`"${plan.name}" already exists — a seed only applies to a new world`);
+    if (plan.kind === "switch") {
+        if (createOnly) {
+            throw new Error(`A world named "${plan.name}" already exists`);
+        }
+        if (cleanSeed) {
+            throw new Error(`"${plan.name}" already exists — a seed only applies to a new world`);
+        }
     }
     if (cleanSeed && /[\r\n]/.test(cleanSeed)) {
         throw new Error("Refusing multi-line seed");

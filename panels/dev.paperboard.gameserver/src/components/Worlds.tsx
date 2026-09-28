@@ -30,6 +30,7 @@ import { FieldControl } from "./PropertyFieldControl";
 import { readServerProperties, writeServerProperties } from "../lib/properties";
 import {
     deleteActiveWorldDirs,
+    isWorldNameTaken,
     listWorlds,
     normalizeLevelType,
     setActiveWorld,
@@ -70,19 +71,22 @@ export default function Worlds() {
     const [createOpen, setCreateOpen] = createSignal(false);
     const [newName, setNewName] = createSignal("world");
     const [createValues, setCreateValues] = createSignal<Record<string, string>>({});
+    const [createError, setCreateError] = createSignal("");
     const [mutating, setMutating] = createSignal(false);
     const [actionError, setActionError] = createSignal("");
     const [deleteConfirmOpen, setDeleteConfirmOpen] = createSignal(false);
 
     const online = () => serverStatus() !== "offline";
 
+    // A listing failure keeps the last-known worlds on screen and shows the
+    // error: replacing them with [] would claim "no worlds yet" and would
+    // silently disable the duplicate check for the New World dialog.
     const refresh = async () => {
-        setListError("");
         try {
             setWorlds(await listWorlds());
+            setListError("");
         } catch (err) {
             console.error("[Worlds] Failed to list worlds:", err);
-            setWorlds([]);
             setListError("Could not list world directories. Check the console for details.");
         }
     };
@@ -113,6 +117,14 @@ export default function Worlds() {
         setCreateValues((prev) => ({ ...prev, [key]: value }));
 
     const nameValid = () => WORLD_NAME_PATTERN.test(newName().trim());
+
+    // Case-insensitive against every listed world (generated or pending).
+    // null means the listing is unavailable — the boundary then decides.
+    const nameTaken = () =>
+        isWorldNameTaken(
+            (worlds() ?? []).map((w) => w.name),
+            newName(),
+        );
 
     const runActivate = async (name: string, seed?: string) => {
         setMutating(true);
@@ -157,26 +169,36 @@ export default function Worlds() {
     };
 
     const submitCreate = async () => {
-        if (!nameValid()) return;
+        if (!nameValid() || nameTaken() || worlds() === null || mutating()) return;
         const name = newName().trim();
-        if ((worlds() ?? []).some((w) => w.name.toLowerCase() === name.toLowerCase())) {
-            setActionError(`A world named "${name}" already exists.`);
-            return;
-        }
-        setActionError("");
+        setCreateError("");
+        setMutating(true);
         try {
-            // generation settings land first; setActiveWorld then reads the
-            // merged file and writes level-name/level-seed on top
-            await writeServerProperties(createValues());
-        } catch (err) {
-            const message = err instanceof Error ? err.message : String(err);
-            console.error("[Worlds] Failed to write generation settings:", message);
-            setActionError(message);
-            return;
-        }
-        if (await runActivate(name, createValue("level-seed", "").trim() || undefined)) {
+            try {
+                // generation settings land first; setActiveWorld then reads the
+                // merged file and writes level-name/level-seed on top
+                await writeServerProperties(createValues());
+            } catch (err) {
+                const message = err instanceof Error ? err.message : String(err);
+                console.error("[Worlds] Failed to write generation settings:", message);
+                setCreateError(message);
+                return;
+            }
+            try {
+                // createOnly: the service refuses an existing name instead of
+                // degrading into a silent switch when the listing above was stale
+                await setActiveWorld(name, createValue("level-seed", "").trim() || undefined, true);
+            } catch (err) {
+                const message = err instanceof Error ? err.message : String(err);
+                console.error(`[Worlds] Failed to create "${name}":`, message);
+                setCreateError(message);
+                return;
+            }
+            await refresh();
             setCreateOpen(false);
             setNewName("world");
+        } finally {
+            setMutating(false);
         }
     };
 
@@ -193,7 +215,10 @@ export default function Worlds() {
                             <PaperButton
                                 variant="success"
                                 disabled={online()}
-                                onClick={() => setCreateOpen(true)}>
+                                onClick={() => {
+                                    setCreateError("");
+                                    setCreateOpen(true);
+                                }}>
                                 <PaperIcon>add</PaperIcon>
                                 New World
                             </PaperButton>
@@ -221,7 +246,9 @@ export default function Worlds() {
                             <PaperCard>
                                 <PaperFlex padding="full" center>
                                     <PaperText size={3} color="text-subtle">
-                                        Loading worlds...
+                                        {listError()
+                                            ? "Couldn't load worlds."
+                                            : "Loading worlds..."}
                                     </PaperText>
                                 </PaperFlex>
                             </PaperCard>
@@ -233,7 +260,9 @@ export default function Worlds() {
                                 <PaperCard>
                                     <PaperFlex padding="full" center>
                                         <PaperText size={3} color="text-subtle">
-                                            No worlds on disk yet. Create one to get started.
+                                            {listError()
+                                                ? "Couldn't load worlds."
+                                                : "No worlds yet. Create one, or start the server to generate one."}
                                         </PaperText>
                                     </PaperFlex>
                                 </PaperCard>
@@ -349,7 +378,12 @@ export default function Worlds() {
                         </PaperButton>
                         <PaperButton
                             variant="success"
-                            disabled={!nameValid() || mutating()}
+                            disabled={
+                                !nameValid() ||
+                                nameTaken() ||
+                                worlds() === null ||
+                                mutating()
+                            }
                             onClick={() => void submitCreate()}>
                             Create
                         </PaperButton>
@@ -362,13 +396,34 @@ export default function Worlds() {
                             fullWidth
                             placeholder="World name"
                             value={newName()}
-                            invalid={newName().trim() !== "" && !nameValid()}
-                            onInput={(e) => setNewName(e.currentTarget.value)}
+                            invalid={
+                                (newName().trim() !== "" && !nameValid()) ||
+                                nameTaken()
+                            }
+                            onInput={(e) => {
+                                setNewName(e.currentTarget.value);
+                                setCreateError("");
+                            }}
                         />
-                        <Show when={newName() && !nameValid()}>
+                        <Show when={nameTaken()}>
+                            <PaperText size={2} color="danger">
+                                There's already a world that's named this.
+                            </PaperText>
+                        </Show>
+                        <Show when={newName() && !nameValid() && !nameTaken()}>
                             <PaperText size={2} color="text-subtle">
                                 Letters, numbers, _ and - only, starting with a letter or number.
                             </PaperText>
+                        </Show>
+                        <Show when={worlds() === null && !listError()}>
+                            <PaperText size={2} color="text-subtle">
+                                Checking existing worlds...
+                            </PaperText>
+                        </Show>
+                        <Show when={createError()}>
+                            <PaperQuote variant="danger" icon="warning" title="Error">
+                                {createError()}
+                            </PaperQuote>
                         </Show>
                     </PaperFlex>
 

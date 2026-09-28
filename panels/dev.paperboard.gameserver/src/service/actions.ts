@@ -152,16 +152,27 @@ export function setActiveWorldAction(worlds: string[]): ActionDefinition {
                 options: worlds.map((name) => ({ label: name, value: name })),
             },
             seed: { type: "string", label: "Seed (new worlds only)", required: false },
+            createOnly: {
+                type: "boolean",
+                label: "Create only",
+                description: "Refuse instead of switching when the world already exists",
+                required: false,
+            },
         },
         output: { type: "object", label: "Active World" },
         quick: false,
         icon: "public",
         run: async (
             ctx: ServiceContext<GameServerState>,
-            inputs: { levelName: string; seed?: string },
+            inputs: { levelName: string; seed?: string; createOnly?: boolean },
         ) => {
             if (!inputs?.levelName) throw new Error("World name is required");
-            const result = await setActiveWorld(ctx, inputs.levelName, inputs.seed);
+            const result = await setActiveWorld(
+                ctx,
+                inputs.levelName,
+                inputs.seed,
+                inputs.createOnly === true,
+            );
             await republishDynamicActions(ctx);
             return result;
         },

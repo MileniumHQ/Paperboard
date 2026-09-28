@@ -59,7 +59,7 @@ export const WORLD_CREATE_FIELDS: PropertyField[] = [
     },
 ];
 
-export { WORLD_NAME_PATTERN } from "../core/worlds";
+export { WORLD_NAME_PATTERN, isWorldNameTaken } from "../core/worlds";
 export type { WorldInfo } from "../core/worlds";
 
 // server.properties stores a preset id with an escaped colon
@@ -84,10 +84,11 @@ export async function listWorlds(): Promise<WorldInfo[]> {
 export async function setActiveWorld(
     levelName: string,
     seed?: string,
+    createOnly = false,
 ): Promise<{ activated: string; created: boolean }> {
     return serverBridge.call<{ activated: string; created: boolean }>(
         ACTION_IDS.setActiveWorld,
-        { levelName, seed },
+        { levelName, seed, createOnly },
     );
 }
 
