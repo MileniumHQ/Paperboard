@@ -33,6 +33,7 @@ export default function AppSettings(props: {
 
     return (
         <PaperSettingList
+            flat
             value={{ ...props.settings } as Record<string, any>}
             onValueChange={handleChange}
             style={{

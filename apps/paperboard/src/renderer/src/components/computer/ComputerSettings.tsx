@@ -52,7 +52,7 @@ const ComputerSettings: Component<ComputerSettingsProps> = (props) => {
                 "overflow-y": "auto",
             }}
         >
-            <PaperSettingList>
+            <PaperSettingList flat>
                 <PaperSettingItem title="Computer Name">
                     <PaperText size={3} weight={600}>
                         {props.computer?.name || "This Computer"}
