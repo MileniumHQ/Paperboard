@@ -7,7 +7,9 @@ import {
     panelEventActions,
     customTypes,
     republishDynamicActions,
+    scheduleRepublishDynamicActions,
 } from "./service/actions";
+import { setPlayerNamesChangedHandler } from "./service/players";
 
 export * from "./service/types";
 export * from "./service/actions";
@@ -48,8 +50,11 @@ export const gameServerService = definePanelService({
     actions: [...panelActions, ...panelEventActions],
     async onInit(ctx) {
         await loadConfigAndProperties(ctx);
-        // the world and gamerule dropdowns are registered from state that
-        // only exists after the config loads
+        // a newly seen player name must reach the join/leave triggers'
+        // dropdowns without a restart
+        setPlayerNamesChangedHandler(() => scheduleRepublishDynamicActions(ctx));
+        // the world, gamerule and player dropdowns are registered from state
+        // that only exists after the config loads
         await republishDynamicActions(ctx);
 
         try {

@@ -22,6 +22,7 @@ import {
     forgetPlayerData,
     deletePlayerData,
     usernameFromUuid,
+    playerNameOptions,
 } from "./players";
 import {
     clearActiveIssue,
@@ -91,6 +92,22 @@ export const customTypes: CustomTypeDefinition[] = [
 // World names and version-filtered gamerule names are schema options, not
 // free text: any event that can change either list re-registers the two
 // actions so the picker's dropdowns never go stale.
+// One bounded trailing timer: a burst of joins republishes once, not once
+// per log line. The timer lives for the service's lifetime.
+let republishTimer: ReturnType<typeof setTimeout> | null = null;
+
+export function scheduleRepublishDynamicActions(
+    ctx: ServiceContext<GameServerState>,
+): void {
+    if (republishTimer) return;
+    republishTimer = setTimeout(() => {
+        republishTimer = null;
+        void republishDynamicActions(ctx).catch((err) =>
+            console.error("[Gameserver] scheduled republish failed:", err),
+        );
+    }, 2000);
+}
+
 export async function republishDynamicActions(
     ctx: ServiceContext<GameServerState>,
 ): Promise<void> {
@@ -108,16 +125,13 @@ export async function republishDynamicActions(
     for (const def of [
         setActiveWorldAction(worlds),
         setGameruleAction(ruleNames),
+        // the join/leave player dropdowns list who the server has seen; the
+        // service republishes them when that set changes
+        playerJoinedTrigger(playerNameOptions()),
+        playerLeftTrigger(playerNameOptions()),
     ]) {
-        const wrapped: ActionDefinition = {
-            ...def,
-            run: (_c, inputs) => {
-                if (!def.run) throw new Error(`Action "${def.id}" has no run body`);
-                return def.run(ctx, inputs);
-            },
-        };
         try {
-            await actionsApi.register(wrapped, undefined, PANEL_ID);
+            await actionsApi.register(bindDynamicAction(def, ctx), undefined, PANEL_ID);
         } catch (err) {
             console.error(
                 `[Gameserver] failed to republish action "${def.id}":`,
@@ -125,6 +139,27 @@ export async function republishDynamicActions(
             );
         }
     }
+}
+
+/**
+ * Binds a dynamic definition's run body to the live service context. Event
+ * actions have no run body and are registered as-is: stamping a run onto one
+ * would declare an event source callable, and the registration validator
+ * refuses match rules on a callable action (which is what silently kept the
+ * player dropdowns from ever republishing).
+ */
+export function bindDynamicAction(
+    def: ActionDefinition,
+    ctx: ServiceContext<GameServerState>,
+): ActionDefinition {
+    if (!def.run) return def;
+    return {
+        ...def,
+        run: (_c, inputs) => {
+            if (!def.run) throw new Error(`Action "${def.id}" has no run body`);
+            return def.run(ctx, inputs);
+        },
+    };
 }
 
 // option list for a gamerule's name input: every rule the server's version
@@ -1098,15 +1133,80 @@ export const panelActions: ActionDefinition[] = [
     }),
 ];
 
+// The player filter is a dropdown of who this server has seen, plus (any);
+// republishDynamicActions re-registers these two when that list changes. The
+// event payload is the username itself, so the match reads the payload root.
+function playerFilterInput(playerNames: string[]) {
+    return {
+        type: "player",
+        label: "Player",
+        allowEmpty: true,
+        emptyLabel: "(any)",
+        options: playerNames.map((name) => ({ label: name, value: name })),
+    };
+}
+
+export function playerJoinedTrigger(playerNames: string[]): ActionDefinition {
+    return defineAction({
+        id: TRIGGER_IDS.playerJoined,
+        name: "When Player Joins",
+        category: "Events",
+        description:
+            "Fires when a player connects and joins the game world; leave Player as (any) to fire for every join",
+        template: "When player {player} joins the server",
+        writtenOut: "When player {player} joins the server",
+        inputs: { player: playerFilterInput(playerNames) },
+        match: { field: "$", input: "player" },
+        output: {
+            type: "player",
+            label: "Username",
+            description: "Username of the connected player",
+        },
+        icon: "person_add",
+    });
+}
+
+export function playerLeftTrigger(playerNames: string[]): ActionDefinition {
+    return defineAction({
+        id: TRIGGER_IDS.playerLeft,
+        name: "When Player Leaves",
+        category: "Events",
+        description:
+            "Fires when a player disconnects from the server; leave Player as (any) to fire for every leave",
+        template: "When player {player} leaves the server",
+        writtenOut: "When player {player} leaves the server",
+        inputs: { player: playerFilterInput(playerNames) },
+        match: { field: "$", input: "player" },
+        output: {
+            type: "player",
+            label: "Username",
+            description: "Username of the disconnected player",
+        },
+        icon: "logout",
+    });
+}
+
 // event actions fire as events and start flows; they are not callable
 export const panelEventActions: ActionDefinition[] = [
     defineAction({
         id: TRIGGER_IDS.chatMessage,
         name: "When Chat Message Sent",
         category: "Events",
-        description: "Fires whenever an in-game player or server chat message is received",
+        description:
+            "Fires when a player sends a chat message; leave Message as (any) to fire for every message",
         template: "When chat message {message} is sent",
         writtenOut: "When chat message {message} is sent",
+        inputs: {
+            message: {
+                type: "string",
+                label: "Message",
+                allowEmpty: true,
+                emptyLabel: "(any)",
+                placeholder: "(any)",
+            },
+        },
+        // the trigger payload is the chat object; filter on what the player said
+        match: { field: "content", input: "message" },
         output: {
             type: "message",
             label: "message",
@@ -1115,35 +1215,9 @@ export const panelEventActions: ActionDefinition[] = [
         icon: "chat",
     }),
 
-    defineAction({
-        id: TRIGGER_IDS.playerJoined,
-        name: "When Player Joins",
-        category: "Events",
-        description: "Fires when a player connects and joins the game world",
-        template: "When player {player} joins the server",
-        writtenOut: "When player {player} joins the server",
-        output: {
-            type: "player",
-            label: "Username",
-            description: "Username of the connected player",
-        },
-        icon: "person_add",
-    }),
+    playerJoinedTrigger([]),
 
-    defineAction({
-        id: TRIGGER_IDS.playerLeft,
-        name: "When Player Leaves",
-        category: "Events",
-        description: "Fires when a player disconnects from the server",
-        template: "When player {player} leaves the server",
-        writtenOut: "When player {player} leaves the server",
-        output: {
-            type: "player",
-            label: "Username",
-            description: "Username of the disconnected player",
-        },
-        icon: "logout",
-    }),
+    playerLeftTrigger([]),
 
     defineAction({
         id: TRIGGER_IDS.serverStarted,

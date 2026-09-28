@@ -35,6 +35,37 @@ export { PLAYER_NAME_PATTERN, SERVER_PROC_ID, STAT_QUERIES };
 const lastJoinAt = new Map<string, number>();
 let pendingStatFields: { player: string; field: keyof PlayerStatData }[] = [];
 
+// Recently seen player names in their original casing (state keys are
+// normalized), newest last. This backs the join/leave triggers' player
+// dropdown: the options must match the event payload's casing, and the list
+// must stay bounded like every other buffer in the panel.
+const recentNames: string[] = [];
+let onNamesChanged: (() => void) | null = null;
+
+/** The gameserver service wires this to republish the triggers' options. */
+export function setPlayerNamesChangedHandler(handler: (() => void) | null): void {
+    onNamesChanged = handler;
+}
+
+function rememberPlayerName(name: string): void {
+    const key = normalizePlayerKey(name);
+    const existing = recentNames.findIndex((n) => normalizePlayerKey(n) === key);
+    if (existing >= 0) recentNames.splice(existing, 1);
+    recentNames.push(name);
+    while (recentNames.length > MAX_BUFFERED_ENTRIES) recentNames.shift();
+    onNamesChanged?.();
+}
+
+function nameKnown(name: string): boolean {
+    const key = normalizePlayerKey(name);
+    return recentNames.some((n) => normalizePlayerKey(n) === key);
+}
+
+/** Newest first, original casing — the order the trigger dropdown shows. */
+export function playerNameOptions(): string[] {
+    return [...recentNames].reverse();
+}
+
 // join timestamps are keyed per username and only deleted on leave —
 // without a cap, spoofed joins grow the map forever. Map preserves
 // insertion order, so evict oldest first.
@@ -52,6 +83,11 @@ function rememberJoin(key: string, ts: number): void {
 export const __playersTest = {
     lastJoinSize: () => lastJoinAt.size,
     clearJoins: () => lastJoinAt.clear(),
+    clearNames: () => {
+        recentNames.length = 0;
+        onNamesChanged = null;
+    },
+    remember: (name: string) => rememberPlayerName(name),
 };
 
 // per-player records grow with unique players; keep them bounded the same
@@ -77,6 +113,7 @@ export function trackPlayerActivity(
     if (joined) {
         const key = normalizePlayerKey(joined);
         if (ts !== undefined) rememberJoin(key, ts);
+        rememberPlayerName(joined);
         ctx.setState((prev) => {
             // seenPlayers is history, not presence: cap it like every other
             // buffer instead of growing one entry per unique join forever
@@ -117,6 +154,9 @@ export function trackPlayerActivity(
     if (names) {
         for (const name of names) {
             if (ts !== undefined && !lastJoinAt.has(name)) rememberJoin(name, ts);
+            // the list lowercases names; keep the join's original casing when
+            // one is already known so the options match the event payload
+            if (!nameKnown(name)) rememberPlayerName(name);
         }
         ctx.setState((prev) => {
             const seen = new Set([...prev.seenPlayers, ...names]);

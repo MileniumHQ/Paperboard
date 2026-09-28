@@ -1,9 +1,13 @@
 import { expect, test } from "bun:test";
+import { validateActionDefinition } from "@paperboard-dev/paperapi";
 import { ACTION_IDS, TRIGGER_IDS } from "../src/service/contract";
 import {
+    bindDynamicAction,
     gameruleNameOptions,
     panelActions,
     panelEventActions,
+    playerJoinedTrigger,
+    playerLeftTrigger,
     setActiveWorldAction,
     setGameruleAction,
 } from "../src/service/actions";
@@ -70,4 +74,50 @@ test("gamerule options are filtered to the installed version", () => {
     expect(modern.length).toBeGreaterThan(floor.length);
     expect(floor.length).toBeGreaterThan(0);
     expect(floor.every((name) => modern.includes(name))).toBe(true);
+});
+
+test("player join/leave triggers filter on the payload with a live (any)-capable dropdown", () => {
+    for (const [make, id] of [
+        [playerJoinedTrigger, TRIGGER_IDS.playerJoined],
+        [playerLeftTrigger, TRIGGER_IDS.playerLeft],
+    ] as const) {
+        const trigger = make(["Steve", "Alex"]);
+        expect(trigger.id).toBe(id);
+        expect(trigger.match).toEqual({ field: "$", input: "player" });
+        expect(trigger.inputs?.player?.allowEmpty).toBe(true);
+        expect(trigger.inputs?.player?.emptyLabel).toBe("(any)");
+        expect(trigger.inputs?.player?.options?.map((o: any) => o.value)).toEqual(["Steve", "Alex"]);
+    }
+});
+
+test("the chat trigger filters on message content and allows (any)", () => {
+    const chat = panelEventActions.find((a) => a.id === TRIGGER_IDS.chatMessage)!;
+    expect(chat.match).toEqual({ field: "content", input: "message" });
+    expect(chat.inputs?.message?.allowEmpty).toBe(true);
+});
+
+test("republishing an event trigger keeps it an event action", () => {
+    const ctx = {} as any;
+    const bound = bindDynamicAction(playerJoinedTrigger(["Steve"]), ctx);
+    expect(bound.run).toBeUndefined();
+    // the registration validator is the boundary that refused the old
+    // wrapper: match rules route events, a callable action is not a source
+    expect(() => validateActionDefinition(bound)).not.toThrow();
+});
+
+test("republishing a callable action binds it to the live service context", async () => {
+    const seen: unknown[] = [];
+    const def = {
+        id: "dynamic-test",
+        name: "Dynamic Test",
+        description: "",
+        run: (ctx: any, inputs: any) => {
+            seen.push(ctx);
+            return inputs;
+        },
+    } as any;
+    const bound = bindDynamicAction(def, { live: true } as any);
+    expect(bound.run).toBeDefined();
+    await bound.run!(null, { a: 1 });
+    expect(seen).toEqual([{ live: true }]);
 });

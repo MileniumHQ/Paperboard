@@ -195,6 +195,33 @@ describe("player events", () => {
         expect(ctx.state.playerPlaytime.steve).toBe(30);
         expect(ctx.triggers).toContainEqual({ id: "player-left", output: "Steve" });
     });
+
+    it("keeps seen player names in original case, newest first, for the filter dropdown", async () => {
+        const { playerNameOptions, __playersTest } = await import("../src/service/players");
+        __playersTest.clearNames();
+        const ctx = makeCtx({ serverStatus: "online" });
+        handleProcessData(ctx, "[12:00:01] [Server thread/INFO]: Steve joined the game\n");
+        handleProcessData(ctx, "[12:00:02] [Server thread/INFO]: Alex joined the game\n");
+        handleProcessData(ctx, "[12:00:03] [Server thread/INFO]: Steve joined the game\n");
+        expect(playerNameOptions()).toEqual(["Steve", "Alex"]);
+        __playersTest.clearNames();
+    });
+});
+
+describe("chat messages", () => {
+    it("emits chat-message for a player message with the parsed payload", () => {
+        const ctx = makeCtx({ serverStatus: "online" });
+        handleProcessData(ctx, "[12:00:40] [Server thread/INFO]: <Steve> gg\n");
+        const chat = ctx.triggers.find((t: any) => t.id === "chat-message") as any;
+        expect(chat?.output).toMatchObject({ sender: "Steve", content: "gg", text: "<Steve> gg" });
+    });
+
+    it("does not emit chat-message for server or join lines", () => {
+        const ctx = makeCtx({ serverStatus: "online" });
+        handleProcessData(ctx, "[12:00:40] [Server thread/INFO]: [Server] Saving the game\n");
+        handleProcessData(ctx, "[12:00:41] [Server thread/INFO]: Steve joined the game\n");
+        expect(ctx.triggers.some((t: any) => t.id === "chat-message")).toBe(false);
+    });
 });
 
 describe("gamerule readouts", () => {
