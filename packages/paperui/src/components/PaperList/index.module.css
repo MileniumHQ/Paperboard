@@ -136,6 +136,13 @@
     color: var(--paper-text-subtle);
 }
 
+.itemActions {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    margin-left: auto;
+}
+
 .PaperListItem:hover {
     background: color-mix(in srgb, var(--paper-contrast) 3%, var(--paper-surface-raised));
 }

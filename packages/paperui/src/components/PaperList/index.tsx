@@ -360,6 +360,11 @@ export interface PaperListItemProps extends Omit<
     value: string | number;
     description?: JSX.Element | string;
     icon?: JSX.Element | string;
+    /**
+     * Trailing controls (for example a menu button). They render after the
+     * item text and are responsible for stopping their own events.
+     */
+    actions?: JSX.Element;
     disabled?: boolean;
     closeable?: boolean;
     onBeforeClose?: (
@@ -374,6 +379,7 @@ export function PaperListItem(props: ParentProps<PaperListItemProps>) {
         "value",
         "description",
         "icon",
+        "actions",
         "disabled",
         "closeable",
         "onBeforeClose",
@@ -510,6 +516,10 @@ export function PaperListItem(props: ParentProps<PaperListItemProps>) {
                     </PaperText>
                 </Show>
             </div>
+
+            <Show when={local.actions}>
+                <span class={styles.itemActions}>{local.actions}</span>
+            </Show>
         </label>
     );
 }

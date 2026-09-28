@@ -87,4 +87,20 @@ describe("PaperLayout and Components Layout Enhancements", () => {
         expect(el.style.height).toBe("100%");
         expect(el.style.overflow).toBe("auto");
     });
+
+    it("renders trailing actions from PaperListItem", () => {
+        const { getByRole, getByText } = render(() => (
+            <PaperList name="action-list">
+                <PaperListItem
+                    value="item1"
+                    actions={<button type="button" aria-label="More actions">More</button>}
+                >
+                    Item 1
+                </PaperListItem>
+            </PaperList>
+        ));
+
+        expect(getByRole("button", { name: "More actions" })).toBeTruthy();
+        expect(getByText("Item 1")).toBeTruthy();
+    });
 });
