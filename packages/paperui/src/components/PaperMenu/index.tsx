@@ -33,6 +33,9 @@ export type PaperMenuProps = SelectionProviderProps &
         direction?: "horizontal" | "vertical";
         horizontal?: boolean;
         spacing?: PaperMenuSpacing;
+        /** Drops the trailing divider and surface so the menu can sit inside a
+         *  host sidebar that already provides its own frame. */
+        embedded?: boolean;
     };
 
 export function PaperMenu(props: ParentProps<PaperMenuProps>) {
@@ -45,6 +48,7 @@ export function PaperMenu(props: ParentProps<PaperMenuProps>) {
         "direction",
         "horizontal",
         "spacing",
+        "embedded",
         "class",
         "classList",
         "style",
@@ -64,6 +68,7 @@ export function PaperMenu(props: ParentProps<PaperMenuProps>) {
             styles.PaperMenu,
             isHorizontal() ? styles.horizontal : "",
             local.spacing ? styles.spacing : "",
+            local.embedded ? styles.embedded : "",
             local.class,
         ]
             .filter(Boolean)

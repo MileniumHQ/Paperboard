@@ -58,3 +58,25 @@ describe("PaperMenu & PaperMenuSection Tests", () => {
         expect(menuEl.style.getPropertyValue("--menu-spacing")).toBe("var(--paper-uigap-half)");
     });
 });
+
+describe("PaperMenu embedded", () => {
+    test("defaults to carrying its own sidebar frame", () => {
+        const { container } = render(() => (
+            <PaperMenu name="nav">
+                <PaperMenuItem value="one">One</PaperMenuItem>
+            </PaperMenu>
+        ));
+        const menu = container.querySelector("[class*='PaperMenu']");
+        expect(menu?.className.includes("embedded")).toBe(false);
+    });
+
+    test("embedded drops the frame so a host sidebar can supply it", () => {
+        const { container } = render(() => (
+            <PaperMenu name="nav" embedded>
+                <PaperMenuItem value="one">One</PaperMenuItem>
+            </PaperMenu>
+        ));
+        const menu = container.querySelector("[class*='PaperMenu']");
+        expect(menu?.className.includes("embedded")).toBe(true);
+    });
+});
