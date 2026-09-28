@@ -8,33 +8,85 @@ import {
     PaperText,
     useContextMenuState,
 } from "@paperboard-dev/paperui";
-import { For, Show } from "solid-js";
-import { metaSections } from "../utils/routeUtils";
-import { withBase } from "../utils/base";
-import { DocsSearch } from "./DocsSearch";
+import {
+    createEffect,
+    createSignal,
+    For,
+    onCleanup,
+    Show,
+    type JSX,
+} from "solid-js";
+import { metaSections } from "../docs/meta";
+import { BASE, withBase } from "../utils/base";
+import {
+    BRAND,
+    DOCS_LINKS,
+    DOWNLOAD,
+    LEARN_LINKS,
+    SITE_LINKS,
+} from "../site/links";
 
 interface TopbarProps {
-    theme: "dark" | "light";
-    toggleTheme: () => void;
+    theme?: "dark" | "light";
+    toggleTheme?: () => void;
     section?: string;
+    /** Docs-only slot; the site pages leave it empty so the search index is
+        not pulled into the site bundle. */
+    search?: JSX.Element;
 }
 
-// Product pages, mirroring the static landing's Learn dropdown
-// (public/index.html). Site-root hrefs, so full navigations — not router
-// routes (they live outside the /docs base).
-const LEARN_LINKS = [
-    { label: "Actions", href: "/actions", image: "/pictures/blocks.png" },
-    { label: "Game Server", href: "/game-server", image: "/pictures/game-server.png" },
-    { label: "Bot Creator", href: "/bot-creator", image: "/pictures/discord-bot.png" },
-    { label: "Local AI", href: "/ai", image: "/pictures/ai.png" },
-];
-
+// One topbar for the docs SPA and the prerendered root pages. The brand
+// follows the section prop: a section page is "<Section> docs". Without a
+// section the docs build keeps its PaperDocs brand, while the site build
+// (base /) shows the site brand. The actions differ by build: the site adds a
+// Download link. Menus are PaperContextMenu in both; the static pages hydrate.
 export function Topbar(props: TopbarProps) {
     const docsMenu = useContextMenuState();
     const learnMenu = useContextMenuState();
+    const [mobileOpen, setMobileOpen] = createSignal(false);
+    const isSite = () => BASE === "/";
+
+    // The mobile panel is a plain disclosure, not a portalled menu, so it
+    // matches the landing. Close it on Escape or a click outside.
+    createEffect(() => {
+        if (!mobileOpen()) return;
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (event.key === "Escape") setMobileOpen(false);
+        };
+        const onPointerDown = (event: Event) => {
+            const target = event.target as HTMLElement | null;
+            if (
+                target?.closest(
+                    ".topbar-mobile-panel, .topbar-menu-button",
+                )
+            ) {
+                return;
+            }
+            setMobileOpen(false);
+        };
+        document.addEventListener("keydown", onKeyDown);
+        document.addEventListener("pointerdown", onPointerDown);
+        onCleanup(() => {
+            document.removeEventListener("keydown", onKeyDown);
+            document.removeEventListener("pointerdown", onPointerDown);
+        });
+    });
 
     const sectionMeta = () =>
         props.section ? metaSections[props.section] : undefined;
+
+    const brandHref = () =>
+        withBase(sectionMeta() ? `/${props.section}` : "/");
+    const brandImage = () =>
+        withBase(
+            sectionMeta()
+                ? `/${props.section}.png`
+                : isSite()
+                  ? BRAND.logo
+                  : "/paperdocs.png",
+        );
+    const brandName = () =>
+        sectionMeta()?.name || (isSite() ? BRAND.name : "PaperDocs");
 
     return (
         <>
@@ -44,18 +96,10 @@ export function Topbar(props: TopbarProps) {
                 class="topbar"
                 align="center"
             >
-                <a
-                    class="topbar-brand"
-                    href={withBase(sectionMeta() ? `/${props.section}` : "/")}
-                >
-                    <img
-                        src={withBase(
-                            `/${sectionMeta() ? props.section : "paperdocs"}.png`,
-                        )}
-                        class="logo"
-                    />
+                <a class="topbar-brand" href={brandHref()}>
+                    <img src={brandImage()} class="logo" />
                     <PaperText rounded weight={800} size={5}>
-                        {sectionMeta()?.name || "PaperDocs"}{" "}
+                        {brandName()}{" "}
                         <Show when={sectionMeta()}>
                             <PaperText weight={600}>docs</PaperText>
                         </Show>
@@ -87,16 +131,73 @@ export function Topbar(props: TopbarProps) {
                     gap="threefourths"
                     class="topbar-actions"
                 >
-                    <DocsSearch class="topbar-search" />
                     <PaperButton
                         icon
                         variant="text"
                         size="tiny"
-                        onClick={props.toggleTheme}
+                        class="topbar-menu-button"
+                        aria-label="Open navigation"
+                        aria-expanded={mobileOpen()}
+                        onClick={() => setMobileOpen((open) => !open)}
+                    >
+                        <PaperIcon zeroHeight>
+                            {mobileOpen() ? "close" : "menu"}
+                        </PaperIcon>
+                    </PaperButton>
+                    <Show when={isSite()}>
+                        <PaperButton
+                            class="topbar-download"
+                            variant="text"
+                            size="tiny"
+                            href={DOWNLOAD.href}
+                        >
+                            {DOWNLOAD.label}
+                        </PaperButton>
+                    </Show>
+                    <Show when={props.search}>{props.search}</Show>
+                    <PaperButton
+                        icon
+                        variant="text"
+                        size="tiny"
+                        onClick={() => props.toggleTheme?.()}
                     >
                         {props.theme === "dark" ? "dark_mode" : "light_mode"}
                     </PaperButton>
                 </PaperFlex>
+
+                {/* Small screens hide the inline links, so this panel carries
+                    the same destinations as the landing's mobile menu: plain
+                    links, no icons or descriptions. It is a child of the
+                    topbar so it floats below the bar instead of pushing the
+                    page down. */}
+                <Show when={mobileOpen()}>
+                    <nav class="topbar-mobile-panel" aria-label="Mobile">
+                        <span class="topbar-mobile-heading">Learn</span>
+                        <For each={LEARN_LINKS}>
+                            {(link) => (
+                                <a class="topbar-mobile-link" href={link.href}>
+                                    {link.label}
+                                </a>
+                            )}
+                        </For>
+                        <span class="topbar-mobile-heading">Docs</span>
+                        <For each={DOCS_LINKS}>
+                            {(link) => (
+                                <a class="topbar-mobile-link" href={link.href}>
+                                    {link.label}
+                                </a>
+                            )}
+                        </For>
+                        <span class="topbar-mobile-heading">Site</span>
+                        <For each={SITE_LINKS}>
+                            {(link) => (
+                                <a class="topbar-mobile-link" href={link.href}>
+                                    {link.label}
+                                </a>
+                            )}
+                        </For>
+                    </nav>
+                </Show>
             </PaperFlex>
 
             <PaperContextMenu
@@ -109,6 +210,7 @@ export function Topbar(props: TopbarProps) {
                     {(link) => (
                         <PaperContextMenuItem
                             icon={<PaperIcon src={withBase(link.image)} />}
+                            description={link.description}
                             onClick={() => {
                                 learnMenu.close();
                                 window.location.href = link.href;
@@ -126,25 +228,25 @@ export function Topbar(props: TopbarProps) {
                 placement={docsMenu.placement()}
                 onClose={docsMenu.close}
             >
-                <For each={Object.entries(metaSections)}>
-                    {([key, meta]) => (
+                <For each={DOCS_LINKS}>
+                    {(link) => (
                         <PaperContextMenuItem
                             icon={
-                                meta.image ? (
-                                    <PaperIcon src={withBase(meta.image)} />
+                                link.image ? (
+                                    <PaperIcon src={withBase(link.image)} />
                                 ) : (
                                     <PaperIcon>
-                                        {meta.icon || "description"}
+                                        {link.icon || "description"}
                                     </PaperIcon>
                                 )
                             }
-                            description={meta.description}
+                            description={link.description}
                             onClick={() => {
                                 docsMenu.close();
-                                window.location.href = withBase(`/${key}`);
+                                window.location.href = link.href;
                             }}
                         >
-                            {meta.name}
+                            {link.label}
                         </PaperContextMenuItem>
                     )}
                 </For>

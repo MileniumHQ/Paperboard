@@ -1,0 +1,42 @@
+{
+    "brand": {
+        "name": "Paperboard",
+        "href": "/",
+        "logo": "/paperboard.png"
+    },
+    "learn": [
+        {
+            "label": "Actions",
+            "href": "/actions",
+            "image": "/pictures/blocks.png",
+            "description": "Visual automation and workflow builder"
+        },
+        {
+            "label": "Game Server",
+            "href": "/game-server",
+            "image": "/pictures/game-server.png",
+            "description": "Dedicated Minecraft & game server manager"
+        },
+        {
+            "label": "Bot Creator",
+            "href": "/bot-creator",
+            "image": "/pictures/discord-bot.png",
+            "description": "Create and manage interactive Discord bots"
+        },
+        {
+            "label": "Local AI",
+            "href": "/ai",
+            "image": "/pictures/ai.png",
+            "description": "Local language models with panel actions"
+        }
+    ],
+    "site": [
+        { "label": "Blog", "href": "/blog" },
+        { "label": "Downloads", "href": "/downloads" },
+        { "label": "Contact", "href": "/contact" }
+    ],
+    "download": {
+        "label": "Download",
+        "href": "/downloads"
+    }
+}

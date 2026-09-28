@@ -13,6 +13,9 @@
   },
   "include": [
     "vite.config.ts",
+    "vite.site.config.ts",
+    "vite.site.client.config.ts",
+    "vite.site.shared.ts",
     "vite-plugin-docs-search.ts",
     "vite-plugin-nest-docs-entry.ts"
   ]

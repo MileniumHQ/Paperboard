@@ -46,4 +46,41 @@
     document.addEventListener("keydown", (event) => {
         if (event.key === "Escape") closeAll(null);
     });
+
+    // Mobile panel: the inline nav is hidden below 900px, so this carries the
+    // same links. It closes on link activation, outside click, and Escape.
+    const mobileToggle = document.querySelector(".site-topbar__mobile-toggle");
+    const mobilePanel = document.getElementById("site-mobile-menu");
+    if (mobileToggle && mobilePanel) {
+        const setMobile = (open) => {
+            mobilePanel.hidden = !open;
+            mobileToggle.setAttribute("aria-expanded", String(open));
+            mobileToggle.classList.toggle("is-open", open);
+            const icon = mobileToggle.querySelector(".icon");
+            if (icon) {
+                icon.classList.toggle("icon-menu", !open);
+                icon.classList.toggle("icon-close", open);
+            }
+        };
+        mobileToggle.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            setMobile(mobilePanel.hidden);
+        });
+        mobilePanel.addEventListener("click", (event) => {
+            if (event.target.closest("a")) setMobile(false);
+        });
+        document.addEventListener("click", (event) => {
+            if (
+                !mobilePanel.hidden &&
+                !mobilePanel.contains(event.target) &&
+                !mobileToggle.contains(event.target)
+            ) {
+                setMobile(false);
+            }
+        });
+        document.addEventListener("keydown", (event) => {
+            if (event.key === "Escape") setMobile(false);
+        });
+    }
 })();

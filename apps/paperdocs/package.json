@@ -6,14 +6,14 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && vite build && vite build -c vite.site.client.config.ts && vite build -c vite.site.config.ts && bun scripts/prerender-site.mjs",
     "test": "bun test",
     "preview": "wrangler dev",
     "deploy": "bun run build && wrangler deploy"
   },
   "dependencies": {
-    "solid-js": "^1.9.0",
-    "@paperboard-dev/paperui": "workspace:*"
+    "@paperboard-dev/paperui": "workspace:*",
+    "solid-js": "^1.9.0"
   },
   "devDependencies": {
     "@types/node": "^22.19.1",

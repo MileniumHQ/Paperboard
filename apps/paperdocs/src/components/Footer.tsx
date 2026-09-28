@@ -1,6 +1,7 @@
 import { PaperText } from "@paperboard-dev/paperui";
 import { For } from "solid-js";
 import { withBase } from "../utils/base";
+import { DOCS_LINKS, LEARN_LINKS, SITE_LINKS } from "../site/links";
 import styles from "./footer.module.css";
 
 interface FooterLink {
@@ -8,28 +9,12 @@ interface FooterLink {
     href: string;
 }
 
-// Learn and Site are website-root pages, so they stay absolute. Docs pages
-// live under the docs base, so they go through withBase.
-const LEARN_LINKS: FooterLink[] = [
+// Link contents come from src/site/links.ts (one source for the docs SPA,
+// the prerendered root pages, and the injected landing chrome). All hrefs are
+// site-root absolute; docs links carry their /docs prefix already.
+const ABOUT_LINKS: FooterLink[] = [
     { label: "About Paperboard", href: "/" },
-    { label: "Actions", href: "/actions" },
-    { label: "Game Server", href: "/game-server" },
-    { label: "Bot Creator", href: "/bot-creator" },
-    { label: "Local AI", href: "/ai" },
-];
-
-const DOCS_LINKS: FooterLink[] = [
-    { label: "PaperAPI", href: withBase("/paperapi") },
-    { label: "PaperUI", href: withBase("/paperui") },
-];
-
-const SITE_LINKS: FooterLink[] = [
-    { label: "Blog", href: "/blog" },
-    { label: "Brand", href: "/brand" },
-    { label: "Contact", href: "/contact" },
-    { label: "Downloads", href: "/downloads" },
-    { label: "Terms of Use", href: "/terms" },
-    { label: "Privacy Policy", href: "/privacy" },
+    ...LEARN_LINKS.map(({ label, href }) => ({ label, href })),
 ];
 
 function XIcon() {
@@ -84,13 +69,13 @@ export function Footer() {
     return (
         <footer class={styles.footer}>
             <div class={styles.inner}>
-                <LinkColumn heading="Learn" links={LEARN_LINKS} />
+                <LinkColumn heading="Learn" links={ABOUT_LINKS} />
                 <LinkColumn heading="Docs" links={DOCS_LINKS} />
                 <LinkColumn heading="Site" links={SITE_LINKS} />
             </div>
             <div class={styles.bottom}>
                 <PaperText size={2} class={styles.copyright}>
-                    &copy; {new Date().getFullYear()} Milenium LLC
+                    &copy; {new Date().getFullYear()} Milenium
                 </PaperText>
                 <div class={styles.right}>
                     <a

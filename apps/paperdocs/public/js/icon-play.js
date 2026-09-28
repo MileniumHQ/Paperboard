@@ -5,15 +5,19 @@
     if (!icons.length) return;
 
     const SIZE = 84;
-    const DAMPING = 0.99;
-    const RESTITUTION = 0.86;
-    const STOP_SPEED = 5;
-    const ANG_DAMPING = 0.985;
-    const ANG_STOP = 0.05;
+    const DAMPING = 0.996;
+    const RESTITUTION = 0.94;
+    const STOP_SPEED = 2.5;
+    const ANG_DAMPING = 0.993;
+    const ANG_STOP = 0.02;
     const MAX_TILT = 0.5;
     const EDGE_INSET = 78;
     const MAX_SPEED = 1800;
     const CANDIDATES = 32;
+    // Circle collision radius; a bit under half so the irregular art can
+    // overlap visually before it bumps.
+    const RADIUS = SIZE * 0.44;
+    const MIN_DIST = RADIUS * 2;
     const reduceMotion =
         typeof window.matchMedia === "function" &&
         window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -153,6 +157,118 @@
         }
     }
 
+    function integrate(item, dt) {
+        const flat = item.vx === 0 && item.vy === 0;
+
+        if (!flat) {
+            item.x += item.vx * dt;
+            item.y += item.vy * dt;
+            const maxX = Math.max(0, W - item.size);
+            const maxY = Math.max(0, H - item.size);
+            if (item.x <= 0) {
+                item.x = 0;
+                item.vx = Math.abs(item.vx) * RESTITUTION;
+            } else if (item.x >= maxX) {
+                item.x = maxX;
+                item.vx = -Math.abs(item.vx) * RESTITUTION;
+            }
+            if (item.y <= 0) {
+                item.y = 0;
+                item.vy = Math.abs(item.vy) * RESTITUTION;
+            } else if (item.y >= maxY) {
+                item.y = maxY;
+                item.vy = -Math.abs(item.vy) * RESTITUTION;
+            }
+            item.vx *= DAMPING;
+            item.vy *= DAMPING;
+            if (Math.hypot(item.vx, item.vy) < STOP_SPEED) {
+                item.vx = 0;
+                item.vy = 0;
+            }
+        }
+
+        if (item.av !== 0) {
+            item.angle += item.av * dt;
+            item.av *= ANG_DAMPING;
+            if (Math.abs(item.av) < ANG_STOP) item.av = 0;
+        } else {
+            // settle back to the position-matched lean, never upside down
+            const tilt = tiltFor(item);
+            item.angle += (tilt - item.angle) * 0.08;
+            if (Math.abs(tilt - item.angle) < 0.002) item.angle = tilt;
+        }
+    }
+
+    function clampItem(item) {
+        item.x = clamp(item.x, 0, Math.max(0, W - item.size));
+        item.y = clamp(item.y, 0, Math.max(0, H - item.size));
+    }
+
+    // Pairwise circle collisions. A dragged icon acts as infinite mass, so it
+    // shoves the others instead of being shoved. The impulse feeds a little
+    // spin too, which is the satisfying part.
+    function collide() {
+        for (let i = 0; i < items.length; i += 1) {
+            const a = items[i];
+            for (let j = i + 1; j < items.length; j += 1) {
+                const b = items[j];
+                if (a.dragging && b.dragging) continue;
+                const ax = a.x + a.size / 2;
+                const ay = a.y + a.size / 2;
+                const bx = b.x + b.size / 2;
+                const by = b.y + b.size / 2;
+                let dx = bx - ax;
+                let dy = by - ay;
+                let dist = Math.hypot(dx, dy);
+                if (dist >= MIN_DIST) continue;
+                if (dist < 0.001) {
+                    dx = 0.01;
+                    dy = 0;
+                    dist = 0.01;
+                }
+                const nx = dx / dist;
+                const ny = dy / dist;
+                const overlap = MIN_DIST - dist;
+
+                const aShare = a.dragging ? 0 : b.dragging ? 1 : 0.5;
+                const bShare = b.dragging ? 0 : a.dragging ? 1 : 0.5;
+                a.x -= nx * overlap * aShare;
+                a.y -= ny * overlap * aShare;
+                b.x += nx * overlap * bShare;
+                b.y += ny * overlap * bShare;
+
+                const rvx = b.vx - a.vx;
+                const rvy = b.vy - a.vy;
+                const vn = rvx * nx + rvy * ny;
+                if (vn > 0) continue;
+                const invA = a.dragging ? 0 : 1;
+                const invB = b.dragging ? 0 : 1;
+                const invSum = invA + invB;
+                if (invSum === 0) continue;
+                const impulse = (-(1 + RESTITUTION) * vn) / invSum;
+                a.vx -= impulse * nx * invA;
+                a.vy -= impulse * ny * invA;
+                b.vx += impulse * nx * invB;
+                b.vy += impulse * ny * invB;
+
+                const vt = rvx * -ny + rvy * nx;
+                if (invA) a.av -= vt * 0.004;
+                if (invB) b.av += vt * 0.004;
+
+                const affected = [];
+                if (invA) affected.push(a);
+                if (invB) affected.push(b);
+                for (const item of affected) {
+                    const speed = Math.hypot(item.vx, item.vy);
+                    if (speed > MAX_SPEED) {
+                        item.vx *= MAX_SPEED / speed;
+                        item.vy *= MAX_SPEED / speed;
+                    }
+                }
+            }
+        }
+    }
+
     function step(now) {
         const dt = last ? Math.min(0.033, (now - last) / 1000) : 0.016;
         last = now;
@@ -162,46 +278,11 @@
                 moving = true;
                 continue;
             }
-            const flat = item.vx === 0 && item.vy === 0;
-
-            if (!flat) {
-                item.x += item.vx * dt;
-                item.y += item.vy * dt;
-                const maxX = Math.max(0, W - item.size);
-                const maxY = Math.max(0, H - item.size);
-                if (item.x <= 0) {
-                    item.x = 0;
-                    item.vx = Math.abs(item.vx) * RESTITUTION;
-                } else if (item.x >= maxX) {
-                    item.x = maxX;
-                    item.vx = -Math.abs(item.vx) * RESTITUTION;
-                }
-                if (item.y <= 0) {
-                    item.y = 0;
-                    item.vy = Math.abs(item.vy) * RESTITUTION;
-                } else if (item.y >= maxY) {
-                    item.y = maxY;
-                    item.vy = -Math.abs(item.vy) * RESTITUTION;
-                }
-                item.vx *= DAMPING;
-                item.vy *= DAMPING;
-                if (Math.hypot(item.vx, item.vy) < STOP_SPEED) {
-                    item.vx = 0;
-                    item.vy = 0;
-                }
-            }
-
-            if (item.av !== 0) {
-                item.angle += item.av * dt;
-                item.av *= ANG_DAMPING;
-                if (Math.abs(item.av) < ANG_STOP) item.av = 0;
-            } else {
-                // settle back to the position-matched lean, never upside down
-                const tilt = tiltFor(item);
-                item.angle += (tilt - item.angle) * 0.08;
-                if (Math.abs(tilt - item.angle) < 0.002) item.angle = tilt;
-            }
-
+            integrate(item, dt);
+        }
+        collide();
+        for (const item of items) {
+            clampItem(item);
             if (!atRest(item)) moving = true;
             setTransform(item);
         }
@@ -298,7 +379,7 @@
             // a click, not a drag: give it a playful spin in place
             item.vx = 0;
             item.vy = 0;
-            if (!reduceMotion) spin(item, 2 + Math.random() * 3);
+            if (!reduceMotion) spin(item, 3 + Math.random() * 4);
             return;
         }
 
@@ -312,7 +393,7 @@
             item.vy = 0;
             return;
         }
-        spin(item, clamp(speed / 320, 0.8, 6));
+        spin(item, clamp(speed / 220, 1, 8));
     }
 
     for (const icon of icons) {

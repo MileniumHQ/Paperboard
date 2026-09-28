@@ -191,3 +191,12 @@
         transform: translate3d(var(--transform-size), var(--transform-size), 0);
     }
 }
+
+/* The hero/outro CTAs are the only large buttons; on phones they should not
+   dwarf the styled headline above them. */
+@media (max-width: 600px) {
+    .PaperButton.size-large {
+        padding: 12px 26px;
+        font-size: 18px;
+    }
+}

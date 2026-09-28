@@ -1,15 +1,14 @@
 import { type Component } from "solid-js";
 import index from "../docs/index.json";
-import type { Page, SectionMeta, Subsection } from "../types/docs";
+import type { Page, Subsection } from "../types/docs";
+import { metaSections } from "../docs/meta";
 import { BASE } from "./base";
 
 // Route data helpers. There is no client-side router: every navigation is a
 // full document load (real anchor links / window.location), and the app derives
 // the current route from window.location at boot.
 
-export const metaSections: Record<string, SectionMeta> =
-    (index as any).meta?.sections || {};
-export const sectionKeys = Object.keys(metaSections);
+export { metaSections, sectionKeys } from "../docs/meta";
 
 export function isKnownSection(section: string | undefined): boolean {
     return (

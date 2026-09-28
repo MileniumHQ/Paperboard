@@ -3,7 +3,24 @@
     <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>Paperboard</title>
+        <meta name="color-scheme" content="dark light" />
+        <title>Paperboard — An all-in-one toolkit for self-hosting</title>
+        <meta
+            name="description"
+            content="Paperboard is an all-in-one toolkit for self-hosting. Run, manage, and automate tools locally on Windows, macOS, and Linux."
+        />
+        <link rel="canonical" href="https://paperboard.dev/" />
+        <link rel="icon" href="/favicon.ico" />
+        <link rel="manifest" href="/site.webmanifest" />
+        <meta property="og:type" content="website" />
+        <meta property="og:site_name" content="Paperboard" />
+        <meta property="og:title" content="Paperboard" />
+        <meta
+            property="og:description"
+            content="An all-in-one toolkit for self-hosting."
+        />
+        <meta property="og:image" content="https://paperboard.dev/paperboard.png" />
+        <meta name="twitter:card" content="summary" />
         <link rel="stylesheet" href="css/style.css" />
     </head>
     <body>
@@ -30,80 +47,8 @@
                                 aria-hidden="true"
                             ></span>
                         </button>
-                        <div class="site-topbar__dropdown" role="menu">
-                            <a
-                                class="site-topbar__item"
-                                role="menuitem"
-                                href="/actions"
-                            >
-                                <img
-                                    class="site-topbar__item-icon"
-                                    src="pictures/blocks.png"
-                                    alt=""
-                                />
-                                <span class="site-topbar__item-text"
-                                    ><strong>Actions</strong
-                                    ><small
-                                        >Lorem ipsum dolor sit amet, consectetur
-                                        adipiscing elit.</small
-                                    ></span
-                                >
-                            </a>
-                            <a
-                                class="site-topbar__item"
-                                role="menuitem"
-                                href="/game-server"
-                            >
-                                <img
-                                    class="site-topbar__item-icon"
-                                    src="pictures/game-server.png"
-                                    alt=""
-                                />
-                                <span class="site-topbar__item-text"
-                                    ><strong>Game Server</strong
-                                    ><small
-                                        >Sed do eiusmod tempor incididunt ut
-                                        labore et dolore.</small
-                                    ></span
-                                >
-                            </a>
-                            <a
-                                class="site-topbar__item"
-                                role="menuitem"
-                                href="/bot-creator"
-                            >
-                                <img
-                                    class="site-topbar__item-icon"
-                                    src="pictures/discord-bot.png"
-                                    alt=""
-                                />
-                                <span class="site-topbar__item-text"
-                                    ><strong>Bot Creator</strong
-                                    ><small
-                                        >Ut enim ad minim veniam, quis nostrud
-                                        exercitation.</small
-                                    ></span
-                                >
-                            </a>
-                            <a
-                                class="site-topbar__item"
-                                role="menuitem"
-                                href="/ai"
-                            >
-                                <img
-                                    class="site-topbar__item-icon"
-                                    src="pictures/ai.png"
-                                    alt=""
-                                />
-                                <span class="site-topbar__item-text"
-                                    ><strong>Local AI</strong
-                                    ><small
-                                        >Duis aute irure dolor in reprehenderit
-                                        in voluptate.</small
-                                    ></span
-                                >
-                            </a>
-                        </div>
+                        <!-- site-nav:learn -->
+                        <!-- /site-nav:learn -->
                     </div>
                     <div class="site-topbar__menu" data-topbar-menu>
                         <button
@@ -117,48 +62,24 @@
                                 aria-hidden="true"
                             ></span>
                         </button>
-                        <div class="site-topbar__dropdown" role="menu">
-                            <a
-                                class="site-topbar__item"
-                                role="menuitem"
-                                href="/docs/paperapi"
-                            >
-                                <img
-                                    class="site-topbar__item-icon"
-                                    src="/paperapi.png"
-                                    alt=""
-                                />
-                                <span class="site-topbar__item-text"
-                                    ><strong>PaperAPI</strong
-                                    ><small
-                                        >Create simple, unique and useful panels
-                                        for the Paperboard platform.</small
-                                    ></span
-                                >
-                            </a>
-                            <a
-                                class="site-topbar__item"
-                                role="menuitem"
-                                href="/docs/paperui"
-                            >
-                                <img
-                                    class="site-topbar__item-icon"
-                                    src="/paperui.png"
-                                    alt=""
-                                />
-                                <span class="site-topbar__item-text"
-                                    ><strong>PaperUI</strong
-                                    ><small
-                                        >Build interactive interfaces with
-                                        beautiful components and styles.</small
-                                    ></span
-                                >
-                            </a>
-                        </div>
+                        <!-- site-nav:docs -->
+                        <!-- /site-nav:docs -->
                     </div>
                     <a class="site-topbar__link" href="/blog">Blog</a>
                 </nav>
                 <div class="site-topbar__actions">
+                    <button
+                        class="site-topbar__mobile-toggle"
+                        type="button"
+                        aria-expanded="false"
+                        aria-controls="site-mobile-menu"
+                        aria-label="Open navigation"
+                    >
+                        <span
+                            class="icon icon-menu"
+                            aria-hidden="true"
+                        ></span>
+                    </button>
                     <PaperButton
                         class="site-topbar__download"
                         variant="brand"
@@ -172,6 +93,10 @@
                     </PaperButton>
                 </div>
             </div>
+            <div class="site-topbar__mobile" id="site-mobile-menu" hidden>
+                <!-- site-nav:mobile -->
+                <!-- /site-nav:mobile -->
+            </div>
         </header>
 
         <BgOverlay></BgOverlay>
@@ -184,10 +109,20 @@
         <main class="page-layout">
             <section class="hero-section">
                 <StyledText size="90">Do more with your computer.</StyledText>
-                <PaperButton variant="brand" size="large">
-                    <span class="icon icon-download" aria-hidden="true"></span>
-                    <span>Download</span>
-                </PaperButton>
+                <p class="hero-sub">
+                    Paperboard is an all-in-one toolkit for self-hosting.
+                </p>
+                <div class="download-cta">
+                    <PaperButton variant="brand" size="large" data-download-button>
+                        <span class="icon icon-download" aria-hidden="true"></span>
+                        <span class="download-label">Download</span>
+                    </PaperButton>
+                    <p class="download-note">
+                        <a href="/downloads"
+                            >Looking for downloads for other OSes?</a
+                        >
+                    </p>
+                </div>
             </section>
 
             <section class="showcase-section">
@@ -468,13 +403,24 @@
             <section class="outro-section" data-play-field>
                 <div class="outro-copy">
                     <StyledText size="72">All this and more.</StyledText>
-                    <PaperButton variant="brand" size="large">
-                        <span
-                            class="icon icon-download"
-                            aria-hidden="true"
-                        ></span>
-                        <span>Download</span>
-                    </PaperButton>
+                    <div class="download-cta">
+                        <PaperButton
+                            variant="brand"
+                            size="large"
+                            data-download-button
+                        >
+                            <span
+                                class="icon icon-download"
+                                aria-hidden="true"
+                            ></span>
+                            <span class="download-label">Download</span>
+                        </PaperButton>
+                        <p class="download-note">
+                            <a href="/downloads"
+                                >Looking for downloads for other OSes?</a
+                            >
+                        </p>
+                    </div>
                 </div>
                 <img
                     class="play-icon"
@@ -525,35 +471,18 @@
             <div class="site-footer__inner">
                 <nav class="site-footer__column" aria-label="Learn">
                     <StyledText size="18">Learn</StyledText>
-                    <a class="site-footer__link" href="/">About Paperboard</a>
-                    <a class="site-footer__link" href="/actions">Actions</a>
-                    <a class="site-footer__link" href="/game-server"
-                        >Game Server</a
-                    >
-                    <a class="site-footer__link" href="/bot-creator"
-                        >Bot Creator</a
-                    >
-                    <a class="site-footer__link" href="/ai">Local AI</a>
+                    <!-- site-nav:footer-learn -->
+                    <!-- /site-nav:footer-learn -->
                 </nav>
                 <nav class="site-footer__column" aria-label="Docs">
                     <StyledText size="18">Docs</StyledText>
-                    <a class="site-footer__link" href="/docs/paperapi"
-                        >PaperAPI</a
-                    >
-                    <a class="site-footer__link" href="/docs/paperui"
-                        >PaperUI</a
-                    >
+                    <!-- site-nav:footer-docs -->
+                    <!-- /site-nav:footer-docs -->
                 </nav>
                 <nav class="site-footer__column" aria-label="Site">
                     <StyledText size="18">Site</StyledText>
-                    <a class="site-footer__link" href="/blog">Blog</a>
-                    <a class="site-footer__link" href="/brand">Brand</a>
-                    <a class="site-footer__link" href="/contact">Contact</a>
-                    <a class="site-footer__link" href="/downloads">Downloads</a>
-                    <a class="site-footer__link" href="/terms">Terms of Use</a>
-                    <a class="site-footer__link" href="/privacy"
-                        >Privacy Policy</a
-                    >
+                    <!-- site-nav:footer-site -->
+                    <!-- /site-nav:footer-site -->
                 </nav>
             </div>
             <div class="site-footer__bottom">
@@ -634,6 +563,7 @@
         <script src="js/styled-text.js"></script>
         <script src="js/paper-button.js"></script>
         <script src="js/topbar.js"></script>
+        <script src="js/download-button.js"></script>
         <script src="js/card-scroll.js"></script>
         <script src="js/dots-bar.js"></script>
         <script src="js/all-in-one.js"></script>

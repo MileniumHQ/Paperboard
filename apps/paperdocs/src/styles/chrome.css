@@ -1,0 +1,125 @@
+/* Topbar chrome shared by the docs SPA (src/index.css) and the prerendered
+   root pages (src/site/site.css). The two builds load different page CSS, so
+   these rules live here once instead of drifting between them. */
+
+.logo {
+    width: 30px;
+}
+
+.paperui-root .topbar {
+    border-bottom: var(--paper-border-width) solid var(--paper-border);
+    padding: var(--paper-uigap-half);
+    padding-left: var(--paper-uigap);
+    padding-right: var(--paper-uigap);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background-color: var(--paper-surface-raised);
+}
+
+.paperui-root .topbar-brand {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: var(--paper-uigap-threefourths);
+    text-decoration: none;
+    color: var(--paper-text);
+    flex-shrink: 0;
+}
+
+/* The mobile panel mirrors the landing's content but keeps PaperContextMenu's
+   typography so it matches the docs. It is absolutely positioned inside the
+   sticky topbar, so it floats over the page instead of pushing it down. */
+.paperui-root .topbar-mobile-panel {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    z-index: 200;
+    display: none;
+    flex-direction: column;
+    margin: 0 var(--paper-uigap);
+    padding: var(--paper-uigap-half);
+    font-family: var(--paper-font-family);
+    background: var(--paper-surface-raised);
+    border: var(--paper-border-width) solid var(--paper-border);
+    border-radius: var(--paper-border-radius);
+    box-shadow: var(--paper-heavy-element-shadow);
+    user-select: none;
+}
+
+.paperui-root .topbar-mobile-heading {
+    padding: var(--paper-uigap-half) var(--paper-uigap-threefourths)
+        var(--paper-uigap-onefourth);
+    font-size: var(--paper-text-size-1);
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: var(--paper-text-subtle);
+    pointer-events: none;
+}
+
+.paperui-root .topbar-mobile-link {
+    display: block;
+    padding: var(--paper-uigap-half) var(--paper-uigap-threefourths);
+    border-radius: var(--paper-border-radius-half);
+    color: var(--paper-text);
+    font-size: var(--paper-text-size-3);
+    font-weight: normal;
+    text-decoration: none;
+    transition:
+        background var(--paper-tiny-transition) ease,
+        color var(--paper-tiny-transition) ease;
+}
+
+.paperui-root .topbar-mobile-link:hover {
+    background: color-mix(
+        in srgb,
+        var(--paper-contrast) 6%,
+        var(--paper-surface-raised)
+    );
+}
+
+/* The mobile menu button only exists once the inline links are hidden. */
+.paperui-root .topbar-menu-button {
+    display: none;
+}
+
+@media (max-width: 720px) {
+    .paperui-root .topbar {
+        gap: var(--paper-uigap-half);
+    }
+
+    .paperui-root .topbar-links {
+        display: none !important;
+    }
+
+    .paperui-root .topbar-menu-button {
+        display: inline-flex;
+    }
+
+    /* The panel carries Download, so the button would only crowd the bar. */
+    .paperui-root .topbar-download {
+        display: none;
+    }
+
+    .paperui-root .topbar-mobile-panel {
+        display: flex;
+    }
+
+    /* The brand cannot shrink, so the search input has to. Without this the
+       actions row is wider than a phone viewport and scrolls the page. */
+    .paperui-root .topbar-actions {
+        min-width: 0;
+    }
+
+    .paperui-root .topbar-search {
+        width: auto;
+        flex: 1 1 80px;
+        min-width: 0;
+    }
+
+    .paperui-root .topbar-search > * {
+        min-width: 0;
+    }
+}

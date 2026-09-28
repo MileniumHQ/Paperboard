@@ -59,7 +59,9 @@ html {
     right: 0;
     z-index: 200;
     display: flex;
-    justify-content: center;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
     padding: 0 16px;
     pointer-events: none;
 }
@@ -240,6 +242,110 @@ html {
 
 .site-topbar__download {
     --paper-border-radius: 999px;
+}
+
+.site-topbar__mobile-toggle {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border: 0;
+    border-radius: 999px;
+    background: none;
+    color: #1a2a3a;
+    cursor: pointer;
+    transition: background-color 0.18s ease;
+}
+
+.site-topbar__mobile-toggle:hover {
+    background: #eef4fb;
+}
+
+.site-topbar__mobile-toggle .icon {
+    width: 22px;
+    height: 22px;
+}
+
+.site-topbar__mobile {
+    pointer-events: auto;
+    width: min(1080px, 100%);
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    background: rgba(255, 255, 255, 0.94);
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    border-radius: 28px;
+    -webkit-backdrop-filter: blur(18px) saturate(1.5);
+    backdrop-filter: blur(18px) saturate(1.5);
+    box-shadow:
+        0 24px 50px -16px rgba(2, 26, 62, 0.45),
+        0 8px 20px -10px rgba(4, 121, 255, 0.3);
+}
+
+.site-topbar__mobile[hidden] {
+    display: none;
+}
+
+.site-topbar__mobile-heading {
+    padding: 10px 14px 4px;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #6b7f96;
+}
+
+.site-topbar__mobile-link {
+    display: block;
+    padding: 10px 14px;
+    border-radius: 16px;
+    color: #1a2a3a;
+    font-size: 15px;
+    font-weight: 700;
+    text-decoration: none;
+    transition: background-color 0.18s ease;
+}
+
+.site-topbar__mobile-link:hover {
+    background: #eef4fb;
+    color: #0f63c8;
+}
+
+.icon-menu {
+    -webkit-mask-image: url('../icons/menu.svg');
+    mask-image: url('../icons/menu.svg');
+}
+
+.icon-close {
+    -webkit-mask-image: url('../icons/close.svg');
+    mask-image: url('../icons/close.svg');
+}
+
+@media (max-width: 900px) {
+    .site-topbar__mobile-toggle {
+        display: inline-flex;
+    }
+
+    /* The mobile panel carries Download, so the button would only crowd the
+       bar. */
+    .site-topbar__download {
+        display: none;
+    }
+
+    .site-topbar__bar {
+        gap: 8px;
+        padding: 6px 6px 6px 12px;
+    }
+
+    .site-topbar__logo {
+        height: 28px;
+    }
+
+    .site-topbar__name {
+        font-size: 17px;
+    }
 }
 
 @media (max-width: 900px) {
@@ -580,11 +686,34 @@ BgOverlay:not(:defined) {
 }
 
 .hero-sub {
-    max-width: 40ch;
-    font-size: 1.05rem;
-    line-height: 1.6;
-    margin: 0 auto 1.5rem;
-    color: #556c88;
+    max-width: 44ch;
+    margin: 0;
+    font-size: clamp(16px, 2.2vh, 20px);
+    line-height: 1.55;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.92);
+    text-align: center;
+}
+
+.download-cta {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+}
+
+.download-note {
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.5;
+    color: rgba(255, 255, 255, 0.82);
+    text-align: center;
+}
+
+.download-note a {
+    color: inherit;
+    text-decoration: underline;
+    text-underline-offset: 2px;
 }
 
 .chart-section {
@@ -1130,6 +1259,29 @@ BgOverlay:not(:defined) {
 
     .site-footer__bottom {
         justify-content: flex-start;
+    }
+}
+
+@media (max-width: 700px) {
+    .hero-section {
+        gap: 18px;
+        padding: 0 18px;
+    }
+
+    .hero-sub {
+        font-size: 16px;
+    }
+
+    /* The styled-text SVG carries internal padding, so a left-aligned heading
+       reads as indented next to its paragraph. Center the pair on phones. */
+    .chart-intro,
+    .cta-copy {
+        align-items: center;
+        text-align: center;
+    }
+
+    .cta-actions {
+        justify-content: center;
     }
 }
 

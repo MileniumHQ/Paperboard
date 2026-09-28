@@ -1,0 +1,145 @@
+/* Chrome and layout for the prerendered root pages. The topbar and footer
+   come from the shared components (same as the docs SPA); only the page
+   column lives here. */
+
+.main {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    padding: var(--paper-uigap-double) var(--paper-uigap);
+}
+
+.container {
+    width: 100%;
+    max-width: var(--paper-page-width);
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap-double);
+}
+
+.stack {
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap);
+}
+
+/* Hydration root for the topbar island. display: contents keeps the sticky
+   topbar positioned against the page column instead of this wrapper. */
+.topbarIsland {
+    display: contents;
+}
+
+.postHeader {
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap-half);
+}
+
+.postInfo {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--paper-uigap-half);
+}
+
+.postInfoSeparator {
+    color: var(--paper-text-faint);
+}
+
+.postBanner {
+    width: 100%;
+    height: auto;
+    display: block;
+    border: var(--paper-border-width) solid var(--paper-border);
+    border-radius: var(--paper-border-radius);
+}
+
+.postBody {
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap);
+}
+
+/* Contact form: one column of labelled fields. The island mounts into
+   #site-contact after the static page renders, so the classes must be present
+   in both the server and client CSS (same module source, same hashes). */
+.contactForm {
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap-double);
+}
+
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap-half);
+}
+
+.fieldLabel {
+    font-size: var(--paper-text-size-2);
+    font-weight: 600;
+    color: var(--paper-text);
+}
+
+.fieldError {
+    color: var(--paper-danger);
+}
+
+/* Semantic tags (p, h2, ul) carry browser default margins. The docs render
+   prose as PaperText spans inside a flex column, so the only spacing is the
+   gap; match that here or every block gets an extra ~16px. */
+.postBody :is(p, h1, h2, h3, h4, h5, h6, ul, ol, li, blockquote, pre, figure) {
+    margin: 0;
+}
+
+.platformHead {
+    display: flex;
+    align-items: center;
+    gap: var(--paper-uigap-half);
+    padding-bottom: var(--paper-uigap-half);
+}
+
+.platformIcon {
+    width: 22px;
+    height: 22px;
+    flex-shrink: 0;
+    color: var(--paper-text);
+}
+
+/* Sections sit further apart than a section's own heading and grid, so the
+   heading stays grouped with its cards. */
+.downloadSections {
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap-triple);
+}
+
+.downloadSection {
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap-half);
+}
+
+.downloadItem {
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap-onefourth);
+    padding: var(--paper-uigap-half) 0;
+}
+
+.downloadItem + .downloadItem {
+    border-top: var(--paper-border-width) solid var(--paper-border);
+}
+
+.downloadRow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--paper-uigap-half);
+}
+
+@media (max-width: 720px) {
+    .main {
+        padding: var(--paper-uigap) var(--paper-uigap-sixfourths);
+    }
+}

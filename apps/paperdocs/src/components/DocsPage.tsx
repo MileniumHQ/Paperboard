@@ -4,6 +4,7 @@ import {
     PaperSelector,
     PaperSelectorItem,
 } from "@paperboard-dev/paperui";
+import "../docs/docsLayout.css";
 import {
     createEffect,
     createMemo,
@@ -35,6 +36,13 @@ export function DocsPage(props: DocsPageProps) {
         siblingsFor(props.section, props.pageKey),
     );
     const valid = () => known() && siblings().current !== null;
+
+    // Each docs page is its own document title, which the SPA shell cannot
+    // set at build time.
+    createEffect(() => {
+        const page = siblings().current;
+        document.title = page ? `${page.name} | Paperboard Docs` : "PaperDocs";
+    });
 
     // Sorted pages → the component for the current page. Eagerly bundled, so
     // there is nothing to await and no Suspense boundary.
