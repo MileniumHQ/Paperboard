@@ -1,6 +1,7 @@
 import { type Component, createSignal, onMount, onCleanup, Show } from "solid-js";
 import { PaperText, PaperButton, PaperIcon, getVarCss } from "@paperboard-dev/paperui";
 import { shellApi, logToMain, shellIpc, isBrowserShell } from "../../lib/shell";
+import { versionLabel as formatVersionLabel } from "../../lib/versionLabel";
 import { leftReserve, rightReserve, type OverlayLike } from "./titlebarInsets";
 
 // Tabs that have no panel files dir — the folder button opens .paperboard/ for these
@@ -40,24 +41,9 @@ const TopBar: Component<{
         target?.addEventListener?.("geometrychange", update);
         onCleanup(() => target?.removeEventListener?.("geometrychange", update));
 
-        // "3.0.0-alpha" -> "Alpha 3" (trailing .0s trimmed, tag capitalized)
         shellApi
             .getAppVersion()
-            .then((raw) => {
-                const dash = raw.indexOf("-");
-                if (dash < 0) {
-                    setVersionLabel(raw);
-                    return;
-                }
-                const core = raw.slice(0, dash).split(".");
-                while (core.length > 1 && core[core.length - 1] === "0") {
-                    core.pop();
-                }
-                const tag = raw.slice(dash + 1);
-                setVersionLabel(
-                    `${tag.charAt(0).toUpperCase()}${tag.slice(1)} ${core.join(".")}`,
-                );
-            })
+            .then((raw) => setVersionLabel(formatVersionLabel(raw)))
             .catch((err) => console.error("[TopBar] failed to read app version:", err));
     });
 
