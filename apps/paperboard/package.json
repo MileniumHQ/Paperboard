@@ -1,7 +1,7 @@
 {
   "name": "paperboard",
   "productName": "Paperboard",
-  "version": "3.0.0-alpha",
+  "version": "0.1.0",
   "description": "Run and manage tools locally.",
   "main": "./out/main/index.js",
   "author": "Milenium <contact@paperboard.dev>",

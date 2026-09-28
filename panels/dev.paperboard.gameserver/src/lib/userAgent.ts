@@ -4,7 +4,7 @@
 // same and rejects generic agents. Keep the string in sync with the app
 // version in apps/paperboard/package.json.
 export const PAPERBOARD_USER_AGENT =
-    "MileniumHQ/Paperboard/3.0.0-alpha (+https://paperboard.dev)";
+    "MileniumHQ/Paperboard/0.1.0 (+https://paperboard.dev)";
 
 /** fetch with the Paperboard User-Agent unless the caller already set one. */
 export function apiFetch(

@@ -13,7 +13,7 @@ export class TransportRegistry {
     // collisions). registeredBare tracks the single-owner claim on the
     // deprecated bare-name read-through: a bare name belongs to exactly one
     // panel, and a second owner is refused at registration — never
-    // overwritten. TODO(remove after v3.1): registeredBare and the bare keys
+    // overwritten. TODO(remove after v0.2): registeredBare and the bare keys
     // die together with the pre-namespaced read-through
     public readonly actionHandlers = new Map<string, ActionHandler>();
     public readonly registeredActions = new Map<string, RegisteredAction>();
@@ -49,7 +49,7 @@ export class TransportRegistry {
         // dispatch surface: the loud warning is part of the deprecation
         // (marker + deadline in the TODO below), same discipline as the
         // wildcard matching in actions.ts
-        // (TODO(remove after v3.1): registeredBare and the bare keys die
+        // (TODO(remove after v0.2): registeredBare and the bare keys die
         // together with the read-through)
         warnOnce(
             "paperapi:bare-action-readthrough",

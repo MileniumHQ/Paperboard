@@ -7,7 +7,7 @@
     },
     "apps/origami": {
       "name": "origami",
-      "version": "1.0.0",
+      "version": "0.1.0",
       "devDependencies": {
         "@cloudflare/workers-types": "^5.20260818.1",
         "@types/bun": "latest",
@@ -19,7 +19,7 @@
     },
     "apps/paperboard": {
       "name": "paperboard",
-      "version": "3.0.0-alpha",
+      "version": "0.1.0",
       "dependencies": {
         "@electron-toolkit/preload": "^3.0.2",
         "@electron-toolkit/utils": "^4.0.0",
@@ -94,7 +94,7 @@
     },
     "packages/paperapi": {
       "name": "@paperboard-dev/paperapi",
-      "version": "3.0.0-alpha",
+      "version": "0.1.0",
       "bin": {
         "paperapi": "./dist/cli.js",
       },
@@ -114,7 +114,7 @@
     },
     "packages/paperui": {
       "name": "@paperboard-dev/paperui",
-      "version": "3.0.0-alpha",
+      "version": "0.1.0",
       "dependencies": {
         "anser": "^2.3.5",
         "marked": "^18.0.14",

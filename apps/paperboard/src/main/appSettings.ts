@@ -31,7 +31,7 @@ export function appSettingsPath(): string {
     return path.join(paperboardDir(), "local", "app-settings.json");
 }
 
-// TODO(remove after v3.1): legacy pre-meaningful-location settings path,
+// TODO(remove after v0.2): legacy pre-meaningful-location settings path,
 // kept only for read-through; dies in one release
 function legacyAppSettingsPath(): string {
     return path.join(paperboardDir(), "configs", "app-settings.json");

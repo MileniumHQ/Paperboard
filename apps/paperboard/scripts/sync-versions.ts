@@ -16,7 +16,7 @@ const targets: Array<{ file: string; path: string }> = [
 
 const versionArg = process.argv.find((a) => a.startsWith("--version="));
 if (!versionArg) {
-  console.error("usage: bun scripts/sync-versions.ts --version=3.0.0-alpha");
+  console.error("usage: bun scripts/sync-versions.ts --version=0.1.0");
   process.exit(1);
 }
 const version = versionArg.slice("--version=".length);

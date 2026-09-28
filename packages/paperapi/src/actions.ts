@@ -267,7 +267,7 @@ export const actionsApi = {
         }
 
         if (targetEvent === "*" || targetPanel === "*") {
-            // TODO(remove after v3.1): wildcard panel/event matching dies
+            // TODO(remove after v0.2): wildcard panel/event matching dies
             // with the pre-namespaced read-through. The daemon warns; the
             // client must warn too — the deprecation has two ends of the wire.
             warnOnce(
@@ -335,7 +335,7 @@ export const actionsApi = {
         }
 
         if (targetPanel === "*" || targetTrigger === "*") {
-            // TODO(remove after v3.1): see actions.on above.
+            // TODO(remove after v0.2): see actions.on above.
             warnOnce(
                 "paperapi:wildcard-onTrigger",
                 '[paperapi] actions.onTrigger with "*" panel/trigger is deprecated and will be refused after v3.1; subscribe to explicit panel:trigger names instead.',

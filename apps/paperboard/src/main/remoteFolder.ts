@@ -278,7 +278,7 @@ export async function openRemoteFolder(
         }
 
         // linux: no window API to watch; rely on server expiry + quit cleanup
-        // TODO(remove after v3.2): the credential-bearing dav URI in argv is
+        // TODO(remove after v0.3): the credential-bearing dav URI in argv is
         // a documented residual — xdg-open passes it to ps output. Loan
         // expired; it is denied (like every other credential-in-argv path)
         // after v3.2.

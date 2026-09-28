@@ -239,7 +239,7 @@ export function validatePanelManifest(
     // network egress declaration: bounded host list or any-https mode.
     // factual clip here; interpretation lives in panelNet
     if (record.network && typeof record.network === "object" && !Array.isArray(record.network)) {
-        // TODO(remove after v3.1): legacy unpackaged panels may surface raw
+        // TODO(remove after v0.2): legacy unpackaged panels may surface raw
         // network shapes; importing keeps manifests reviewable via one path
         manifest.network = record.network;
     }

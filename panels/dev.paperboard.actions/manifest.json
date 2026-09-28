@@ -1,7 +1,7 @@
 {
     "name": "Actions",
     "id": "dev.paperboard.actions",
-    "version": "3.0.0-alpha",
+    "version": "0.1.0",
     "description": "Visual automation and workflow builder",
     "publisher": "Paperboard",
     "base": "./dist/index.html",

@@ -1,7 +1,7 @@
 {
   "name": "paperboard-monorepo",
   "private": true,
-  "version": "3.0.0-alpha",
+  "version": "0.1.0",
   "packageManager": "bun@1.4.0",
   "workspaces": ["apps/*", "packages/*", "panels/*"],
   "scripts": {

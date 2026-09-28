@@ -1,7 +1,7 @@
 {
     "name": "Terminal",
     "id": "dev.paperboard.terminal",
-    "version": "3.0.0-alpha",
+    "version": "0.1.0",
     "description": "Interactive shell & multi-tab terminal console",
     "publisher": "Paperboard",
     "base": "./dist/index.html",
