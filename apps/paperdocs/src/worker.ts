@@ -36,7 +36,24 @@ export default {
         const url = new URL(request.url);
 
         if (!isDocsRequest(url.pathname)) {
-            return env.ASSETS.fetch(request);
+            const asset = await env.ASSETS.fetch(request);
+            if (asset.status !== 404 || !acceptsHtml(request)) {
+                return asset;
+            }
+            // A missing root page gets the static 404 document, still with a
+            // 404 status so crawlers do not treat it as a real page. The
+            // extensionless path is what the asset server resolves to
+            // 404.html (it redirects /404.html to /404).
+            const notFound = await env.ASSETS.fetch(
+                new Request(new URL("/404", url), request),
+            );
+            if (notFound.status === 404) {
+                return asset;
+            }
+            return new Response(notFound.body, {
+                status: 404,
+                headers: notFound.headers,
+            });
         }
 
         // Canonicalize the docs mount so relative resolution and the SPA's

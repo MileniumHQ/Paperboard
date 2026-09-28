@@ -17,6 +17,10 @@ const FILES: Record<string, { body: string; type: string }> = {
         body: "<!doctype html><title>PaperDocs</title>",
         type: "text/html",
     },
+    "/404.html": {
+        body: "<!doctype html><title>404</title><p>That page does not exist.</p>",
+        type: "text/html",
+    },
     "/assets/docs-abc.js": { body: "console.log(1)", type: "text/javascript" },
     "/assets/docs-abc.css": { body: "a{}", type: "text/css" },
     "/paperdocs.png": { body: "png", type: "image/png" },
@@ -32,7 +36,7 @@ function createAssets() {
                 /\/$/,
                 "/index.html",
             );
-            const file = FILES[pathname];
+            const file = FILES[pathname] ?? FILES[`${pathname}.html`];
             if (!file) return new Response("not found", { status: 404 });
             return new Response(file.body, {
                 headers: { "content-type": file.type },
@@ -111,6 +115,18 @@ describe("paperdocs worker routing", () => {
     test("a missing top-level path stays a 404, never the landing", async () => {
         const res = await get("/nope");
         expect(res.status).toBe(404);
+    });
+
+    test("a missing root page serves the static 404 document", async () => {
+        const res = await get("/nope");
+        expect(res.status).toBe(404);
+        expect(await res.text()).toContain("That page does not exist.");
+    });
+
+    test("a missing asset is not answered with the 404 document", async () => {
+        const res = await get("/nope.css", "*/*");
+        expect(res.status).toBe(404);
+        expect(await res.text()).not.toContain("That page does not exist.");
     });
 
     test("a static file sharing the docs prefix is not captured", async () => {
