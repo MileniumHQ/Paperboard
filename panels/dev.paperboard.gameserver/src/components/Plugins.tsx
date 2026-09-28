@@ -24,13 +24,11 @@ import {
     PaperSelectMenu,
     PaperSelectMenuItem,
     PaperTable,
-    PaperProse,
+    PaperMarkdown,
     PaperText,
     getVarCss,
     PaperCard,
 } from "@paperboard-dev/paperui";
-import DOMPurify from "dompurify";
-import { marked } from "marked";
 import { serverSoftware, serverVersion } from "../lib/server";
 import { PaperPageHeader } from "@paperboard-dev/paperui";
 import {
@@ -55,26 +53,9 @@ import {
     type ProjectVersionOption,
 } from "../lib/plugins";
 
-// Third-party markdown is rendered with marked, then sanitized before touching the DOM
-marked.use({ async: false, breaks: true });
-
-DOMPurify.addHook("afterSanitizeAttributes", (node) => {
-    if (node.tagName === "A") {
-        node.setAttribute("target", "_blank");
-        node.setAttribute("rel", "noopener noreferrer nofollow");
-    }
-});
-
-const SANITIZE_CONFIG = {
-    USE_PROFILES: { html: true },
-    ADD_ATTR: ["target"],
-    FORBID_TAGS: ["style", "form"],
-    FORBID_ATTR: ["style"],
-};
-
-function renderDescriptionBody(md: string): string {
-    return DOMPurify.sanitize(marked.parse(md) as string, SANITIZE_CONFIG);
-}
+// Third-party markdown goes through PaperMarkdown, which renders PaperUI
+// elements instead of HTML; images are allowed because Modrinth bodies are
+// reviewed, host-scoped by the panel manifest and CSP-enforced.
 
 function formatCount(count: number): string {
     if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1)}M`;
@@ -422,10 +403,7 @@ export default function Plugins(props: { updateRequest?: number }) {
         return project()?.description || "";
     };
 
-    const detailBody = () => {
-        const p = project();
-        return p ? renderDescriptionBody(p.body) : "";
-    };
+    const detailBody = () => project()?.body ?? "";
 
     const renderCardIcon = (iconUrl?: string): JSX.Element => (
         <PaperAvatar src={iconUrl} shape="square" size="large" fallbackIcon="extension" />
@@ -690,7 +668,10 @@ export default function Plugins(props: { updateRequest?: number }) {
                                             </PaperText>
                                         }
                                     >
-                                        <PaperProse innerHTML={detailBody()} />
+                                        <PaperMarkdown
+                                            text={detailBody()}
+                                            allowImages
+                                        />
                                     </Show>
                                 </Show>
                             </PaperFlex>
