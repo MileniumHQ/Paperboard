@@ -40,9 +40,10 @@ describe("remote folder mount credential hygiene", () => {
         expect(tricky).toContain("c\\\\d");
     });
 
-    it("mounts only where the credential stays out of argv", () => {
+    it("opens remote folders only where the credential stays out of argv", () => {
         expect(remoteFolderSupported("win32")).toBe(true);
         expect(remoteFolderSupported("darwin")).toBe(true);
-        expect(remoteFolderSupported("linux")).toBe(false);
+        expect(remoteFolderSupported("linux")).toBe(true);
+        expect(remoteFolderSupported("freebsd")).toBe(false);
     });
 });

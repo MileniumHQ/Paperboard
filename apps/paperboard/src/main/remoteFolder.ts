@@ -9,6 +9,7 @@ import {
     macMountScriptPath,
     remoteFolderSupported,
 } from "./remoteFolderMount";
+import { startDavRelay, relayFolderUrl, type DavRelay } from "./davRelay";
 
 // remote data dir over WebDAV with ephemeral session; teardown on explorer close
 const IDLE_MS = 180_000;
@@ -23,6 +24,7 @@ interface ActiveSession {
     mainToken: string;
     davUser: string;
     mount: string; // drive "Z:", /Volumes/Name, or "" (linux)
+    relay: DavRelay | null; // linux: loopback relay holding the credential
     timer: NodeJS.Timeout | null;
     seen: boolean;
     misses: number;
@@ -56,6 +58,22 @@ function execAsync(
             child.stdin.write(input);
             child.stdin.end();
         }
+    });
+}
+
+// xdg-open's exit code says whether any handler took the URL; a detached
+// fire-and-forget spawn would report success for a URL nobody opened
+function openWithDesktop(url: string): Promise<boolean> {
+    return new Promise((resolve) => {
+        const child = spawn("xdg-open", [url], { stdio: "ignore" });
+        child.on("error", (err) => {
+            logger.warn("[RemoteFolder] xdg-open failed to start:", err.message);
+            resolve(false);
+        });
+        child.on("exit", (code) => {
+            if (code !== 0) logger.warn(`[RemoteFolder] xdg-open could not open the folder (exit ${code})`);
+            resolve(code === 0);
+        });
     });
 }
 
@@ -94,6 +112,7 @@ export async function closeRemoteFolder(computerId: string): Promise<void> {
     if (!s) return;
     active.delete(computerId);
     if (s.timer) clearInterval(s.timer);
+    await s.relay?.close();
     await unmount(s);
     await revokeSession(s);
 }
@@ -188,6 +207,7 @@ export async function openRemoteFolder(
         mainToken,
         davUser: session.user,
         mount: "",
+        relay: null,
         timer: null,
         seen: false,
         misses: 0,
@@ -268,7 +288,20 @@ export async function openRemoteFolder(
             return { ok: true };
         }
 
-        return await fail("unsupported-platform");
+        // linux: the file manager gets a credential-free loopback URL; the
+        // relay adds the session auth and only serves this user's sockets.
+        // No window API to watch, so the relay's own idle timer ends it.
+        active.set(computerId, rec);
+        rec.relay = await startDavRelay({
+            upstream: `http://${bracket(host)}:${port}`,
+            user: session.user,
+            pass: session.pass,
+            idleMs: IDLE_MS,
+            onIdle: () => void closeRemoteFolder(computerId),
+        });
+        const opened = await openWithDesktop(relayFolderUrl(process.env.XDG_CURRENT_DESKTOP, rec.relay.port, subDir));
+        if (!opened) return await fail("no-file-manager");
+        return { ok: true };
     } catch (err: any) {
         logger.warn("[RemoteFolder] open failed:", err?.message ?? err);
         return await fail(`mount: ${err?.message ?? err}`);

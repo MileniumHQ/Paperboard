@@ -47,11 +47,6 @@ const TopBar: Component<{
             .catch((err) => console.error("[TopBar] failed to read app version:", err));
     });
 
-    // a remote computer's folder mounts over WebDAV, which has no
-    // credential-safe mount path on Linux yet
-    const remoteFolderUnsupported = () =>
-        props.getComputerId() !== "local" && /Linux/.test(navigator.userAgent) && !/Android/.test(navigator.userAgent);
-
     const handleFolder = () => {
         const computerId = props.getComputerId();
         // Local: panel's files dir (or .paperboard/ when no panel tab).
@@ -116,22 +111,13 @@ const TopBar: Component<{
                     "-webkit-app-region": "no-drag",
                 }}
             >
-                {/* the wrapper carries the tooltip: a disabled button takes no pointer events */}
-                <span
-                    title={
-                        remoteFolderUnsupported()
-                            ? "Opening a remote computer's folder isn't supported on Linux yet"
-                            : "Open panel folder"
-                    }
-                    style={{ display: "inline-flex" }}>
-                    <PaperButton size="tiny"
-                        icon
-                        aria-label="Open panel folder"
-                        disabled={remoteFolderUnsupported()}
-                        onClick={handleFolder}>
-                        <PaperIcon>folder_open</PaperIcon>
-                    </PaperButton>
-                </span>
+                <PaperButton size="tiny"
+                    icon
+                    title="Open panel folder"
+                    aria-label="Open panel folder"
+                    onClick={handleFolder}>
+                    <PaperIcon>folder_open</PaperIcon>
+                </PaperButton>
                 <Show when={updateReady() !== null}>
                     <PaperButton
                         title={`Restart to install ${updateReady()}`}
