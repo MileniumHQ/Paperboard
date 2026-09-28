@@ -107,7 +107,6 @@ export async function handleActions(action: string, id: unknown, params: any, ct
         case "event:emit": {
             const panelId = assertPanelId(params?.panelId);
             const evt = assertStr(params?.event, "event", 256);
-            broadcastEvent("actions:event", { panelId, event: evt, payload: params?.payload });
             broadcastEvent(`actions:${panelId}:${evt}`, params?.payload);
             reply(id, { success: true });
             return true;
@@ -116,7 +115,6 @@ export async function handleActions(action: string, id: unknown, params: any, ct
         case "trigger:emit": {
             const panelId = assertPanelId(params?.panelId);
             const trigger = assertStr(params?.trigger, "trigger", 256);
-            broadcastEvent("triggers:event", { panelId, trigger, output: params?.output });
             broadcastEvent(`triggers:${panelId}:${trigger}`, params?.output);
             reply(id, { success: true });
             return true;

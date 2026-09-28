@@ -190,22 +190,10 @@ describe("refused invokes clean up progress listeners", () => {
         closeTransport("local");
     });
 
-    test("wildcard subscriptions warn loudly (once)", async () => {
+    test("wildcard subscriptions are refused", async () => {
         await connect();
-        const warnings: unknown[][] = [];
-        const orig = console.warn;
-        (console as any).warn = (...a: unknown[]) => warnings.push(a);
-        try {
-            const off1 = actionsApi.on("*", "evt", () => {});
-            const off2 = actionsApi.onTrigger("panel", "*", () => {});
-            off1();
-            off2();
-        } finally {
-            (console as any).warn = orig;
-        }
-        expect(warnings.length).toBe(2);
-        expect(String(warnings[0][0])).toContain("v0.2");
-        expect(String(warnings[1][0])).toContain("v0.2");
+        expect(() => actionsApi.on("*", "evt", () => {})).toThrow(/does not accept "\*"/);
+        expect(() => actionsApi.onTrigger("panel", "*", () => {})).toThrow(/does not accept "\*"/);
     });
 });
 

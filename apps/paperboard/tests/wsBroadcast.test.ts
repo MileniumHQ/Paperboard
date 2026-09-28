@@ -68,18 +68,19 @@ describe("events:subscribe broadcast filtering", () => {
         const a = await connect();
         const b = await connect();
 
-        // exact-name interest: only "actions:event"
-        send(a, { id: 1, action: "events:subscribe", params: { events: ["actions:event"] } });
+        // exact-name interest: only "actions:dev.x:boom"
+        send(a, { id: 1, action: "events:subscribe", params: { events: ["actions:dev.x:boom"] } });
         await waitFor(a, (f) => f.id === 1 && !f.error);
 
-        // A emits; the daemon fans out to subscribers only
-        send(a, { id: 2, action: "actions:emit", params: { panelId: "dev.x", event: "boom" } });
-        await waitFor(a, (f) => f.type === "event" && f.event === "actions:event");
+        // A emits two events; the daemon fans out to subscribers only
+        send(a, { id: 2, action: "actions:emit", params: { panelId: "dev.x", event: "other" } });
+        send(a, { id: 3, action: "actions:emit", params: { panelId: "dev.x", event: "boom" } });
+        await waitFor(a, (f) => f.type === "event" && f.event === "actions:dev.x:boom");
 
-        const aSpecific = a.frames.find(
-            (f) => f.type === "event" && f.event === "actions:dev.x:boom",
+        const aOther = a.frames.find(
+            (f) => f.type === "event" && f.event === "actions:dev.x:other",
         );
-        expect(aSpecific).toBeUndefined();
+        expect(aOther).toBeUndefined();
 
         await new Promise((r) => setTimeout(r, 100));
         expect(b.frames.filter((f) => f.type === "event")).toHaveLength(0);
@@ -100,6 +101,7 @@ describe("events:subscribe broadcast filtering", () => {
         send(a, { id: 2, action: "actions:emit", params: { panelId: "dev.x", event: "boom" } });
         await waitFor(a, (f) => f.type === "event" && f.event === "actions:dev.x:boom");
 
+        // the unscoped all-panels channel no longer exists
         expect(
             a.frames.find((f) => f.type === "event" && f.event === "actions:event"),
         ).toBeUndefined();
@@ -113,7 +115,6 @@ describe("events:subscribe broadcast filtering", () => {
         await waitFor(a, (f) => f.id === 1 && !f.error);
 
         send(a, { id: 2, action: "actions:emit", params: { panelId: "dev.y", event: "pulse" } });
-        await waitFor(a, (f) => f.type === "event" && f.event === "actions:event");
         await waitFor(a, (f) => f.type === "event" && f.event === "actions:dev.y:pulse");
 
         a.ws.terminate();
@@ -121,20 +122,20 @@ describe("events:subscribe broadcast filtering", () => {
 
     it("subscribe is full-replace: removing interest stops delivery", async () => {
         const a = await connect();
-        send(a, { id: 1, action: "events:subscribe", params: { events: ["actions:event"] } });
+        send(a, { id: 1, action: "events:subscribe", params: { events: ["actions:dev.z:e"] } });
         await waitFor(a, (f) => f.id === 1 && !f.error);
 
-        send(a, { id: 2, action: "actions:emit", params: { panelId: "dev.z", event: "e1" } });
-        await waitFor(a, (f) => f.type === "event" && f.event === "actions:event");
+        send(a, { id: 2, action: "actions:emit", params: { panelId: "dev.z", event: "e" } });
+        await waitFor(a, (f) => f.type === "event" && f.event === "actions:dev.z:e");
 
         // empty declaration = unsubscribe from everything
         send(a, { id: 3, action: "events:subscribe", params: { events: [] } });
         await waitFor(a, (f) => f.id === 3 && !f.error);
 
-        send(a, { id: 4, action: "actions:emit", params: { panelId: "dev.z", event: "e2" } });
+        send(a, { id: 4, action: "actions:emit", params: { panelId: "dev.z", event: "e" } });
         await new Promise((r) => setTimeout(r, 100));
         const afterUnsub = a.frames.filter(
-            (f) => f.type === "event" && f.event === "actions:event",
+            (f) => f.type === "event" && f.event === "actions:dev.z:e",
         );
         expect(afterUnsub).toHaveLength(1);
 

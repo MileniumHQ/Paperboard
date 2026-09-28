@@ -96,7 +96,7 @@ const result = await actionsApi.call<string>(
             <PaperText preset="subheader" id="behavior">Behavior</PaperText>
             <PaperText preset="body">
                 Action subscriptions are scoped to explicit panel and event identifiers.
-                Wildcard subscriptions using "*" emit deprecation warnings.
+                Wildcard subscriptions using "*" are refused: subscribe to an explicit panel id and event name.
                 Every subscription returns a disposal function to guarantee bounded listener lifetimes.
             </PaperText>
 

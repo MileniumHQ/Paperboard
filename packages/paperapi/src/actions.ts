@@ -1,6 +1,5 @@
 import { getTransport, getPanelId } from "./ipc";
 import { debugErr } from "./debug";
-import { warnOnce } from "./identity";
 import {
     type ActionDefinition,
     type ActionSchema,
@@ -267,27 +266,13 @@ export const actionsApi = {
         }
 
         if (targetEvent === "*" || targetPanel === "*") {
-            // TODO(remove after v0.2): wildcard panel/event matching dies
-            // with the pre-namespaced read-through. The daemon warns; the
-            // client must warn too — the deprecation has two ends of the wire.
-            warnOnce(
-                "paperapi:wildcard-on",
-                '[paperapi] actions.on with "*" panel/event is deprecated and will be refused after v0.2; subscribe to explicit panel:event names instead.',
+            throw new Error(
+                '[paperapi] actions.on does not accept "*": subscribe to an explicit panel id and event name.',
             );
         }
 
-        const listener = (data: any) => {
-            if (!data) return;
-            if (targetEvent === "*" || targetPanel === "*") {
-                callback(data);
-                return;
-            }            if (data.panelId === targetPanel && data.event === targetEvent) {
-                callback(data.payload);
-            }
-        };
-
-        const source = targetPanel === "*" || targetEvent === "*" ? "actions:event" : `actions:${targetPanel}:${targetEvent}`;
-        const scopedListener = source === "actions:event" ? listener : (payload: any) => callback(payload);
+        const source = `actions:${targetPanel}:${targetEvent}`;
+        const scopedListener = (payload: any) => callback(payload);
         transport.subscribeEvent(source, scopedListener);
         transport.ensureConnected().catch((err) => debugErr("ensure connected on subscribe", err));
 
@@ -335,24 +320,13 @@ export const actionsApi = {
         }
 
         if (targetPanel === "*" || targetTrigger === "*") {
-            // TODO(remove after v0.2): see actions.on above.
-            warnOnce(
-                "paperapi:wildcard-onTrigger",
-                '[paperapi] actions.onTrigger with "*" panel/trigger is deprecated and will be refused after v0.2; subscribe to explicit panel:trigger names instead.',
+            throw new Error(
+                '[paperapi] actions.onTrigger does not accept "*": subscribe to an explicit panel id and trigger name.',
             );
         }
 
-        const listener = (data: any) => {
-            if (!data) return;
-            if (targetTrigger === "*" || data.trigger === targetTrigger) {
-                if (targetPanel === "*" || data.panelId === targetPanel) {
-                    callback(data.output, data);
-                }
-            }
-        };
-
-        const source = targetPanel === "*" || targetTrigger === "*" ? "triggers:event" : `triggers:${targetPanel}:${targetTrigger}`;
-        const scopedListener = source === "triggers:event" ? listener : (output: T) => callback(output, { panelId: targetPanel, trigger: targetTrigger, output });
+        const source = `triggers:${targetPanel}:${targetTrigger}`;
+        const scopedListener = (output: T) => callback(output, { panelId: targetPanel, trigger: targetTrigger, output });
         transport.subscribeEvent(source, scopedListener);
         transport.ensureConnected().catch((err) => debugErr("ensure connected on subscribe", err));
 
