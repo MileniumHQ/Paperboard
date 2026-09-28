@@ -8,7 +8,7 @@
         "build": "tsc && vite build && bun build ./src/service.ts --outfile ./dist/service.js --target=node --external @paperboard-dev/paperui",
         "pack": "bunx paperapi pack",
         "preview": "vite preview",
-        "test": "bun test"
+        "test": "bun test --isolate"
     },
     "dependencies": {
         "@paperboard-dev/paperapi": "workspace:*",

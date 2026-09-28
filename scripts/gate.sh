@@ -64,7 +64,7 @@ step "origami silent-catches" run_in "$ROOT/apps/origami" bash "$CATCH" src test
 
 # first-party panels: suite, typecheck, silent-catch gate each
 for panel in panels/dev.paperboard.actions panels/dev.paperboard.ai panels/dev.paperboard.botcreator panels/dev.paperboard.gameserver panels/dev.paperboard.terminal; do
-    step "$panel tests" run_in "$ROOT/$panel" bun test
+    step "$panel tests" run_in "$ROOT/$panel" bun run test
     step "$panel typecheck" run_in "$ROOT/$panel" bunx tsc --noEmit
     step "$panel silent-catches" run_in "$ROOT/$panel" bash "$CATCH" src test
 done
