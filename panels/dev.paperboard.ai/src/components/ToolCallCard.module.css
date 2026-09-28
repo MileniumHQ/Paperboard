@@ -1,0 +1,95 @@
+/* The approval card: prominent while the action waits for an answer. */
+.ToolCallCard {
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap-half);
+    padding: var(--paper-uigap);
+    border: var(--paper-border-width) solid var(--paper-border);
+    border-radius: var(--paper-border-radius);
+    background-color: var(--paper-surface-raised);
+}
+
+.waiting {
+    border-color: var(--paper-warning);
+    box-shadow: 0 0 0 var(--paper-border-width) var(--paper-warning);
+}
+
+.approvalHead {
+    display: flex;
+    align-items: center;
+    gap: var(--paper-uigap-half);
+    min-width: 0;
+}
+
+.appIcon {
+    width: var(--paper-control-size-small);
+    height: var(--paper-control-size-small);
+    border-radius: var(--paper-border-radius-half);
+    flex-shrink: 0;
+    object-fit: cover;
+}
+
+.title {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+}
+
+.args {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: var(--paper-uigap-onefourth) var(--paper-uigap);
+    margin: 0;
+    padding: var(--paper-uigap-onefourth) var(--paper-uigap-half);
+    border-radius: var(--paper-border-radius-half);
+    background-color: var(--paper-surface);
+    font-size: var(--paper-text-size-2);
+}
+
+.args dt {
+    color: var(--paper-text-muted);
+    font-family: var(--paper-font-family-code);
+}
+
+.args dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+    font-family: var(--paper-font-family-code);
+}
+
+.actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--paper-uigap-half);
+}
+
+.result {
+    max-height: calc(var(--paper-size-panel-height-small) * 0.5);
+    overflow: auto;
+}
+
+/* what the AI asks to run: capped so a huge request cannot push the
+   decision buttons away, and selectable so it can be read and copied */
+.request {
+    max-height: calc(var(--paper-size-panel-height-small) * 0.6);
+    overflow-y: auto;
+}
+
+.requestBox {
+    position: relative;
+}
+
+.requestBox .args {
+    max-height: calc(var(--paper-size-panel-height-small) * 0.6);
+    overflow-y: auto;
+    padding-right: calc(var(--paper-control-size-tiny) + var(--paper-uigap));
+    -webkit-user-select: text;
+    user-select: text;
+}
+
+.requestCopy {
+    position: absolute;
+    top: var(--paper-uigap-onefourth);
+    right: var(--paper-uigap-onefourth);
+}

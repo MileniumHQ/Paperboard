@@ -1,0 +1,5 @@
+.SettingsView {
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap);
+}

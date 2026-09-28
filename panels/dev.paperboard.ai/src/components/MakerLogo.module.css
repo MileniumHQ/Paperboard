@@ -1,0 +1,31 @@
+.MakerLogo {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    border-radius: var(--paper-border-radius-half);
+    background-color: var(--paper-surface-inset);
+    color: var(--paper-text);
+}
+
+.svg {
+    display: inline-flex;
+}
+
+.small {
+    width: var(--paper-control-size-small);
+    height: var(--paper-control-size-small);
+    font-size: var(--paper-icon-size-small);
+}
+
+.medium {
+    width: var(--paper-control-size-medium);
+    height: var(--paper-control-size-medium);
+    font-size: var(--paper-icon-size-medium);
+}
+
+.large {
+    width: var(--paper-control-size-large);
+    height: var(--paper-control-size-large);
+    font-size: var(--paper-icon-size-large);
+}

@@ -1,2 +1,2 @@
-/* Panel-local styles live here. Prefer --paper-* tokens from PaperUI over
- * hardcoded values, and never let selectors escape .paperui-root. */
+/* Panel-level layout only; components carry their own CSS modules. Every
+ * value is a --paper-* token, and nothing escapes .paperui-root. */

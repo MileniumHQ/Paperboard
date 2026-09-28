@@ -1,0 +1,170 @@
+.Composer {
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap-half);
+    box-sizing: border-box;
+    width: 100%;
+    max-width: var(--paper-page-width);
+    margin: 0 auto;
+    padding: var(--paper-uigap-half) var(--paper-uigap-double) var(--paper-uigap);
+}
+
+.box {
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap-half);
+    min-width: 0;
+    padding: var(--paper-uigap-threefourths) var(--paper-uigap-threefourths) var(--paper-uigap-half);
+    border: var(--paper-border-width) solid var(--paper-border);
+    border-radius: var(--paper-border-radius);
+    background: var(--paper-surface-sunken);
+    transition: border-color var(--paper-tiny-transition) var(--paper-ease-standard);
+}
+
+.box:focus-within {
+    border-color: var(--paper-primary);
+}
+
+.box.dragging {
+    border-color: var(--paper-primary);
+    background: color-mix(in srgb, var(--paper-primary) 8%, var(--paper-surface-sunken));
+}
+
+.attachments {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--paper-uigap-onefourth);
+}
+
+.chip {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--paper-uigap-onefourth);
+    max-width: var(--paper-size-field);
+    padding: var(--paper-uigap-onefourth) var(--paper-uigap-half);
+    border: var(--paper-border-width) solid var(--paper-border);
+    border-radius: var(--paper-border-radius-half);
+    background: var(--paper-surface);
+}
+
+.thumb {
+    width: var(--paper-icon-size-small);
+    height: var(--paper-icon-size-small);
+    object-fit: cover;
+    border-radius: var(--paper-border-radius-half);
+}
+
+.chipIcon {
+    font-size: var(--paper-icon-size-small);
+}
+
+.chipName {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--paper-text-size-1);
+    color: var(--paper-text-muted);
+}
+
+.controls {
+    display: flex;
+    align-items: center;
+    gap: var(--paper-uigap-onefourth);
+    min-width: 0;
+}
+
+/* token-styled inline controls: the box is the frame, so none of these
+   draw their own background or padding */
+.model {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--paper-uigap-half);
+    max-width: 45%;
+    min-width: 0;
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--paper-text);
+    font: inherit;
+    font-size: var(--paper-text-size-2);
+    font-weight: 600;
+    cursor: pointer;
+    transition: color var(--paper-short-transition) var(--paper-ease-standard);
+}
+
+.model:hover {
+    color: var(--paper-primary);
+}
+
+.model:focus-visible {
+    outline: var(--paper-focus-ring);
+    outline-offset: var(--paper-focus-offset);
+    border-radius: var(--paper-border-radius-half);
+}
+
+.modelName {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.modelIcon {
+    font-size: var(--paper-icon-size-small);
+    color: var(--paper-text-muted);
+}
+
+.reasoning {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--paper-uigap-onefourth);
+    flex-shrink: 0;
+    padding: 0;
+    border: none;
+    background: none;
+    margin-left: var(--paper-uigap-half);
+    color: var(--paper-text-muted);
+    font: inherit;
+    font-size: var(--paper-text-size-2);
+    cursor: pointer;
+    transition:
+        color var(--paper-short-transition) var(--paper-ease-standard),
+        opacity var(--paper-short-transition) var(--paper-ease-standard);
+}
+
+.reasoning:hover:not(:disabled) {
+    color: var(--paper-text);
+}
+
+.reasoning:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+.reasoning:focus-visible {
+    outline: var(--paper-focus-ring);
+    outline-offset: var(--paper-focus-offset);
+    border-radius: var(--paper-border-radius-half);
+}
+
+.reasoningChevron {
+    font-size: var(--paper-icon-size-small);
+    transition: transform var(--paper-short-transition) var(--paper-ease-standard);
+}
+
+.reasoning[aria-expanded="true"] .reasoningChevron {
+    transform: rotate(180deg);
+}
+
+.attach {
+    margin-right: var(--paper-uigap-half);
+}
+
+.spacer {
+    flex: 1;
+}
+
+.reason {
+    display: flex;
+    align-items: center;
+    gap: var(--paper-uigap-onefourth);
+}

@@ -1,0 +1,19 @@
+.ConversationList {
+    display: flex;
+    flex-direction: column;
+    width: calc(var(--paper-size-sidebar) * 1.35);
+    min-width: 0;
+    flex-shrink: 0;
+    border-right: var(--paper-border-width) solid var(--paper-border-subtle);
+    background-color: var(--paper-surface);
+}
+
+.list {
+    flex: 1;
+    min-height: 0;
+}
+
+/* pinned under the chats when they do not fill the sidebar */
+.settingsItem {
+    margin-top: auto;
+}

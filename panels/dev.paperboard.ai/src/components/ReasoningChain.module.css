@@ -1,0 +1,131 @@
+/* The reasoning chain: thinking and invoked actions read as one thread,
+   their icons joined by a line while the steps follow each other. */
+.step {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.step:has(+ .step)::after {
+    content: "";
+    position: absolute;
+    left: calc(var(--paper-uigap-half) + var(--paper-icon-size-small) / 2 - var(--paper-border-width) / 2);
+    top: calc(var(--paper-uigap-onefourth) * 2 + var(--paper-icon-size-small));
+    bottom: calc(var(--paper-uigap-half) * -1);
+    width: var(--paper-border-width);
+    background: var(--paper-border);
+}
+
+.head {
+    display: flex;
+    align-items: center;
+    gap: var(--paper-uigap-half);
+    min-width: 0;
+    padding: var(--paper-uigap-onefourth) var(--paper-uigap-half);
+    border: none;
+    background: none;
+    border-radius: var(--paper-border-radius-half);
+    color: var(--paper-text-muted);
+    font: inherit;
+    font-size: var(--paper-text-size-2);
+    text-align: left;
+    cursor: pointer;
+    transition:
+        color var(--paper-short-transition) var(--paper-ease-standard),
+        background-color var(--paper-short-transition) var(--paper-ease-standard);
+}
+
+.head[aria-disabled="true"] {
+    cursor: default;
+}
+
+.head:hover:not([aria-disabled="true"]) {
+    color: var(--paper-text);
+    background: var(--paper-surface);
+}
+
+.head:focus-visible {
+    outline: var(--paper-focus-ring);
+    outline-offset: calc(var(--paper-focus-offset) * -1);
+}
+
+.icon {
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+    width: var(--paper-icon-size-small);
+    height: var(--paper-icon-size-small);
+    font-size: var(--paper-icon-size-small);
+    line-height: 1;
+}
+
+/* the glyph box is exactly the cell: no inherited line height pushing it
+   below the label's center, no button icon margins shifting it sideways */
+.icon > * {
+    margin: 0;
+    line-height: 1;
+}
+
+.appIcon {
+    width: 100%;
+    height: 100%;
+    border-radius: var(--paper-border-radius-half);
+    object-fit: cover;
+}
+
+.label {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.app {
+    color: var(--paper-text);
+    font-weight: 600;
+    margin-right: var(--paper-uigap-half);
+}
+
+.subject {
+    font-family: var(--paper-font-family-code);
+    font-size: var(--paper-text-size-1);
+}
+
+.status {
+    display: inline-flex;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.done {
+    font-size: var(--paper-icon-size-small);
+    color: var(--paper-success);
+}
+
+.chevron {
+    flex-shrink: 0;
+    font-size: var(--paper-icon-size-small);
+    transition: transform var(--paper-short-transition) var(--paper-ease-standard);
+}
+
+.open .chevron {
+    transform: rotate(180deg);
+}
+
+.body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap-half);
+    min-width: 0;
+    max-height: calc(var(--paper-size-panel-height-small) * 0.6);
+    overflow-y: auto;
+    padding: var(--paper-uigap-onefourth) var(--paper-uigap-half) var(--paper-uigap-half)
+        calc(var(--paper-uigap-half) * 2 + var(--paper-icon-size-small));
+}
+
+.thinkingText {
+    color: var(--paper-text-muted);
+    font-size: var(--paper-text-size-2);
+}

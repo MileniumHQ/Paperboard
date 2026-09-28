@@ -1,0 +1,65 @@
+.FitMeter {
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap-onefourth);
+    min-width: 0;
+    width: 100%;
+}
+
+.head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--paper-uigap-half);
+    min-width: 0;
+}
+
+.rating {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--paper-uigap-onefourth);
+    min-width: 0;
+}
+
+.track {
+    position: relative;
+    width: 100%;
+    height: var(--paper-uigap-half);
+    border-radius: var(--paper-border-radius-pill);
+    background-color: var(--paper-surface-inset);
+    border: var(--paper-border-width) solid var(--paper-border-subtle);
+    overflow: hidden;
+}
+
+.gpuZone {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    background-color: color-mix(in srgb, var(--paper-primary) 20%, transparent);
+}
+
+.fill {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    border-radius: var(--paper-border-radius-pill);
+    background-color: var(--paper-text-subtle);
+}
+
+.FitMeter[data-rating="gpu"] .fill {
+    background-color: var(--paper-success);
+}
+
+.FitMeter[data-rating="partial"] .fill {
+    background-color: var(--paper-warning);
+}
+
+.FitMeter[data-rating="cpu"] .fill {
+    background-color: var(--paper-text-subtle);
+}
+
+.FitMeter[data-rating="too-big"] .fill {
+    background-color: var(--paper-danger);
+}

@@ -1,0 +1,27 @@
+/* A bare textarea: the composer's box owns the surface and frame. */
+.MessageInput {
+    width: 100%;
+    box-sizing: border-box;
+    display: block;
+    margin: 0;
+    padding: 0;
+    border: none;
+    outline: none;
+    resize: none;
+    overflow-y: auto;
+    background: transparent;
+    color: var(--paper-text);
+    font-family: inherit;
+    font-size: var(--paper-text-size-3);
+    line-height: var(--paper-console-line-height);
+    min-height: calc(var(--paper-uigap) * 2.5);
+}
+
+.MessageInput::placeholder {
+    color: var(--paper-text-subtle);
+}
+
+.MessageInput:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}

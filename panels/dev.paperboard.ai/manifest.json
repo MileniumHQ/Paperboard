@@ -1,10 +1,13 @@
 {
     "name": "AI",
     "id": "dev.paperboard.ai",
-    "version": "0.1.0",
-    "description": "Local language models with panel actions",
+    "version": "0.3.0",
+    "description": "Chat with local models through Ollama. Models can search the web through Brave and run shell commands you approve one at a time, and, experimentally, use your other apps' actions with your approval.",
     "publisher": "Paperboard",
     "base": "./dist/index.html",
     "service": "./dist/service.js",
-    "icon": "./branding/icon.png"
+    "icon": "./branding/icon.png",
+    "network": {
+        "hosts": ["registry.ollama.ai", "search.brave.com"]
+    }
 }

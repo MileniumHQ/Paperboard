@@ -1,0 +1,98 @@
+.userRow {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: var(--paper-uigap-onefourth);
+}
+
+.userMeta {
+    display: flex;
+    align-items: center;
+    gap: var(--paper-uigap-onefourth);
+}
+
+.user {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    max-width: 80%;
+    padding: var(--paper-uigap-half) var(--paper-uigap);
+    border-radius: var(--paper-border-radius);
+    border-bottom-right-radius: var(--paper-border-radius-half);
+    background-color: var(--paper-primary-deep);
+    color: var(--paper-on-color);
+}
+
+.userBody {
+    min-width: 0;
+    width: 100%;
+}
+
+.clamped {
+    display: -webkit-box;
+    -webkit-line-clamp: 8;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.showMore {
+    margin-top: var(--paper-uigap-onefourth);
+    padding: 0;
+    border: none;
+    background: none;
+    color: inherit;
+    font-family: inherit;
+    font-size: var(--paper-text-size-1);
+    opacity: 0.85;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.showMore:focus-visible {
+    outline: var(--paper-focus-ring);
+    outline-offset: var(--paper-focus-offset);
+    border-radius: var(--paper-border-radius-half);
+}
+
+.userText {
+    white-space: pre-wrap;
+    color: inherit;
+}
+
+.assistant {
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap-half);
+    min-width: 0;
+}
+
+.attachments {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--paper-uigap-onefourth);
+    margin-bottom: var(--paper-uigap-onefourth);
+}
+
+.attachmentImage {
+    max-width: var(--paper-size-field);
+    max-height: var(--paper-size-field);
+    border-radius: var(--paper-border-radius-half);
+    object-fit: cover;
+}
+
+.attachmentFile {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--paper-uigap-onefourth);
+    max-width: var(--paper-size-field);
+    padding: 0 var(--paper-uigap-onefourth);
+    border-radius: var(--paper-border-radius-half);
+    background: color-mix(in srgb, var(--paper-on-color) 18%, transparent);
+    font-size: var(--paper-text-size-1);
+}
+
+.attachmentName {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}

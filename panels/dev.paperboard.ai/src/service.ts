@@ -1,52 +1,27 @@
-import {
-    definePanelService,
-    defineAction,
-    type ServiceContext,
-} from "@paperboard-dev/paperapi";
-import { buildGreeting } from "./lib/greet";
+import { definePanelService } from "@paperboard-dev/paperapi";
+import { PANEL_ID } from "./contract";
+import { initialState, type AiState } from "./core/types";
+import { AiApp } from "./service/app";
+import { publicActions, uiActions } from "./service/actions";
 
-// pass PANEL_ID explicitly, ambient scope resolves to last-imported panel
-const PANEL_ID = "dev.paperboard.ai";
+const app = new AiApp();
 
-interface StarterServiceState {
-    greetingCount: number;
-}
-
-type Ctx = ServiceContext<StarterServiceState>;
-
-const actions = [
-    defineAction({
-        id: "greet",
-        name: "Greet",
-        category: "General",
-        description: "Greets a person by name",
-        template: "Greet {name}",
-        inputs: {
-            name: { type: "string", label: "Name", placeholder: "Ada", required: true },
-        },
-        output: { type: "string", label: "Greeting" },
-        icon: "waving_hand",
-        run: async (ctx: Ctx, inputs: { name?: string }) => {
-            // validation lives in pure lib code (tested); the action only
-            // wires it to state. Invalid input throws a typed error, never
-            // an empty success.
-            const greeting = buildGreeting(inputs?.name);
-            ctx.setState({
-                greetingCount: (ctx.state.greetingCount ?? 0) + 1,
-            });
-            return greeting;
-        },
-    }),
-];
-
-export const starterService = definePanelService({
+export const aiService = definePanelService<AiState, ReturnType<typeof publicActions>>({
     id: PANEL_ID,
-    state: { greetingCount: 0 },
-    categories: [{ name: "General", icon: "star", order: 1 }],
-    actions,
-    async onInit(_ctx: Ctx) {
-        console.log(`[${PANEL_ID}] service ready.`);
+    state: initialState(),
+    categories: [{ name: "AI", icon: "smart_toy", order: 1 }],
+    actions: [...publicActions(app), ...uiActions(app)],
+    async onInit(ctx) {
+        await app.init(ctx);
     },
 });
 
-export default starterService;
+// replies and downloads stop with the service; the Ollama child is a
+// supervised workload and is replaced (stop observed) on the next start
+for (const signal of ["SIGTERM", "SIGINT"] as const) {
+    process.once(signal, () => {
+        app.shutdown().finally(() => process.exit(0));
+    });
+}
+
+export default aiService;

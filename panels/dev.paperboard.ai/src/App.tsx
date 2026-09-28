@@ -1,53 +1,35 @@
-import { createSignal } from "solid-js";
+import { Match, onMount, Switch } from "solid-js";
 import {
-    PaperFlex,
-    PaperMenu,
-    PaperMenuItem,
-    PaperInterfaceGroup,
-    PaperInterfaceItem,
+    PaperButton,
+    PaperCenteredInterface,
+    PaperEmptyState,
+    PaperLoader,
 } from "@paperboard-dev/paperui";
 import "@paperboard-dev/paperui/style.css";
 import "@paperboard-dev/paperui/panel.css";
 import "./style.css";
-import CounterPage from "./pages/CounterPage";
-import NotesPage from "./pages/NotesPage";
-import EchoPage from "./pages/EchoPage";
+import { hydrate, hydration, hydrationError } from "./lib/state";
+import ChatView from "./components/ChatView";
 
 export default function App() {
-    const [activeTab, setActiveTab] = createSignal("counter");
+    onMount(() => void hydrate());
 
     return (
-        <PaperFlex fullWidth fullHeight direction="row">
-            <PaperMenu
-                name="starter-menu"
-                spacing="half"
-                value={activeTab()}
-                onValueChange={(val) => setActiveTab(String(val))}
-            >
-                <PaperMenuItem value="counter" icon="add">
-                    Counter
-                </PaperMenuItem>
-                <PaperMenuItem value="notes" icon="edit">
-                    Notes
-                </PaperMenuItem>
-                <PaperMenuItem value="echo" icon="chat">
-                    Echo
-                </PaperMenuItem>
-            </PaperMenu>
-            <PaperInterfaceGroup
-                value={activeTab()}
-                style={{ flex: 1, height: "100%", "min-height": 0, overflow: "auto" }}
-            >
-                <PaperInterfaceItem value="counter">
-                    <CounterPage />
-                </PaperInterfaceItem>
-                <PaperInterfaceItem value="notes">
-                    <NotesPage />
-                </PaperInterfaceItem>
-                <PaperInterfaceItem value="echo">
-                    <EchoPage />
-                </PaperInterfaceItem>
-            </PaperInterfaceGroup>
-        </PaperFlex>
+        <Switch>
+            <Match when={hydration() === "loading"}>
+                <PaperCenteredInterface size="compact">
+                    <PaperLoader loaderStatus="indeterminate" label="Connecting to the AI service" />
+                </PaperCenteredInterface>
+            </Match>
+            <Match when={hydration() === "failed"}>
+                <PaperCenteredInterface size="compact">
+                    <PaperEmptyState icon="cloud_off" title="The AI service is not answering" description={hydrationError()} />
+                    <PaperButton variant="primary" onClick={() => void hydrate()}>Try again</PaperButton>
+                </PaperCenteredInterface>
+            </Match>
+            <Match when={true}>
+                <ChatView />
+            </Match>
+        </Switch>
     );
 }
