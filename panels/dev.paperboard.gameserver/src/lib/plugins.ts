@@ -17,6 +17,7 @@ import {
     type PluginUpdateStatus as CoreUpdateStatus,
 } from "../core/plugins";
 import type { InstalledPlugin, InstalledRecord } from "../core/plugins";
+import { apiFetch } from "./userAgent";
 
 export type { InstalledPlugin, InstalledRecord };
 export { INSTALL_RECORDS_KEY, isInstallRecord, pluginDirName, validatePluginFilename };
@@ -149,7 +150,7 @@ async function modrinthFetch<T>(
     const query = params
         ? `?${new URLSearchParams(params).toString()}`
         : "";
-    const res = await fetch(`${MODRINTH_API}${path}${query}`);
+    const res = await apiFetch(`${MODRINTH_API}${path}${query}`);
     const text = await res.text();
 
     let data: unknown;

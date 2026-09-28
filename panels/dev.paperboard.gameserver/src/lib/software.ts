@@ -1,4 +1,5 @@
 import { isSupportedMcVersion, javaPackageFor } from "./versionProfile";
+import { apiFetch } from "./userAgent";
 
 export type ServerSoftwareType = "vanilla" | "paper" | "fabric";
 
@@ -33,7 +34,7 @@ let pistonManifestCache: any | null = null;
 
 async function getPistonManifest(): Promise<any> {
     if (!pistonManifestCache) {
-        const res = await fetch(PISTON_META_URL);
+        const res = await apiFetch(PISTON_META_URL);
         pistonManifestCache = await res.json();
     }
     return pistonManifestCache;
@@ -54,7 +55,7 @@ export async function getVanillaDownload(versionId: string): Promise<{ url: stri
     const version = data.versions.find((v: any) => v.id === versionId);
     if (!version) throw new Error(`Version ${versionId} not found`);
 
-    const versionRes = await fetch(version.url);
+    const versionRes = await apiFetch(version.url);
     const versionData = await versionRes.json();
     const server = versionData.downloads?.server;
     if (!server) throw new Error(`No server jar for ${versionId}`);
@@ -68,13 +69,13 @@ export async function getVanillaDownload(versionId: string): Promise<{ url: stri
 }
 
 export async function getPaperVersions(): Promise<string[]> {
-    const res = await fetch(PAPER_API_URL);
+    const res = await apiFetch(PAPER_API_URL);
     const data = await res.json();
     return Object.values(data.versions as Record<string, string[]>).flat();
 }
 
 export async function getPaperBuilds(version: string): Promise<number[]> {
-    const res = await fetch(`${PAPER_API_URL}/versions/${version}`);
+    const res = await apiFetch(`${PAPER_API_URL}/versions/${version}`);
     const data = await res.json();
     return data.builds || [];
 }
@@ -83,7 +84,7 @@ export async function getPaperDownload(version: string, build?: number | string)
     const targetBuild = build ?? (await getPaperBuilds(version))[0];
     if (!targetBuild) throw new Error(`No builds found for Paper version ${version}`);
 
-    const res = await fetch(`${PAPER_API_URL}/versions/${version}/builds/${targetBuild}`);
+    const res = await apiFetch(`${PAPER_API_URL}/versions/${version}/builds/${targetBuild}`);
     const data = await res.json();
     const server = data.downloads?.["server:default"];
     if (!server) throw new Error(`No server download for Paper ${version} build ${targetBuild}`);
@@ -105,7 +106,7 @@ export async function getPaperDownload(version: string, build?: number | string)
 
 export async function getFabricLoaderVersions(gameVersion?: string): Promise<string[]> {
     const endpoint = gameVersion ? `${FABRIC_META_URL}/loader/${gameVersion}` : `${FABRIC_META_URL}/loader`;
-    const res = await fetch(endpoint);
+    const res = await apiFetch(endpoint);
     const data = await res.json();
     return data.map((item: any) => item.loader?.version || item.version).filter(Boolean);
 }
@@ -141,7 +142,7 @@ export async function getDetailedVersionsForSoftware(software: ServerSoftwareTyp
             }));
         }
         case "fabric": {
-            const res = await fetch(`${FABRIC_META_URL}/game`);
+            const res = await apiFetch(`${FABRIC_META_URL}/game`);
             const data = await res.json();
             return (data || []).map((v: any) => ({
                 id: v.version,
