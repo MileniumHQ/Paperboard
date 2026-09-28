@@ -2,7 +2,6 @@
     width: var(--size);
     height: var(--size);
     border-radius: 50%;
-    --size: var(--paper-control-size-medium);
     position: relative;
     display: inline-flex;
     align-items: center;
@@ -11,7 +10,7 @@
 }
 
 .small {
-    --size: var(--paper-control-size-tiny);
+    --size: var(--paper-icon-size-small);
 }
 
 .medium {
