@@ -3,11 +3,13 @@ import {
     splitProps,
     Show,
     createSignal,
+    onCleanup,
     type JSX,
     type ParentProps,
 } from "solid-js";
 import { PaperButton } from "../PaperButton";
 import { PaperIcon } from "../PaperIcon";
+import { copyText } from "../../utils/clipboard";
 
 import Prism from "prismjs";
 import "prismjs/components/prism-clike";
@@ -59,7 +61,9 @@ export function PaperCode(props: ParentProps<PaperCodeProps>) {
         "ref",
     ]);
 
-    const [copied, setCopied] = createSignal(false);
+    const [copied, setCopied] = createSignal<"idle" | "copied" | "failed">("idle");
+    let resetTimer: ReturnType<typeof setTimeout> | undefined;
+    onCleanup(() => clearTimeout(resetTimer));
 
     const getCodeText = (): string => {
         if (typeof local.children === "string") return local.children;
@@ -72,14 +76,11 @@ export function PaperCode(props: ParentProps<PaperCodeProps>) {
     const handleCopy = async (e: MouseEvent) => {
         e.preventDefault();
         e.stopPropagation();
-        const text = getCodeText();
-        try {
-            await navigator.clipboard.writeText(text);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
-        } catch (err) {
-            console.error("Failed to copy code to clipboard", err);
-        }
+        // copyText falls back to execCommand where the async clipboard is
+        // denied (sandboxed panel frames), and reports failure honestly
+        setCopied((await copyText(getCodeText())) ? "copied" : "failed");
+        clearTimeout(resetTimer);
+        resetTimer = setTimeout(() => setCopied("idle"), 2000);
     };
 
     const highlightedHTML = () => {
@@ -103,15 +104,37 @@ export function PaperCode(props: ParentProps<PaperCodeProps>) {
                 />
             }
         >
-            <div class={styles.PaperCodeWrapper}>
+            <div
+                class={styles.PaperCodeWrapper}
+                classList={{ [styles.copyable]: isCopyable() }}
+            >
                 <Show when={isCopyable()}>
-                    <PaperButton size="tiny"
+                    <PaperButton
+                        size="tiny"
                         icon
                         class={styles.copyButton}
                         onClick={handleCopy}
-                        title={copied() ? "Copied!" : "Copy code"}>
-                        <PaperIcon zeroHeight>
-                            {copied() ? "check" : "content_copy"}
+                        aria-label={
+                            copied() === "copied"
+                                ? "Copied"
+                                : copied() === "failed"
+                                  ? "Copy failed"
+                                  : "Copy code"
+                        }
+                        title={
+                            copied() === "copied"
+                                ? "Copied"
+                                : copied() === "failed"
+                                  ? "Copy failed"
+                                  : "Copy code"
+                        }
+                    >
+                        <PaperIcon>
+                            {copied() === "copied"
+                                ? "check"
+                                : copied() === "failed"
+                                  ? "error"
+                                  : "content_copy"}
                         </PaperIcon>
                     </PaperButton>
                 </Show>

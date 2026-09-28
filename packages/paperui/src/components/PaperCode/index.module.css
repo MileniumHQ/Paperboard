@@ -23,11 +23,27 @@
     background: var(--paper-surface);
 }
 
+/* the button sits in a square corner inset by uigap-half; a copyable block
+   is at least that tall and keeps its text clear of the button, so a
+   one-line block holds the button exactly with its line centered */
 .copyButton {
     position: absolute;
     top: var(--paper-uigap-half);
     right: var(--paper-uigap-half);
     z-index: 2;
+}
+
+.copyable .PaperCodeBlock {
+    display: flex;
+    align-items: center;
+    box-sizing: border-box;
+    min-height: calc(var(--paper-control-size-tiny) + var(--paper-uigap));
+    padding-right: calc(var(--paper-control-size-tiny) + var(--paper-uigap));
+}
+
+.copyable .PaperCodeBlock > code {
+    min-width: 0;
+    flex: 1;
 }
 
 .PaperCodeBlock {
