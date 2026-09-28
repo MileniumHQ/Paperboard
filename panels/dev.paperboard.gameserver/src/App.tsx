@@ -162,7 +162,7 @@ export default function App() {
                                 <Plugins updateRequest={pluginUpdateRequest()} />
                             </PaperInterfaceItem>
                         </Show>
-                        <PaperInterfaceItem value="logs">
+                        <PaperInterfaceItem value="logs" variant="full">
                             <Logs />
                         </PaperInterfaceItem>
                         <Show when={showWorlds()}>
