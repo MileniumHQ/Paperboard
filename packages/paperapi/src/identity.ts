@@ -2,6 +2,7 @@
 // options. A document URL is an asset address, never a credential claim.
 
 import { serviceBootContext } from "./boot";
+import { requirePanelId } from "./panelIdentity";
 
 // log-once ledger. BOUNDED: an append-only array grows with every distinct
 // label a long-lived process warns about, so past the cap the oldest entry
@@ -39,4 +40,24 @@ export function resolvePanelId(): string {
 export function resolveDefaultPanelId(optsPanelId: string | undefined): string {
     if (optsPanelId) return optsPanelId;
     return resolvePanelId();
+}
+
+// Address of an asset served from another panel's origin on the same
+// computer (a sibling's icon in a picker, say). Electron serves every panel
+// from panel://<computerId>.<panelId>/; browser mode serves it from
+// http://<computerId>.<panelId>.<shell host>/. The shape follows the
+// document this runs in; the computer is the granted one, never assumed.
+export function panelAssetUrl(panelId: string, subpath = ""): string {
+    const target = requirePanelId(panelId);
+    const computerId = grantedComputerId();
+    const rest = subpath.replace(/^\.?\/+/, "");
+    const own = resolvePanelId();
+    const loc = (globalThis as any).location as Location | undefined;
+    if (own && loc && (loc.protocol === "http:" || loc.protocol === "https:")) {
+        const prefix = `${computerId}.${own}.`;
+        if (loc.host.startsWith(prefix)) {
+            return `${loc.protocol}//${computerId}.${target}.${loc.host.slice(prefix.length)}/${rest}`;
+        }
+    }
+    return `panel://${computerId}.${target}/${rest}`;
 }
