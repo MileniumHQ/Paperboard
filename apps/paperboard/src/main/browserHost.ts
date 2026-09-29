@@ -264,7 +264,15 @@ export function startBrowserHost(opts: BrowserHostOptions): Promise<BrowserHost>
 
     const proxyRenderer = (req: http.IncomingMessage, res: http.ServerResponse, devUrl: string) =>
         new Promise<void>((resolve, reject) => {
-            const target = new URL(req.url || "/", devUrl);
+            // the request path is appended to the dev origin as text: URL
+            // resolution would let "//other-host/x" or an absolute-form
+            // request line pick the upstream host
+            const rawPath = req.url || "/";
+            if (!rawPath.startsWith("/")) {
+                reject(new HttpError(400, "Malformed request path"));
+                return;
+            }
+            const target = new URL(new URL(devUrl).origin + rawPath);
             const upstream = http.request(
                 target,
                 {

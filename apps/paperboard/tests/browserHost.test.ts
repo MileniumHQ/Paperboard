@@ -336,3 +336,74 @@ describe("close", () => {
         fs.rmSync(dir, { recursive: true, force: true });
     });
 });
+
+describe("renderer dev proxy", () => {
+    it("never lets the request path choose the upstream host", async () => {
+        const seen: { dev: string[]; other: string[] } = { dev: [], other: [] };
+        const listen = (log: string[]) =>
+            new Promise<http.Server>((resolve) => {
+                const server = http.createServer((req, res) => {
+                    log.push(req.url ?? "");
+                    res.end("upstream");
+                });
+                server.listen(0, "127.0.0.1", () => resolve(server));
+            });
+        const dev = await listen(seen.dev);
+        const other = await listen(seen.other);
+        const devPort = (dev.address() as net.AddressInfo).port;
+        const otherPort = (other.address() as net.AddressInfo).port;
+        const proxied = await startBrowserHost({
+            port: 0,
+            rendererDevUrl: `http://127.0.0.1:${devPort}`,
+            invoke: {},
+            servePanel: async () => new Response("x"),
+        });
+        try {
+            const target = proxied;
+            const send = (pathname: string, cookie: string) =>
+                new Promise<number>((resolve, reject) => {
+                    const req = http.request(
+                        {
+                            host: "127.0.0.1",
+                            port: target.port,
+                            path: pathname,
+                            headers: { host: `${BROWSER_HOST_SUFFIX}:${target.port}`, cookie },
+                        },
+                        (res) => {
+                            res.resume();
+                            res.on("end", () => resolve(res.statusCode ?? 0));
+                        },
+                    );
+                    req.on("error", reject);
+                    req.end();
+                });
+            const launch = new URL(proxied.mintLaunchUrl());
+            const signedIn = await new Promise<string>((resolve, reject) => {
+                http
+                    .get(
+                        {
+                            host: "127.0.0.1",
+                            port: proxied.port,
+                            path: launch.pathname + launch.search,
+                            headers: { host: `${BROWSER_HOST_SUFFIX}:${proxied.port}` },
+                        },
+                        (res) => {
+                            res.resume();
+                            resolve(String(res.headers["set-cookie"]?.[0] ?? "").split(";")[0]);
+                        },
+                    )
+                    .on("error", reject);
+            });
+            expect(await send("/main.js", signedIn)).toBe(200);
+            await send(`//127.0.0.1:${otherPort}/secret`, signedIn);
+            await send(`http://127.0.0.1:${otherPort}/secret`, signedIn);
+            expect(seen.other).toEqual([]);
+            expect(seen.dev[0]).toBe("/main.js");
+            expect(seen.dev).toContain(`//127.0.0.1:${otherPort}/secret`);
+        } finally {
+            await proxied.close();
+            dev.close();
+            other.close();
+        }
+    });
+});
