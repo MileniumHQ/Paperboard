@@ -1057,6 +1057,24 @@ export class PaperCraneEngine {
         }
     }
 
+    /** Restarts only the panel's service child. Workloads it started through
+     * process:run/terminals are daemon-owned clients and keep running.
+     * Resolves true once the new generation reports ready, false when the
+     * panel declares no service. */
+    public async restartPanelService(panelId: string): Promise<boolean> {
+        const cleanId = requirePanelId(panelId);
+        const key = `panel:${cleanId}`;
+        if (this.operations.has(key)) throw new Error(`An operation on ${cleanId} is already running`);
+        if (!fs.existsSync(path.join(this.panelsDir, cleanId))) throw new Error(`Panel ${cleanId} is not installed`);
+        this.operations.add(key);
+        try {
+            await this.services.stopService(cleanId);
+            if (!this.services.startService(cleanId)) return false;
+            await this.services.waitUntilReady(cleanId);
+            return true;
+        } finally { this.operations.delete(key); }
+    }
+
     public async uninstallPanel(panelId: string): Promise<boolean> {
         const cleanId = requirePanelId(panelId);
         this.requireRecoveryCapacity(this.panelsDir, cleanId);

@@ -52,6 +52,8 @@ import {
     mergeVersionRecord,
     osOf,
     releaseAssetUrl,
+    storedRecordOrigin,
+    storeUploadParts,
     tagFor,
     ymlKeyFor,
     type DlApp,
@@ -646,9 +648,16 @@ interface PackedPanel {
     bytes: Buffer;
     sha256: string;
     meta: Record<string, unknown>;
+    store: ReturnType<typeof storeUploadParts>;
 }
 
 async function packPanel(info: PanelInfo): Promise<PackedPanel> {
+    // listing files are read and validated before the build: a broken
+    // listing refuses the publish instead of shipping a release without it
+    const store = storeUploadParts(
+        JSON.parse(readFileSync(join(info.dir, "manifest.json"), "utf8")).store,
+        (rel) => readFileSync(join(info.dir, rel)),
+    );
     await sh([process.execPath, "run", "build"], { cwd: info.dir, quiet: false });
     const outDir = join(tmpdir(), `paperboard-pack-${Date.now()}-${info.id}`);
     mkdirSync(outDir, { recursive: true });
@@ -670,6 +679,7 @@ async function packPanel(info: PanelInfo): Promise<PackedPanel> {
         archivePath,
         bytes,
         sha256,
+        store,
         meta: {
             id: info.id,
             name: info.name,
@@ -684,7 +694,7 @@ async function packPanel(info: PanelInfo): Promise<PackedPanel> {
 }
 
 async function uploadPanel(packed: PackedPanel, authKey: string): Promise<void> {
-    const { info, bytes, meta } = packed;
+    const { info, bytes, meta, store } = packed;
     const archiveName = `${info.id}-${info.version}.tar.gz`;
     const formData = new FormData();
     formData.append("archive", new Blob([bytes], { type: "application/gzip" }), archiveName);
@@ -699,6 +709,10 @@ async function uploadPanel(packed: PackedPanel, authKey: string): Promise<void> 
             formData.append("icon", new Blob([iconBuffer], { type: mimeType }), basename(iconPath));
         }
     }
+    if (store.about !== undefined) formData.append("about", store.about);
+    for (const part of store.files) {
+        formData.append(part.field, new Blob([part.bytes as BlobPart], { type: part.type }), part.fileName);
+    }
     const res = await fetch(`${ORIGAMI_URL}/panel/publish`, {
         method: "POST",
         headers: { Authorization: `Bearer ${authKey}`, "X-Auth-Key": authKey },
@@ -706,6 +720,27 @@ async function uploadPanel(packed: PackedPanel, authKey: string): Promise<void> 
     });
     if (!res.ok) {
         throw new Error(`Publish failed (${res.status} ${res.statusText}): ${await res.text()}`);
+    }
+
+    // The registry bakes PANEL_BASE_URL into every record URL. A local dev
+    // server whose PANEL_BASE_URL still names production stores unreachable
+    // icon/download URLs — catch it here, not as broken images later.
+    let body: { panel?: { iconUrl?: unknown; downloadUrl?: unknown } } | null =
+        null;
+    try {
+        body = (await res.json()) as typeof body;
+    } catch (err) {
+        console.debug("publish response was not JSON:", String(err));
+    }
+    const wrongOrigin =
+        storedRecordOrigin(ORIGAMI_URL, body?.panel?.iconUrl) ??
+        storedRecordOrigin(ORIGAMI_URL, body?.panel?.downloadUrl);
+    if (wrongOrigin) {
+        p.log.warn(
+            `The registry stored URLs on ${wrongOrigin} while you published to ${ORIGAMI_URL}: ` +
+                `records will point at the wrong host. Set PANEL_BASE_URL to your dev origin ` +
+                `(see apps/origami/README.md) and republish.`,
+        );
     }
 }
 

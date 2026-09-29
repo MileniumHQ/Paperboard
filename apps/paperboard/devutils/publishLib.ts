@@ -11,6 +11,14 @@
 // VERSION_SEGMENT, FILE_SEGMENT, DL_HOST, kvKeyFor, and the /<app>/<file>
 // redirect contract. If you change one side, change the other and say so.
 
+import {
+    parseStoreManifest,
+    storeImageExtension,
+    storeScreenshotField,
+    STORE_IMAGE_TYPES,
+    STORE_MAX_SCREENSHOT_BYTES,
+} from "../../../packages/paperapi/src/storeListing";
+
 export const GH_REPO = "MileniumHQ/Paperboard";
 export const DL_HOST = "i.paperboard.dev";
 export const ORIGAMI_HOST = "origami.ariapis.com";
@@ -218,4 +226,68 @@ export function legacyDownloadRedirect(
         : null;
     if (!t) return null;
     return dlFileUrl(seg, "latest", assetFileName(seg, t));
+}
+
+// A registry stores record URLs from its configured PANEL_BASE_URL, not
+// from the request host (Host-header poisoning is refused at the worker).
+// Publishing to a local dev server whose PANEL_BASE_URL still names the
+// production origin bakes unreachable URLs into every record — the panel
+// library then renders icons/downloads from the wrong host. Returns the
+// stored origin when it disagrees with the registry the publish targeted.
+export function storedRecordOrigin(
+    publishBase: string,
+    recordUrl: unknown,
+): string | null {
+    if (typeof recordUrl !== "string" || !recordUrl) return null;
+    try {
+        const expected = new URL(publishBase).origin;
+        const stored = new URL(recordUrl).origin;
+        return expected === stored ? null : stored;
+    } catch (err) {
+        console.debug(
+            "storedRecordOrigin: unparseable URL, skipping comparison:",
+            String(err),
+        );
+        return null;
+    }
+}
+
+// The files a panel's store listing names, as publish-form parts. The
+// manifest block is validated by the same parser Origami enforces, so a
+// listing the registry would refuse fails here, before the upload. `read`
+// resolves a manifest path against the panel root; a missing file throws.
+export interface StoreUploadPart {
+    field: string;
+    fileName: string;
+    type: string;
+    bytes: Uint8Array;
+}
+
+export function storeUploadParts(
+    rawStore: unknown,
+    read: (relativePath: string) => Uint8Array,
+): { about?: string; files: StoreUploadPart[] } {
+    const store = parseStoreManifest(rawStore);
+    if (!store) return { files: [] };
+    const files: StoreUploadPart[] = [];
+    for (const [index, shot] of store.screenshots.entries()) {
+        for (const theme of ["light", "dark"] as const) {
+            const file = shot[theme];
+            if (!file) continue;
+            const bytes = read(file);
+            if (bytes.byteLength > STORE_MAX_SCREENSHOT_BYTES) {
+                throw new Error(`${file} is over the ${STORE_MAX_SCREENSHOT_BYTES}-byte screenshot cap`);
+            }
+            files.push({
+                field: storeScreenshotField(index, theme),
+                fileName: file.split("/").pop()!,
+                type: STORE_IMAGE_TYPES[storeImageExtension(file)!]!,
+                bytes,
+            });
+        }
+    }
+    const about = store.about
+        ? new TextDecoder().decode(read(store.about))
+        : undefined;
+    return { ...(about !== undefined ? { about } : {}), files };
 }

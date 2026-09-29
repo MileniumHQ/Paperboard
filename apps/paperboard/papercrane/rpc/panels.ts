@@ -40,6 +40,15 @@ export async function handlePanels(action: string, id: unknown, params: any, ctx
                 }
                 return true;
             }
+            case "panel:restartService": {
+                const panelId = effectivePanelId(assertPanelId(params?.panelId), action, ctx);
+                try {
+                    reply(id, { restarted: await engine.restartPanelService(panelId) });
+                } catch (err: any) {
+                    reply(id, null, `Restart failed: ${err?.message}`);
+                }
+                return true;
+            }
             case "panel:restore": {
                 requireHost(ctx.callerPanelId(), action);
                 await engine.restorePanel(assertPanelId(params?.panelId), assertStr(params?.recoveryName, "recoveryName", 256));

@@ -157,10 +157,6 @@ export class PanelServicesManager {
         if (this.services.get(id) === entry) this.services.delete(id);
     }
     public revokePanel(id: string): void { this.auth?.revokePanelTokens(requirePanelId(id)); }
-    public async restartService(id: string): Promise<void> {
-        await this.stopService(id);
-        if (this.startService(id)) await this.waitUntilReady(id);
-    }
     /** Synchronous last-resort exit hook; normal removal awaits stopService. */
     public stopAll(): void {
         for (const entry of this.services.values()) {

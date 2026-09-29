@@ -4,6 +4,7 @@
 // contract is pinned here.
 import { describe, expect, it } from "bun:test";
 import {
+    storeUploadParts,
     ALL_TARGETS,
     assetFileName,
     buildLatestYml,
@@ -17,6 +18,7 @@ import {
     PAPERDL_R2_BUCKET,
     r2YmlKey,
     releaseAssetUrl,
+    storedRecordOrigin,
     tagFor,
     ymlKeyFor,
     type DlAppRecord,
@@ -163,5 +165,82 @@ describe("legacy download redirects", () => {
     it("returns null for unknown targets instead of fabricating a URL", () => {
         expect(legacyDownloadRedirect("paperboard", "solaris-sparc")).toBeNull();
         expect(legacyDownloadRedirect("crane", "")).toBeNull();
+    });
+});
+
+describe("stored record origin guard", () => {
+    it("flags records whose stored origin is not the publish target", () => {
+        expect(
+            storedRecordOrigin(
+                "http://localhost:8787",
+                "https://origami.ariapis.com/panel/panel.a/icon",
+            ),
+        ).toBe("https://origami.ariapis.com");
+        expect(
+            storedRecordOrigin(
+                "http://localhost:8787",
+                "https://origami.ariapis.com/panel/panel.a/download",
+            ),
+        ).toBe("https://origami.ariapis.com");
+    });
+
+    it("accepts matching origins and ignores unusable values", () => {
+        expect(
+            storedRecordOrigin(
+                "https://origami.ariapis.com",
+                "https://origami.ariapis.com/panel/panel.a/icon",
+            ),
+        ).toBeNull();
+        expect(storedRecordOrigin("http://localhost:8787", undefined)).toBeNull();
+        expect(storedRecordOrigin("http://localhost:8787", "")).toBeNull();
+        expect(storedRecordOrigin("not a url", "also not a url")).toBeNull();
+    });
+});
+
+describe("storeUploadParts", () => {
+    const files: Record<string, Uint8Array> = {
+        "./store/about.md": new TextEncoder().encode("# About"),
+        "./store/1-light.png": new Uint8Array([1]),
+        "./store/1-dark.webp": new Uint8Array([2]),
+    };
+    const read = (rel: string) => {
+        const bytes = files[rel];
+        if (!bytes) throw new Error(`ENOENT ${rel}`);
+        return bytes;
+    };
+
+    it("maps every declared file to the field Origami reads", () => {
+        const parts = storeUploadParts(
+            {
+                about: "./store/about.md",
+                screenshots: [{ light: "./store/1-light.png", dark: "./store/1-dark.webp" }],
+            },
+            read,
+        );
+        expect(parts.about).toBe("# About");
+        expect(parts.files.map(({ field, fileName, type }) => ({ field, fileName, type }))).toEqual([
+            { field: "screenshot-0-light", fileName: "1-light.png", type: "image/png" },
+            { field: "screenshot-0-dark", fileName: "1-dark.webp", type: "image/webp" },
+        ]);
+    });
+
+    it("no listing uploads nothing; a missing or invalid listing refuses the publish", () => {
+        expect(storeUploadParts(undefined, read)).toEqual({ files: [] });
+        expect(() => storeUploadParts({ screenshots: [{ light: "./store/2.png" }] }, read)).toThrow(/ENOENT/);
+        expect(() => storeUploadParts({ about: "./about.md" }, read)).toThrow(/inside store/);
+    });
+});
+
+describe("first-party store listings", () => {
+    const { readdirSync, readFileSync } = require("fs") as typeof import("fs");
+    const { join } = require("path") as typeof import("path");
+    const panelsDir = join(import.meta.dir, "../../../panels");
+
+    it.each(readdirSync(panelsDir))("%s: listing validates and every named file exists", (id) => {
+        const dir = join(panelsDir, id);
+        const manifest = JSON.parse(readFileSync(join(dir, "manifest.json"), "utf8"));
+        const parts = storeUploadParts(manifest.store, (rel) => readFileSync(join(dir, rel)));
+        expect(parts.about?.length).toBeGreaterThan(0);
+        expect(parts.files.length).toBeGreaterThan(0);
     });
 });
