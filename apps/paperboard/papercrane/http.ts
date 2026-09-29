@@ -2,7 +2,7 @@ import * as http from "http";
 import * as fs from "fs";
 import * as path from "path";
 import { PaperCraneEngine } from "./engine";
-import pkg from "../package.json";
+import { PAPERCRANE_VERSION } from "./discovery";
 
 import { lookupMime } from "./mime";
 import { buildPanelCsp } from "./panelNet";
@@ -95,7 +95,7 @@ export function handleHttpRequest(
             JSON.stringify({
                 status: "ok",
                 service: "papercrane",
-                version: pkg.version || "1.0.0",
+                version: PAPERCRANE_VERSION,
             }),
         );
         return;

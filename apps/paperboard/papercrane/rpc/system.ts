@@ -3,7 +3,7 @@ import * as fs from "fs";
 import { spawn } from "child_process";
 import { getDetailedOsInfo, getNetworkIp } from "../index";
 import { streamToFileWithProgress } from "../storage";
-import pkg from "../../package.json";
+import { PAPERCRANE_VERSION } from "../discovery";
 import { logger } from "../logger";
 import type { RpcContext } from "./context";
 import { rpcErrorCode } from "./params";
@@ -43,7 +43,7 @@ export async function handleSystem(action: string, id: unknown, params: any, ctx
             const osInfo = await getDetailedOsInfo();
             reply(id, {
                 service: "papercrane",
-                version: pkg.version || "1.0.0",
+                version: PAPERCRANE_VERSION,
                 hostname: os.hostname().replace(/\.local$/i, ""),
                 os: osInfo.os,
                 osVersion: osInfo.osVersion,
