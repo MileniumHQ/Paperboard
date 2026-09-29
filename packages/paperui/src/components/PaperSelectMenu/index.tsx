@@ -112,7 +112,6 @@ function SelectMenuInner(
     const selection = useSelectionContext();
     const [open, setOpen] = createSignal(false);
     const [options, setOptions] = createSignal<RegisteredOption[]>([]);
-    let containerEl: HTMLDivElement | undefined;
     let hiddenInputRef: HTMLInputElement | undefined;
     let triggerEl: HTMLButtonElement | undefined;
 
@@ -191,19 +190,11 @@ function SelectMenuInner(
         }
     };
 
-    onMount(() => {
-        const handleOutsidePointer = (e: PointerEvent) => {
-            if (!open()) return;
-            const target = e.target as Node;
-            if (containerEl && !containerEl.contains(target)) {
-                setOpen(false);
-            }
-        };
-        document.addEventListener("pointerdown", handleOutsidePointer, true);
-        onCleanup(() =>
-            document.removeEventListener("pointerdown", handleOutsidePointer, true),
-        );
-    });
+    // Dismissal on presses outside the popup belongs to PaperContextMenu: it
+    // is the one that knows where its panel is, and it treats this trigger as
+    // inside so a press on either the trigger or an option reaches its click.
+    // A second document listener here used to close the portaled popup on the
+    // press that started an option click, so no option ever committed.
 
     const className = () =>
         [
@@ -219,7 +210,6 @@ function SelectMenuInner(
         <SelectMenuContext.Provider value={menuContext}>
             <div
                 {...rest}
-                ref={(el) => (containerEl = el)}
                 class={className()}
                 classList={local.classList}
                 onKeyDown={handleKeyDown}

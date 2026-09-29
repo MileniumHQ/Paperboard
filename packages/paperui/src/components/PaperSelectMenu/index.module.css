@@ -58,6 +58,13 @@
     font-size: var(--paper-icon-size-medium);
 }
 
+/* `button .PaperIcon` pulls icons outward with negative margins, but the label
+   clips its overflow, so the icon's left edge was cut off */
+.triggerLabel .triggerIcon {
+    margin-left: 0;
+    margin-right: 0;
+}
+
 .placeholder {
     color: var(--paper-text-faint);
 }

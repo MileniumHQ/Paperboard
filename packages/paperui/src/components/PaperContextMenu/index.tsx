@@ -464,7 +464,16 @@ export function PaperContextMenu(props: ParentProps<PaperContextMenuProps>) {
         const handleOutsidePointerDown = (e: PointerEvent) => {
             if (!menuRef) return;
             const target = e.target instanceof Node ? e.target : null;
-            if (target && menuRef.contains(target)) return;
+            if (target) {
+                if (menuRef.contains(target)) return;
+                // A dropdown's anchor is part of the menu it opens: the press
+                // on its trigger must reach the trigger's click, which owns
+                // the open/close decision (a select's toggle, a picker's
+                // reopen). Dismissing on that press instead would close the
+                // menu before the click arrives.
+                const anchor = local.target instanceof HTMLElement ? local.target : null;
+                if (anchor?.contains(target)) return;
+            }
             handleClose();
         };
 

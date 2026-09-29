@@ -7,6 +7,9 @@
     border-radius: var(--paper-border-radius);
     background: var(--paper-surface);
     overflow: hidden;
+    /* overflow:hidden zeroes the auto min-size, so without this a card is
+       crushed by its siblings in a column; `grow`/`shrink` opt back in */
+    flex-shrink: 0;
 }
 
 .PaperCard.frontest {

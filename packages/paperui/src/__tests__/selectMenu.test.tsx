@@ -76,6 +76,30 @@ describe("PaperSelectMenu", () => {
         expect(within(getTrigger()).getByText("Dark")).toBeDefined();
     });
 
+    test("the press on an option is not a dismissal: the click that follows still commits", () => {
+        let received: string | undefined;
+        render(() => (
+            <PaperSelectMenu
+                name="theme"
+                value="system"
+                onValueChange={(v) => (received = String(v))}
+            >
+                <PaperSelectMenuItem value="system">System</PaperSelectMenuItem>
+                <PaperSelectMenuItem value="dark">Dark</PaperSelectMenuItem>
+            </PaperSelectMenu>
+        ));
+
+        fireEvent.click(getTrigger());
+        const option = within(getListbox()).getByText("Dark");
+        fireEvent.pointerDown(option);
+        // a real browser would not deliver the click to a hidden option, so
+        // the popup must still be open when the press reaches the option
+        expect(getTrigger().getAttribute("aria-expanded")).toBe("true");
+
+        fireEvent.click(option);
+        expect(received).toBe("dark");
+    });
+
     test("dispatches bubbling change events from the named carrier input", () => {
         const events: string[] = [];
         render(() => (

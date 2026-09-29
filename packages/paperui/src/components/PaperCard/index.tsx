@@ -80,6 +80,8 @@ export function PaperCard(props: ParentProps<PaperCardProps>) {
         const paddingX = resolveSpacing(local.paddingX ?? local.padding);
         const paddingY = resolveSpacing(local.paddingY ?? local.padding);
         return {
+            // a growing card must also be able to shrink, or it overflows
+            ...(local.grow && local.shrink === undefined ? { "flex-shrink": 1 } : {}),
             ...resolveLayoutStyles(local, layoutCtx),
             ...(axisPadding
                 ? {
