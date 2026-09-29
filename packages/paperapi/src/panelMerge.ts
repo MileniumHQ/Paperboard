@@ -65,7 +65,9 @@ export function mergeRegistryWithInstalled(
     installed: PanelItem[],
     registryBase = "",
 ): PanelItem[] {
-    const base = registryBase.replace(/\/+$/, "");
+    let end = registryBase.length;
+    while (end > 0 && registryBase[end - 1] === "/") end--;
+    const base = registryBase.slice(0, end);
     const installedMap = new Map(installed.map((p) => [p.id, p]));
     const panels: PanelItem[] = [];
 

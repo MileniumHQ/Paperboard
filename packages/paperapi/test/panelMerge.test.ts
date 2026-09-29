@@ -123,3 +123,16 @@ test("the registry's listing and archive size reach the merged item; bad listing
         requirements: [],
     });
 });
+
+test("trailing slashes on the registry base are dropped, however many", () => {
+    const panels = mergeRegistryWithInstalled(
+        { "panel.a": { name: "A", version: "1.0.0", description: "" } },
+        [],
+        "https://registry.example///",
+    );
+    expect(panels[0]!.downloadUrl).toBe("https://registry.example/panel/panel.a/download");
+    const long = "/".repeat(200_000) + "x" + "/".repeat(200_000);
+    const t = Date.now();
+    mergeRegistryWithInstalled({ "panel.a": { name: "A", version: "1.0.0", description: "" } }, [], long);
+    expect(Date.now() - t).toBeLessThan(500);
+});
