@@ -76,7 +76,7 @@ export default function ModelDetailModal(props: ModelDetailModalProps) {
         <PaperModal
             open={model() !== null}
             onClose={props.onClose}
-            title={model()?.name ?? "Model"}
+            title="Download Model"
             size="large"
             footer={
                 <Show
@@ -116,9 +116,9 @@ export default function ModelDetailModal(props: ModelDetailModalProps) {
                 <div class={styles.head}>
                     <MakerLogo icon={maker()?.icon} size="large" />
                     <div class={styles.names}>
-                        <PaperText weight={700}>{maker()?.name ?? "Unknown maker"}</PaperText>
+                        <PaperText weight={700}>{ref()}</PaperText>
                         <PaperText size={2} color="text-muted">
-                            {model()!.tags.length} size{model()!.tags.length === 1 ? "" : "s"} available
+                            {maker()?.name ?? "Unknown maker"}
                         </PaperText>
                     </div>
                     <Show when={capabilities().length > 0}>

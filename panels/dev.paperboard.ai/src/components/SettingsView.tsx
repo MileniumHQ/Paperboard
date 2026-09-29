@@ -64,7 +64,7 @@ export default function SettingsView() {
                 </PaperSettingItem>
                 <PaperSettingItem
                     title="Web search"
-                    description="Lets the model search the web through Brave when it needs something current. Searches run without asking, and each one shows in the chat."
+                    description="Lets the model search the web through DuckDuckGo when it needs something current. Searches run without asking, and each one shows in the chat."
                 >
                     <PaperToggle
                         name="webSearch"

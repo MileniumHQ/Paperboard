@@ -46,6 +46,26 @@ describe("Ask AI schema", () => {
             findAction(fakeApp(["a:1", "b:1"]), "ask").inputs.model.options.map((o: any) => o.value),
         ).toEqual(["a:1", "b:1"]);
     });
+
+    it("has no instructions input and labels the prompt plainly", () => {
+        const ask = findAction(fakeApp([]), "ask");
+        expect("system" in ask.inputs).toBe(false);
+        expect(ask.inputs.prompt.label).toBe("Prompt");
+    });
+
+    it("uses \"Model ID\" as the download input placeholder", () => {
+        const download = findAction(fakeApp([]), "download-model");
+        expect(download.inputs.model.label).toBe("Model");
+        expect(download.inputs.model.placeholder).toBe("Model ID");
+    });
+
+    it("offers the installed models on delete", () => {
+        const del = findAction(fakeApp(["qwen3:8b", "llama3:2b"]), "delete-model");
+        expect(del.inputs.model.options.map((o: any) => o.value)).toEqual([
+            "qwen3:8b",
+            "llama3:2b",
+        ]);
+    });
 });
 
 describe("AI trigger filters", () => {

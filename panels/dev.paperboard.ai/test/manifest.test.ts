@@ -11,7 +11,7 @@ describe("manifest", () => {
     });
 
     it("declares the Ollama registry and the web search host", () => {
-        expect(manifest.network.hosts).toEqual(["registry.ollama.ai", "search.brave.com"]);
+        expect(manifest.network.hosts).toEqual(["registry.ollama.ai", "html.duckduckgo.com"]);
     });
 
     it("the service and UI reach no undeclared remote host (absence check)", () => {

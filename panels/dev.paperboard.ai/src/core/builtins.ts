@@ -109,20 +109,22 @@ function text(html: string): string {
 }
 
 /**
- * Brave's result page, read for its web results. Brave answers even
- * nonsense queries with loose matches, and its "no results" text ships on
- * every page, so zero readable results means a block or a markup change:
- * it fails loudly instead of reading as "nothing found".
+ * DuckDuckGo's no-JS result page, read for its web results. Sponsored
+ * blocks share the organic markup and are skipped by their `result--ad`
+ * class. DuckDuckGo answers even nonsense queries with loose matches, so
+ * zero readable results means a block or a markup change: it fails loudly
+ * instead of reading as "nothing found".
  */
-export function parseBraveResults(html: string): SearchResult[] {
-    const blocks = html.split('data-type="web"').slice(1);
+export function parseDuckDuckGoResults(html: string): SearchResult[] {
+    const blocks = html.split('<div class="result ').slice(1);
     const results: SearchResult[] = [];
     for (const block of blocks) {
-        const url = /<a href="(https?:\/\/[^"]+)"/.exec(block)?.[1];
-        const title = /class="title search-snippet-title[^"]*"[^>]*title="([^"]*)"/.exec(block)?.[1];
-        const snippet = /class="generic-snippet[^"]*"><div class="content[^"]*">([\s\S]*?)<\/div>/.exec(block)?.[1] ?? "";
-        if (!url || !title) continue;
-        results.push({ title: text(title), url: text(url), snippet: text(snippet) });
+        // the ad marker sits in the opening tag's class attribute
+        if (/^[^>]*result--ad/.test(block)) continue;
+        const link = /<a[^>]*class="result__a"[^>]*href="(https?:\/\/[^"]+)"[^>]*>([\s\S]*?)<\/a>/.exec(block);
+        if (!link?.[1] || !link[2]) continue;
+        const snippet = /<a[^>]*class="result__snippet"[^>]*>([\s\S]*?)<\/a>/.exec(block)?.[1] ?? "";
+        results.push({ title: text(link[2]), url: text(link[1]), snippet: text(snippet) });
         if (results.length >= MAX_SEARCH_RESULTS) break;
     }
     if (results.length === 0) {

@@ -51,7 +51,7 @@ export function publicActions(app: AiApp): ActionDefinition[] {
                 "Asks a local model and returns its answer. The model gets no actions here, since nobody is present to approve them. Fails if the answer takes longer than 28 seconds.",
             template: "Ask AI {prompt}",
             inputs: {
-                prompt: { type: "string", label: "Prompt", required: true, placeholder: "Summarize this log" },
+                prompt: { type: "string", label: "Prompt", required: true, placeholder: "Prompt" },
                 model: {
                     type: "string",
                     label: "Model",
@@ -65,16 +65,15 @@ export function publicActions(app: AiApp): ActionDefinition[] {
                     default: "standard",
                     options: personalityOptions,
                 },
-                system: { type: "string", label: "Instructions", placeholder: "Answer in one sentence" },
             },
             output: { type: "string", label: "Answer" },
             icon: "smart_toy",
-            run: async (_ctx, inputs: { prompt?: string; model?: string; system?: string; personality?: string }) => {
+            run: async (_ctx, inputs: { prompt?: string; model?: string; personality?: string }) => {
                 await app.ready;
                 return app.ask(
                     str(inputs?.prompt, "prompt", 32_000),
                     optStr(inputs?.model, "model"),
-                    optStr(inputs?.system, "system", 8000),
+                    undefined,
                     isPromptStyle(inputs?.personality) ? inputs.personality : undefined,
                 );
             },
@@ -101,7 +100,7 @@ export function publicActions(app: AiApp): ActionDefinition[] {
             description:
                 "Starts downloading a model from the Ollama library. Returns once the download has started; When Model Downloaded fires when it finishes.",
             template: "Download AI model {model}",
-            inputs: { model: { type: "string", label: "Model", required: true, placeholder: "qwen3:8b" } },
+            inputs: { model: { type: "string", label: "Model", required: true, placeholder: "Model ID" } },
             output: { type: "string", label: "Model" },
             icon: "download",
             run: async (_ctx, inputs: { model?: string }) => {
@@ -120,7 +119,7 @@ export function publicActions(app: AiApp): ActionDefinition[] {
             category: "AI",
             description: "Deletes a downloaded model and frees its disk space",
             template: "Delete AI model {model}",
-            inputs: { model: { type: "string", label: "Model", required: true, placeholder: "qwen3:8b" } },
+            inputs: { model: { type: "string", label: "Model", required: true, placeholder: "qwen3:8b", options: models } },
             output: { type: "string", label: "Model" },
             icon: "delete",
             run: async (_ctx, inputs: { model?: string }) => {

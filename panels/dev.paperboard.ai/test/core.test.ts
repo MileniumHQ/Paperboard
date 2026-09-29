@@ -3,7 +3,7 @@ import {
     BuiltinArgumentError,
     builtinArguments,
     MAX_QUERY_CHARS,
-    parseBraveResults,
+    parseDuckDuckGoResults,
     SearchUnavailableError,
     shellArgv,
 } from "../src/core/builtins";
@@ -363,16 +363,18 @@ describe("conversations", () => {
 });
 
 describe("built-ins", () => {
-    it("parses Brave's result page into titles, links and excerpts", () => {
-        const html = fs.readFileSync(path.join(import.meta.dir, "fixtures", "brave-results.html"), "utf8");
-        const results = parseBraveResults(html);
-        expect(results.length).toBe(2);
+    it("parses DuckDuckGo's result page into titles, links and excerpts, skipping ads", () => {
+        const html = fs.readFileSync(path.join(import.meta.dir, "fixtures", "ddg-results.html"), "utf8");
+        const results = parseDuckDuckGoResults(html);
+        expect(results.length).toBe(3);
         expect(results[0]).toMatchObject({ title: "Stores - SolidJS Documentation", url: "https://docs.solidjs.com/concepts/stores" });
-        expect(results[0]!.snippet).toMatch(/^Stores are a state management primitive/);
+        expect(results[0]!.snippet).toBe("Manage complex nested state efficiently with stores that provide fine-grained reactivity for objects and arrays in Solid.");
+        expect(results[2]!.snippet).toContain("Solid's answer to nested reactivity");
+        expect(results.every((r) => !r.url.startsWith("https://duckduckgo.com/y.js"))).toBe(true);
     });
 
     it("a page with no readable results is a failure, not an empty answer", () => {
-        expect(() => parseBraveResults("<html><title>Just a moment</title></html>")).toThrow(SearchUnavailableError);
+        expect(() => parseDuckDuckGoResults("<html><title>Just a moment</title></html>")).toThrow(SearchUnavailableError);
     });
 
     it("checks built-in arguments", () => {
