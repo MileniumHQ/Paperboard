@@ -12,6 +12,7 @@ export const SHELL_INVOKE_CHANNELS = [
     "computer-switch",
     "discovery-list",
     "open-panel-folder",
+    "panel-listing-file",
     "app-version",
 ] as const;
 

@@ -11,6 +11,7 @@ import {
     getVarCss,
 } from "@paperboard-dev/paperui";
 import {
+    loadInstalledPanelMedia,
     panelsApi,
     type PanelItem,
 } from "@paperboard-dev/paperapi";
@@ -18,12 +19,14 @@ import {
     computersApi,
     logToMain,
     panelUrl,
+    readPanelListingFile,
     type ComputerInfo as ComputerItem,
 } from "./lib/shell";
 import AppSettings from "./components/settings/AppSettings";
 import PanelView from "./components/panels/PanelView";
-import PanelLibrary from "./components/panels/PanelLibrary";
+import LibraryFrame from "./components/panels/LibraryFrame";
 import PanelContextMenu from "./components/panels/PanelContextMenu";
+import type { RestartState } from "./components/panels/PanelView";
 import UninstallPanelModal, {
     type UninstallTarget,
 } from "./components/panels/UninstallPanelModal";
@@ -62,13 +65,10 @@ const App: Component = () => {
         setOpenedPanels,
         reloadTokens,
         setReloadTokens,
-        storeLoadFailedFor,
         panelsLoadFailed,
         getSelectedTab,
         setComputerTab,
         refreshPanelsForComputer,
-        refreshStorePanels,
-        activePanelsList,
     } = usePanels();
     const [isSetupOpen, setIsSetupOpen] = createSignal<boolean>(false);
     const panelContextMenu = useContextMenuState();
@@ -112,12 +112,40 @@ const App: Component = () => {
         }));
     };
 
-    const handleReloadPanel = () => {
+    // per-panel restart progress, shown inside the panel's own frame
+    const [restartStates, setRestartStates] = createSignal<Record<string, RestartState>>({});
+    const setRestartState = (key: string, state: RestartState | null) =>
+        setRestartStates((prev) => {
+            const next = { ...prev };
+            if (state) next[key] = state;
+            else delete next[key];
+            return next;
+        });
+
+    const restartPanel = async (compId: string, panelId: string, name: string) => {
+        const key = `${compId}::${panelId}`;
+        if (restartStates()[key]?.kind === "restarting") return;
+        setComputerTab(compId, panelId);
+        setRestartState(key, { kind: "restarting" });
+        try {
+            // false = no service declared; reloading the view is the restart
+            await panelsApi.restartService(panelId, compId);
+            setRestartState(key, null);
+            bumpReloadToken(key);
+        } catch (err: any) {
+            logToMain("error", "Failed to restart panel:", err);
+            setRestartState(key, {
+                kind: "failed",
+                message: `Couldn't restart ${name}${err?.message ? `: ${err.message}` : ""}`,
+            });
+        }
+    };
+
+    const handleRestartPanel = () => {
         const target = contextMenuPanel();
         if (!target) return;
         panelContextMenu.close();
-        const key = `${target.compId}::${target.panel.id}`;
-        bumpReloadToken(key);
+        void restartPanel(target.compId, target.panel.id, target.panel.name);
     };
 
     const handleRequestUninstall = () => {
@@ -137,11 +165,11 @@ const App: Component = () => {
             await panelsApi.uninstall(target.panel.id, target.compId);
             const key = `${target.compId}::${target.panel.id}`;
             setOpenedPanels((prev) => prev.filter((k) => k !== key));
+            setRestartState(key, null);
             if (getSelectedTab(target.compId) === target.panel.id) {
                 setComputerTab(target.compId, "landing");
             }
             await refreshPanelsForComputer(target.compId);
-            await refreshStorePanels(target.compId);
             setIsUninstallModalOpen(false);
             setUninstallTarget(null);
         } catch (err: any) {
@@ -158,7 +186,6 @@ const App: Component = () => {
         const compId = activeComputerId();
         await refreshComputers();
         await refreshPanelsForComputer(compId);
-        await refreshStorePanels(compId);
     };
 
     // re-fetch failed panel list on reconnect
@@ -180,7 +207,6 @@ const App: Component = () => {
 
         // Data fetches are scoped per computer
         await refreshPanelsForComputer(activeComputerId());
-        refreshStorePanels(activeComputerId());
 
         // Load application-wide settings before anything depends on them
         await loadAppSettings();
@@ -216,8 +242,6 @@ const App: Component = () => {
             .switch(compId)
             .then(async () => {
                 await refreshPanelsForComputer(compId);
-                // The store is per-computer too — re-merge against the new target
-                await refreshStorePanels(compId);
             })
             .catch((err) => {
                 logToMain("error", "Failed to switch computer:", err);
@@ -332,11 +356,27 @@ const App: Component = () => {
         computers().find((c) => c.id === contextMenuComputerId())?.name ||
         "this computer";
 
-    const handleDownload = async (panelId: string) => {
+    // The library runs in an iframe and asks for installs over postMessage;
+    // the install path is unchanged — daemon RPC, refresh, open the panel.
+    const handleLibraryInstall = async (panelId: string) => {
         const compId = activeComputerId();
         await panelsApi.install(panelId, compId);
         await refreshPanelsForComputer(compId);
         setComputerTab(compId, panelId);
+    };
+
+    // Panels the registry doesn't list still get a full library page: read
+    // their own manifest and store/ files through the panel:// surface.
+    const handleLibraryMedia = (panelId: string, full: boolean) => {
+        const compId = activeComputerId();
+        return loadInstalledPanelMedia(
+            (path) => readPanelListingFile(compId, panelId, path),
+            full,
+        );
+    };
+
+    const handleLibraryOpen = (panelId: string) => {
+        setComputerTab(activeComputerId(), panelId);
     };
 
     const renderPanelIcon = (panel: PanelItem, compId: string) => {
@@ -404,6 +444,10 @@ const App: Component = () => {
                                 direction="column"
                                 fullWidth
                                 fullHeight
+                                style={{
+                                    flex: 1,
+                                    "overflow-y": "auto",
+                                }}
                             >
                                 <AppSettings
                                     settings={appSettings()}
@@ -601,19 +645,20 @@ const App: Component = () => {
                                             : "none",
                                 }}
                             >
-                                <PanelLibrary
-                                    panels={activePanelsList(activeComputerId())}
-                                    computerId={activeComputerId()}
-                                    loadFailed={storeLoadFailedFor(activeComputerId())}
-                                    onRetryLoad={() =>
-                                        void refreshStorePanels(
-                                            activeComputerId(),
-                                        )
+                                <LibraryFrame
+                                    active={
+                                        getSelectedTab(activeComputerId()) ===
+                                        "library"
                                     }
-                                    onOpen={(id) =>
-                                        setComputerTab(activeComputerId(), id)
+                                    theme={appSettings().darkMode}
+                                    installed={
+                                        panelsByComputer()[
+                                            activeComputerId()
+                                        ] || []
                                     }
-                                    onDownload={handleDownload}
+                                    onInstall={handleLibraryInstall}
+                                    onOpen={handleLibraryOpen}
+                                    loadMedia={handleLibraryMedia}
                                 />
                             </PaperFlex>
 
@@ -628,7 +673,7 @@ const App: Component = () => {
                                             fullHeight
                                             style={{
                                                 flex: 1,
-                                                overflow: "hidden",
+                                                "overflow-y": "auto",
                                                 display: isVisible()
                                                     ? "flex"
                                                     : "none",
@@ -669,6 +714,12 @@ const App: Component = () => {
                                     openedPanels={openedPanels()}
                                     reloadTokens={reloadTokens()}
                                     onReloadPanel={bumpReloadToken}
+                                    restartStates={restartStates()}
+                                    onRestartPanel={(key) => {
+                                        const [compId, panelId] = key.split("::");
+                                        const name = panelsByComputer()[compId]?.find((p) => p.id === panelId)?.name || panelId;
+                                        void restartPanel(compId, panelId, name);
+                                    }}
                                 />
                             </PaperFlex>
                         </PaperFlex>
@@ -718,7 +769,7 @@ const App: Component = () => {
                     panelContextMenu.close();
                     setContextMenuPanel(null);
                 }}
-                onReload={handleReloadPanel}
+                onRestart={handleRestartPanel}
                 onUninstall={handleRequestUninstall}
             />
 

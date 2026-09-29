@@ -17,18 +17,6 @@ export function usePanels() {
     >({
         local: "landing",
     });
-    // R5: the store is keyed per computer, like installed panels. A single
-    // shared list let a slow computer-A registry response overwrite
-    // computer-B's store while B was active — the Panel Library showed the
-    // wrong machine's registry.
-    const [storeByComputer, setStoreByComputer] = createSignal<
-        Record<string, PanelItem[]>
-    >({});
-    const [storeLoadFailedByComputer, setStoreLoadFailedByComputer] =
-        createSignal<Record<string, boolean>>({});
-    // monotonic fetch sequence per computer: a late response from an
-    // earlier fetch must not overwrite a newer one's result
-    const storeFetchSeq: Record<string, number> = {};
     const [openedPanels, setOpenedPanels] = createSignal<string[]>([]);
     const [reloadTokens, setReloadTokens] = createSignal<
         Record<string, number>
@@ -75,56 +63,11 @@ export function usePanels() {
         }
     };
 
-    const refreshStorePanels = async (compId: string) => {
-        // R5: per-computer fetch sequence — only the newest fetch for this
-        // computer may write, so a slow stale response can never clobber a
-        // newer one's result (the race that showed the wrong library).
-        const seq = (storeFetchSeq[compId] ?? 0) + 1;
-        storeFetchSeq[compId] = seq;
-        try {
-            const registry = await panelsApi.registry(compId);
-            if (storeFetchSeq[compId] !== seq) return;
-            if (Array.isArray(registry)) {
-                setStoreByComputer((prev) => ({
-                    ...prev,
-                    [compId]: registry,
-                }));
-                setStoreLoadFailedByComputer((prev) => ({
-                    ...prev,
-                    [compId]: false,
-                }));
-            }
-        } catch (err) {
-            if (storeFetchSeq[compId] !== seq) return;
-            logToMain("error", "Failed to load panel store for", compId, err);
-            setStoreLoadFailedByComputer((prev) => ({
-                ...prev,
-                [compId]: true,
-            }));
-        }
-    };
-
-    const storePanelsFor = (compId: string) => storeByComputer()[compId] || [];
-    const storeLoadFailedFor = (compId: string) =>
-        storeLoadFailedByComputer()[compId] || false;
-
-    const activePanelsList = (activeComputerId: string) => {
-        const installed = panelsByComputer()[activeComputerId] || [];
-        const installedIds = new Set(installed.map((p) => p.id));
-        return storePanelsFor(activeComputerId).map((panel) => ({
-            ...panel,
-            isInstalled: installedIds.has(panel.id),
-        }));
-    };
-
     return {
         panelsByComputer,
         setPanelsByComputer,
         activeTabByComputer,
         setActiveTabByComputer,
-        storeByComputer,
-        storePanelsFor,
-        storeLoadFailedFor,
         openedPanels,
         setOpenedPanels,
         reloadTokens,
@@ -134,8 +77,6 @@ export function usePanels() {
         getSelectedTab,
         setComputerTab,
         refreshPanelsForComputer,
-        refreshStorePanels,
-        activePanelsList,
     };
 }
 

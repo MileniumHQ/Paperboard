@@ -6,6 +6,8 @@ export interface ComputerInfo {
     name: string;
     host: string;
     port: number;
+    /** the address other machines reach this computer at (local computer only) */
+    networkAddress?: string;
     os?: string;
     osVersion?: string;
     distroId?: string;
@@ -65,6 +67,20 @@ export function panelUrl(computerId: string, panelId: string, subpath = ""): str
     const rest = subpath.replace(/^\.?\//, "");
     if (!isBrowserShell()) return `panel://${computerId}.${panelId}/${rest}`;
     return `${location.protocol}//${computerId}.${panelId}.${location.host}/${rest}`;
+}
+
+/** One file of an installed panel's manifest or store listing, as bytes. */
+export async function readPanelListingFile(
+    computerId: string,
+    panelId: string,
+    path: string,
+): Promise<Uint8Array> {
+    const base64 = await requireIpc().invoke<string>("panel-listing-file", {
+        computerId,
+        panelId,
+        path,
+    });
+    return Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
 }
 
 export const computersApi = {

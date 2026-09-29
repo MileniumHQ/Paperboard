@@ -6,6 +6,8 @@ import {
     PaperSettingItem,
     PaperFlex,
     PaperModal,
+    PaperPage,
+    PaperPageHeader,
 } from "@paperboard-dev/paperui";
 import type { ComputerItem } from "../../App";
 import { formatOsVersion } from "./ComputerHeader";
@@ -42,17 +44,14 @@ const ComputerSettings: Component<ComputerSettingsProps> = (props) => {
     };
 
     return (
-        <PaperFlex
-            direction="column"
-            fullWidth
-            fullHeight
-            background="surface-raised"
-            style={{
-                flex: 1,
-                "overflow-y": "auto",
-            }}
-        >
-            <PaperSettingList flat>
+        <PaperPage>
+            <PaperPageHeader
+                icon="info"
+                title="Computer Info"
+                subtitle={props.computer?.name || "This Computer"}
+            />
+
+            <PaperSettingList autoHeight>
                 <PaperSettingItem title="Computer Name">
                     <PaperText size={3} weight={600}>
                         {props.computer?.name || "This Computer"}
@@ -61,7 +60,7 @@ const ComputerSettings: Component<ComputerSettingsProps> = (props) => {
 
                 <PaperSettingItem title="Network Address">
                     <PaperText size={3} weight={600} color="text-subtle">
-                        {props.computer?.host || "127.0.0.1"}:
+                        {props.computer?.networkAddress || props.computer?.host || "127.0.0.1"}:
                         {props.computer?.port || 45464}
                     </PaperText>
                 </PaperSettingItem>
@@ -125,7 +124,7 @@ const ComputerSettings: Component<ComputerSettingsProps> = (props) => {
                     </PaperText>
                 </Show>
             </PaperModal>
-        </PaperFlex>
+        </PaperPage>
     );
 };
 

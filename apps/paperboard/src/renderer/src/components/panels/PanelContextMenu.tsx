@@ -8,7 +8,7 @@ import {
 interface PanelContextMenuProps {
     menu: ReturnType<typeof useContextMenuState>;
     onClose: () => void;
-    onReload: () => void;
+    onRestart: () => void;
     onUninstall: () => void;
 }
 
@@ -21,8 +21,8 @@ const PanelContextMenu: Component<PanelContextMenuProps> = (props) => {
             placement={props.menu.placement()}
             onClose={() => props.onClose()}
         >
-            <PaperContextMenuItem icon="refresh" onClick={() => props.onReload()}>
-                Reload Panel
+            <PaperContextMenuItem icon="refresh" onClick={() => props.onRestart()}>
+                Restart Panel
             </PaperContextMenuItem>
             <PaperContextMenuItem
                 icon="delete"

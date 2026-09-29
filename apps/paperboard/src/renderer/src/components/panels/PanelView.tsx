@@ -3,15 +3,19 @@ import { type Component, createEffect, createSignal, For, Show, onCleanup, onMou
 import { recordUse, liveKeys, MAX_LIVE_IFRAMES } from "./panelLru";
 import { panelUrl } from "../../lib/shell";
 
+export type RestartState = { kind: "restarting" } | { kind: "failed"; message: string };
+
 export interface PanelViewProps {
     activePanel: string;
     activeComputerId: string;
     openedPanels: string[];
     reloadTokens?: Record<string, number>;
     onReloadPanel?: (key: string) => void;
+    restartStates?: Record<string, RestartState>;
+    onRestartPanel?: (key: string) => void;
 }
 
-const PanelFrame: Component<{ panelKey: string; current: boolean; reload: number; retry: () => void }> = (props) => {
+const PanelFrame: Component<{ panelKey: string; current: boolean; reload: number; retry: () => void; restart?: RestartState; retryRestart: () => void }> = (props) => {
     const [computerId, panelId] = props.panelKey.split("::");
     const [ready, setReady] = createSignal(false);
     const [failure, setFailure] = createSignal("");
@@ -40,8 +44,12 @@ const PanelFrame: Component<{ panelKey: string; current: boolean; reload: number
             sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
             allow="clipboard-read; clipboard-write"
             onLoad={() => frame?.contentWindow?.postMessage({ type: "paperboard:initialize", generation }, "*")}
-            style={{ width: "100%", height: "100%", border: "none", "border-left": `${getVarCss("border-width")} solid ${getVarCss("border")}`, visibility: ready() && !failure() ? "visible" : "hidden" }} />
-        <Show when={!ready() || failure()}><PaperFlex direction="column" center fullWidth fullHeight gap="half" style={{ position: "absolute", inset: "0" }}>
+            style={{ width: "100%", height: "100%", border: "none", "border-left": `${getVarCss("border-width")} solid ${getVarCss("border")}`, visibility: ready() && !failure() && !props.restart ? "visible" : "hidden" }} />
+        <Show when={props.restart}>{(restart) => <PaperFlex direction="column" center fullWidth fullHeight gap="half" style={{ position: "absolute", inset: "0" }}>
+            <PaperText role="status">{restart().kind === "failed" ? (restart() as { message: string }).message : "Restarting panel service…"}</PaperText>
+            <Show when={restart().kind === "failed"}><PaperButton onClick={props.retryRestart}>Restart panel</PaperButton></Show>
+        </PaperFlex>}</Show>
+        <Show when={!props.restart && (!ready() || failure())}><PaperFlex direction="column" center fullWidth fullHeight gap="half" style={{ position: "absolute", inset: "0" }}>
             <PaperText role="status">{failure() || "Connecting panel…"}</PaperText>
             <Show when={failure()}><PaperButton onClick={props.retry}>Reload panel</PaperButton></Show>
         </PaperFlex></Show>
@@ -55,7 +63,8 @@ const PanelView: Component<PanelViewProps> = (props) => {
     const live = () => liveKeys(props.openedPanels, usageOrder(), currentKey(), MAX_LIVE_IFRAMES);
     return <PaperFlex fullWidth fullHeight background="surface-raised" style={{ flex: "1", position: "relative", overflow: "hidden" }}>
         <For each={props.openedPanels}>{(key) => <Show when={live().has(key)}>
-            <PanelFrame panelKey={key} current={key === currentKey()} reload={props.reloadTokens?.[key] || 0} retry={() => props.onReloadPanel?.(key)} />
+            <PanelFrame panelKey={key} current={key === currentKey()} reload={props.reloadTokens?.[key] || 0} retry={() => props.onReloadPanel?.(key)}
+                restart={props.restartStates?.[key]} retryRestart={() => props.onRestartPanel?.(key)} />
         </Show>}</For>
     </PaperFlex>;
 };

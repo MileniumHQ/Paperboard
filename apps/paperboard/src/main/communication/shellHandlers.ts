@@ -12,6 +12,19 @@ import { sanitizeId } from "../../../papercrane/storage";
 import { logger } from "../../../papercrane/logger";
 import { readCraneHandshake } from "../../../papercrane/handshake";
 import { openRemoteFolder } from "../remoteFolder";
+import { servePanelAsset } from "../panelServe";
+
+// The panel library reads an installed panel's manifest and listing media,
+// nothing else: never HTML (the serve path injects credentials into it),
+// never scripts, and never more than the listing caps allow.
+const LISTING_FILE_MAX_BYTES = 2 * 1024 * 1024;
+const LISTING_FILE_EXTENSIONS = new Set([".png", ".webp", ".jpg", ".jpeg", ".md"]);
+
+export function isListingFilePath(subpath: string): boolean {
+    if (subpath === "manifest.json") return true;
+    if (subpath.split(/[\\/]/).includes("..")) return false;
+    return LISTING_FILE_EXTENSIONS.has(path.extname(subpath).toLowerCase());
+}
 
 export interface ShellHandlerDeps {
     appVersion: () => string;
@@ -32,6 +45,7 @@ export const SHARED_SHELL_INVOKE_CHANNELS = [
     "computer-switch",
     "discovery-list",
     "open-panel-folder",
+    "panel-listing-file",
     "app-version",
 ] as const;
 
@@ -99,6 +113,22 @@ export function createShellInvokeHandlers(
         },
 
         // local dir or panel files dir; remotes mount an ephemeral session
+        // base64 so both transports (IPC structured clone, browser-mode
+        // JSON) carry the same value
+        "panel-listing-file": async (args) => {
+            const computerId = requireString(field(args, "computerId"), "computerId");
+            const panelId = sanitizeId(requireString(field(args, "panelId"), "panelId"));
+            if (!panelId) throw new Error("Invalid parameter: panelId");
+            const subpath = requireString(field(args, "path"), "path").replace(/^\.?\/+/, "");
+            if (!isListingFilePath(subpath)) throw new Error(`Not a listing file: ${subpath}`);
+            const res = await servePanelAsset(computerId, panelId, subpath);
+            if (!res.ok) throw new Error(`${subpath}: ${res.status} ${await res.text()}`);
+            const bytes = Buffer.from(await res.arrayBuffer());
+            if (bytes.byteLength > LISTING_FILE_MAX_BYTES) {
+                throw new Error(`${subpath} is over the ${LISTING_FILE_MAX_BYTES}-byte listing cap`);
+            }
+            return bytes.toString("base64");
+        },
         "open-panel-folder": async (args) => {
             const computerId = requireString(field(args, "computerId"), "computerId");
             const panelId = field(args, "panelId");

@@ -1,7 +1,7 @@
 import { EventEmitter } from "events";
 import * as os from "os";
 import * as path from "path";
-import { DEFAULT_PORT, getDetailedOsInfo } from "../../../../papercrane";
+import { DEFAULT_PORT, getDetailedOsInfo, getNetworkIp } from "../../../../papercrane";
 import {
     readJsonFileSync,
     writeJsonAtomicSync,
@@ -171,7 +171,7 @@ export class ConnectionPool extends EventEmitter {
         return true;
     }
 
-    public listComputers(): (StoredComputer & { status: any })[] {
+    public listComputers(): (StoredComputer & { status: any; networkAddress?: string })[] {
         return Array.from(this.computers.values()).map((c) => {
             const client = this.clients.get(c.id);
             const status =
@@ -180,7 +180,10 @@ export class ConnectionPool extends EventEmitter {
                     : client
                       ? client.getStatus()
                       : { connected: false, isRemote: true, host: c.host, port: c.port };
-            return { ...c, status };
+            // the local daemon is dialed on loopback, which is no address
+            // another machine can use; remote hosts are already the address
+            // they were paired with. Computed per call: it follows the network.
+            return { ...c, status, ...(c.id === "local" ? { networkAddress: getNetworkIp() } : {}) };
         });
     }
 
