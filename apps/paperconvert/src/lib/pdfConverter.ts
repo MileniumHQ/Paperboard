@@ -132,15 +132,31 @@ export async function convertTextToPdf(text: string, title: string = "Document")
   return new Blob([pdfBytes as unknown as BlobPart], { type: "application/pdf" });
 }
 
+const HTML_ESCAPES: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
+
+/** Text for an HTML body or a quoted attribute. */
+export function escapeHtml(text: string): string {
+  return text.replace(/[&<>"']/g, (c) => HTML_ESCAPES[c]!);
+}
+
+// links and images may point at the web, mail, or a relative path; a
+// javascript:/data: target would run when the converted file is opened
+function safeUrl(escapedUrl: string): string {
+  const url = escapedUrl.trim();
+  return /^(https?:|mailto:)/i.test(url) || !/^[a-z][a-z0-9+.-]*:/i.test(url) ? url : "#";
+}
+
 export function markdownToHtml(md: string): string {
-  let html = md
+  // escape first: the markdown rules below add the only markup, so source
+  // text can never contribute an element or attribute of its own
+  let html = escapeHtml(md)
     .replace(/^### (.*$)/gim, "<h3>$1</h3>")
     .replace(/^## (.*$)/gim, "<h2>$1</h2>")
     .replace(/^# (.*$)/gim, "<h1>$1</h1>")
     .replace(/\*\*(.*)\*\*/gim, "<strong>$1</strong>")
     .replace(/\*(.*)\*/gim, "<em>$1</em>")
-    .replace(/!\[(.*?)\]\((.*?)\)/gim, '<img alt="$1" src="$2" />')
-    .replace(/\[(.*?)\]\((.*?)\)/gim, '<a href="$2">$1</a>')
+    .replace(/!\[(.*?)\]\((.*?)\)/gim, (_m, alt: string, src: string) => `<img alt="${alt}" src="${safeUrl(src)}" />`)
+    .replace(/\[(.*?)\]\((.*?)\)/gim, (_m, label: string, href: string) => `<a href="${safeUrl(href)}">${label}</a>`)
     .replace(/\n\n/gim, "</p><p>")
     .replace(/\n/gim, "<br />");
 

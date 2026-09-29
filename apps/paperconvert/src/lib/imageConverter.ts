@@ -11,6 +11,7 @@ import { convertSpreadsheet } from "./spreadsheetConverter";
 import {
   convertImageToPdf,
   convertTextToPdf,
+  escapeHtml,
   markdownToHtml,
   htmlToMarkdown,
 } from "./pdfConverter";
@@ -339,7 +340,7 @@ export async function convertImage(
 
     if (target === "html") {
       mime = "text/html";
-      resultText = ext === "md" ? markdownToHtml(text) : `<pre>${text}</pre>`;
+      resultText = ext === "md" ? markdownToHtml(text) : `<pre>${escapeHtml(text)}</pre>`;
     } else if (target === "md") {
       mime = "text/markdown";
       resultText = ext === "html" ? htmlToMarkdown(text) : text;

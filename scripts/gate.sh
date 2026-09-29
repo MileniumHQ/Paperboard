@@ -43,6 +43,7 @@ step "paperboard silent-catches" run_in "$ROOT/apps/paperboard" bash "$CATCH"
 
 # paperconvert: workspace app with its own typecheck and silent-catch gate
 step "paperconvert typecheck" run_in "$ROOT/apps/paperconvert" bun run typecheck
+step "paperconvert tests" run_in "$ROOT/apps/paperconvert" bun run test
 step "paperconvert silent-catches" run_in "$ROOT/apps/paperconvert" bash "$CATCH" src
 
 # paperdocs: tests plus the static site build (typecheck, docs SPA, prerender)
