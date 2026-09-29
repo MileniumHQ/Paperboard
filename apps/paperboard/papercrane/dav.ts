@@ -129,12 +129,16 @@ export interface DavCredential {
     kind: "main" | "session";
 }
 
-function parseBasic(header: string): { user: string; pass: string } | null {
-    const m = /^Basic\s+(.+)$/i.exec(header.trim());
-    if (!m) return null;
+export function parseBasic(header: string): { user: string; pass: string } | null {
+    // runs before authentication on attacker-sized input: plain slicing, no
+    // backtracking pattern
+    const value = header.trim();
+    if (value.slice(0, 5).toLowerCase() !== "basic" || !/^\s/.test(value.slice(5, 6))) return null;
+    const token = value.slice(5).trimStart();
+    if (!token) return null;
     let decoded: string;
     try {
-        decoded = Buffer.from(m[1], "base64").toString("utf-8");
+        decoded = Buffer.from(token, "base64").toString("utf-8");
     } catch (err) {
         logger.debug("[dav] basic-auth decode failed:", err);
         return null;

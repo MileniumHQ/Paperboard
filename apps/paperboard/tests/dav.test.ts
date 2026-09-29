@@ -5,7 +5,7 @@ import * as os from "os";
 import * as path from "path";
 import { PaperCraneEngine } from "../papercrane/engine";
 import { PaperCraneAuth } from "../papercrane/auth";
-import { DavSessionStore, resolveDavPath } from "../papercrane/dav";
+import { DavSessionStore, parseBasic, resolveDavPath } from "../papercrane/dav";
 import { handleHttpRequest } from "../papercrane/http";
 
 const TOKEN = "test-main-token";
@@ -399,5 +399,25 @@ describe("WebDAV symlink refusal", () => {
         } finally {
             fs.unlinkSync(link);
         }
+    });
+});
+
+describe("parseBasic", () => {
+    const enc = (s: string) => Buffer.from(s).toString("base64");
+    it("reads user and password, scheme case-insensitive, any whitespace run", () => {
+        expect(parseBasic(`Basic ${enc("u:p:w")}`)).toEqual({ user: "u", pass: "p:w" });
+        expect(parseBasic(`  bAsIc \t  ${enc("a:b")}  `)).toEqual({ user: "a", pass: "b" });
+    });
+    it("refuses other schemes, missing credentials and missing colons", () => {
+        expect(parseBasic("Bearer abc")).toBeNull();
+        expect(parseBasic("Basicabc")).toBeNull();
+        expect(parseBasic("Basic")).toBeNull();
+        expect(parseBasic("Basic    ")).toBeNull();
+        expect(parseBasic(`Basic ${enc("nocolon")}`)).toBeNull();
+    });
+    it("stays linear on a header of nothing but spaces", () => {
+        const t = Date.now();
+        parseBasic("Basic " + " ".repeat(1_000_000) + "\u0000");
+        expect(Date.now() - t).toBeLessThan(500);
     });
 });
