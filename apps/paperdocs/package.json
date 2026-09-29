@@ -5,10 +5,10 @@
   "license": "MIT",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "bun run build && wrangler dev",
+    "dev:vite": "vite",
     "build": "tsc -b && vite build && vite build -c vite.site.client.config.ts && vite build -c vite.site.config.ts && bun scripts/prerender-site.mjs",
     "test": "bun test",
-    "preview": "wrangler dev",
     "deploy": "bun run build && wrangler deploy"
   },
   "dependencies": {

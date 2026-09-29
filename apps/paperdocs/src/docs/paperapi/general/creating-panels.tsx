@@ -46,7 +46,16 @@ export default function CreatingPanelsDoc() {
   "publisher": "Developer",
   "base": "./dist/index.html",
   "service": "./dist/service.js",
-  "icon": "./branding/icon.png"
+  "icon": "./branding/icon.png",
+  "store": {
+    "about": "./store/about.md",
+    "screenshots": [
+      { "light": "./store/1-light.png", "dark": "./store/1-dark.png", "alt": "Chat view" }
+    ],
+    "services": [{ "name": "Ollama", "detail": "Downloading models" }],
+    "credits": [{ "name": "Discord.js", "detail": "Providing the backend engine" }],
+    "requirements": [{ "name": "RAM", "detail": "16 GB" }]
+  }
 }`}
             </PaperCode>
 
@@ -84,8 +93,66 @@ export default function CreatingPanelsDoc() {
                         <td>string</td>
                         <td>Relative path to the compiled background Node service script.</td>
                     </tr>
+                    <tr>
+                        <td><PaperCode>store</PaperCode></td>
+                        <td>object</td>
+                        <td>Optional panel library page. See Store listing below.</td>
+                    </tr>
                 </tbody>
             </PaperTable>
+
+            <PaperText preset="subheader" id="store-listing">Store listing</PaperText>
+            <PaperText preset="body">
+                The store block fills your panel's page in the panel library.
+                Your name, description and publisher head the page, next to the install button.
+                The block adds screenshots, a long description and three information cards.
+                Every field is optional. A card with no rows is not shown.
+            </PaperText>
+            <PaperText preset="body">
+                Keep listing files in a store folder at the panel root.
+                Paths must point inside store/. The packer never includes that folder in the install archive, so screenshots cost your users no disk space.
+                At publish, the registry validates the block, hosts the images, and inlines the about text.
+                A listing that names a missing file, or breaks a limit below, refuses the whole publish.
+            </PaperText>
+            <PaperTable>
+                <thead>
+                    <tr>
+                        <th>Field</th>
+                        <th>Type</th>
+                        <th>Description</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><PaperCode>about</PaperCode></td>
+                        <td>string</td>
+                        <td>Path to a .md file, rendered with PaperMarkdown. Images in it are not rendered. At most 32 KB.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>screenshots</PaperCode></td>
+                        <td>array</td>
+                        <td>Up to 8 entries of light (required), dark and alt. The alt text describes the image for screen readers and is not shown on the page. Each image is a .png, .webp or .jpg of at most 2 MB. The page shows the image matching its theme. Use 4:3 frames.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>services</PaperCode></td>
+                        <td>array</td>
+                        <td>Websites and services the panel talks to, as name and detail rows. This card is for people reading the page. It does not replace the network block, which the panel CSP enforces.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>credits</PaperCode></td>
+                        <td>array</td>
+                        <td>Special thanks: libraries and people, as name and detail rows.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>requirements</PaperCode></td>
+                        <td>array</td>
+                        <td>Recommended system, as name and detail rows (Storage, RAM, CPU, GPU).</td>
+                    </tr>
+                </tbody>
+            </PaperTable>
+            <PaperText preset="body">
+                Each table holds at most 12 rows. A name is at most 48 characters and a detail at most 160.
+            </PaperText>
 
             <PaperText preset="subheader" id="local-development-and-symlinking">Local development and symlinking</PaperText>
             <PaperText preset="body">
