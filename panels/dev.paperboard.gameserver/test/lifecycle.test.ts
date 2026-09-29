@@ -253,6 +253,57 @@ describe("gamerule readouts", () => {
     });
 });
 
+describe("poll chatter stays out of the console", () => {
+    it("list responses update presence without appending", () => {
+        const ctx = makeCtx({ serverStatus: "online" });
+        handleProcessData(
+            ctx,
+            '[12:00:05] [Server thread/INFO]: There are 2 of a max of 20 players online: Steve, Alex\n',
+        );
+        expect(ctx.state.onlinePlayers).toEqual(["steve", "alex"]);
+        expect(ctx.state.serverEntries).toEqual([]);
+    });
+
+    it("empty list responses are chatter too", () => {
+        const ctx = makeCtx({ serverStatus: "online" });
+        handleProcessData(
+            ctx,
+            "[12:00:05] [Server thread/INFO]: There are 0 of a max of 20 players online:\n",
+        );
+        expect(ctx.state.serverEntries).toEqual([]);
+    });
+
+    it("entity-data responses update nothing visible and never append", () => {
+        const ctx = makeCtx({ serverStatus: "online" });
+        handleProcessData(
+            ctx,
+            "[12:00:05] [Server thread/INFO]: Steve has the following entity data: 20.0\n",
+        );
+        handleProcessData(
+            ctx,
+            "[12:00:05] [Server thread/INFO]: Steve has the following entity data: [12.5, 64.0, -3.0]\n",
+        );
+        expect(ctx.state.serverEntries).toEqual([]);
+    });
+
+    it("gamerule readouts converge state without appending", () => {
+        const ctx = makeCtx({ serverStatus: "online" });
+        handleProcessData(
+            ctx,
+            "[12:00:02] [Server thread/INFO]: Gamerule keep_inventory is currently set to: false\n",
+        );
+        expect(ctx.state.gamerules.keep_inventory).toBe("false");
+        expect(ctx.state.serverEntries).toEqual([]);
+    });
+
+    it("join lines and real output still append", () => {
+        const ctx = makeCtx({ serverStatus: "online" });
+        handleProcessData(ctx, "[12:00:01] [Server thread/INFO]: Steve joined the game\n");
+        handleProcessData(ctx, "[12:00:01] [Server thread/INFO]: Saving players\n");
+        expect(ctx.state.serverEntries.length).toBe(2);
+    });
+});
+
 describe("restart", () => {
     it("a restart starts a fresh instance after the stop half completes", async () => {
         const ctx = makeCtx({ serverStatus: "online", serverVersion: "1.21.1" });

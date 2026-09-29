@@ -15,7 +15,7 @@ import { resolveVersionProfile } from "../lib/versionProfile";
 import { isSupportedMcVersion, MIN_SUPPORTED_MC_VERSION } from "../lib/versionProfile";
 import { loadConfigAndProperties } from "./config";
 import { trackPlayerActivity, handleStatResponse, handlePositionResponse } from "./players";
-import { assertSingleLine } from "../core/players";
+import { assertSingleLine, extractStatValue, extractPosition, extractDimension, isPlayerListResponse } from "../core/players";
 import { checkLogForIssues } from "./diagnostics";
 import { onServerOnline } from "./gamerules";
 import { applyPendingRuntimeProperties } from "./runtimeProperties";
@@ -263,20 +263,21 @@ export async function sendChatMessage(
 
 // gamerule readouts ride the same log stream as every other server line:
 // query responses keep the UI honest, write confirmations converge an
-// online edit on server truth
+// online edit on server truth. Returns whether the line was consumed.
 function handleGameruleResponse(
     ctx: ServiceContext<GameServerState>,
     clean: string,
-): void {
+): boolean {
     const profile = resolveVersionProfile(
         ctx.state.serverSoftware,
         ctx.state.serverVersion,
     );
     const parsed = parseGameruleValue(clean, profile);
-    if (!parsed) return;
+    if (!parsed) return false;
     ctx.setState((prev) => ({
         gamerules: { ...prev.gamerules, [parsed.name]: parsed.value },
     }));
+    return true;
 }
 
 export function handleProcessData(
@@ -296,9 +297,9 @@ export function handleProcessData(
         }
 
         trackPlayerActivity(ctx, clean);
-        handleStatResponse(ctx, clean);
-        handlePositionResponse(ctx, clean);
-        handleGameruleResponse(ctx, clean);
+        const statConsumed = handleStatResponse(ctx, clean);
+        const positionConsumed = handlePositionResponse(ctx, clean);
+        const gameruleConsumed = handleGameruleResponse(ctx, clean);
         checkLogForIssues(ctx, clean);
 
         if (
@@ -334,9 +335,27 @@ export function handleProcessData(
             }
         }
 
-        ctx.setState({
-            serverEntries: appendCapped(ctx.state.serverEntries, parseLogLine(line)),
-        });
+        // Poll responses are consumed into state above; appending them as
+        // well floods the console every few seconds (positions every 2s,
+        // list every 15s, stats every 30s, gamerule bursts on sync). The
+        // entity-data shape is matched directly — not just the pending
+        // queues — so a response that arrives after its marker was evicted
+        // stays out too. Join/leave lines, chat, errors and real server
+        // output still append.
+        const pollResponse =
+            statConsumed ||
+            positionConsumed ||
+            gameruleConsumed ||
+            isPlayerListResponse(clean) ||
+            extractStatValue(clean) !== undefined ||
+            extractPosition(clean) !== undefined ||
+            extractDimension(clean) !== undefined;
+
+        if (!pollResponse) {
+            ctx.setState({
+                serverEntries: appendCapped(ctx.state.serverEntries, parseLogLine(line)),
+            });
+        }
     }
 }
 

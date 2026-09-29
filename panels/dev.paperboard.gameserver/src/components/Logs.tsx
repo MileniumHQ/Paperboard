@@ -127,7 +127,7 @@ export default function Logs() {
                 </PaperFlex>
             </PaperCard>
 
-            <PaperCard grow minHeight={0}>
+            <PaperCard grow minHeight={0} padding="full">
                 <Show
                     when={content()}
                     fallback={

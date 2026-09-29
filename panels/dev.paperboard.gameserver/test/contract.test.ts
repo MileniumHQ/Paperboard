@@ -3,6 +3,8 @@ import { validateActionDefinition } from "@paperboard-dev/paperapi";
 import { ACTION_IDS, TRIGGER_IDS } from "../src/service/contract";
 import {
     bindDynamicAction,
+    deletePluginAction,
+    deleteWorldAction,
     gameruleNameOptions,
     panelActions,
     panelEventActions,
@@ -12,12 +14,15 @@ import {
     setGameruleAction,
 } from "../src/service/actions";
 
-// set-active-world and set-game-rule are registered by
-// republishDynamicActions: their dropdown options come from live state
-// (worlds on disk, the installed version), not from the static list
+// set-active-world, set-game-rule, delete-world and delete-plugin are
+// registered by republishDynamicActions: their dropdown options come from
+// live state (worlds on disk, installed jars, the installed version), not
+// from the static list
 const DYNAMIC_ACTION_IDS = new Set<string>([
     ACTION_IDS.setActiveWorld,
     ACTION_IDS.setGamerule,
+    ACTION_IDS.deleteWorld,
+    ACTION_IDS.deletePlugin,
 ]);
 
 test("every defined action id lives in the contract", () => {
@@ -66,6 +71,34 @@ test("world and gamerule actions carry their live dropdown options", () => {
     expect(
         ruleAction.inputs?.name?.options?.map((o: any) => o.value),
     ).toEqual(["keepInventory", "mobGriefing"]);
+});
+
+test("delete actions carry live dropdown options over disk state", () => {
+    const worldAction = deleteWorldAction(["world", "creative"]);
+    expect(worldAction.id).toBe(ACTION_IDS.deleteWorld);
+    expect(
+        worldAction.inputs?.levelName?.options?.map((o: any) => o.value),
+    ).toEqual(["world", "creative"]);
+
+    const pluginAction = deletePluginAction(["Dynmap.jar", "Essentials.jar"]);
+    expect(pluginAction.id).toBe(ACTION_IDS.deletePlugin);
+    expect(
+        pluginAction.inputs?.filename?.options?.map((o: any) => o.value),
+    ).toEqual(["Dynmap.jar", "Essentials.jar"]);
+});
+
+test("render-map-tile stays callable for the Map tab but hides from flows", () => {
+    const tile = panelActions.find((a) => a.id === ACTION_IDS.renderMapTile)!;
+    expect(tile.internal).toBe(true);
+});
+
+test("install-server offers exactly the software the service accepts", () => {
+    const install = panelActions.find((a) => a.id === ACTION_IDS.installServerVersion)!;
+    expect(install.inputs?.software?.options?.map((o: any) => o.value)).toEqual([
+        "vanilla",
+        "paper",
+        "fabric",
+    ]);
 });
 
 test("gamerule options are filtered to the installed version", () => {

@@ -64,6 +64,15 @@ export function extractListedNames(clean: string): string[] | undefined {
         .filter((n) => PLAYER_NAME_PATTERN.test(n));
 }
 
+// the `list` poll's header line, with or without names attached: an empty
+// server answers "There are 0 of a max of 20 players online:" which
+// extractListedNames (correctly) refuses, but it is still poll chatter, not
+// log output. Only the server's canonical header matches — player chat
+// keeps flowing to the chat feed regardless.
+export function isPlayerListResponse(clean: string): boolean {
+    return /there are \d+ of (?:a )?max of \d+ players online\s*:?/i.test(clean);
+}
+
 export function extractStatValue(clean: string): number | undefined {
     const match = clean.match(/has the following entity data:\s*(-?\d+(?:\.\d+)?)/i);
     if (!match) return undefined;

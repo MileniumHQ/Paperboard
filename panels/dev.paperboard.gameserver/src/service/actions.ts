@@ -51,7 +51,7 @@ import {
 import { assertPlayerName, assertSingleLine } from "../core/players";
 import type { GameServerState } from "./types";
 import { ACTION_IDS, TRIGGER_IDS, PANEL_ID } from "./contract";
-import { getRequiredJavaVersion, getSoftwareDownload } from "../lib/software";
+import { getRequiredJavaVersion, getSoftwareDownload, SOFTWARE_NAMES } from "../lib/software";
 import { isSupportedMcVersion, mcAtLeast, MIN_SUPPORTED_MC_VERSION } from "../lib/versionProfile";
 import { GAMERULES } from "../generated/gamerules.generated";
 
@@ -117,6 +117,13 @@ export async function republishDynamicActions(
     } catch (err) {
         console.error("[Gameserver] world list unreadable for action options:", err);
     }
+    let pluginFiles: string[] = [];
+    try {
+        const { plugins } = await listInstalledPlugins(ctx);
+        pluginFiles = plugins.map((plugin) => plugin.filename);
+    } catch (err) {
+        console.error("[Gameserver] plugin list unreadable for action options:", err);
+    }
     const version = ctx.state.serverVersion;
     const ruleNames = GAMERULES.filter(
         (rule) => !rule.addedIn || mcAtLeast(version, rule.addedIn),
@@ -125,6 +132,8 @@ export async function republishDynamicActions(
     for (const def of [
         setActiveWorldAction(worlds),
         setGameruleAction(ruleNames),
+        deleteWorldAction(worlds),
+        deletePluginAction(pluginFiles),
         // the join/leave player dropdowns list who the server has seen; the
         // service republishes them when that set changes
         playerJoinedTrigger(playerNameOptions()),
@@ -243,6 +252,72 @@ export function setGameruleAction(ruleNames: string[]): ActionDefinition {
                 throw new Error("Game rule name and value are required");
             }
             return setGamerule(ctx, inputs.name, inputs.value);
+        },
+    });
+}
+
+// Delete World: the world name is a dropdown over the worlds on disk.
+// republishDynamicActions re-registers it whenever that list changes; a
+// name chosen from a stale list still fails loudly in deleteActiveWorldDirs.
+export function deleteWorldAction(worlds: string[]): ActionDefinition {
+    return defineAction({
+        id: ACTION_IDS.deleteWorld,
+        name: "Delete World",
+        category: "Worlds",
+        description: "Deletes a world's directories (offline only, trash-first, recoverable on crash)",
+        template: "Delete world {levelName}",
+        inputs: {
+            levelName: {
+                type: "string",
+                label: "World Name",
+                required: true,
+                options: worlds.map((name) => ({ label: name, value: name })),
+            },
+        },
+        output: { type: "boolean", label: "Success" },
+        quick: false,
+        icon: "delete",
+        run: async (
+            ctx: ServiceContext<GameServerState>,
+            inputs: { levelName: string },
+        ) => {
+            if (!inputs?.levelName) throw new Error("World name is required");
+            await deleteActiveWorldDirs(ctx, inputs.levelName);
+            await republishDynamicActions(ctx);
+            return true;
+        },
+    });
+}
+
+// Delete Plugin: the filename is a dropdown over the installed jars.
+// republishDynamicActions re-registers it whenever that list changes; a
+// name chosen from a stale list still fails loudly in deletePlugin.
+export function deletePluginAction(filenames: string[]): ActionDefinition {
+    return defineAction({
+        id: ACTION_IDS.deletePlugin,
+        name: "Delete Plugin",
+        category: "Plugins",
+        description: "Deletes a plugin jar (trash-first, recoverable on crash)",
+        template: "Delete plugin {filename}",
+        inputs: {
+            filename: {
+                type: "string",
+                label: "Filename",
+                required: true,
+                options: filenames.map((name) => ({ label: name, value: name })),
+            },
+        },
+        output: { type: "boolean", label: "Success" },
+        quick: false,
+        icon: "delete",
+        run: async (
+            ctx: ServiceContext<GameServerState>,
+            inputs: { filename: string },
+        ) => {
+            if (!inputs?.filename) throw new Error("Filename is required");
+            await deletePlugin(ctx, inputs.filename);
+            await republishDynamicActions(ctx);
+            return true;
         },
     });
 }
@@ -736,7 +811,15 @@ export const panelActions: ActionDefinition[] = [
         description: "Downloads and replaces server.jar for a software/version (offline only)",
         template: "Install server {software} {version}",
         inputs: {
-            software: { type: "string", label: "Software", required: true },
+            software: {
+                type: "string",
+                label: "Software",
+                required: true,
+                options: (["vanilla", "paper", "fabric"] as const).map((value) => ({
+                    label: SOFTWARE_NAMES[value],
+                    value,
+                })),
+            },
             version: { type: "string", label: "Version", required: true },
         },
         output: { type: "object", label: "Installed" },
@@ -797,29 +880,6 @@ export const panelActions: ActionDefinition[] = [
     }),
 
     defineAction({
-        id: ACTION_IDS.deleteWorld,
-        name: "Delete World",
-        category: "Worlds",
-        description: "Deletes a world's directories (offline only, trash-first, recoverable on crash)",
-        template: "Delete world {levelName}",
-        inputs: {
-            levelName: { type: "string", label: "World Name", required: true },
-        },
-        output: { type: "boolean", label: "Success" },
-        quick: false,
-        icon: "delete",
-        run: async (
-            ctx: ServiceContext<GameServerState>,
-            inputs: { levelName: string },
-        ) => {
-            if (!inputs?.levelName) throw new Error("World name is required");
-            await deleteActiveWorldDirs(ctx, inputs.levelName);
-            await republishDynamicActions(ctx);
-            return true;
-        },
-    }),
-
-    defineAction({
         id: ACTION_IDS.listMapRegions,
         name: "List Map Regions",
         category: "Worlds",
@@ -838,6 +898,9 @@ export const panelActions: ActionDefinition[] = [
         id: ACTION_IDS.renderMapTile,
         name: "Render Map Tile",
         category: "Worlds",
+        // internal: the Map tab calls this directly; flows should never see
+        // it as a block. Callable, never offered.
+        internal: true,
         description: "Renders one 512x512 top-down map tile for a dimension and region coordinate",
         template: "Render map tile {dimension} {rx} {rz}",
         inputs: {
@@ -873,28 +936,6 @@ export const panelActions: ActionDefinition[] = [
         icon: "extension",
         run: async (ctx: ServiceContext<GameServerState>) => {
             return listInstalledPlugins(ctx);
-        },
-    }),
-
-    defineAction({
-        id: ACTION_IDS.deletePlugin,
-        name: "Delete Plugin",
-        category: "Plugins",
-        description: "Deletes a plugin jar (trash-first, recoverable on crash)",
-        template: "Delete plugin {filename}",
-        inputs: {
-            filename: { type: "string", label: "Filename", required: true },
-        },
-        output: { type: "boolean", label: "Success" },
-        quick: false,
-        icon: "delete",
-        run: async (
-            ctx: ServiceContext<GameServerState>,
-            inputs: { filename: string },
-        ) => {
-            if (!inputs?.filename) throw new Error("Filename is required");
-            await deletePlugin(ctx, inputs.filename);
-            return true;
         },
     }),
 
