@@ -210,6 +210,15 @@ export const RPC_ROUTES: Record<string, WsRoute> = {
         unwrap: (r) => r.success ?? true,
         timeoutMs: null,
     },
+    "panel-restart-service": {
+        // Bare-string invoke: invoke("panel-restart-service", panelId).
+        // Resolves false when the panel has no service to restart.
+        action: "panel:restartService",
+        params: (args) => ({ panelId: args[0] }),
+        unwrap: (r) => r.restarted === true,
+        // stop grace (<=6s) + readiness deadline (20s)
+        timeoutMs: 60_000,
+    },
     "process-exists": {
         action: "process:exists",
         unwrap: (r) => r.running,

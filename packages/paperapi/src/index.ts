@@ -3,6 +3,10 @@ import "./readiness";
 
 export * from "./ipc";
 export * from "./config";
+export * from "./registryFetch";
+export * from "./panelMerge";
+export * from "./storeListing";
+export { isPanelId, requirePanelId } from "./panelIdentity";
 export * from "./identity";
 export * from "./secrets";
 export * from "./package";
