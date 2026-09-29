@@ -13,6 +13,6 @@ export function debug(msg: string): void {
  * "Logged" must mean "visible", not "hidden behind a flag".
  */
 export function debugErr(where: string, err: unknown): void {
-    console.error(`[transport] ${where}:`, err instanceof Error ? err : String(err));
+    console.error("[transport] %s:", where, err instanceof Error ? err : String(err));
     if (DEBUG) console.debug(`[transport] ${where} trace above`);
 }

@@ -128,7 +128,7 @@ describe("status listener lifetime", () => {
             // not silently swallowed by the retry loop
             LAST().emit("error", new Error("ECONNREFUSED"));
             await waitFor(() => errors.length > 0);
-            expect(String(errors[0][0])).toContain("reconnect attempt failed");
+            expect(errors[0].map(String).join(" ")).toContain("reconnect attempt failed");
         } finally {
             (console as any).error = orig;
         }
