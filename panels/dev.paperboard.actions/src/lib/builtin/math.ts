@@ -60,7 +60,7 @@ export const mathBuiltins: BuiltinDef[] = [
                     action: "math-round",
                     schema: {
                         id: "math-round",
-                        name: "Round Number",
+                        name: "Round",
                         description: "Rounds a decimal number to the nearest integer",
                         template: "Round {number}",
                         icon: "exposure",
@@ -74,7 +74,7 @@ export const mathBuiltins: BuiltinDef[] = [
                         },
                         output: {
                             type: "number",
-                            label: "Rounded Number",
+                            label: "Number",
                         },
                     },
                 } },

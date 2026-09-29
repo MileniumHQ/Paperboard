@@ -188,6 +188,17 @@ export function resolveToken(
         return { found: true, value: contextPayload };
     }
 
+    // named flow variables (set-variable): a live store read, deliberately
+    // last — every step-output, payload and generic rule above keeps its
+    // existing meaning, and only tokens that would otherwise fail as
+    // dangling fall through to the variable name
+    if (flowVariablesStore.has(token)) {
+        return { found: true, value: flowVariablesStore.get(token) };
+    }
+    if (label && flowVariablesStore.has(label)) {
+        return { found: true, value: flowVariablesStore.get(label) };
+    }
+
     return { found: false };
 }
 
@@ -916,6 +927,7 @@ const BUILTIN_NO_HANDLER_IDS = new Set([
     "repeat",
     "if",
     "if-else",
+    "try-catch",
     "on-play",
 ]);
 for (const def of BUILTIN_DEFS) {
@@ -1130,6 +1142,33 @@ export async function executeFlow(
                         }
                     }
                     result = conditionMet;
+                } else if (actionId === "try-catch") {
+                    stepLog.actionName = "Try Catch";
+                    log.steps.push(stepLog);
+                    try {
+                        if (child.children && child.children.length > 0) {
+                            await executeBlockList(child.children);
+                        }
+                        result = "";
+                    } catch (err) {
+                        // loop control and flow stop are not failures: they
+                        // pass through instead of triggering the catch branch
+                        if (err instanceof FlowLoopSignal) throw err;
+                        if ((err as any)?.message === "FLOW_STOPPED") throw err;
+                        const message = (err as any)?.message || String(err);
+                        // absorbed, not silent: the failing step already
+                        // logged its own error entry, and the message stays
+                        // reachable as this block's Error output
+                        console.error(
+                            `[Actions Runtime] Try/Catch absorbed failure in "${child.id}":`,
+                            message,
+                        );
+                        stepLog.actionName = "Try Catch (caught)";
+                        if (child.elseChildren && child.elseChildren.length > 0) {
+                            await executeBlockList(child.elseChildren);
+                        }
+                        result = message;
+                    }
                 } else {
                     const isBuiltin = Boolean(panelId && panelId.startsWith("builtin."));
                     if (isBuiltin) {

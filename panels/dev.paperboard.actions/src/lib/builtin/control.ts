@@ -102,7 +102,22 @@ export const controlBuiltins: BuiltinDef[] = [
                             },
                         },
                     },
-                } },    { id: "break", category: "logic.control", panelId: "builtin.logic", item: {
+                } },    { id: "try-catch", category: "logic.control", panelId: "builtin.logic", item: {
+                    panelId: "builtin.logic",
+                    action: "try-catch",
+                    schema: {
+                        id: "try-catch",
+                        name: "Try Catch",
+                        description: "Runs nested actions; if one fails, runs the catch actions with the error instead of failing the flow",
+                        template: "Try / Catch",
+                        icon: "safety_check",
+                        output: {
+                            type: "string",
+                            label: "Error",
+                        },
+                    },
+                } },
+    { id: "break", category: "logic.control", panelId: "builtin.logic", item: {
                     panelId: "builtin.logic",
                     action: "break",
                     schema: {

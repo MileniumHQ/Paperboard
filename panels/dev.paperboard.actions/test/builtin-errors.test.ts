@@ -3,13 +3,18 @@
 // the step instead of silently evaluating to 0
 import { describe, it, expect } from "bun:test";
 import { executeFlow } from "../src/lib/runtime";
-import { BUILTIN_CATEGORIES } from "../src/lib/builtins";
+import { BUILTIN_CATEGORIES, BUILTIN_DEFS } from "../src/lib/builtins";
 
 const schemaFor = (id: string): any => {
     for (const cat of BUILTIN_CATEGORIES as any[]) {
         for (const item of cat.items || []) {
             if (item.action === id || item.trigger === id) return item.schema;
         }
+    }
+    // runtime registry, not the library: hidden-but-runnable builtins
+    // (get-variable) still execute for existing flows
+    for (const def of BUILTIN_DEFS as any[]) {
+        if (def.id === id) return def.item.schema;
     }
     throw new Error(`no schema for ${id}`);
 };

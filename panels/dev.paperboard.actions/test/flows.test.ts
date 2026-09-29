@@ -1,6 +1,6 @@
 import { describe, it, expect } from "bun:test";
 import { executeFlow, clampWaitValue } from "../src/lib/runtime";
-import { BUILTIN_CATEGORIES } from "../src/lib/builtins";
+import { BUILTIN_CATEGORIES, BUILTIN_DEFS } from "../src/lib/builtins";
 
 // ported from the ad-hoc verify-flows script — real tests, zero network
 // blocks (the HTTP round-trips live behind the web builtin but need a
@@ -11,6 +11,11 @@ const schemaFor = (id: string): any => {
         for (const item of cat.items || []) {
             if (item.action === id || item.trigger === id) return item.schema;
         }
+    }
+    // runtime registry, not the library: hidden-but-runnable builtins
+    // (get-variable) still execute for existing flows
+    for (const def of BUILTIN_DEFS as any[]) {
+        if (def.id === id) return def.item.schema;
     }
     throw new Error(`no schema for ${id}`);
 };
@@ -143,5 +148,37 @@ describe("bounded resources", () => {
         const { block } = trig([blk("wait", { duration: 0.01 })]);
         const log = await executeFlow(block as any, {});
         expect(log.status).toBe("success");
+    });
+});
+
+describe("named variables resolve without a Get block", () => {
+    it("a name stored by Set Variable resolves in a later step", async () => {
+        const { block } = trig([
+            blk("set-variable", { key: "hero_name_test", value: "Zelda" }),
+            blk("text", { value: "hello {{hero_name_test:hero_name_test:data_object}}" }),
+        ]);
+        const log = await executeFlow(block as any, {});
+        expect(log.status).toBe("success");
+        const steps = Object.fromEntries(log.steps.map((s: any) => [s.actionName, s.result]));
+        expect(steps["Text"]).toBe("hello Zelda");
+    });
+
+    it("a name that was never stored still fails loudly", async () => {
+        const { block } = trig([
+            blk("text", { value: "hello {{never_stored_xyz:never_stored_xyz:data_object}}" }),
+        ]);
+        const log = await executeFlow(block as any, {});
+        expect(log.status).toBe("error");
+    });
+});
+
+describe("get-variable library hiding", () => {
+    it("is absent from the library but present in the runtime registry", () => {
+        const inLibrary = (BUILTIN_CATEGORIES as any[]).some((cat) =>
+            (cat.items || []).some((item: any) => item.action === "get-variable"),
+        );
+        expect(inLibrary).toBe(false);
+        const def = (BUILTIN_DEFS as any[]).find((d) => d.id === "get-variable");
+        expect(def?.item?.schema?.id).toBe("get-variable");
     });
 });

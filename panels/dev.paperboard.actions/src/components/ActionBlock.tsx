@@ -823,7 +823,8 @@ export default function ActionBlock(props: ActionBlockProps) {
     const isContainerBlock = () =>
         props.action.id === "repeat" ||
         props.action.id === "if" ||
-        props.action.id === "if-else";
+        props.action.id === "if-else" ||
+        props.action.id === "try-catch";
 
     const isHoverIndex = (index: number, branch?: "else") => {
         if (!props.activeDropTarget || !props.id) return false;
@@ -970,14 +971,51 @@ export default function ActionBlock(props: ActionBlockProps) {
                     : allowEmpty
                       ? emptyLabel
                       : placeholderText());
+            // a dropdown holds either a literal option or one variable
+            // (right-click opens the picker, like booleans; a wrong-typed
+            // value flows to the service and fails loudly in the console)
+            const boundVariable = () => parseVariableToken(val());
+
+            const openPicker = (x: number, y: number) => {
+                if (props.static || !props.id) return;
+                props.onRequestVariablePicker?.(
+                    props.id,
+                    key,
+                    x,
+                    y,
+                    (varId, label, icon) => {
+                        props.onValueChange?.(props.id!, key, `{{${varId}:${label}:${icon}}}`);
+                    },
+                    typeof def?.type === "string" ? def.type : "string",
+                );
+            };
+
+            const clearVariable = (e: MouseEvent) => {
+                if (props.static || !props.id) return;
+                e.stopPropagation();
+                props.onValueChange?.(props.id!, key, undefined);
+            };
 
             return (
                 <span
                     class={`actionInput actionInputOption ${isColorless() ? "colorless" : ""} ${isRequiredError() ? "requiredError" : ""}`}
                     onPointerDown={(e) => e.stopPropagation()}
+                    onContextMenu={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        openPicker(e.clientX, e.clientY);
+                    }}
                     onClick={(e) => {
                         if (props.static || !props.id) return;
                         e.stopPropagation();
+                        if (boundVariable()) {
+                            if ((e.target as HTMLElement).closest?.(".actionBoolClear")) {
+                                clearVariable(e);
+                                return;
+                            }
+                            openPicker(e.clientX, e.clientY);
+                            return;
+                        }
                         const target = e.currentTarget as HTMLElement;
                         const rect = target.getBoundingClientRect();
                         props.onRequestOptionPicker?.(
@@ -996,10 +1034,41 @@ export default function ActionBlock(props: ActionBlockProps) {
                             target,
                         );
                     }}
-                    title={allowEmpty ? `Select ${token.label} (${emptyLabel})` : `Select ${token.label}`}
+                    title={
+                        boundVariable()
+                            ? "Click to change the variable, right-click to replace it"
+                            : allowEmpty ? `Select ${token.label} (${emptyLabel})` : `Select ${token.label}`
+                    }
                 >
-                    <span>{displayLabel()}</span>
-                    <PaperIcon class="dropdownChevronIcon">expand_more</PaperIcon>
+                    <Show
+                        when={boundVariable()}
+                        fallback={
+                            <>
+                                <span>{displayLabel()}</span>
+                                <PaperIcon class="dropdownChevronIcon">expand_more</PaperIcon>
+                            </>
+                        }
+                    >
+                        {(variable) => (
+                            <>
+                                <span
+                                    class="actionVariableChip"
+                                    data-var-id={variable().id}
+                                    data-label={variable().label}
+                                    data-icon={variable().icon}
+                                >
+                                    <span class="chipIcon">{variable().icon}</span>
+                                    <span class="chipLabel">{variable().label}</span>
+                                </span>
+                                <span
+                                    class="actionBoolClear"
+                                    title="Clear variable"
+                                >
+                                    <PaperIcon>close</PaperIcon>
+                                </span>
+                            </>
+                        )}
+                    </Show>
                 </span>
             );
         }
@@ -1358,9 +1427,9 @@ export default function ActionBlock(props: ActionBlockProps) {
                     <span>Drop Actions Here</span>
                 </div>
 
-                    <Show when={props.action.id === "if-else"}>
+                    <Show when={props.action.id === "if-else" || props.action.id === "try-catch"}>
                     <PaperText size={3} weight={500} class="ifElsePlain">
-                        else
+                        {props.action.id === "try-catch" ? "catch" : "else"}
                     </PaperText>
 
                     <Show when={props.elseChildren && props.elseChildren.length > 0}>

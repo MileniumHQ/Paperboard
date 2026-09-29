@@ -549,6 +549,7 @@ export default function ActionLibrary(props: ActionLibraryProps) {
 
                                 <PaperInput
                                     fullWidth
+                                    icon="search"
                                     placeholder="Search actions..."
                                     value={search()}
                                     onInput={(e) =>

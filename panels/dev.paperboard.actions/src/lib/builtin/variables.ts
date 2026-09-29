@@ -13,8 +13,8 @@ export const variablesBuiltins: BuiltinDef[] = [
                         inputs: {
                             key: {
                                 type: "string",
-                                label: "Variable Name",
-                                placeholder: "Variable Name",
+                                label: "Name",
+                                placeholder: "Name",
                                 required: true,
                             },
                             value: {
@@ -42,8 +42,8 @@ export const variablesBuiltins: BuiltinDef[] = [
                         inputs: {
                             key: {
                                 type: "string",
-                                label: "Variable Name",
-                                placeholder: "Variable Name",
+                                label: "Name",
+                                placeholder: "Name",
                                 required: true,
                             },
                             amount: {
@@ -72,8 +72,8 @@ export const variablesBuiltins: BuiltinDef[] = [
                         inputs: {
                             key: {
                                 type: "string",
-                                label: "Variable Name",
-                                placeholder: "Variable Name",
+                                label: "Name",
+                                placeholder: "Name",
                                 required: true,
                             },
                         },
@@ -91,8 +91,8 @@ export const variablesBuiltins: BuiltinDef[] = [
                         inputs: {
                             key: {
                                 type: "string",
-                                label: "Variable Name",
-                                placeholder: "Variable Name",
+                                label: "Name",
+                                placeholder: "Name",
                                 required: true,
                             },
                         },

@@ -215,6 +215,13 @@ export default function App() {
                 ? next.slice(next.length - MAX_CONSOLE_LOGS)
                 : next;
         });
+        // the newest line is the point: scroll there on every append so a
+        // failure can never hide below the fold
+        queueMicrotask(() => {
+            if (consoleBodyRef) {
+                consoleBodyRef.scrollTop = consoleBodyRef.scrollHeight;
+            }
+        });
     };
 
     const [hoveredSourceBlockId, setHoveredSourceBlockId] = createSignal<string | null>(null);
@@ -336,16 +343,55 @@ export default function App() {
                     type: typeof out === "string" ? out : (out as any).type || "any",
                 });
             };
+            // names assigned by Set/Increment Variable blocks are picker
+            // items too: a stored name resolves against the live variable
+            // store at run time, so no Get Variable hop is needed. Only
+            // literal names qualify — a key that is itself a reference
+            // cannot be listed. Clears drop the name again so a deleted
+            // variable is not offered.
+            const namedVariables = new Map<
+                string,
+                {
+                    id: string;
+                    label: string;
+                    sourceBlockId: string;
+                    sourceName: string;
+                    icon?: string;
+                    type?: string;
+                }
+            >();
+            const pushNamedVariable = (child: CanvasBlock) => {
+                const actionId = (child.action as any)?.id || "";
+                const rawKey = (child.values as any)?.key;
+                const name =
+                    typeof rawKey === "string" ? rawKey.trim() : "";
+                if (actionId === "clear-variable") {
+                    if (name) namedVariables.delete(name);
+                    return;
+                }
+                if (actionId !== "set-variable" && actionId !== "increment-variable") return;
+                if (!name || name.includes("{{") || name.includes("}}")) return;
+                namedVariables.set(name, {
+                    id: name,
+                    label: name,
+                    sourceBlockId: child.id,
+                    sourceName: child.action.name,
+                    icon: "data_object",
+                    type: "string",
+                });
+            };
             const visitInOrder = (list: CanvasBlock[]): boolean => {
                 for (const child of list) {
                     if (child.id === blockId) return true;
                     pushActionOutput(child);
+                    pushNamedVariable(child);
                     if (child.children && visitInOrder(child.children)) return true;
                     if (child.elseChildren && visitInOrder(child.elseChildren)) return true;
                 }
                 return false;
             };
             visitInOrder(trig.children || []);
+            for (const item of namedVariables.values()) available.push(item);
             break;
         }
 
@@ -483,18 +529,20 @@ export default function App() {
                 { triggerBlockId: triggerBlock.id, payload: payload || {} },
             );
             // only failures reach the console; a clean run shows nothing and
-            // the flow's own Log to Console actions speak for themselves
-            if (log?.status === "error" && log.message) {
+            // the flow's own Log to Console actions speak for themselves.
+            // An error status with no message still announces itself: a
+            // failed run that logs nothing is silent success.
+            if (log?.status === "error") {
                 appendConsoleLog({
                     time: new Date().toLocaleTimeString(),
-                    message: log.message,
+                    message: log.message || `Flow failed (status: ${log.status})`,
                     level: "error",
                 });
             }
         } catch (err: any) {
             appendConsoleLog({
                 time: new Date().toLocaleTimeString(),
-                message: err?.message || err,
+                message: err?.message || String(err ?? "Flow run failed"),
                 level: "error",
             });
         }
@@ -734,6 +782,7 @@ export default function App() {
     let rightClickDownPos = { x: 0, y: 0 };
     let lastContextMenuPos = { x: 0, y: 0 };
     let containerRef: HTMLDivElement | undefined;
+    let consoleBodyRef: HTMLDivElement | undefined;
 
     const bringToFront = (id: string) => {
         maxZIndex += 1;
@@ -1303,7 +1352,7 @@ export default function App() {
                                 <PaperIcon>delete_sweep</PaperIcon>
                             </PaperButton>
                         </div>
-                        <div class="canvas-console-body">
+                        <div class="canvas-console-body" ref={consoleBodyRef}>
                             <For each={consoleLogs}>
                                 {(log) => (
                                     <div

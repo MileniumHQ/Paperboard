@@ -2,13 +2,18 @@
 // the real executor.
 import { describe, expect, it } from "bun:test";
 import { executeFlow } from "../src/lib/runtime";
-import { BUILTIN_CATEGORIES } from "../src/lib/builtins";
+import { BUILTIN_CATEGORIES, BUILTIN_DEFS } from "../src/lib/builtins";
 
 const schemaFor = (id: string): any => {
     for (const cat of BUILTIN_CATEGORIES as any[]) {
         for (const item of cat.items || []) {
             if (item.action === id || item.trigger === id) return item.schema;
         }
+    }
+    // runtime registry, not the library: hidden-but-runnable builtins
+    // (get-variable) still execute for existing flows
+    for (const def of BUILTIN_DEFS as any[]) {
+        if (def.id === id) return def.item.schema;
     }
     throw new Error(`no schema for ${id}`);
 };
@@ -99,5 +104,74 @@ describe("wait-until", () => {
         const log = await run([blk("wait-until", { variable: "never-set", timeout: 0.2 })]);
         expect(log.status).toBe("error");
         expect(log.message).toMatch(/timed out/);
+    });
+});
+
+describe("try-catch", () => {
+    const tryCatch = (tryChildren: any[], catchChildren?: any[]) => ({
+        ...blk("try-catch", {}, tryChildren),
+        ...(catchChildren ? { elseChildren: catchChildren } : {}),
+    });
+
+    it("runs the try branch and skips catch on success", async () => {
+        const log = await run([
+            tryCatch(
+                [blk("set-variable", { key: "tc_ok", value: "yes" })],
+                [blk("set-variable", { key: "tc_caught", value: "no" })],
+            ),
+            blk("get-variable", { key: "tc_ok" }),
+        ]);
+        expect(log.status).toBe("success");
+        expect(finalResult(log)).toBe("yes");
+    });
+
+    it("runs catch with the error instead of failing the flow", async () => {
+        const log = await run([
+            tryCatch(
+                [blk("math-calculate", { expression: "2 +" })],
+                [blk("set-variable", { key: "tc_err", value: "caught" })],
+            ),
+            blk("get-variable", { key: "tc_err" }),
+        ]);
+        expect(log.status).toBe("success");
+        expect(finalResult(log)).toBe("caught");
+    });
+
+    it("exposes the failure message as the Error output", async () => {
+        const log = await run([
+            {
+                ...blk("try-catch", {}, [blk("math-calculate", { expression: "2 +" })]),
+                id: "tc_block",
+            },
+            blk("text", { value: "saw {{tc_block:Error:data_object}}" }),
+        ]);
+        expect(log.status).toBe("success");
+        expect(String(finalResult(log))).toMatch(/math-calculate/);
+    });
+
+    it("a caught failure without a catch branch still succeeds", async () => {
+        const log = await run([
+            tryCatch([blk("math-calculate", { expression: "2 +" })]),
+            blk("text", { value: "survived" }),
+        ]);
+        expect(log.status).toBe("success");
+        expect(finalResult(log)).toBe("survived");
+    });
+
+    it("break inside try still breaks the loop instead of triggering catch", async () => {
+        const log = await run([
+            blk("repeat", { count: 5 }, [
+                tryCatch(
+                    [
+                        blk("increment-variable", { key: "tc_loop" }),
+                        blk("break"),
+                    ],
+                    [blk("set-variable", { key: "tc_loop_caught", value: "bad" })],
+                ),
+            ]),
+            blk("get-variable", { key: "tc_loop" }),
+        ]);
+        expect(log.status).toBe("success");
+        expect(finalResult(log)).toBe(1);
     });
 });

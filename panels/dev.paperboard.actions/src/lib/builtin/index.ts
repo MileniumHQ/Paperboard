@@ -25,9 +25,16 @@ export const BUILTIN_DEFS: BuiltinDef[] = [
     ...utilityBuiltins,
 ];
 
+// Get Variable stays registered and runnable for existing flows, but the
+// library no longer offers it: set-variable names appear directly in the
+// variable picker, which made the extra hop block redundant.
+const LIBRARY_HIDDEN_BUILTINS = new Set(["get-variable"]);
+
 export const BUILTIN_CATEGORIES: BuiltinCategory[] = BUILTIN_CATEGORY_META.map((meta) => ({
     ...meta,
-    items: BUILTIN_DEFS.filter((d) => d.category === meta.id).map((d) => d.item),
+    items: BUILTIN_DEFS.filter(
+        (d) => d.category === meta.id && !LIBRARY_HIDDEN_BUILTINS.has(d.id),
+    ).map((d) => d.item),
 }));
 
 // Registry-shaped entries for the stored-block schema merge: a flow saved
