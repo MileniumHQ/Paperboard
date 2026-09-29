@@ -9,14 +9,29 @@ export interface VariableChip {
     icon: string;
 }
 
-/** Serializes a stored value (with {{id:label:icon}} refs) to chip markup. */
+const HTML_ESCAPES: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
+const escapeHtml = (text: string) => text.replace(/[&<>"']/g, (c) => HTML_ESCAPES[c]!);
+
+/**
+ * Serializes a stored value (with {{id:label:icon}} refs) to chip markup. The
+ * result is assigned to innerHTML, so every piece of the value is escaped:
+ * typed text shows as typed, never as markup.
+ */
 export function renderHtmlWithChips(text: string): string {
     if (!text) return "";
-    return text.replace(/\{\{([^{}]+)\}\}/g, (_match, token) => {
+    let html = "";
+    let last = 0;
+    for (const match of text.matchAll(/\{\{([^{}]+)\}\}/g)) {
+        const token = match[1]!;
         const info = getVariableInfo(token);
-        const varId = token.split(":")[0];
-        return `\u200B<span class="actionVariableChip" contenteditable="false" data-var-id="${varId}" data-label="${info.label}" data-icon="${info.icon}"><span class="chipIcon">${info.icon}</span><span class="chipLabel">${info.label}</span></span>\u200B`;
-    });
+        const varId = escapeHtml(token.split(":")[0]!);
+        const label = escapeHtml(info.label);
+        const icon = escapeHtml(info.icon);
+        html += escapeHtml(text.slice(last, match.index));
+        html += `\u200B<span class="actionVariableChip" contenteditable="false" data-var-id="${varId}" data-label="${label}" data-icon="${icon}"><span class="chipIcon">${icon}</span><span class="chipLabel">${label}</span></span>\u200B`;
+        last = match.index! + match[0].length;
+    }
+    return html + escapeHtml(text.slice(last));
 }
 
 /** Reads the stored value back out of the editable DOM. Single-line fields
