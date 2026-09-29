@@ -4,6 +4,8 @@ import {
     PaperList,
     PaperListItem,
     PaperButton,
+    PaperEffect,
+    PaperEmptyState,
     PaperIcon,
     PaperModal,
     PaperInput,
@@ -152,6 +154,7 @@ export default function App() {
                     background: getVarCss("surface-app", "#0d0e12"),
                 }}
             >
+                <Show when={tabs().length > 0}>
                 <PaperList
                     reorderable
                     direction="horizontal"
@@ -204,6 +207,7 @@ export default function App() {
                         <PaperIcon>add</PaperIcon>
                     </PaperButton>
                 </PaperList>
+                </Show>
 
                 <PaperFlex
                     fullWidth
@@ -213,6 +217,21 @@ export default function App() {
                         overflow: "hidden",
                     }}
                 >
+                    <Show when={tabs().length === 0}>
+                        <PaperFlex fullWidth fullHeight align="center" justify="center">
+                            <PaperEmptyState
+                                icon="terminal"
+                                title="No terminals open"
+                                description="Open a new tab to start a shell."
+                            >
+                                <PaperEffect variant="primary">
+                                    <PaperButton variant="primary" onClick={addTab}>
+                                        <PaperIcon>add</PaperIcon> New Tab
+                                    </PaperButton>
+                                </PaperEffect>
+                            </PaperEmptyState>
+                        </PaperFlex>
+                    </Show>
                     <For each={tabs()}>
                         {(tab) => (
                             <div

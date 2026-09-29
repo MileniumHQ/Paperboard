@@ -91,9 +91,23 @@ export function TerminalComponent(props: TerminalComponentProps) {
         const sendResize = () => {
             if (!term) return;
             if (term.cols === lastCols && term.rows === lastRows) return;
-            lastCols = term.cols;
-            lastRows = term.rows;
-            terminalApi.resize(props.id, term.cols, term.rows);
+            const cols = term.cols;
+            const rows = term.rows;
+            // the sent size is recorded only on success: a failed send
+            // (daemon unreachable, session gone) must retry on the next
+            // fit instead of desyncing the shell's line wrapping forever
+            terminalApi
+                .resize(props.id, cols, rows)
+                .then(() => {
+                    lastCols = cols;
+                    lastRows = rows;
+                })
+                .catch((err) => {
+                    console.error(
+                        `[terminal] resize to ${cols}x${rows} for ${props.id} failed, will retry:`,
+                        err,
+                    );
+                });
         };
         const safeFit = () => {
             if (

@@ -6,5 +6,36 @@
     "publisher": "Paperboard",
     "base": "./dist/index.html",
     "service": "./dist/service.js",
-    "icon": "./branding/icon.png"
+    "icon": "./branding/icon.png",
+    "store": {
+        "about": "./store/about.md",
+        "screenshots": [
+            {
+                "light": "./store/1-light.png",
+                "dark": "./store/1-dark.png",
+                "alt": "System info at a glance"
+            },
+            {
+                "light": "./store/2-light.png",
+                "dark": "./store/2-dark.png",
+                "alt": "Work with git"
+            },
+            {
+                "light": "./store/3-light.png",
+                "dark": "./store/3-dark.png",
+                "alt": "Any command-line tool"
+            },
+            {
+                "light": "./store/4-light.png",
+                "dark": "./store/4-dark.png",
+                "alt": "Monitor processes"
+            }
+        ],
+        "credits": [
+            {
+                "name": "xterm.js",
+                "detail": "Rendering the terminal"
+            }
+        ]
+    }
 }

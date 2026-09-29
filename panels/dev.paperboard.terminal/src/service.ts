@@ -127,6 +127,19 @@ export function __terminalTestState() {
     };
 }
 
+// a requested pty size is usable only when both dimensions are positive
+// integers; anything else means "no size given", never a resize to 0
+export function isValidTerminalSize(cols: unknown, rows: unknown): boolean {
+    return (
+        typeof cols === "number" &&
+        Number.isInteger(cols) &&
+        cols > 0 &&
+        typeof rows === "number" &&
+        Number.isInteger(rows) &&
+        rows > 0
+    );
+}
+
 // returns false when the session could not be probed AND not created:
 // keystrokes must never be sent into a void and reported as delivered
 async function ensureSession(id: string, cols?: number, rows?: number): Promise<boolean> {
@@ -136,7 +149,21 @@ async function ensureSession(id: string, cols?: number, rows?: number): Promise<
     } catch (err) {
         console.error(`[TerminalService] session probe failed for ${id}:`, err);
     }
-    if (exists) return true;
+    if (exists) {
+        // an existing session keeps whatever size its pty was spawned or
+        // last set to: a viewer returning with a different size (window
+        // resized while away, fonts changed) would otherwise desync the
+        // shell's line wrapping. Best-effort and loud — a failed resize
+        // must not fail the open.
+        if (isValidTerminalSize(cols, rows)) {
+            try {
+                await terminalApi.resize(id, cols as number, rows as number);
+            } catch (err) {
+                console.error(`[TerminalService] session resize failed for ${id}:`, err);
+            }
+        }
+        return true;
+    }
     try {
         await terminalApi.create(id, { cols, rows });
         return true;
