@@ -1,0 +1,26 @@
+{
+    "name": "paperboard-panel-library",
+    "private": true,
+    "version": "0.1.0",
+    "type": "module",
+    "description": "Origami-served panel library: the Paperboard panel store as a standalone web app and an embeddable iframe.",
+    "scripts": {
+        "dev": "vite",
+        "build": "tsc --noEmit && vite build",
+        "typecheck": "tsc --noEmit",
+        "test": "vitest run"
+    },
+    "dependencies": {
+        "@paperboard-dev/paperui": "workspace:*",
+        "solid-js": "^1.9.0"
+    },
+    "devDependencies": {
+        "@solidjs/testing-library": "^0.8.10",
+        "@types/node": "^22.19.1",
+        "jsdom": "^30.0.1",
+        "typescript": "~6.0.2",
+        "vite": "^8.1.0",
+        "vite-plugin-solid": "^2.11.14",
+        "vitest": "^4.1.10"
+    }
+}

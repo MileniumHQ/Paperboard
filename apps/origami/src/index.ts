@@ -44,6 +44,7 @@ export default {
                     endpoints: [
                         "/package/:name.json",
                         "/package/index.json",
+                        "/library/",
                         "/panels/index.json",
                         "/panel/:id.json",
                         "/panel/:id/download",

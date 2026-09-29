@@ -6,10 +6,13 @@
     "private": true,
     "license": "PolyForm-Noncommercial-1.0.0",
     "scripts": {
-        "dev": "wrangler dev",
-        "deploy": "wrangler deploy -c wrangler.jsonc --no-autoconfig",
+        "build:library": "bun run --cwd library build",
+        "dev": "bun run build:library && wrangler dev --var PANEL_BASE_URL:http://localhost:8787",
+        "deploy": "bun run build:library && wrangler deploy -c wrangler.jsonc --no-autoconfig",
         "types": "wrangler types",
-        "typecheck": "tsc --noEmit",
+        "typecheck": "tsc --noEmit && bun run --cwd library typecheck",
+        "test": "bun test ./test",
+        "test:library": "bun run --cwd library test",
         "update:java": "bun scripts/update-java.ts",
         "update:ollama": "bun scripts/update-ollama.ts"
     },

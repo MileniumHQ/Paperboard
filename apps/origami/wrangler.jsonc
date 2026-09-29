@@ -14,6 +14,15 @@
             "custom_domain": true
         }
     ],
+    // The panel library division: built by `bun run build:library` into
+    // library/dist and served from the same origin as the registry it
+    // reads. Registry routes never match an asset, so the worker keeps
+    // serving them; unmatched paths fall through to the worker's 404.
+    "assets": {
+        "directory": "./library/dist",
+        "not_found_handling": "none",
+        "run_worker_first": false
+    },
     "kv_namespaces": [
         {
             "binding": "PACKAGES",

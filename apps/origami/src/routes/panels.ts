@@ -8,6 +8,16 @@ import {
     type PanelRecord,
 } from "../panels";
 import { jsonResponse, verifyAuth, type Env } from "../lib";
+import {
+    parseStoreManifest,
+    storeImageExtension,
+    storeScreenshotField,
+    STORE_IMAGE_TYPES,
+    STORE_MAX_ABOUT_BYTES,
+    STORE_MAX_SCREENSHOT_BYTES,
+    STORE_MAX_SCREENSHOTS,
+    type StoreListing,
+} from "../../../../packages/paperapi/src/storeListing";
 
 // Upload caps, enforced BEFORE any body is buffered: a single oversized
 // publish must refuse, not OOM the Worker. MAX_REQUEST_BYTES is the early
@@ -15,8 +25,12 @@ import { jsonResponse, verifyAuth, type Env } from "../lib";
 // slack); the per-file stream caps below are the exact enforcement.
 export const MAX_ARCHIVE_BYTES = 64 * 1024 * 1024;
 export const MAX_ICON_BYTES = 1 * 1024 * 1024;
+// store media: every screenshot slot (light + dark) at its cap, plus the
+// about markdown; the per-file caps below are the exact enforcement
+export const MAX_STORE_MEDIA_BYTES =
+    STORE_MAX_SCREENSHOTS * 2 * STORE_MAX_SCREENSHOT_BYTES + STORE_MAX_ABOUT_BYTES;
 export const MAX_REQUEST_BYTES =
-    MAX_ARCHIVE_BYTES + MAX_ICON_BYTES + 1024 * 1024;
+    MAX_ARCHIVE_BYTES + MAX_ICON_BYTES + MAX_STORE_MEDIA_BYTES + 1024 * 1024;
 
 // Reads a stream up to `cap` bytes; returns null the moment the cap is
 // exceeded (the stream is cancelled, nothing further is buffered).
@@ -214,6 +228,27 @@ export async function handlePanelsRoutes(
                 return jsonResponse({ error: "Manifest id must match the published panel id" }, 400);
             }
 
+            // Store listing: validated in full BEFORE anything is written,
+            // so a malformed listing cannot leave a half-published release.
+            let storeMedia: {
+                listing: Omit<StoreListing, "screenshots">;
+                screenshots: {
+                    alt?: string;
+                    files: { theme: "light" | "dark"; ext: string; bytes: Uint8Array }[];
+                }[];
+            } | null = null;
+            try {
+                storeMedia = await readStoreUpload(metadata.manifest?.store, formData);
+            } catch (err) {
+                if (err instanceof StoreCapError) {
+                    return overCapResponse(err.cap, err.limitBytes);
+                }
+                return jsonResponse(
+                    { error: `Invalid store listing: ${(err as Error).message}` },
+                    400,
+                );
+            }
+
             // Cap enforced by a stream reader: bytes past the cap are never
             // accumulated — the read aborts as soon as the limit is crossed.
             const archiveBuffer = await readWithCap(
@@ -289,6 +324,43 @@ export async function handlePanelsRoutes(
                 iconUrl = `${recordOrigin}/panel/${metadata.id}/icon`;
             }
 
+            // media keys are per version: a republish never overwrites the
+            // bytes an older record still references
+            let store: StoreListing | undefined;
+            if (storeMedia) {
+                if (!bucket && storeMedia.screenshots.length > 0) {
+                    return jsonResponse(
+                        { error: "Store screenshots need the PANELS_BUCKET binding" },
+                        500,
+                    );
+                }
+                const screenshots: StoreListing["screenshots"] = [];
+                for (const [index, shot] of storeMedia.screenshots.entries()) {
+                    const urls: Partial<Record<"light" | "dark", string>> = {};
+                    for (const file of shot.files) {
+                        const name = `${index}-${file.theme}.${file.ext}`;
+                        await bucket!.put(
+                            `${storeMediaPrefix(metadata.id)}${metadata.version}/${name}`,
+                            file.bytes,
+                            {
+                                httpMetadata: {
+                                    // O2 again: derived from the extension
+                                    contentType: STORE_IMAGE_TYPES[file.ext],
+                                    cacheControl: "public, max-age=31536000, immutable",
+                                },
+                            },
+                        );
+                        urls[file.theme] = `${recordOrigin}/panel/${metadata.id}/media/${metadata.version}/${name}`;
+                    }
+                    screenshots.push({
+                        light: urls.light!,
+                        ...(urls.dark ? { dark: urls.dark } : {}),
+                        ...(shot.alt ? { alt: shot.alt } : {}),
+                    });
+                }
+                store = { ...storeMedia.listing, screenshots };
+            }
+
             const record: PanelRecord = {
                 id: metadata.id,
                 name: metadata.name,
@@ -304,6 +376,7 @@ export async function handlePanelsRoutes(
                 sizeBytes,
                 downloadUrl: `${recordOrigin}/panel/${metadata.id}/download`,
                 updatedAt: new Date().toISOString(),
+                ...(store ? { store } : {}),
                 // an absent manifest is an absent manifest: no metadata
                 // masquerading as one — a manifest-less record installs
                 // as a coarse {id} record without publisher/version facts
@@ -420,6 +493,35 @@ export async function handlePanelsRoutes(
         return jsonResponse({ error: "Icon not found" }, 404);
     }
 
+    const mediaMatch = pathname.match(
+        /^\/panel\/([a-zA-Z0-9_\-\.]+)\/media\/([a-zA-Z0-9._+-]+)\/([0-9]+-(?:light|dark)\.(?:png|webp|jpg|jpeg))$/,
+    );
+    if (mediaMatch) {
+        if (request.method !== "GET" && request.method !== "HEAD") {
+            return jsonResponse({ error: "Method Not Allowed" }, 405);
+        }
+        const [, panelId, version, name] = mediaMatch;
+        // only media the live record references is served: a taken-down
+        // panel or a superseded release does not keep its screenshots public
+        const record = await getPanel(env.PACKAGES, panelId!);
+        const referenced = record?.store?.screenshots?.some((shot) =>
+            [shot.light, shot.dark].some((u) =>
+                typeof u === "string" && u.endsWith(`/panel/${panelId}/media/${version}/${name}`),
+            ),
+        );
+        if (!record || !referenced || !bucket) {
+            return jsonResponse({ error: "Media not found" }, 404);
+        }
+        const object = await bucket.get(`${storeMediaPrefix(panelId!)}${version}/${name}`);
+        if (!object) return jsonResponse({ error: "Media not found" }, 404);
+        const headers = new Headers();
+        object.writeHttpMetadata(headers);
+        headers.set("etag", object.httpEtag);
+        headers.set("Access-Control-Allow-Origin", "*");
+        headers.set("X-Content-Type-Options", "nosniff");
+        return new Response(request.method === "HEAD" ? null : object.body, { headers });
+    }
+
     const panelMatch = pathname.match(
         /^\/panel\/([a-zA-Z0-9_\-\.]+?)(?:\.json)?$/,
     );
@@ -460,4 +562,69 @@ export async function handlePanelsRoutes(
     }
 
     return null;
+}
+
+export function storeMediaPrefix(panelId: string): string {
+    return `panels/${panelId}/media/`;
+}
+
+class StoreCapError extends Error {
+    constructor(
+        readonly cap: string,
+        readonly limitBytes: number,
+    ) {
+        super(`${cap} exceeded`);
+    }
+}
+
+// Reads the listing's text and images out of the publish form. Every file
+// the manifest names must be present; a part the manifest does not name is
+// ignored, never stored.
+async function readStoreUpload(rawStore: unknown, formData: FormData) {
+    const manifest = parseStoreManifest(rawStore);
+    if (!manifest) return null;
+
+    let about: string | undefined;
+    if (manifest.about) {
+        const part = formData.get("about");
+        if (typeof part !== "string" || !part.trim()) {
+            throw new Error(`about names ${manifest.about} but the upload has no 'about' text`);
+        }
+        const bytes = new TextEncoder().encode(part).byteLength;
+        if (bytes > STORE_MAX_ABOUT_BYTES) {
+            throw new StoreCapError("STORE_MAX_ABOUT_BYTES", STORE_MAX_ABOUT_BYTES);
+        }
+        about = part;
+    }
+
+    const screenshots = [];
+    for (const [index, shot] of manifest.screenshots.entries()) {
+        const files = [];
+        for (const theme of ["light", "dark"] as const) {
+            const declared = shot[theme];
+            if (!declared) continue;
+            const field = storeScreenshotField(index, theme);
+            const part = formData.get(field);
+            if (!part || typeof part === "string") {
+                throw new Error(`screenshot ${declared} is missing from the upload (${field})`);
+            }
+            const ext = storeImageExtension(declared)!;
+            const bytes = await readWithCap(new Response(part).body, STORE_MAX_SCREENSHOT_BYTES);
+            if (!bytes) {
+                throw new StoreCapError("STORE_MAX_SCREENSHOT_BYTES", STORE_MAX_SCREENSHOT_BYTES);
+            }
+            files.push({ theme, ext, bytes });
+        }
+        screenshots.push({ ...(shot.alt ? { alt: shot.alt } : {}), files });
+    }
+
+    return {
+        listing: {
+            ...(about ? { about } : {}),
+            services: manifest.services,
+            credits: manifest.credits,
+            requirements: manifest.requirements,
+        },
+        screenshots,
+    };
 }

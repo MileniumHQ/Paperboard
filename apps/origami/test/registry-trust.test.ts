@@ -3,6 +3,7 @@
 // and trashes instead of destroying.
 import { describe, expect, it } from "bun:test";
 import worker, { type Env } from "../src/index";
+import { MAX_REQUEST_BYTES } from "../src/routes/panels";
 
 const AUTH_KEY = "test-auth-key";
 
@@ -333,7 +334,7 @@ describe("publish upload size caps", () => {
 
     it("refuses early on a declared Content-Length over the request envelope, body unread", async () => {
         const { env, kv, r2 } = envWith();
-        const limit = 64 * 1024 * 1024 + 1024 * 1024 + 1024 * 1024;
+        const limit = MAX_REQUEST_BYTES;
         const res = await worker.fetch(
             authed("http://localhost/panel/publish", {
                 method: "POST",
@@ -643,5 +644,156 @@ describe("download redirects", () => {
             env,
         );
         expect(res.status).toBe(404);
+    });
+});
+
+describe("store listing publish", () => {
+    const STORE = {
+        about: "./store/about.md",
+        screenshots: [
+            { light: "./store/1-light.png", dark: "./store/1-dark.png", alt: "Chat" },
+        ],
+        services: [{ name: "Ollama", detail: "Downloading models" }],
+        credits: [{ name: "Discord.js", detail: "Providing the backend engine" }],
+        requirements: [{ name: "RAM", detail: "16 GB" }],
+    };
+
+    function listingForm(store: unknown, parts: Record<string, Blob | string>) {
+        const form = new FormData();
+        form.append("archive", new Blob([new Uint8Array([1])], { type: "application/gzip" }), "s-1.0.0.tar.gz");
+        form.append(
+            "metadata",
+            JSON.stringify({
+                id: "storey",
+                name: "Storey",
+                version: "1.0.0",
+                manifest: { id: "storey", store },
+            }),
+        );
+        for (const [name, part] of Object.entries(parts)) {
+            if (typeof part === "string") form.append(name, part);
+            else form.append(name, part, `${name}.png`);
+        }
+        return form;
+    }
+
+    const png = (byte: number) => new Blob([new Uint8Array([byte])], { type: "image/png" });
+
+    async function publish(env: Env, form: FormData) {
+        return worker.fetch(
+            authed("http://localhost/panel/publish", { method: "POST", body: form }),
+            env,
+            {} as any,
+        );
+    }
+
+    it("stores the listing in the record and serves its screenshots", async () => {
+        const { env, kv, r2 } = envWith();
+        const res = await publish(
+            env,
+            listingForm(STORE, {
+                about: "## Hello",
+                "screenshot-0-light": png(1),
+                "screenshot-0-dark": png(2),
+            }),
+        );
+        expect(res.status).toBe(200);
+
+        const stored = JSON.parse((kv as any).__store.get("panel:storey"));
+        expect(stored.store).toEqual({
+            about: "## Hello",
+            screenshots: [
+                {
+                    light: "http://localhost/panel/storey/media/1.0.0/0-light.png",
+                    dark: "http://localhost/panel/storey/media/1.0.0/0-dark.png",
+                    alt: "Chat",
+                },
+            ],
+            services: STORE.services,
+            credits: STORE.credits,
+            requirements: STORE.requirements,
+        });
+        expect([...(r2 as any).objects.keys()]).toContain("panels/storey/media/1.0.0/0-dark.png");
+
+        const media = await worker.fetch(
+            new Request("http://localhost/panel/storey/media/1.0.0/0-dark.png"),
+            env,
+            {} as any,
+        );
+        expect(media.status).toBe(200);
+        expect(new Uint8Array(await media.arrayBuffer())).toEqual(new Uint8Array([2]));
+    });
+
+    it("refuses a listing whose declared screenshot is missing, before writing anything", async () => {
+        const { env, kv, r2 } = envWith();
+        const res = await publish(
+            env,
+            listingForm(STORE, { about: "hi", "screenshot-0-light": png(1) }),
+        );
+        expect(res.status).toBe(400);
+        expect(((await res.json()) as any).error).toContain("screenshot-0-dark");
+        expect((kv as any).__store.has("panel:storey")).toBe(false);
+        expect((r2 as any).objects.size).toBe(0);
+    });
+
+    it("refuses a malformed listing with a typed 400", async () => {
+        const { env, kv } = envWith();
+        for (const bad of [
+            { screenshots: [{ light: "../secret.png" }] },
+            { about: "./store/about.txt" },
+            { services: [{ name: "Ollama" }] },
+            { requirements: "16 GB" },
+        ]) {
+            const res = await publish(env, listingForm(bad, {}));
+            expect(res.status).toBe(400);
+        }
+        expect((kv as any).__store.has("panel:storey")).toBe(false);
+    });
+
+    it("refuses an oversize screenshot with the cap's 413", async () => {
+        const { env, kv } = envWith();
+        const big = new Blob([new Uint8Array(2 * 1024 * 1024 + 1)], { type: "image/png" });
+        const res = await publish(
+            env,
+            listingForm({ screenshots: [{ light: "./store/1.png" }] }, { "screenshot-0-light": big }),
+        );
+        expect(res.status).toBe(413);
+        expect((kv as any).__store.has("panel:storey")).toBe(false);
+    });
+
+    it("serves only media the live record references, and trashes it on delete", async () => {
+        const { env, r2 } = envWith();
+        await publish(
+            env,
+            listingForm(STORE, {
+                about: "hi",
+                "screenshot-0-light": png(1),
+                "screenshot-0-dark": png(2),
+            }),
+        );
+        // an object under the prefix the record doesn't name stays private
+        (r2 as any).objects.set("panels/storey/media/0.9.0/0-light.png", { body: new Uint8Array([9]) });
+        const stale = await worker.fetch(
+            new Request("http://localhost/panel/storey/media/0.9.0/0-light.png"),
+            env,
+            {} as any,
+        );
+        expect(stale.status).toBe(404);
+
+        const del = await worker.fetch(
+            authed("http://localhost/panel/storey", { method: "DELETE" }),
+            env,
+            {} as any,
+        );
+        expect(del.status).toBe(200);
+        const keys = [...(r2 as any).objects.keys()] as string[];
+        expect(keys).not.toContain("panels/storey/media/1.0.0/0-light.png");
+        expect(keys.some((k) => k.endsWith("-panels/storey/media/1.0.0/0-light.png") && k.startsWith("trash/"))).toBe(true);
+        const gone = await worker.fetch(
+            new Request("http://localhost/panel/storey/media/1.0.0/0-light.png"),
+            env,
+            {} as any,
+        );
+        expect(gone.status).toBe(404);
     });
 });

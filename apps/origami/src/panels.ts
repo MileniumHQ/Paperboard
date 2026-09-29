@@ -1,4 +1,5 @@
 import { isPanelId } from "../../../packages/paperapi/src/panelIdentity";
+import type { StoreListing } from "../../../packages/paperapi/src/storeListing";
 
 export interface PanelRecord {
     id: string;
@@ -20,6 +21,8 @@ export interface PanelRecord {
     author?: string;
     homepage?: string;
     manifest?: Record<string, unknown>;
+    /** published store listing: about text and registry-hosted screenshots */
+    store?: StoreListing;
 }
 
 export interface PanelsEnv {
@@ -217,6 +220,31 @@ export async function trashPanel(
                 }
             } catch (err) {
                 console.error(`[origami] icon trash failed for panels/${id}/icon.${ext}:`, err);
+            }
+        }
+    }
+
+    // store screenshots follow the icon: the ones the live record
+    // references are copied to trash before their originals are deleted
+    if (bucket && existing.store?.screenshots) {
+        const marker = `/panel/${id}/media/`;
+        for (const shot of existing.store.screenshots) {
+            for (const url of [shot.light, shot.dark]) {
+                const at = typeof url === "string" ? url.indexOf(marker) : -1;
+                if (at < 0) continue;
+                const mediaKey = `panels/${id}/media/${url!.slice(at + marker.length)}`;
+                try {
+                    const media = await bucket.get(mediaKey);
+                    if (media) {
+                        await bucket.put(`trash/${stamp}-${mediaKey}`, media.body, {
+                            httpMetadata: media.httpMetadata,
+                            customMetadata: { id, trashedAt: trashed.trashedAt! },
+                        });
+                        await bucket.delete(mediaKey);
+                    }
+                } catch (err) {
+                    console.error(`[origami] media trash failed for ${mediaKey}:`, err);
+                }
             }
         }
     }

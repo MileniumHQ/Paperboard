@@ -57,10 +57,17 @@ step "paperui tests" run_in "$ROOT/packages/paperui" bun run test
 step "paperui styling invariant" bash "$ROOT/scripts/check-paperui-styling.sh"
 step "paperui silent-catches" run_in "$ROOT/packages/paperui" bash "$CATCH" src
 
-# registry service: typecheck plus its suite (no test script, bun runs it)
+# registry service: typecheck plus its worker suite (the library division
+# has its own vitest suite below; `bun test ./test` scopes bun to the worker)
 step "origami typecheck" run_in "$ROOT/apps/origami" bun run typecheck
-step "origami tests" run_in "$ROOT/apps/origami" bun test
+step "origami tests" run_in "$ROOT/apps/origami" bun run test
 step "origami silent-catches" run_in "$ROOT/apps/origami" bash "$CATCH" src test
+
+# the panel library division of origami: browser-logic suite and the
+# production build that static assets serve (typecheck rides origami's)
+step "origami library tests" run_in "$ROOT/apps/origami/library" bun run test
+step "origami library build" run_in "$ROOT/apps/origami/library" bun run build
+step "origami library silent-catches" run_in "$ROOT/apps/origami/library" bash "$CATCH" src test
 
 # first-party panels: suite, typecheck, silent-catch gate each
 for panel in panels/dev.paperboard.actions panels/dev.paperboard.ai panels/dev.paperboard.botcreator panels/dev.paperboard.gameserver panels/dev.paperboard.terminal; do

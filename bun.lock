@@ -17,6 +17,23 @@
         "typescript": "^5",
       },
     },
+    "apps/origami/library": {
+      "name": "paperboard-panel-library",
+      "version": "0.1.0",
+      "dependencies": {
+        "@paperboard-dev/paperui": "workspace:*",
+        "solid-js": "^1.9.0",
+      },
+      "devDependencies": {
+        "@solidjs/testing-library": "^0.8.10",
+        "@types/node": "^22.19.1",
+        "jsdom": "^30.0.1",
+        "typescript": "~6.0.2",
+        "vite": "^8.1.0",
+        "vite-plugin-solid": "^2.11.14",
+        "vitest": "^4.1.10",
+      },
+    },
     "apps/paperboard": {
       "name": "paperboard",
       "version": "0.1.0",
@@ -123,6 +140,7 @@
       },
       "devDependencies": {
         "@solidjs/testing-library": "^0.8.10",
+        "@types/node": "^22.19.1",
         "@types/prismjs": "^1.26.6",
         "jsdom": "^30.0.1",
         "solid-js": "^1.9.13",
@@ -1232,6 +1250,8 @@
     "pako": ["pako@1.0.11", "", {}, "sha512-4hLB8Py4zZce5s4yd9XzopqwVv/yGNhV1Bl8NTmCq1763HeK2+EwVTv+leGeL13Dnh2wfbqowVPXCIO0z4taYw=="],
 
     "paperboard": ["paperboard@workspace:apps/paperboard"],
+
+    "paperboard-panel-library": ["paperboard-panel-library@workspace:apps/origami/library"],
 
     "paperconvert": ["paperconvert@workspace:apps/paperconvert"],
 
