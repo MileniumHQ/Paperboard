@@ -288,6 +288,12 @@ export interface SlashCommandDefinition {
     /** GLOBAL_SCOPE or a Discord guild id */
     scope: string;
     options: SlashCommandOption[];
+    /**
+     * Also available to users who installed the app on their account, not
+     * just servers the bot is in. Discord only honors installation
+     * contexts on globally-scoped commands, so this is global-only.
+     */
+    userInstall: boolean;
 }
 
 export interface CommandMutationResult {
@@ -559,11 +565,24 @@ export function normalizeCommandDefinitions(raw: unknown): SlashCommandDefinitio
         }
         seen.add(key);
         perScope.set(scope, count + 1);
+        // Discord only honors installation contexts on globally-scoped
+        // commands: a server-scoped user-install flag would register as a
+        // guild command that silently ignores it, so it is dropped loudly
+        let userInstall = Boolean(
+            (entry as Partial<SlashCommandDefinition>).userInstall,
+        );
+        if (userInstall && scope !== GLOBAL_SCOPE) {
+            console.error(
+                `[botcreator] ignoring user-install flag on stored command /${name}: user apps are only available for global commands`,
+            );
+            userInstall = false;
+        }
         commands.push({
             ...entry,
             name,
             scope,
             options: normalizeOptions(entry.options),
+            userInstall,
         });
     }
 

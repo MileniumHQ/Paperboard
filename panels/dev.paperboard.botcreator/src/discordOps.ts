@@ -520,18 +520,15 @@ export class InteractionOps {
         private readonly take: (interactionId: string) => RepliableInteraction,
     ) {}
 
-    private payload(content?: string, embeds?: unknown) {
-        return buildMessagePayload({ content, embeds });
-    }
-
     async respond(
         interactionId: string,
-        payload: { content?: string; embeds?: unknown; ephemeral?: boolean },
+        payload: { content?: string; embeds?: unknown; components?: unknown; ephemeral?: boolean },
     ): Promise<string> {
         const interaction = this.take(interactionId.trim());
         const body = buildMessagePayload({
             content: payload.content,
             embeds: payload.embeds,
+            components: payload.components,
         });
         if (interaction.deferred || interaction.replied) {
             await interaction.editReply(body);
@@ -554,12 +551,13 @@ export class InteractionOps {
 
     async followUp(
         interactionId: string,
-        payload: { content?: string; embeds?: unknown; ephemeral?: boolean },
+        payload: { content?: string; embeds?: unknown; components?: unknown; ephemeral?: boolean },
     ): Promise<string> {
         const interaction = this.take(interactionId.trim());
         const body = buildMessagePayload({
             content: payload.content,
             embeds: payload.embeds,
+            components: payload.components,
         });
         const sent = await interaction.followUp({
             ...body,

@@ -13,5 +13,42 @@
             "discord.com",
             "gateway.discord.gg"
         ]
+    },
+    "store": {
+        "about": "./store/about.md",
+        "screenshots": [
+            {
+                "light": "./store/1-light.png",
+                "dark": "./store/1-dark.png",
+                "alt": "Overview"
+            },
+            {
+                "light": "./store/2-light.png",
+                "dark": "./store/2-dark.png",
+                "alt": "Servers your bot is in"
+            },
+            {
+                "light": "./store/3-light.png",
+                "dark": "./store/3-dark.png",
+                "alt": "Slash commands"
+            },
+            {
+                "light": "./store/4-light.png",
+                "dark": "./store/4-dark.png",
+                "alt": "Server details"
+            }
+        ],
+        "services": [
+            {
+                "name": "Discord",
+                "detail": "Connecting your bot and its commands"
+            }
+        ],
+        "credits": [
+            {
+                "name": "discord.js",
+                "detail": "Providing the bot engine"
+            }
+        ]
     }
 }

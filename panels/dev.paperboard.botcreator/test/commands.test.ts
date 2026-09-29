@@ -5,6 +5,7 @@ import { describe, it, expect, beforeEach } from "bun:test";
 import {
     ApplicationCommandOptionType,
     ApplicationCommandType,
+    ApplicationIntegrationType,
     ChannelType,
     type Client,
 } from "discord.js";
@@ -31,6 +32,7 @@ import {
 import {
     buildHealth,
     buildInviteUrl,
+    buildUserInstallUrl,
     buildGuildDetail,
     buildMemberSummaries,
     commandPayload,
@@ -48,8 +50,17 @@ function command(
     scope: string = GLOBAL_SCOPE,
     id: string = name,
     options: SlashCommandOption[] = [],
+    overrides: Partial<SlashCommandDefinition> = {},
 ): SlashCommandDefinition {
-    return { id, name, description: `${name} does things`, scope, options };
+    return {
+        id,
+        name,
+        description: `${name} does things`,
+        scope,
+        options,
+        userInstall: false,
+        ...overrides,
+    };
 }
 
 function option(
@@ -159,7 +170,7 @@ describe("normalizeCommandDefinitions", () => {
             { id: "1", name: "ping", description: "Pong" },
         ]);
         expect(normalized).toEqual([
-            { id: "1", name: "ping", description: "Pong", scope: GLOBAL_SCOPE, options: [] },
+            { id: "1", name: "ping", description: "Pong", scope: GLOBAL_SCOPE, options: [], userInstall: false },
         ]);
     });
 
@@ -188,6 +199,22 @@ describe("normalizeCommandDefinitions", () => {
         expect(normalizeCommandDefinitions(undefined)).toEqual([]);
         expect(normalizeCommandDefinitions("[]")).toEqual([]);
     });
+
+    it("defaults the user-install flag off and keeps an explicit opt-in", () => {
+        const normalized = normalizeCommandDefinitions([
+            { id: "1", name: "ping", description: "Pong", scope: GLOBAL_SCOPE },
+            { id: "2", name: "pm", description: "Pong", scope: GLOBAL_SCOPE, userInstall: true },
+        ]);
+        expect(normalized.map((c) => c.userInstall)).toEqual([false, true]);
+    });
+
+    it("drops the user-install flag on server-scoped commands instead of registering a lie", () => {
+        const normalized = normalizeCommandDefinitions([
+            { id: "1", name: "local", description: "Pong", scope: "12345678901234567", userInstall: true },
+        ]);
+        expect(normalized).toHaveLength(1);
+        expect(normalized[0].userInstall).toBe(false);
+    });
 });
 
 describe("buildInviteUrl", () => {
@@ -200,6 +227,19 @@ describe("buildInviteUrl", () => {
     it("fails loud on unknown permissions and a missing application id", () => {
         expect(() => buildInviteUrl("1", ["SendMesages"])).toThrow(/Unknown Discord permission/);
         expect(() => buildInviteUrl("", [])).toThrow(/application ID/);
+    });
+});
+
+describe("buildUserInstallUrl", () => {
+    it("builds an account-install link with no bot permissions", () => {
+        const url = buildUserInstallUrl("12345678901234567");
+        expect(url).toBe(
+            "https://discord.com/api/oauth2/authorize?client_id=12345678901234567&integration_type=1&scope=applications.commands",
+        );
+    });
+
+    it("fails loud on a missing application id", () => {
+        expect(() => buildUserInstallUrl("")).toThrow(/application ID/);
     });
 });
 
@@ -318,6 +358,34 @@ describe("command payload and per-command triggers", () => {
         expect(payload.options?.[4].required).toBe(true);
     });
 
+    it("pins guild-only installs explicitly so portal defaults cannot promote a command", () => {
+        const payload = commandPayload(command("ping"));
+        expect(payload.integrationTypes).toEqual([
+            ApplicationIntegrationType.GuildInstall,
+        ]);
+    });
+
+    it("registers user-app commands for both installation contexts", () => {
+        const payload = commandPayload(
+            command("pm", GLOBAL_SCOPE, "u1", [], { userInstall: true }),
+        );
+        expect(payload.integrationTypes).toEqual([
+            ApplicationIntegrationType.GuildInstall,
+            ApplicationIntegrationType.UserInstall,
+        ]);
+        expect(ApplicationIntegrationType.GuildInstall).toBe(0);
+        expect(ApplicationIntegrationType.UserInstall).toBe(1);
+    });
+
+    it("describes user-app triggers as firing outside servers too", () => {
+        const def = commandTriggerDefinition(
+            command("pm", GLOBAL_SCOPE, "u1", [], { userInstall: true }),
+        );
+        expect(def.description).toMatch(/DM/);
+        const guildOnly = commandTriggerDefinition(command("ping"));
+        expect(guildOnly.description).toMatch(/any server/);
+    });
+
     it("exposes the command's parameters as typed fields", () => {
         const def = commandTriggerDefinition(
             command("ping", GLOBAL_SCOPE, "c1", [
@@ -371,6 +439,11 @@ describe("command payload and per-command triggers", () => {
         expect(findCommandForInteraction([global, scoped], "ping", null)).toBe(global);
         expect(findCommandForInteraction([global, scoped], "nope", null)).toBeUndefined();
     });
+
+    it("resolves a user-install invocation in a DM to the global command", () => {
+        const userApp = command("pm", GLOBAL_SCOPE, "u1", [], { userInstall: true });
+        expect(findCommandForInteraction([userApp], "pm", null)).toBe(userApp);
+    });
 });
 
 describe("slash command sync", () => {
@@ -410,7 +483,7 @@ describe("slash command sync", () => {
         const errors = await syncSlashCommands(bot, [command("ping")]);
         expect(errors).toEqual([]);
         expect(bot.sets.global).toEqual([
-            { type: ApplicationCommandType.ChatInput, name: "ping", description: "ping does things", options: [] },
+            { type: ApplicationCommandType.ChatInput, name: "ping", description: "ping does things", options: [], integrationTypes: [ApplicationIntegrationType.GuildInstall] },
         ]);
     });
 

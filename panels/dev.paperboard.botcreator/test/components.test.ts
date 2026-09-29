@@ -156,3 +156,48 @@ describe("the interaction trigger", () => {
         expect(trigger.outputFields?.interactionId?.type).toBe("discord-interaction");
     });
 });
+
+describe("interaction responses carry buttons", () => {
+    const button = { label: "Roll", style: "primary", customId: "roll-dice" };
+
+    function fakeInteraction() {
+        const calls: Record<string, unknown[]> = {};
+        return {
+            calls,
+            interaction: {
+                id: "inter_1",
+                deferred: false,
+                replied: false,
+                reply: async (body: unknown) => {
+                    (calls.reply ??= []).push(body);
+                },
+                editReply: async (body: unknown) => {
+                    (calls.editReply ??= []).push(body);
+                },
+                followUp: async (body: unknown) => {
+                    (calls.followUp ??= []).push(body);
+                    return { id: "m1" };
+                },
+            } as any,
+        };
+    }
+
+    it("respond includes the component row instead of dropping it", async () => {
+        const { InteractionOps } = await import("../src/discordOps");
+        const { interaction, calls } = fakeInteraction();
+        const ops = new InteractionOps(() => interaction);
+        await ops.respond("inter_1", { content: "Pick one", components: [button] });
+        const body = calls.reply[0] as any;
+        expect(body.content).toBe("Pick one");
+        expect(body.components).toHaveLength(1);
+    });
+
+    it("followUp includes the component row instead of dropping it", async () => {
+        const { InteractionOps } = await import("../src/discordOps");
+        const { interaction, calls } = fakeInteraction();
+        const ops = new InteractionOps(() => interaction);
+        await ops.followUp("inter_1", { content: "More", components: [button] });
+        const body = calls.followUp[0] as any;
+        expect(body.components).toHaveLength(1);
+    });
+});

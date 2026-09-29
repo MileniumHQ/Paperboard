@@ -7,6 +7,7 @@ import {
     MessageFlags,
     ApplicationCommandOptionType,
     ApplicationCommandType,
+    ApplicationIntegrationType,
     type ApplicationCommandOptionData,
     type ChatInputApplicationCommandData,
     type ChatInputCommandInteraction,
@@ -429,6 +430,16 @@ export function buildInviteUrl(appId: string, permissions: string[]): string {
 
 function generateInvite(permissions: string[]): string {
     return buildInviteUrl(client?.user?.id || savedAppId, permissions);
+}
+
+// User installs carry no bot permissions: the link authorizes
+// applications.commands for the user's own account. It only works once
+// User Install is enabled for the app in the Discord developer portal.
+export function buildUserInstallUrl(appId: string): string {
+    if (!appId) {
+        throw new Error("Cannot build a user-install URL: no application ID is known.");
+    }
+    return `https://discord.com/api/oauth2/authorize?client_id=${appId}&integration_type=1&scope=applications.commands`;
 }
 
 async function stopBot() {
@@ -926,7 +937,9 @@ export function commandTriggerDefinition(command: SlashCommandDefinition) {
         category: discordCategory("Commands"),
         description:
             command.scope === GLOBAL_SCOPE
-                ? `Fires when /${command.name} is used in any server`
+                ? command.userInstall
+                    ? `Fires when /${command.name} is used anywhere it is installed — servers, DMs, and group chats`
+                    : `Fires when /${command.name} is used in any server`
                 : `Fires when /${command.name} is used in the server it is registered to`,
         template: `When /${command.name} is used`,
         output: { type: "object", label: "Command Data" },
@@ -1012,11 +1025,21 @@ function optionPayload(option: SlashCommandOption): ApplicationCommandOptionData
 export function commandPayload(
     def: SlashCommandDefinition,
 ): ChatInputApplicationCommandData {
+    // Always explicit: omitting integration types inherits the app's
+    // configured contexts, which would silently promote a guild-only
+    // command to user installs once the portal enables them. contexts is
+    // left unset so a user-install command works on every surface.
     return {
         type: ApplicationCommandType.ChatInput,
         name: def.name,
         description: def.description,
         options: def.options.map(optionPayload),
+        integrationTypes: def.userInstall
+            ? [
+                ApplicationIntegrationType.GuildInstall,
+                ApplicationIntegrationType.UserInstall,
+            ]
+            : [ApplicationIntegrationType.GuildInstall],
     };
 }
 
@@ -1540,6 +1563,7 @@ export const actions = [
                 interactionId: string;
                 content?: string;
                 embeds?: unknown;
+                components?: unknown;
                 ephemeral?: boolean;
             },
         ) => {
@@ -1572,6 +1596,7 @@ export const actions = [
                 interactionId: string;
                 content?: string;
                 embeds?: unknown;
+                components?: unknown;
                 ephemeral?: boolean;
             },
         ) => {
@@ -2632,6 +2657,13 @@ export const botService = definePanelService({
         );
 
         registerInternal(
+            "get-user-install-url",
+            "Get User Install URL",
+            "Panel UI only: builds the account-install URL for user-app commands.",
+            () => buildUserInstallUrl(client?.user?.id || savedAppId),
+        );
+
+        registerInternal(
             "connect-bot",
             "Connect Bot",
             "Panel UI only: connects the vault token. Never accepts a token over the wire.",
@@ -2722,6 +2754,7 @@ export const botService = definePanelService({
                 description?: string;
                 scope?: string;
                 options?: unknown;
+                userInstall?: unknown;
             }): Promise<CommandMutationResult> => {
                 const name =
                     typeof input?.name === "string"
@@ -2735,10 +2768,16 @@ export const botService = definePanelService({
                     typeof input?.scope === "string" && input.scope
                         ? input.scope
                         : GLOBAL_SCOPE;
+                const userInstall = Boolean(input?.userInstall);
                 const problem = describeCommandProblem({ name, description });
                 if (problem) throw new Error(problem);
                 if (scope !== GLOBAL_SCOPE && !SNOWFLAKE_PATTERN.test(scope)) {
                     throw new Error(`Unknown command scope "${scope}".`);
+                }
+                if (userInstall && scope !== GLOBAL_SCOPE) {
+                    throw new Error(
+                        "User apps are only available for global commands: Discord ignores installation contexts on server-scoped commands.",
+                    );
                 }
                 const options = parseCommandOptions(input?.options);
 
@@ -2759,6 +2798,7 @@ export const botService = definePanelService({
                     description,
                     scope,
                     options,
+                    userInstall,
                 };
                 const next = [...commands, definition];
                 await writeStoredCommands(next);

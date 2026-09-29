@@ -59,6 +59,7 @@ export default function Commands() {
     const [name, setName] = createSignal("");
     const [description, setDescription] = createSignal("");
     const [scope, setScope] = createSignal(GLOBAL_SCOPE);
+    const [userInstall, setUserInstall] = createSignal(false);
     const [options, setOptions] = createSignal<SlashCommandOption[]>([]);
     const [busy, setBusy] = createSignal(false);
     const [formError, setFormError] = createSignal("");
@@ -111,6 +112,7 @@ export default function Commands() {
         // default: guild commands register instantly, global ones can take
         // up to an hour to appear
         setScope(guilds().length === 1 ? guilds()[0].id : GLOBAL_SCOPE);
+        setUserInstall(false);
         setOptions([]);
         setFormError("");
         setCreateOpen(true);
@@ -208,6 +210,7 @@ export default function Commands() {
                     description: description(),
                     scope: scope(),
                     options: options(),
+                    userInstall: userInstall(),
                 },
             );
             setCommands((prev) => [...prev, result.command]);
@@ -322,6 +325,11 @@ export default function Commands() {
                                                         {command.options.length === 1 ? "" : "s"}
                                                     </PaperBadge>
                                                 </Show>
+                                                <Show when={command.userInstall}>
+                                                    <PaperBadge>
+                                                        User app
+                                                    </PaperBadge>
+                                                </Show>
                                                 <PaperBadge
                                                     variant={
                                                         command.scope === GLOBAL_SCOPE
@@ -399,7 +407,13 @@ export default function Commands() {
                             name="commandScope"
                             fullWidth
                             value={scope()}
-                            onValueChange={(val) => setScope(String(val))}
+                            onValueChange={(val) => {
+                                const next = String(val);
+                                setScope(next);
+                                // Discord only honors installation contexts
+                                // on global commands
+                                if (next !== GLOBAL_SCOPE) setUserInstall(false);
+                            }}
                         >
                             <PaperSelectMenuItem value={GLOBAL_SCOPE} icon="public">
                                 Global (every server)
@@ -418,6 +432,22 @@ export default function Commands() {
                                 Global commands can take up to an hour to appear. Pick a
                                 server while testing to register instantly.
                             </PaperQuote>
+                        </Show>
+
+                        <Show when={scope() === GLOBAL_SCOPE}>
+                            <PaperCheckbox
+                                checked={userInstall()}
+                                label="Also available as a user app"
+                                onChange={(checked) => setUserInstall(checked)}
+                            />
+                            <Show when={userInstall()}>
+                                <PaperText size={2} color="text-subtle">
+                                    Users can install this command on their
+                                    account so it works in DMs and servers
+                                    without the bot. Needs User Install
+                                    enabled in the Discord developer portal.
+                                </PaperText>
+                            </Show>
                         </Show>
                     </PaperFlex>
 
