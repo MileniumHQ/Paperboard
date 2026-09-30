@@ -23,6 +23,7 @@ import {
     siblingsFor,
 } from "../utils/routeUtils";
 import { withBase } from "../utils/base";
+import { tocLevel } from "../utils/toc";
 import type { TocItem } from "../types/docs";
 
 interface DocsPageProps {
@@ -69,36 +70,11 @@ export function DocsPage(props: DocsPageProps) {
         const items: TocItem[] = [];
         elements.forEach((el) => {
             const id = el.getAttribute("id");
-            if (id) {
+            const level = tocLevel(el);
+            if (id && level !== null) {
                 const clone = el.cloneNode(true) as HTMLElement;
                 clone.querySelector("button")?.remove();
                 const text = clone.textContent?.trim() || id;
-
-                const preset = el.getAttribute("data-preset") || "";
-                const classStr = el.className.toLowerCase();
-                const tagName = el.tagName.toUpperCase();
-
-                let level = 0;
-                if (
-                    preset === "title" ||
-                    classStr.includes("title") ||
-                    tagName === "H3"
-                ) {
-                    level = 1;
-                } else if (
-                    preset === "subtitle" ||
-                    classStr.includes("subtitle") ||
-                    tagName === "H4"
-                ) {
-                    level = 2;
-                } else if (
-                    preset === "subheader" ||
-                    classStr.includes("subheader") ||
-                    tagName === "H2"
-                ) {
-                    level = 0;
-                }
-
                 items.push({ id, text, level });
             }
         });
