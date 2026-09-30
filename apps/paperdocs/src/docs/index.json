@@ -76,6 +76,10 @@
                 "icon": "widgets",
                 "sort": "alphabetical",
                 "pages": {
+                    "paper-audio": {
+                        "name": "PaperAudio",
+                        "file": "paper-audio"
+                    },
                     "paper-avatar": {
                         "name": "PaperAvatar",
                         "file": "paper-avatar"
@@ -179,6 +183,10 @@
                     "paper-progress": {
                         "name": "PaperProgress",
                         "file": "paper-progress"
+                    },
+                    "paper-range": {
+                        "name": "PaperRange",
+                        "file": "paper-range"
                     },
                     "paper-prose": {
                         "name": "PaperProse",
