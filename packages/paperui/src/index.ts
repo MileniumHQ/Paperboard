@@ -29,6 +29,7 @@ export * from "./components/PaperProgress";
 export * from "./components/PaperProse";
 export * from "./components/PaperProvider";
 export * from "./components/PaperQuote";
+export * from "./components/PaperRange";
 export * from "./components/PaperRail";
 export * from "./components/PaperSelector";
 export * from "./components/PaperSelectMenu";

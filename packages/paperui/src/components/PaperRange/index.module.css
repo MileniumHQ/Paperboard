@@ -1,0 +1,56 @@
+/* PaperRange draws PaperProgress's track and bar and adds only what a slider
+   needs: a hit area larger than the track, focus, and a vertical axis. */
+.PaperRange {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    cursor: pointer;
+    touch-action: none;
+    outline: none;
+}
+
+.horizontal {
+    padding: var(--paper-uigap-half) 0;
+}
+
+.vertical {
+    padding: 0 var(--paper-uigap-half);
+}
+
+/* Default lengths carry zero specificity, so a caller's class sets them no
+   matter which stylesheet loads last. A vertical range owns a real height:
+   100% of an auto-height parent collapses it to nothing. */
+:where(.horizontal) {
+    width: 100%;
+}
+
+:where(.vertical) {
+    height: calc(var(--paper-control-size-small) * 3);
+}
+
+.vertical .track {
+    display: flex;
+    flex-direction: column-reverse;
+    width: calc(var(--paper-thickest-border-width) * 2);
+    height: 100%;
+}
+
+.vertical .bar {
+    width: 100%;
+}
+
+/* the bar follows the pointer; PaperProgress's easing would trail it */
+.PaperRange .bar {
+    transition: none;
+}
+
+.PaperRange:focus-visible .track {
+    outline: var(--paper-focus-ring);
+    outline-offset: var(--paper-focus-offset);
+}
+
+.disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+}
