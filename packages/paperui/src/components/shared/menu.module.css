@@ -159,20 +159,26 @@
     align-items: center;
 }
 
+/* portaled out of the scrolling menu and fixed at its row's edge (see
+   PaperContextMenuSub); the margins set the gap, and ::before bridges it so
+   the pointer can cross from the row without the panel closing */
 .subMenuPanel {
-    position: absolute;
-    top: calc(var(--paper-uigap-half) * -1);
-    left: calc(100% + var(--paper-uigap-half));
-    z-index: 1001;
+    position: fixed;
+    z-index: 2001;
+    margin-left: var(--paper-uigap-half);
+    margin-top: calc(var(--paper-uigap-half) * -1);
+    font-family: var(--paper-font-family);
     background: var(--paper-surface-raised);
     border: var(--paper-border-width) solid var(--paper-border);
     border-radius: var(--paper-border-radius);
     box-shadow: var(--paper-heavy-element-shadow);
     padding: var(--paper-uigap-half);
     min-width: calc(var(--paper-size-sidebar) * 0.7);
+    box-sizing: border-box;
     display: flex;
     flex-direction: column;
-    transform: translateZ(0);
+    gap: var(--paper-uigap-onefourth);
+    user-select: none;
 }
 
 .subMenuPanel::before {
@@ -185,8 +191,7 @@
 }
 
 .subMenuPanel.flipX {
-    left: auto;
-    right: calc(100% + var(--paper-uigap-half));
+    margin-left: calc(var(--paper-uigap-half) * -1);
 }
 
 .subMenuPanel.flipX::before {
@@ -195,6 +200,5 @@
 }
 
 .subMenuPanel.flipY {
-    top: auto;
-    bottom: calc(var(--paper-uigap-half) * -1);
+    margin-top: 0;
 }

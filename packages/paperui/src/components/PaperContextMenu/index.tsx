@@ -218,8 +218,19 @@ export function useContextMenuState(
     };
 }
 
+const LEVEL_SELECTOR = "[data-context-level]";
+
+interface SubMenuHandle {
+    open: () => void;
+    close: () => void;
+}
+
 interface ContextMenuContextType {
+    /** Marks every element of this menu, including portaled submenu panels. */
+    rootId: string;
     closeMenu: () => void;
+    /** Lets the keyboard handler open and close a submenu by its item id. */
+    registerSub: (id: string, handle: SubMenuHandle) => () => void;
     highlightedItem: () => string | number | null;
     setHighlightedItem: (val: string | number | null) => void;
 }
@@ -269,6 +280,20 @@ export function PaperContextMenu(props: ParentProps<PaperContextMenuProps>) {
         string | number | null
     >(null);
     const [activeSubMenu, setActiveSubMenu] = createSignal<string | null>(null);
+    // one entry per mounted submenu; each removes itself on cleanup
+    const subHandles = new Map<string, SubMenuHandle>();
+    // Submenu panels are portaled out of the scrolling menu, so "inside this
+    // menu" is membership by id, never DOM containment.
+    const rootId = createUniqueId();
+    const rootSelector = `[data-context-root="${rootId}"]`;
+    const inMenu = (node: Node | null) => {
+        const el = node instanceof Element ? node : (node?.parentElement ?? null);
+        return !!el?.closest(rootSelector);
+    };
+    const findItem = (value: string | number) =>
+        document.querySelector<HTMLElement>(
+            `${rootSelector} [data-context-item="${escapeAttributeValue(String(value))}"]`,
+        );
     let isDraggingGesture = false;
 
     const updatePosition = () => {
@@ -308,8 +333,17 @@ export function PaperContextMenu(props: ParentProps<PaperContextMenuProps>) {
         const targetRect = resolvedEl?.getBoundingClientRect() ?? null;
         const padding = 12;
 
+        const placementMode = local.placement || "mouse";
+        // "-right" placements line the menu's right edge up with the
+        // target's; anchoring its left edge there would open it diagonally
+        // off the target's corner
+        const anchorX =
+            targetRect && placementMode.endsWith("-right")
+                ? targetRect.right - rect.width
+                : targetX;
+
         const left = resolveMenuLeft(
-            targetX,
+            anchorX,
             targetRect?.right ?? null,
             rect.width,
             window.innerWidth,
@@ -317,7 +351,6 @@ export function PaperContextMenu(props: ParentProps<PaperContextMenuProps>) {
         );
         let top = targetY;
 
-        const placementMode = local.placement || "mouse";
         const isBelowMode = placementMode.startsWith("below");
 
         if (isBelowMode && top + rect.height > window.innerHeight - padding) {
@@ -349,11 +382,8 @@ export function PaperContextMenu(props: ParentProps<PaperContextMenuProps>) {
 
     const scrollHighlightedIntoView = () => {
         const value = highlightedItem();
-        if (value === null || !menuRef) return;
-        const target = menuRef.querySelector(
-            `[data-context-item="${escapeAttributeValue(String(value))}"]`,
-        ) as HTMLElement | null;
-        target?.scrollIntoView?.({ block: "nearest" });
+        if (value === null) return;
+        findItem(value)?.scrollIntoView?.({ block: "nearest" });
     };
 
     createEffect(() => {
@@ -371,58 +401,94 @@ export function PaperContextMenu(props: ParentProps<PaperContextMenuProps>) {
 
         let pointerMoveRaf: number | null = null;
 
+        // Each menu level (the root and every open submenu panel) is its
+        // own list: arrows move within the level of the highlighted item,
+        // Right/Enter descend into a submenu, Left/Escape climb back out.
+        const levelItems = (level: Element) =>
+            Array.from(
+                level.querySelectorAll<HTMLElement>(
+                    "[data-context-item]:not([data-disabled='true'])",
+                ),
+            ).filter((el) => el.closest(LEVEL_SELECTOR) === level);
+
+        const highlightIn = (items: HTMLElement[], index: number) => {
+            const value = items[index]?.getAttribute("data-context-item");
+            if (value) setHighlightedItem(value);
+            scrollHighlightedIntoView();
+        };
+
+        const openSub = (subEl: HTMLElement) => {
+            const id = subEl.getAttribute("data-context-sub");
+            if (!id) return;
+            subHandles.get(id)?.open();
+            const panel = document.querySelector(
+                `${rootSelector}[data-context-parent="${escapeAttributeValue(id)}"]`,
+            );
+            if (panel) highlightIn(levelItems(panel), 0);
+        };
+
+        const leaveLevel = (level: Element) => {
+            const id = level.getAttribute("data-context-parent");
+            if (!id) return;
+            subHandles.get(id)?.close();
+            setHighlightedItem(id);
+        };
+
         const handleKeyDown = (e: KeyboardEvent) => {
-            if ((local.closeOnEsc ?? true) && e.key === "Escape") {
-                handleClose();
+            if (!menuRef) {
+                if ((local.closeOnEsc ?? true) && e.key === "Escape") handleClose();
                 return;
             }
 
-            if (!menuRef) return;
-            const items = Array.from(
-                menuRef.querySelectorAll<HTMLElement>(
-                    "[data-context-item]:not([data-disabled='true'])",
-                ),
-            );
-            if (items.length === 0) return;
-
             const currentHighlight = highlightedItem();
-            const currentIndex = items.findIndex(
-                (el) =>
-                    el.getAttribute("data-context-item") === currentHighlight,
-            );
+            const current = currentHighlight === null ? null : findItem(currentHighlight);
+            const level = current?.closest(LEVEL_SELECTOR) ?? menuRef;
+            const inSub = level !== menuRef;
+
+            if (e.key === "Escape") {
+                if (inSub) {
+                    e.preventDefault();
+                    leaveLevel(level);
+                } else if (local.closeOnEsc ?? true) {
+                    handleClose();
+                }
+                return;
+            }
+
+            const items = levelItems(level);
+            if (items.length === 0) return;
+            const currentIndex = current ? items.indexOf(current) : -1;
+            const isSub = !!current?.hasAttribute("data-context-sub");
 
             if (e.key === "ArrowDown") {
                 e.preventDefault();
-                const nextIdx = (currentIndex + 1) % items.length;
-                const nextVal =
-                    items[nextIdx].getAttribute("data-context-item");
-                if (nextVal) setHighlightedItem(nextVal);
-                scrollHighlightedIntoView();
+                highlightIn(items, (currentIndex + 1) % items.length);
             } else if (e.key === "ArrowUp") {
                 e.preventDefault();
-                const prevIdx =
-                    currentIndex <= 0 ? items.length - 1 : currentIndex - 1;
-                const prevVal =
-                    items[prevIdx].getAttribute("data-context-item");
-                if (prevVal) setHighlightedItem(prevVal);
-                scrollHighlightedIntoView();
+                highlightIn(
+                    items,
+                    currentIndex <= 0 ? items.length - 1 : currentIndex - 1,
+                );
             } else if (e.key === "Home") {
                 e.preventDefault();
-                const first = items[0].getAttribute("data-context-item");
-                if (first) setHighlightedItem(first);
-                scrollHighlightedIntoView();
+                highlightIn(items, 0);
             } else if (e.key === "End") {
                 e.preventDefault();
-                const last = items[items.length - 1].getAttribute(
-                    "data-context-item",
-                );
-                if (last) setHighlightedItem(last);
-                scrollHighlightedIntoView();
+                highlightIn(items, items.length - 1);
+            } else if (e.key === "ArrowRight") {
+                if (current && isSub) {
+                    e.preventDefault();
+                    openSub(current);
+                }
+            } else if (e.key === "ArrowLeft") {
+                if (inSub) {
+                    e.preventDefault();
+                    leaveLevel(level);
+                }
             } else if (e.key === "Enter" || e.key === " ") {
                 e.preventDefault();
-                if (currentIndex >= 0) {
-                    items[currentIndex].click();
-                }
+                if (current && isSub) openSub(current);
+                else if (current && currentIndex >= 0) current.click();
             }
         };
 
@@ -465,7 +531,7 @@ export function PaperContextMenu(props: ParentProps<PaperContextMenuProps>) {
             if (!menuRef) return;
             const target = e.target instanceof Node ? e.target : null;
             if (target) {
-                if (menuRef.contains(target)) return;
+                if (inMenu(target)) return;
                 // A dropdown's anchor is part of the menu it opens: the press
                 // on its trigger must reach the trigger's click, which owns
                 // the open/close decision (a select's toggle, a picker's
@@ -479,7 +545,7 @@ export function PaperContextMenu(props: ParentProps<PaperContextMenuProps>) {
 
         const handleScroll = (e: Event) => {
             const targetNode = e.target instanceof Node ? e.target : null;
-            if (menuRef && (!targetNode || !menuRef.contains(targetNode))) {
+            if (menuRef && (!targetNode || !inMenu(targetNode))) {
                 handleClose();
             }
         };
@@ -501,6 +567,13 @@ export function PaperContextMenu(props: ParentProps<PaperContextMenuProps>) {
     });
 
     const contextValue: ContextMenuContextType = {
+        rootId,
+        registerSub: (id, handle) => {
+            subHandles.set(id, handle);
+            return () => {
+                if (subHandles.get(id) === handle) subHandles.delete(id);
+            };
+        },
         closeMenu: () => {
             if (local.closeOnClick ?? true) {
                 handleClose();
@@ -542,6 +615,8 @@ export function PaperContextMenu(props: ParentProps<PaperContextMenuProps>) {
                                 updatePosition();
                             }}
                             role="menu"
+                            data-context-level=""
+                            data-context-root={rootId}
                             tabIndex={-1}
                             aria-activedescendant={activeDescendantId()}
                             aria-hidden={!local.open}
@@ -652,7 +727,9 @@ export function PaperContextMenuSub(
     props: ParentProps<PaperContextMenuSubProps>,
 ) {
     let subRef: HTMLDivElement | undefined;
+    let rowRef: HTMLDivElement | undefined;
     let closeTimeout: number | undefined;
+    let flipRaf: number | undefined;
 
     const [local, rest] = splitProps(props, [
         "label",
@@ -663,8 +740,11 @@ export function PaperContextMenuSub(
         "children",
     ]);
 
-    const autoId = createUniqueId();
+    // An id, not the label: two submenus may share a label, and the id is
+    // also this row's item value for keyboard highlight and activedescendant.
+    const subId = `sub-${createUniqueId()}`;
     const subLabel = () => local.label || local.title || "";
+    const ctx = useContextMenu();
     const subCtx = useContext(SubMenuLevelContext);
     const [childActiveSubMenu, setChildActiveSubMenu] = createSignal<string | null>(null);
     const childSubMenuContextValue: SubMenuLevelContextType = {
@@ -672,11 +752,12 @@ export function PaperContextMenuSub(
         setActiveSubMenu: setChildActiveSubMenu,
     };
 
-    const subId = () => (typeof subLabel() === "string" && subLabel() ? String(subLabel()) : autoId);
-    const isOpen = () => subCtx?.activeSubMenu() === subId();
+    const isOpen = () => subCtx?.activeSubMenu() === subId;
+    const isHighlighted = () => isOpen() || ctx?.highlightedItem() === subId;
 
     const [flipX, setFlipX] = createSignal(false);
     const [flipY, setFlipY] = createSignal(false);
+    const [coords, setCoords] = createSignal({ left: 0, top: 0 });
 
     const cancelClose = () => {
         if (closeTimeout) {
@@ -688,29 +769,54 @@ export function PaperContextMenuSub(
     const scheduleClose = () => {
         cancelClose();
         closeTimeout = window.setTimeout(() => {
-            if (subCtx?.activeSubMenu() === subId()) {
+            if (subCtx?.activeSubMenu() === subId) {
                 subCtx?.setActiveSubMenu(null);
             }
         }, 150);
     };
 
-    const handlePointerEnter = () => {
-        cancelClose();
-        subCtx?.setActiveSubMenu(subId());
-        requestAnimationFrame(() => {
-            if (!subRef) return;
-            const rect = subRef.getBoundingClientRect();
-            setFlipX(rect.right > window.innerWidth - 12);
-            setFlipY(rect.bottom > window.innerHeight - 12);
+    // The panel is portaled and fixed: placed at the row's right edge (CSS
+    // margins supply the gap), then flipped once measured if it would leave
+    // the viewport.
+    const place = () => {
+        if (!rowRef) return;
+        const row = rowRef.getBoundingClientRect();
+        const panel = subRef?.getBoundingClientRect();
+        const pad = 12;
+        const fitsRight = !panel || row.right + panel.width <= window.innerWidth - pad;
+        const fitsBelow = !panel || row.top + panel.height <= window.innerHeight - pad;
+        setFlipX(!fitsRight);
+        setFlipY(!fitsBelow);
+        setCoords({
+            left: fitsRight ? row.right : row.left - (panel?.width ?? 0),
+            top: fitsBelow
+                ? row.top
+                : Math.max(pad, window.innerHeight - pad - (panel?.height ?? 0)),
         });
     };
 
-    const handlePointerLeave = () => {
-        scheduleClose();
+    const open = () => {
+        cancelClose();
+        subCtx?.setActiveSubMenu(subId);
+        place();
+        if (flipRaf) cancelAnimationFrame(flipRaf);
+        flipRaf = requestAnimationFrame(() => {
+            flipRaf = undefined;
+            place();
+        });
     };
+
+    const close = () => {
+        cancelClose();
+        if (subCtx?.activeSubMenu() === subId) subCtx.setActiveSubMenu(null);
+    };
+
+    const unregister = ctx?.registerSub(subId, { open, close });
 
     onCleanup(() => {
         cancelClose();
+        if (flipRaf) cancelAnimationFrame(flipRaf);
+        unregister?.();
     });
 
     const subClassName = () =>
@@ -724,17 +830,30 @@ export function PaperContextMenuSub(
 
     return (
         <div
+            ref={rowRef}
+            id={`paper-menuitem-${subId}`}
+            role="menuitem"
+            aria-haspopup="menu"
+            aria-expanded={isOpen()}
+            tabIndex={-1}
             {...rest}
+            data-context-item={subId}
+            data-context-sub={subId}
             class={[
                 menuStyles.item,
-                isOpen() ? menuStyles.highlighted : "",
+                isHighlighted() ? menuStyles.highlighted : "",
                 local.class,
             ]
                 .filter(Boolean)
                 .join(" ")}
             classList={local.classList}
-            onPointerEnter={handlePointerEnter}
-            onPointerLeave={handlePointerLeave}
+            onPointerEnter={() => {
+                ctx?.setHighlightedItem(subId);
+                open();
+            }}
+            onPointerLeave={scheduleClose}
+            // touch has no hover: a tap on the row opens it
+            onClick={open}
         >
             <Show when={local.icon}>
                 {typeof local.icon === "string" ? (
@@ -748,16 +867,24 @@ export function PaperContextMenuSub(
             <PaperIcon class={menuStyles.subMenuIndicator} zeroHeight>chevron_right</PaperIcon>
 
             <Show when={isOpen()}>
-                <SubMenuLevelContext.Provider value={childSubMenuContextValue}>
-                    <div
-                        ref={subRef}
-                        class={subClassName()}
-                        onPointerEnter={cancelClose}
-                        onPointerLeave={scheduleClose}
-                    >
-                        {local.children}
-                    </div>
-                </SubMenuLevelContext.Provider>
+                <Portal>
+                    <SubMenuLevelContext.Provider value={childSubMenuContextValue}>
+                        <div
+                            ref={subRef}
+                            role="menu"
+                            data-context-level=""
+                            data-context-root={ctx?.rootId}
+                            data-context-parent={subId}
+                            aria-label={typeof subLabel() === "string" ? (subLabel() as string) : undefined}
+                            class={subClassName()}
+                            style={{ left: `${coords().left}px`, top: `${coords().top}px` }}
+                            onPointerEnter={cancelClose}
+                            onPointerLeave={scheduleClose}
+                        >
+                            {local.children}
+                        </div>
+                    </SubMenuLevelContext.Provider>
+                </Portal>
             </Show>
         </div>
     );

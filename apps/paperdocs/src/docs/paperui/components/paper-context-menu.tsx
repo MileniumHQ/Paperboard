@@ -115,7 +115,7 @@ export function Example() {
                             <td><PaperCode>placement</PaperCode></td>
                             <td><PaperCode>ContextMenuPlacement</PaperCode></td>
                             <td><PaperCode>"mouse"</PaperCode></td>
-                            <td>Alignment rule: mouse, below, below-left, below-right, above, above-left, above-right.</td>
+                            <td>Where the menu opens. <PaperCode>"mouse"</PaperCode> opens at the pointer. <PaperCode>"below"</PaperCode> and <PaperCode>"below-left"</PaperCode> open under the target with left edges aligned, and <PaperCode>"below-right"</PaperCode> with right edges aligned. The <PaperCode>"above"</PaperCode> variants use the same edges from the target's top edge. A menu that would leave the viewport on the right anchors to the target's right edge instead.</td>
                         </tr>
                         <tr>
                             <td><PaperCode>onClose</PaperCode></td>
@@ -141,7 +141,13 @@ export function Example() {
             <PaperText preset="subheader" id="behavior">Behavior</PaperText>
             <PaperText preset="body">
                 The menu clamps its coordinate offsets to prevent spilling past viewport borders.
-                Keyboard navigation is supported using ArrowUp, ArrowDown, and Enter keys.
+                ArrowUp, ArrowDown, Home, and End move the highlight. Enter or Space picks the highlighted item.
+            </PaperText>
+            <PaperText preset="body">
+                A <PaperCode>PaperContextMenuSub</PaperCode> row is a menu item with its own list.
+                ArrowRight, Enter, or Space opens it and highlights its first item. The arrows then move within the submenu only.
+                ArrowLeft or Escape closes the submenu and returns the highlight to its row. Escape at the top level closes the menu.
+                Pointer users open a submenu by hovering or clicking its row.
             </PaperText>
 
             <PaperText preset="subheader" id="recipes">Recipes</PaperText>
