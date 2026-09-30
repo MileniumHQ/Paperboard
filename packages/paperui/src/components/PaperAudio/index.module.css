@@ -1,0 +1,130 @@
+.PaperAudio {
+    display: flex;
+    align-items: center;
+    gap: var(--paper-uigap-half);
+    /* compact by default; fullWidth fills the container */
+    width: var(--paper-size-card-min);
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    padding: var(--paper-uigap-onefourth);
+    background: var(--paper-surface-raised);
+    border: var(--paper-border-width) solid var(--paper-border-subtle);
+    border-radius: var(--paper-border-radius);
+    color: var(--paper-text);
+    font-family: var(--paper-font-family-rounded);
+}
+
+.PaperAudio.fullWidth {
+    width: 100%;
+}
+
+.actions {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.play {
+    flex-shrink: 0;
+}
+
+.track {
+    position: relative;
+    flex: 1;
+    min-width: 0;
+    height: var(--paper-control-size-small);
+    display: flex;
+    align-items: center;
+    margin-left: var(--paper-uigap-onefourth);
+    border-radius: var(--paper-border-radius-half);
+}
+
+/* the range input carries focus; the ring belongs on the visible track */
+.track:has(.range:focus-visible) {
+    outline: var(--paper-focus-ring);
+    outline-offset: var(--paper-focus-offset);
+}
+
+.wave {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+    pointer-events: none;
+}
+
+.waveBase {
+    fill: var(--paper-border-strong);
+}
+
+.waveFill {
+    fill: var(--paper-primary);
+}
+
+.range {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    opacity: 0;
+    cursor: pointer;
+}
+
+.range:disabled {
+    cursor: default;
+}
+
+.time {
+    flex-shrink: 0;
+    min-width: 4ch;
+    text-align: right;
+    font-size: var(--paper-text-size-2);
+    font-variant-numeric: tabular-nums;
+    color: var(--paper-text-subtle);
+}
+
+/* portaled and fixed to the volume button; the padding bridges the gap so
+   the pointer can travel from the button to the slider */
+.volumePopover {
+    position: fixed;
+    z-index: 2000;
+    transform: translate(-50%, -100%);
+    padding-bottom: var(--paper-uigap-onefourth);
+}
+
+.volumePopover.below {
+    transform: translateX(-50%);
+    padding-bottom: 0;
+    padding-top: var(--paper-uigap-onefourth);
+}
+
+.volumeBox {
+    display: flex;
+    justify-content: center;
+    padding: var(--paper-uigap-half) var(--paper-uigap-onefourth);
+    background: var(--paper-surface-raised);
+    border: var(--paper-border-width) solid var(--paper-border-subtle);
+    border-radius: var(--paper-border-radius);
+}
+
+.error {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--paper-uigap-half);
+}
+
+.errorText {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--paper-text-size-2);
+    color: var(--paper-danger);
+}
+

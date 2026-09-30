@@ -9,10 +9,12 @@
 import { createSignal } from "solid-js";
 import { render } from "solid-js/web";
 import {
+    PaperAudio,
     PaperContextMenu,
     PaperContextMenuItem,
     PaperSelectMenu,
     PaperSelectMenuItem,
+    PaperRange,
     useContextMenuState,
 } from "../../index";
 import "../../styles/styles.css";
@@ -137,6 +139,15 @@ function Fixture() {
                     Reload Panel
                 </PaperContextMenuItem>
             </PaperContextMenu>
+
+            {/* Sizing only resolves with real layout: a vertical range in an
+                auto-height box once collapsed to 0px (an empty volume box). */}
+            <div id="range-auto" style={{ display: "flex", "margin-top": "160px" }}>
+                <PaperRange aria-label="Auto height" orientation="vertical" value={50} />
+            </div>
+            <div style={{ "margin-top": "32px" }}>
+                <PaperAudio src="data:audio/wav;base64," waveform={false} label="Fixture audio" />
+            </div>
         </div>
     );
 }
@@ -196,6 +207,18 @@ function run(): void {
     const itemPoint = centerOf(item);
     browserClick(itemPoint.x, itemPoint.y);
     out.checks.contextMenuClosedAfterItem = !menuIsShowing('[role="menu"]');
+
+    const autoRange = document.querySelector('[role="slider"][aria-label="Auto height"]') as HTMLElement;
+    out.checks.autoRangeTrackHeight = (autoRange.firstElementChild as HTMLElement).getBoundingClientRect().height;
+
+    const volumeButton = document.querySelector(
+        '[role="group"][aria-label="Fixture audio"] button[aria-label="Mute"]',
+    ) as HTMLElement;
+    volumeButton.dispatchEvent(new PointerEvent("pointerenter"));
+    const volume = document.querySelector('[role="slider"][aria-label="Volume"]') as HTMLElement | null;
+    out.checks.volumeTrackHeight = volume
+        ? (volume.firstElementChild as HTMLElement).getBoundingClientRect().height
+        : -1;
 }
 
 try {

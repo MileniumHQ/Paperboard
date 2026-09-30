@@ -1,6 +1,7 @@
 import "./styles/styles.css";
 
 export * from "./components/PaperBadge";
+export * from "./components/PaperAudio";
 export * from "./components/PaperAvatar";
 export * from "./components/PaperButton";
 export * from "./components/PaperCard";

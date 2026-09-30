@@ -221,6 +221,11 @@ describe("menu presses in a real browser", () => {
             expect(checks.contextMenuOpened, "right click did not open the context menu").toBe(true);
             expect(checks.contextItemClicks, "the context menu item click did not run").toBe(1);
             expect(checks.contextMenuClosedAfterItem, "the context menu stayed open after its item click").toBe(true);
+
+            // vertical PaperRange owns a real height; a caller's auto-height
+            // container must not collapse it (the empty volume box)
+            expect(checks.autoRangeTrackHeight, "a vertical range collapsed in an auto-height box").toBeGreaterThan(0);
+            expect(checks.volumeTrackHeight, "the PaperAudio volume slider rendered empty").toBeGreaterThan(0);
         },
         60_000,
     );
