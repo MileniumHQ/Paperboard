@@ -1,3 +1,5 @@
+# Terminal
+
 The Terminal panel brings the command line to Paperboard. Interact with your system shell just as you would anywhere else.
 
 - **Persists across sessions** - A terminal tab isn't closed until you close it. Start a process and leave it be for as long as you need.

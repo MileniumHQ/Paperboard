@@ -1,3 +1,5 @@
+# Bot Creator
+
 Create fully functional Discord bots without writing a single line of code. The Bot Creator panel exposes many actions to the Paperboard ecosystem, and you need to do to get started is provide a valid Discord bot token.
 
 - **Code visually** - Use the Actions panel to build custom logic with ease in minutes. Using the Actions panel, you can create a bot that triggers actions and behavior in other installed panels and services.

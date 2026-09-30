@@ -93,7 +93,9 @@ describe("loadInstalledPanelMedia", () => {
         const read = async (path: string) => new Uint8Array(readFileSync(join(aiDir, path)));
         const media = await loadInstalledPanelMedia(read, true);
         expect(isDataImage(media.icon)).toBe(true);
-        expect(media.store!.about).toContain("Ollama");
+        // the listing text is whatever the panel ships; assert it round-trips
+        // instead of pinning copy that changes with every store refresh
+        expect(media.store!.about).toBe(readFileSync(join(aiDir, "store/about.md"), "utf8"));
         expect(media.store!.screenshots.length).toBe(4);
         // what the shell sends survives the library's parser intact
         expect(parseStoreListing(media.store, { allowDataImages: true })).toEqual(media.store!);

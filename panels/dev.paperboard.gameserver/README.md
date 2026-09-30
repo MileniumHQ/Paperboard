@@ -1,3 +1,5 @@
+# Game Server
+
 Host Minecraft and game servers on your computer without the hassle of learning a terminal. The Game Server panel is a full-featured server hosting dashboard that brings all your server management tasks into one convenient interface.
 
 - **No setup required** - You don't need to install anything. Paperboard handles software installs and server downloads automatically. Just select the version you want to play on and you're good to go.

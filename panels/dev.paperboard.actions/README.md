@@ -1,3 +1,5 @@
+# Actions
+
 Build automations visually. In the Actions panel, simply drag action blocks into trigger blocks and interconnect the entire Paperboard experience into one canvas.
 
 - **Bring everything together** - Actions integrates with any panels installed in Paperboard. Create a flow that sends a Discord message when someone joins your Minecraft server, use locally hosted AI to automate tasks on your computer, or anything else you can dream of. Your imagination is the limit.
