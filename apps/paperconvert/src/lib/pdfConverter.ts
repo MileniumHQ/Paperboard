@@ -146,10 +146,19 @@ function safeUrl(escapedUrl: string): string {
   return /^(https?:|mailto:)/i.test(url) || !/^[a-z][a-z0-9+.-]*:/i.test(url) ? url : "#";
 }
 
+// Inline HTML that Markdown documents commonly carry. Bare tags only: no
+// attributes, so nothing here can hold a handler or a URL.
+const SAFE_INLINE_TAGS = "br|hr|kbd|b|i|u|s|em|strong|del|ins|mark|small|sub|sup|code";
+const SAFE_TAG_PATTERN = new RegExp(`&lt;(/?)(${SAFE_INLINE_TAGS})\\s*(/?)&gt;`, "gi");
+
 export function markdownToHtml(md: string): string {
-  // escape first: the markdown rules below add the only markup, so source
-  // text can never contribute an element or attribute of its own
+  // escape first, then hand back only the allow-listed bare tags: the
+  // markdown rules below add the rest of the markup, so source text can
+  // never contribute any other element or attribute
   let html = escapeHtml(md)
+    .replace(SAFE_TAG_PATTERN, (_m, close: string, tag: string, selfClose: string) =>
+      `<${close}${tag.toLowerCase()}${selfClose && !close ? " /" : ""}>`,
+    )
     .replace(/^### (.*$)/gim, "<h3>$1</h3>")
     .replace(/^## (.*$)/gim, "<h2>$1</h2>")
     .replace(/^# (.*$)/gim, "<h1>$1</h1>")
@@ -165,6 +174,9 @@ export function markdownToHtml(md: string): string {
 
 export function htmlToMarkdown(html: string): string {
   return html
+    // script and style are not content: drop them with their bodies, not
+    // just their tags, so code never lands in the document as text
+    .replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, "")
     .replace(/<h1[^>]*>(.*?)<\/h1>/gi, "# $1\n\n")
     .replace(/<h2[^>]*>(.*?)<\/h2>/gi, "## $1\n\n")
     .replace(/<h3[^>]*>(.*?)<\/h3>/gi, "### $1\n\n")
@@ -176,5 +188,7 @@ export function htmlToMarkdown(html: string): string {
     .replace(/<p[^>]*>(.*?)<\/p>/gi, "$1\n\n")
     .replace(/<br\s*\/?>/gi, "\n")
     .replace(/<[^>]+>/g, "")
+    // an unterminated tag ("<script" with no ">") survives the strip above
+    .replace(/<[a-z!/?][^>]*$/i, "")
     .trim();
 }
