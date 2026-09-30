@@ -14,8 +14,10 @@ describe("versionLabel", () => {
         expect(versionLabel("1.2.2")).toBe("1.2.2");
     });
 
-    it("ignores prerelease tags", () => {
-        expect(versionLabel("0.2.0-alpha")).toBe("Beta 2");
+    it("appends prerelease tags title-cased", () => {
+        expect(versionLabel("0.2.0-alpha")).toBe("Beta 2 Alpha");
+        expect(versionLabel("1.3-alpha")).toBe("1.3 Alpha");
+        expect(versionLabel("0.2.0-x2")).toBe("Beta 2 x2");
     });
 
     it("leaves an unparseable version as it is", () => {
