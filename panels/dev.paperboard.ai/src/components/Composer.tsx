@@ -132,7 +132,7 @@ export default function Composer(props: ComposerProps) {
                     ref={(el) => (input = el)}
                     value={text()}
                     disabled={props.disabled}
-                    placeholder="Ask for changes, send follow-ups, or attach images"
+                    placeholder="Ask anything"
                     onInput={setText}
                     onPaste={(e) => {
                         const files = [...(e.clipboardData?.files ?? [])];
