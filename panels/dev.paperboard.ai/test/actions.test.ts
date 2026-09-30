@@ -1,7 +1,8 @@
 // The AI panel's public action schemas: the model dropdowns and personality
 // options flows see, and the persona a one-shot ask runs with.
 import { describe, it, expect } from "bun:test";
-import { publicActions } from "../src/service/actions";
+import { publicActions, uiActions } from "../src/service/actions";
+import { UI_ACTION_IDS } from "../src/contract";
 import { PROMPT_STYLES } from "../src/core/conversation";
 import { askSystemPrompt } from "../src/core/conversation";
 
@@ -92,5 +93,21 @@ describe("askSystemPrompt", () => {
         const withInstructions = askSystemPrompt("standard", "qwen3:8b", "  Answer in one sentence  ");
         expect(withInstructions.endsWith("Answer in one sentence")).toBe(true);
         expect(withInstructions).toContain(standard);
+    });
+});
+
+describe("delete-all chats UI action", () => {
+    it("is registered and calls the app's delete-all", async () => {
+        let calls = 0;
+        const app = {
+            ready: Promise.resolve(),
+            deleteAllConversations: async () => {
+                calls += 1;
+            },
+        } as any;
+        const action = uiActions(app).find((a) => a.id === UI_ACTION_IDS.deleteAllConversations);
+        expect(action).toBeDefined();
+        await action!.run!({}, {});
+        expect(calls).toBe(1);
     });
 });

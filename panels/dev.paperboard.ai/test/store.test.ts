@@ -81,6 +81,19 @@ describe("conversation store", () => {
         expect(await store.delete("eeeeeeee-5")).toEqual([]);
         await expect(store.get("eeeeeeee-5")).rejects.toThrow();
     });
+
+    it("delete all removes every chat, including files hidden from the index", async () => {
+        const store = new ConversationStore(dir);
+        await store.load();
+        await store.save(conv("eeeeeeee-5", 1));
+        await store.save(conv("ffffffff-6", 2));
+        // a conversation that never parsed is on disk but not in the index
+        fs.writeFileSync(path.join(dir, "conversations", "gggggggg-7.json"), "garbage");
+        expect(await store.deleteAll()).toEqual([]);
+        expect(fs.readdirSync(path.join(dir, "conversations"))).toEqual(["index.json"]);
+        await expect(store.get("eeeeeeee-5")).rejects.toThrow();
+        expect((await new ConversationStore(dir).load()).summaries).toEqual([]);
+    });
 });
 
 describe("model manager", () => {

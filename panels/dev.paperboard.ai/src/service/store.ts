@@ -132,4 +132,25 @@ export class ConversationStore {
             return this.summaries;
         });
     }
+
+    /**
+     * Deletes every conversation, including files the index never listed
+     * (a conversation that failed to parse) and abandoned temp writes, then
+     * writes an empty index. "All chats" must not leave leftovers behind.
+     * A failure partway leaves the store as it was, so the caller reports it
+     * instead of a false success.
+     */
+    deleteAll(): Promise<ConversationSummary[]> {
+        return this.serial(async () => {
+            await fs.promises.mkdir(this.dir, { recursive: true });
+            const entries = await fs.promises.readdir(this.dir, { withFileTypes: true });
+            for (const entry of entries) {
+                if (!entry.isFile() || entry.name === "index.json") continue;
+                await fs.promises.rm(path.join(this.dir, entry.name), { force: true });
+            }
+            this.summaries = [];
+            await this.writeAtomic(path.join(this.dir, "index.json"), JSON.stringify({ conversations: [] }));
+            return this.summaries;
+        });
+    }
 }

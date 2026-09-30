@@ -282,6 +282,19 @@ export class AiApp {
         this.ctx.setState({ conversations: await this.store.delete(id) });
     }
 
+    async deleteAllConversations(): Promise<void> {
+        // stop every reply and let its final save land before clearing, so a
+        // save cannot resurrect a chat after the wipe
+        await this.chat.stopAll();
+        const conversations = await this.store.deleteAll();
+        this.ctx.setState(() => ({
+            conversations,
+            // the files an unreadable warning described are gone; a config
+            // read error is a different failure and stays
+            ...(this.configLoaded ? { storageError: undefined } : {}),
+        }));
+    }
+
     resolveApproval(id: string, decision: ApprovalDecision): void {
         this.chat.resolveApproval(id, decision);
     }

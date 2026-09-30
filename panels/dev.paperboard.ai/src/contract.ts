@@ -29,6 +29,7 @@ export const UI_ACTION_IDS = {
     getConversation: "ui-get-conversation",
     renameConversation: "ui-rename-conversation",
     deleteConversation: "ui-delete-conversation",
+    deleteAllConversations: "ui-delete-all-conversations",
     rewindConversation: "ui-rewind-conversation",
     setConversationModel: "ui-set-conversation-model",
     sendMessage: "ui-send-message",

@@ -210,6 +210,7 @@ export function uiActions(app: AiApp): ActionDefinition[] {
             ready(() => app.rewindConversation(str(i.id, "id", 64), str(i.messageId, "messageId", 64))),
         ),
         ui(UI_ACTION_IDS.deleteConversation, "Delete chat", (i) => ready(() => app.deleteConversation(str(i.id, "id", 64)))),
+        ui(UI_ACTION_IDS.deleteAllConversations, "Delete all chats", () => ready(() => app.deleteAllConversations())),
         ui(UI_ACTION_IDS.setConversationModel, "Set chat model", (i) =>
             ready(() => app.setConversationModel(str(i.id, "id", 64), str(i.model, "model"))),
         ),

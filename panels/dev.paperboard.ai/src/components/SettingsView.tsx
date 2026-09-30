@@ -1,5 +1,8 @@
 import { createSignal, Show } from "solid-js";
 import {
+    PaperButton,
+    PaperIcon,
+    PaperModal,
     PaperSelectMenu,
     PaperSelectMenuItem,
     PaperSettingItem,
@@ -16,6 +19,8 @@ const CONTEXTS = [4096, 8192, 16384, 32768, 65536, 131072];
 
 export default function SettingsView() {
     const [error, setError] = createSignal("");
+    const [confirmingDeleteAll, setConfirmingDeleteAll] = createSignal(false);
+    const [deletingAll, setDeletingAll] = createSignal(false);
 
     const save = async (patch: Record<string, unknown>) => {
         setError("");
@@ -23,6 +28,19 @@ export default function SettingsView() {
             await call(UI_ACTION_IDS.updateSettings, patch);
         } catch (err) {
             setError(errorText(err));
+        }
+    };
+
+    const deleteAllChats = async () => {
+        setDeletingAll(true);
+        setError("");
+        try {
+            await call(UI_ACTION_IDS.deleteAllConversations);
+            setConfirmingDeleteAll(false);
+        } catch (err) {
+            setError(errorText(err));
+        } finally {
+            setDeletingAll(false);
         }
     };
 
@@ -114,7 +132,46 @@ export default function SettingsView() {
                         ))}
                     </PaperSelectMenu>
                 </PaperSettingItem>
+                <PaperSettingItem
+                    title="Delete all chats"
+                    description="Removes every chat and its messages from this computer. This cannot be undone."
+                >
+                    <PaperButton
+                        variant="danger"
+                        onClick={() => setConfirmingDeleteAll(true)}
+                    >
+                        <PaperIcon>delete</PaperIcon> Delete all
+                    </PaperButton>
+                </PaperSettingItem>
             </PaperSettingList>
+
+            <PaperModal
+                open={confirmingDeleteAll()}
+                onClose={() => !deletingAll() && setConfirmingDeleteAll(false)}
+                title="Delete all chats?"
+                size="small"
+                footer={
+                    <>
+                        <PaperButton
+                            onClick={() => setConfirmingDeleteAll(false)}
+                            disabled={deletingAll()}
+                        >
+                            Keep them
+                        </PaperButton>
+                        <PaperButton
+                            variant="danger"
+                            onClick={deleteAllChats}
+                            disabled={deletingAll()}
+                        >
+                            Delete all
+                        </PaperButton>
+                    </>
+                }
+            >
+                <PaperText>
+                    Every chat and its messages are removed from this computer. This cannot be undone.
+                </PaperText>
+            </PaperModal>
         </div>
     );
 }
