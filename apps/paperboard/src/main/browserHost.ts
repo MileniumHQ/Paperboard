@@ -21,12 +21,10 @@
 // is checked on every request (DNS-rebinding defense).
 import * as http from "http";
 import * as crypto from "crypto";
-import * as fs from "fs";
-import * as path from "path";
 import { logger } from "../../papercrane/logger";
-import { lookupMime } from "../../papercrane/mime";
 import { secretsMatch } from "../../papercrane/secretCompare";
 import { parsePanelHost } from "./panelAssets";
+import { readShellFile } from "./shellAssets";
 
 export const BROWSER_HOST_SUFFIX = "paperboard.localhost";
 export const SESSION_COOKIE = "pb_shell";
@@ -239,27 +237,10 @@ export function startBrowserHost(opts: BrowserHostOptions): Promise<BrowserHost>
 
     const serveRendererFile = async (pathname: string, res: http.ServerResponse) => {
         if (!opts.rendererDir) throw new HttpError(404, "Not found");
-        const root = path.resolve(opts.rendererDir);
-        const rel = pathname === "/" ? "index.html" : decodeURIComponent(pathname).replace(/^\/+/, "");
-        const file = path.resolve(root, rel);
-        if (file !== root && !file.startsWith(root + path.sep)) throw new HttpError(403, "Forbidden");
-        let data: Buffer;
-        try {
-            data = await fs.promises.readFile(file);
-        } catch (err: any) {
-            if (err?.code === "ENOENT" || err?.code === "EISDIR") throw new HttpError(404, "Not found");
-            throw err;
-        }
-        const ext = path.extname(file).toLowerCase();
-        res.writeHead(200, {
-            "Content-Type": lookupMime(ext),
-            "X-Content-Type-Options": "nosniff",
-            "Cache-Control": ext === ".html" ? "no-store" : "no-cache",
-            // the shell is never framed by anyone
-            "Content-Security-Policy": "frame-ancestors 'none'",
-            "Referrer-Policy": "no-referrer",
-        });
-        res.end(data);
+        const file = await readShellFile(opts.rendererDir, pathname);
+        if (!file.ok) throw new HttpError(file.status, file.status === 403 ? "Forbidden" : file.status === 400 ? "Bad request" : "Not found");
+        res.writeHead(200, file.headers);
+        res.end(file.data);
     };
 
     const proxyRenderer = (req: http.IncomingMessage, res: http.ServerResponse, devUrl: string) =>

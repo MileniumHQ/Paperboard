@@ -25,6 +25,7 @@ import {
     WINDOW_BACKGROUND_COLORS,
 } from "../../papercrane/themeConstants";
 import { parsePanelHost, servePanelAsset } from "./panelServe";
+import { readShellFile, SHELL_HOST, SHELL_ORIGIN, SHELL_SCHEME } from "./shellAssets";
 import { startBrowserHost, type BrowserHost } from "./browserHost";
 import { createShellInvokeHandlers, SHARED_SHELL_INVOKE_CHANNELS } from "./communication/shellHandlers";
 import { applySavedAppSettings } from "./communication/shelldata";
@@ -75,6 +76,16 @@ process.on("unhandledRejection", (reason) => {
 });
 
 protocol.registerSchemesAsPrivileged([
+    // the packaged shell's origin (see shellAssets.ts)
+    {
+        scheme: SHELL_SCHEME,
+        privileges: {
+            standard: true,
+            secure: true,
+            supportFetchAPI: true,
+            codeCache: true,
+        },
+    },
     {
         scheme: "panel",
         privileges: {
@@ -173,7 +184,7 @@ function createWindow(): void {
     if (is.dev && process.env["ELECTRON_RENDERER_URL"]) {
         mainWindow.loadURL(process.env["ELECTRON_RENDERER_URL"]);
     } else {
-        mainWindow.loadFile(path.join(__dirname, "../renderer/index.html"));
+        mainWindow.loadURL(`${SHELL_ORIGIN}/index.html`);
     }
 }
 
@@ -284,7 +295,7 @@ function createUpdaterWindow(): BrowserWindow {
             `${process.env["ELECTRON_RENDERER_URL"]}/updater.html`,
         );
     } else {
-        updaterWindow.loadFile(path.join(__dirname, "../renderer/updater.html"));
+        updaterWindow.loadURL(`${SHELL_ORIGIN}/updater.html`);
     }
 
     return updaterWindow;
@@ -395,6 +406,15 @@ app.whenReady().then(async () => {
     };
 
     protocol.handle("panel", handlePanelProtocol);
+
+    const rendererDir = path.join(__dirname, "../renderer");
+    protocol.handle(SHELL_SCHEME, async (request: Request) => {
+        const url = new URL(request.url);
+        if (url.host !== SHELL_HOST) return new Response("Not found", { status: 404 });
+        const file = await readShellFile(rendererDir, url.pathname);
+        if (!file.ok) return new Response(null, { status: file.status });
+        return new Response(new Uint8Array(file.data), { headers: file.headers });
+    });
 
     if (browserMode) {
         // no updater pass either: it restarts into a window. Updates apply

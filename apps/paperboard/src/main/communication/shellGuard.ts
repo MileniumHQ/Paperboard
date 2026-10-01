@@ -3,7 +3,7 @@
 // Panels render as <iframe> elements inside the shell window and inherit the
 // window's preload, so the preload channel allowlist alone cannot keep
 // privileged channels shell-only. Every shell channel handler validates
-// `event.senderFrame.url`: shell origins (file://, dev http://localhost)
+// `event.senderFrame.url`: shell origins (paperboard://shell, dev http://localhost)
 // are answered; panel origins (`panel://<computer>.<panel>/...`) get a
 // typed refusal — never an answer, never empty silence.
 //
