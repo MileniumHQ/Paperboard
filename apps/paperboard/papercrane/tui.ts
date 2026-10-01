@@ -5,13 +5,21 @@ import { readBanner } from "./branding";
 export interface TuiOptions {
     host: string;
     port: number;
+    secure: boolean;
     auth: PaperCraneAuth;
     onStop: () => void;
 }
 
+// Pairing trusts whichever computer answers first (trust on first use), so
+// the code can be intercepted on an untrusted network. Every later connection
+// is pinned to the certificate captured then, so it is encrypted end to end.
+const PAIRING_TRUST_NOTE =
+    "Pairing itself is unauthenticated: pair only on a network you trust. Once paired, the connection is encrypted and locked to this server, so you can use it from anywhere.";
+
 export class PaperCraneTui {
     private host: string;
     private port: number;
+    private scheme: string;
     private auth: PaperCraneAuth;
     private onStop: () => void;
     private isPromptingRevoke = false;
@@ -19,6 +27,7 @@ export class PaperCraneTui {
     constructor(options: TuiOptions) {
         this.host = options.host;
         this.port = options.port;
+        this.scheme = options.secure ? "https" : "http";
         this.auth = options.auth;
         this.onStop = options.onStop;
 
@@ -120,8 +129,8 @@ export class PaperCraneTui {
 
         this.clear();
         console.log(readBanner() ?? "Paperboard Server");
-        console.log(`Listening on http://${this.host}:${this.port}\n`);
-        console.log("Only pair on a home or other trusted network you control: the connection is unencrypted on the local network.\n");
+        console.log(`Listening on ${this.scheme}://${this.host}:${this.port}\n`);
+        console.log(`${PAIRING_TRUST_NOTE}\n`);
 
         if (this.auth.isPairingActive()) {
             const code = this.auth.getPairingCode() || "------";
@@ -144,8 +153,8 @@ export class PaperCraneTui {
     }
 
     private renderPlain() {
-        console.log(`[Paperboard Server] Listening on http://${this.host}:${this.port}`);
-        console.log("[Paperboard Server] Only pair on a trusted network you control: the connection is unencrypted on the local network.");
+        console.log(`[Paperboard Server] Listening on ${this.scheme}://${this.host}:${this.port}`);
+        console.log(`[Paperboard Server] ${PAIRING_TRUST_NOTE}`);
         if (this.auth.isPairingActive()) {
             const code = this.auth.getPairingCode() || "------";
             console.log(`[Paperboard Server] Pairing Code: ${code.slice(0, 3)} ${code.slice(3)}`);

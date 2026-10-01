@@ -8,6 +8,8 @@ export interface RemoteEntry {
     host: string;
     port: number;
     token?: string;
+    // the remote daemon's certificate, pinned when it was paired
+    cert: string;
     isLocal?: boolean;
 }
 
@@ -33,6 +35,8 @@ export function readRemotes(file: string | undefined): RemoteEntry[] {
             Number.isInteger(c.port) &&
             c.port > 0 &&
             c.port <= 65535 &&
+            typeof c.cert === "string" &&
+            c.cert.length > 0 &&
             (typeof c.id === "string" || typeof c.name === "string"),
     );
 }

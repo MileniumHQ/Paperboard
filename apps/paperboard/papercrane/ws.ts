@@ -1,9 +1,10 @@
 import { WebSocketServer, WebSocket } from "ws";
 import * as os from "os";
-import { WebSocket as UpstreamWebSocket } from "ws";
 import { PaperCraneEngine } from "./engine";
 import { PaperCraneAuth, type AuthorizedToken } from "./auth";
 import { readRemotes } from "./remotes";
+import { pinnedTlsOptions } from "./pinnedTls";
+import { pinnableWebSocket } from "./pinnableWebSocket";
 import { getDetailedOsInfo } from "./index";
 import { logger } from "./logger";
 import { actionsRegistry } from "./actions";
@@ -165,7 +166,7 @@ export function setupWebSocketServer(
         };
 
         // tunnels to paired remotes, keyed by tunnel id
-        const tunnels = new Map<string, { socket: UpstreamWebSocket; ready: boolean; timer: ReturnType<typeof setTimeout> }>();
+        const tunnels = new Map<string, { socket: WebSocket; ready: boolean; timer: ReturnType<typeof setTimeout> }>();
 
         // one teardown shape for every tunnel exit: map removal lives
         // here, not scattered across event handlers. Notify-once falls out
@@ -265,7 +266,7 @@ export function setupWebSocketServer(
                 // tunneled frames bypass the local pipeline
                 if (maybe && typeof maybe === "object" && maybe.type === "tunnel") {
                     const tunnel = tunnels.get(maybe.id);
-                    if (isAuthenticated && tunnel?.ready && tunnel.socket.readyState === UpstreamWebSocket.OPEN) {
+                    if (isAuthenticated && tunnel?.ready && tunnel.socket.readyState === WebSocket.OPEN) {
                         tunnel.socket.send(typeof maybe.payload === "string" ? maybe.payload : JSON.stringify(maybe.payload));
                     }
                     return;
@@ -320,8 +321,10 @@ export function setupWebSocketServer(
                         return;
                     }
                     try {
-                        const upstream = new UpstreamWebSocket(`ws://${entry.host}:${entry.port}`, {
+                        const UpstreamWebSocket = pinnableWebSocket();
+                        const upstream = new UpstreamWebSocket(`wss://${entry.host}:${entry.port}`, {
                             maxPayload: MAX_WS_PAYLOAD, handshakeTimeout: HANDSHAKE_TIMEOUT_MS,
+                            ...pinnedTlsOptions(entry.cert),
                         });
                         const timer = setTimeout(() => closeTunnel(tunnelId, { reason: "Remote authentication timed out" }), HANDSHAKE_TIMEOUT_MS);
                         timer.unref?.();

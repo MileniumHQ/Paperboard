@@ -1,4 +1,5 @@
 import * as http from "http";
+import * as https from "https";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
@@ -15,10 +16,11 @@ import { DavSessionStore } from "./dav";
 import { setupWebSocketServer } from "./ws";
 import { PaperCraneTui } from "./tui";
 import { ensureNativeHelpersExecutable } from "./pty";
-import { advertisePaperCrane, type AdvertisementHandle } from "./discovery";
+import { advertisePaperCrane, isLoopbackHost, type AdvertisementHandle } from "./discovery";
 import { writeFileAtomicSync } from "./storage";
 import { getLinuxDistroInfo } from "./util";
-import { getPaperboardDir } from "./paths";
+import { getLocalDir, getPaperboardDir } from "./paths";
+import { loadOrCreateTlsIdentity, type TlsIdentity } from "./tlsIdentity";
 import { logger } from "./logger";
 import { PanelServicesManager } from "./panelServices";
 
@@ -154,7 +156,7 @@ export async function getDetailedOsInfo(): Promise<{
 export const DEFAULT_PORT =
     Number(process.env.PAPERCRANE_PORT) || 45464;
 // bind all interfaces by default — running remotely is PaperCrane's job.
-// every RPC still requires a token.
+// every RPC still requires a token, and a non-loopback bind is TLS only.
 export const DEFAULT_HOST = process.env.PAPERCRANE_HOST || "0.0.0.0";
 
 // PID file, detects stale instances on restart. Identity is path-bound:
@@ -286,6 +288,8 @@ export interface ServerOptions {
     staticToken?: string;
     // Path to the paired-computers registry enabling remote tunnels
     remotesFile?: string;
+    // mDNS announcement on non-loopback binds (default on)
+    advertise?: boolean;
 }
 
 // handshake file for local clients, written on every listen
@@ -308,11 +312,14 @@ function writeCraneJson(port: number, token: string | null) {
 }
 
 export interface ServerInstance {
-    server: http.Server;
+    server: http.Server | https.Server;
     wss: WebSocketServer;
     engine: PaperCraneEngine;
     auth: PaperCraneAuth;
     port: number;
+    // plaintext loopback port for this machine's own clients (crane.json,
+    // panel services). Equals port when the daemon is loopback-only.
+    localPort: number;
     host: string;
     stop: () => void;
 }
@@ -342,6 +349,23 @@ export function startPaperCraneServer(
         const staticToken =
             options.staticToken ?? (noAuth ? null : crypto.randomBytes(24).toString("hex"));
 
+        // Reachable from other computers = TLS with this computer's pinned
+        // identity. Plaintext exists only on loopback, for local clients.
+        const loopbackOnly = isLoopbackHost(host);
+        if (noAuth && !loopbackOnly) {
+            reject(new Error(`--no-auth only runs on a loopback host, not ${host}`));
+            return;
+        }
+        let tlsIdentity: TlsIdentity | null = null;
+        if (!loopbackOnly) {
+            try {
+                tlsIdentity = loadOrCreateTlsIdentity(getLocalDir());
+            } catch (err) {
+                reject(err);
+                return;
+            }
+        }
+
         const tryStart = (currentPort: number) => {
             let advertisement: AdvertisementHandle | null = null;
             const panelServices = new PanelServicesManager(getPaperboardDir());
@@ -357,11 +381,20 @@ export function startPaperCraneServer(
                 );
             });
 
-            const server = http.createServer((req, res) => {
+            const onRequest = (req: http.IncomingMessage, res: http.ServerResponse) => {
                 handleHttpRequest(engine, req, res, { auth, sessions });
-            });
+            };
+            const server = tlsIdentity
+                ? https.createServer({ key: tlsIdentity.key, cert: tlsIdentity.cert }, onRequest)
+                : http.createServer(onRequest);
+            const localServer = tlsIdentity ? http.createServer(onRequest) : null;
 
-            const wss = new WebSocketServer({ server });
+            const wss = new WebSocketServer({ noServer: true });
+            for (const listener of [server, localServer]) {
+                listener?.on("upgrade", (req, socket, head) => {
+                    wss.handleUpgrade(req, socket, head, (ws) => wss.emit("connection", ws, req));
+                });
+            }
             setupWebSocketServer(wss, engine, auth, {
                 remotesFile: options.remotesFile,
                 staticToken,
@@ -388,6 +421,7 @@ export function startPaperCraneServer(
                 } catch (err) { logger.debug("[index.ts] op failed:", err) }
                 try {
                     wss.close();
+                    localServer?.close();
                     server.close(() => {
                         if (!noAuth && !headless) {
                             process.exit(0);
@@ -409,6 +443,7 @@ export function startPaperCraneServer(
                 listenFailed = true;
                 try {
                     wss.close();
+                    localServer?.close();
                     server.close();
                 } catch (err) { logger.debug("[index.ts] op failed:", err) }
 
@@ -440,10 +475,22 @@ export function startPaperCraneServer(
             });
 
             const onListening = () => {
-                hasListened = true;
                 const addr = server.address();
                 const actualPort =
                     typeof addr === "object" && addr ? addr.port : currentPort;
+                if (!localServer) {
+                    onReady(actualPort, actualPort);
+                    return;
+                }
+                localServer.once("error", (err) => void handleListenError(err));
+                localServer.listen(0, "127.0.0.1", () => {
+                    const local = localServer.address();
+                    onReady(actualPort, typeof local === "object" && local ? local.port : 0);
+                });
+            };
+
+            const onReady = (actualPort: number, localPort: number) => {
+                hasListened = true;
 
                 // children must never outlive the daemon
                 process.once("exit", () => {
@@ -472,7 +519,7 @@ export function startPaperCraneServer(
 
                 // Start background services for installed panels
                 try {
-                    panelServices.init(actualPort, staticToken ?? undefined, auth);
+                    panelServices.init(localPort, staticToken ?? undefined, auth);
                 } catch (err: any) {
                     logger.warn("[Paperboard Server] Failed to initialize panel services:", err?.message || err);
                 }
@@ -482,13 +529,15 @@ export function startPaperCraneServer(
                 engine.sweepStartupOrphans();
 
                 // only standalone daemons claim the PID file
-                writeCraneJson(actualPort, staticToken);
+                writeCraneJson(localPort, staticToken);
 
                 // announce over mDNS (loopback skips inside)
-                advertisement = advertisePaperCrane({
-                    port: actualPort,
-                    host,
-                });
+                if (options.advertise !== false) {
+                    advertisement = advertisePaperCrane({
+                        port: actualPort,
+                        host,
+                    });
+                }
 
                 if (!headless) {
                     writePidFile();
@@ -503,7 +552,7 @@ export function startPaperCraneServer(
 
                 if (noAuth || headless) {
                     console.log(
-                        `[Paperboard Server] Listening on http://${host}:${actualPort}`,
+                        `[Paperboard Server] Listening on ${tlsIdentity ? "https" : "http"}://${host}:${actualPort}`,
                     );
                 } else {
                     const existingClients = auth.getAuthorizedClients();
@@ -518,6 +567,7 @@ export function startPaperCraneServer(
                     const tui = new PaperCraneTui({
                         host,
                         port: actualPort,
+                        secure: tlsIdentity !== null,
                         auth,
                         onStop: stop,
                     });
@@ -531,6 +581,7 @@ export function startPaperCraneServer(
                     engine,
                     auth,
                     port: actualPort,
+                    localPort,
                     host,
                     stop,
                 });

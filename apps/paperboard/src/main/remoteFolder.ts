@@ -10,8 +10,10 @@ import {
     remoteFolderSupported,
 } from "./remoteFolderMount";
 import { startDavRelay, relayFolderUrl, type DavRelay } from "./davRelay";
+import { pinnedRequest } from "../../papercrane/pinnedTls";
 
-// remote data dir over WebDAV with ephemeral session; teardown on explorer close
+// remote data dir over WebDAV with ephemeral session; teardown on explorer
+// close. The OS mounts a loopback relay that makes the pinned TLS hop.
 const IDLE_MS = 180_000;
 const POLL_MS = 4_000;
 const GRACE_MS = 90_000;
@@ -21,10 +23,11 @@ interface ActiveSession {
     computerId: string;
     host: string;
     port: number;
+    cert: string;
     mainToken: string;
     davUser: string;
     mount: string; // drive "Z:", /Volumes/Name, or "" (linux)
-    relay: DavRelay | null; // linux: loopback relay holding the credential
+    relay: DavRelay | null; // loopback relay to the remote daemon
     timer: NodeJS.Timeout | null;
     seen: boolean;
     misses: number;
@@ -79,11 +82,11 @@ function openWithDesktop(url: string): Promise<boolean> {
 
 async function revokeSession(s: ActiveSession): Promise<void> {
     try {
-        await fetch(`http://${bracket(s.host)}:${s.port}/dav/session`, {
+        await pinnedRequest(`https://${bracket(s.host)}:${s.port}/dav/session`, s.cert, {
             method: "DELETE",
             headers: { Authorization: `Bearer ${s.mainToken}` },
             body: JSON.stringify({ user: s.davUser }),
-            signal: AbortSignal.timeout(10_000),
+            timeoutMs: 10_000,
         });
     } catch (err) {
         // unreachable — server expiry reaps it
@@ -182,19 +185,22 @@ export async function openRemoteFolder(
     if (!mainToken) return { ok: false, error: "not-paired" };
     const host = client.getHost();
     const port = client.getPort();
+    const cert = client.getCert();
+    if (!cert) return { ok: false, error: "not-paired" };
+    const origin = `https://${bracket(host)}:${port}`;
 
     await closeRemoteFolder(computerId);
 
     let session: { user: string; pass: string };
     try {
-        const res = await fetch(`http://${bracket(host)}:${port}/dav/session`, {
+        const res = await pinnedRequest(`${origin}/dav/session`, cert, {
             method: "POST",
             headers: { Authorization: `Bearer ${mainToken}` },
             body: JSON.stringify({ idleMs: IDLE_MS }),
-            signal: AbortSignal.timeout(20_000),
+            timeoutMs: 20_000,
         });
         if (!res.ok) return { ok: false, error: `session-${res.status}` };
-        session = (await res.json()) as { user: string; pass: string };
+        session = JSON.parse(res.body.toString("utf8")) as { user: string; pass: string };
         if (!session?.user || !session?.pass) return { ok: false, error: "bad-session" };
     } catch (err: any) {
         return { ok: false, error: `unreachable: ${err?.message ?? err}` };
@@ -204,6 +210,7 @@ export async function openRemoteFolder(
         computerId,
         host,
         port,
+        cert,
         mainToken,
         davUser: session.user,
         mount: "",
@@ -232,20 +239,33 @@ export async function openRemoteFolder(
         for (const seg of subDir.split("/").filter(Boolean)) {
             prefix += `/${encodeURIComponent(seg)}`;
             try {
-                await fetch(`http://${bracket(host)}:${port}/dav${prefix}`, {
+                await pinnedRequest(`${origin}/dav${prefix}`, cert, {
                     method: "MKCOL",
                     headers: { Authorization: basic },
-                    signal: AbortSignal.timeout(10_000),
+                    timeoutMs: 10_000,
                 });
             } catch (err) { logger.debug("[remoteFolder.ts] op failed:", err) }
         }
     }
 
     try {
+        // linux file managers get a credential-free URL and the relay checks
+        // the socket owner; macOS/Windows mount with the session credential
+        active.set(computerId, rec);
+        rec.relay = await startDavRelay({
+            upstream: origin,
+            cert,
+            user: session.user,
+            pass: session.pass,
+            clientAuth: process.platform === "linux" ? "peer" : "basic",
+            idleMs: IDLE_MS,
+            onIdle: () => void closeRemoteFolder(computerId),
+        });
+
         if (process.platform === "win32") {
             // credential in child env, never argv: cmdkey/net-use password
             // args are world-readable via WMI/Task Manager
-            const url = `http://${host}:${port}/dav`;
+            const url = `http://127.0.0.1:${rec.relay.port}/dav`;
             const plan = buildWindowsMountCommand(url, session.user, session.pass);
             const out = await execAsync("powershell.exe", plan.args, 60_000, undefined, plan.env);
             const drive = /([A-Z]:)/i.exec(out.stdout)?.[1]?.toUpperCase();
@@ -270,7 +290,7 @@ export async function openRemoteFolder(
             // credential in a 0600 temp file, never argv/URL (both leak
             // into ps output)
             const scriptPath = macMountScriptPath();
-            fs.writeFileSync(scriptPath, buildMacMountScript(session.user, session.pass, host, port), {
+            fs.writeFileSync(scriptPath, buildMacMountScript(session.user, session.pass, "127.0.0.1", rec.relay.port), {
                 mode: 0o600,
             });
             try {
@@ -288,17 +308,7 @@ export async function openRemoteFolder(
             return { ok: true };
         }
 
-        // linux: the file manager gets a credential-free loopback URL; the
-        // relay adds the session auth and only serves this user's sockets.
-        // No window API to watch, so the relay's own idle timer ends it.
-        active.set(computerId, rec);
-        rec.relay = await startDavRelay({
-            upstream: `http://${bracket(host)}:${port}`,
-            user: session.user,
-            pass: session.pass,
-            idleMs: IDLE_MS,
-            onIdle: () => void closeRemoteFolder(computerId),
-        });
+        // linux: no window API to watch, so the relay's own idle timer ends it
         const opened = await openWithDesktop(relayFolderUrl(process.env.XDG_CURRENT_DESKTOP, rec.relay.port, subDir));
         if (!opened) return await fail("no-file-manager");
         return { ok: true };

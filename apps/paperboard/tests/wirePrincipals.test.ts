@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import http from "node:http";
+import https from "node:https";
 import { once } from "node:events";
 import { WebSocket, WebSocketServer } from "ws";
 import { PaperCraneAuth } from "../papercrane/auth";
@@ -11,16 +12,21 @@ import { setupWebSocketServer } from "../papercrane/ws";
 import { handleHttpRequest } from "../papercrane/http";
 import { DavSessionStore } from "../papercrane/dav";
 import { CraneTransport } from "../../../packages/paperapi/src/ws";
+import { pinnedTlsOptions } from "../papercrane/pinnedTls";
+import { pinnableWebSocket } from "../papercrane/pinnableWebSocket";
+import { remoteTls } from "./tlsFixture";
 
-async function fixture(remotes?: { port: number }) {
+// tls: serve as a remote computer's daemon does (TLS only, pinned by peers)
+async function fixture(remotes?: { port: number }, options: { tls?: boolean } = {}) {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "paperboard-wire-"));
     const engine = new PaperCraneEngine(root);
     const auth = new PaperCraneAuth(false, path.join(root, "local"));
     auth.injectToken("test-host", "host");
     const sessions = new DavSessionStore();
     const remotesFile = path.join(root, "remotes.json");
-    fs.writeFileSync(remotesFile, JSON.stringify({ computers: remotes ? [{ id: "remote", host: "127.0.0.1", port: remotes.port, token: "test-host" }] : [] }));
-    const server = http.createServer((req, res) => handleHttpRequest(engine, req, res, { auth, sessions }));
+    fs.writeFileSync(remotesFile, JSON.stringify({ computers: remotes ? [{ id: "remote", host: "127.0.0.1", port: remotes.port, token: "test-host", cert: remoteTls.cert }] : [] }));
+    const onRequest = (req: http.IncomingMessage, res: http.ServerResponse) => handleHttpRequest(engine, req, res, { auth, sessions });
+    const server = options.tls ? https.createServer({ key: remoteTls.key, cert: remoteTls.cert }, onRequest) : http.createServer(onRequest);
     const wss = new WebSocketServer({ server });
     setupWebSocketServer(wss, engine, auth, { remotesFile });
     server.listen(0, "127.0.0.1");
@@ -95,7 +101,7 @@ test("panel credential issuance is host-only and claim-carrying", async () => {
 });
 
 test("scoped authorization agrees over RPC, HTTP and authenticated remote relay", async () => {
-    const remote = await fixture();
+    const remote = await fixture(undefined, { tls: true });
     const local = await fixture(remote);
     const token = local.auth.issuePanelToken("panel.a");
     const sdk = new CraneTransport({ port: local.port, token, computerId: "remote", panelId: "panel.a" });
@@ -106,7 +112,8 @@ test("scoped authorization agrees over RPC, HTTP and authenticated remote relay"
         expect(await remote.engine.getConfig("panel.a")).toEqual({ remote: true });
         await expect(sdk.call("auth:scope", { panelId: "panel.b" })).rejects.toMatchObject({ code: "FORBIDDEN" });
         await expect(sdk.call("auth:verify", { token: "test-host" })).rejects.toThrow();
-        const raw = new WebSocket(`ws://127.0.0.1:${remote.port}`);
+        const PinnedSocket = pinnableWebSocket();
+        const raw = new PinnedSocket(`wss://127.0.0.1:${remote.port}`, pinnedTlsOptions(remoteTls.cert));
         await once(raw, "open");
         const send = async (action: string, params: unknown) => {
             const response = once(raw, "message");
@@ -128,7 +135,7 @@ test("scoped authorization agrees over RPC, HTTP and authenticated remote relay"
 });
 
 test("explicit shell credential provider initializes additional remote transports without ambient IPC", async () => {
-    const remote = await fixture();
+    const remote = await fixture(undefined, { tls: true });
     const local = await fixture(remote);
     const api = await import("../../../packages/paperapi/src/index");
     const dispose = api.configureHostConnection(async () => ({ port: local.port, token: "test-host" }));
@@ -141,7 +148,7 @@ test("explicit shell credential provider initializes additional remote transport
 });
 
 test("live revocation closes both direct and relay sockets, and invalidates DAV credentials", async () => {
-    const remote = await fixture();
+    const remote = await fixture(undefined, { tls: true });
     const local = await fixture(remote);
     const token = local.auth.issuePanelToken("panel.a");
     const direct = new CraneTransport({ port: local.port, token, computerId: "local" });

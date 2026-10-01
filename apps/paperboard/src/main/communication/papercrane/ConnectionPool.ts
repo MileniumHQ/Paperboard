@@ -9,6 +9,7 @@ import {
 } from "../../../../papercrane/storage";
 import { getLocalDir } from "../../../../papercrane/paths";
 import { logger } from "../../../../papercrane/logger";
+import { pinnedRequest } from "../../../../papercrane/pinnedTls";
 import { PaperCraneClient } from "./PaperCraneClient";
 import type { ComputerDriver } from "../driver/ComputerDriver";
 import { RemoteComputerDriver } from "../driver/RemoteComputerDriver";
@@ -19,12 +20,18 @@ export interface StoredComputer {
     host: string;
     port: number;
     token?: string;
+    // remote daemon certificate, pinned at pairing (remote computers only)
+    cert?: string;
     os?: string;
     osVersion?: string;
     distroId?: string;
     distroName?: string;
     arch?: string;
     isLocal?: boolean;
+}
+
+function bracketHost(host: string): string {
+    return host.includes(":") && !host.startsWith("[") ? `[${host}]` : host;
 }
 
 // timeout = lost in transit, refusal = nothing listening there
@@ -148,7 +155,7 @@ export class ConnectionPool extends EventEmitter {
                 // credentials resolved internally via handshake/embedded
                 client.connect("127.0.0.1").catch((err) => logger.debug("[ConnectionPool] local connect failed:", err));
             } else {
-                client.connect(comp.host, comp.port, comp.token).catch((err) => logger.debug("[ConnectionPool] remote connect failed:", err));
+                client.connect(comp.host, comp.port, comp.token, comp.cert).catch((err) => logger.debug("[ConnectionPool] remote connect failed:", err));
             }
         }
         return client;
@@ -197,8 +204,9 @@ export class ConnectionPool extends EventEmitter {
         port = DEFAULT_PORT,
     ): Promise<{ reachable: boolean; hostname?: string; error?: string }> {
         try {
-            const url = `http://${host}:${port}/health`;
-            const res = await fetch(url, { signal: AbortSignal.timeout(2000) });
+            // reachability only: no credential crosses this request, so the
+            // not-yet-pinned certificate is not checked here
+            const res = await pinnedRequest(`https://${bracketHost(host)}:${port}/health`, null, { timeoutMs: 2000 });
             if (res.ok) {
                 // /health carries liveness + version only; hostname arrives
                 // over the authenticated pair/verify handshake instead
@@ -218,12 +226,14 @@ export class ConnectionPool extends EventEmitter {
     ): Promise<StoredComputer> {
         const tempClient = new PaperCraneClient();
         try {
-            await tempClient.connect(host, port);
+            await tempClient.connectForPairing(host, port);
             // send our hostname, never the server name; customName stays local-only
             const pairRes = await tempClient.pair(code, os.hostname().replace(/\.local$/i, "") || "Paperboard App");
             if (!pairRes.success || !pairRes.token) {
                 throw new Error("Pairing rejected: invalid code or daemon refused");
             }
+            const cert = tempClient.getCert();
+            if (!cert) throw new Error("Pairing failed: the computer presented no certificate");
 
             // explicit identity: millisecond timestamps collide; a random
             // suffix keeps two paired-in-a-blink computers distinct
@@ -234,6 +244,7 @@ export class ConnectionPool extends EventEmitter {
                 host,
                 port,
                 token: pairRes.token,
+                cert,
                 os: pairRes.os,
                 osVersion: pairRes.osVersion,
                 distroId: pairRes.distroId,

@@ -22,7 +22,7 @@ export interface AdvertisementHandle {
     stop: () => void;
 }
 
-function isLoopbackHost(host?: string): boolean {
+export function isLoopbackHost(host?: string): boolean {
     if (!host) return false;
     return (
         host === "127.0.0.1" ||

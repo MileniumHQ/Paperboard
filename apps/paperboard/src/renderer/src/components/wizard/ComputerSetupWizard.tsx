@@ -334,8 +334,6 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
                                 Enter the 6-digit pairing code shown by the
                                 Paperboard Server daemon on{" "}
                                 {name() || host() || "the target computer"}.
-                                Only do this on a trusted network you
-                                control.
                             </PaperText>
                         </PaperFlex>
 

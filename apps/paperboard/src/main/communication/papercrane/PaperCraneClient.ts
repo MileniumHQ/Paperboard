@@ -12,6 +12,15 @@ import {
 import { PROTOCOL_VERSION } from "../../../../papercrane/protocol";
 import { readCraneHandshake } from "../../../../papercrane/handshake";
 import { getLocalDir } from "../../../../papercrane/paths";
+import {
+    peerCertPem,
+    pinnedRequest,
+    pinnedTlsOptions,
+    type PinnedRequestInit,
+    type PinnedResponse,
+} from "../../../../papercrane/pinnedTls";
+import type { TLSSocket } from "tls";
+import { pinnableWebSocket } from "../../../../papercrane/pinnableWebSocket";
 
 export type RpcParams = Record<string, unknown>;
 
@@ -66,6 +75,10 @@ async function probeAlive(port: number): Promise<boolean> {
     }
 }
 
+function isLoopback(host: string): boolean {
+    return host === "localhost" || host === "127.0.0.1";
+}
+
 export interface TargetStatus {
     connected: boolean;
     isRemote: boolean;
@@ -81,6 +94,9 @@ export class PaperCraneClient extends EventEmitter {
     private host: string = "localhost";
     private port: number = DEFAULT_PORT;
     private token?: string;
+    // remote daemon certificate: pinned after pairing, captured during it
+    private cert?: string;
+    private trustOnFirstUse = false;
     private embeddedServer: ServerInstance | null = null;
     private isConnected: boolean = false;
     private requestIdCounter = 1;
@@ -120,13 +136,38 @@ export class PaperCraneClient extends EventEmitter {
         return this.token;
     }
 
-    public getHttpUrl(subpath: string = ""): string {
+    public getCert(): string | undefined {
+        return this.cert;
+    }
+
+    // HTTP to this computer's daemon: plaintext on loopback, pinned TLS
+    // for a paired remote
+    public async request(subpath: string, init: PinnedRequestInit = {}): Promise<PinnedResponse> {
         const cleanSub = subpath.startsWith("/") ? subpath : `/${subpath}`;
-        return `http://${this.host}:${this.port}${cleanSub}`;
+        if (isLoopback(this.host)) {
+            const res = await fetch(`http://${this.host}:${this.port}${cleanSub}`, {
+                method: init.method,
+                headers: init.headers,
+                body: init.body,
+                signal: AbortSignal.timeout(init.timeoutMs ?? 30_000),
+            });
+            return {
+                status: res.status,
+                ok: res.ok,
+                headers: Object.fromEntries(res.headers),
+                body: Buffer.from(await res.arrayBuffer()),
+            };
+        }
+        if (!this.cert) throw new Error(this.missingCertMessage());
+        return pinnedRequest(`https://${this.host}:${this.port}${cleanSub}`, this.cert, init);
+    }
+
+    private missingCertMessage(): string {
+        return `${this.host} has no pinned certificate. Remove this computer and pair it again`;
     }
 
     public getStatus(): TargetStatus {
-        const isRemote = this.host !== "localhost" && this.host !== "127.0.0.1";
+        const isRemote = !isLoopback(this.host);
         return {
             connected: this.isConnected,
             isRemote,
@@ -135,10 +176,24 @@ export class PaperCraneClient extends EventEmitter {
         };
     }
 
+    /**
+     * Connects to an unpaired remote daemon and accepts whatever certificate
+     * it presents. That certificate is pinned for every later connection.
+     */
+    public async connectForPairing(host: string, port: number): Promise<TargetStatus> {
+        this.trustOnFirstUse = true;
+        try {
+            return await this.connect(host, port);
+        } finally {
+            this.trustOnFirstUse = false;
+        }
+    }
+
     public async connect(
         host = "127.0.0.1",
         port?: number,
         token?: string,
+        cert?: string,
     ): Promise<TargetStatus> {
         if (this.connectingPromise) return this.connectingPromise;
 
@@ -147,8 +202,14 @@ export class PaperCraneClient extends EventEmitter {
             this.host = host;
             if (port) this.port = port;
             this.token = token;
+            this.cert = cert;
 
-            const isLocal = host === "localhost" || host === "127.0.0.1";
+            const isLocal = isLoopback(host);
+            if (!isLocal && !cert && !this.trustOnFirstUse) {
+                const error = this.missingCertMessage();
+                this.emit("status", { ...this.getStatus(), error });
+                throw new Error(error);
+            }
 
             // trust handshake only after health probe, else restart embedded
             if (isLocal && !token) {
@@ -191,9 +252,26 @@ export class PaperCraneClient extends EventEmitter {
             }
 
             return new Promise((resolve, reject) => {
-                const wsUrl = `ws://${host}:${this.port}`;
-                const ws = new WebSocket(wsUrl);
+                const Socket = pinnableWebSocket();
+                const ws = isLocal
+                    ? new Socket(`ws://${host}:${this.port}`)
+                    : new Socket(
+                          `wss://${host}:${this.port}`,
+                          cert ? pinnedTlsOptions(cert) : { rejectUnauthorized: false },
+                      );
                 let hasResolved = false;
+
+                if (!isLocal && !cert) {
+                    // pairing: capture the certificate before any credential is sent
+                    ws.on("upgrade", (res) => {
+                        try {
+                            this.cert = peerCertPem(res.socket as TLSSocket);
+                        } catch (err) {
+                            ws.emit("error", err);
+                            ws.terminate();
+                        }
+                    });
+                }
 
                 ws.on("open", () => {
                     this.ws = ws;
@@ -315,7 +393,7 @@ export class PaperCraneClient extends EventEmitter {
         timeoutMs: number = DEFAULT_RPC_TIMEOUT_MS,
     ): Promise<T> {
         if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-            await this.connect(this.host, this.port, this.token);
+            await this.connect(this.host, this.port, this.token, this.cert);
         }
         if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
             throw new Error(`Cannot connect to the Paperboard Server daemon at ${this.host}:${this.port}`);

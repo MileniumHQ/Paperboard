@@ -1,12 +1,15 @@
-// loopback WebDAV relay (bun test): a real DAV daemon behind the real relay.
-// The client never sends a credential; the relay adds the session's Basic
-// auth. Connections are served only when the kernel reports the client
-// socket belongs to this user, a refused peer gets nothing, the upstream's
-// password challenge never reaches the file manager, and a quiet relay
-// closes itself.
+// loopback WebDAV relay (bun test): a real DAV daemon, serving TLS like
+// every remote daemon, behind the real relay. The upstream hop is pinned to
+// the paired certificate. In peer mode the client never sends a credential;
+// the relay adds the session's Basic auth, and connections are served only
+// when the kernel reports the client socket belongs to this user. In basic
+// mode (macOS/Windows mounts) the client must present the session
+// credential. The upstream's password challenge never reaches the file
+// manager, and a quiet relay closes itself.
 import { describe, it, expect, beforeAll, afterAll } from "bun:test";
 import * as fs from "fs";
 import * as http from "http";
+import * as https from "https";
 import * as net from "net";
 import * as os from "os";
 import * as path from "path";
@@ -21,10 +24,12 @@ import {
     MAX_RELAY_CONNECTIONS,
     type DavRelay,
 } from "../src/main/davRelay";
+import { pinnedRequest } from "../papercrane/pinnedTls";
+import { remoteTls, impostorTls } from "./tlsFixture";
 
 const TOKEN = "relay-test-main-token";
 let tmp = "";
-let upstream: http.Server;
+let upstream: https.Server;
 let upstreamOrigin = "";
 let session: { user: string; pass: string };
 const relays: DavRelay[] = [];
@@ -32,6 +37,8 @@ const relays: DavRelay[] = [];
 async function relayWith(overrides: Partial<Parameters<typeof startDavRelay>[0]> = {}): Promise<DavRelay> {
     const relay = await startDavRelay({
         upstream: upstreamOrigin,
+        cert: remoteTls.cert,
+        clientAuth: "peer",
         user: session.user,
         pass: session.pass,
         idleMs: 60_000,
@@ -48,20 +55,20 @@ beforeAll(async () => {
     const auth = new PaperCraneAuth(false, tmp);
     auth.injectToken(TOKEN, "test");
     const sessions = new DavSessionStore();
-    upstream = http.createServer((req, res) => {
+    upstream = https.createServer({ key: remoteTls.key, cert: remoteTls.cert }, (req, res) => {
         handleHttpRequest(engine, req, res, { auth, sessions });
     });
     await new Promise<void>((resolve) => upstream.listen(0, "127.0.0.1", resolve));
     const addr = upstream.address();
-    upstreamOrigin = `http://127.0.0.1:${typeof addr === "object" && addr ? addr.port : 0}`;
+    upstreamOrigin = `https://127.0.0.1:${typeof addr === "object" && addr ? addr.port : 0}`;
     fs.mkdirSync(path.join(tmp, "files"), { recursive: true });
     fs.writeFileSync(path.join(tmp, "files", "note.txt"), "hello");
-    const res = await fetch(`${upstreamOrigin}/dav/session`, {
+    const res = await pinnedRequest(`${upstreamOrigin}/dav/session`, remoteTls.cert, {
         method: "POST",
         headers: { Authorization: `Bearer ${TOKEN}` },
         body: JSON.stringify({ idleMs: 60_000 }),
     });
-    session = (await res.json()) as { user: string; pass: string };
+    session = JSON.parse(res.body.toString("utf8")) as { user: string; pass: string };
 });
 
 afterAll(async () => {
@@ -105,9 +112,52 @@ describe("relaying", () => {
     });
 
     it("answers 502 when the remote computer is unreachable", async () => {
-        const relay = await relayWith({ upstream: "http://127.0.0.1:1" });
+        const relay = await relayWith({ upstream: "https://127.0.0.1:1" });
         const res = await fetch(`http://127.0.0.1:${relay.port}/dav/`, { method: "PROPFIND" });
         expect(res.status).toBe(502);
+    });
+});
+
+describe("the hop to the remote computer", () => {
+    it("refuses an upstream that presents a different certificate", async () => {
+        // the real upstream, but the relay was paired with someone else
+        const relay = await relayWith({ cert: impostorTls.cert });
+        const res = await fetch(`http://127.0.0.1:${relay.port}/dav/`, { method: "PROPFIND", headers: { Depth: "0" } });
+        expect(res.status).toBe(502);
+    });
+
+    it("refuses a plaintext upstream", async () => {
+        await expect(relayWith({ upstream: "http://127.0.0.1:1" })).rejects.toThrow(/https/);
+    });
+});
+
+describe("basic mode (macOS/Windows mounts)", () => {
+    const basic = (user: string, pass: string) => `Basic ${Buffer.from(`${user}:${pass}`).toString("base64")}`;
+
+    it("challenges a request without the session credential", async () => {
+        const relay = await relayWith({ clientAuth: "basic", verifyPeer: async () => false });
+        const res = await fetch(`http://127.0.0.1:${relay.port}/dav/`, { method: "PROPFIND", headers: { Depth: "0" } });
+        expect(res.status).toBe(401);
+        expect(res.headers.get("www-authenticate")).toContain("Basic");
+    });
+
+    it("refuses a wrong credential", async () => {
+        const relay = await relayWith({ clientAuth: "basic" });
+        const res = await fetch(`http://127.0.0.1:${relay.port}/dav/`, {
+            method: "PROPFIND",
+            headers: { Depth: "0", Authorization: basic(session.user, "nope") },
+        });
+        expect(res.status).toBe(401);
+    });
+
+    it("serves the session credential", async () => {
+        const relay = await relayWith({ clientAuth: "basic" });
+        const res = await fetch(`http://127.0.0.1:${relay.port}/dav/files/`, {
+            method: "PROPFIND",
+            headers: { Depth: "1", Authorization: basic(session.user, session.pass) },
+        });
+        expect(res.status).toBe(207);
+        expect(await res.text()).toContain("note.txt");
     });
 });
 

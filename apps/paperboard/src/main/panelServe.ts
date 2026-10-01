@@ -4,6 +4,7 @@
 // injection and CSP, so the two hosts cannot drift apart.
 import * as fs from "fs";
 import * as path from "path";
+import { STATUS_CODES } from "http";
 import connectionPool from "./communication/papercrane/ConnectionPool";
 import { logger } from "../../papercrane/logger";
 import { getPanelsDir } from "../../papercrane/paths";
@@ -21,6 +22,9 @@ import {
 export { parsePanelHost } from "./panelAssets";
 
 const log = logger;
+
+const headerValue = (value: string | string[] | undefined): string | undefined =>
+    Array.isArray(value) ? value[0] : value;
 
 const injectCspNonce = (html: string) =>
     html.replaceAll("<script", `<script nonce="${PANEL_CSP_NONCE}"`);
@@ -132,25 +136,24 @@ export async function servePanelAsset(
         }
 
         const client = connectionPool.getClient(comp);
-        const httpUrl = client.getHttpUrl(`panel/${cleanPanelId}/${subpath}`);
         // /panel/ is authenticated-only on the daemon: attach the same
         // main-token Bearer header the DAV surface uses
         const assetToken = client.getToken();
-        const res = await fetch(httpUrl, {
+        const res = await client.request(`panel/${cleanPanelId}/${subpath}`, {
             ...(assetToken ? { headers: { Authorization: `Bearer ${assetToken}` } } : {}),
         }).catch((err) => {
             log.debug("[PanelProtocol] asset fetch failed:", err?.message || err);
             return null;
         });
         if (!res || !res.ok) {
-            return new Response(res ? res.statusText : "Not Found", {
+            return new Response(res ? STATUS_CODES[res.status] ?? "Error" : "Not Found", {
                 status: res ? res.status : 404,
             });
         }
-        const buffer = await res.arrayBuffer();
+        const buffer = new Uint8Array(res.body);
         const remoteExt = path.extname(subpath).toLowerCase();
         const contentType =
-            res.headers.get("content-type") || lookupMime(remoteExt);
+            headerValue(res.headers["content-type"]) || lookupMime(remoteExt);
         const headers: Record<string, string> = {
             "Content-Type": contentType,
             "X-Content-Type-Options": "nosniff",
@@ -166,7 +169,7 @@ export async function servePanelAsset(
             // daemon derived it from the manifest IT installed and
             // review approved. Deriving egress from the local manifest
             // would give a remote panel the wrong machine's policy.
-            const served = res.headers.get("content-security-policy");
+            const served = headerValue(res.headers["content-security-policy"]) ?? null;
             headers["Content-Security-Policy"] = remotePanelHtmlCsp(served);
             responseBody = injectCspNonce(
                 injectUnselectable(

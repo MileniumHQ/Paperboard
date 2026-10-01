@@ -6,17 +6,20 @@ import { describe, it, expect, beforeAll, afterAll } from "bun:test";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
+import * as https from "https";
 import { WebSocketServer, WebSocket } from "ws";
 import type { AddressInfo } from "net";
 import { setupWebSocketServer } from "../papercrane/ws";
 import { PaperCraneEngine } from "../papercrane/engine";
 import { PaperCraneAuth } from "../papercrane/auth";
 import { actionsRegistry } from "../papercrane/actions";
+import { remoteTls, impostorTls } from "./tlsFixture";
 
 let tmp = "";
 let wss: WebSocketServer;
 let port = 0;
 let upstream: WebSocketServer;
+let upstreamServer: https.Server;
 let upstreamPort = 0;
 let remotesFile = "";
 const TOKEN = "pc_test_remote_auth_token";
@@ -27,8 +30,10 @@ beforeAll(async () => {
     const auth = new PaperCraneAuth(false, tmp);
     auth.injectToken(TOKEN, "test");
 
-    // fake paired machine: answers the tunnel auth handshake with success
-    upstream = new WebSocketServer({ port: 0 });
+    // fake paired machine (TLS, like every remote daemon): answers the
+    // tunnel auth handshake with success
+    upstreamServer = https.createServer({ key: remoteTls.key, cert: remoteTls.cert });
+    upstream = new WebSocketServer({ server: upstreamServer });
     upstream.on("connection", (sock: WebSocket) => {
         sock.on("message", (raw: Buffer) => {
             try {
@@ -41,15 +46,15 @@ beforeAll(async () => {
             }
         });
     });
-    await new Promise<void>((resolve) => upstream.on("listening", () => resolve()));
-    upstreamPort = (upstream.address() as AddressInfo).port;
+    await new Promise<void>((resolve) => upstreamServer.listen(0, "127.0.0.1", () => resolve()));
+    upstreamPort = (upstreamServer.address() as AddressInfo).port;
 
     remotesFile = path.join(tmp, "paired_computers.json");
     fs.writeFileSync(
         remotesFile,
         JSON.stringify({
             computers: [
-                { id: "peer1", name: "peer1", host: "127.0.0.1", port: upstreamPort, token: "remote-token" },
+                { id: "peer1", name: "peer1", host: "127.0.0.1", port: upstreamPort, token: "remote-token", cert: remoteTls.cert },
             ],
         }),
     );
@@ -64,6 +69,7 @@ afterAll(() => {
     for (const client of wss.clients) client.terminate();
     wss.close();
     upstream.close();
+    upstreamServer.close();
     fs.rmSync(tmp, { recursive: true, force: true });
 });
 
@@ -154,6 +160,48 @@ describe("pre-auth remote tunnel gating", () => {
         }
     });
 
+    it("a remote presenting a different certificate never receives the stored token", async () => {
+        // same address and port as peer1, but pinned to someone else's
+        // certificate: what the tunnel sees when an impostor answers
+        const raw = JSON.parse(fs.readFileSync(remotesFile, "utf8"));
+        raw.computers.push({ id: "impostor", name: "impostor", host: "127.0.0.1", port: upstreamPort, token: "remote-token", cert: impostorTls.cert });
+        fs.writeFileSync(remotesFile, JSON.stringify(raw));
+        let tokenSeen = false;
+        const watch = (sock: WebSocket) => sock.on("message", (m: Buffer) => {
+            if (m.toString("utf8").includes("remote-token")) tokenSeen = true;
+        });
+        upstream.on("connection", watch);
+        const c = await connect();
+        try {
+            send(c, { id: 1, action: "auth:verify", params: { token: TOKEN } });
+            await waitFor(c, (f) => f.id === 1);
+            send(c, { type: "remote:open", tunnelId: "t-impostor", computerId: "impostor" });
+            const closed = await waitFor(c, (f) => f.type === "tunnel-closed" && f.id === "t-impostor", 5000);
+            expect(closed.reason).toBe("unreachable");
+            expect(c.frames.find((f) => f.type === "tunnel-open" && f.id === "t-impostor")).toBeUndefined();
+            expect(tokenSeen).toBe(false);
+        } finally {
+            upstream.off("connection", watch);
+            c.ws.terminate();
+        }
+    });
+
+    it("a paired remote without a pinned certificate is not dialed", async () => {
+        const raw = JSON.parse(fs.readFileSync(remotesFile, "utf8"));
+        raw.computers.push({ id: "unpinned", name: "unpinned", host: "127.0.0.1", port: upstreamPort, token: "remote-token" });
+        fs.writeFileSync(remotesFile, JSON.stringify(raw));
+        const c = await connect();
+        try {
+            send(c, { id: 1, action: "auth:verify", params: { token: TOKEN } });
+            await waitFor(c, (f) => f.id === 1);
+            send(c, { type: "remote:open", tunnelId: "t-unpinned", computerId: "unpinned" });
+            const closed = await waitFor(c, (f) => f.type === "tunnel-closed" && f.id === "t-unpinned", 5000);
+            expect(closed.reason).toBe("unknown-computer");
+        } finally {
+            c.ws.terminate();
+        }
+    });
+
     it("unreachable upstream yields exactly one tunnel-closed (single teardown)", async () => {
         // grab a port nothing listens on: bind, read, release
         const probe = new WebSocketServer({ port: 0 });
@@ -161,7 +209,7 @@ describe("pre-auth remote tunnel gating", () => {
         const deadPort = (probe.address() as AddressInfo).port;
         await new Promise<void>((resolve) => probe.close(() => resolve()));
         const raw = JSON.parse(fs.readFileSync(remotesFile, "utf8"));
-        raw.computers.push({ id: "dead", name: "dead", host: "127.0.0.1", port: deadPort, token: "x" });
+        raw.computers.push({ id: "dead", name: "dead", host: "127.0.0.1", port: deadPort, token: "x", cert: remoteTls.cert });
         fs.writeFileSync(remotesFile, JSON.stringify(raw));
 
         const c = await connect();
@@ -211,9 +259,9 @@ describe("pre-auth remote tunnel gating", () => {
         const deadPort = (probe.address() as AddressInfo).port;
         await new Promise<void>((resolve) => probe.close(() => resolve()));
         raw.computers.push(
-            { id: "ghost", name: "peer1", host: "127.0.0.1", port: deadPort, token: "x" },
-            { id: "twin-a", name: "twins", host: "127.0.0.1", port: upstreamPort, token: "remote-token" },
-            { id: "twin-b", name: "twins", host: "127.0.0.1", port: upstreamPort, token: "remote-token" },
+            { id: "ghost", name: "peer1", host: "127.0.0.1", port: deadPort, token: "x", cert: remoteTls.cert },
+            { id: "twin-a", name: "twins", host: "127.0.0.1", port: upstreamPort, token: "remote-token", cert: remoteTls.cert },
+            { id: "twin-b", name: "twins", host: "127.0.0.1", port: upstreamPort, token: "remote-token", cert: remoteTls.cert },
         );
         fs.writeFileSync(remotesFile, JSON.stringify(raw));
 

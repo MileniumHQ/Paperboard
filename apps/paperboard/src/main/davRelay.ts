@@ -1,19 +1,26 @@
-// Loopback WebDAV relay for opening a remote computer's folder on Linux.
+// Loopback WebDAV relay for opening a remote computer's folder.
 //
-// The file manager is handed a plain URL to 127.0.0.1 with no
-// credential in it; this relay adds the DAV session's Basic auth on the way
-// to the remote daemon. That keeps the session password out of argv (ps),
-// out of the file manager's history/recent files, and works on any desktop
-// whose file manager speaks WebDAV (GNOME dav://, KDE webdav://).
+// The OS file manager speaks plain WebDAV to 127.0.0.1; the relay makes the
+// hop to the remote daemon over TLS pinned to the certificate captured at
+// pairing, which no OS WebDAV client could do with a self-signed cert.
 //
-// A loopback port is reachable by every local account, so a connection is
-// only served when the kernel says its client socket belongs to this user
-// (/proc/net/tcp owner uid). Anything else is dropped before a byte of
-// HTTP is parsed. No Electron imports: tests drive the real relay.
+// A loopback port is reachable by every local account, so callers are
+// checked one of two ways:
+// - "peer" (Linux): the file manager gets a URL with no credential in it
+//   and the relay adds the DAV session's Basic auth. A connection is only
+//   served when the kernel says its client socket belongs to this user
+//   (/proc/net/tcp owner uid); anything else is dropped before a byte of
+//   HTTP is parsed. Keeps the password out of argv and file-manager history.
+// - "basic" (macOS, Windows): the OS mounts with the session credential and
+//   the relay refuses any request that does not carry it.
+// No Electron imports: tests drive the real relay.
 import * as fs from "fs";
 import * as http from "http";
+import * as https from "https";
 import * as net from "net";
 import { logger } from "../../papercrane/logger";
+import { pinnedTlsOptions } from "../../papercrane/pinnedTls";
+import { secretsMatch } from "../../papercrane/secretCompare";
 
 // bounds: open client connections, and how long a quiet relay lives
 export const MAX_RELAY_CONNECTIONS = 32;
@@ -83,10 +90,14 @@ async function peerIsCurrentUser(socket: net.Socket): Promise<boolean> {
 }
 
 export interface DavRelayOptions {
-    /** remote daemon origin, e.g. http://192.168.1.4:45464 */
+    /** remote daemon origin, e.g. https://192.168.1.4:45464 */
     upstream: string;
+    /** the remote daemon's certificate, pinned at pairing */
+    cert: string;
     user: string;
     pass: string;
+    /** how local callers are checked; see the header comment */
+    clientAuth: "peer" | "basic";
     /** quiet time after which the relay closes itself and calls onIdle */
     idleMs: number;
     onIdle: () => void;
@@ -101,8 +112,12 @@ export interface DavRelay {
 
 export function startDavRelay(opts: DavRelayOptions): Promise<DavRelay> {
     const upstream = new URL(opts.upstream);
+    if (upstream.protocol !== "https:") throw new Error("DAV relay upstream must be https");
+    // one pinned, keep-alive agent per relay; destroyed with it
+    const agent = new https.Agent({ ...pinnedTlsOptions(opts.cert), keepAlive: true, maxSockets: MAX_RELAY_CONNECTIONS });
     const authorization = `Basic ${Buffer.from(`${opts.user}:${opts.pass}`).toString("base64")}`;
-    const verifyPeer = opts.verifyPeer ?? peerIsCurrentUser;
+    const verifyPeer =
+        opts.clientAuth === "basic" ? async () => true : (opts.verifyPeer ?? peerIsCurrentUser);
     const sockets = new Set<net.Socket>();
     let idleTimer: NodeJS.Timeout | null = null;
     let closed = false;
@@ -119,6 +134,12 @@ export function startDavRelay(opts: DavRelayOptions): Promise<DavRelay> {
 
     const httpServer = http.createServer((req, res) => {
         touch();
+        if (opts.clientAuth === "basic" && !secretsMatch(req.headers.authorization ?? "", authorization)) {
+            res.writeHead(401, { "WWW-Authenticate": 'Basic realm="Paperboard"', "Content-Type": "text/plain" });
+            res.end("Unauthorized");
+            req.resume();
+            return;
+        }
         const headers: http.OutgoingHttpHeaders = {};
         for (const [key, value] of Object.entries(req.headers)) {
             if (value === undefined || DROP_REQUEST_HEADERS.has(key)) continue;
@@ -137,9 +158,9 @@ export function startDavRelay(opts: DavRelayOptions): Promise<DavRelay> {
                 return;
             }
         }
-        const out = http.request(
+        const out = https.request(
             {
-                protocol: upstream.protocol,
+                agent,
                 hostname: upstream.hostname,
                 port: upstream.port,
                 method: req.method,
@@ -210,6 +231,7 @@ export function startDavRelay(opts: DavRelayOptions): Promise<DavRelay> {
             if (idleTimer) clearTimeout(idleTimer);
             for (const socket of sockets) socket.destroy();
             sockets.clear();
+            agent.destroy();
             return new Promise<void>((done) => gate.close(() => done()));
         },
     };

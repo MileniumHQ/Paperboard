@@ -80,8 +80,8 @@ export const OfflineComputerModal: Component<OfflineComputerModalProps> = (
                         <PaperText preset="body">
                             Nothing responded at {comp().host}:
                             {comp().port}. Make sure the Paperboard Server
-                            daemon is running on that computer and both
-                            devices are on the same trusted network.
+                            daemon is running on that computer and its
+                            port is reachable from this device.
                         </PaperText>
                     )}
                 </Show>
