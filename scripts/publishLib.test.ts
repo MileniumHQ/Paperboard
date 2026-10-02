@@ -8,6 +8,7 @@ import {
     ALL_TARGETS,
     archOf,
     assetFileName,
+    buildCraneIndex,
     buildLatestYml,
     dlFileUrl,
     isArch,
@@ -309,6 +310,27 @@ describe("storeUploadParts", () => {
         expect(storeUploadParts(undefined, read)).toEqual({ files: [] });
         expect(() => storeUploadParts({ screenshots: [{ light: "./store/2.png" }] }, read)).toThrow(/ENOENT/);
         expect(() => storeUploadParts({ about: "./about.md" }, read)).toThrow(/inside store/);
+    });
+});
+
+describe("crane update index", () => {
+    it("keys one signed entry per target in the shape updatePlan reads", () => {
+        const index = buildCraneIndex("2.0.0", [
+            { target: "linux-x64", file: "crane-linux-x64.tar.gz", sha256: "a".repeat(64), signature: "sig-linux" },
+            { target: "windows-x64", file: "crane-windows-x64.zip", sha256: "b".repeat(64), signature: "sig-win" },
+        ]);
+        expect(Object.keys(index).sort()).toEqual(["linux-x64", "windows-x64"]);
+        expect(index["linux-x64"]).toEqual({
+            version: "2.0.0",
+            sha256: "a".repeat(64),
+            downloadUrl: dlFileUrl("crane", "2.0.0", "crane-linux-x64.tar.gz"),
+            signature: "sig-linux",
+        });
+        // every entry carries the signature the daemon verifies
+        for (const entry of Object.values(index)) {
+            expect(entry.signature).toBeTruthy();
+            expect(entry.downloadUrl).toContain("2.0.0");
+        }
     });
 });
 

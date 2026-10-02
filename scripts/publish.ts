@@ -46,6 +46,7 @@ import {
     KV_PACKAGES_BINDING,
     PAPERDL_R2_BUCKET,
     assetFileName,
+    buildCraneIndex,
     buildLatestYml,
     dlFileUrl,
     isValidVersionSegment,
@@ -686,6 +687,35 @@ async function flowPublishBinaries(): Promise<void> {
         p.log.success(
             `Index ${kvKeyFor(app)}: recorded v${version} (${prev ? Object.keys(prev.versions).length : 0} → ${Object.keys(next.versions).length} versions, latest → v${version}).`,
         );
+    }
+
+    // The host's crane update planner reads this R2 projection, not KV. It
+    // carries the signed version/sha256 facts the daemon verifies, so a
+    // remote self-update has an authoritative entry to act on.
+    const craneIndex = buildCraneIndex(
+        version,
+        staged
+            .filter((b) => b.app === "crane")
+            .map((b) => ({
+                target: b.target,
+                file: b.filename,
+                sha256: b.sha256,
+                signature: signVerified(signingKey, releaseMessage.crane(version, b.sha256), b.filename),
+            })),
+    );
+    const craneIndexTmp = join(tmpdir(), `crane-index-${Date.now()}.json`);
+    try {
+        writeFileSync(craneIndexTmp, JSON.stringify(craneIndex, null, 2));
+        await r2Put("crane/index.json", craneIndexTmp, "application/json");
+        p.log.success(
+            `Index paperdl/crane/index.json: signed entries for ${Object.keys(craneIndex).length} targets.`,
+        );
+    } finally {
+        try {
+            unlinkSync(craneIndexTmp);
+        } catch (err) {
+            console.debug("temp crane index already gone:", String(err));
+        }
     }
 
     // electron-updater feeds (paperboard only) stay on Origami/R2; their

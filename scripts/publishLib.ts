@@ -208,6 +208,34 @@ export function dlFileUrl(
     return `https://${DL_HOST}/${app}/${versionOrLatest}/${file}`;
 }
 
+// The host's crane update planner reads Origami's R2 crane/index.json (it
+// cannot read the KV version record directly). One entry per platform/arch
+// carrying the same signed facts the daemon verifies: version, sha256 and
+// the offline release signature. Kept in sync with paperboard's
+// updatePlan.ts reads (`craneDlIndex[platform-arch]`).
+export interface CraneIndexEntry {
+    version: string;
+    sha256: string;
+    downloadUrl: string;
+    signature: string;
+}
+
+export function buildCraneIndex(
+    version: string,
+    files: { target: Target; file: string; sha256: string; signature: string }[],
+): Record<string, CraneIndexEntry> {
+    const index: Record<string, CraneIndexEntry> = {};
+    for (const f of files) {
+        index[f.target] = {
+            version,
+            sha256: f.sha256,
+            downloadUrl: dlFileUrl("crane", version, f.file),
+            signature: f.signature,
+        };
+    }
+    return index;
+}
+
 // URL-shape guards. A version or filename sits inside a URL path slot on
 // both the worker and the redirect target, so neither may contain "/",
 // whitespace, "%", "?", or "#". "latest" matches VERSION_SEGMENT on
