@@ -6,6 +6,8 @@ import {
     isRefusedFrame,
     assertShellFrame,
     PANEL_IPC_REFUSED,
+    allowDevShellOrigin,
+    keepShellNavigation,
 } from "../src/main/communication/shellGuard";
 
 const panelEvent = (url: string) => ({ senderFrame: { url } });
@@ -29,22 +31,46 @@ describe("shell IPC origin guard", () => {
         expect(() => assertShellFrame(event, "computer-pair")).toThrow(/shell-only/);
     });
 
-    it("answers shell origins (file:// and dev localhost)", () => {
-        expect(() =>
-            assertShellFrame(panelEvent("file:///app/renderer/index.html"), "computer-pair"),
-        ).not.toThrow();
-        expect(() =>
-            assertShellFrame(panelEvent("http://localhost:5173/"), "computers-list"),
-        ).not.toThrow();
-        // DENY-BY-DEFAULT: an unreadable origin (no frame / no url) is
-        // refused the same as a panel origin — the old fail-open default
-        // ("missing frame = shell") inverted every privileged channel's
-        // polarity and is refused now
+    it("answers only the shell's own origin", () => {
+        expect(() => assertShellFrame(panelEvent("paperboard://shell/index.html"), "computer-pair")).not.toThrow();
+        expect(isRefusedFrame(panelEvent("paperboard://shell"))).toBe(false);
+        // file:// was accepted as "the shell" before, but the shell is never
+        // served from file://; a dropped or opened local HTML file is
+        // exactly what must not reach crane-credentials
+        for (const url of [
+            "file:///app/renderer/index.html",
+            "https://origami.ariapis.com/library/",
+            "http://localhost:5173/",
+            "paperboard://shellfake/index.html",
+            "paperboard://evil/",
+        ]) {
+            expect(isRefusedFrame(panelEvent(url))).toBe(true);
+        }
+        // deny-by-default: an unreadable origin is refused like a panel
         expect(() => assertShellFrame({}, "app-version")).toThrow(PANEL_IPC_REFUSED);
         expect(() => assertShellFrame({ senderFrame: null }, "app-version")).toThrow(PANEL_IPC_REFUSED);
         expect(() => assertShellFrame({ senderFrame: {} }, "app-version")).toThrow(PANEL_IPC_REFUSED);
-        expect(isRefusedFrame({})).toBe(true);
-        expect(isRefusedFrame({ senderFrame: {} })).toBe(true);
-        expect(isRefusedFrame(panelEvent("file:///app/renderer/index.html"))).toBe(false);
+    });
+
+    it("answers the dev renderer origin only once main registers it", () => {
+        expect(isRefusedFrame(panelEvent("http://localhost:5199/"))).toBe(true);
+        allowDevShellOrigin("http://localhost:5199/");
+        expect(isRefusedFrame(panelEvent("http://localhost:5199/index.html"))).toBe(false);
+        expect(isRefusedFrame(panelEvent("http://localhost:5200/"))).toBe(true);
+    });
+});
+
+describe("shell window navigation", () => {
+    const attempt = (url: string) => {
+        let prevented = false;
+        const allowed = keepShellNavigation({ preventDefault: () => { prevented = true; } }, url);
+        return { allowed, prevented };
+    };
+
+    it("stays on the shell and blocks every other destination", () => {
+        expect(attempt("paperboard://shell/index.html")).toEqual({ allowed: true, prevented: false });
+        for (const url of ["file:///home/user/Downloads/page.html", "https://example.com/", "panel://local.dev.x/"]) {
+            expect(attempt(url)).toEqual({ allowed: false, prevented: true });
+        }
     });
 });

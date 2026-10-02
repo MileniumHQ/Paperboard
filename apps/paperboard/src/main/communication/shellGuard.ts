@@ -1,17 +1,27 @@
-// Shell/panel IPC origin boundary (T1).
+// Shell IPC origin boundary.
 //
-// Panels render as <iframe> elements inside the shell window and inherit the
-// window's preload, so the preload channel allowlist alone cannot keep
-// privileged channels shell-only. Every shell channel handler validates
-// `event.senderFrame.url`: shell origins (paperboard://shell, dev http://localhost)
-// are answered; panel origins (`panel://<computer>.<panel>/...`) get a
-// typed refusal — never an answer, never empty silence.
+// Shell channels answer only the shell document: paperboard://shell (the
+// packaged shell's scheme) and, in development only, the renderer dev
+// server origin main registers at startup. Every other sender is refused:
+// panel:// frames, remote pages, file:// documents, and any frame whose URL
+// cannot be read. senderFrame is Electron-provided and unspoofable from the
+// renderer.
 //
-// senderFrame is Electron-provided and unspoofable from the renderer; panel
-// iframes always carry panel:// URLs. An URL that CANNOT be read (missing
-// frame or url) is denied the same as a panel frame: the guard refuses
-// by default. The old fail-open default ("missing frame = shell") inverted
-// the polarity of every privileged channel — it is refused now.
+// This is an allowlist on purpose. The old guard refused only panel://, so
+// anything else that reached the preload (a top-level navigation to remote
+// content, a dropped file) was answered as the shell — including
+// crane-credentials, which returns the master token.
+import { SHELL_ORIGIN } from "../shellAssets";
+import { logger } from "../../../papercrane/logger";
+
+let devShellOrigin: string | null = null;
+
+// main calls this in development with ELECTRON_RENDERER_URL; production
+// never registers one
+export function allowDevShellOrigin(url: string): void {
+    devShellOrigin = new URL(url).origin;
+}
+
 export function isPanelOrigin(url: unknown): boolean {
     return (
         typeof url === "string" &&
@@ -19,12 +29,32 @@ export function isPanelOrigin(url: unknown): boolean {
     );
 }
 
+export function isShellUrl(url: unknown): boolean {
+    if (typeof url !== "string") return false;
+    if (url === SHELL_ORIGIN || url.startsWith(`${SHELL_ORIGIN}/`)) return true;
+    if (!devShellOrigin) return false;
+    try {
+        return new URL(url).origin === devShellOrigin;
+    } catch (err) {
+        // an unparseable sender URL is not the shell
+        logger.debug("[Shell] sender URL unparseable, refusing:", err);
+        return false;
+    }
+}
+
 export function isRefusedFrame(event: unknown): boolean {
     const url = (event as { senderFrame?: { url?: unknown } } | null | undefined)
         ?.senderFrame?.url;
-    // deny-by-default: panel origins are refused, and an unreadable origin
-    // (no frame / no url) is refused too — only a verdict of "shell" allows
-    return url === undefined || url === null || isPanelOrigin(url);
+    return !isShellUrl(url);
+}
+
+// will-navigate guard for shell windows: the shell document never navigates
+// away from the shell, because whatever it navigated to would inherit the
+// preload and with it every shell channel
+export function keepShellNavigation(event: { preventDefault(): void }, url: string): boolean {
+    if (isShellUrl(url)) return true;
+    event.preventDefault();
+    return false;
 }
 
 export const PANEL_IPC_REFUSED = "PANEL_IPC_REFUSED";

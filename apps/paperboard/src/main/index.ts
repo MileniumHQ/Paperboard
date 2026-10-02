@@ -15,7 +15,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { electronApp, optimizer, is } from "@electron-toolkit/utils";
 import { startCommunicator, logRendererMessage } from "./communication/communication";
-import { isRefusedFrame } from "./communication/shellGuard";
+import { allowDevShellOrigin, isRefusedFrame, keepShellNavigation } from "./communication/shellGuard";
 import connectionPool from "./communication/papercrane/ConnectionPool";
 import { shouldSkipUpdate, runUpdateOrchestrator } from "./updater";
 import { initAppSettingsSync } from "./appSettings";
@@ -154,6 +154,12 @@ function createWindow(): void {
         mainWindow.show();
     });
 
+    // the shell document never leaves the shell: a navigated-to page (a
+    // dropped file, a followed link) would inherit the preload
+    mainWindow.webContents.on("will-navigate", (event, url) => {
+        if (!keepShellNavigation(event, url)) log.warn("[Main] Blocked shell navigation to", url);
+    });
+
     mainWindow.webContents.setWindowOpenHandler((details) => {
         if (details.url.startsWith("https://")) {
             shell.openExternal(details.url);
@@ -287,6 +293,11 @@ function createUpdaterWindow(): BrowserWindow {
         webPreferences: commonWebPreferences(),
     });
 
+    updaterWindow.webContents.on("will-navigate", (event, url) => {
+        if (!keepShellNavigation(event, url)) log.warn("[Main] Blocked updater navigation to", url);
+    });
+    updaterWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+
     updaterWindow.on("ready-to-show", () => {
         updaterWindow.show();
     });
@@ -303,6 +314,10 @@ function createUpdaterWindow(): BrowserWindow {
 }
 
 app.whenReady().then(async () => {
+    // the dev renderer server is a shell origin in development only
+    if (is.dev && process.env["ELECTRON_RENDERER_URL"]) {
+        allowDevShellOrigin(process.env["ELECTRON_RENDERER_URL"]);
+    }
     // icon unpacked in prod, resources/ in dev
     if (process.platform === "darwin") {
         const iconCandidates = [
