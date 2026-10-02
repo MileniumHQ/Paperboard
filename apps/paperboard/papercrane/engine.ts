@@ -205,6 +205,27 @@ export class PaperCraneEngine {
         }
     }
 
+    // records the creator of a workload that now exists. A workload that
+    // already exited (and was forgotten) gets no entry.
+    public recordClientOwner(id: string, owner: string | null): void {
+        if (!this.clients.has(id)) return;
+        this.setClientOwner(id, owner);
+    }
+
+    // drops a finished workload's ledger entry, on disk too: an entry left
+    // in process-owners.json would outlive the workload across a restart.
+    // A failed write keeps the stale entry, which only over-claims (refuses
+    // other panels that id) — it never grants anything — so it is logged
+    // rather than thrown into the exit path that called this.
+    private forgetClientOwner(id: string): void {
+        if (!this.clientOwners.delete(id)) return;
+        try {
+            writeJsonAtomicSync(path.join(this.localDir, "process-owners.json"), Object.fromEntries(this.clientOwners), { mode: 0o600 });
+        } catch (err) {
+            logger.error(`[engine] could not persist the end of ${id}'s ownership; the stale entry over-claims until the next write:`, err);
+        }
+    }
+
     public clientOwner(id: string): string | null {
         return this.clientOwners.get(id) ?? null;
     }
@@ -309,7 +330,7 @@ export class PaperCraneEngine {
             this.clients,
             { onData, onExit: (code) => {
                 this.clients.delete(id);
-                this.clientOwners.delete(id);
+                this.forgetClientOwner(id);
                 onExit?.(code);
             } },
         );
@@ -328,7 +349,7 @@ export class PaperCraneEngine {
         if (client) {
             await this.stopOwnedClient(id, client);
         }
-        this.clientOwners.delete(id);
+        this.forgetClientOwner(id);
     }
 
     // Reattaches streaming for a terminal owned by a previous session
@@ -391,7 +412,7 @@ export class PaperCraneEngine {
                     onStderr,
                     onExit: (exitCode: number) => {
                         this.clients.delete(id);
-                        this.clientOwners.delete(id);
+                        this.forgetClientOwner(id);
                         resolveExit({ exitCode });
                     },
                 },
@@ -412,7 +433,7 @@ export class PaperCraneEngine {
     public async killProcess(id: string, signal: string = "SIGTERM"): Promise<void> {
         const client = this.clients.get(id);
         if (!client) {
-            this.clientOwners.delete(id);
+            this.forgetClientOwner(id);
             return;
         }
         await this.stopOwnedClient(id, client, signal);
@@ -1137,8 +1158,7 @@ export class PaperCraneEngine {
         }
         client.destroy();
         this.clients.delete(id);
-        this.clientOwners.delete(id);
-        writeJsonAtomicSync(path.join(this.localDir, "process-owners.json"), Object.fromEntries(this.clientOwners), { mode: 0o600 });
+        this.forgetClientOwner(id);
     }
 
     public async restorePanel(panelId: string, recoveryName: string): Promise<void> {

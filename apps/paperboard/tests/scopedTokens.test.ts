@@ -174,6 +174,9 @@ describe("terminal/process id ownership", () => {
             setClientOwner: (id: string, owner: string | null) => {
                 owners.set(id, owner);
             },
+            recordClientOwner: (id: string, owner: string | null) => {
+                owners.set(id, owner);
+            },
             writeTerminal: (id: string) => {
                 writes.push(id);
             },
@@ -195,10 +198,18 @@ describe("terminal/process id ownership", () => {
         };
     }
 
-    it("claimClient records the creator claim", () => {
+    it("claimClient records the creator claim once the workload starts", async () => {
         const engine = stubEngine();
-        claimClient("t1", termCtx(engine, "a").ctx as any, "term:create");
+        await claimClient("t1", termCtx(engine, "a").ctx as any, "term:create", async () => undefined);
         expect(engine.owners.get("t1")).toBe("a");
+    });
+
+    it("claimClient records nothing when the workload fails to start", async () => {
+        const engine = stubEngine();
+        await expect(
+            claimClient("t1", termCtx(engine, "a").ctx as any, "term:create", async () => { throw new Error("spawn failed"); }),
+        ).rejects.toThrow("spawn failed");
+        expect(engine.owners.has("t1")).toBe(false);
     });
 
     it("a scoped caller cannot touch another panel's terminal", async () => {
@@ -211,10 +222,14 @@ describe("terminal/process id ownership", () => {
         expect(engine.writes).toEqual([]);
     });
 
-    it("a scoped caller cannot re-create another panel's id to take it over", () => {
+    it("a scoped caller cannot re-create another panel's id to take it over", async () => {
         const engine = stubEngine();
         engine.owners.set("t1", "gameserver");
-        expect(() => claimClient("t1", termCtx(engine, "botcreator").ctx as any, "term:create")).toThrow(/another panel/);
+        let started = false;
+        await expect(
+            claimClient("t1", termCtx(engine, "botcreator").ctx as any, "term:create", async () => { started = true; }),
+        ).rejects.toThrow(/another panel/);
+        expect(started).toBe(false);
         expect(engine.owners.get("t1")).toBe("gameserver");
     });
 

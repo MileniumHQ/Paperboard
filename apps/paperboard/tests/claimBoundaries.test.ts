@@ -217,6 +217,7 @@ describe("spawn boundaries refuse loudly", () => {
                 engine: {
                     clientOwner: (id: string) => owners.get(id) ?? null,
                     setClientOwner: (id: string, o: string | null) => owners.set(id, o),
+                    recordClientOwner: (id: string, o: string | null) => owners.set(id, o),
                     startProcess: () => Promise.resolve({ completion: Promise.resolve({ exitCode: 0 }) }),
                 },
                 callerPanelId: () => claim,

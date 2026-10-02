@@ -15,11 +15,15 @@ function assertNotForeign(id: string, ctx: RpcContext, what: string): void {
 }
 
 // create paths call this: refuses to take over an id another panel owns,
-// then records the creator claim.
-export function claimClient(id: unknown, ctx: RpcContext, what: string): void {
-    if (typeof id !== "string" || !id) return;
-    assertNotForeign(id, ctx, what);
-    ctx.engine.setClientOwner(id, ctx.callerPanelId());
+// starts the workload, and records the creator claim only once the workload
+// exists. A spawn that fails leaves no claim behind (a leaked claim would
+// fill the bounded ledger and refuse every later spawn).
+export async function claimClient<T>(id: unknown, ctx: RpcContext, what: string, start: () => Promise<T>): Promise<T> {
+    const named = typeof id === "string" && id ? id : null;
+    if (named) assertNotForeign(named, ctx, what);
+    const result = await start();
+    if (named) ctx.engine.recordClientOwner(named, ctx.callerPanelId());
+    return result;
 }
 
 // every other id action calls this before touching the client.

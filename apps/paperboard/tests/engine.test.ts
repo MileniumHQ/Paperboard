@@ -212,3 +212,29 @@ describe("PaperCraneEngine app-global configs", () => {
         }
     });
 });
+
+describe("process ownership ledger stays bounded by live workloads", () => {
+    it("a spawn that fails leaves no claim, in memory or on disk", async () => {
+        const { handleProcess } = await import("../papercrane/rpc/process");
+        const ctx = {
+            engine,
+            callerPanelId: () => "panel.a",
+            sendEvent: () => undefined,
+            reply: () => undefined,
+        };
+        await expect(
+            handleProcess("process:run", 1, { id: "doomed", command: "true", cwd: "/nonexistent/paperboard-cwd" }, ctx as any),
+        ).rejects.toThrow(/cwd does not exist/);
+        expect(engine.clientOwner("doomed")).toBeNull();
+        const ledger = path.join(engine.getAppDataDir(), "local", "process-owners.json");
+        if (fs.existsSync(ledger)) expect(JSON.parse(fs.readFileSync(ledger, "utf8"))).not.toHaveProperty("doomed");
+    });
+
+    it("an ended workload's entry is removed from the persisted ledger too", async () => {
+        engine.setClientOwner("finished", "panel.a");
+        const ledger = path.join(engine.getAppDataDir(), "local", "process-owners.json");
+        expect(JSON.parse(fs.readFileSync(ledger, "utf8"))).toHaveProperty("finished", "panel.a");
+        await engine.killProcess("finished");
+        expect(JSON.parse(fs.readFileSync(ledger, "utf8"))).not.toHaveProperty("finished");
+    });
+});

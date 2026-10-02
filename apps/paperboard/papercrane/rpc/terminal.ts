@@ -7,12 +7,11 @@ export async function handleTerminal(action: string, id: unknown, params: any, c
     switch (action) {
         case "term:create": {
             const termId = assertStr(params?.id, "id", 128);
-            claimClient(termId, ctx, "term:create");
             const cols = assertNum(params?.cols, "cols", 80);
             const rows = assertNum(params?.rows, "rows", 24);
             const env = assertEnvMap(params?.env, "env");
             checkSpawnEnv(env, ctx, "term:create");
-            await engine.createTerminal(
+            await claimClient(termId, ctx, "term:create", () => engine.createTerminal(
                 termId,
                 cols,
                 rows,
@@ -20,7 +19,7 @@ export async function handleTerminal(action: string, id: unknown, params: any, c
                 env,
                 (data) => sendEvent("term:data", { id: termId, data }),
                 (exitCode) => sendEvent("term:exit", { id: termId, exitCode }),
-            );
+            ));
             reply(id, { success: true });
             return true;
         }

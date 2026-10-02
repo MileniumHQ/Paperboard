@@ -7,7 +7,6 @@ export async function handleProcess(action: string, id: unknown, params: any, ct
     switch (action) {
         case "process:run": {
             const procId = assertStr(params?.id, "id", 128);
-            claimClient(procId, ctx, "process:run");
             const command = assertStr(params?.command, "command");
             // refuse, don't coerce: a non-string arg is a caller bug, and
             // silently dropping it would run a different command than asked
@@ -23,7 +22,7 @@ export async function handleProcess(action: string, id: unknown, params: any, ct
             });
             const env = assertEnvMap(params?.env, "env");
             checkSpawnEnv(env, ctx, "process:run");
-            const started = await engine.startProcess(
+            const started = await claimClient(procId, ctx, "process:run", () => engine.startProcess(
                 procId,
                 command,
                 args,
@@ -32,7 +31,7 @@ export async function handleProcess(action: string, id: unknown, params: any, ct
                 undefined, // onData omitted — stdout & stderr are individually routed below
                 (stdout) => sendEvent("process:data", { id: procId, data: stdout, stream: "stdout" }),
                 (stderr) => sendEvent("process:data", { id: procId, data: stderr, stream: "stderr" }),
-            );
+            ));
             void started.completion.then(({ exitCode }) => {
                 sendEvent("process:exit", { id: procId, exitCode });
             }).catch((err) => {
