@@ -57,11 +57,12 @@ export class PaperCraneTui {
         });
     }
 
-    // "host" token is infrastructure, hidden from every list
+    // "host" token is infrastructure, hidden from every list; a panel-scoped
+    // token is a local service credential, not a paired computer
     private visibleClients(): AuthorizedToken[] {
         return this.auth
             .getAuthorizedClients()
-            .filter((c) => c.clientName !== "host");
+            .filter((c) => c.clientName !== "host" && !c.panelId);
     }
 
     public start() {
