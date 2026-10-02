@@ -111,6 +111,7 @@ export default function Plugins(props: { updateRequest?: number }) {
     const [pendingDelete, setPendingDelete] = createSignal<InstalledPlugin | null>(
         null,
     );
+    const [deleteError, setDeleteError] = createSignal("");
     const [installTarget, setInstallTarget] = createSignal<DetailTarget | null>(null);
     const [installVersions, setInstallVersions] =
         createSignal<ProjectVersionOption[] | null>(null);
@@ -376,17 +377,19 @@ export default function Plugins(props: { updateRequest?: number }) {
 
     const confirmDelete = async () => {
         const target = pendingDelete();
-        setPendingDelete(null);
         if (!target) return;
         setUninstallingFile(target.filename);
-        setError("");
+        setDeleteError("");
         try {
             await deletePlugin(target.filename);
             await reloadInstalled();
+            setPendingDelete(null);
         } catch (err) {
+            // the modal stays open: a delete that failed must say why, not
+            // close as if the jar were gone (it is still on disk)
             console.error(`[Plugins] Failed to delete "${target.filename}":`, err);
-            setError(
-                `Failed to delete "${target.filename}". Check the console for details.`,
+            setDeleteError(
+                err instanceof Error ? err.message : String(err),
             );
         } finally {
             setUninstallingFile(null);
@@ -638,7 +641,10 @@ export default function Plugins(props: { updateRequest?: number }) {
                                             <PaperButton
                                                 variant="danger"
                                                 disabled={busy()}
-                                                onClick={() => setPendingDelete(entry)}
+                                                onClick={() => {
+                                                    setDeleteError("");
+                                                    setPendingDelete(entry);
+                                                }}
                                             >
                                                 <PaperIcon>delete</PaperIcon>
                                                 Uninstall
@@ -909,16 +915,23 @@ export default function Plugins(props: { updateRequest?: number }) {
 
             <PaperModal
                 open={pendingDelete() !== null}
-                onClose={() => setPendingDelete(null)}
+                onClose={() => {
+                    if (uninstallingFile() === null) setPendingDelete(null);
+                }}
                 title={`Uninstall ${pendingDelete()?.filename ?? ""}`}
                 size="small"
                 footer={
                     <PaperFlex direction="row" justify="flex-end" gap="half" fullWidth>
-                        <PaperButton onClick={() => setPendingDelete(null)}>
+                        <PaperButton
+                            disabled={uninstallingFile() !== null}
+                            onClick={() => setPendingDelete(null)}>
                             Cancel
                         </PaperButton>
-                        <PaperButton variant="danger" onClick={confirmDelete}>
-                            Uninstall
+                        <PaperButton
+                            variant="danger"
+                            disabled={uninstallingFile() !== null}
+                            onClick={() => void confirmDelete()}>
+                            {uninstallingFile() !== null ? "Uninstalling…" : "Uninstall"}
                         </PaperButton>
                     </PaperFlex>
                 }
@@ -929,6 +942,11 @@ export default function Plugins(props: { updateRequest?: number }) {
                     folder inside the server folder, where it can be restored.
                     The change takes effect after a restart.
                 </PaperText>
+                <Show when={deleteError()}>
+                    <PaperQuote variant="danger" icon="warning" title="Couldn't uninstall">
+                        {deleteError()}
+                    </PaperQuote>
+                </Show>
             </PaperModal>
 
             <PaperModal
