@@ -732,11 +732,13 @@ const App: Component = () => {
                 open={!!offlineTarget()}
                 computer={offlineTarget() ?? undefined}
                 onClose={() => setOfflineTarget(null)}
-                onWorkOffline={() => {
+                onForget={() => {
                     const comp = offlineTarget();
                     if (!comp) return;
                     setOfflineTarget(null);
-                    finishComputerSelect(comp.id);
+                    setForgetError(null);
+                    setContextMenuComputerId(comp.id);
+                    setIsForgetConfirmOpen(true);
                 }}
                 onReconnectSuccess={async () => {
                     const comp = offlineTarget();

@@ -7,8 +7,8 @@ export interface OfflineComputerModalProps {
     computer?: ComputerItem;
     open: boolean;
     onClose: () => void;
-    /** User chose to proceed onto this computer despite it being offline. */
-    onWorkOffline: () => void;
+    /** User chose to forget the unreachable computer. */
+    onForget: () => void;
     /** Probe succeeded — caller should select the computer normally. */
     onReconnectSuccess: () => void;
 }
@@ -62,10 +62,9 @@ export const OfflineComputerModal: Component<OfflineComputerModalProps> = (
             footer={
                 <PaperFlex direction="row" justify="flex-end" gap="half" fullWidth>
                     <PaperButton
-                        variant="text"
-                        disabled={isProbing()}
-                        onClick={props.onWorkOffline}>
-                        Work Offline
+                        variant="danger"
+                        onClick={props.onForget}>
+                        Forget Computer
                     </PaperButton>
                     <PaperButton disabled={isProbing()} onClick={attemptReconnect}>
                         <PaperIcon>restart_alt</PaperIcon>
