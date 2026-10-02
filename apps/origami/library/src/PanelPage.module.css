@@ -175,7 +175,10 @@
 
 .cards {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+    /* fixed, narrow columns so one or two cards match the three-card size
+       instead of stretching across the page; the group stays centered */
+    grid-template-columns: repeat(auto-fit, minmax(15rem, 18rem));
+    justify-content: center;
     gap: var(--paper-uigap);
     align-items: stretch;
 }
@@ -192,6 +195,12 @@
     align-items: center;
     text-align: center;
     gap: var(--paper-uigap-onefourth);
+}
+
+/* the heading's default margins dwarf the header gap; drop them so the
+   title sits close to its subtitle */
+.cardTitle {
+    margin: 0;
 }
 
 .cardIcon {

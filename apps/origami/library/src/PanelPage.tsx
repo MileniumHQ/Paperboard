@@ -86,7 +86,7 @@ const InfoCard: Component<{
                 <PaperIcon class={styles.cardIcon} aria-hidden="true">
                     {props.icon}
                 </PaperIcon>
-                <PaperText as="h3" size={4} weight={800} rounded>
+                <PaperText as="h3" class={styles.cardTitle} size={4} weight={800} rounded>
                     {props.title}
                 </PaperText>
                 <PaperText size={2} color="text-subtle">
