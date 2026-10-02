@@ -15,7 +15,7 @@ Good luck devs and agents !
 
 Paperboard is a dashboard for self-hosted programs. Panels are the apps. Optimize for the thousandth panel, not the first.
 
-Never compromise on: panels are reviewed, not sandboxed; the registry is closed and hashes the bytes it hosts; secrets live only in the daemon vault; identity is granted, never ambient.
+Never compromise on: panels are first-party, not sandboxed; the registry is closed and hashes the bytes it hosts; secrets live only in the daemon vault; identity is granted, never ambient.
 
 ## Glossary
 
@@ -28,8 +28,8 @@ Never compromise on: panels are reviewed, not sandboxed; the registry is closed 
 
 ## Trust model — don't fight it
 
-- Panels are **reviewed, not sandboxed**, and trusted like first-party code. Never add sandbox plumbing or "harden" panels by distrusting them.
-- Review is meaningful because of the **registry and the manifest**. Panels declare network egress; review checks declared hosts against what they fetch, and API use against the stated product.
+- Panels are **first-party, not sandboxed**. Never add sandbox plumbing or "harden" panels by distrusting them. There is no "reviewed" badge or review attestation to record: every panel the registry hosts is ours.
+- Trust in a panel comes from the **registry**: the closed registry is the only install source, and it hashes the bytes it hosts.
 - Secrets (bot tokens, API keys) never go in panel config or injected payload. They go through the vault (`papercrane/credentials.ts`, `secretsApi` in PaperAPI) with the panel id explicit. `secrets:list` returns names only. A panel that stores a secret in plaintext config is not released.
 - Accepted trust-model gaps live in a private security ledger, not here. Never add entries; close them.
 
@@ -45,7 +45,7 @@ Never compromise on: panels are reviewed, not sandboxed; the registry is closed 
 
 **Validate at the boundary.** One check, at the service that owns the resource. UI-layer checks don't count.
 
-**Separate trust decisions.** Name the authority for a release, the artifact digest, the download location, and the installed manifest. Publisher URL plus checksum is not independent verification; fetching the same record twice adds no authority. The registry hashes the bytes it hosts: verify them and require archive/request identity agreement before activation. If the authoritative lookup fails, refuse the install. Download origin, publisher, signature, review attestation, and installed version are different facts; never synthesize one from another.
+**Separate trust decisions.** Name the authority for a release, the artifact digest, the download location, and the installed manifest. Publisher URL plus checksum is not independent verification; fetching the same record twice adds no authority. The registry hashes the bytes it hosts: verify them and require archive/request identity agreement before activation. If the authoritative lookup fails, refuse the install. Download origin, publisher, signature, and installed version are different facts; never synthesize one from another.
 
 **No dead links in UI styling.** Use `--paper-*` tokens from PaperUI; if one is missing, add it there, not a hex. No global selectors (`*`, bare `:disabled`) outside `.paperui-root`. No workbench/demo file in a component package's `files`.
 
@@ -67,7 +67,7 @@ Never compromise on: panels are reviewed, not sandboxed; the registry is closed 
 
 1. **Identity is end to end.** `packages/paperapi/src/panelIdentity.ts` owns panel identifiers; never copy its regex. Pack, publish, routes, manifest validation, and token issuance must agree. Never normalize a rejected identity into an accepted one. Test real first-party dotted ids and reserved names.
 2. **Authentication precedes use.** An open socket is not authenticated or ready. RPC, HTTP, DAV, and relays preserve the same principal; a scoped token is not a host token. Relays may narrow identity, never broaden it. Revocation invalidates live sockets and derived sessions. See `papercrane/principal.ts`, `auth.ts`, `ws.ts`, `dav.ts`, `tests/wirePrincipals.test.ts`.
-3. **Lifecycle is observed, not inferred.** Service generations own their timers, child, readiness, and completion. Await async init and stop. `ChildProcess.killed` means a signal was sent, not that it exited. A removed record cancels delayed work. No in-process import fallback that can't be stopped or restarted. Update success requires new behavior/readiness; rollback preserves the previous release. Kill workloads through the ownership ledger, never by name guess.
+3. **Lifecycle is observed, not inferred.** Service generations own their timers, child, readiness, and completion. Await async init and stop. `ChildProcess.killed` means a signal was sent, not that it exited. A removed record cancels delayed work. No in-process import fallback that can't be stopped or restarted. Update success requires new behavior/readiness. Kill workloads through the ownership ledger, never by name guess.
 4. **Persistence has one owner.** Ordinary writes affect only the addressed document. Migrations are explicit, versioned, one-time, recoverable, and never heuristically clean sibling documents. Atomic writes don't solve read-modify-write races. Never treat unreadable state as empty state to overwrite.
 5. **An event has defined multiplicity.** Two flows on one event each run once: subscribe by unique event key or dispatch only the subscribed flow. Nested failure propagates to the parent. Recursion state belongs to an execution stack, not a global set.
 6. **Test what gets distributed.** Workspace symlinks and source imports hide broken exports. Build and pack shared libraries, then run `node scripts/check-package-artifacts.mjs` against an external consumer. Every declared export target must exist, including conditional and CJS entries. Typechecks don't prove OS or packaged-app support.
