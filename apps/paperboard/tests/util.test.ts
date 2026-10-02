@@ -1,5 +1,14 @@
 import { describe, it, expect } from "bun:test";
-import { semverGt, RingBuffer, resolveRegistryUrl } from "../papercrane/util";
+import {
+    semverGt,
+    RingBuffer,
+    resolveRegistryUrl,
+    selectNetworkIp,
+    getNetworkIp,
+    isUnspecifiedHost,
+    getDisplayHost,
+} from "../papercrane/util";
+import { formatListenAddress } from "../papercrane/tui";
 
 describe("semverGt", () => {
     it("compares major/minor/patch", () => {
@@ -53,6 +62,81 @@ describe("RingBuffer", () => {
         rb.push("toolongstring"); // whole chunk is evicted — cannot split
         expect(rb.getAll()).toBe("");
         expect(rb.size).toBe(0);
+    });
+});
+
+describe("network ip selection", () => {
+    it("skips the unspecified 0.0.0.0 adapter and picks a real address", () => {
+        expect(
+            selectNetworkIp({
+                Ethernet: [
+                    { address: "0.0.0.0", family: "IPv4", internal: false },
+                    { address: "192.168.1.50", family: "IPv4", internal: false },
+                ],
+            }),
+        ).toBe("192.168.1.50");
+    });
+
+    it("returns loopback when only unspecified/loopback/IPv6 adapters exist", () => {
+        expect(
+            selectNetworkIp({
+                Virtual: [{ address: "0.0.0.0", family: "IPv4", internal: false }],
+                Loopback: [{ address: "127.0.0.1", family: "IPv4", internal: true }],
+                IPv6: [{ address: "fe80::1", family: "IPv6", internal: false }],
+            }),
+        ).toBe("127.0.0.1");
+    });
+
+    it("prefers a private address over a public one and tolerates numeric family", () => {
+        expect(
+            selectNetworkIp({
+                Wan: [{ address: "8.8.8.8", family: 4, internal: false }],
+                Lan: [{ address: "10.0.0.7", family: 4, internal: false }],
+            }),
+        ).toBe("10.0.0.7");
+    });
+
+    it("never yields an address no peer can dial", () => {
+        const ip = getNetworkIp();
+        expect(ip).not.toBe("");
+        expect(ip).not.toBe("0.0.0.0");
+    });
+});
+
+describe("display host", () => {
+    it("treats every unspecified bind as needing an address", () => {
+        expect(isUnspecifiedHost(undefined)).toBe(true);
+        expect(isUnspecifiedHost("0.0.0.0")).toBe(true);
+        expect(isUnspecifiedHost("::")).toBe(true);
+        expect(isUnspecifiedHost("192.168.1.5")).toBe(false);
+    });
+
+    it("shows a concrete bind verbatim", () => {
+        expect(getDisplayHost("192.168.1.5")).toBe("192.168.1.5");
+        expect(getDisplayHost("10.0.0.2")).toBe("10.0.0.2");
+    });
+
+    it("resolves an unspecified bind to a dialable address", () => {
+        for (const host of [undefined, "0.0.0.0", "::"]) {
+            const shown = getDisplayHost(host);
+            expect(shown).not.toBe("0.0.0.0");
+            expect(shown).not.toBe("::");
+            expect(shown.length).toBeGreaterThan(0);
+        }
+    });
+});
+
+describe("formatListenAddress", () => {
+    it("prints a connectable URL instead of the 0.0.0.0 bind", () => {
+        const url = formatListenAddress("0.0.0.0", 45464, false);
+        expect(url).not.toContain("0.0.0.0");
+        expect(url).toMatch(/^http:\/\/[^:]+:45464$/);
+    });
+
+    it("keeps a concrete host and scheme", () => {
+        expect(formatListenAddress("10.0.0.5", 45464, true)).toBe(
+            "https://10.0.0.5:45464",
+        );
     });
 });
 

@@ -60,8 +60,10 @@ const ComputerSettings: Component<ComputerSettingsProps> = (props) => {
 
                 <PaperSettingItem title="Network Address">
                     <PaperText size={3} weight={600} color="text-subtle">
-                        {props.computer?.networkAddress || props.computer?.host || "127.0.0.1"}:
-                        {props.computer?.port || 45464}
+                        {props.computer?.networkAddress || props.computer?.host || "127.0.0.1"}
+                        <Show when={!isLocal()}>
+                            :{props.computer?.port || 45464}
+                        </Show>
                     </PaperText>
                 </PaperSettingItem>
 

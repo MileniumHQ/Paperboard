@@ -1,6 +1,66 @@
 // small pure utilities shared by both sides
+import * as os from "os";
 import semver from "semver";
 import { logger } from "./logger";
+
+export interface NetworkInterfaceLike {
+    address?: string;
+    family?: string | number;
+    internal?: boolean;
+}
+
+// an address other machines can dial. loopback and the unspecified
+// address (0.0.0.0, which Windows virtual/VPN adapters report when they
+// have no lease) are not connectable, so neither counts.
+export function isUsableIpv4(item: NetworkInterfaceLike | undefined): boolean {
+    if (!item || item.internal) return false;
+    if (item.family !== "IPv4" && item.family !== 4) return false;
+    const addr = item.address;
+    if (!addr || addr === "0.0.0.0" || addr === "127.0.0.1") return false;
+    return true;
+}
+
+function isPrivateIpv4(addr: string): boolean {
+    return (
+        addr.startsWith("192.168.") ||
+        addr.startsWith("10.") ||
+        /^172\.(1[6-9]|2[0-9]|3[01])\./.test(addr)
+    );
+}
+
+// pick a reachable IPv4 from a network-interface table, preferring the
+// private LAN range a peer on the same network would actually use.
+export function selectNetworkIp(
+    ifaces: Record<string, NetworkInterfaceLike[] | undefined>,
+): string {
+    let fallback = "127.0.0.1";
+    for (const name of Object.keys(ifaces)) {
+        const list = ifaces[name];
+        if (!list) continue;
+        for (const item of list) {
+            if (!isUsableIpv4(item)) continue;
+            const addr = item.address as string;
+            if (isPrivateIpv4(addr)) return addr;
+            if (fallback === "127.0.0.1") fallback = addr;
+        }
+    }
+    return fallback;
+}
+
+export function getNetworkIp(): string {
+    return selectNetworkIp(os.networkInterfaces());
+}
+
+// a bind host that names no specific interface cannot be dialed as-is
+export function isUnspecifiedHost(host?: string): boolean {
+    return !host || host === "0.0.0.0" || host === "::" || host === "[::]";
+}
+
+// display the address a peer can actually reach: a concrete bind host is
+// shown verbatim, an unspecified bind (the default) resolves to the LAN IP.
+export function getDisplayHost(host?: string): string {
+    return isUnspecifiedHost(host) ? getNetworkIp() : (host as string);
+}
 
 // registry override policy: environment override is honored only outside
 // production, or when an explicit --allow-registry-override flag is passed.

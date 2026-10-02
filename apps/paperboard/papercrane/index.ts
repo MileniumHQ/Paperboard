@@ -18,7 +18,7 @@ import { PaperCraneTui } from "./tui";
 import { ensureNativeHelpersExecutable } from "./pty";
 import { advertisePaperCrane, isLoopbackHost, type AdvertisementHandle } from "./discovery";
 import { writeFileAtomicSync } from "./storage";
-import { getLinuxDistroInfo } from "./util";
+import { getDisplayHost, getLinuxDistroInfo } from "./util";
 import { getLocalDir, getPaperboardDir } from "./paths";
 import { loadOrCreateTlsIdentity, type TlsIdentity } from "./tlsIdentity";
 import { logger } from "./logger";
@@ -36,30 +36,12 @@ export * from "./actions";
 export * from "./dav";
 export * from "./panelServices";
 export * from "./panelAssets";
-
-export function getNetworkIp(): string {
-    const ifaces = os.networkInterfaces();
-    let fallback = "127.0.0.1";
-
-    for (const name of Object.keys(ifaces)) {
-        const list = ifaces[name];
-        if (!list) continue;
-        for (const item of list) {
-            if (!item.internal && item.family === "IPv4") {
-                if (
-                    item.address.startsWith("192.168.") ||
-                    item.address.startsWith("10.") ||
-                    /^172\.(1[6-9]|2[0-9]|3[01])\./.test(item.address)
-                ) {
-                    return item.address;
-                }
-                fallback = item.address;
-            }
-        }
-    }
-
-    return fallback;
-}
+export {
+    getDisplayHost,
+    getNetworkIp,
+    isUnspecifiedHost,
+    selectNetworkIp,
+} from "./util";
 
 // build number to friendly release. The reg query runs on the WS auth
 // path, so the DisplayVersion result is cached per build — one entry,
@@ -555,7 +537,7 @@ export function startPaperCraneServer(
 
                 if (noAuth || headless) {
                     console.log(
-                        `[Paperboard Server] Listening on ${tlsIdentity ? "https" : "http"}://${host}:${actualPort}`,
+                        `[Paperboard Server] Listening on ${tlsIdentity ? "https" : "http"}://${getDisplayHost(host)}:${actualPort}`,
                     );
                 } else {
                     const existingClients = auth.getAuthorizedClients();

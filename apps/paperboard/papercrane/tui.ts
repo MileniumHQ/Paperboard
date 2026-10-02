@@ -1,6 +1,17 @@
 import * as readline from "readline";
 import { PaperCraneAuth, type AuthorizedToken } from "./auth";
 import { readBanner } from "./branding";
+import { getDisplayHost } from "./util";
+
+// the bind host may be unspecified (0.0.0.0/::); the string printed for a
+// human must be an address they can actually type into another computer.
+export function formatListenAddress(
+    host: string,
+    port: number,
+    secure: boolean,
+): string {
+    return `${secure ? "https" : "http"}://${getDisplayHost(host)}:${port}`;
+}
 
 export interface TuiOptions {
     host: string;
@@ -129,7 +140,7 @@ export class PaperCraneTui {
 
         this.clear();
         console.log(readBanner() ?? "Paperboard Server");
-        console.log(`Listening on ${this.scheme}://${this.host}:${this.port}\n`);
+        console.log(`Listening on ${formatListenAddress(this.host, this.port, this.scheme === "https")}\n`);
         console.log(`${PAIRING_TRUST_NOTE}\n`);
 
         if (this.auth.isPairingActive()) {
@@ -153,7 +164,7 @@ export class PaperCraneTui {
     }
 
     private renderPlain() {
-        console.log(`[Paperboard Server] Listening on ${this.scheme}://${this.host}:${this.port}`);
+        console.log(`[Paperboard Server] Listening on ${formatListenAddress(this.host, this.port, this.scheme === "https")}`);
         console.log(`[Paperboard Server] ${PAIRING_TRUST_NOTE}`);
         if (this.auth.isPairingActive()) {
             const code = this.auth.getPairingCode() || "------";
