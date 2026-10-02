@@ -611,6 +611,8 @@ async function flowPublishBinaries(): Promise<void> {
     if (!checkCancel(await p.confirm({ message: `Build all 10 binaries for v${version}?`, initialValue: false }))) {
         cancelled();
     }
+    // daemons refuse unsigned self-updates: no key, nothing is built
+    const signingKey = loadReleaseSigningKey();
 
     const jobs: { app: DlApp; target: Target }[] = [
         ...ALL_TARGETS.map((target) => ({ app: "pb" as DlApp, target })),
@@ -670,7 +672,15 @@ async function flowPublishBinaries(): Promise<void> {
         const prev = await kvReadRecord(app);
         const files: VersionFileEntry[] = staged
             .filter((b) => b.app === app)
-            .map((b) => ({ file: b.filename, sha256: b.sha256, sha512: b.sha512, size: b.size }));
+            .map((b) => ({
+                file: b.filename,
+                sha256: b.sha256,
+                sha512: b.sha512,
+                size: b.size,
+                signature: app === "crane"
+                    ? signVerified(signingKey, releaseMessage.crane(version, b.sha256), b.filename)
+                    : signVerified(signingKey, releaseMessage.app(version, b.filename, b.sha512), b.filename),
+            }));
         const next = mergeVersionRecord(prev, version, files);
         await kvWriteRecord(app, next);
         p.log.success(

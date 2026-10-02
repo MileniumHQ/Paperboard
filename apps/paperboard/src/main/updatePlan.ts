@@ -19,6 +19,8 @@ export interface UpdateTask {
     downloadUrl: string;
     label: string;
     sha256?: string;
+    // offline release-key signature (crane binaries); the daemon verifies it
+    signature?: string;
 }
 
 export interface PanelUpdateInfo {
@@ -157,6 +159,10 @@ export async function planUpdateTasks(
                     logger.warn(
                         `[Updater] Refusing Paperboard Server update on ${comp.name}: registry did not provide a sha256 checksum`,
                     );
+                } else if (typeof craneEntry.signature !== "string" || !craneEntry.signature) {
+                    logger.warn(
+                        `[Updater] Refusing Paperboard Server update on ${comp.name}: the release is not signed`,
+                    );
                 } else {
                     tasks.push({
                         type: "ext_crane",
@@ -167,6 +173,7 @@ export async function planUpdateTasks(
                             `${opts.registryUrl}/paperdl/crane/${platform}-${arch}/download`,
                         label: `Updating Paperboard Server on ${comp.name}`,
                         sha256: craneEntry.sha256,
+                        signature: craneEntry.signature,
                     });
                 }
             }

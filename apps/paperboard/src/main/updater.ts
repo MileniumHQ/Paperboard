@@ -374,8 +374,13 @@ async function runOrchestratorInner(
                             `Install refused for Paperboard Server update on ${task.computerId}: update task carries no sha256 checksum`,
                         );
                     }
+                    if (typeof task.signature !== "string" || !task.signature) {
+                        throw new Error(
+                            `Install refused for Paperboard Server update on ${task.computerId}: the release is not signed`,
+                        );
+                    }
                     const client = connectionPool.getClient(task.computerId);
-                    await client.updateCrane(task.version, task.downloadUrl, task.sha256);
+                    await client.updateCrane(task.version, task.downloadUrl, task.sha256, task.signature);
                     // confirm before recording: system:update only initiates
                     // (the daemon swaps and respawns), so persist
                     // crane_version only when the new binary actually reports

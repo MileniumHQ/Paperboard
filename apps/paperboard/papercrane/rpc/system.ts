@@ -9,6 +9,8 @@ import type { RpcContext } from "./context";
 import { rpcErrorCode } from "./params";
 import { forbidden } from "./errors";
 import { getGpuReport } from "../gpu";
+import { semverGt } from "../util";
+import { releaseMessage, verifyRelease } from "../releaseSignature";
 
 // self-update URL must be https or loopback http
 function isSafeUpdateUrl(rawUrl: string): boolean {
@@ -60,7 +62,7 @@ export async function handleSystem(action: string, id: unknown, params: any, ctx
             return true;
         }
         case "system:update": {
-            const { downloadUrl, sha256 } = params;
+            const { downloadUrl, sha256, version, signature } = params ?? {};
             // replacing the daemon binary is host equipment, never panel
             // equipment: a scoped pcp_ token carries one panel claim and no
             // wider reach. Caller identity is the token claim, not a param.
@@ -70,16 +72,11 @@ export async function handleSystem(action: string, id: unknown, params: any, ctx
                 );
                 throw forbidden("system:update is host-only; scoped panel tokens may not self-update the daemon");
             }
-            // DOCUMENTED EXCEPTION to "separate trust decisions": the URL
-            // and the sha256 arrive in the same params object, from the
-            // same caller. That is inherent to a self-hosted updater — the
-            // machine is told where its next binary lives, and there is no
-            // second authority to cross-check against. The facts are still
-            // validated independently (URL scheme/loopback here, checksum
-            // format here, bytes verified against the sha after download),
-            // the RPC is host-token-only, and the gap is recorded in
-            // known-vulnerabilities.md. Do not "fix" this by mirroring the
-            // registry rule — the updater has no registry to ask.
+            // The URL and sha256 come from the caller; the authority for
+            // which bytes are a Paperboard Server release is the offline
+            // release key. A signature over (version, sha256) is required,
+            // and the version must be newer than this daemon: an old signed
+            // binary cannot be replayed as a downgrade.
             if (!downloadUrl || !isSafeUpdateUrl(downloadUrl)) {
                 reply(id, null, "Refusing update: download URL must be https (or http to localhost)");
                 return true;
@@ -90,6 +87,9 @@ export async function handleSystem(action: string, id: unknown, params: any, ctx
                 reply(id, null, "Refusing update: sha256 checksum is required");
                 return true;
             }
+            // platform capability is refused before release facts are
+            // checked: a daemon that cannot swap its own binary refuses
+            // whatever the caller signs
             if (process.platform === "win32") {
                 // no in-place swap over a running executable on Windows
                 reply(id, null, "Self-update is not supported on Windows yet");
@@ -102,6 +102,18 @@ export async function handleSystem(action: string, id: unknown, params: any, ctx
                 // the respawn guard below is not enough, the rename must
                 // never happen either.
                 reply(id, null, "Self-update is not supported when the daemon runs embedded in Electron");
+                return true;
+            }
+            if (typeof version !== "string" || !version || /[\n\r]/.test(version)) {
+                reply(id, null, "Refusing update: the release version is required");
+                return true;
+            }
+            if (!semverGt(version, PAPERCRANE_VERSION)) {
+                reply(id, null, `Refusing update: ${version} is not newer than the running ${PAPERCRANE_VERSION}`);
+                return true;
+            }
+            if (!verifyRelease(releaseMessage.crane(version, sha256), signature)) {
+                reply(id, null, "Refusing update: the binary is not signed by the Paperboard release key");
                 return true;
             }
             reply(id, { success: true, message: "Update initiated" });

@@ -697,9 +697,10 @@ export class PaperCraneClient extends EventEmitter {
     public async updateCrane(
         version: string,
         downloadUrl: string,
-        sha256?: string,
+        sha256: string,
+        signature: string,
     ): Promise<void> {
-        await this.call("system:update", { version, downloadUrl, sha256 });
+        await this.call("system:update", { version, downloadUrl, sha256, signature });
     }
 
     // System info

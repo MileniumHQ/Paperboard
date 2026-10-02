@@ -52,7 +52,8 @@ export interface ComputerDriver {
     updateCrane(
         version: string,
         downloadUrl: string,
-        sha256?: string,
+        sha256: string,
+        signature: string,
     ): Promise<void>;
 
     getConfig(id: string): Promise<any>;

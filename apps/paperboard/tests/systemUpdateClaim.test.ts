@@ -41,3 +41,24 @@ describe("system:update claim boundary", () => {
         expect(f.replies[0].code).toBe("FORBIDDEN");
     });
 });
+
+describe("system:update release authority", () => {
+    const valid = { downloadUrl: "https://example.invalid/crane", sha256: "a".repeat(64) };
+
+    it("refuses an unsigned or wrongly signed binary before any download", async () => {
+        for (const signature of [undefined, "", "AAAA", "A".repeat(86) + "=="]) {
+            const f = systemCtx(null);
+            await handleSystem("system:update", 1, { ...valid, version: "99.0.0", signature }, f.ctx as any);
+            expect(f.replies[0].error).toMatch(/not signed by the Paperboard release key/);
+        }
+    });
+
+    it("refuses a version that is not newer than the running daemon (no signed downgrades)", async () => {
+        const f = systemCtx(null);
+        await handleSystem("system:update", 1, { ...valid, version: "0.0.1", signature: "A".repeat(86) + "==" }, f.ctx as any);
+        expect(f.replies[0].error).toMatch(/not newer/);
+        const g = systemCtx(null);
+        await handleSystem("system:update", 1, { ...valid }, g.ctx as any);
+        expect(g.replies[0].error).toMatch(/version is required/);
+    });
+});

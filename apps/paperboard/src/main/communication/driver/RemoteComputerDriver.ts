@@ -42,8 +42,8 @@ export class RemoteComputerDriver implements ComputerDriver {
         return this.client.installPanel(panelId, expected);
     }
 
-    public async updateCrane(version: string, downloadUrl: string, sha256?: string): Promise<void> {
-        return this.client.updateCrane(version, downloadUrl, sha256);
+    public async updateCrane(version: string, downloadUrl: string, sha256: string, signature: string): Promise<void> {
+        return this.client.updateCrane(version, downloadUrl, sha256, signature);
     }
 
     public async getConfig(id: string): Promise<any> {

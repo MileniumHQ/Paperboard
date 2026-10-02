@@ -81,8 +81,19 @@ describe("planUpdateTasks crane version gate", () => {
     }
 
     const craneIndex = {
-        "linux-x64": { version: "2.0.0", sha256: SHA },
+        "linux-x64": { version: "2.0.0", sha256: SHA, signature: "fixture-signature" },
     };
+
+    it("refuses to plan an unsigned crane update", async () => {
+        const tasks = await planUpdateTasks(
+            [remoteComputer({ os: "linux", arch: "x64", version: "1.0.0" })],
+            {},
+            {},
+            { "linux-x64": { version: "2.0.0", sha256: SHA } },
+            OPTS,
+        );
+        expect(tasks).toEqual([]);
+    });
 
     it("plans a crane update when the installed version is known and older", async () => {
         const tasks = await planUpdateTasks(

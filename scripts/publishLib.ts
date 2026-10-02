@@ -235,6 +235,9 @@ export interface VersionFileEntry {
     sha256: string;
     sha512?: string;
     size: number;
+    // offline release-key signature (crane: over version + sha256); the
+    // daemon refuses a self-update without a valid one
+    signature?: string;
 }
 
 export interface DlAppRecord {
