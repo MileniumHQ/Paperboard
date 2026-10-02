@@ -26,7 +26,7 @@ import {
     toNumber,
     truncateText,
 } from "./builtinData";
-import { egressRefusal } from "./networkEgress";
+import { fetchRefusal } from "./fetchPolicy";
 
 const mathParser = new ExprParser();
 
@@ -586,10 +586,9 @@ function schedulePersistVariables() {
 
 // responses are text-only feature data: cap what a block will hold
 const HTTP_RESPONSE_MAX_BYTES = 10 * 1024 * 1024;
-// fetch steps honor the panel's own manifest network declaration (see
-// lib/networkEgress.ts); the daemon CSP stays the enforcement boundary
+// fetch steps follow the fixed scheme rule (see lib/fetchPolicy.ts)
 function assertNetworkAllowed(rawUrl: string): void {
-    const refusal = egressRefusal(rawUrl);
+    const refusal = fetchRefusal(rawUrl);
     if (refusal) {
         throw new Error(`Refusing fetch: ${refusal}`);
     }

@@ -5,7 +5,7 @@
 // form and uploads the files it names, Origami validates the same form at
 // the publish boundary and stores the published form, and the library
 // parses the published form before rendering it. A listing is presentation
-// only. It grants nothing and is not the network egress declaration.
+// only and grants nothing.
 //
 // Manifest form (paths are relative to the panel root, under store/):
 //   "store": {

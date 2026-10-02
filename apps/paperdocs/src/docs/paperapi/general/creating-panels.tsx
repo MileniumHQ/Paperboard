@@ -136,7 +136,7 @@ export default function CreatingPanelsDoc() {
                     <tr>
                         <td><PaperCode>services</PaperCode></td>
                         <td>array</td>
-                        <td>Websites and services the panel talks to, as name and detail rows. This card is for people reading the page. It does not replace the network block, which the panel CSP enforces.</td>
+                        <td>Websites and services the panel talks to, as name and detail rows. This card is for people reading the page.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>credits</PaperCode></td>
@@ -197,10 +197,6 @@ export default function CreatingPanelsDoc() {
             </PaperText>
             <PaperCard padding="double" surface="front">
                 <PaperFlex direction="column" gap="full">
-                    <PaperText preset="body" weight={700}>Declared network egress</PaperText>
-                    <PaperText preset="body" color="text-subtle">
-                        Network destinations must be declared in the manifest and validated against actual requests.
-                    </PaperText>
                     <PaperText preset="body" weight={700}>Credential vault storage</PaperText>
                     <PaperText preset="body" color="text-subtle">
                         API keys, bot tokens, and user secrets must never exist in plaintext configuration files. All credentials must route through secretsApi.

@@ -149,11 +149,10 @@ export function handleHttpRequest(
             "Content-Type": contentType,
             "X-Content-Type-Options": "nosniff",
         };
-        // panel CSP derives from the panel's declared network egress
-        // (panelNet) — same builder electron uses, one source of truth
+        // one fixed panel CSP (panelNet) — same builder electron uses
         if (ext === ".html") {
             headers["Content-Security-Policy"] = [
-                buildPanelCsp(panelId),
+                buildPanelCsp(),
                 "frame-ancestors 'none'",
             ].join("; ");
         }

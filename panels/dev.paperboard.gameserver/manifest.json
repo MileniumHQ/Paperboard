@@ -7,18 +7,6 @@
     "base": "./dist/index.html",
     "service": "./dist/service.js",
     "icon": "./branding/icon.png",
-    "network": {
-        "hosts": [
-            "api.modrinth.com",
-            "cdn.modrinth.com",
-            "fill.papermc.io",
-            "fill-data.papermc.io",
-            "mc-heads.net",
-            "meta.fabricmc.net",
-            "piston-data.mojang.com",
-            "piston-meta.mojang.com"
-        ]
-    },
     "store": {
         "about": "./store/about.md",
         "screenshots": [

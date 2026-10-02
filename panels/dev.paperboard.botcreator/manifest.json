@@ -7,13 +7,6 @@
     "base": "./dist/index.html",
     "service": "./dist/service.js",
     "icon": "./branding/icon.png",
-    "network": {
-        "hosts": [
-            "cdn.discordapp.com",
-            "discord.com",
-            "gateway.discord.gg"
-        ]
-    },
     "store": {
         "about": "./store/about.md",
         "screenshots": [

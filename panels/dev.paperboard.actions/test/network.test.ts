@@ -1,6 +1,6 @@
-// network-egress declaration (bun test): the service-side http-get/http-post
-// builtins fetch from node, beyond CSP reach — the manifest must declare
-// `network: { mode: "any-https" }` and the runtime must enforce it.
+// service-side fetch rule (bun test): the service-side http-get/http-post
+// builtins fetch from node, beyond CSP reach — https anywhere, http only to
+// loopback, and the runtime enforces it.
 import { describe, it, expect } from "bun:test";
 import manifest from "../manifest.json";
 import { executeFlow } from "../src/lib/runtime";
@@ -15,10 +15,9 @@ const schemaFor = (id: string): any => {
     throw new Error(`no schema for ${id}`);
 };
 
-describe("service-side egress is declared and enforced", () => {
-    it("manifest declares network any-https for the http builtins", () => {
-        expect((manifest as any)?.network?.mode).toBe("any-https");
-        // the builtins that need it actually exist
+describe("service-side fetches follow the fixed scheme rule", () => {
+    it("carries no egress declaration; the http builtins exist", () => {
+        expect((manifest as any)?.network).toBeUndefined();
         expect(schemaFor("http-get").id).toBe("http-get");
         expect(schemaFor("http-post").id).toBe("http-post");
     });

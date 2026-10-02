@@ -7,9 +7,6 @@
     "base": "./dist/index.html",
     "service": "./dist/service.js",
     "icon": "./branding/icon.png",
-    "network": {
-        "mode": "any-https"
-    },
     "store": {
         "about": "./store/about.md",
         "screenshots": [

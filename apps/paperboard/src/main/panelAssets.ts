@@ -3,7 +3,7 @@
 // daemon /panel/ route); this module re-exports it and adds the
 // Electron-side iframe credential payload builder.
 import * as crypto from "crypto";
-import { buildPanelCsp as localEgressCsp } from "../../papercrane/panelNet";
+import { buildPanelCsp as fixedPanelCsp } from "../../papercrane/panelNet";
 
 export {
     resolveLocalPanelFile,
@@ -34,15 +34,13 @@ export function panelCspNonce(): string {
 export const withCspNonce = (csp: string, nonce: string) =>
     csp.replace(/script-src(?!-)/, (m) => `${m} 'nonce-${nonce}'`);
 
-// CSP for a locally-served panel: egress facts come from the local manifest
-export const buildPanelCsp = (panelId: string | undefined, nonce: string) =>
-    withCspNonce(localEgressCsp(panelId), nonce);
+// CSP for a locally-served panel: the one fixed panel policy
+export const buildPanelCsp = (nonce: string) =>
+    withCspNonce(fixedPanelCsp(), nonce);
 
-// CSP for a REMOTELY-served panel HTML response: the egress facts must be
-// the serving daemon's (it holds the manifest that was reviewed and
-// installed on that machine). The local manifest is never consulted here —
-// if the peer sends no CSP (protocol mismatch), the panel gets a closed
-// policy, not the wrong machine's declarations. `frame-ancestors` is
+// CSP for a REMOTELY-served panel HTML response: the serving daemon's
+// policy wins when it sends one (a protocol-mismatched peer falls back to
+// the same fixed panel policy the shell uses locally). `frame-ancestors` is
 // STRIPPED: the daemon's copy says "nobody may embed this" because TopBar
 // windows point at nothing — but in the shell the panel document IS the
 // iframe content, and importing that directive would block the very
@@ -56,7 +54,7 @@ export const remotePanelHtmlCsp = (servedCsp: string | null | undefined, nonce: 
             nonce,
         );
     }
-    return localEgressCsp();
+    return fixedPanelCsp();
 };
 
 export interface CraneCreds {

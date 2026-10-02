@@ -91,9 +91,9 @@ describe("buildCraneCredentialPayload (iframe identity)", () => {
     });
 });
 
-// remote panel CSP provenance: the egress facts must come from the Serving
-// machine's manifest (carried in its Content-Security-Policy header), never
-// from the local one. A missing header falls closed, not local.
+// remote panel CSP provenance: the serving daemon's policy (carried in its
+// Content-Security-Policy header) wins; a missing header falls back to the
+// same fixed panel policy the shell uses locally.
 import {
     remotePanelHtmlCsp,
     panelCspNonce,
@@ -105,18 +105,16 @@ describe("remote panel CSP provenance", () => {
             "default-src 'self'; script-src 'self'; connect-src https://api.modrinth.com";
         const nonce = panelCspNonce();
         const csp = remotePanelHtmlCsp(served, nonce);
-        // egress facts survive untouched
+        // the served policy survives untouched
         expect(csp).toContain("connect-src https://api.modrinth.com");
         // and carry the script nonce for this response
         expect(csp).toContain(`'nonce-${nonce}'`);
     });
 
-    it("never consults the local manifest for a remote panel", () => {
-        // a panel id that cannot exist locally: whatever the local
-        // filesystem declares, the remote policy is the served one
-        const remoteEgress =
+    it("never consults the local filesystem for a remote panel", () => {
+        const remotePolicy =
             "default-src 'self'; script-src 'self'; connect-src https://remote-host.example";
-        expect(remotePanelHtmlCsp(remoteEgress, panelCspNonce())).toContain("remote-host.example");
+        expect(remotePanelHtmlCsp(remotePolicy, panelCspNonce())).toContain("remote-host.example");
     });
 
     it("strips the daemon's frame-ancestors directive", () => {
@@ -141,9 +139,9 @@ describe("remote panel CSP provenance", () => {
         expect(remotePanelHtmlCsp(served, first)).not.toContain(`'nonce-${second}'`);
     });
 
-    it("falls closed when the peer sends no CSP (never to the local manifest)", () => {
+    it("falls back to the fixed panel policy when the peer sends no CSP", () => {
         const csp = remotePanelHtmlCsp(null, panelCspNonce());
-        expect(csp).not.toContain("https://");
         expect(csp).toContain("default-src 'self' panel: data: blob:");
+        expect(csp).toContain("script-src 'self'");
     });
 });

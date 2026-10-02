@@ -109,18 +109,14 @@ describe("resolveSecureTargetPath", () => {
 });
 
 describe("validatePanelManifest", () => {
-    it("stores the network declaration only in panelNet's normalized form", () => {
-        const hosts = validatePanelManifest(
-            { network: { hosts: ["api.modrinth.com", "not a host", 7], extra: "x" } },
+    it("drops unknown fields like the removed network declaration", () => {
+        const manifest = validatePanelManifest(
+            { network: { hosts: ["api.modrinth.com"] }, permissions: ["x"], extra: "x" },
             "com.example.net",
         );
-        expect(hosts.network).toEqual({ hosts: ["api.modrinth.com"] });
-        expect(validatePanelManifest({ network: { mode: "any-https", hosts: ["a.com"] } }, "com.example.net").network).toEqual({
-            mode: "any-https",
-        });
-        // nothing usable declared is closed: no network field at all
-        expect(validatePanelManifest({ network: { hosts: ["::bad::"] } }, "com.example.net").network).toBeUndefined();
-        expect(validatePanelManifest({ network: ["a.com"] }, "com.example.net").network).toBeUndefined();
+        expect((manifest as any).network).toBeUndefined();
+        expect((manifest as any).permissions).toBeUndefined();
+        expect((manifest as any).extra).toBeUndefined();
     });
 
     it("accepts a valid manifest and fills fallback id", () => {

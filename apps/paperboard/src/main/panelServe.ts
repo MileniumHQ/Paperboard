@@ -116,7 +116,7 @@ export async function servePanelAsset(
                         if (ext === ".html") {
                             const nonce = panelCspNonce();
                             headers["Content-Security-Policy"] =
-                                buildPanelCsp(cleanPanelId, nonce);
+                                buildPanelCsp(nonce);
                             const html = injectCspNonce(
                                 injectUnselectable(
                                     await injectCraneCreds(

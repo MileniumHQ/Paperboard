@@ -1,5 +1,7 @@
 // Manifest honesty: the panel is unfinished until it has run on real
-// hardware (0.x), and every remote host it reaches is declared.
+// hardware (0.x). There is no network egress declaration — panels are
+// first-party — so this only checks that the static remote hosts are the
+// known ones.
 import { describe, it, expect } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
@@ -10,11 +12,8 @@ describe("manifest", () => {
         expect(manifest.version).toMatch(/^0\.\d+\.\d+$/);
     });
 
-    it("declares any-https because the endpoint is user-configured", () => {
-        // the static hosts (registry.ollama.ai, html.duckduckgo.com) are
-        // built in, but a custom provider can point anywhere, so a fixed
-        // host list would understate what the panel may reach
-        expect(manifest.network).toEqual({ mode: "any-https" });
+    it("carries no network egress block", () => {
+        expect((manifest as any).network).toBeUndefined();
     });
 
     it("hardcoded remote hosts stay the known static ones (absence check)", () => {

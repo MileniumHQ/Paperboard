@@ -15,10 +15,6 @@ export interface PanelManifest {
     isLinked?: boolean;
     service?: string;
     autostart?: boolean;
-    // network egress declaration, preserved verbatim
-    // from the manifest by validatePanelManifest (surfaced at install,
-    // enforced by the panel CSP — never granted here)
-    network?: { hosts?: string[]; mode?: string };
     // "dev" = symlinked from a working tree; registry installs carry none
     installSource?: "dev";
 }

@@ -6,7 +6,6 @@ import { requirePanelId } from "../../../packages/paperapi/src/panelIdentity";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { PAPERBOARD_USER_AGENT } from "./userAgent";
-import { parseNetworkEgress } from "./panelNet";
 
 // one-shot timers must never hold the process open: unref and move on.
 // (bun and node both expose unref on Timeout handles)
@@ -265,19 +264,12 @@ export function validatePanelManifest(
         manifest.autostart = record.autostart;
     }
 
-    // network egress declaration: panelNet owns the one parser (host
-    // syntax, cap, modes); only its normalized result is stored, so the
-    // manifest never carries a shape the CSP builder would read differently
-    const egress = parseNetworkEgress(record);
-    if (egress.mode === "any-https") manifest.network = { mode: "any-https" };
-    else if (egress.mode === "declared-hosts") manifest.network = { hosts: egress.hosts };
-
-    // NOTE: the `permissions` array was deleted — it was declared,
-    // validated, and displayed, but nothing ever dispatched on it, so it
-    // taught readers the badges meant something they didn't. Unknown fields
-    // like it are dropped here (see the index-signature type above) rather
-    // than preserved. Network egress stays declared (`network`) because the
-    // panel CSP is actually built from it.
+    // NOTE: the `permissions` array and the `network` egress declaration
+    // were deleted — they were declared, validated, and displayed, but the
+    // network block never governed a first-party panel (the CSP is one
+    // fixed policy now), so it taught readers the declaration meant
+    // something it didn't. Unknown fields like them are dropped here (see
+    // the index-signature type above) rather than preserved.
 
     return manifest;
 }
