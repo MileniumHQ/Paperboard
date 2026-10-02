@@ -2,7 +2,7 @@
 import path from "path";
 import fs from "fs";
 import os from "os";
-import { SupervisedProcessClient, getSupervisorSocketPath } from "./supervisor";
+import { SupervisedProcessClient, supervisorPresent } from "./supervisor";
 import { PanelManifest } from "./types";
 import {
     ProgressCallback,
@@ -250,7 +250,11 @@ export class PaperCraneEngine {
     ): Promise<SupervisedProcessClient | null> {
         let client = this.clients.get(id);
         if (!client) {
-            if (!fs.existsSync(getSupervisorSocketPath(id))) return null;
+            // Windows supervisors listen on a named pipe, which fs cannot
+            // stat: supervisorPresent keys off the metadata file there so an
+            // orphaned Ollama is found and stopped instead of a second
+            // supervisor racing the same pipe name.
+            if (!supervisorPresent(id)) return null;
             client = new SupervisedProcessClient(id);
             if (!(await client.connect())) return null;
             this.clients.set(id, client);
