@@ -3,6 +3,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
 import * as cp from "child_process";
+import * as crypto from "crypto";
 import { spawnPty, getDefaultShell } from "./pty";
 import { IPtyProcess } from "./types";
 import { logger } from "./logger";
@@ -31,26 +32,42 @@ export interface SupervisorMetadata {
 export { getPaperboardDir } from "./paths";
 import { ensureDir, getSocketsDir } from "./paths";
 
-function sanitizeSocketId(procId: string): string {
+// Endpoint names are one-to-one with ids. The old scheme replaced every
+// character outside [a-zA-Z0-9_-] with "_", so "a.b" and "a_b" shared one
+// socket: a second spawn unlinked the first's live socket (orphaning its
+// workload) and an id another panel owned could be reached under a sibling
+// spelling. A fixed-length digest also keeps unix socket paths under the
+// 104/108-byte limit for any 128-character id.
+export function supervisorEndpointName(procId: string): string {
     if (!procId || typeof procId !== "string") {
         throw new Error("supervisor id is required");
     }
+    return crypto.createHash("sha256").update(procId, "utf8").digest("hex").slice(0, 32);
+}
+
+// TODO(remove after v0.2): the pre-digest endpoint name, used only to
+// recover supervisors that were started before the rename and are still
+// running (engine.recoverRunningSupervisors)
+export function legacySupervisorEndpointName(procId: string): string {
     return procId.replace(/[^a-zA-Z0-9_-]/g, "_");
 }
 
-export function getSupervisorSocketPath(procId: string): string {
-    const safeId = sanitizeSocketId(procId);
+// socket/pipe path for an endpoint name (not an id)
+export function supervisorSocketPathForName(name: string): string {
     if (process.platform === "win32") {
-        return `\\\\.\\pipe\\papercrane-${safeId}`;
+        return `\\\\.\\pipe\\papercrane-${name}`;
     }
     const socketsDir = ensureDir(getSocketsDir());
-    return path.join(socketsDir, `${safeId}.sock`);
+    return path.join(socketsDir, `${name}.sock`);
+}
+
+export function getSupervisorSocketPath(procId: string): string {
+    return supervisorSocketPathForName(supervisorEndpointName(procId));
 }
 
 export function getSupervisorMetadataPath(procId: string): string {
-    const safeId = sanitizeSocketId(procId);
     const socketsDir = ensureDir(getSocketsDir());
-    return path.join(socketsDir, `${safeId}.json`);
+    return path.join(socketsDir, `${supervisorEndpointName(procId)}.json`);
 }
 
 /**

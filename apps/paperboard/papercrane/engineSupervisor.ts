@@ -1,6 +1,6 @@
 // spawn helper for detached supervisors
 import { spawn } from "child_process";
-import { SupervisedProcessClient } from "./supervisor";
+import { SupervisedProcessClient, supervisorPresent } from "./supervisor";
 import { EmbeddedSupervisor, isEmbeddedHost } from "./embeddedSupervisor";
 
 export interface PreListeners {
@@ -42,6 +42,16 @@ export async function spawnSupervisedClient(
             throw new Error(embedded.startError ?? `Process ${id} could not start`);
         }
         return embedded;
+    }
+
+    // a supervisor already listening for this id (one that outlived a
+    // daemon restart) is a running workload: spawning another would take
+    // over its endpoint and orphan it beyond the reach of kill and uninstall
+    if (supervisorPresent(id)) {
+        const probe = new SupervisedProcessClient(id);
+        const live = await probe.connect();
+        probe.destroy();
+        if (live) throw new Error(`Process ${id} is already running; attach to it instead of starting it again`);
     }
 
     const execPath = process.execPath;

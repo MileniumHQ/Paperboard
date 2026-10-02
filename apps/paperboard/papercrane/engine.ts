@@ -2,7 +2,13 @@
 import path from "path";
 import fs from "fs";
 import os from "os";
-import { SupervisedProcessClient, supervisorPresent } from "./supervisor";
+import {
+    SupervisedProcessClient,
+    supervisorPresent,
+    supervisorEndpointName,
+    legacySupervisorEndpointName,
+    supervisorSocketPathForName,
+} from "./supervisor";
 import { PanelManifest } from "./types";
 import {
     ProgressCallback,
@@ -504,27 +510,48 @@ export class PaperCraneEngine {
     }
 
     // Recovers running supervisor clients from previous sessions
+    // Reconnects supervisors that outlived the previous daemon, keyed by the
+    // id their metadata records (the endpoint name is a digest of it, never
+    // an id). A supervisor whose metadata does not belong to its file name is
+    // skipped rather than adopted under the wrong id.
     public async recoverRunningSupervisors(): Promise<void> {
         const socketsDir = getSocketsDir();
         if (!fs.existsSync(socketsDir)) return;
+        let files: string[];
         try {
-            const files = await fs.promises.readdir(socketsDir);
-            for (const file of files) {
-                if (file.endsWith(".json")) {
-                    const id = file.replace(/\.json$/, "");
-                    if (!this.clients.has(id)) {
-                        const client = new SupervisedProcessClient(id);
-                        if (await client.connect()) {
-                            this.clients.set(id, client);
-                        }
-                    }
-                }
-            }
+            files = await fs.promises.readdir(socketsDir);
         } catch (err) {
-            logger.warn(
-                "[Paperboard Server] failed to recover running supervisors:",
-                err,
-            );
+            logger.warn("[Paperboard Server] failed to list running supervisors:", err);
+            return;
+        }
+        for (const file of files) {
+            if (!file.endsWith(".json")) continue;
+            const stem = file.slice(0, -".json".length);
+            let id: unknown;
+            try {
+                id = JSON.parse(await fs.promises.readFile(path.join(socketsDir, file), "utf8"))?.id;
+            } catch (err) {
+                logger.warn(`[Paperboard Server] unreadable supervisor metadata ${file}; not adopting it:`, err);
+                continue;
+            }
+            if (typeof id !== "string" || !id || this.clients.has(id)) continue;
+            const current = stem === supervisorEndpointName(id);
+            // TODO(remove after v0.2): supervisors started under the old
+            // character-substituted endpoint name are still reachable there
+            const legacy = !current && stem === legacySupervisorEndpointName(id);
+            if (!current && !legacy) {
+                logger.warn(`[Paperboard Server] supervisor metadata ${file} names "${id}", which does not own that endpoint; not adopting it`);
+                continue;
+            }
+            const client = new SupervisedProcessClient(id, supervisorSocketPathForName(stem));
+            if (await client.connect()) {
+                this.clients.set(id, client);
+                client.on("exit", () => {
+                    if (this.clients.get(id) === client) this.clients.delete(id);
+                });
+            } else {
+                client.destroy();
+            }
         }
     }
 
