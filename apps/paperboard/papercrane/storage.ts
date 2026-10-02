@@ -331,6 +331,19 @@ export async function streamToFileWithProgress(
     expectedSha256?: string,
     limits: { maxBytes?: number; idleMs?: number; totalMs?: number } = {},
 ): Promise<{ sha1: string; sha256: string }> {
+    // network downloads only: under Bun (the compiled daemon) fetch also
+    // reads file:// URLs, which would let file:download copy any local file
+    // (the vault included) into a panel's folder
+    let scheme: string;
+    try {
+        scheme = new URL(url).protocol;
+    } catch (err) {
+        throw new Error(`Download refused: not a URL (${err instanceof Error ? err.message : String(err)})`);
+    }
+    if (scheme !== "https:" && scheme !== "http:") {
+        throw new Error(`Download refused: only http(s) URLs are downloaded, not ${scheme}`);
+    }
+
     onProgress?.({ stage: "starting", percent: 0, message: "Connecting..." });
 
     if (activeDownloads >= 8) throw new LimitError("Too many concurrent downloads (max 8)");
