@@ -6,6 +6,8 @@ import { packPanel } from "../../../packages/paperapi/src/pack";
 import { isPanelId } from "../../../packages/paperapi/src/panelIdentity";
 import worker from "../../origami/src/index";
 import { PaperCraneEngine } from "../papercrane/engine";
+import { releaseMessage } from "../papercrane/releaseSignature";
+import { fixtureSign, FIXTURE_RELEASE_PUBLIC_KEY } from "./registryFixture";
 
 test("all real first-party IDs follow the shared pack/publish/install identity contract", () => {
     for (const name of ["actions", "botcreator", "gameserver", "terminal"]) {
@@ -41,7 +43,9 @@ test("real dotted identity survives pack, publish, metadata lookup, download and
         fs.writeFileSync(path.join(source, "dist", "index.html"), "<html><title>Release fixture</title></html>");
         const packed = packPanel({ targetDir: source, outputDir: path.join(tmp, "archives"), autoBuild: false });
         const form = new FormData();
-        form.set("metadata", JSON.stringify({ ...manifest, manifest }));
+        // the publisher signs offline; origami stores the signature it is given
+        const signature = fixtureSign(releaseMessage.panel(manifest.id, manifest.version, packed.sha256));
+        form.set("metadata", JSON.stringify({ ...manifest, manifest, signature }));
         form.set("archive", new Blob([fs.readFileSync(packed.archivePath)]), packed.archiveName);
         const published = await fetch(`${env.PANEL_BASE_URL}/panel/publish`, { method: "POST", body: form, headers: { Authorization: "Bearer fixture-publisher" } });
         expect(published.status).toBe(200);
@@ -49,7 +53,7 @@ test("real dotted identity survives pack, publish, metadata lookup, download and
         expect(record.id).toBe(manifest.id);
         expect(record.sha256).toBe(packed.sha256);
         // the daemon reads the same origami worker as its registry
-        const engine = new PaperCraneEngine(path.join(tmp, "host"), undefined, env.PANEL_BASE_URL);
+        const engine = new PaperCraneEngine(path.join(tmp, "host"), undefined, env.PANEL_BASE_URL, FIXTURE_RELEASE_PUBLIC_KEY);
         expect((await engine.installPanel(manifest.id, { version: record.version, sha256: record.sha256 })).id).toBe(manifest.id);
         expect((await engine.listPanels()).map((p) => p.id)).toEqual([manifest.id]);
         expect(fs.readFileSync(engine.resolvePath("panels", manifest.id, "dist/index.html"), "utf8")).toContain("Release fixture");

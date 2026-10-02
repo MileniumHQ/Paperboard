@@ -8,7 +8,7 @@ import { PaperCraneAuth } from "../papercrane/auth";
 import { PanelServicesManager } from "../papercrane/panelServices";
 import { CredentialStore } from "../papercrane/credentials";
 import { resolveDavPath } from "../papercrane/dav";
-import { startFixtureRegistry, manifestFile } from "./registryFixture";
+import { startFixtureRegistry, manifestFile, FIXTURE_RELEASE_PUBLIC_KEY } from "./registryFixture";
 
 test("upgrade observes new service behavior; failed activation restores usable previous bytes", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "panel-upgrade-"));
@@ -16,7 +16,7 @@ test("upgrade observes new service behavior; failed activation restores usable p
     const services = new PanelServicesManager(root);
     services.setAuth(auth);
     const registry = await startFixtureRegistry(root);
-    const engine = new PaperCraneEngine(root, services, registry.url);
+    const engine = new PaperCraneEngine(root, services, registry.url, FIXTURE_RELEASE_PUBLIC_KEY);
     const server = registry;
     const install = async (version: string, fail = false) => {
         await registry.publish("dev.test.running", version, {

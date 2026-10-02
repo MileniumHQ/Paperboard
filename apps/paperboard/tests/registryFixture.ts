@@ -5,6 +5,15 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as crypto from "node:crypto";
 import * as tar from "tar";
+import { releaseMessage } from "../papercrane/releaseSignature";
+
+// a throwaway release key standing in for the offline Paperboard key:
+// engines under test are constructed with FIXTURE_RELEASE_PUBLIC_KEY
+const fixtureKeys = crypto.generateKeyPairSync("ed25519");
+export const FIXTURE_RELEASE_PUBLIC_KEY = fixtureKeys.publicKey.export({ type: "spki", format: "pem" }).toString();
+export function fixtureSign(msg: Buffer): string {
+    return crypto.sign(null, msg, fixtureKeys.privateKey).toString("base64");
+}
 
 export interface FixtureRelease {
     record: Record<string, unknown>;
@@ -56,7 +65,15 @@ export async function startFixtureRegistry(workDir: string): Promise<FixtureRegi
             const archive = new Uint8Array(fs.readFileSync(archivePath));
             const sha256 = crypto.createHash("sha256").update(archive).digest("hex");
             const release = {
-                record: { id, name: id, version, sha256, downloadUrl: `${url}/panel/${id}/download`, ...recordOverrides },
+                record: {
+                    id,
+                    name: id,
+                    version,
+                    sha256,
+                    signature: fixtureSign(releaseMessage.panel(id, version, sha256)),
+                    downloadUrl: `${url}/panel/${id}/download`,
+                    ...recordOverrides,
+                },
                 archive,
             };
             releases.set(id, release);

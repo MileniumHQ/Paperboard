@@ -70,6 +70,19 @@ import {
     type YmlEntry,
 } from "./publishLib";
 import { applyWindowsIcon } from "./windowsIcon";
+import { loadReleaseSigningKey, releaseMessage, signRelease } from "./releaseSigning";
+import { RELEASE_PUBLIC_KEY, verifyRelease } from "../apps/paperboard/papercrane/releaseSignature";
+import type { KeyObject } from "node:crypto";
+
+// signs one release fact and proves the signature verifies against the
+// public key clients ship with, before anything uploads
+function signVerified(key: KeyObject, msg: Buffer, what: string): string {
+    const signature = signRelease(key, msg);
+    if (!verifyRelease(msg, signature, RELEASE_PUBLIC_KEY)) {
+        fail(`The release key does not match RELEASE_PUBLIC_KEY in papercrane/releaseSignature.ts; refusing to publish ${what}.`);
+    }
+    return signature;
+}
 
 const HERE = join(import.meta.dir, "..", "apps", "paperboard");
 const ORIGAMI_DIR = join(HERE, "..", "origami");
@@ -837,12 +850,16 @@ async function flowPublishPanels(): Promise<void> {
         }),
     ) as string[];
     const picked = panels.filter((x) => pickedIds.includes(x.id));
+    // clients refuse unsigned releases: no key, nothing is packed or sent
+    const signingKey = loadReleaseSigningKey();
 
     const packBar = bar(picked.length);
     const packed: PackedPanel[] = [];
     for (const info of picked) {
         p.log.step(`Packing ${info.name} (${info.id} v${info.version})…`);
-        packed.push(await packPanel(info));
+        const x = await packPanel(info);
+        x.meta.signature = signVerified(signingKey, releaseMessage.panel(info.id, info.version, x.sha256), info.id);
+        packed.push(x);
         packBar.increment(1, { task: info.id });
     }
     packBar.stop();

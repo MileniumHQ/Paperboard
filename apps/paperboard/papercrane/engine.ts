@@ -33,6 +33,7 @@ import { CredentialStore } from "./credentials";
 import { resolveRegistryUrl } from "./util";
 import { requirePanelId } from "../../../packages/paperapi/src/panelIdentity";
 import { fetchRegistryRecord } from "./registryRecord";
+import { RELEASE_PUBLIC_KEY, releaseMessage, requireReleaseSignature } from "./releaseSignature";
 
 export const REGISTRY_URL = resolveRegistryUrl();
 
@@ -60,7 +61,14 @@ export class PaperCraneEngine {
     private operations = new Set<string>();
     private services: PanelServicesManager;
 
-    constructor(baseDir?: string, services?: PanelServicesManager, private registryUrl = REGISTRY_URL) {
+    // registryUrl and releaseKey are fixed in production; tests point them
+    // at a loopback registry signed with a fixture key
+    constructor(
+        baseDir?: string,
+        services?: PanelServicesManager,
+        private registryUrl = REGISTRY_URL,
+        private releaseKey = RELEASE_PUBLIC_KEY,
+    ) {
         this.services = services ?? (baseDir ? new PanelServicesManager(baseDir) : panelServices);
         this.appDataDir = baseDir || getPaperboardDir();
         this.packagesDir = path.join(this.appDataDir, "packages");
@@ -961,6 +969,9 @@ export class PaperCraneEngine {
             throw new Error(`Install refused for "${id}": registry did not provide a version`);
         }
         const sha256 = raw.sha256.toLowerCase();
+        // the registry's facts count only when the offline release key
+        // signed them: a registry compromise cannot list its own bytes
+        requireReleaseSignature(releaseMessage.panel(id, raw.version, sha256), raw.signature, `"${id}"`, this.releaseKey);
         if (expected.sha256 !== undefined && expected.sha256.toLowerCase() !== sha256) {
             throw new Error(`Install refused for "${id}": the registry now lists different bytes than the release requested`);
         }

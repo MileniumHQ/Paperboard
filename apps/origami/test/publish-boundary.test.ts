@@ -8,6 +8,10 @@ import {
     isValidPanelVersion,
 } from "../src/panels";
 
+// a well-formed release signature: origami stores it but holds no key to
+// verify it (clients do, against the offline release key)
+const TEST_SIGNATURE = "A".repeat(86) + "==";
+
 const AUTH_KEY = "test-auth-key";
 
 function createMockKV(initialData: Record<string, unknown> = {}): KVNamespace {
@@ -107,7 +111,7 @@ function publishForm(
         new Blob([archive as any], { type: "application/gzip" }),
         "panel.tar.gz",
     );
-    form.append("metadata", JSON.stringify(metadata));
+    form.append("metadata", JSON.stringify({ signature: TEST_SIGNATURE, ...metadata }));
     if (icon) {
         form.append(
             "icon",
@@ -253,7 +257,7 @@ describe("O3: the request envelope cap holds without a declared Content-Length",
         const oversized = new Uint8Array(64 * 1024 * 1024 + 2 * 1024 * 1024);
         const form = new FormData();
         form.append("archive", new Blob([oversized as any], { type: "application/gzip" }), "big.tar.gz");
-        form.append("metadata", JSON.stringify({ id: "big", name: "Big", version: "1.0.0" }));
+        form.append("metadata", JSON.stringify({ signature: TEST_SIGNATURE, id: "big", name: "Big", version: "1.0.0" }));
         const res = await worker.fetch(
             authed("http://localhost/panel/publish", { method: "POST", body: form }),
             env,

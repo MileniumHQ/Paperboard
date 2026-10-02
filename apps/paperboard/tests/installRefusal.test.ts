@@ -7,7 +7,8 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import { PaperCraneEngine } from "../papercrane/engine";
-import { startFixtureRegistry, manifestFile, type FixtureRegistry } from "./registryFixture";
+import { startFixtureRegistry, manifestFile, fixtureSign, FIXTURE_RELEASE_PUBLIC_KEY, type FixtureRegistry } from "./registryFixture";
+import { RELEASE_PUBLIC_KEY, releaseMessage } from "../papercrane/releaseSignature";
 
 let tmp = "";
 let registry: FixtureRegistry;
@@ -18,7 +19,7 @@ const PAGE = { "dist/index.html": "<html>panel</html>" };
 beforeEach(async () => {
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), "install-refusal-"));
     registry = await startFixtureRegistry(tmp);
-    engine = new PaperCraneEngine(path.join(tmp, "home"), undefined, registry.url);
+    engine = new PaperCraneEngine(path.join(tmp, "home"), undefined, registry.url, FIXTURE_RELEASE_PUBLIC_KEY);
 });
 
 afterEach(async () => {
@@ -80,6 +81,31 @@ describe("installPanel resolves the release from its own registry", () => {
         await registry.publish(ID, "0.2.0", { "manifest.json": manifestFile(ID, "0.1.0"), ...PAGE });
         await expect(engine.installPanel(ID)).rejects.toThrow(/archive is version "0.1.0"/);
         expect(installed()).toBe(false);
+    });
+
+    it("refuses a release the release key did not sign, before downloading it", async () => {
+        let downloads = 0;
+        const release = await registry.publish(ID, "0.2.0", { "manifest.json": manifestFile(ID, "0.2.0"), ...PAGE });
+        const archive = release.archive;
+        Object.defineProperty(release, "archive", { get: () => { downloads++; return archive; } });
+        // a registry that lists bytes nobody signed (a compromised publish key)
+        release.record.signature = undefined;
+        await expect(engine.installPanel(ID)).rejects.toThrow(/not signed/);
+        // signed by some other key
+        release.record.signature = fixtureSign(releaseMessage.panel(ID, "0.2.0", "b".repeat(64)));
+        await expect(engine.installPanel(ID)).rejects.toThrow(/does not verify/);
+        // a valid signature for one release does not cover a different version
+        release.record.signature = fixtureSign(releaseMessage.panel(ID, "0.1.0", String(release.record.sha256)));
+        await expect(engine.installPanel(ID)).rejects.toThrow(/does not verify/);
+        expect(downloads).toBe(0);
+        expect(installed()).toBe(false);
+    });
+
+    it("production engines verify against the compiled-in release key, not a fixture key", async () => {
+        await registry.publish(ID, "0.2.0", { "manifest.json": manifestFile(ID, "0.2.0"), ...PAGE });
+        const production = new PaperCraneEngine(path.join(tmp, "prod"), undefined, registry.url);
+        expect(RELEASE_PUBLIC_KEY).not.toBe(FIXTURE_RELEASE_PUBLIC_KEY);
+        await expect(production.installPanel(ID)).rejects.toThrow(/does not verify/);
     });
 
     it("still rejects invalid panel ids before any network", async () => {

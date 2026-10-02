@@ -224,6 +224,11 @@ export async function handlePanelsRoutes(
                     400,
                 );
             }
+            // the registry stores the publisher's offline signature; it holds
+            // no key and cannot make one, and clients refuse records without
+            if (typeof metadata.signature !== "string" || !/^[A-Za-z0-9+/]{40,200}={0,2}$/.test(metadata.signature)) {
+                return jsonResponse({ error: "Metadata must carry the release signature (sign with the Paperboard release key)" }, 400);
+            }
             if (metadata.manifest?.id !== undefined && metadata.manifest.id !== metadata.id) {
                 return jsonResponse({ error: "Manifest id must match the published panel id" }, 400);
             }
@@ -373,6 +378,7 @@ export async function handlePanelsRoutes(
                 iconUrl,
                 archiveKey,
                 sha256,
+                signature: metadata.signature,
                 sizeBytes,
                 downloadUrl: `${recordOrigin}/panel/${metadata.id}/download`,
                 updatedAt: new Date().toISOString(),

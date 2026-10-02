@@ -15,6 +15,9 @@ export interface PanelRecord {
     downloadUrl?: string;
     archiveKey?: string;
     sha256?: string;
+    // offline release-key signature over (id, version, sha256); clients
+    // refuse a record without a valid one (papercrane/releaseSignature.ts)
+    signature?: string;
     sizeBytes?: number;
     updatedAt?: string;
     trashedAt?: string;

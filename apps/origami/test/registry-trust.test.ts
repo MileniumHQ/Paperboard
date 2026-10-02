@@ -5,6 +5,10 @@ import { describe, expect, it } from "bun:test";
 import worker, { type Env } from "../src/index";
 import { MAX_REQUEST_BYTES } from "../src/routes/panels";
 
+// a well-formed release signature: origami stores it but holds no key to
+// verify it (clients do, against the offline release key)
+const TEST_SIGNATURE = "A".repeat(86) + "==";
+
 const AUTH_KEY = "test-auth-key";
 
 function createMockKV(initialData: Record<string, unknown> = {}): KVNamespace {
@@ -174,7 +178,7 @@ describe("publish trust separation", () => {
         form.append("archive", new Blob([archive as any], { type: "application/gzip" }), "evil-1.0.0.tar.gz");
         form.append(
             "metadata",
-            JSON.stringify({ id: "good", name: "Good", version: "1.0.0", sha256: "b".repeat(64) }),
+            JSON.stringify({ signature: TEST_SIGNATURE, id: "good", name: "Good", version: "1.0.0", sha256: "b".repeat(64) }),
         );
         const res = await worker.fetch(
             authed("http://localhost/panel/publish", { method: "POST", body: form }),
@@ -195,12 +199,39 @@ describe("publish trust separation", () => {
         expect((r2 as any).objects.has("panels/good/good-1.0.0.tar.gz")).toBe(true);
     });
 
+    it("refuses a publish without a release signature, writing nothing", async () => {
+        const { env, kv, r2 } = envWith();
+        for (const signature of [undefined, "", "not base64!", "QUJD"]) {
+            const form = new FormData();
+            form.append("archive", new Blob([new Uint8Array([7])]), "u-1.0.0.tar.gz");
+            form.append("metadata", JSON.stringify({ id: "unsigned", name: "U", version: "1.0.0", signature }));
+            const res = await worker.fetch(
+                authed("http://localhost/panel/publish", { method: "POST", body: form }),
+                env,
+                {} as any,
+            );
+            expect(res.status).toBe(400);
+        }
+        expect(((kv as any).__store as Map<string, string>).has("panel:unsigned")).toBe(false);
+        expect((r2 as any).objects.size).toBe(0);
+    });
+
+    it("stores the publisher's signature on the record", async () => {
+        const { env, kv } = envWith();
+        const form = new FormData();
+        form.append("archive", new Blob([new Uint8Array([8])]), "s-1.0.0.tar.gz");
+        form.append("metadata", JSON.stringify({ signature: TEST_SIGNATURE, id: "signed", name: "S", version: "1.0.0" }));
+        const res = await worker.fetch(authed("http://localhost/panel/publish", { method: "POST", body: form }), env, {} as any);
+        expect(res.status).toBe(200);
+        expect(JSON.parse(((kv as any).__store as Map<string, string>).get("panel:signed")!).signature).toBe(TEST_SIGNATURE);
+    });
+
     it("writes the canonical panel: namespace only, no board: aliasing", async () => {
         const { env, kv } = envWith();
         const archive = new Uint8Array([9]);
         const form = new FormData();
         form.append("archive", new Blob([archive as any]), "m-1.0.0.tar.gz");
-        form.append("metadata", JSON.stringify({ id: "m", name: "M", version: "1.0.0" }));
+        form.append("metadata", JSON.stringify({ signature: TEST_SIGNATURE, id: "m", name: "M", version: "1.0.0" }));
         const res = await worker.fetch(
             authed("http://localhost/panel/publish", { method: "POST", body: form }),
             env,
@@ -223,7 +254,7 @@ describe("recoverable delete", () => {
         const archive = new Uint8Array([7, 7, 7]);
         const form = new FormData();
         form.append("archive", new Blob([archive as any]), "doomed-1.0.0.tar.gz");
-        form.append("metadata", JSON.stringify({ id: "doomed", name: "Doomed", version: "1.0.0" }));
+        form.append("metadata", JSON.stringify({ signature: TEST_SIGNATURE, id: "doomed", name: "Doomed", version: "1.0.0" }));
         const res = await worker.fetch(
             authed("http://localhost/panel/publish", { method: "POST", body: form }),
             env,
@@ -300,7 +331,7 @@ it("publish without a manifest stores no manifest (no metadata masquerade)", asy
     const archive = new Uint8Array([7]);
     const form = new FormData();
     form.append("archive", new Blob([archive as any], { type: "application/gzip" }), "m-1.0.0.tar.gz");
-    form.append("metadata", JSON.stringify({ id: "noform", name: "NoForm", version: "1.0.0" }));
+    form.append("metadata", JSON.stringify({ signature: TEST_SIGNATURE, id: "noform", name: "NoForm", version: "1.0.0" }));
     const res = await worker.fetch(
         authed("http://localhost/panel/publish", { method: "POST", body: form }),
         env,
@@ -317,7 +348,7 @@ describe("publish upload size caps", () => {
         const oversized = new Uint8Array(64 * 1024 * 1024 + 1);
         const form = new FormData();
         form.append("archive", new Blob([oversized as any], { type: "application/gzip" }), "big-1.0.0.tar.gz");
-        form.append("metadata", JSON.stringify({ id: "big", name: "Big", version: "1.0.0" }));
+        form.append("metadata", JSON.stringify({ signature: TEST_SIGNATURE, id: "big", name: "Big", version: "1.0.0" }));
         const res = await worker.fetch(
             authed("http://localhost/panel/publish", { method: "POST", body: form }),
             env,
@@ -359,7 +390,7 @@ describe("publish upload size caps", () => {
         const bigIcon = new Uint8Array(1024 * 1024 + 1);
         const form = new FormData();
         form.append("archive", new Blob([new Uint8Array([1])], { type: "application/gzip" }), "m-1.0.0.tar.gz");
-        form.append("metadata", JSON.stringify({ id: "iconny", name: "Iconny", version: "1.0.0" }));
+        form.append("metadata", JSON.stringify({ signature: TEST_SIGNATURE, id: "iconny", name: "Iconny", version: "1.0.0" }));
         form.append("icon", new Blob([bigIcon as any], { type: "image/png" }), "icon.png");
         const res = await worker.fetch(
             authed("http://localhost/panel/publish", { method: "POST", body: form }),
@@ -385,7 +416,7 @@ describe("publish icon extension", () => {
         const { env, kv, r2 } = envWith();
         const form = new FormData();
         form.append("archive", new Blob([new Uint8Array([1])], { type: "application/gzip" }), "m-1.0.0.tar.gz");
-        form.append("metadata", JSON.stringify({ id: "iconext", name: "IconExt", version: "1.0.0" }));
+        form.append("metadata", JSON.stringify({ signature: TEST_SIGNATURE, id: "iconext", name: "IconExt", version: "1.0.0" }));
         form.append("icon", new Blob([new Uint8Array([1, 2, 3])], { type: "image/jpeg" }), "icon.jpg");
         const res = await worker.fetch(
             authed("http://localhost/panel/publish", { method: "POST", body: form }),
@@ -408,7 +439,7 @@ describe("publish icon extension", () => {
         const { env, kv, r2 } = envWith();
         const form = new FormData();
         form.append("archive", new Blob([new Uint8Array([1])], { type: "application/gzip" }), "m-1.0.0.tar.gz");
-        form.append("metadata", JSON.stringify({ id: "webpy", name: "Webpy", version: "1.0.0" }));
+        form.append("metadata", JSON.stringify({ signature: TEST_SIGNATURE, id: "webpy", name: "Webpy", version: "1.0.0" }));
         form.append("icon", new Blob([new Uint8Array([1, 2])], { type: "image/webp" }), "icon.webp");
         const res = await worker.fetch(
             authed("http://localhost/panel/publish", { method: "POST", body: form }),
@@ -664,6 +695,7 @@ describe("store listing publish", () => {
         form.append(
             "metadata",
             JSON.stringify({
+                signature: TEST_SIGNATURE,
                 id: "storey",
                 name: "Storey",
                 version: "1.0.0",
