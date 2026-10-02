@@ -76,171 +76,171 @@
                 "icon": "widgets",
                 "sort": "alphabetical",
                 "pages": {
-                    "paper-audio": {
+                    "paperaudio": {
                         "name": "PaperAudio",
                         "file": "paper-audio"
                     },
-                    "paper-avatar": {
+                    "paperavatar": {
                         "name": "PaperAvatar",
                         "file": "paper-avatar"
                     },
-                    "paper-badge": {
+                    "paperbadge": {
                         "name": "PaperBadge",
                         "file": "paper-badge"
                     },
-                    "paper-button": {
+                    "paperbutton": {
                         "name": "PaperButton",
                         "file": "paper-button"
                     },
-                    "paper-card": {
+                    "papercard": {
                         "name": "PaperCard",
                         "file": "paper-card"
                     },
-                    "paper-checkbox": {
+                    "papercheckbox": {
                         "name": "PaperCheckbox",
                         "file": "paper-checkbox"
                     },
-                    "paper-code": {
+                    "papercode": {
                         "name": "PaperCode",
                         "file": "paper-code"
                     },
-                    "paper-console": {
+                    "paperconsole": {
                         "name": "PaperConsole",
                         "file": "paper-console"
                     },
-                    "paper-context-menu": {
+                    "papercontextmenu": {
                         "name": "PaperContextMenu",
                         "file": "paper-context-menu"
                     },
-                    "paper-copy-button": {
+                    "papercopybutton": {
                         "name": "PaperCopyButton",
                         "file": "paper-copy-button"
                     },
-                    "paper-effect": {
+                    "papereffect": {
                         "name": "PaperEffect",
                         "file": "paper-effect"
                     },
-                    "paper-empty-state": {
+                    "paperemptystate": {
                         "name": "PaperEmptyState",
                         "file": "paper-empty-state"
                     },
-                    "paper-grid": {
+                    "papergrid": {
                         "name": "PaperGrid",
                         "file": "paper-grid"
                     },
-                    "paper-icon": {
+                    "papericon": {
                         "name": "PaperIcon",
                         "file": "paper-icon"
                     },
-                    "paper-input": {
+                    "paperinput": {
                         "name": "PaperInput",
                         "file": "paper-input"
                     },
-                    "paper-kbd": {
+                    "paperkbd": {
                         "name": "PaperKbd",
                         "file": "paper-kbd"
                     },
-                    "paper-key-value-list": {
+                    "paperkeyvaluelist": {
                         "name": "PaperKeyValueList",
                         "file": "paper-key-value-list"
                     },
-                    "paper-link": {
+                    "paperlink": {
                         "name": "PaperLink",
                         "file": "paper-link"
                     },
-                    "paper-list": {
+                    "paperlist": {
                         "name": "PaperList",
                         "file": "paper-list"
                     },
-                    "paper-loader": {
+                    "paperloader": {
                         "name": "PaperLoader",
                         "file": "paper-loader"
                     },
-                    "paper-markdown": {
+                    "papermarkdown": {
                         "name": "PaperMarkdown",
                         "file": "paper-markdown"
                     },
-                    "paper-media-card": {
+                    "papermediacard": {
                         "name": "PaperMediaCard",
                         "file": "paper-media-card"
                     },
-                    "paper-menu": {
+                    "papermenu": {
                         "name": "PaperMenu",
                         "file": "paper-menu"
                     },
-                    "paper-modal": {
+                    "papermodal": {
                         "name": "PaperModal",
                         "file": "paper-modal"
                     },
-                    "paper-page-header": {
+                    "paperpageheader": {
                         "name": "PaperPageHeader",
                         "file": "paper-page-header"
                     },
-                    "paper-pagination": {
+                    "paperpagination": {
                         "name": "PaperPagination",
                         "file": "paper-pagination"
                     },
-                    "paper-progress": {
+                    "paperprogress": {
                         "name": "PaperProgress",
                         "file": "paper-progress"
                     },
-                    "paper-range": {
+                    "paperrange": {
                         "name": "PaperRange",
                         "file": "paper-range"
                     },
-                    "paper-prose": {
+                    "paperprose": {
                         "name": "PaperProse",
                         "file": "paper-prose"
                     },
-                    "paper-provider": {
+                    "paperprovider": {
                         "name": "PaperProvider",
                         "file": "paper-provider"
                     },
-                    "paper-quote": {
+                    "paperquote": {
                         "name": "PaperQuote",
                         "file": "paper-quote"
                     },
-                    "paper-rail": {
+                    "paperrail": {
                         "name": "PaperRail",
                         "file": "paper-rail"
                     },
-                    "paper-section-header": {
+                    "papersectionheader": {
                         "name": "PaperSectionHeader",
                         "file": "paper-section-header"
                     },
-                    "paper-selector": {
+                    "paperselector": {
                         "name": "PaperSelector",
                         "file": "paper-selector"
                     },
-                    "paper-select-menu": {
+                    "paperselectmenu": {
                         "name": "PaperSelectMenu",
                         "file": "paper-select-menu"
                     },
-                    "paper-separator": {
+                    "paperseparator": {
                         "name": "PaperSeparator",
                         "file": "paper-separator"
                     },
-                    "paper-spacer": {
+                    "paperspacer": {
                         "name": "PaperSpacer",
                         "file": "paper-spacer"
                     },
-                    "paper-swatch": {
+                    "paperswatch": {
                         "name": "PaperSwatch",
                         "file": "paper-swatch"
                     },
-                    "paper-table": {
+                    "papertable": {
                         "name": "PaperTable",
                         "file": "paper-table"
                     },
-                    "paper-text": {
+                    "papertext": {
                         "name": "PaperText",
                         "file": "paper-text"
                     },
-                    "paper-text-list": {
+                    "papertextlist": {
                         "name": "PaperTextList",
                         "file": "paper-text-list"
                     },
-                    "paper-toggle": {
+                    "papertoggle": {
                         "name": "PaperToggle",
                         "file": "paper-toggle"
                     }
@@ -251,31 +251,31 @@
                 "icon": "dashboard_customize",
                 "sort": "alphabetical",
                 "pages": {
-                    "paper-centered-interface": {
+                    "papercenteredinterface": {
                         "name": "PaperCenteredInterface",
                         "file": "paper-centered-interface"
                     },
-                    "paper-flex": {
+                    "paperflex": {
                         "name": "PaperFlex",
                         "file": "paper-flex"
                     },
-                    "paper-interface-group": {
+                    "paperinterfacegroup": {
                         "name": "PaperInterfaceGroup",
                         "file": "paper-interface-group"
                     },
-                    "paper-page": {
+                    "paperpage": {
                         "name": "PaperPage",
                         "file": "paper-page"
                     },
-                    "paper-panel": {
+                    "paperpanel": {
                         "name": "PaperPanel",
                         "file": "paper-panel"
                     },
-                    "paper-setting-list": {
+                    "papersettinglist": {
                         "name": "PaperSettingList",
                         "file": "paper-setting-list"
                     },
-                    "paper-wizard": {
+                    "paperwizard": {
                         "name": "PaperWizard",
                         "file": "paper-wizard"
                     }
