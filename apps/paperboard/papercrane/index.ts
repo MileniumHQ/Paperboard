@@ -420,6 +420,9 @@ export function startPaperCraneServer(
                     );
                 } catch (err) { logger.debug("[index.ts] op failed:", err) }
                 try {
+                    // ws 8 leaves connected sockets open on close(); a
+                    // stopped daemon must not keep serving them
+                    for (const client of wss.clients) client.close(1001, "Paperboard Server stopped");
                     wss.close();
                     localServer?.close();
                     server.close(() => {

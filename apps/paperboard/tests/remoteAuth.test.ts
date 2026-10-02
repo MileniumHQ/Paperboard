@@ -318,3 +318,68 @@ describe("pre-auth remote tunnel gating", () => {
         }
     });
 });
+
+// A remote that sleeps or drops off the network leaves the tunnel's
+// upstream socket looking open. Without a heartbeat the panel's frames went
+// into it forever; one missed pong now closes the tunnel, and PaperAPI's
+// transport reopens it on tunnel-closed.
+describe("tunnel upstream heartbeat", () => {
+    it("closes a tunnel whose remote stopped answering", async () => {
+        const net = await import("net");
+        let frozen = false;
+        const hops = new Set<import("net").Socket>();
+        const pathToPeer = net.createServer((inbound) => {
+            const outbound = net.connect(upstreamPort, "127.0.0.1");
+            hops.add(inbound).add(outbound);
+            inbound.on("data", (d) => !frozen && outbound.write(d));
+            outbound.on("data", (d) => !frozen && inbound.write(d));
+            inbound.on("close", () => outbound.destroy());
+            outbound.on("close", () => inbound.destroy());
+            inbound.on("error", () => outbound.destroy());
+            outbound.on("error", () => inbound.destroy());
+        });
+        await new Promise<void>((resolve) => pathToPeer.listen(0, "127.0.0.1", () => resolve()));
+        const viaPath = path.join(tmp, "paired_via_path.json");
+        fs.writeFileSync(
+            viaPath,
+            JSON.stringify({
+                computers: [{
+                    id: "sleepy", name: "sleepy", host: "127.0.0.1",
+                    port: (pathToPeer.address() as AddressInfo).port,
+                    token: "remote-token", cert: remoteTls.cert,
+                }],
+            }),
+        );
+        const auth = new PaperCraneAuth(false, tmp);
+        auth.injectToken(TOKEN, "test");
+        const local = new WebSocketServer({ port: 0 });
+        setupWebSocketServer(local, new PaperCraneEngine(tmp), auth, {
+            remotesFile: viaPath,
+            tunnelHeartbeatMs: 100,
+        });
+        await new Promise<void>((resolve) => local.on("listening", () => resolve()));
+        const frames: any[] = [];
+        const ws = new WebSocket(`ws://127.0.0.1:${(local.address() as AddressInfo).port}`);
+        ws.on("message", (raw: Buffer) => frames.push(JSON.parse(raw.toString("utf8"))));
+        await new Promise((resolve) => ws.on("open", resolve));
+        const c = { ws, frames };
+        try {
+            send(c, { id: 1, action: "auth:verify", params: { token: TOKEN } });
+            await waitFor(c, (f) => f.id === 1);
+            send(c, { type: "remote:open", tunnelId: "t-sleepy", computerId: "sleepy" });
+            await waitFor(c, (f) => f.type === "tunnel-open" && f.id === "t-sleepy", 5000);
+            // healthy pings keep it open across several intervals
+            await new Promise((r) => setTimeout(r, 400));
+            expect(frames.some((f) => f.type === "tunnel-closed")).toBe(false);
+            frozen = true;
+            const closed = await waitFor(c, (f) => f.type === "tunnel-closed" && f.id === "t-sleepy", 2000);
+            expect(closed.reason).toBe("The remote computer stopped responding");
+        } finally {
+            ws.terminate();
+            for (const hop of hops) hop.destroy();
+            pathToPeer.close();
+            for (const client of local.clients) client.terminate();
+            local.close();
+        }
+    });
+});

@@ -253,10 +253,13 @@ export class ConnectionPool extends EventEmitter {
                 isLocal: false,
             };
 
+            // the pairing socket trusted whatever certificate it was shown;
+            // from here on the computer is dialed pinned, by a client that
+            // reconnects on its own
+            tempClient.disconnect();
             this.computers.set(id, comp);
-            this.clients.set(id, tempClient);
-            this.remoteDrivers.set(id, new RemoteComputerDriver(id, tempClient));
             this.saveConfig();
+            this.getDriver(id);
             this.emit("change");
             return comp;
         } catch (err) {
@@ -317,6 +320,11 @@ export class ConnectionPool extends EventEmitter {
             this.emit("change");
         }
         return removed;
+    }
+
+    // the machine woke or the network changed: recheck every computer now
+    public wake(): void {
+        for (const client of this.clients.values()) client.wake();
     }
 
     public getComputer(id: string): StoredComputer | undefined {

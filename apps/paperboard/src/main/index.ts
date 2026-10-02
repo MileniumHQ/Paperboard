@@ -9,6 +9,7 @@ import {
     nativeImage,
     session,
     Tray,
+    powerMonitor,
 } from "electron";
 import * as fs from "fs";
 import * as path from "path";
@@ -375,6 +376,11 @@ app.whenReady().then(async () => {
     log.info(
         `Paperboard v${app.getVersion()} starting (electron ${process.versions.electron}, node ${process.versions.node}, ${process.platform}-${process.arch})`,
     );
+
+    // after sleep a remote's socket can look open while its peer is gone;
+    // recheck every computer at once instead of waiting for the heartbeat
+    powerMonitor.on("resume", () => connectionPool.wake());
+    powerMonitor.on("unlock-screen", () => connectionPool.wake());
 
     try {
         await connectionPool.init();

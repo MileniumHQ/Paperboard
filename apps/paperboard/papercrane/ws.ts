@@ -62,6 +62,8 @@ export function isAllowedOrigin(origin: string): boolean {
 interface TunnelOptions {
     remotesFile?: string;
     staticToken?: string | null;
+    /** upstream ping interval for remote tunnels (tests shorten it) */
+    tunnelHeartbeatMs?: number;
 }
 
 // per-socket broadcast interest is opt-in: a socket that never declares an
@@ -76,6 +78,7 @@ const MAX_CONNECTIONS = 4096;
 const MAX_UNAUTHENTICATED = 128;
 const MAX_IN_FLIGHT_PER_SOCKET = 1024;
 const HANDSHAKE_TIMEOUT_MS = 10_000;
+const TUNNEL_HEARTBEAT_MS = 15_000;
 
 export function setupWebSocketServer(
     wss: WebSocketServer,
@@ -166,7 +169,12 @@ export function setupWebSocketServer(
         };
 
         // tunnels to paired remotes, keyed by tunnel id
-        const tunnels = new Map<string, { socket: WebSocket; ready: boolean; timer: ReturnType<typeof setTimeout> }>();
+        const tunnels = new Map<string, {
+            socket: WebSocket;
+            ready: boolean;
+            timer: ReturnType<typeof setTimeout>;
+            heartbeat?: ReturnType<typeof setInterval>;
+        }>();
 
         // one teardown shape for every tunnel exit: map removal lives
         // here, not scattered across event handlers. Notify-once falls out
@@ -180,6 +188,7 @@ export function setupWebSocketServer(
             if (!tunnel) return;
             tunnels.delete(tunnelId);
             clearTimeout(tunnel.timer);
+            clearInterval(tunnel.heartbeat);
             try {
                 tunnel.socket.terminate();
             } catch (err) {
@@ -328,12 +337,27 @@ export function setupWebSocketServer(
                         });
                         const timer = setTimeout(() => closeTunnel(tunnelId, { reason: "Remote authentication timed out" }), HANDSHAKE_TIMEOUT_MS);
                         timer.unref?.();
-                        const tunnel = { socket: upstream, ready: false, timer };
+                        const tunnel: { socket: WebSocket; ready: boolean; timer: ReturnType<typeof setTimeout>; heartbeat?: ReturnType<typeof setInterval> } = { socket: upstream, ready: false, timer };
                         tunnels.set(tunnelId, tunnel);
                         const opened = () => {
                             if (!tunnels.has(tunnelId) || ws.readyState !== WebSocket.OPEN) return;
                             clearTimeout(timer);
                             tunnel.ready = true;
+                            // a remote that sleeps or drops off the network
+                            // leaves the upstream looking open; one missed
+                            // pong closes the tunnel so the panel's
+                            // transport reopens it instead of hanging
+                            let awaitingPong = false;
+                            upstream.on("pong", () => { awaitingPong = false; });
+                            tunnel.heartbeat = setInterval(() => {
+                                if (awaitingPong) {
+                                    closeTunnel(tunnelId, { reason: "The remote computer stopped responding" });
+                                    return;
+                                }
+                                awaitingPong = true;
+                                upstream.ping();
+                            }, options.tunnelHeartbeatMs ?? TUNNEL_HEARTBEAT_MS);
+                            tunnel.heartbeat.unref?.();
                             ws.send(JSON.stringify({ type: "tunnel-open", id: tunnelId }));
                         };
                         upstream.on("open", () => {

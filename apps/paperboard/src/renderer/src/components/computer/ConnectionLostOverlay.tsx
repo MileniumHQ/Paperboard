@@ -99,8 +99,18 @@ export const ConnectionLostOverlay: Component<ConnectionLostOverlayProps> = (
                     Cannot communicate with{" "}
                     <strong>{props.computer.name}</strong> at{" "}
                     {props.computer.host}:{props.computer.port}. Make sure
-                    the Paperboard Server daemon is running.
+                    the Paperboard Server daemon is running. Paperboard
+                    keeps retrying on its own.
                 </PaperText>
+                <Show when={props.computer.status?.error}>
+                    <PaperText
+                        size={2}
+                        color="text-subtle"
+                        style={{ "text-align": "center", "max-width": "24rem" }}
+                    >
+                        {props.computer.status?.error}
+                    </PaperText>
+                </Show>
             </PaperFlex>
 
             <PaperFlex center direction="column" gap="half">

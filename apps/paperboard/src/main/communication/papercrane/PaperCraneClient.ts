@@ -88,6 +88,23 @@ export interface TargetStatus {
 }
 
 const DEFAULT_RPC_TIMEOUT_MS = 30_000;
+// a daemon closes a socket that has not authenticated within its handshake
+// window (10s), so the token is verified as part of connecting
+const AUTH_TIMEOUT_MS = 10_000;
+
+export interface PaperCraneClientOptions {
+    /** ping interval; a socket that misses one pong is treated as dead */
+    heartbeatMs?: number;
+    reconnectBaseMs?: number;
+    reconnectMaxMs?: number;
+}
+
+// the daemon answered a call with an error (as opposed to a timeout or a
+// dropped socket, which say nothing about the request itself)
+class DaemonRefusal extends Error {}
+
+// Close codes after which retrying with the same credential cannot work.
+const CREDENTIAL_CLOSE_CODES = new Set([4401, 4403]);
 
 export class PaperCraneClient extends EventEmitter {
     private ws: WebSocket | null = null;
@@ -106,10 +123,25 @@ export class PaperCraneClient extends EventEmitter {
             resolve: (val: unknown) => void;
             reject: (err: Error) => void;
             timer: NodeJS.Timeout;
+            socket: WebSocket;
         }
     >();
     // single-flight guard so concurrent calls don't race reentrant connects
     private connectingPromise: Promise<TargetStatus> | null = null;
+    // Every connect or disconnect starts a new generation; handlers of an
+    // older socket see a stale generation and leave the client alone.
+    private generation = 0;
+    // what the owner asked to connect to, replayed by automatic reconnects
+    // (a local client re-resolves its daemon instead of reusing a token)
+    private target: { host: string; port?: number; token?: string; cert?: string } | null = null;
+    private heartbeat: NodeJS.Timeout | null = null;
+    private reconnectTimer: NodeJS.Timeout | null = null;
+    private reconnectAttempts = 0;
+    // why the last connection attempt or connection ended, shown while offline
+    private lastError?: string;
+    private readonly heartbeatMs: number;
+    private readonly reconnectBaseMs: number;
+    private readonly reconnectMaxMs: number;
 
     public getEmbeddedServer(): ServerInstance | null {
         return this.embeddedServer;
@@ -120,8 +152,11 @@ export class PaperCraneClient extends EventEmitter {
         (payload: ProgressPayload) => void
     >();
 
-    constructor() {
+    constructor(options: PaperCraneClientOptions = {}) {
         super();
+        this.heartbeatMs = options.heartbeatMs ?? 15_000;
+        this.reconnectBaseMs = options.reconnectBaseMs ?? 1_000;
+        this.reconnectMaxMs = options.reconnectMaxMs ?? 15_000;
     }
 
     public getHost(): string {
@@ -173,6 +208,7 @@ export class PaperCraneClient extends EventEmitter {
             isRemote,
             host: this.host,
             port: this.port,
+            ...(!this.isConnected && this.lastError ? { error: this.lastError } : {}),
         };
     }
 
@@ -196,163 +232,297 @@ export class PaperCraneClient extends EventEmitter {
         cert?: string,
     ): Promise<TargetStatus> {
         if (this.connectingPromise) return this.connectingPromise;
-
-        const doConnect = async (): Promise<TargetStatus> => {
-            this.disconnect();
-            this.host = host;
-            if (port) this.port = port;
-            this.token = token;
-            this.cert = cert;
-
-            const isLocal = isLoopback(host);
-            if (!isLocal && !cert && !this.trustOnFirstUse) {
-                const error = this.missingCertMessage();
-                this.emit("status", { ...this.getStatus(), error });
-                throw new Error(error);
-            }
-
-            // trust handshake only after health probe, else restart embedded
-            if (isLocal && !token) {
-                const stored = readCraneJson();
-                if (stored && (await probeAlive(stored.port))) {
-                    this.port = stored.port;
-                    this.token = stored.token;
-                } else {
-                    try {
-                        if (this.embeddedServer?.stop) {
-                            this.embeddedServer.stop();
-                            this.embeddedServer = null;
-                        }
-                        // reuse previous token so authorized-token store stays stable
-                        const freshToken =
-                            stored?.token ??
-                            "pc_" + crypto.randomBytes(24).toString("hex");
-                        this.embeddedServer = await startPaperCraneServer({
-                            port: 0,
-                            host: "127.0.0.1",
-                            headless: true,
-                            staticToken: freshToken,
-                            remotesFile: path.join(
-                                getLocalDir(),
-                                "paired_computers.json",
-                            ),
-                        });
-                        if (this.embeddedServer?.port) {
-                            this.port = this.embeddedServer.port;
-                            this.token = freshToken;
-                        }
-                        await new Promise((r) => setTimeout(r, 150));
-                    } catch (err) {
-                        console.warn(
-                            "[PaperCraneClient] failed to start embedded server:",
-                            err instanceof Error ? err.message : err,
-                        );
-                    }
-                }
-            }
-
-            return new Promise((resolve, reject) => {
-                const Socket = pinnableWebSocket();
-                const ws = isLocal
-                    ? new Socket(`ws://${host}:${this.port}`)
-                    : new Socket(
-                          `wss://${host}:${this.port}`,
-                          cert ? pinnedTlsOptions(cert) : { rejectUnauthorized: false },
-                      );
-                let hasResolved = false;
-
-                if (!isLocal && !cert) {
-                    // pairing: capture the certificate before any credential is sent
-                    ws.on("upgrade", (res) => {
-                        try {
-                            this.cert = peerCertPem(res.socket as TLSSocket);
-                        } catch (err) {
-                            ws.emit("error", err);
-                            ws.terminate();
-                        }
-                    });
-                }
-
-                ws.on("open", () => {
-                    this.ws = ws;
-                    this.isConnected = true;
-                    if (!hasResolved) {
-                        hasResolved = true;
-                        this.emit("status", this.getStatus());
-                        resolve(this.getStatus());
-                    }
-                });
-
-                ws.on("error", (err: Error) => {
-                    this.emit("status", {
-                        ...this.getStatus(),
-                        error: err?.message || "Connection failed",
-                    });
-                    // reject pre-open so callers see real failures
-                    if (!hasResolved) {
-                        hasResolved = true;
-                        this.isConnected = false;
-                        reject(
-                            new Error(
-                                `Cannot connect to the Paperboard Server daemon at ${host}:${this.port}` +
-                                    (err?.message ? `: ${err.message}` : ""),
-                            ),
-                        );
-                    }
-                });
-
-                ws.on("message", (raw: unknown) => {
-                    try {
-                        const text = (raw as Buffer).toString("utf8");
-                        const msg = JSON.parse(text) as {
-                            type?: string;
-                            id?: number;
-                            error?: string;
-                            result?: unknown;
-                            event?: string;
-                            payload?: Record<string, unknown>;
-                        };
-                        if (msg.type === "response") {
-                            const handler =
-                                msg.id !== undefined
-                                    ? this.pendingRequests.get(msg.id)
-                                    : undefined;
-                            if (handler) {
-                                this.pendingRequests.delete(msg.id as number);
-                                clearTimeout(handler.timer);
-                                if (msg.error)
-                                    handler.reject(new Error(msg.error));
-                                else handler.resolve(msg.result);
-                            }
-                        } else if (msg.type === "event") {
-                            this.handlePushEvent(
-                                msg.event ?? "",
-                                msg.payload ?? {},
-                            );
-                        }
-                    } catch (err) { logger.debug("[PaperCraneClient.ts] op failed:", err) }
-                });
-
-                ws.on("close", () => {
-                    this.isConnected = false;
-                    this.ws = null;
-                    for (const pending of this.pendingRequests.values()) {
-                        clearTimeout(pending.timer);
-                        pending.reject(new Error("Paperboard Server connection closed"));
-                    }
-                    this.pendingRequests.clear();
-                    this.emit("status", this.getStatus());
-                });
-            });
-        };
-
-        this.connectingPromise = doConnect().finally(() => {
+        // pairing dials without a credential and must not be retried
+        this.target = this.trustOnFirstUse ? null : { host, port, token, cert };
+        this.connectingPromise = this.open(host, port, token, cert).finally(() => {
             this.connectingPromise = null;
         });
         return this.connectingPromise;
     }
 
-    public disconnect() {
+    private async open(
+        host: string,
+        port: number | undefined,
+        token: string | undefined,
+        cert: string | undefined,
+    ): Promise<TargetStatus> {
+        this.closeSocket();
+        const gen = this.generation;
+        this.host = host;
+        if (port) this.port = port;
+        this.token = token;
+        this.cert = cert;
+
+        const isLocal = isLoopback(host);
+        if (!isLocal && !cert && !this.trustOnFirstUse) {
+            const error = this.missingCertMessage();
+            this.lastError = error;
+            this.emit("status", this.getStatus());
+            throw new Error(error);
+        }
+
+        // trust handshake only after health probe, else restart embedded
+        if (isLocal && !token) {
+            const stored = readCraneJson();
+            if (stored && (await probeAlive(stored.port))) {
+                this.port = stored.port;
+                this.token = stored.token;
+            } else {
+                try {
+                    if (this.embeddedServer?.stop) {
+                        this.embeddedServer.stop();
+                        this.embeddedServer = null;
+                    }
+                    // reuse previous token so authorized-token store stays stable
+                    const freshToken =
+                        stored?.token ??
+                        "pc_" + crypto.randomBytes(24).toString("hex");
+                    this.embeddedServer = await startPaperCraneServer({
+                        port: 0,
+                        host: "127.0.0.1",
+                        headless: true,
+                        staticToken: freshToken,
+                        remotesFile: path.join(
+                            getLocalDir(),
+                            "paired_computers.json",
+                        ),
+                    });
+                    if (this.embeddedServer?.port) {
+                        this.port = this.embeddedServer.port;
+                        this.token = freshToken;
+                    }
+                    await new Promise((r) => setTimeout(r, 150));
+                } catch (err) {
+                    console.warn(
+                        "[PaperCraneClient] failed to start embedded server:",
+                        err instanceof Error ? err.message : err,
+                    );
+                }
+            }
+            if (gen !== this.generation) throw new Error("Connection attempt was superseded");
+        }
+
+        return new Promise((resolve, reject) => {
+            const Socket = pinnableWebSocket();
+            const ws = isLocal
+                ? new Socket(`ws://${host}:${this.port}`)
+                : new Socket(
+                      `wss://${host}:${this.port}`,
+                      cert ? pinnedTlsOptions(cert) : { rejectUnauthorized: false },
+                  );
+            this.ws = ws;
+            let settled = false;
+            const current = () => gen === this.generation && this.ws === ws;
+            const fail = (message: string) => {
+                this.lastError = message;
+                if (settled) return;
+                settled = true;
+                reject(new Error(message));
+            };
+
+            if (!isLocal && !cert) {
+                // pairing: capture the certificate before any credential is sent
+                ws.on("upgrade", (res) => {
+                    try {
+                        this.cert = peerCertPem(res.socket as TLSSocket);
+                    } catch (err) {
+                        ws.emit("error", err);
+                        ws.terminate();
+                    }
+                });
+            }
+
+            ws.on("open", async () => {
+                if (!current()) return;
+                // An open socket is not an authenticated one. Verify the
+                // credential before reporting connected: the daemon closes
+                // a socket that stays unauthenticated past its handshake
+                // window, which showed an idle remote as "Connection Lost"
+                // seconds after every launch.
+                if (this.token) {
+                    try {
+                        await this.request_("auth:verify", {}, AUTH_TIMEOUT_MS, ws);
+                    } catch (err) {
+                        if (!current()) return;
+                        const reason = err instanceof Error ? err.message : String(err);
+                        if (err instanceof DaemonRefusal) {
+                            this.credentialRejected = true;
+                            fail(`${host} refused this app's pairing (${reason}). Remove this computer and pair it again`);
+                        } else {
+                            fail(`Could not sign in to ${host}: ${reason}`);
+                        }
+                        ws.close();
+                        return;
+                    }
+                    if (!current()) return;
+                }
+                this.isConnected = true;
+                this.lastError = undefined;
+                this.reconnectAttempts = 0;
+                this.startHeartbeat(ws);
+                this.emit("status", this.getStatus());
+                if (!settled) {
+                    settled = true;
+                    resolve(this.getStatus());
+                }
+            });
+
+            ws.on("error", (err: Error) => {
+                if (!current()) return;
+                fail(
+                    `Cannot connect to the Paperboard Server daemon at ${host}:${this.port}` +
+                        (err?.message ? `: ${err.message}` : ""),
+                );
+                this.emit("status", this.getStatus());
+            });
+
+            ws.on("message", (raw: unknown) => {
+                try {
+                    const text = (raw as Buffer).toString("utf8");
+                    const msg = JSON.parse(text) as {
+                        type?: string;
+                        id?: number;
+                        error?: string;
+                        result?: unknown;
+                        event?: string;
+                        payload?: Record<string, unknown>;
+                    };
+                    if (msg.type === "response") {
+                        const handler =
+                            msg.id !== undefined
+                                ? this.pendingRequests.get(msg.id)
+                                : undefined;
+                        if (handler && handler.socket === ws) {
+                            this.pendingRequests.delete(msg.id as number);
+                            clearTimeout(handler.timer);
+                            if (msg.error)
+                                handler.reject(new DaemonRefusal(msg.error));
+                            else handler.resolve(msg.result);
+                        }
+                    } else if (msg.type === "event") {
+                        this.handlePushEvent(
+                            msg.event ?? "",
+                            msg.payload ?? {},
+                        );
+                    }
+                } catch (err) { logger.debug("[PaperCraneClient.ts] op failed:", err) }
+            });
+
+            ws.on("close", (code: number, reason: Buffer) => {
+                // calls sent on this socket can never be answered now
+                for (const [id, pending] of this.pendingRequests) {
+                    if (pending.socket !== ws) continue;
+                    this.pendingRequests.delete(id);
+                    clearTimeout(pending.timer);
+                    pending.reject(new Error("Paperboard Server connection closed"));
+                }
+                if (!current()) return;
+                this.stopHeartbeat();
+                this.ws = null;
+                this.isConnected = false;
+                const why = reason?.toString("utf8");
+                if (CREDENTIAL_CLOSE_CODES.has(code)) {
+                    this.credentialRejected = true;
+                    this.lastError = `${host} closed the connection: ${why || code}. Remove this computer and pair it again`;
+                } else if (!this.lastError) {
+                    this.lastError = why ? `Connection closed: ${why}` : "Connection closed";
+                }
+                fail(this.lastError);
+                this.emit("status", this.getStatus());
+                this.scheduleReconnect();
+            });
+        });
+    }
+
+    // set when the daemon refused the credential; retrying cannot help
+    private credentialRejected = false;
+
+    // A computer that drops (sleep, network change, daemon restart) comes
+    // back by itself: one pending retry at a time, exponential backoff.
+    private scheduleReconnect(): void {
+        if (!this.target || this.credentialRejected || this.reconnectTimer) return;
+        const delay = Math.min(
+            this.reconnectBaseMs * 2 ** this.reconnectAttempts,
+            this.reconnectMaxMs,
+        );
+        this.reconnectAttempts++;
+        this.reconnectTimer = setTimeout(() => {
+            this.reconnectTimer = null;
+            this.reconnectNow();
+        }, delay);
+        this.reconnectTimer.unref?.();
+    }
+
+    private reconnectNow(): void {
+        const target = this.target;
+        if (!target) return;
+        this.connect(target.host, target.port, target.token, target.cert).catch((err) => {
+            // the attempt's close handler schedules the next one
+            logger.debug(`[PaperCraneClient] reconnect to ${target.host} failed:`, err);
+        });
+    }
+
+    /**
+     * The machine woke up or the network changed: a sleeping socket can look
+     * open while its peer is long gone. Probe a connected socket at once and
+     * retry a disconnected one now instead of waiting out the backoff.
+     */
+    public wake(): void {
+        if (this.isConnected && this.ws) {
+            this.probeHeartbeat(this.ws);
+            return;
+        }
+        if (this.reconnectTimer) {
+            clearTimeout(this.reconnectTimer);
+            this.reconnectTimer = null;
+        }
+        this.reconnectAttempts = 0;
+        if (!this.credentialRejected) this.reconnectNow();
+    }
+
+    private awaitingPong = false;
+
+    private startHeartbeat(ws: WebSocket): void {
+        this.stopHeartbeat();
+        this.awaitingPong = false;
+        ws.on("pong", () => {
+            this.awaitingPong = false;
+        });
+        this.heartbeat = setInterval(() => this.probeHeartbeat(ws), this.heartbeatMs);
+        this.heartbeat.unref?.();
+    }
+
+    private probeHeartbeat(ws: WebSocket): void {
+        if (this.ws !== ws) return;
+        if (this.awaitingPong) {
+            // no answer since the last ping: the peer or the path is gone
+            this.lastError = "The computer stopped responding";
+            ws.terminate();
+            return;
+        }
+        this.awaitingPong = true;
+        try {
+            ws.ping();
+        } catch (err) {
+            logger.debug("[PaperCraneClient] ping failed:", err);
+            ws.terminate();
+        }
+    }
+
+    private stopHeartbeat(): void {
+        if (this.heartbeat) clearInterval(this.heartbeat);
+        this.heartbeat = null;
+    }
+
+    // ends the current socket without touching the owner's intent
+    private closeSocket(): void {
+        this.generation++;
+        this.stopHeartbeat();
+        if (this.reconnectTimer) {
+            clearTimeout(this.reconnectTimer);
+            this.reconnectTimer = null;
+        }
+        this.credentialRejected = false;
         if (this.ws) {
             try {
                 this.ws.close();
@@ -360,6 +530,12 @@ export class PaperCraneClient extends EventEmitter {
             this.ws = null;
         }
         this.isConnected = false;
+    }
+
+    // the owner is done with this computer: no automatic reconnects
+    public disconnect() {
+        this.target = null;
+        this.closeSocket();
     }
 
     // separate from disconnect so reconnects never kill long-running children
@@ -392,13 +568,24 @@ export class PaperCraneClient extends EventEmitter {
         params: RpcParams = {},
         timeoutMs: number = DEFAULT_RPC_TIMEOUT_MS,
     ): Promise<T> {
+        if (this.connectingPromise) await this.connectingPromise;
         if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-            await this.connect(this.host, this.port, this.token, this.cert);
+            const t = this.target ?? { host: this.host, port: this.port, token: this.token, cert: this.cert };
+            await this.connect(t.host, t.port, t.token, t.cert);
         }
         if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
             throw new Error(`Cannot connect to the Paperboard Server daemon at ${this.host}:${this.port}`);
         }
 
+        return this.request_<T>(action, params, timeoutMs, this.ws);
+    }
+
+    private request_<T = unknown>(
+        action: string,
+        params: RpcParams,
+        timeoutMs: number,
+        socket: WebSocket,
+    ): Promise<T> {
         const id = this.requestIdCounter++;
         // token last: a params object that happens to carry a token (or a
         // typo'd field) can never clobber the real credential — same
@@ -415,8 +602,9 @@ export class PaperCraneClient extends EventEmitter {
                 resolve: resolve as (val: unknown) => void,
                 reject,
                 timer,
+                socket,
             });
-            this.ws!.send(JSON.stringify({ id, action, params: finalParams }));
+            socket.send(JSON.stringify({ id, action, params: finalParams }));
         });
     }
 
