@@ -63,6 +63,7 @@ import {
     type VersionFileEntry,
     type YmlEntry,
 } from "./publishLib";
+import { applyWindowsIcon } from "./windowsIcon";
 
 const HERE = join(import.meta.dir, "..", "apps", "paperboard");
 const ORIGAMI_DIR = join(HERE, "..", "origami");
@@ -341,16 +342,22 @@ function findPaperboardArtifact(target: Target): string {
     return join(distDir, files[0]);
 }
 
-// Windows metadata for standalone crane binaries. Bun only accepts these
-// flags when compiling ON Windows (cross-compiles from other hosts reject
-// them), so elsewhere the exe keeps its defaults and icon.ico waits for a
-// Windows-host build. Title/publisher/icon live in papercrane/branding/.
+// Windows version-info metadata for standalone crane binaries. Bun only
+// accepts these flags when compiling ON Windows (cross-compiles from other
+// hosts reject them), so elsewhere the exe keeps default version info. The
+// icon is NOT set here: Bun also refuses `--windows-icon` in a cross-compile,
+// so it is applied to every build by applyCraneWindowsIcon below, from
+// papercrane/branding/icon.ico.
 function craneCompileFlags(target: Target): string[] {
     if (osOf(target) !== "windows" || process.platform !== "win32") return [];
-    const flags = ["--windows-title=Paperboard Server", "--windows-publisher=Paperboard"];
+    return ["--windows-title=Paperboard Server", "--windows-publisher=Paperboard"];
+}
+
+// Stamp the Crane icon onto a freshly built Windows crane binary. Runs on
+// every host so a Linux/macOS cross-build no longer ships Bun's default logo.
+function applyCraneWindowsIcon(filePath: string): void {
     const icon = join(HERE, "papercrane", "branding", "icon.ico");
-    if (existsSync(icon)) flags.push(`--windows-icon=${icon}`);
-    return flags;
+    if (existsSync(icon)) applyWindowsIcon(filePath, icon);
 }
 
 interface BuiltBinary {
@@ -390,6 +397,7 @@ async function buildCraneTarget(target: Target): Promise<BuiltBinary> {
     const filePath = join(distDir, outName);
     if (!existsSync(filePath))
         throw new Error(`No Paperboard Server binary found at ${filePath}`);
+    if (osOf(target) === "windows") applyCraneWindowsIcon(filePath);
     const { sha256, sha512, size } = await hashFile(filePath);
     return { app: "crane", target, filePath, filename: basename(filePath), sha256, sha512, size };
 }
@@ -988,6 +996,7 @@ async function buildUsbFolder() {
         await $`bun build --compile --target=${bunTarget} ${craneCompileFlags(target)} ./papercrane/main.ts --outfile ./dist/${outName}`.cwd(HERE);
         const built = join(usbDistDir, outName);
         if (!existsSync(built)) throw new Error(`No Paperboard Server binary found at ${built}`);
+        if (os === "windows") applyCraneWindowsIcon(built);
         cpSync(built, join(craneDir, outName));
         craneFiles.push(`crane/${outName}`);
     }

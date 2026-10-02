@@ -5,7 +5,7 @@ optional; absence falls back to text/defaults, never an error.
 
 | File        | Format                              | Used for                                              |
 |-------------|-------------------------------------|-------------------------------------------------------|
-| `icon.ico`  | Windows .ico, 256x256 multi-size    | Standalone `papercrane-*.exe` executable icon (replaces the default Bun icon). Applied at compile time by `publish.ts`, **only when compiling on a Windows host** (Bun rejects the flag in cross-compiles, so Linux/macOS-built exes keep defaults). |
+| `icon.ico`  | Windows .ico, multi-size (16-256)   | Standalone `papercrane-*.exe` executable icon (replaces Bun's default logo). Stamped onto the built binary by `publish.ts` on every host — Bun refuses `--windows-icon` in a cross-compile, so the resources are rewritten in place after compilation. |
 | `icon.png`  | PNG, 512x512                        | Reserved for docs/packaging and future use.           |
 | `banner.txt`| Plain-text ASCII art, ~60 cols wide | Printed as the TUI header on standalone daemon start (replaces the "Paperboard Server" text line). |
 
