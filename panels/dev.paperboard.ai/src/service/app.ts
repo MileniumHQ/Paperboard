@@ -83,11 +83,15 @@ export class AiApp {
     private resolveReady!: () => void;
     readonly ready = new Promise<void>((resolve) => (this.resolveReady = resolve));
 
-    constructor(private readonly host: ProcessHost = processHost) {
+    constructor(
+        private readonly host: ProcessHost = processHost,
+        options: { readyTimeoutMs?: number } = {},
+    ) {
         this.runtime = new OllamaRuntime({
             procId: OLLAMA_PROC_ID,
             host,
             onState: (patch) => this.patchRuntime(patch),
+            ...(options.readyTimeoutMs !== undefined ? { readyTimeoutMs: options.readyTimeoutMs } : {}),
         });
         this.models = new ModelManager({
             clients: () => providerClients({ ollama: this.runtime.api }, PROVIDERS),
@@ -144,10 +148,16 @@ export class AiApp {
         });
         await this.loadConfig();
         await this.loadConversations();
-        // actions wait for settings and history, not for Ollama to boot
+        // actions wait for settings and history, not for Ollama to boot —
+        // and neither does the daemon's service-ready gate. Awaiting the
+        // runtime here coupled readiness to Ollama's 60 s boot, so a slow or
+        // crashed Ollama made the daemon kill the service at its 20 s
+        // deadline and, after five restarts, abandon the panel entirely
+        // (the Windows GPU-crash report). Start it in the background; its
+        // state surfaces through patchRuntime either way.
         this.resolveReady();
         void this.refreshHardware();
-        await this.startIfInstalled();
+        void this.startIfInstalled().catch((err) => console.error("[ai] Ollama startup task failed:", String(err)));
     }
 
     // ─── settings & permissions (the panel's config document) ────────────
