@@ -17,8 +17,12 @@ const MAX_IDLE_MS = 30 * 60_000;
 // session cap: refusals for NEW sessions only, never eviction of live ones
 // (same shape as the token vault's MAX_TOKENS refusal)
 const MAX_SESSIONS = 50;
-// non-regular entries break PROPFIND/GET
-const BLOCKED_TOP_LEVEL = new Set(["sockets"]);
+// top-level dirs WebDAV never serves. sockets/: non-regular entries break
+// PROPFIND/GET. local/: this computer's own credentials and server state
+// (vault, paired tokens, TLS identity, paired computers, crane.json). The
+// whole directory is refused rather than a list of names inside it: a
+// name list missed tls_identity.json, the daemon's TLS private key.
+const BLOCKED_TOP_LEVEL = new Set(["sockets", "local"]);
 
 // credential/server-local files are never visible through WebDAV,
 // for any method (resolveDavPath is the single enforcement point)
@@ -29,6 +33,7 @@ const BLOCKED_FILE_NAMES = new Set([
     "paired_computers.json",
     "machine-id.json",
     "vault-recovery",
+    "tls_identity.json",
 ]);
 
 const KEY_MATERIAL_RE = /\.(key|pem|crt)$/i;
@@ -42,7 +47,8 @@ export function davMaxUploadBytes(): number {
 }
 
 function isBlockedFileName(name: string): boolean {
-    return BLOCKED_FILE_NAMES.has(name.toLowerCase()) || name.toLowerCase().startsWith("secrets.json.") || KEY_MATERIAL_RE.test(name);
+    const lower = name.toLowerCase();
+    return BLOCKED_FILE_NAMES.has(lower) || lower.startsWith("secrets.json.") || lower.startsWith("tls_identity.json.") || KEY_MATERIAL_RE.test(name);
 }
 
 export interface DavSession {
@@ -222,7 +228,8 @@ export function resolveDavPath(root: string, rel: string): string | null {
     const target = path.resolve(root, "." + (decoded.startsWith("/") ? decoded : "/" + decoded));
     const relToRoot = path.relative(root, target);
     if (relToRoot.startsWith("..") || path.isAbsolute(relToRoot)) return null;
-    const top = relToRoot.split(path.sep)[0];
+    // case-folded: macOS and Windows filesystems resolve /LOCAL/ to local/
+    const top = relToRoot.split(path.sep)[0].toLowerCase();
     if (BLOCKED_TOP_LEVEL.has(top)) return null;
     // refuse credential/local files and key material at ANY depth,
     // including dot-segment tricks after decodeURIComponent.
@@ -333,7 +340,7 @@ function listDir(root: string, dir: string): string[] {
     return fs
         .readdirSync(dir, { withFileTypes: true })
         .filter((e) => {
-            if (dir === root && BLOCKED_TOP_LEVEL.has(e.name)) return false;
+            if (dir === root && BLOCKED_TOP_LEVEL.has(e.name.toLowerCase())) return false;
             if (isBlockedFileName(e.name)) return false;
             return true;
         })

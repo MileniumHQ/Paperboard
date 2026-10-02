@@ -81,6 +81,14 @@ export class PaperCraneEngine {
         ]) {
             if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
         }
+        // local/ holds this computer's credentials (vault, paired tokens, TLS
+        // identity): owner-only, so other accounts cannot even list it. The
+        // files inside are 0600 regardless; on filesystems without modes
+        // (FAT on a USB stick) the chmod is refused and those modes remain.
+        if (process.platform !== "win32") {
+            try { fs.chmodSync(this.localDir, 0o700); }
+            catch (err) { logger.warn(`[engine] could not restrict ${this.localDir} to its owner:`, err); }
+        }
 
         this.credentialsStore = new CredentialStore(this.appDataDir);
         const ownersFile = path.join(this.localDir, "process-owners.json");

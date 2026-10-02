@@ -275,11 +275,19 @@ describe("DavSessionStore + resolveDavPath units", () => {
             "/files/server.key",
             "/packages/cert.pem",
             "/local/SECRETS.json",
+            "/local/tls_identity.json",
+            "/LOCAL/tls_identity.json",
+            "/Local/",
+            "/SOCKETS/x.sock",
+            "/files/tls_identity.json",
         ]) {
             expect(resolveDavPath(tmp, rel)).toBeNull();
         }
-        // non-credential files in local/ stay reachable
-        expect(resolveDavPath(tmp, "/local/app-settings.json")).not.toBeNull();
+        // all of local/ is this computer's own state, not a share: the old
+        // name list here allowed local/app-settings.json and with it every
+        // file nobody had thought to list, including tls_identity.json
+        expect(resolveDavPath(tmp, "/local/app-settings.json")).toBeNull();
+        expect(resolveDavPath(tmp, "/local")).toBeNull();
         // the file exists on disk but is invisible to WebDAV
         expect(fs.existsSync(path.join(tmp, "local", "secrets.json"))).toBe(true);
     });
@@ -287,8 +295,19 @@ describe("DavSessionStore + resolveDavPath units", () => {
 
 describe("WebDAV credential files", () => {
     it("serves credential files to no method, in any casing", async () => {
+        fs.mkdirSync(path.join(tmp, "local"), { recursive: true });
+        fs.writeFileSync(path.join(tmp, "local", "tls_identity.json"), "{\"key\":\"fixture\"}");
         const sess = await mintSession();
         const auth = basic(sess.user, sess.pass);
+        for (const method of ["GET", "PROPFIND", "PUT", "COPY", "DELETE"]) {
+            const key = await fetch(`${base}/dav/local/tls_identity.json`, {
+                method,
+                headers: { Authorization: auth, Destination: `${base}/dav/files/y.json` },
+                body: method === "PUT" ? "replaced" : undefined,
+            });
+            expect([403, 404]).toContain(key.status);
+        }
+        expect(fs.readFileSync(path.join(tmp, "local", "tls_identity.json"), "utf8")).toContain("fixture");
         for (const method of ["GET", "PROPFIND", "PUT", "COPY", "DELETE"]) {
             const res = await fetch(`${base}/dav/local/secrets.json`, {
                 method,
@@ -303,8 +322,13 @@ describe("WebDAV credential files", () => {
             method: "PROPFIND",
             headers: { Depth: "1", Authorization: auth },
         });
-        expect(listing.status).toBe(207);
-        expect(await listing.text()).not.toContain("secrets.json");
+        expect([403, 404]).toContain(listing.status);
+        const root = await fetch(`${base}/dav/`, {
+            method: "PROPFIND",
+            headers: { Depth: "1", Authorization: auth },
+        });
+        expect(root.status).toBe(207);
+        expect(await root.text()).not.toContain("/local");
     });
 
     it("rejects uploads beyond the cap with 413", async () => {
@@ -419,5 +443,18 @@ describe("parseBasic", () => {
         const t = Date.now();
         parseBasic("Basic " + " ".repeat(1_000_000) + "\u0000");
         expect(Date.now() - t).toBeLessThan(500);
+    });
+});
+
+describe("local/ is owner-only on disk", () => {
+    it.skipIf(process.platform === "win32")("the daemon restricts local/ to its owner", () => {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), "local-mode-"));
+        try {
+            fs.mkdirSync(path.join(dir, "local"), { mode: 0o755 });
+            new PaperCraneEngine(dir);
+            expect(fs.statSync(path.join(dir, "local")).mode & 0o777).toBe(0o700);
+        } finally {
+            fs.rmSync(dir, { recursive: true, force: true });
+        }
     });
 });
