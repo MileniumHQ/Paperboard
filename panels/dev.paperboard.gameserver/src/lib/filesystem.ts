@@ -1,7 +1,7 @@
 import { fileApi, processApi, system } from "@paperboard-dev/paperapi";
 import { PANEL_ID } from "../service/types";
 import { isWindowsTarget } from "./platform";
-import { isValidEntryName, isListableDirArg } from "../core/dirs";
+import { isValidEntryName, isListableDirArg, windowsDirArgs } from "../core/dirs";
 
 // entry-name + directory-arg validation lives in core/dirs.ts (pure, tested)
 export { isValidEntryName, isListableDirArg } from "../core/dirs";
@@ -44,7 +44,7 @@ export async function tryListDirectory(dir: string): Promise<DirectoryListing> {
         if (isWin) {
             result = await processApi.run({
                 command: "cmd",
-                args: ["/c", "dir", "/b", "/a:d-l-h", absoluteDir],
+                args: windowsDirArgs(absoluteDir),
                 cwd: serverDir,
                 onStdout: collect,
             });

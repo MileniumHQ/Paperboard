@@ -28,3 +28,13 @@ export function isListableDirArg(dir: unknown): dir is string {
         .split("/")
         .every((segment) => segment !== "" && isValidEntryName(segment));
 }
+
+/**
+ * The argv for listing one directory on Windows. The lister feeds logs,
+ * plugin jars and player-stat files, so it must return FILES as well as
+ * folders: `/a:d` lists only directories and hid every file from the UI.
+ * `-l` drops reparse points (symlink loops), `-h` drops hidden entries.
+ */
+export function windowsDirArgs(absoluteDir: string): string[] {
+    return ["/c", "dir", "/b", "/a:-l-h", absoluteDir];
+}

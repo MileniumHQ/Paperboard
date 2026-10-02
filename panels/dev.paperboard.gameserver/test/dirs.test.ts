@@ -4,7 +4,7 @@
 // (isValidEntryName("") is false), which made the world manager see zero
 // worlds.
 import { describe, test, expect } from "bun:test";
-import { isListableDirArg, isValidEntryName } from "../src/core/dirs";
+import { isListableDirArg, isValidEntryName, windowsDirArgs } from "../src/core/dirs";
 
 describe("isListableDirArg", () => {
     test("accepts the panel root", () => {
@@ -51,5 +51,15 @@ describe("isValidEntryName", () => {
         expect(isValidEntryName("")).toBe(false);
         expect(isValidEntryName("..")).toBe(false);
         expect(isValidEntryName("level.dat")).toBe(true);
+    });
+});
+
+describe("windowsDirArgs", () => {
+    test("lists files as well as directories", () => {
+        const args = windowsDirArgs("C:\\data\\logs");
+        // `/a:d` (directories only) hid every log/jar/stats file on Windows
+        expect(args).toContain("/a:-l-h");
+        expect(args).not.toContain("/a:d-l-h");
+        expect(args.at(-1)).toBe("C:\\data\\logs");
     });
 });
