@@ -386,6 +386,72 @@ describe("O6: icons die with the panel", () => {
     });
 });
 
+describe("a version names fixed bytes", () => {
+    const form = (id: string, version: string, bytes: number[]) =>
+        publishForm({ id, name: id, version }, new Uint8Array(bytes));
+
+    it("refuses to republish a live version instead of overwriting its bytes", async () => {
+        const { env, r2 } = envWith();
+        const first = await worker.fetch(
+            authed("http://localhost/panel/publish", { method: "POST", body: form("fixed", "1.0.0", [1]) }),
+            env,
+            {} as any,
+        );
+        expect(first.status).toBe(200);
+
+        const second = await worker.fetch(
+            authed("http://localhost/panel/publish", { method: "POST", body: form("fixed", "1.0.0", [2, 2, 2]) }),
+            env,
+            {} as any,
+        );
+        expect(second.status).toBe(409);
+        // the original archive is untouched
+        const stored = (r2 as any).objects.get("panels/fixed/fixed-1.0.0.tar.gz");
+        expect(Array.from(stored.body)).toEqual([1]);
+    });
+
+    it("allows a new version and republishing after take-down", async () => {
+        const { env } = envWith();
+        for (const version of ["1.0.0", "1.1.0"]) {
+            const res = await worker.fetch(
+                authed("http://localhost/panel/publish", { method: "POST", body: form("moved", version, [1]) }),
+                env,
+                {} as any,
+            );
+            expect(res.status).toBe(200);
+        }
+        await worker.fetch(
+            authed("http://localhost/panel/moved", { method: "DELETE" }),
+            env,
+            {} as any,
+        );
+        const again = await worker.fetch(
+            authed("http://localhost/panel/publish", { method: "POST", body: form("moved", "1.1.0", [3]) }),
+            env,
+            {} as any,
+        );
+        expect(again.status).toBe(200);
+    });
+
+    it("refuses the publish when the existing record cannot be read", async () => {
+        const { env, kv } = envWith();
+        const store = (kv as any).__store as Map<string, string>;
+        const originalGet = (kv as any).get.bind(kv);
+        (kv as any).get = async (key: string, options?: any) => {
+            if (key === "panel:fixed2") throw new Error("kv down");
+            return originalGet(key, options);
+        };
+        const res = await worker.fetch(
+            authed("http://localhost/panel/publish", { method: "POST", body: form("fixed2", "1.0.0", [1]) }),
+            env,
+            {} as any,
+        );
+        expect(res.status).toBe(500);
+        // unreadable is not empty: nothing was written over it
+        expect(store.has("panel:fixed2")).toBe(false);
+    });
+});
+
 describe("O8: method confusion closed", () => {
     it("download refuses non-GET/HEAD methods", async () => {
         const { env } = envWith();

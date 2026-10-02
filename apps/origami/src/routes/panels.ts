@@ -1,6 +1,7 @@
 import {
     getPanelsIndex,
     getPanel,
+    readPanelStrict,
     savePanel,
     deletePanel,
     isValidPanelId,
@@ -231,6 +232,20 @@ export async function handlePanelsRoutes(
             }
             if (metadata.manifest?.id !== undefined && metadata.manifest.id !== metadata.id) {
                 return jsonResponse({ error: "Manifest id must match the published panel id" }, 400);
+            }
+
+            // a version names fixed bytes: a live record with this version
+            // is refused rather than silently redefined. The read is
+            // strict — an unreadable record refuses the publish instead of
+            // being overwritten (readPanelStrict).
+            const existing = await readPanelStrict(env.PACKAGES, metadata.id);
+            if (existing && existing.version === metadata.version) {
+                return jsonResponse(
+                    {
+                        error: `Panel ${metadata.id} version ${metadata.version} is already published; bump the version to publish again`,
+                    },
+                    409,
+                );
             }
 
             // Store listing: validated in full BEFORE anything is written,

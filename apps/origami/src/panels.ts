@@ -138,6 +138,20 @@ export async function getPanel(
     }
 }
 
+// Strict read for write boundaries: an unreadable record must refuse the
+// write, never read as "nothing exists yet" and be overwritten. Read
+// routes keep the lenient getPanel so a flaky KV read degrades to 404
+// instead of a 500.
+export async function readPanelStrict(
+    kv: KVNamespace,
+    id: string,
+): Promise<PanelRecord | null> {
+    const record = await kv.get(`${PANEL_KEY_PREFIX}${id}`, {
+        type: "json",
+    });
+    return (record as PanelRecord) || null;
+}
+
 export async function savePanel(
     kv: KVNamespace,
     record: PanelRecord,
