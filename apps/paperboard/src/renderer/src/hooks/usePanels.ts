@@ -38,10 +38,17 @@ export function usePanels() {
         if (tab !== "landing" && tab !== "library" && tab !== "settings") {
             const key = `${compId}::${tab}`;
             setOpenedPanels((prev) => {
-                const next = [...prev.filter((k) => k !== key), key];
-                return next.length > MAX_OPENED_PANELS
-                    ? next.slice(next.length - MAX_OPENED_PANELS)
-                    : next;
+                // Selecting an already-open panel must NOT rebuild the list:
+                // a new array reorders the keys, which makes PanelView's
+                // <For> move live iframes in the DOM, and detaching/reinserting
+                // an iframe flickers its contents. Membership only.
+                if (prev.includes(key)) return prev;
+                const next = [...prev, key];
+                if (next.length <= MAX_OPENED_PANELS) return next;
+                // drop the oldest placeholder, never the panel just selected
+                const drop = next.findIndex((k) => k !== key);
+                next.splice(drop, 1);
+                return next;
             });
         }
     };

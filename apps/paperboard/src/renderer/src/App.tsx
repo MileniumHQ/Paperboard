@@ -607,6 +607,7 @@ const App: Component = () => {
                             style={{
                                 flex: 1,
                                 overflow: "hidden",
+                                position: "relative",
                             }}
                         >
                             <For each={computers()}>
@@ -636,12 +637,22 @@ const App: Component = () => {
                                 direction="column"
                                 fullHeight
                                 style={{
-                                    flex: 1,
+                                    position: "absolute",
+                                    inset: "0",
                                     overflow: "hidden",
-                                    display:
+                                    display: "flex",
+                                    // visibility, not display: a hidden iframe
+                                    // keeps its compositor state, so switching
+                                    // back does not repaint a white frame
+                                    visibility:
                                         getSelectedTab(activeComputerId()) ===
                                         "library"
-                                            ? "flex"
+                                            ? "visible"
+                                            : "hidden",
+                                    "pointer-events":
+                                        getSelectedTab(activeComputerId()) ===
+                                        "library"
+                                            ? "auto"
                                             : "none",
                                 }}
                             >
@@ -692,17 +703,30 @@ const App: Component = () => {
                                 direction="column"
                                 fullHeight
                                 style={{
-                                    flex: 1,
-                                    position: "relative",
+                                    position: "absolute",
+                                    inset: "0",
                                     overflow: "hidden",
-                                    display:
+                                    display: "flex",
+                                    // visibility, not display, for the same
+                                    // reason as the library layer: never tear
+                                    // down a live panel iframe on a tab switch
+                                    visibility:
                                         getSelectedTab(activeComputerId()) !==
                                             "landing" &&
                                         getSelectedTab(activeComputerId()) !==
                                             "library" &&
                                         getSelectedTab(activeComputerId()) !==
                                             "settings"
-                                            ? "flex"
+                                            ? "visible"
+                                            : "hidden",
+                                    "pointer-events":
+                                        getSelectedTab(activeComputerId()) !==
+                                            "landing" &&
+                                        getSelectedTab(activeComputerId()) !==
+                                            "library" &&
+                                        getSelectedTab(activeComputerId()) !==
+                                            "settings"
+                                            ? "auto"
                                             : "none",
                                 }}
                             >

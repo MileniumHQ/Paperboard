@@ -39,7 +39,7 @@ const PanelFrame: Component<{ panelKey: string; current: boolean; reload: number
         onCleanup(() => { clearTimeout(timer); window.removeEventListener("message", receive); });
     });
     onMount(() => { if (frame) frame.src = panelUrl(computerId, panelId, `?_r=${props.reload}&generation=${generation}`); });
-    return <div style={{ position: "absolute", inset: "0", display: props.current ? "block" : "none" }}>
+    return <div style={{ position: "absolute", inset: "0", visibility: props.current ? "visible" : "hidden", "pointer-events": props.current ? "auto" : "none" }}>
         <iframe ref={frame} data-panel-key={props.panelKey} title={panelId}
             sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
             allow="clipboard-read; clipboard-write"
