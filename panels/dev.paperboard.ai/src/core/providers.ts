@@ -94,7 +94,8 @@ export function credentialsAllowed(baseUrl: string): boolean {
     let url: URL;
     try {
         url = new URL(baseUrl);
-    } catch {
+    } catch (err) {
+        console.debug("[ai] endpoint URL could not be parsed; no credential will be sent:", String(err));
         return false;
     }
     if (url.protocol === "https:") return true;
