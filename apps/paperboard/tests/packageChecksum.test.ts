@@ -13,11 +13,7 @@ import { PAPERBOARD_USER_AGENT } from "../papercrane/userAgent";
 const SHA = "e58fcdcd637b25c03ca84cbbcefc70d11efb8f4b4cbd05decc9f661769d77f94";
 
 function stubFetch(body: unknown, status = 200): any {
-    return async () => ({
-        ok: status >= 200 && status < 300,
-        status,
-        text: async () => (typeof body === "string" ? body : JSON.stringify(body)),
-    });
+    return async () => new Response(typeof body === "string" ? body : JSON.stringify(body), { status });
 }
 
 const META = {
@@ -82,7 +78,7 @@ describe("resolvePackageSha256", () => {
                 platform: "linux",
                 arch: "x64",
             }),
-        ).rejects.toThrow(/no metadata.*404/);
+        ).rejects.toThrow(/HTTP 404/);
     });
 
     it("refuses when the registry is unreachable", async () => {
@@ -94,18 +90,40 @@ describe("resolvePackageSha256", () => {
                 platform: "linux",
                 arch: "x64",
             }),
-        ).rejects.toThrow(/unreachable/);
+        ).rejects.toThrow(/socket hang up/);
+    });
+
+    it("cancels an oversized record at the cap instead of buffering it", async () => {
+        let cancelled = false;
+        let pulled = 0;
+        const chunk = new Uint8Array(64 * 1024).fill(0x61);
+        const fetchFn: any = async () =>
+            new Response(
+                new ReadableStream({
+                    pull(controller) {
+                        pulled += chunk.byteLength;
+                        controller.enqueue(chunk);
+                    },
+                    cancel() {
+                        cancelled = true;
+                    },
+                }),
+                { status: 200 },
+            );
+        await expect(
+            resolvePackageSha256("java-25", { fetchFn, platform: "linux", arch: "x64" }),
+        ).rejects.toThrow(/exceeds 262144 bytes/);
+        expect(cancelled).toBe(true);
+        // the body is unbounded: settling at all proves the reader stopped,
+        // and a few queued chunks is as far ahead as the stream may run
+        expect(pulled).toBeLessThanOrEqual(16 * chunk.byteLength);
     });
 
     it("identifies Paperboard on the registry request", async () => {
         let seen: string | null = null;
         const fetchFn: any = async (_url: string, init?: RequestInit) => {
             seen = new Headers(init?.headers).get("User-Agent");
-            return {
-                ok: true,
-                status: 200,
-                text: async () => JSON.stringify(META),
-            };
+            return new Response(JSON.stringify(META), { status: 200 });
         };
         await resolvePackageSha256("java-25", {
             fetchFn,

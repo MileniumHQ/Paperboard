@@ -1,20 +1,17 @@
 // Registry checksum resolution for ad-hoc package installs (bun-safe,
 // node-safe: no electron imports). The update plan carries sha256 facts
 // from planning time, but the package:download RPC path has no plan —
-// callers like the gameserver Setup wizard just name a package. Rather
-// than refuse a package the registry can verify, the daemon resolves the
-// checksum itself from registry metadata and hands it to the engine,
-// which re-reads the metadata and cross-checks (engine.ts). Two reads,
-// one refusal posture: a failed lookup still throws instead of passing
-// sha256: undefined.
+// callers like the gameserver Setup wizard just name a package. The daemon
+// reads the registry record once (bounded, shared reader) so it can hand
+// the engine an expected digest; the engine then re-reads the record and
+// verifies the release signature, which is the actual authority. The first
+// read adds no authority, only the fact a plan would have supplied.
 import { resolveRegistryUrl } from "./util";
 import { logger } from "./logger";
-import { PAPERBOARD_USER_AGENT } from "./userAgent";
+import { fetchRegistryRecord } from "./registryRecord";
 
 const REGISTRY_URL = resolveRegistryUrl();
 
-const METADATA_TIMEOUT_MS = 10_000;
-const METADATA_MAX_BYTES = 256 * 1024;
 const SHA256_RE = /^[a-f0-9]{64}$/i;
 
 export interface PackageChecksumDeps {
@@ -65,36 +62,9 @@ export async function resolvePackageSha256(
         );
     }
     const url = `${REGISTRY_URL}/package/${encodeURIComponent(clean)}.json`;
-    const fetchFn = deps?.fetchFn ?? fetch;
-    let res: Response;
-    try {
-        const ctrl = new AbortController();
-        const timer = setTimeout(() => ctrl.abort(), METADATA_TIMEOUT_MS);
-        try {
-            res = await fetchFn(url, {
-                headers: { "User-Agent": PAPERBOARD_USER_AGENT },
-                signal: ctrl.signal,
-            });
-        } finally {
-            clearTimeout(timer);
-        }
-    } catch (err) {
-        throw new Error(
-            `Install refused for package "${clean}": registry metadata unreachable (${err instanceof Error ? err.message : String(err)})`,
-        );
-    }
-    if (!res.ok) {
-        throw new Error(
-            `Install refused for package "${clean}": registry has no metadata (HTTP ${res.status})`,
-        );
-    }
     let body: unknown;
     try {
-        const text = await res.text();
-        if (text.length > METADATA_MAX_BYTES) {
-            throw new Error(`metadata exceeds ${METADATA_MAX_BYTES} bytes`);
-        }
-        body = JSON.parse(text);
+        body = await fetchRegistryRecord(url, deps?.fetchFn);
     } catch (err) {
         throw new Error(
             `Install refused for package "${clean}": registry metadata unreadable (${err instanceof Error ? err.message : String(err)})`,
