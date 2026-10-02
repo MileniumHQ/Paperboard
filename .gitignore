@@ -15,6 +15,8 @@ tmp/
 *.lcov
 .eslintcache
 coverage/
+# generated USB bundle (installers + panels), built by scripts/publish.ts
+apps/usb/
 logs/
 report.[0-9]*.json
 .idea
