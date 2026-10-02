@@ -134,6 +134,9 @@ export function setupWebSocketServer(
         // granted panel identity for this socket (token claim, never a
         // caller parameter). Null = full-authority master/host caller.
         let authedPanelId: string | null = null;
+        // relay-only socket (remote-served panel): may tunnel to this one
+        // computer and nothing else. Null = an ordinary principal.
+        let authedRelayTo: string | null = null;
         let inFlight = 0;
         let countedUnauthenticated = !auth.noAuth;
         if (countedUnauthenticated) unauthenticated++;
@@ -153,11 +156,12 @@ export function setupWebSocketServer(
             sockets.add(ws);
             index.set(key, sockets);
         };
-        const grantIdentity = (token: string | null, panelId: string | null) => {
+        const grantIdentity = (token: string | null, panelId: string | null, relayTo: string | null = null) => {
             unindex(byToken, authedToken);
             unindex(byPanel, authedPanelId);
             authedToken = token;
             authedPanelId = panelId;
+            authedRelayTo = relayTo;
             isAuthenticated = true;
             indexSocket(byToken, token);
             indexSocket(byPanel, panelId);
@@ -303,6 +307,12 @@ export function setupWebSocketServer(
                     const tunnelId = assertStr(maybe.tunnelId ?? maybe.id, "tunnel id", 128);
                     const computerId = assertStr(maybe.computerId, "computerId", 128);
                     if (tunnels.has(tunnelId)) throw new Error("Tunnel id is already open");
+                    // a relay credential reaches exactly the computer that
+                    // served its panel, by id — never another, never by name
+                    if (authedRelayTo !== null && computerId !== authedRelayTo) {
+                        ws.send(JSON.stringify({ type: "tunnel-closed", id: tunnelId, reason: "relay-scope" }));
+                        return;
+                    }
                     // identity first: exact id match wins. A bare name only
                     // resolves when it is unambiguous — with two remotes
                     // sharing a name, first-match-wins could tunnel to the
@@ -518,11 +528,14 @@ export function setupWebSocketServer(
                     const entry = auth.resolveToken(params?.token);
                     const valid = auth.noAuth || entry !== null;
                     if (valid) {
-                        if (authedPanelId && entry?.panelId !== authedPanelId) {
+                        if (
+                            authedPanelId &&
+                            (entry?.panelId !== authedPanelId || (entry?.relayTo ?? null) !== authedRelayTo)
+                        ) {
                             reply(null, "A scoped connection cannot broaden or change its identity", ErrorCode.FORBIDDEN);
                             return;
                         }
-                        grantIdentity(params?.token ?? null, entry?.panelId ?? null);
+                        grantIdentity(params?.token ?? null, entry?.panelId ?? null, entry?.relayTo ?? null);
                         const osInfo = await getDetailedOsInfo();
                         reply({
                             success: true,
@@ -543,7 +556,7 @@ export function setupWebSocketServer(
                     if (params?.token) {
                         const entry = auth.resolveToken(params.token);
                         if (entry !== null || auth.noAuth) {
-                            grantIdentity(params.token, entry?.panelId ?? null);
+                            grantIdentity(params.token, entry?.panelId ?? null, entry?.relayTo ?? null);
                         } else {
                             reply(null, "Unauthorized. Authentication required.", ErrorCode.AUTH_REQUIRED);
                             return;
@@ -552,6 +565,13 @@ export function setupWebSocketServer(
                         reply(null, "Unauthorized. Authentication required.", ErrorCode.AUTH_REQUIRED);
                         return;
                     }
+                }
+
+                // relay sockets exist only to carry tunnels (handled above);
+                // no local RPC answers them
+                if (authedRelayTo !== null && action !== "auth:revoke-self") {
+                    reply(null, `${String(action)} refused: this credential only relays to computer "${authedRelayTo}"`, ErrorCode.FORBIDDEN);
+                    return;
                 }
 
                 // A paired host can narrow this connection permanently. The
@@ -564,7 +584,13 @@ export function setupWebSocketServer(
                 }
                 if (action === "auth:panel-token") {
                     requireHost(authedPanelId, action);
-                    reply({ token: auth.issuePanelToken(assertPanelId(params?.panelId)) });
+                    const panelId = assertPanelId(params?.panelId);
+                    // relayTo names the computer that serves the panel; a
+                    // panel served from elsewhere gets a relay-only credential
+                    const relayTo = params?.relayTo === undefined || params?.relayTo === "local"
+                        ? null
+                        : assertStr(params.relayTo, "relayTo", 128);
+                    reply({ token: relayTo ? auth.issueRelayToken(panelId, relayTo) : auth.issuePanelToken(panelId) });
                     return;
                 }
 

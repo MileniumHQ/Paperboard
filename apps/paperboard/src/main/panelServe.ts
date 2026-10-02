@@ -40,8 +40,10 @@ const injectUnselectable = (html: string): string => {
 
 // inject computer-scoped creds; scope comes from serving URL.
 // panelId travels with the credentials: identity is a granted fact,
-// never parsed from a URL after the fact. The token is the panel's own
-// scoped credential issued by the authenticated local daemon. An unavailable
+// never parsed from a URL after the fact. The token is issued by the
+// authenticated local daemon: a local panel gets its own scoped credential,
+// a panel served by another computer gets a relay-only credential that can
+// tunnel to that computer and touch nothing on this one. An unavailable
 // issuer refuses the document rather than substituting a master token.
 const injectCraneCreds = async (
     html: string,
@@ -50,7 +52,10 @@ const injectCraneCreds = async (
 ): Promise<string> => {
     const creds = readCraneHandshake();
     if (!panelId) throw new Error("Panel credential injection requires an explicit panel id");
-    const granted = await connectionPool.getClient("local").call<{ token: string }>("auth:panel-token", { panelId });
+    const granted = await connectionPool.getClient("local").call<{ token: string }>(
+        "auth:panel-token",
+        comp === "local" ? { panelId } : { panelId, relayTo: comp },
+    );
     const scoped = granted?.token;
     if (typeof scoped !== "string" || !scoped) throw new Error("Daemon did not issue a panel credential");
     const payload = buildCraneCredentialPayload(creds, comp, panelId, scoped);

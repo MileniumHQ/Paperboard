@@ -199,3 +199,65 @@ test("service hydration waits for initialization and rejects failed initializati
         await expect(api.actionsApi.call("panel.failed", "__getState")).rejects.toThrow("fixture hydration failed");
     } finally { release(); disposeBridge?.(); api.closeTransport("local"); await f.close(); }
 });
+
+test("a remote-served panel's credential only relays to its computer and never leaves this one", async () => {
+    const remote = await fixture(undefined, { tls: true });
+    const local = await fixture(remote);
+    const host = new CraneTransport({ port: local.port, token: "test-host", computerId: "local" });
+    // every frame the remote daemon receives, to prove no local credential arrives there
+    const seenByRemote: string[] = [];
+    remote.wss.on("connection", (ws) => ws.on("message", (raw) => seenByRemote.push(String(raw))));
+    let sdk: CraneTransport | undefined;
+    let raw: WebSocket | undefined;
+    try {
+        await local.engine.setConfig("panel.a", { localOnly: true });
+        const { token } = await host.call<{ token: string }>("auth:panel-token", { panelId: "panel.a", relayTo: "remote" });
+        expect(token).not.toBe(local.auth.issuePanelToken("panel.a"));
+        expect(local.auth.verifyHostToken(token)).toBe(false);
+
+        // over the tunnel it behaves as panel.a on the remote computer
+        sdk = new CraneTransport({ port: local.port, token, computerId: "remote", panelId: "panel.a" });
+        expect(await sdk.call("config:set", { id: "panel.a", data: { remote: true } })).toEqual({ success: true });
+        expect(await remote.engine.getConfig("panel.a")).toEqual({ remote: true });
+        expect(seenByRemote.some((frame) => frame.includes(token))).toBe(false);
+
+        // the same credential sent straight to this computer gets nothing
+        raw = new WebSocket(`ws://127.0.0.1:${local.port}`);
+        await once(raw, "open");
+        const frames: any[] = [];
+        raw.on("message", (data) => frames.push(JSON.parse(String(data))));
+        const ask = async (id: number, frame: Record<string, unknown>) => {
+            raw!.send(JSON.stringify({ id, ...frame }));
+            const deadline = Date.now() + 3000;
+            while (!frames.some((f) => f.id === id)) {
+                if (Date.now() > deadline) throw new Error(`no answer to ${id}`);
+                await Bun.sleep(5);
+            }
+            return frames.find((f) => f.id === id);
+        };
+        expect((await ask(1, { action: "auth:verify", params: { token } })).error).toBeUndefined();
+        for (const [id, action, params] of [
+            [2, "process:run", { id: "relay-escape", command: "true" }],
+            [3, "secrets:get", { panelId: "panel.a", name: "k" }],
+            [4, "config:get", { id: "panel.a" }],
+            [5, "file:read", { targetPath: "x" }],
+            [6, "auth:panel-token", { panelId: "panel.a" }],
+            [7, "actions:register", { panelId: "panel.a", action: "run" }],
+        ] as const) {
+            const res = await ask(id, { action, params });
+            expect(res.code).toBe("FORBIDDEN");
+        }
+        expect(local.engine.clientOwner("relay-escape")).toBeNull();
+        // and it cannot be pointed at a different computer
+        raw.send(JSON.stringify({ type: "remote:open", tunnelId: "t-other", computerId: "elsewhere" }));
+        const deadline = Date.now() + 3000;
+        while (!frames.some((f) => f.type === "tunnel-closed" && f.id === "t-other")) {
+            if (Date.now() > deadline) throw new Error("no tunnel refusal");
+            await Bun.sleep(5);
+        }
+        expect(frames.find((f) => f.id === "t-other").reason).toBe("relay-scope");
+    } finally {
+        raw?.terminate(); sdk?.close(); host.close();
+        await local.close(); await remote.close();
+    }
+});

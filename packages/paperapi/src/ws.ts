@@ -841,11 +841,17 @@ export class CraneTransport {
             throw new Error(`No open tunnel to ${this.computerId}`);
         }
         if (this.tunnelId) {
+            // the remote authenticates the tunnel itself (host-granted scope);
+            // this computer's credential never travels to another computer
+            const p = payload as { params?: Record<string, unknown> };
+            const forwarded = p?.params && "token" in p.params
+                ? { ...p, params: { ...p.params, token: undefined } }
+                : payload;
             this.ws.send(
                 JSON.stringify({
                     type: "tunnel",
                     id: this.tunnelId,
-                    payload: JSON.stringify(payload),
+                    payload: JSON.stringify(forwarded),
                 }),
             );
         } else {

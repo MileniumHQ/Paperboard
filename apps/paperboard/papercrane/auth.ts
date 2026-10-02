@@ -8,6 +8,7 @@ import {
 import { getLocalDir } from "./paths";
 import { secretsMatch } from "./secretCompare";
 import { requirePanelId } from "../../../packages/paperapi/src/panelIdentity";
+import { sanitizeId } from "./storage";
 
 export interface AuthorizedToken {
     token: string;
@@ -18,6 +19,12 @@ export interface AuthorizedToken {
     // a URL or trusted from a caller parameter. Absent = full-authority
     // master/host token (pre-scoped-token flows).
     panelId?: string;
+    // relay-only principal: a panel served FROM this computer id. The
+    // credential authenticates a socket that may only open a tunnel to that
+    // one computer; every local RPC is refused. Remote-served panel pages get
+    // this, never the local panel token for the same id (which would hand a
+    // remote computer this machine's process, file and vault reach).
+    relayTo?: string;
 }
 
 const BASE_LOCKOUT_MS = 5_000;
@@ -28,6 +35,10 @@ const LOCKOUT_ESCALATION_THRESHOLD = 3;
 // of already-trusted credentials
 const MAX_TOKENS = 200;
 const MAX_PANEL_TOKENS = 10_000;
+
+function relayKey(computerId: string, panelId: string): string {
+    return `${computerId}\n${panelId}`;
+}
 
 // pairing auth and token store
 export class PaperCraneAuth extends EventEmitter {
@@ -44,6 +55,7 @@ export class PaperCraneAuth extends EventEmitter {
     // whenever the vault mutates; teardown = map replaced, no timers.
     private tokenIndex: Map<string, AuthorizedToken> = new Map();
     private panelTokenIndex = new Map<string, AuthorizedToken>();
+    private relayTokenIndex = new Map<string, AuthorizedToken>();
     public noAuth: boolean = false;
 
     // injectable clock for testable lockouts
@@ -74,8 +86,12 @@ export class PaperCraneAuth extends EventEmitter {
             index.set(this.tokenHash(entry.token), entry);
         }
         this.tokenIndex = index;
+        const entries = [...this.authorizedTokens.values()];
         this.panelTokenIndex = new Map(
-            [...this.authorizedTokens.values()].filter((entry) => entry.panelId).map((entry) => [entry.panelId!, entry]),
+            entries.filter((entry) => entry.panelId && !entry.relayTo).map((entry) => [entry.panelId!, entry]),
+        );
+        this.relayTokenIndex = new Map(
+            entries.filter((entry) => entry.panelId && entry.relayTo).map((entry) => [relayKey(entry.relayTo!, entry.panelId!), entry]),
         );
     }
 
@@ -137,6 +153,29 @@ export class PaperCraneAuth extends EventEmitter {
             pairedAt: new Date().toISOString(),
             lastSeenAt: new Date().toISOString(),
             panelId,
+        };
+        this.authorizedTokens.set(token, entry);
+        this.saveTokens();
+        return token;
+    }
+
+    // mints (or reuses) the relay-only credential for a panel served from
+    // another computer. Bounded like panel tokens: one per (computer, panel).
+    public issueRelayToken(panelId: string, computerId: string): string {
+        requirePanelId(panelId);
+        const computer = sanitizeId(computerId);
+        if (!computer || computer === "local") throw new Error(`Invalid relay computer id: ${JSON.stringify(computerId)}`);
+        const existing = this.relayTokenIndex.get(relayKey(computer, panelId));
+        if (existing) return existing.token;
+        if (this.relayTokenIndex.size >= MAX_PANEL_TOKENS) throw new Error("Relay credential store is full");
+        const token = "pcr_" + crypto.randomBytes(24).toString("hex");
+        const entry: AuthorizedToken = {
+            token,
+            clientName: `panel-relay:${computer}:${panelId}`,
+            pairedAt: new Date().toISOString(),
+            lastSeenAt: new Date().toISOString(),
+            panelId,
+            relayTo: computer,
         };
         this.authorizedTokens.set(token, entry);
         this.saveTokens();
