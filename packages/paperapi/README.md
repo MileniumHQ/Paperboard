@@ -1,3 +1,5 @@
+APIs for Paperboard panels. Learn more at https://paperboard.dev/paperapi.
+
 # PaperAPI
 
 Client SDK for Paperboard panels talking to the PaperCrane daemon. Paperboard

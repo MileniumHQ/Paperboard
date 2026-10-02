@@ -1,3 +1,5 @@
+UI library for Paperboard. Learn more at https://paperboard.dev/paperui.
+
 # PaperUI
 
 A component library and design system for [Paperboard](https://paperboard.dev) and its panel ecosystem, built with [SolidJS](https://www.solidjs.com).
