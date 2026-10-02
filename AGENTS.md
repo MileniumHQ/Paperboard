@@ -2,6 +2,15 @@
 
 Mandatory engineering contracts. This file is not evidence that the code obeys them. Most of this project is agent-written: code, comments, tests, and earlier agent reports can all agree and still be wrong. Verify the user-visible contract against the real producer, transport, resource owner, persistence, and consumer. If a requirement conflicts with the requested change, explain the conflict and ask; never silently weaken the requirement or its test.
 
+## A note from the maintainer
+Hi, I'm Pxl, and I'm the person that decides whether I want to merge your PRs!!
+These rules aren't perfect, and they were admittedly made in a pinch. However, I agree with them and they've boosted Paperboard development so much!!
+But they're not completely finite, if you think there's a rule that should be added of removed or changed, that in itself is a PR you can make! :3
+
+Paperboard isn't supposed to be just an app, it should have passion in every corner and I hope that's how you build it.
+
+Good luck devs and agents !
+
 ## The product
 
 Paperboard is a dashboard for self-hosted programs. Panels are the apps. Optimize for the thousandth panel, not the first.
