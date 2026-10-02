@@ -162,26 +162,33 @@ function spawnNodePty(
     };
 }
 
-// A compiled Bun binary (the Windows crane) cannot resolve node_modules, so
-// publish.ts places a node-pty copy beside the executable and this resolves it
-// by absolute path. Anywhere else, the bundled copy is the answer.
-function loadNodePty(): any {
-    try {
-        return require("node-pty");
-    } catch (bundledErr: any) {
-        const sidecar = path.join(
-            path.dirname(process.execPath),
-            "node-pty",
-            "lib",
-            "index.js",
+// Which node-pty a runtime loads. Bun on Windows (the compiled crane) must
+// use the sidecar publish.ts places beside the executable: the compiler
+// bundles node-pty's JS, so `require("node-pty")` succeeds, but its native
+// conpty.node is then resolved inside the virtual bundle and the first spawn
+// fails. The sidecar also carries the conpty input-pipe patch Bun needs.
+// Node and Electron load their own installed node-pty.
+export function nodePtyEntry(
+    runtime: { bun: boolean; platform: NodeJS.Platform; execPath: string },
+    exists: (file: string) => boolean = fs.existsSync,
+): string {
+    if (!runtime.bun || runtime.platform !== "win32") return "node-pty";
+    const sidecar = path.win32.join(path.win32.dirname(runtime.execPath), "node-pty", "lib", "index.js");
+    if (!exists(sidecar)) {
+        throw new Error(
+            `Terminals need the node-pty folder that ships beside ${path.win32.basename(runtime.execPath)}; ` +
+                `it is missing (${sidecar}). Copy the whole crane folder, not just the executable`,
         );
-        if (!fs.existsSync(sidecar)) {
-            throw new Error(
-                `node-pty is unavailable (bundled: ${bundledErr?.message ?? bundledErr}); ` +
-                    `no sidecar at ${sidecar}`,
-            );
-        }
-        logger.debug(`[pty] node-pty resolved via sidecar ${sidecar}`);
-        return require(sidecar);
     }
+    return sidecar;
+}
+
+function loadNodePty(): any {
+    const entry = nodePtyEntry({
+        bun: Boolean(BunRuntime),
+        platform: process.platform,
+        execPath: process.execPath,
+    });
+    if (entry !== "node-pty") logger.debug(`[pty] node-pty resolved via sidecar ${entry}`);
+    return require(entry);
 }

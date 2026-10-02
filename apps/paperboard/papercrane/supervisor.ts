@@ -53,6 +53,23 @@ export function getSupervisorMetadataPath(procId: string): string {
     return path.join(socketsDir, `${safeId}.json`);
 }
 
+/**
+ * Whether a supervisor endpoint is present enough to attempt a connect.
+ * On Windows the endpoint is a named pipe; `fs.existsSync` cannot see a
+ * live pipe, so a check against the pipe path is always false and an
+ * orphaned supervisor is never found. The metadata file written beside the
+ * pipe is the on-disk presence fact there; the connect remains the actual
+ * liveness probe (a stale metadata file simply fails to connect).
+ */
+export function supervisorPresent(
+    procId: string,
+    platform: NodeJS.Platform = process.platform,
+): boolean {
+    return platform === "win32"
+        ? fs.existsSync(getSupervisorMetadataPath(procId))
+        : fs.existsSync(getSupervisorSocketPath(procId));
+}
+
 // client for a detached supervisor over IPC socket
 export class SupervisedProcessClient {
     private socket: net.Socket | null = null;
@@ -64,6 +81,7 @@ export class SupervisedProcessClient {
     private hasExited = false;
     private exitCode = 0;
     private listeners = new Map<string, Function[]>();
+    private status: { error?: string } | null = null;
 
     public pid = 0;
     public childPid = 0;
@@ -155,6 +173,8 @@ export class SupervisedProcessClient {
                 this.pid = msg.pid;
                 this.childPid = msg.childPid;
                 this.isPty = Boolean(msg.isPty);
+                this.status = { error: typeof msg.error === "string" ? msg.error : undefined };
+                this.emit("status", this.status);
                 break;
             case "history":
                 this.emit("history", msg.data);
@@ -173,6 +193,33 @@ export class SupervisedProcessClient {
                 }
                 break;
         }
+    }
+
+    /**
+     * Resolves once the supervisor has reported whether its workload
+     * started. An open pipe only proves the supervisor is listening; the
+     * spawn behind it can still have failed (a missing pty backend, a bad
+     * cwd), and that failure is the caller's error, not a later exit.
+     */
+    public awaitStarted(timeoutMs = 5000): Promise<void> {
+        return new Promise((resolve, reject) => {
+            const settle = (status: { error?: string }) => {
+                clearTimeout(timer);
+                this.off("status", settle);
+                this.off("exit", onExit);
+                if (status.error) reject(new Error(status.error));
+                else resolve();
+            };
+            const onExit = () => settle(this.status ?? { error: `Supervisor ${this.id} exited before reporting a start` });
+            const timer = setTimeout(
+                () => settle({ error: `Supervisor ${this.id} did not report a start within ${timeoutMs}ms` }),
+                timeoutMs,
+            );
+            unrefTimer(timer);
+            if (this.status) return settle(this.status);
+            this.on("status", settle);
+            this.on("exit", onExit);
+        });
     }
 
     public write(data: string) {
@@ -228,6 +275,10 @@ class CircularBuffer {
     }
 }
 
+// how long a supervisor whose workload failed to start waits for the
+// spawning daemon to connect and read why
+const START_FAILURE_LINGER_MS = 10_000;
+
 // detached supervisor serving output over socket/pipe
 export async function runSupervisor(procId: string): Promise<void> {
     const socketPath = getSupervisorSocketPath(procId);
@@ -266,6 +317,9 @@ export async function runSupervisor(procId: string): Promise<void> {
     let isExited = false;
     let ptyInstance: IPtyProcess | null = null;
     let childProcess: cp.ChildProcess | null = null;
+    // why the workload never started; reported in the status frame so the
+    // spawning daemon fails its create call with this reason
+    let startError: string | null = null;
 
     const broadcast = (msgObj: Record<string, any>) => {
         const payload = JSON.stringify(msgObj) + "\n";
@@ -305,8 +359,12 @@ export async function runSupervisor(procId: string): Promise<void> {
                 childPid,
                 running: !isExited,
                 isPty: Boolean(config.isPty),
+                ...(startError ? { error: startError } : {}),
             }) + "\n",
         );
+        // the status frame carried the failure; this client was the one
+        // waiting for it, so the supervisor's job is done
+        if (startError) cleanupAndExit(1);
 
         let socketBuffer = "";
         socket.on("data", (chunk) => {
@@ -337,17 +395,25 @@ export async function runSupervisor(procId: string): Promise<void> {
         socket.on("error", () => clients.delete(socket));
     });
 
+    // a workload that cannot start stays failed: the supervisor keeps
+    // listening just long enough for the spawning daemon to read the reason
+    // from the status frame, then exits. No metadata is written, so nothing
+    // mistakes the dead supervisor for a live one.
+    const failStart = (msg: string) => {
+        startError = msg;
+        logger.error(`[supervisor:${procId}] ${msg}`);
+        ringBuffer.push(`\n${msg}\n`);
+        const giveUp = setTimeout(() => cleanupAndExit(1), START_FAILURE_LINGER_MS);
+        unrefTimer(giveUp);
+    };
+
     server.listen(socketPath, () => {
         // explicit but missing cwd must fail with its path attached
         let finalCwd: string;
         if (config.cwd) {
             if (!fs.existsSync(config.cwd)) {
-                const msg = `[supervisor:${procId}] configured cwd does not exist: ${config.cwd}`;
-                try {
-                    fs.writeFileSync(metadataPath, JSON.stringify({ id: procId, error: msg }, null, 2), "utf8");
-                } catch (err) { logger.debug("[supervisor.ts] op failed:", err) }
-                console.error(msg);
-                process.exit(1);
+                failStart(`Working directory does not exist: ${config.cwd}`);
+                return;
             }
             finalCwd = config.cwd;
         } else {
@@ -374,10 +440,7 @@ export async function runSupervisor(procId: string): Promise<void> {
                 ptyInstance = spawnPty(shell, cols, rows, finalCwd, finalEnv);
             } catch (err) {
                 // no tty backend available is a spawn failure, not a pipe shell
-                const msg = `[supervisor:${procId}] could not start pty: ${(err as Error).message}`;
-                logger.error(msg);
-                broadcast({ type: "data", stream: "stderr", data: `\n${msg}\n` });
-                cleanupAndExit(1);
+                failStart(`Could not start a terminal: ${(err as Error).message}`);
                 return;
             }
             ptyInstance.onData((data) => {

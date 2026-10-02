@@ -37,7 +37,10 @@ export async function spawnSupervisedClient(
                 preListeners!.onExit!(code);
             });
 
-        if (!await embedded.connect()) throw new Error(`Process ${id} could not start`);
+        if (!await embedded.connect()) {
+            clientsMap.delete(id);
+            throw new Error(embedded.startError ?? `Process ${id} could not start`);
+        }
         return embedded;
     }
 
@@ -73,6 +76,12 @@ export async function spawnSupervisedClient(
     if (!client.isConnected()) {
         client.destroy(); clientsMap.delete(id);
         throw new Error(`Supervisor ${id} did not become ready`);
+    }
+    try {
+        await client.awaitStarted();
+    } catch (err) {
+        client.destroy(); clientsMap.delete(id);
+        throw err;
     }
     return client;
 }

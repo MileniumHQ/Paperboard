@@ -46,6 +46,8 @@ export class EmbeddedSupervisor implements PaperCraneClientLike {
     private listeners = new Map<string, Function[]>();
     private proc: any = null;
     private alive = false;
+    // why connect() could not start the workload, for the caller's error
+    public startError?: string;
 
     constructor(
         public readonly id: string,
@@ -161,6 +163,7 @@ export class EmbeddedSupervisor implements PaperCraneClientLike {
             // spawn itself failed (bad binary, bad cwd): the exit code
             // below is not enough — the WHY must be logged, not swallowed
             logger.error(`[embedded-supervisor] spawn failed for "${this.config?.id ?? "unknown"}":`, err);
+            this.startError = err instanceof Error ? err.message : String(err);
             this.alive = false;
             this.emit("exit", 1);
             return false;
