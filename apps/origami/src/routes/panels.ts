@@ -487,6 +487,15 @@ export async function handlePanelsRoutes(
                 if (object) {
                     const headers = new Headers();
                     object.writeHttpMetadata(headers);
+                    // icons share the library's origin and may be SVG
+                    // documents: sandboxed with nothing to load, an icon
+                    // navigated to as a top-level document cannot run
+                    // script in the registry origin
+                    headers.set(
+                        "Content-Security-Policy",
+                        "default-src 'none'; sandbox",
+                    );
+                    headers.set("X-Content-Type-Options", "nosniff");
                     headers.set(
                         "Cache-Control",
                         "public, max-age=86400",

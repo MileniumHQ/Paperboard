@@ -246,6 +246,10 @@ describe("O2: icon content type is derived, never publisher-chosen", () => {
         );
         expect(res.status).toBe(200);
         expect(res.headers.get("Content-Type")).toBe("image/svg+xml");
+        // an SVG is a document: if it is navigated to it must not run
+        // script in the library's origin
+        expect(res.headers.get("Content-Security-Policy")).toContain("sandbox");
+        expect(res.headers.get("X-Content-Type-Options")).toBe("nosniff");
     });
 });
 
