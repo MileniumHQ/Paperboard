@@ -10,6 +10,6 @@ optional; absence falls back to text/defaults, never an error.
 | `banner.txt`| Plain-text ASCII art, ~60 cols wide | Printed as the TUI header on standalone daemon start (replaces the "Paperboard Server" text line). |
 
 Notes:
-- `icon.ico` only affects fresh compiles; rebuild the server binaries after adding it (`bun devutils/publish.ts` → Build binaries, or `bun devutils/publish.ts usb`).
+- `icon.ico` only affects fresh compiles; rebuild the server binaries after adding it (from the repo root: `bun scripts/publish.ts` → Build binaries, or `bun run usb` from `apps/paperboard`).
 - The macOS/Linux standalone binaries show the OS generic executable icon; executables can't carry icons there without an app bundle.
 - For a standalone deployment, copy this whole `branding/` folder next to the binary as `<exedir>/branding/` and `banner.txt` keeps working there too.

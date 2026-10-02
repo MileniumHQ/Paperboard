@@ -27,7 +27,7 @@ set -u
 if [ "$#" -gt 0 ]; then
     DIRS="$*"
 else
-    DIRS="papercrane src tests devutils scripts"
+    DIRS="papercrane src tests scripts"
 fi
 GLOBS=(--glob '!node_modules' --glob '!dist' --glob '!out' --glob '!build')
 FAIL=0

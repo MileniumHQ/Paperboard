@@ -11,7 +11,7 @@ import { PlatformIcon, type PlatformId } from "../platformIcons";
 import styles from "../site.module.css";
 
 // Versionless download aliases resolved by i.paperboard.dev to the current
-// release asset. Canonical filenames live in apps/paperboard/devutils.
+// release asset. Canonical filenames live in scripts/.
 interface DownloadLink {
     arch: string;
     file: string;

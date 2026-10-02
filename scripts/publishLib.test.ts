@@ -234,7 +234,7 @@ describe("storeUploadParts", () => {
 describe("first-party store listings", () => {
     const { readdirSync, readFileSync } = require("fs") as typeof import("fs");
     const { join } = require("path") as typeof import("path");
-    const panelsDir = join(import.meta.dir, "../../../panels");
+    const panelsDir = join(import.meta.dir, "../panels");
 
     it.each(readdirSync(panelsDir))("%s: listing validates and every named file exists", (id) => {
         const dir = join(panelsDir, id);

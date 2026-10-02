@@ -7,7 +7,7 @@
 // around it.
 //
 // URL-shape constants are duplicated in apps/origami/src/routes/paperdl.ts
-// (the worker cannot import devutils). The two sides must stay in sync:
+// (the worker cannot import scripts). The two sides must stay in sync:
 // VERSION_SEGMENT, FILE_SEGMENT, DL_HOST, kvKeyFor, and the /<app>/<file>
 // redirect contract. If you change one side, change the other and say so.
 
@@ -17,7 +17,7 @@ import {
     storeScreenshotField,
     STORE_IMAGE_TYPES,
     STORE_MAX_SCREENSHOT_BYTES,
-} from "../../../packages/paperapi/src/storeListing";
+} from "../packages/paperapi/src/storeListing";
 
 export const GH_REPO = "MileniumHQ/Paperboard";
 export const DL_HOST = "i.paperboard.dev";

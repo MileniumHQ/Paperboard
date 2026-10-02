@@ -15,7 +15,15 @@
     "build:panels": "bun scripts/dev.ts build",
     "link:panels": "bun scripts/dev.ts link",
     "unlink:panels": "bun scripts/dev.ts unlink",
-    "panels:status": "bun scripts/dev.ts status"
+    "panels:status": "bun scripts/dev.ts status",
+    "usb": "bun scripts/publish.ts usb",
+    "publish": "bun scripts/publish.ts"
+  },
+  "devDependencies": {
+    "@clack/prompts": "^1.8.1",
+    "adm-zip": "^0.6.0",
+    "cli-progress": "^3.12.0",
+    "tar": "^7.5.22"
   },
   "patchedDependencies": {
     "@solid-primitives/refs@1.1.4": "patches/@solid-primitives%2Frefs@1.1.4.patch",

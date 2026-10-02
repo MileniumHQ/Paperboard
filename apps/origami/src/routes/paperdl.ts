@@ -4,8 +4,8 @@ import { jsonResponse, type Env } from "../lib";
 // only 302-redirects to them and serves the small metadata (latest.yml
 // feeds) from R2. It never proxies bytes.
 //
-// Canonical facts duplicated in apps/paperboard/devutils/publishLib.ts
-// (the worker cannot import devutils): DOWNLOAD_HOST, GH_REPO, the
+// Canonical facts duplicated in scripts/publishLib.ts
+// (the worker cannot import scripts): DOWNLOAD_HOST, GH_REPO, the
 // /<app>/<version|latest>/<file> redirect contract, VERSION_SEGMENT,
 // FILE_SEGMENT, the <app>-v<version> tag scheme, and the canonical asset
 // names below. Change both sides together.

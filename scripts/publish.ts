@@ -2,8 +2,8 @@
 /**
  * publish.ts: interactive build & publish console for Paperboard.
  *
- *   bun devutils/publish.ts        # interactive menu (needs a TTY)
- *   bun devutils/publish.ts usb    # headless USB test bundle (bun run usb)
+ *   bun scripts/publish.ts        # interactive menu (needs a TTY)
+ *   bun scripts/publish.ts usb    # headless USB test bundle (bun run usb)
  *
  * Nothing leaves the machine except through the Publish flows, and each of
  * those confirms twice before any upload. Pure release-math (tags, asset
@@ -36,7 +36,7 @@ import {
 import { join, basename } from "path";
 import { tmpdir } from "os";
 import * as tar from "tar";
-import { resolvePublishTarget } from "./publishManifest";
+import { discoverPanels, PANELS_ROOT } from "./publishManifest";
 import {
     ALL_TARGETS,
     BUN_TARGET_MAP,
@@ -64,7 +64,7 @@ import {
     type YmlEntry,
 } from "./publishLib";
 
-const HERE = join(import.meta.dir, "..");
+const HERE = join(import.meta.dir, "..", "apps", "paperboard");
 const ORIGAMI_DIR = join(HERE, "..", "origami");
 const ORIGAMI_URL = process.env.ORIGAMI_URL || "https://origami.ariapis.com";
 
@@ -622,24 +622,11 @@ interface PanelInfo {
 }
 
 function listPanels(): PanelInfo[] {
-    const panelsRoot = join(HERE, "..", "..", "panels");
-    const out: PanelInfo[] = [];
-    if (!existsSync(panelsRoot)) return out;
-    for (const e of readdirSync(panelsRoot, { withFileTypes: true })) {
-        if (!e.isDirectory()) continue;
-        const manifestPath = join(panelsRoot, e.name, "manifest.json");
-        if (!existsSync(manifestPath)) continue;
-        try {
-            const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
-            const t = resolvePublishTarget(manifest, join(panelsRoot, e.name));
-            out.push({ dir: join(panelsRoot, e.name), ...t });
-        } catch (err) {
-            p.log.warn(
-                `Skipping ${e.name}: ${err instanceof Error ? err.message : String(err)}`,
-            );
-        }
-    }
-    return out.sort((a, b) => a.id.localeCompare(b.id));
+    return discoverPanels(PANELS_ROOT, (dirName, err) => {
+        p.log.warn(
+            `Skipping ${dirName}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+    });
 }
 
 interface PackedPanel {
@@ -1075,27 +1062,28 @@ async function buildUsbFolder() {
         console.log(`   → node-pty sidecar (win32-x64)`);
     }
 
-    // 3. All panels (workspace dirs carrying a manifest.json)
+    // 3. All panels under panels/ (shared discovery with the publish flow —
+    // listPanels reads the same root, validates each manifest, and reports
+    // failures instead of silently bundling nothing).
     const panelEntries: { id: string; name: string; version: string }[] = [];
-    const siblings = readdirSync(join(HERE, ".."), { withFileTypes: true })
-        .filter((e) => e.isDirectory())
-        .map((e) => join(HERE, "..", e.name))
-        .filter((d) => existsSync(join(d, "manifest.json")));
-    for (const boardDir of siblings) {
-        const manifest = JSON.parse(readFileSync(join(boardDir, "manifest.json"), "utf8"));
-        const boardId = manifest.id || basename(boardDir);
-        console.log(`\n📦 Building panel ${boardId}…\n`);
-        await $`bun run build`.cwd(boardDir);
-        const dest = join(panelsDir, boardId);
+    for (const info of listPanels()) {
+        console.log(`\n📦 Building panel ${info.id}…\n`);
+        await $`bun run build`.cwd(info.dir);
+        const dest = join(panelsDir, info.id);
         mkdirSync(dest, { recursive: true });
-        cpSync(join(boardDir, "manifest.json"), join(dest, "manifest.json"));
-        if (existsSync(join(boardDir, "dist"))) cpSync(join(boardDir, "dist"), join(dest, "dist"), { recursive: true });
-        if (existsSync(join(boardDir, "branding"))) {
-            cpSync(join(boardDir, "branding"), join(dest, "branding"), { recursive: true });
-        } else if (existsSync(join(boardDir, "icon.png"))) {
-            cpSync(join(boardDir, "icon.png"), join(dest, "icon.png"));
+        cpSync(join(info.dir, "manifest.json"), join(dest, "manifest.json"));
+        if (existsSync(join(info.dir, "dist"))) cpSync(join(info.dir, "dist"), join(dest, "dist"), { recursive: true });
+        if (existsSync(join(info.dir, "branding"))) {
+            cpSync(join(info.dir, "branding"), join(dest, "branding"), { recursive: true });
+        } else if (existsSync(join(info.dir, "icon.png"))) {
+            cpSync(join(info.dir, "icon.png"), join(dest, "icon.png"));
         }
-        panelEntries.push({ id: boardId, name: manifest.name || boardId, version: manifest.version || "?" });
+        panelEntries.push({ id: info.id, name: info.name, version: info.version });
+    }
+    if (!panelEntries.length) {
+        throw new Error(
+            `No panels found under ${PANELS_ROOT} — the USB bundle would ship without panels.`,
+        );
     }
 
     // 4. Symlink helper: links every bundled panel into ~/.paperboard/panels/

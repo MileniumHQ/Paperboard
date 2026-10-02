@@ -3,7 +3,7 @@
  * scrape-gamerules.ts — Generates gamerules.generated.ts from the Minecraft Wiki
  *
  * Usage: bun run scrape-gamerules.ts
- * Output: ../../panels/dev.paperboard.gameserver/src/generated/gamerules.generated.ts
+ * Output: ../panels/dev.paperboard.gameserver/src/generated/gamerules.generated.ts
  */
 
 import { writeFileSync } from "fs";
@@ -11,7 +11,7 @@ import { join } from "path";
 
 const API_URL = "https://minecraft.wiki/api.php";
 const USER_AGENT = "PaperboardDevUtils/1.0 (gamerules generator)";
-const OUT_FILE = join(import.meta.dir, "..", "..", "..", "panels", "dev.paperboard.gameserver", "src", "generated", "gamerules.generated.ts");
+const OUT_FILE = join(import.meta.dir, "..", "panels", "dev.paperboard.gameserver", "src", "generated", "gamerules.generated.ts");
 
 interface GameruleEntry {
     name: string;
@@ -256,7 +256,7 @@ function generate(entries: GameruleEntry[]): string {
     const lines: string[] = [];
     lines.push("// GENERATED FILE — do not edit by hand.");
     lines.push(`// Source: minecraft.wiki /w/Game_rule (scraped ${new Date().toISOString().slice(0, 10)})`);
-    lines.push("// Regenerate with: bun run Paperboard/devutils/scrape-gamerules.ts");
+    lines.push("// Regenerate with: bun run Paperboard/scripts/scrape-gamerules.ts");
     lines.push("");
     lines.push("export interface GameruleEntry {");
     lines.push("    name: string;");
