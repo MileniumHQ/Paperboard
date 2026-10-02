@@ -1,4 +1,5 @@
 import { WebSocket } from "ws";
+import { randomUUID } from "crypto";
 import { logger } from "./logger";
 import { RpcError } from "./rpc/errors";
 import { ErrorCode } from "./protocol";
@@ -28,6 +29,9 @@ export interface PendingActionCall {
     reject: (error: Error) => void;
     timer: ReturnType<typeof setTimeout>;
     callerWs: WebSocket;
+    // the socket the action is registered on: the only socket whose
+    // action_reply may settle this call
+    targetWs: WebSocket;
 }
 
 // result of a namespace write; ok:false with code "CONFLICT" means the name
@@ -48,7 +52,6 @@ export class ActionsRegistry {
     // per-caller outstanding call ids (teardown: handleSocketClose drops
     // the set together with pendingCalls entries)
     private socketPendingCalls = new Map<WebSocket, Set<string>>();
-    private callIdCounter = 1;
 
     private actionKey(panelId: string, action: string): string {
         return `${panelId}:${action}`;
@@ -180,12 +183,17 @@ export class ActionsRegistry {
         return changed;
     }
 
+    // callerPanelId is the caller socket's token claim (null = host). It
+    // travels in the action_call frame so the handling panel knows who is
+    // calling, and gates `internal` actions: those answer only their own
+    // panel (or the host), never another panel.
     public async call(
         panelId: string,
         action: string,
         args: unknown[] = [],
         callerWs: WebSocket,
         timeoutMs: number = 30_000,
+        callerPanelId: string | null = null,
     ): Promise<unknown> {
         const key = this.actionKey(panelId, action);
         const registered = this.actions.get(key);
@@ -194,8 +202,16 @@ export class ActionsRegistry {
                 `Action "${action}" on panel "${panelId}" is not registered or unavailable`,
             );
         }
+        if (registered.schema?.internal === true && callerPanelId !== null && callerPanelId !== panelId) {
+            logger.warn(`[Actions] "${callerPanelId}" refused internal action "${panelId}:${action}"`);
+            throw new RpcError(
+                ErrorCode.FORBIDDEN,
+                `Action "${action}" is internal to panel "${panelId}"`,
+            );
+        }
 
-        const callId = `call_${Date.now()}_${this.callIdCounter++}`;
+        // unguessable: a reply must name a call it was actually sent
+        const callId = `call_${randomUUID()}`;
 
         // bounded at both scopes: a caller runaway is refused with a typed
         // error naming the cap, never queued into an unbounded map
@@ -243,6 +259,7 @@ export class ActionsRegistry {
                 reject,
                 timer,
                 callerWs,
+                targetWs: registered.ws,
             });
             if (!socketSet) {
                 this.socketPendingCalls.set(callerWs, new Set([callId]));
@@ -258,6 +275,7 @@ export class ActionsRegistry {
                         panelId,
                         action,
                         args,
+                        caller: { panelId: callerPanelId },
                     }),
                 );
             } catch (err: any) {
@@ -271,13 +289,21 @@ export class ActionsRegistry {
         });
     }
 
+    // fromWs must be the socket the call was dispatched to: any other
+    // authenticated socket answering is refused, never allowed to settle
+    // someone else's call
     public handleReply(
         callId: string,
         result: unknown,
-        error?: string,
+        error: string | undefined,
+        fromWs: WebSocket,
     ): boolean {
         const pending = this.pendingCalls.get(callId);
         if (!pending) return false;
+        if (pending.targetWs !== fromWs) {
+            logger.warn(`[Actions] dropped action_reply for "${pending.panelId}:${pending.action}" from a socket that was not called`);
+            return false;
+        }
 
         this.pendingCalls.delete(callId);
         clearTimeout(pending.timer);

@@ -28,7 +28,7 @@ function makeRegistry(callerWs: any) {
     handlerWs.send = (text: string) => {
         origSend(text);
         const msg = JSON.parse(text) as { callId: string };
-        reg.handleReply(msg.callId, { pong: true });
+        reg.handleReply(msg.callId, { pong: true }, undefined, handlerWs);
     };
     return { reg, handlerWs, callerWs };
 }
@@ -128,6 +128,7 @@ describe("pendingCalls are bounded server-side", () => {
         const callerWs = fakeWs();
         const ctx = {
             ws: callerWs,
+            callerPanelId: () => null,
             reply: (_id: unknown, result: any, error?: string, code?: string) =>
                 replyLogs.push({ result, error, code }),
             broadcastEvent: () => undefined,
@@ -157,6 +158,7 @@ describe("rpc timeout clamp", () => {
         };
         const ctx = {
             ws: fakeWs(),
+            callerPanelId: () => null,
             reply: (_id: unknown, result: any, error?: string, code?: string) =>
                 replyLogs.push({ result, error, code }),
             broadcastEvent: () => undefined,

@@ -268,7 +268,7 @@ export function setupWebSocketServer(
                         logger.debug("[ws] dropping pre-auth action_reply frame");
                         return;
                     }
-                    actionsRegistry.handleReply(maybe.callId, maybe.result, maybe.error);
+                    actionsRegistry.handleReply(maybe.callId, maybe.result, maybe.error, ws);
                     return;
                 }
 

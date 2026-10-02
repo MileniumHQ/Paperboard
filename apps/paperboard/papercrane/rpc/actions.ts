@@ -1,6 +1,7 @@
 import { actionsRegistry } from "../actions";
 import { ErrorCode } from "../protocol";
 import type { RpcContext } from "./context";
+import { resourcePanelId } from "../principal";
 import { assertPanelId, assertStr, assertOptStr, assertNum, InvalidParamsError, rpcErrorCode } from "./params";
 
 // outstanding calls cap from the registry surface (mirrors the client's
@@ -19,6 +20,13 @@ export function assertCallTimeout(value: unknown, name: string, fallback?: numbe
     return n;
 }
 
+// The namespace a socket writes to (register, unregister, emit) is the
+// token claim: a scoped caller naming another panel is refused. Host
+// callers carry no claim and keep the explicit parameter.
+function ownPanelId(params: any, action: string, ctx: RpcContext): string {
+    return resourcePanelId(ctx.callerPanelId(), assertPanelId(params?.panelId), action)!;
+}
+
 // Malformed calls throw InvalidParamsError and the WS dispatcher answers
 // INVALID_PARAMS — no per-case catch needed. Registry conflicts keep
 // their CONFLICT shape below; registry call failures answer untyped,
@@ -28,7 +36,7 @@ export async function handleActions(action: string, id: unknown, params: any, ct
     switch (action) {
         case "actions:register":
         case "action:register": {
-            const panelId = assertPanelId(params?.panelId);
+            const panelId = ownPanelId(params, action, ctx);
             const act = assertOptStr(params?.action, "action", 256);
             const acts = params?.actions;
             const schema = params?.schema;
@@ -67,7 +75,7 @@ export async function handleActions(action: string, id: unknown, params: any, ct
         }
         case "actions:unregister":
         case "action:unregister": {
-            const panelId = assertPanelId(params?.panelId);
+            const panelId = ownPanelId(params, action, ctx);
             const act = assertOptStr(params?.action, "action", 256);
             const result = actionsRegistry.unregister(panelId, act, ws);
             if (!result.ok) {
@@ -90,7 +98,7 @@ export async function handleActions(action: string, id: unknown, params: any, ct
             const args = params?.args;
             const timeoutMs = assertCallTimeout(params?.timeoutMs, "timeoutMs", 30_000);
             try {
-                const result = await actionsRegistry.call(panelId, act, Array.isArray(args) ? args : [], ws, timeoutMs);
+                const result = await actionsRegistry.call(panelId, act, Array.isArray(args) ? args : [], ws, timeoutMs, ctx.callerPanelId());
                 reply(id, { result });
             } catch (err: any) {
                 reply(id, null, err?.message || String(err), rpcErrorCode(err));
@@ -105,7 +113,7 @@ export async function handleActions(action: string, id: unknown, params: any, ct
         case "actions:emit":
         case "action:emit":
         case "event:emit": {
-            const panelId = assertPanelId(params?.panelId);
+            const panelId = ownPanelId(params, action, ctx);
             const evt = assertStr(params?.event, "event", 256);
             broadcastEvent(`actions:${panelId}:${evt}`, params?.payload);
             reply(id, { success: true });
@@ -113,7 +121,7 @@ export async function handleActions(action: string, id: unknown, params: any, ct
         }
         case "triggers:emit":
         case "trigger:emit": {
-            const panelId = assertPanelId(params?.panelId);
+            const panelId = ownPanelId(params, action, ctx);
             const trigger = assertStr(params?.trigger, "trigger", 256);
             broadcastEvent(`triggers:${panelId}:${trigger}`, params?.output);
             reply(id, { success: true });

@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { once } from "node:events";
-import { WebSocketServer } from "ws";
+import { WebSocket, WebSocketServer } from "ws";
 import { PaperCraneEngine } from "../papercrane/engine";
 import { PaperCraneAuth } from "../papercrane/auth";
 import { setupWebSocketServer } from "../papercrane/ws";
@@ -28,7 +28,14 @@ test("two flows sharing one event each execute once through the real SDK and aut
         const starts: string[] = [];
         off = actionsApi.onTrigger("dev.paperboard.actions", "flow-start", (data: any) => starts.push(data.triggerBlockId));
         await getTransport("local").call("system:info");
-        await actionsApi.emitTrigger("on-message", { content: "fixture" }, "dev.paperboard.botcreator");
+        // the event comes from botcreator's own credential: a panel can only
+        // emit triggers under its own claim (tests/actionIdentity.test.ts)
+        const bot = new WebSocket(`ws://127.0.0.1:${(wss.address() as any).port}`);
+        await once(bot, "open");
+        bot.send(JSON.stringify({ id: 1, action: "triggers:emit", params: { token: auth.issuePanelToken("dev.paperboard.botcreator"), panelId: "dev.paperboard.botcreator", trigger: "on-message", output: { content: "fixture" } } }));
+        const [ack] = await once(bot, "message");
+        expect(JSON.parse(String(ack)).error).toBeUndefined();
+        bot.terminate();
         const deadline = Date.now() + 2000;
         while (starts.length < 2 && Date.now() < deadline) await Bun.sleep(5);
         await Bun.sleep(30);
