@@ -204,9 +204,11 @@ export const RPC_ROUTES: Record<string, WsRoute> = {
         unwrap: (r) => r.panels ?? [],
     },
     "panel-uninstall": {
-        // Bare-string invoke: invoke("panel-uninstall", panelId)
+        // invoke("panel-uninstall", panelId, deleteData?) — the second
+        // argument is the explicit delete-data opt-in; absent or false
+        // keeps the user's config, files and credentials
         action: "panel:uninstall",
-        params: (args) => ({ panelId: args[0] }),
+        params: (args) => ({ panelId: args[0], deleteData: args[1] === true }),
         unwrap: (r) => r.success ?? true,
         timeoutMs: null,
     },

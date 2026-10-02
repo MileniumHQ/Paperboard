@@ -71,18 +71,29 @@ describe("PaperCraneEngine panels install/uninstall parity", () => {
         expect(await engine.getConfig("somepanel")).toEqual({ a: 1 });
     });
 
-    it("uninstallPanel retains removed packages and existing recovery copies", async () => {
+    it("uninstallPanel deleteData removes config, files and secrets", async () => {
+        await engine.setConfig("somepanel", { a: 1 });
+        await engine.writeFile("keep.txt", "x", "somepanel");
+        engine.setSecret("tok", "v", "somepanel");
+        fs.mkdirSync(path.join(tmp, "panels", "somepanel"), { recursive: true });
+        await engine.uninstallPanel("somepanel", { deleteData: true });
+        expect(await engine.getConfig("somepanel")).toBeNull();
+        expect(await engine.readFile("keep.txt", "somepanel")).toBeNull();
+        expect(engine.getSecret("tok", "somepanel").found).toBe(false);
+        expect(fs.existsSync(path.join(tmp, "files", "somepanel"))).toBe(false);
+    });
+
+    it("uninstallPanel deletes the code without touching other panels", async () => {
         fs.mkdirSync(path.join(tmp, "panels", "trashed"), { recursive: true });
         fs.writeFileSync(path.join(tmp, "panels", "trashed", "manifest.json"), "{}");
-        // a previous crashed uninstall leaves a marked trash dir behind
-        fs.mkdirSync(path.join(tmp, "panels", ".trash-123-trashed"), { recursive: true });
         // a live panel with a similar name must never be touched by the sweep
         fs.mkdirSync(path.join(tmp, "panels", "trashed2"), { recursive: true });
         expect(await engine.uninstallPanel("trashed")).toBe(true);
         expect(fs.existsSync(path.join(tmp, "panels", "trashed"))).toBe(false);
-        expect(fs.existsSync(path.join(tmp, "panels", ".trash-123-trashed"))).toBe(true);
-        expect(fs.readdirSync(path.join(tmp, "panels")).filter((e) => e.startsWith(".trash-"))).toHaveLength(2);
         expect(fs.existsSync(path.join(tmp, "panels", "trashed2"))).toBe(true);
+        expect(
+            fs.readdirSync(path.join(tmp, "panels")).filter((e) => e.startsWith(".trash-") || e.startsWith(".replaced-")),
+        ).toEqual([]);
     });
 });
 

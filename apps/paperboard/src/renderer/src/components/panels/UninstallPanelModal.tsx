@@ -1,5 +1,6 @@
 import { Show, type Component } from "solid-js";
 import {
+    PaperCheckbox,
     PaperModal,
     PaperFlex,
     PaperButton,
@@ -17,6 +18,8 @@ interface UninstallPanelModalProps {
     target: UninstallTarget | null;
     isBusy: boolean;
     error?: string | null;
+    deleteData: boolean;
+    onDeleteDataChange: (value: boolean) => void;
     onClose: () => void;
     onConfirm: () => void;
 }
@@ -61,9 +64,17 @@ const UninstallPanelModal: Component<UninstallPanelModalProps> = (props) => {
                         <PaperText size={2} color="text-subtle">
                             This stops the panel and removes its installed code.
                             Your configuration, files and saved credentials are
-                            kept for reinstalling. The removed package is retained
-                            in the computer’s panel recovery folder.
+                            kept for reinstalling.
                         </PaperText>
+                        <PaperCheckbox
+                            checked={props.deleteData}
+                            disabled={props.isBusy}
+                            onChange={(checked) =>
+                                props.onDeleteDataChange(checked)
+                            }
+                            label="Also delete this panel's data and saved credentials"
+                            description="Configuration, files and vault entries are removed. This cannot be undone."
+                        />
                         <Show when={props.error}>
                             <PaperText size={2} color="danger">
                                 {props.error}

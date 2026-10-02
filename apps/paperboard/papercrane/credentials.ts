@@ -153,15 +153,9 @@ export class CredentialStore {
 
     public purge(panelId: string): number {
         const panel = this.validatePanelId(panelId);
-        // Recovery material stays in the restricted vault directory and is
-        // staged successfully before the live store is changed.
+        // A purge deletes: no recovery copy is staged, so a failed save
+        // rolls the in-memory store back and leaves the live file alone.
         const entries = [...this.secrets].filter(([key]) => key.split("/")[0] === panel);
-        if (entries.length) {
-            const recoveryDir = path.join(path.dirname(this.file), "vault-recovery");
-            fs.mkdirSync(recoveryDir, { recursive: true, mode: 0o700 });
-            if (fs.readdirSync(recoveryDir).length >= 64) throw new Error("Vault recovery storage is full; archive recovery files before purging");
-            writeFileAtomicSync(path.join(recoveryDir, `${panel}-${Date.now()}.json`), JSON.stringify(Object.fromEntries(entries)), { mode: 0o600 });
-        }
         let purged = 0;
         for (const key of this.secrets.keys()) {
             if (key.split("/")[0] === panel) {
@@ -174,23 +168,5 @@ export class CredentialStore {
             catch (err) { for (const [key, entry] of entries) this.secrets.set(key, entry); throw err; }
         }
         return purged;
-    }
-
-    public restoreRecovery(fileName: string, panelId: string): void {
-        const panel = this.validatePanelId(panelId);
-        if (!fileName.startsWith(`${panel}-`) || path.basename(fileName) !== fileName || !fileName.endsWith(".json")) {
-            throw new SecretError("INVALID_PARAMS", "Invalid vault recovery record");
-        }
-        const file = path.join(path.dirname(this.file), "vault-recovery", fileName);
-        const recovered = JSON.parse(fs.readFileSync(file, "utf8")) as SecretFile;
-        for (const [key, value] of Object.entries(recovered)) {
-            if (!key.startsWith(`${panel}/`) || typeof value?.value !== "string") throw new Error("Invalid vault recovery contents");
-            if (this.secrets.has(key)) throw new Error("Restore refused: a live secret would be overwritten");
-        }
-        const previous = new Map(this.secrets);
-        try {
-            for (const [key, value] of Object.entries(recovered)) this.secrets.set(key, value);
-            this.save();
-        } catch (err) { this.secrets = previous; throw err; }
     }
 }

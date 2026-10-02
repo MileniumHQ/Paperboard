@@ -86,6 +86,8 @@ const App: Component = () => {
     const [uninstallTarget, setUninstallTarget] =
         createSignal<UninstallTarget | null>(null);
     const [isUninstalling, setIsUninstalling] = createSignal<boolean>(false);
+    const [uninstallDeleteData, setUninstallDeleteData] =
+        createSignal<boolean>(false);
     const [uninstallError, setUninstallError] = createSignal<string | null>(
         null,
     );
@@ -153,6 +155,7 @@ const App: Component = () => {
         if (!target) return;
         panelContextMenu.close();
         setUninstallTarget(target);
+        setUninstallDeleteData(false);
         setIsUninstallModalOpen(true);
     };
 
@@ -162,7 +165,9 @@ const App: Component = () => {
         setIsUninstalling(true);
         setUninstallError(null);
         try {
-            await panelsApi.uninstall(target.panel.id, target.compId);
+            await panelsApi.uninstall(target.panel.id, target.compId, {
+                deleteData: uninstallDeleteData(),
+            });
             const key = `${target.compId}::${target.panel.id}`;
             setOpenedPanels((prev) => prev.filter((k) => k !== key));
             setRestartState(key, null);
@@ -172,6 +177,7 @@ const App: Component = () => {
             await refreshPanelsForComputer(target.compId);
             setIsUninstallModalOpen(false);
             setUninstallTarget(null);
+            setUninstallDeleteData(false);
         } catch (err: any) {
             logToMain("error", "Failed to uninstall panel:", err);
             setUninstallError(
@@ -854,10 +860,13 @@ const App: Component = () => {
                 target={uninstallTarget()}
                 isBusy={isUninstalling()}
                 error={uninstallError()}
+                deleteData={uninstallDeleteData()}
+                onDeleteDataChange={setUninstallDeleteData}
                 onClose={() => {
                     if (!isUninstalling()) {
                         setIsUninstallModalOpen(false);
                         setUninstallTarget(null);
+                        setUninstallDeleteData(false);
                         setUninstallError(null);
                     }
                 }}

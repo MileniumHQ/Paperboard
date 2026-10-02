@@ -41,8 +41,16 @@ export const panelsApi = {
 
     install: (panelId: string, scope?: string): Promise<boolean> =>
         invokeIn<boolean>(scope, "panel-install", panelId),
-    uninstall: (panelId: string, scope?: string): Promise<boolean> =>
-        invokeIn<boolean>(scope, "panel-uninstall", panelId),
+    /**
+     * Removes the panel's code. Config, files and saved credentials are
+     * kept unless `deleteData` is explicitly true.
+     */
+    uninstall: (
+        panelId: string,
+        scope?: string,
+        options?: { deleteData?: boolean },
+    ): Promise<boolean> =>
+        invokeIn<boolean>(scope, "panel-uninstall", panelId, options?.deleteData === true),
     /** Restarts the panel's service; false when it declares none. */
     restartService: (panelId: string, scope?: string): Promise<boolean> =>
         invokeIn<boolean>(scope, "panel-restart-service", panelId),

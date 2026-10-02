@@ -29,7 +29,7 @@ afterEach(() => {
 });
 
 describe("linkPanel force replace", () => {
-    test("--force replaces a physical directory via a trash rename", () => {
+    test("--force replaces a physical directory and keeps no copy", () => {
         const panelsDir = path.join(homeTmp, "panels");
         const existing = path.join(panelsDir, "dev.test.link");
         fs.mkdirSync(existing, { recursive: true });
@@ -40,10 +40,9 @@ describe("linkPanel force replace", () => {
         expect(res.id).toBe("dev.test.link");
         // the link now points at the new source
         expect(fs.readlinkSync(res.linkPath)).toBe(sourceDir);
-        // Recovery contains the actual previous bytes, not just a renamed entry.
-        const entries = fs.readdirSync(panelsDir);
-        const recovery = entries.find((name) => name.startsWith(".trash-"))!;
-        expect(fs.readFileSync(path.join(panelsDir, recovery, "keep-me.txt"), "utf8")).toBe("old bytes");
+        expect(
+            fs.readdirSync(panelsDir).filter((name) => name.startsWith(".trash-")),
+        ).toEqual([]);
     });
 
     test("--force on a directory without --force is refused", () => {

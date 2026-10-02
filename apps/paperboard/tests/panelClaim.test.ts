@@ -83,7 +83,7 @@ describe("panel:uninstall is claim-checked; panel:install is host-only", () => {
     it("a scoped caller may uninstall its own panel", async () => {
         const f = panelsCtx("a");
         await handlePanels("panel:uninstall", 1, { panelId: "a" }, f.ctx as any);
-        expect(f.calls).toEqual([{ op: "uninstallPanel", args: ["a"] }]);
+        expect(f.calls).toEqual([{ op: "uninstallPanel", args: ["a", { deleteData: false }] }]);
         expect(f.replies[0].result).toEqual({ success: true });
     });
 
@@ -93,6 +93,15 @@ describe("panel:uninstall is claim-checked; panel:install is host-only", () => {
         expect(f.replies[0].code).toBe("FORBIDDEN");
         expect(f.replies[0].error).toMatch(/limited to "a"/);
         expect(f.calls).toEqual([]);
+    });
+
+    it("deleteData is true only when the caller explicitly sends true", async () => {
+        const f = panelsCtx(null);
+        await handlePanels("panel:uninstall", 1, { panelId: "x", deleteData: "yes" }, f.ctx as any);
+        expect(f.calls[0]).toEqual({ op: "uninstallPanel", args: ["x", { deleteData: false }] });
+        const g = panelsCtx(null);
+        await handlePanels("panel:uninstall", 1, { panelId: "x", deleteData: true }, g.ctx as any);
+        expect(g.calls[0]).toEqual({ op: "uninstallPanel", args: ["x", { deleteData: true }] });
     });
 
     it("a scoped caller may not install at all (host action)", async () => {
@@ -120,7 +129,7 @@ describe("panel:uninstall is claim-checked; panel:install is host-only", () => {
         // its registry, and only the caller's expectations are passed on
         expect(f.calls).toEqual([{ op: "installPanel", args: ["x", { version: undefined, sha256: "a".repeat(64) }] }]);
         await handlePanels("panel:uninstall", 2, { panelId: "x" }, f.ctx as any);
-        expect(f.calls[1]).toEqual({ op: "uninstallPanel", args: ["x"] });
+        expect(f.calls[1]).toEqual({ op: "uninstallPanel", args: ["x", { deleteData: false }] });
     });
 
     it("install refusal precedes parameter asserts that would leak nothing — missing downloadUrl vs scoped token", async () => {

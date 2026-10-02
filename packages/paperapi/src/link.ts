@@ -49,12 +49,9 @@ export function linkPanel(options: LinkOptions = {}): {
             fs.unlinkSync(linkPath);
         } else if (lstat.isDirectory()) {
             if (options.force) {
-                // Keep the previous package for recovery.
-                const trashPath = path.join(
-                    panelsDir,
-                    `.trash-${Date.now()}-${manifest.id}`,
-                );
-                fs.renameSync(linkPath, trashPath);
+                // --force replaces the installed panel with the dev link;
+                // no copy of the replaced directory is retained
+                fs.rmSync(linkPath, { recursive: true, force: true });
             } else {
                 throw new Error(`Destination ${linkPath} already exists. Use --force to replace it.`);
             }

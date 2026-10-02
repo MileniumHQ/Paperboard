@@ -10,7 +10,7 @@ import { CredentialStore } from "../papercrane/credentials";
 import { resolveDavPath } from "../papercrane/dav";
 import { startFixtureRegistry, manifestFile, FIXTURE_RELEASE_PUBLIC_KEY } from "./registryFixture";
 
-test("upgrade observes new service behavior; failed activation restores usable previous bytes", async () => {
+test("upgrade observes new service behavior; failed activation restores the previous release in place", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "panel-upgrade-"));
     const auth = new PaperCraneAuth(false, path.join(root, "local"));
     const services = new PanelServicesManager(root);
@@ -32,12 +32,16 @@ test("upgrade observes new service behavior; failed activation restores usable p
         await expect(install("0.3.0", true)).rejects.toThrow();
         expect((await engine.listPanels())[0].version).toBe("0.2.0");
         expect(fs.readFileSync(engine.resolvePath("panels", "dev.test.running", "running-version"), "utf8")).toBe("0.2.0");
+        // a successful activation leaves no copy of the replaced release
+        expect(
+            fs.readdirSync(engine.resolvePath("panels")).filter((name) => name.startsWith(".replaced-") || name.startsWith(".trash-") || name.startsWith(".failed-")),
+        ).toEqual([]);
         await engine.setConfig("dev.test.running", { retained: true });
         await engine.writeFile("world.dat", "world bytes", "dev.test.running");
         engine.setSecret("token", "fixture", "dev.test.running");
         await engine.uninstallPanel("dev.test.running");
-        const recovery = fs.readdirSync(engine.resolvePath("panels")).filter((name) => name.startsWith(".trash-")).sort().at(-1)!;
-        await engine.restorePanel("dev.test.running", recovery);
+        // uninstall deletes the code; config, files and secrets stay
+        expect(fs.existsSync(engine.resolvePath("panels", "dev.test.running"))).toBe(false);
         expect(await engine.readFile("world.dat", "dev.test.running")).toBe("world bytes");
         expect(await engine.getConfig("dev.test.running")).toEqual({ retained: true });
         expect(engine.getSecret("token", "dev.test.running").value).toBe("fixture");
@@ -61,18 +65,21 @@ test("uninstall uses the owner of mc-server and waits for observed exit before r
     } finally { client.removeAllListeners(); fs.rmSync(root, { recursive: true, force: true }); }
 });
 
-test("vault purge retains owner-only recovery and restores actual secrets outside DAV", () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), "vault-restore-"));
+test("vault purge deletes the secrets and leaves no recovery copy", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "vault-purge-"));
     try {
         const store = new CredentialStore(root);
         store.set("key", "value", "panel.a");
         expect(store.purge("panel.a")).toBe(1);
-        const dir = path.join(root, "local", "vault-recovery");
-        const record = fs.readdirSync(dir)[0];
-        expect(resolveDavPath(root, `/local/vault-recovery/${record}`)).toBeNull();
-        expect(fs.statSync(path.join(dir, record)).mode & 0o777).toBe(0o600);
-        store.restoreRecovery(record, "panel.a");
-        expect(store.get("key", "panel.a").value).toBe("value");
+        expect(store.get("key", "panel.a").found).toBe(false);
+        expect(fs.existsSync(path.join(root, "local", "vault-recovery"))).toBe(false);
+        // a fresh store proves the deletion persisted
+        expect(new CredentialStore(root).get("key", "panel.a").found).toBe(false);
+        // legacy recovery directories from older installs stay off DAV
+        const legacy = path.join(root, "local", "vault-recovery");
+        fs.mkdirSync(legacy, { recursive: true });
+        fs.writeFileSync(path.join(legacy, "panel.a-1.json"), "{}");
+        expect(resolveDavPath(root, "/local/vault-recovery/panel.a-1.json")).toBeNull();
     } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
 

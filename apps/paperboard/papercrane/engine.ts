@@ -103,11 +103,6 @@ export class PaperCraneEngine {
         }
     }
 
-    private requireRecoveryCapacity(dir: string, id: string): void {
-        const count = fs.readdirSync(dir).filter((name) => (name.startsWith(".trash-") || name.startsWith(".failed-")) && name.endsWith(`-${id}`)).length;
-        if (count >= 16) throw new LimitError(`Recovery storage for ${id} holds 16 releases. Archive or explicitly purge old recovery copies before replacing another release.`);
-    }
-
     // Removes interrupted download/install artifacts (*.tmp-*, *.staging-*).
     // These appear when a crash/restart interrupts a long operation.
     //
@@ -731,7 +726,6 @@ export class PaperCraneEngine {
             logger.info(`[package:${packageName}] ${msg}`);
 
         const targetDir = path.join(this.packagesDir, packageName);
-        this.requireRecoveryCapacity(this.packagesDir, packageName);
         if (this.getPackageIndex()[packageName]?.sha256 === expectedSha256 && this.findBinDir(targetDir, 4)) {
             onProgress?.({ stage: "completed", percent: 100, message: "Requested release is installed" });
             return targetDir;
@@ -861,16 +855,22 @@ export class PaperCraneEngine {
                 sha256: expectedSha256,
                 installedAt: new Date().toISOString(),
             };
-            const trash = path.join(this.packagesDir, `.trash-${Date.now()}-${packageName}`);
-            if (fs.existsSync(targetDir)) await fs.promises.rename(targetDir, trash);
+            // swap in place: the previous release is parked only until the
+            // replacement is indexed, then it is gone. A failed swap rolls
+            // it back; nothing is retained after success.
+            const previous = path.join(this.packagesDir, `.replaced-${Date.now()}-${packageName}`);
+            if (fs.existsSync(targetDir)) await fs.promises.rename(targetDir, previous);
             try {
                 await fs.promises.rename(pkgDir, targetDir);
                 writeJsonAtomicSync(path.join(this.packagesDir, "index.json"), index);
             } catch (err) {
-                if (fs.existsSync(targetDir)) await fs.promises.rename(targetDir, path.join(this.packagesDir, `.failed-${Date.now()}-${packageName}`));
-                if (fs.existsSync(trash)) await fs.promises.rename(trash, targetDir);
+                if (fs.existsSync(targetDir)) await fs.promises.rm(targetDir, { recursive: true, force: true });
+                if (fs.existsSync(previous)) await fs.promises.rename(previous, targetDir);
                 throw err;
             }
+            await fs.promises
+                .rm(previous, { recursive: true, force: true })
+                .catch((err) => logger.warn("[engine] previous package copy could not be removed:", err));
 
             onProgress?.({
                 stage: "completed",
@@ -988,7 +988,6 @@ export class PaperCraneEngine {
         const release = await this.resolvePanelRelease(cleanId, expected);
         const downloadUrl = `${this.registryUrl}/panel/${encodeURIComponent(cleanId)}/download`;
         const targetDir = path.join(this.panelsDir, cleanId);
-        this.requireRecoveryCapacity(this.panelsDir, cleanId);
 
         if (fs.existsSync(targetDir)) {
             try {
@@ -1055,28 +1054,29 @@ export class PaperCraneEngine {
                 if (this.clientOwners.get(id) === cleanId) await this.stopOwnedClient(id, client);
             }
 
-            // atomic swap into place: the live dir moves to trash first,
-            // so a failed swap leaves the previous version recoverable
-            // instead of deleting the working panel before its replacement
-            // exists. Same rename-to-trash discipline as uninstall.
-            const trashDir = path.join(this.panelsDir, `.trash-${Date.now()}-${cleanId}`);
+            // atomic swap into place: the live dir is parked only until the
+            // replacement activates. A failed activation removes the new
+            // release and restores the previous one in place; a successful
+            // one leaves no copy behind.
+            const previousDir = path.join(this.panelsDir, `.replaced-${Date.now()}-${cleanId}`);
             if (fs.existsSync(targetDir)) {
-                await fs.promises.rename(targetDir, trashDir);
+                await fs.promises.rename(targetDir, previousDir);
             }
             try {
                 await moveFileSafe(contentDir, targetDir);
                 if (this.services.startService(cleanId)) await this.services.waitUntilReady(cleanId);
             } catch (err) {
                 await this.services.stopService(cleanId);
-                // Retain the failed release for diagnosis without presenting
-                // it as installed. The last usable release remains recoverable.
-                if (fs.existsSync(targetDir)) await fs.promises.rename(targetDir, path.join(this.panelsDir, `.failed-${Date.now()}-${cleanId}`));
-                if (fs.existsSync(trashDir)) {
-                    await fs.promises.rename(trashDir, targetDir);
+                if (fs.existsSync(targetDir)) await fs.promises.rm(targetDir, { recursive: true, force: true });
+                if (fs.existsSync(previousDir)) {
+                    await fs.promises.rename(previousDir, targetDir);
                     if (this.services.startService(cleanId)) await this.services.waitUntilReady(cleanId);
                 }
                 throw err;
             }
+            await fs.promises
+                .rm(previousDir, { recursive: true, force: true })
+                .catch((err) => logger.warn("[engine] previous panel copy could not be removed:", err));
             await fs.promises
                 .rm(stagingDir, { recursive: true, force: true })
                 .catch((err) => logger.debug("[engine] staging cleanup failed:", err));
@@ -1119,9 +1119,8 @@ export class PaperCraneEngine {
         } finally { this.operations.delete(key); }
     }
 
-    public async uninstallPanel(panelId: string): Promise<boolean> {
+    public async uninstallPanel(panelId: string, options?: { deleteData?: boolean }): Promise<boolean> {
         const cleanId = requirePanelId(panelId);
-        this.requireRecoveryCapacity(this.panelsDir, cleanId);
         const key = `panel:${cleanId}`;
         if (this.operations.has(key)) throw new Error(`An operation on ${cleanId} is already running`);
         this.operations.add(key);
@@ -1138,16 +1137,23 @@ export class PaperCraneEngine {
 
         const panelDir = path.join(this.panelsDir, cleanId);
         if (fs.existsSync(panelDir)) {
-            // Retained until an explicit archive/purge decision. Ordinary
-            // uninstall never sweeps earlier recovery copies.
-            const trashDir = path.join(this.panelsDir, `.trash-${Date.now()}-${cleanId}`);
-            await fs.promises.rename(panelDir, trashDir);
+            // uninstall removes the code, not the user's data; the workload
+            // is already stopped and its exit observed above
+            await fs.promises.rm(panelDir, { recursive: true, force: true });
         }
-        // Uninstall removes code, not user data. Config, files and vault
-        // entries remain in their restricted stores for a later reinstall.
-        // a removed panel stops authenticating immediately: its scoped
-        // token is revoked, not left lingering in the vault
+        // Uninstall removes code, not user data by default. Config, files
+        // and vault entries remain in their restricted stores for a later
+        // reinstall. a removed panel stops authenticating immediately: its
+        // scoped token is revoked, not left lingering in the vault
         this.services.revokePanel(cleanId);
+
+        if (options?.deleteData === true) {
+            // explicit opt-in: the panel's config document, workspace files
+            // and vault entries are deleted with the code
+            await fs.promises.rm(this.configFileFor(cleanId), { force: true });
+            await fs.promises.rm(path.join(this.filesDir, panelFilesDirName(cleanId)), { recursive: true, force: true });
+            this.credentialsStore.purge(cleanId);
+        }
 
         return true;
         } finally { this.operations.delete(key); }
@@ -1172,30 +1178,6 @@ export class PaperCraneEngine {
         client.destroy();
         this.clients.delete(id);
         this.forgetClientOwner(id);
-    }
-
-    public async restorePanel(panelId: string, recoveryName: string): Promise<void> {
-        const id = requirePanelId(panelId);
-        if (path.basename(recoveryName) !== recoveryName || !recoveryName.startsWith(".trash-") || !recoveryName.endsWith(`-${id}`)) {
-            throw new Error("Invalid panel recovery record");
-        }
-        const key = `panel:${id}`;
-        if (this.operations.has(key)) throw new Error(`An operation on ${id} is already running`);
-        const target = path.join(this.panelsDir, id);
-        if (fs.existsSync(target)) throw new Error("Restore refused: a panel is already installed");
-        this.operations.add(key);
-        const recovery = path.join(this.panelsDir, recoveryName);
-        try {
-            validatePanelManifest(JSON.parse(await fs.promises.readFile(path.join(recovery, "manifest.json"), "utf8")), id);
-            await fs.promises.rename(recovery, target);
-            try {
-                if (this.services.startService(id)) await this.services.waitUntilReady(id);
-            } catch (err) {
-                await this.services.stopService(id);
-                await fs.promises.rename(target, recovery);
-                throw err;
-            }
-        } finally { this.operations.delete(key); }
     }
 
     public async getConfig(id: string, configPath?: string): Promise<any> {

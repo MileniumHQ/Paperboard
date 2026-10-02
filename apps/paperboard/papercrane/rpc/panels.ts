@@ -1,6 +1,6 @@
 import type { RpcContext } from "./context";
 import { logger } from "../logger";
-import { assertConfigPath, assertId, assertPanelId, assertStr, assertOptStr, rpcErrorCode } from "./params";
+import { assertConfigPath, assertId, assertPanelId, assertOptStr, rpcErrorCode } from "./params";
 import { requireHost, resourcePanelId } from "../principal";
 
 function effectivePanelId(requested: string, action: string, ctx: RpcContext): string {
@@ -33,7 +33,11 @@ export async function handlePanels(action: string, id: unknown, params: any, ctx
             case "panel:uninstall": {
                 const panelId = effectivePanelId(assertPanelId(params?.panelId), action, ctx);
                 try {
-                    const success = await engine.uninstallPanel(panelId);
+                    // deleting data is opt-in and only an explicit true
+                    // enables it; anything else keeps the user's data
+                    const success = await engine.uninstallPanel(panelId, {
+                        deleteData: params?.deleteData === true,
+                    });
                     if (!success) {
                         reply(id, null, `Invalid panel id: ${JSON.stringify(panelId)}`);
                         return true;
@@ -51,12 +55,6 @@ export async function handlePanels(action: string, id: unknown, params: any, ctx
                 } catch (err: any) {
                     reply(id, null, `Restart failed: ${err?.message}`);
                 }
-                return true;
-            }
-            case "panel:restore": {
-                requireHost(ctx.callerPanelId(), action);
-                await engine.restorePanel(assertPanelId(params?.panelId), assertStr(params?.recoveryName, "recoveryName", 256));
-                reply(id, { success: true });
                 return true;
             }
             case "config:get": {
