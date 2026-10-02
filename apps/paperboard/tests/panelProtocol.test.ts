@@ -96,19 +96,19 @@ describe("buildCraneCredentialPayload (iframe identity)", () => {
 // from the local one. A missing header falls closed, not local.
 import {
     remotePanelHtmlCsp,
-    buildPanelCsp,
-    PANEL_CSP_NONCE,
+    panelCspNonce,
 } from "../src/main/panelAssets";
 
 describe("remote panel CSP provenance", () => {
-    it("adopts the serving daemon's CSP verbatim (plus the electron nonce)", () => {
+    it("adopts the serving daemon's CSP verbatim (plus the response nonce)", () => {
         const served =
             "default-src 'self'; script-src 'self'; connect-src https://api.modrinth.com";
-        const csp = remotePanelHtmlCsp(served);
+        const nonce = panelCspNonce();
+        const csp = remotePanelHtmlCsp(served, nonce);
         // egress facts survive untouched
         expect(csp).toContain("connect-src https://api.modrinth.com");
-        // and carry the electron script nonce
-        expect(csp).toContain(`'nonce-${PANEL_CSP_NONCE}'`);
+        // and carry the script nonce for this response
+        expect(csp).toContain(`'nonce-${nonce}'`);
     });
 
     it("never consults the local manifest for a remote panel", () => {
@@ -116,7 +116,7 @@ describe("remote panel CSP provenance", () => {
         // filesystem declares, the remote policy is the served one
         const remoteEgress =
             "default-src 'self'; script-src 'self'; connect-src https://remote-host.example";
-        expect(remotePanelHtmlCsp(remoteEgress)).toContain("remote-host.example");
+        expect(remotePanelHtmlCsp(remoteEgress, panelCspNonce())).toContain("remote-host.example");
     });
 
     it("strips the daemon's frame-ancestors directive", () => {
@@ -125,14 +125,24 @@ describe("remote panel CSP provenance", () => {
         // directive would block the embedding the shell performs
         const served =
             "default-src 'self'; script-src 'self'; frame-ancestors 'none'; connect-src https://remote-host.example";
-        const csp = remotePanelHtmlCsp(served);
+        const nonce = panelCspNonce();
+        const csp = remotePanelHtmlCsp(served, nonce);
         expect(csp).not.toContain("frame-ancestors");
         expect(csp).toContain("connect-src https://remote-host.example");
-        expect(csp).toContain(`'nonce-${PANEL_CSP_NONCE}'`);
+        expect(csp).toContain(`'nonce-${nonce}'`);
+    });
+
+    it("mints a fresh nonce per response and carries only that one", () => {
+        const served = "default-src 'self'; script-src 'self'";
+        const first = panelCspNonce();
+        const second = panelCspNonce();
+        expect(first).not.toBe(second);
+        expect(remotePanelHtmlCsp(served, first)).toContain(`'nonce-${first}'`);
+        expect(remotePanelHtmlCsp(served, first)).not.toContain(`'nonce-${second}'`);
     });
 
     it("falls closed when the peer sends no CSP (never to the local manifest)", () => {
-        const csp = remotePanelHtmlCsp(null);
+        const csp = remotePanelHtmlCsp(null, panelCspNonce());
         expect(csp).not.toContain("https://");
         expect(csp).toContain("default-src 'self' panel: data: blob:");
     });

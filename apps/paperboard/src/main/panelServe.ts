@@ -14,7 +14,7 @@ import { lookupMime } from "../../papercrane/mime";
 import {
     resolveLocalPanelFile,
     buildCraneCredentialPayload,
-    PANEL_CSP_NONCE,
+    panelCspNonce,
     buildPanelCsp,
     remotePanelHtmlCsp,
 } from "./panelAssets";
@@ -26,8 +26,8 @@ const log = logger;
 const headerValue = (value: string | string[] | undefined): string | undefined =>
     Array.isArray(value) ? value[0] : value;
 
-const injectCspNonce = (html: string) =>
-    html.replaceAll("<script", `<script nonce="${PANEL_CSP_NONCE}"`);
+const injectCspNonce = (html: string, nonce: string) =>
+    html.replaceAll("<script", `<script nonce="${nonce}"`);
 
 // panels render outside shell styles; keep the same no-select baseline
 const injectUnselectable = (html: string): string => {
@@ -114,8 +114,9 @@ export async function servePanelAsset(
                             "Cache-Control": "no-store",
                         };
                         if (ext === ".html") {
+                            const nonce = panelCspNonce();
                             headers["Content-Security-Policy"] =
-                                buildPanelCsp(cleanPanelId);
+                                buildPanelCsp(cleanPanelId, nonce);
                             const html = injectCspNonce(
                                 injectUnselectable(
                                     await injectCraneCreds(
@@ -124,6 +125,7 @@ export async function servePanelAsset(
                                         cleanPanelId,
                                     ),
                                 ),
+                                nonce,
                             );
                             return new Response(html, { headers });
                         }
@@ -175,7 +177,8 @@ export async function servePanelAsset(
             // review approved. Deriving egress from the local manifest
             // would give a remote panel the wrong machine's policy.
             const served = headerValue(res.headers["content-security-policy"]) ?? null;
-            headers["Content-Security-Policy"] = remotePanelHtmlCsp(served);
+            const nonce = panelCspNonce();
+            headers["Content-Security-Policy"] = remotePanelHtmlCsp(served, nonce);
             responseBody = injectCspNonce(
                 injectUnselectable(
                     await injectCraneCreds(
@@ -184,6 +187,7 @@ export async function servePanelAsset(
                         cleanPanelId,
                     ),
                 ),
+                nonce,
             );
         }
 

@@ -22,18 +22,21 @@ export function parsePanelHost(
     return { comp: hostname.slice(0, dot), panelId: hostname.slice(dot + 1) };
 }
 
-// per-launch nonce for panel script tags; electron-local, never leaves
-// the shell process
-export const PANEL_CSP_NONCE = crypto.randomBytes(16).toString("base64");
+// fresh nonce for panel script tags, one per HTML response: a nonce that
+// outlives its document lets any later panel content reuse it. Generated
+// in the shell process and never persisted.
+export function panelCspNonce(): string {
+    return crypto.randomBytes(16).toString("base64");
+}
 
-// add the electron script nonce to any CSP — a daemon-built CSP gets the
-// same treatment as a locally-built one
-export const withCspNonce = (csp: string) =>
-    csp.replace(/script-src(?!-)/, (m) => `${m} 'nonce-${PANEL_CSP_NONCE}'`);
+// add the script nonce to any CSP — a daemon-built CSP gets the same
+// treatment as a locally-built one
+export const withCspNonce = (csp: string, nonce: string) =>
+    csp.replace(/script-src(?!-)/, (m) => `${m} 'nonce-${nonce}'`);
 
 // CSP for a locally-served panel: egress facts come from the local manifest
-export const buildPanelCsp = (panelId?: string) =>
-    withCspNonce(localEgressCsp(panelId));
+export const buildPanelCsp = (panelId: string | undefined, nonce: string) =>
+    withCspNonce(localEgressCsp(panelId), nonce);
 
 // CSP for a REMOTELY-served panel HTML response: the egress facts must be
 // the serving daemon's (it holds the manifest that was reviewed and
@@ -44,12 +47,13 @@ export const buildPanelCsp = (panelId?: string) =>
 // windows point at nothing — but in the shell the panel document IS the
 // iframe content, and importing that directive would block the very
 // embedding the shell performs.
-export const remotePanelHtmlCsp = (servedCsp: string | null | undefined): string => {
+export const remotePanelHtmlCsp = (servedCsp: string | null | undefined, nonce: string): string => {
     if (servedCsp && servedCsp.includes("script-src")) {
         return withCspNonce(
             servedCsp
                 .replace(/frame-ancestors\s+[^;]+;?\s*/g, "")
                 .trim(),
+            nonce,
         );
     }
     return localEgressCsp();
