@@ -6,9 +6,12 @@ import { describe, expect, it } from "bun:test";
 import {
     storeUploadParts,
     ALL_TARGETS,
+    archOf,
     assetFileName,
     buildLatestYml,
     dlFileUrl,
+    isArch,
+    isOs,
     isValidFileSegment,
     isValidVersionSegment,
     KV_PACKAGES_BINDING,
@@ -16,10 +19,14 @@ import {
     legacyDownloadRedirect,
     mergeVersionRecord,
     PAPERDL_R2_BUCKET,
+    parseUsbArgs,
     r2YmlKey,
     releaseAssetUrl,
     storedRecordOrigin,
     tagFor,
+    targetsForOses,
+    USB_ARCHES,
+    USB_OSES,
     ymlKeyFor,
     type DlAppRecord,
 } from "./publishLib";
@@ -28,6 +35,80 @@ describe("deploy targets", () => {
     it("pins the R2 bucket and KV binding from wrangler.jsonc", () => {
         expect(PAPERDL_R2_BUCKET).toBe("paperboard-paperdl");
         expect(KV_PACKAGES_BINDING).toBe("PACKAGES");
+    });
+});
+
+describe("usb OS and arch selection", () => {
+    it("presents every OS and arch that has targets", () => {
+        expect(USB_OSES).toEqual(["windows", "macos", "linux"]);
+        for (const os of USB_OSES) expect(isOs(os)).toBe(true);
+        expect(isOs("solaris")).toBe(false);
+        expect(USB_ARCHES).toEqual(["x64", "arm64"]);
+        for (const arch of USB_ARCHES) expect(isArch(arch)).toBe(true);
+        expect(isArch("riscv64")).toBe(false);
+        expect(ALL_TARGETS.map(archOf)).toEqual(["x64", "arm64", "x64", "arm64", "x64"]);
+    });
+
+    it("scopes crane targets to the chosen OSes and arches", () => {
+        expect(targetsForOses(["windows"])).toEqual(["windows-x64"]);
+        expect(targetsForOses(["macos"])).toEqual(["macos-x64", "macos-arm64"]);
+        expect(targetsForOses(["linux"])).toEqual(["linux-x64", "linux-arm64"]);
+        // ALL_TARGETS order is preserved however the OSes were selected.
+        expect(targetsForOses(["linux", "macos"])).toEqual([
+            "linux-x64",
+            "linux-arm64",
+            "macos-x64",
+            "macos-arm64",
+        ]);
+        // Arches narrow each OS; an OS with no target of that arch drops out.
+        expect(targetsForOses(["linux", "windows"], ["arm64"])).toEqual(["linux-arm64"]);
+        expect(targetsForOses(["macos", "linux"], ["x64"])).toEqual([
+            "linux-x64",
+            "macos-x64",
+        ]);
+    });
+
+    it("parses --os and --arch in comma-separated and repeated forms, deduped", () => {
+        expect(parseUsbArgs(["--os", "windows"])).toEqual({
+            oses: ["windows"],
+            arches: null,
+            help: false,
+        });
+        expect(parseUsbArgs(["--os=linux,macos"])).toEqual({
+            oses: ["linux", "macos"],
+            arches: null,
+            help: false,
+        });
+        expect(parseUsbArgs(["-o", "windows", "--os", "windows"])).toEqual({
+            oses: ["windows"],
+            arches: null,
+            help: false,
+        });
+        expect(parseUsbArgs(["--arch", "arm64"])).toEqual({
+            oses: null,
+            arches: ["arm64"],
+            help: false,
+        });
+        expect(parseUsbArgs(["--arch=x64,arm64", "-a", "x64"])).toEqual({
+            oses: null,
+            arches: ["x64", "arm64"],
+            help: false,
+        });
+        expect(parseUsbArgs(["--os=linux", "--arch=arm64"])).toEqual({
+            oses: ["linux"],
+            arches: ["arm64"],
+            help: false,
+        });
+        expect(parseUsbArgs([])).toEqual({ oses: null, arches: null, help: false });
+        expect(parseUsbArgs(["--help"])).toEqual({ oses: null, arches: null, help: true });
+    });
+
+    it("refuses unknown OSes/arches, missing values, and stray flags", () => {
+        expect(() => parseUsbArgs(["--os", "solaris"])).toThrow(/Unknown OS/);
+        expect(() => parseUsbArgs(["--os"])).toThrow(/needs a value/);
+        expect(() => parseUsbArgs(["--arch", "riscv64"])).toThrow(/Unknown architecture/);
+        expect(() => parseUsbArgs(["--arch"])).toThrow(/needs a value/);
+        expect(() => parseUsbArgs(["--wat"])).toThrow(/Unknown usb option/);
     });
 });
 

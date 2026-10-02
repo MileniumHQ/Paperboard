@@ -59,6 +59,12 @@ export function osOf(t: Target): Os {
           : "linux";
 }
 
+export type Arch = "x64" | "arm64";
+
+export function archOf(t: Target): Arch {
+    return t.endsWith("arm64") ? "arm64" : "x64";
+}
+
 export const BUN_TARGET_MAP: Record<Target, string> = {
     "linux-x64": "bun-linux-x64",
     "linux-arm64": "bun-linux-arm64",
@@ -66,6 +72,88 @@ export const BUN_TARGET_MAP: Record<Target, string> = {
     "macos-arm64": "bun-darwin-arm64",
     "windows-x64": "bun-windows-x64",
 };
+
+// USB bundle OS/arch selection. The bundle is the slow, throwaway sneakernet
+// path, so it lets the operator compile only the OS(es) and architecture(s)
+// under test. Order here is the prompt/report order; targetsForOses preserves
+// ALL_TARGETS order.
+export const USB_OSES: Os[] = ["windows", "macos", "linux"];
+export const USB_ARCHES: Arch[] = ["x64", "arm64"];
+
+export function isOs(value: string): value is Os {
+    return (USB_OSES as string[]).includes(value);
+}
+
+export function isArch(value: string): value is Arch {
+    return (USB_ARCHES as string[]).includes(value);
+}
+
+// The server targets a bundle covers for the given OSes and architectures.
+// Arches default to every one, so existing OS-only callers are unchanged.
+export function targetsForOses(
+    oses: Iterable<Os>,
+    arches: Iterable<Arch> = USB_ARCHES,
+): Target[] {
+    const selectedOses = new Set(oses);
+    const selectedArches = new Set(arches);
+    return ALL_TARGETS.filter(
+        (t) => selectedOses.has(osOf(t)) && selectedArches.has(archOf(t)),
+    );
+}
+
+export interface UsbArgs {
+    oses: Os[] | null;
+    arches: Arch[] | null;
+    help: boolean;
+}
+
+// Parses `usb [--os <list>] [--arch <list>]…` into deduped OS and arch lists
+// (null means "ask"), or help. Unknown flags/values throw rather than silently
+// bundling the wrong set. Pure so publish.ts's headless contract is testable.
+export function parseUsbArgs(args: string[]): UsbArgs {
+    const oses: Os[] = [];
+    const arches: Arch[] = [];
+    let help = false;
+    const addOs = (raw: string) => {
+        const os = raw.trim().toLowerCase();
+        if (!isOs(os)) {
+            throw new Error(`Unknown OS ${JSON.stringify(raw)} — expected windows, macos, or linux.`);
+        }
+        if (!oses.includes(os)) oses.push(os);
+    };
+    const addArch = (raw: string) => {
+        const arch = raw.trim().toLowerCase();
+        if (!isArch(arch)) {
+            throw new Error(`Unknown architecture ${JSON.stringify(raw)} — expected x64 or arm64.`);
+        }
+        if (!arches.includes(arch)) arches.push(arch);
+    };
+    for (let i = 0; i < args.length; i++) {
+        const a = args[i];
+        if (a === "--help" || a === "-h") {
+            help = true;
+        } else if (a === "--os" || a === "-o") {
+            const raw = args[++i];
+            if (raw === undefined) throw new Error("--os needs a value (windows, macos, or linux).");
+            for (const part of raw.split(",")) addOs(part);
+        } else if (a.startsWith("--os=")) {
+            for (const part of a.slice("--os=".length).split(",")) addOs(part);
+        } else if (a === "--arch" || a === "-a") {
+            const raw = args[++i];
+            if (raw === undefined) throw new Error("--arch needs a value (x64 or arm64).");
+            for (const part of raw.split(",")) addArch(part);
+        } else if (a.startsWith("--arch=")) {
+            for (const part of a.slice("--arch=".length).split(",")) addArch(part);
+        } else {
+            throw new Error(`Unknown usb option: ${a}. Run \`bun scripts/publish.ts usb --help\`.`);
+        }
+    }
+    return {
+        oses: oses.length ? oses : null,
+        arches: arches.length ? arches : null,
+        help,
+    };
+}
 
 // One repo hosts both release lines, so tags carry the app:
 // pb-v3.0.0-alpha, crane-v3.0.0-alpha.

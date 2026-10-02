@@ -39,6 +39,7 @@ import * as tar from "tar";
 import { discoverPanels, PANELS_ROOT } from "./publishManifest";
 import {
     ALL_TARGETS,
+    archOf,
     BUN_TARGET_MAP,
     DL_HOST,
     GH_REPO,
@@ -51,11 +52,16 @@ import {
     kvKeyFor,
     mergeVersionRecord,
     osOf,
+    parseUsbArgs,
     releaseAssetUrl,
     storedRecordOrigin,
     storeUploadParts,
     tagFor,
+    targetsForOses,
+    USB_ARCHES,
+    USB_OSES,
     ymlKeyFor,
+    type Arch,
     type DlApp,
     type DlAppRecord,
     type Os,
@@ -890,25 +896,98 @@ async function flowPublishPackages(): Promise<void> {
     p.outro("npm updated.");
 }
 
-// ─── USB test bundle (unchanged behavior, headless-capable) ─────────────────
+// ─── USB test bundle (headless-capable, OS-selectable) ──────────────────────
 // Builds Paperboard installers + crane binaries + all panels into ../usb/:
 //
 //   usb/
-//     installers/    win setup exe, mac zips (x64+arm64), linux AppImage
+//     installers/    win setup exe, mac tarballs, linux AppImage (per selected arch)
 //     crane/         papercrane-<target> binaries
 //     panels/        <board-id>/ (manifest.json + dist/ + branding/)
 //     link-panels.sh symlinks panels/ into ~/.paperboard/panels/ for testing
 //     README.txt
 //
+// Only the requested operating systems and architectures are bundled: a
+// Windows-only or arm64-only run skips the other crane/target builds and
+// stages only the selected installers. (macOS still compiles both arches in
+// its single electron-builder pass; only the selected one is tarred.)
+//
+//   bun scripts/publish.ts usb                       # pick OSes+arches (TTY)
+//   bun scripts/publish.ts usb --os windows          # Windows only
+//   bun scripts/publish.ts usb --os linux,macos      # comma-separated
+//   bun scripts/publish.ts usb --arch arm64          # arm64 targets only
+//
 // Never publishes anything. Copy the folder onto a USB stick and test anywhere.
-async function buildUsbFolder() {
+
+function printUsbHelp(): void {
+    console.log(`Build a USB test bundle (never uploads).
+
+  bun scripts/publish.ts usb                       pick OSes+arches interactively
+  bun scripts/publish.ts usb --os windows          Windows only
+  bun scripts/publish.ts usb --os linux,macos      several, comma-separated
+  bun scripts/publish.ts usb --os windows --os macos
+  bun scripts/publish.ts usb --arch arm64          arm64 targets only
+  bun scripts/publish.ts usb --os linux --arch x64,arm64
+
+Options:
+  -o, --os <list>     windows, macos, linux (comma-separated or repeated)
+  -a, --arch <list>   x64, arm64 (comma-separated or repeated)
+  -h, --help          show this help`);
+}
+
+async function chooseUsbOses(requested: Os[] | null): Promise<Os[]> {
+    if (requested) return requested;
+    if (!process.stdin.isTTY || !process.stdout.isTTY) {
+        console.log("No TTY — bundling every OS (pass `--os <list>` to narrow it).");
+        return [...USB_OSES];
+    }
+    const picked = checkCancel(
+        await p.multiselect({
+            message: "Which operating systems to bundle?",
+            options: USB_OSES.map((os) => ({
+                value: os,
+                label: os,
+                hint: `${targetsForOses([os]).length} server target(s)`,
+            })),
+            required: true,
+        }),
+    ) as Os[];
+    if (!picked.length) cancelled();
+    return picked;
+}
+
+async function chooseUsbArches(requested: Arch[] | null): Promise<Arch[]> {
+    if (requested) return requested;
+    if (!process.stdin.isTTY || !process.stdout.isTTY) {
+        console.log("No TTY — bundling every architecture (pass `--arch <list>` to narrow it).");
+        return [...USB_ARCHES];
+    }
+    const picked = checkCancel(
+        await p.multiselect({
+            message: "Which architectures to bundle?",
+            options: USB_ARCHES.map((arch) => ({
+                value: arch,
+                label: arch,
+                hint: `${targetsForOses(USB_OSES, [arch]).length} server target(s)`,
+            })),
+            required: true,
+        }),
+    ) as Arch[];
+    if (!picked.length) cancelled();
+    return picked;
+}
+
+async function buildUsbFolder(oses: Os[], arches: Arch[]) {
     const USB = join(HERE, "..", "usb");
     const usbDistDir = join(HERE, "dist");
     const installersDir = join(USB, "installers");
     const craneDir = join(USB, "crane");
     const panelsDir = join(USB, "panels");
+    const selected = new Set(oses);
+    const selectedArches = new Set(arches);
 
-    console.log(`\n💾 Building USB test bundle (paperboard v${version}) → ${USB}\n`);
+    console.log(
+        `\n💾 Building USB test bundle (paperboard v${version}; ${oses.join(", ")}; ${arches.join(", ")}) → ${USB}\n`,
+    );
     rmSync(USB, { recursive: true, force: true });
     mkdirSync(installersDir, { recursive: true });
     mkdirSync(craneDir, { recursive: true });
@@ -917,18 +996,20 @@ async function buildUsbFolder() {
     // npm ships node-pty's spawn-helper without the exec bit; restore it or
     // every packaged mac app gets a pty helper that can never execute.
     // (Runtime self-heal in pty.ts covers copies; this covers the build.)
-    for (const arch of ["x64", "arm64"]) {
-        const helper = join(
-            HERE,
-            "node_modules",
-            "node-pty",
-            "prebuilds",
-            `darwin-${arch}`,
-            "spawn-helper",
-        );
-        try {
-            if (existsSync(helper)) await $`chmod +x ${helper}`;
-        } catch (err) { console.debug("spawn-helper chmod skipped:", String(err)); }
+    if (selected.has("macos")) {
+        for (const arch of ["x64", "arm64"]) {
+            const helper = join(
+                HERE,
+                "node_modules",
+                "node-pty",
+                "prebuilds",
+                `darwin-${arch}`,
+                "spawn-helper",
+            );
+            try {
+                if (existsSync(helper)) await $`chmod +x ${helper}`;
+            } catch (err) { console.debug("spawn-helper chmod skipped:", String(err)); }
+        }
     }
 
     const snapshotDist = () => Date.now();
@@ -948,13 +1029,19 @@ async function buildUsbFolder() {
     };
 
     // 1. Paperboard installers per OS (win + linux direct; mac via tarball below)
-    const osBuilds: { os: Os; script: string; match: (f: string) => boolean }[] = [
-        { os: "windows", script: "build:win", match: (f) => f.endsWith("-setup.exe") },
-        { os: "linux", script: "build:linux", match: (f) => f.endsWith(".AppImage") },
-        { os: "linux", script: "build:linux-arm64", match: (f) => f.endsWith(".AppImage") },
+    const osBuilds: {
+        os: Os;
+        arch: Arch;
+        script: string;
+        match: (f: string) => boolean;
+    }[] = [
+        { os: "windows", arch: "x64", script: "build:win", match: (f) => f.endsWith("-setup.exe") },
+        { os: "linux", arch: "x64", script: "build:linux", match: (f) => f.endsWith(".AppImage") },
+        { os: "linux", arch: "arm64", script: "build:linux-arm64", match: (f) => f.endsWith(".AppImage") },
     ];
     const installerFiles: string[] = [];
-    for (const { os, script, match } of osBuilds) {
+    for (const { os, arch, script, match } of osBuilds) {
+        if (!selected.has(os) || !selectedArches.has(arch)) continue;
         console.log(`\n🔨 Building Paperboard for ${os}…\n`);
         const before = snapshotDist();
         await $`bun run ${script}`.cwd(HERE);
@@ -969,7 +1056,7 @@ async function buildUsbFolder() {
     // FAT32 USB sticks — users double-click and drag to Applications, no
     // chmod, no DMG tooling needed (hdiutil is macOS-only). The zip stays
     // in dist/ for the updater feed.
-    {
+    if (selected.has("macos")) {
         console.log(`\n🔨 Building Paperboard for macos…\n`);
         await $`bun run build:mac`.cwd(HERE);
         const macApps: { dir: string; arch: string }[] = [
@@ -977,6 +1064,7 @@ async function buildUsbFolder() {
             { dir: join(usbDistDir, "mac-arm64"), arch: "arm64" },
         ];
         for (const { dir, arch } of macApps) {
+            if (!selectedArches.has(arch as Arch)) continue;
             const appPath = join(dir, "Paperboard.app");
             if (!existsSync(appPath)) throw new Error(`No app bundle at ${appPath}`);
             const tarName = `paperboard-${version}-macos-${arch}.tar.gz`;
@@ -986,9 +1074,9 @@ async function buildUsbFolder() {
         }
     }
 
-    // 2. Crane binaries (all targets except linux-arm64 — no testing surface)
+    // 2. Crane binaries, limited to the selected OSes
     const craneFiles: string[] = [];
-    for (const target of ALL_TARGETS) {
+    for (const target of targetsForOses(oses, arches)) {
         const os = osOf(target);
         const bunTarget = BUN_TARGET_MAP[target];
         const outName = os === "windows" ? `papercrane-${target}.exe` : `papercrane-${target}`;
@@ -1004,7 +1092,7 @@ async function buildUsbFolder() {
     // node-pty sidecar for standalone Windows: lets the compiled binary
     // reach conpty (absolute require resolves internally) instead of the
     // pipe fallback. macOS/Linux standalone use the Bun FFI backend.
-    {
+    if (selected.has("windows")) {
         const sidecarSrc = join(HERE, "node_modules", "node-pty");
         const sidecarDest = join(craneDir, "node-pty");
         mkdirSync(join(sidecarDest, "lib"), { recursive: true });
@@ -1191,11 +1279,16 @@ ${panelEntries.map((p) => `  ${p.id} (${p.name} v${p.version})`).join("\n")}
 async function main(): Promise<void> {
     const argv = process.argv.slice(2);
     if (argv[0] === "usb") {
-        await buildUsbFolder();
+        const { oses, arches, help } = parseUsbArgs(argv.slice(1));
+        if (help) {
+            printUsbHelp();
+            return;
+        }
+        await buildUsbFolder(await chooseUsbOses(oses), await chooseUsbArches(arches));
         return;
     }
     if (!process.stdin.isTTY || !process.stdout.isTTY) {
-        console.error("publish.ts is interactive — run it in a terminal (or `bun devutils/publish.ts usb` headless).");
+        console.error("publish.ts is interactive — run it in a terminal (or `bun scripts/publish.ts usb` headless).");
         process.exit(1);
     }
 
@@ -1227,7 +1320,7 @@ async function main(): Promise<void> {
             await flowPublishPackages();
             break;
         case "usb":
-            await buildUsbFolder();
+            await buildUsbFolder(await chooseUsbOses(null), await chooseUsbArches(null));
             break;
         default:
             cancelled();
