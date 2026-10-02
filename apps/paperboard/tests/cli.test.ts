@@ -13,8 +13,8 @@ describe("parseCliArgs", () => {
     it("auth stays on by default", () => {
         expect(parseCliArgs([...base]).noAuth).toBeUndefined();
     });
-    it("parses port/host/headless/pair", () => {
-        const o = parseCliArgs([...base, "--port", "51749", "--host", "127.0.0.1", "--headless", "--pair"]);
+    it("parses port/host/headless/start-pairing", () => {
+        const o = parseCliArgs([...base, "--port", "51749", "--host", "127.0.0.1", "--headless", "--start-pairing"]);
         expect(o.port).toBe(51749);
         expect(o.host).toBe("127.0.0.1");
         expect(o.headless).toBe(true);

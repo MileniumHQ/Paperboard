@@ -540,12 +540,10 @@ export function startPaperCraneServer(
                         `[Paperboard Server] Listening on ${tlsIdentity ? "https" : "http"}://${getDisplayHost(host)}:${actualPort}`,
                     );
                 } else {
-                    const existingClients = auth.getAuthorizedClients();
-                    // fresh daemon with only the host token still offers pairing
-                    const hasRealClients = existingClients.some(
-                        (c) => c.clientName !== "host",
-                    );
-                    if (options.startPairing || !hasRealClients) {
+                    // pairing opens only when asked: [p] in the TUI, or
+                    // --start-pairing at launch. A daemon listening on the
+                    // LAN never offers a pairing code on its own.
+                    if (options.startPairing) {
                         auth.startPairing();
                     }
 
@@ -593,7 +591,7 @@ export function parseCliArgs(argv: string[] = process.argv): ServerOptions & { s
         .option("--no-auth", "disable authentication")
         .option("--local", "alias for --no-auth")
         .option("--headless", "run without TUI/pairing UI")
-        .option("--pair", "start pairing on boot")
+        .option("--start-pairing", "show a pairing code at launch (otherwise press p)")
         .option("--port <number>", "listen port", (v) => Number(v))
         .option("--host <host>", "listen host")
         .option("--allow-registry-override", "honor ORIGAMI_REGISTRY_URL even in production")
@@ -605,7 +603,7 @@ export function parseCliArgs(argv: string[] = process.argv): ServerOptions & { s
     // --no-auth surfaces as opts.auth === false, check both spellings
     if (opts.auth === false || opts.noAuth || opts.local) options.noAuth = true;
     if (opts.headless) options.headless = true;
-    if (opts.pair) options.startPairing = true;
+    if (opts.startPairing) options.startPairing = true;
     if (typeof opts.port === "number" && Number.isFinite(opts.port)) {
         options.port = opts.port;
     }
