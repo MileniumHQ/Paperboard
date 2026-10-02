@@ -1,35 +1,34 @@
 // World manager service path (bun test): the real service/worlds.ts, core
-// planning, directory listing and trash-remove run against an in-memory
-// daemon (files, config, `ls`, and a pty that performs the trash move).
+// planning, directory listing and trash-remove run against a temporary
+// server folder on disk (files, `ls`, and the trash rename are real; the
+// daemon's config store is in memory).
 // Deleting a world must remove it from the next listing — including the
 // ACTIVE world, which used to linger as a "not generated" card until the
 // user switched away — and an unreadable panel config must fail loudly
 // instead of being listed as empty or overwritten.
-import { describe, it, expect, mock, beforeEach } from "bun:test";
+import { describe, it, expect, mock, beforeEach, afterAll } from "bun:test";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as nodePath from "node:path";
 
-let disk = new Set<string>();
+const root = fs.mkdtempSync(nodePath.join(os.tmpdir(), "gameserver-worlds-"));
 let savedConfig: Record<string, unknown> | null = null;
 let configReadError: Error | null = null;
 const configSets: Record<string, unknown>[] = [];
 
-const dataListeners = new Map<string, (chunk: string) => void>();
-const exitListeners = new Map<string, (code?: number) => void>();
-
-const fileContents = new Map<string, string>();
-
-const topLevelDirs = () =>
-    [...new Set([...disk].map((p) => p.split("/")[0]))].filter((d) => !d.startsWith(".trash-"));
+const inRoot = (path: string) => nodePath.join(root, ...path.split("/"));
+const exists = (path: string) => fs.existsSync(inRoot(path));
+const readText = (path: string) => fs.readFileSync(inRoot(path), "utf8");
 
 const fileApiFake = {
-    read: async (path: string) =>
-        disk.has(path) ? (fileContents.get(path) ?? "") : null,
+    read: async (path: string) => (exists(path) ? readText(path) : null),
     write: async (path: string, content: string) => {
-        disk.add(path);
-        fileContents.set(path, content);
-        return `/srv/mc/${path}`;
+        fs.mkdirSync(nodePath.dirname(inRoot(path)), { recursive: true });
+        fs.writeFileSync(inRoot(path), content);
+        return inRoot(path);
     },
-    exists: async (path: string) => disk.has(path),
-    getPath: async () => "/srv/mc",
+    exists: async (path: string) => exists(path),
+    getPath: async (path: string) => inRoot(path),
 };
 
 mock.module("@paperboard-dev/paperapi", () => ({
@@ -49,61 +48,41 @@ mock.module("@paperboard-dev/paperapi", () => ({
     system: { getInfo: async () => ({ os: "linux" }) },
     processApi: {
         // lib/filesystem lists the server root with `ls -1 <dir>`
-        run: async (opts: { onStdout?: (chunk: string) => void }) => {
-            opts.onStdout?.(topLevelDirs().join("\n") + "\n");
+        run: async (opts: { args: string[]; onStdout?: (chunk: string) => void }) => {
+            opts.onStdout?.(fs.readdirSync(opts.args[1]).join("\n") + "\n");
             return { exitCode: 0 };
         },
-    },
-    terminal: {
-        create: async () => true,
-        // the trash-remove pty: perform the moves the command names, then
-        // print the success marker and exit like a real shell would
-        write: (id: string, data: string) => {
-            const moved = [...data.matchAll(/mv '([^']+)'/g)].map((m) => m[1]);
-            for (const dir of moved) {
-                for (const path of [...disk]) {
-                    if (path === dir || path.startsWith(`${dir}/`)) disk.delete(path);
-                }
-            }
-            queueMicrotask(() => {
-                dataListeners.get(id)?.("TRASH_REMOVE_OK\r\n");
-                exitListeners.get(id)?.(0);
-            });
-        },
-        onData: (id: string, cb: (chunk: string) => void) => {
-            dataListeners.set(id, cb);
-            return () => dataListeners.delete(id);
-        },
-        onExit: (id: string, cb: (code?: number) => void) => {
-            exitListeners.set(id, cb);
-            return () => exitListeners.delete(id);
-        },
-        destroy: () => {},
     },
 }));
 
 const { listWorlds, deleteActiveWorldDirs, setActiveWorld } = await import(
     "../src/service/worlds"
 );
-const { cancelPendingPtyDestroys } = await import("../src/service/ptyCleanup");
 
 const offlineCtx = { state: { serverStatus: "offline" } } as any;
 
 function seedWorld(name: string, dims: { nether?: boolean; end?: boolean } = {}) {
-    disk.add(`${name}/level.dat`);
-    if (dims.nether) disk.add(`${name}_nether/level.dat`);
-    if (dims.end) disk.add(`${name}_the_end/level.dat`);
+    const levelDat = (dir: string) => {
+        fs.mkdirSync(inRoot(dir), { recursive: true });
+        fs.writeFileSync(inRoot(`${dir}/level.dat`), "level");
+    };
+    levelDat(name);
+    if (dims.nether) levelDat(`${name}_nether`);
+    if (dims.end) levelDat(`${name}_the_end`);
 }
 
 function setLevelName(name: string) {
-    disk.add("server.properties");
-    fileContents.set("server.properties", `level-name=${name}\n`);
+    fs.writeFileSync(inRoot("server.properties"), `level-name=${name}\n`);
 }
 
+afterAll(() => {
+    fs.rmSync(root, { recursive: true, force: true });
+});
+
 beforeEach(() => {
-    cancelPendingPtyDestroys();
-    disk = new Set();
-    fileContents.clear();
+    for (const entry of fs.readdirSync(root)) {
+        fs.rmSync(nodePath.join(root, entry), { recursive: true, force: true });
+    }
     savedConfig = null;
     configReadError = null;
     configSets.length = 0;
@@ -125,7 +104,11 @@ describe("world deletion reaches the next listing", () => {
         await deleteActiveWorldDirs(offlineCtx, "survival");
         const names = (await listWorlds()).map((w) => w.name);
         expect(names).toEqual(["creative"]);
-        expect(disk.has("survival_nether/level.dat")).toBe(false);
+        expect(exists("survival_nether/level.dat")).toBe(false);
+        // trashed, not destroyed: the bytes are recoverable from .trash-*
+        const trash = fs.readdirSync(root).find((e) => e.startsWith(".trash-"));
+        expect(trash).toBeDefined();
+        expect(exists(`${trash}/survival_nether/level.dat`)).toBe(true);
     });
 
     it("drops a created-but-never-started world", async () => {
@@ -146,7 +129,7 @@ describe("recreating the configured world", () => {
         setLevelName("world");
         const res = await setActiveWorld(offlineCtx, "world", "12345");
         expect(res).toEqual({ activated: "world", created: true });
-        expect(fileContents.get("server.properties")).toContain("level-seed=12345");
+        expect(readText("server.properties")).toContain("level-seed=12345");
         expect((await listWorlds()).map((w) => [w.name, w.active, w.generated])).toEqual([
             ["world", true, false],
         ]);
@@ -168,7 +151,7 @@ describe("recreating the configured world", () => {
             setActiveWorld(offlineCtx, "world", undefined, true),
         ).rejects.toThrow(/already exists/);
         // the refusal happens before server.properties is rewritten
-        expect(fileContents.get("server.properties")).toContain(
+        expect(readText("server.properties")).toContain(
             "level-name=survival",
         );
     });

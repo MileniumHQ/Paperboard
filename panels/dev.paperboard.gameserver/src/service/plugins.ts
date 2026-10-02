@@ -11,7 +11,7 @@ import {
     pluginDirName,
     validatePluginFilename,
 } from "../core/plugins";
-import { trashRemovePathsWith } from "../core/trash";
+import { trashRemovePathsWith } from "./trash";
 import { makeTrashRemoveDeps } from "./trashDeps";
 import type { GameServerState, InstalledPlugin, InstalledRecord } from "./types";
 import { PANEL_ID } from "./types";
@@ -72,12 +72,11 @@ export async function deletePlugin(
     filename: string,
 ): Promise<void> {
     const safe = validatePluginFilename(sanitizeFileName(filename) ?? filename);
-    // trash first, then remove (see core/trash.ts) — a bare fileApi.delete
+    // moved to trash (see service/trash.ts) — a bare fileApi.delete
     // here is irreversible destruction on a single RPC
     await trashRemovePathsWith(
-        makeTrashRemoveDeps("Service:Plugins"),
+        makeTrashRemoveDeps(),
         [`${pluginDirName(ctx.state.serverSoftware)}/${safe}`],
-        "delete-plugin-pty",
     );
     const records = await getInstallRecords();
     if (records[safe]) {
@@ -95,8 +94,9 @@ export async function uninstallAllPlugins(
 ): Promise<number> {
     const paths: string[] = [];
     for (const dir of ALL_PLUGIN_DIRS) {
-        const exists = await fileApi.exists(dir, PANEL_ID).catch(() => false);
-        if (!exists) continue;
+        // an unanswerable exists is a failure, not an empty folder: "uninstall
+        // everything" must not report success over jars it never saw
+        if (!(await fileApi.exists(dir, PANEL_ID))) continue;
         for (const entry of await listDirectory(dir)) {
             const safe = sanitizeFileName(entry);
             if (!safe || !safe.toLowerCase().endsWith(".jar")) continue;
@@ -109,9 +109,8 @@ export async function uninstallAllPlugins(
     }
     if (paths.length > 0) {
         await trashRemovePathsWith(
-            makeTrashRemoveDeps("Service:Plugins"),
+            makeTrashRemoveDeps(),
             paths,
-            "uninstall-all-plugins-pty",
         );
     }
     await writeInstallRecords({});

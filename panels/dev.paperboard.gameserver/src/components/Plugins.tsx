@@ -924,9 +924,10 @@ export default function Plugins(props: { updateRequest?: number }) {
                 }
             >
                 <PaperText preset="body">
-                    This permanently removes the jar from the server's{" "}
-                    {pluginDirName(serverSoftware())}/ folder. The change takes
-                    effect after a restart. This cannot be undone.
+                    This moves the jar out of the server's{" "}
+                    {pluginDirName(serverSoftware())}/ folder into a .trash
+                    folder inside the server folder, where it can be restored.
+                    The change takes effect after a restart.
                 </PaperText>
             </PaperModal>
 

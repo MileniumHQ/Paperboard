@@ -70,7 +70,7 @@ export function normalizeLevelType(value: string): string {
 }
 
 // world listing and deletion run in the service (service/worlds.ts owns
-// the pty + trash discipline with an explicit PANEL_ID). The direct
+// the trash discipline with an explicit PANEL_ID). The direct
 // fileApi/terminalApi twins that lived here are gone: the UI triggers,
 // the service executes, state syncs back.
 export async function listWorldDirs(): Promise<string[]> {

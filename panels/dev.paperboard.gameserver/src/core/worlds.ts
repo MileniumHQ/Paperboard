@@ -1,12 +1,9 @@
-import { trashRemovePathsWith, type TrashRemoveDeps } from "./trash";
-
 export const WORLD_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 
-// shell-safe level names for DELETION: single-quoteable on posix (only '
-// is unsafe there) and double-quoteable on Windows (only " and % are
-// unsafe there — cmd expands %VAR% inside quotes). Creation stays on the
-// stricter WORLD_NAME_PATTERN; an exotic-but-valid level-name refuses
-// loudly instead of deleting the wrong directory.
+// level names a world may be DELETED or switched by: one plain path
+// segment (deletion is a rename inside the server folder, service/trash.ts).
+// Creation stays on the stricter WORLD_NAME_PATTERN; an exotic-but-valid
+// level-name refuses loudly instead of deleting the wrong directory.
 export const SHELL_SAFE_LEVEL_NAME = /^[A-Za-z0-9][A-Za-z0-9 _().-]{0,63}$/;
 
 export function assertShellSafeLevelName(levelName: unknown): string {
@@ -22,7 +19,7 @@ export function assertShellSafeLevelName(levelName: unknown): string {
     return safe;
 }
 
-// names reach shell commands, so stricter than the entry pattern
+// one level name becomes three server-folder paths, so it is checked here
 export function getWorldDirsToDelete(levelName: string): string[] {
     const safe = assertShellSafeLevelName(levelName);
     return [safe, `${safe}_nether`, `${safe}_the_end`];
@@ -53,18 +50,6 @@ export async function collectWorldDirs(deps: WorldListDeps): Promise<string[]> {
     return worlds.sort((a, b) => a.localeCompare(b));
 }
 
-export interface WorldDeleteDeps extends TrashRemoveDeps {}
-
-// deletes <level>, <level>_nether and <level>_the_end via a short-lived
-// pty — trash first, then remove (see core/trash.ts), never a bare rm
-export async function deleteWorldDirs(
-    levelName: string,
-    deps: WorldDeleteDeps,
-): Promise<void> {
-    const dirs = getWorldDirsToDelete(levelName);
-    await trashRemovePathsWith(deps, dirs, "delete-world-pty");
-}
-
 // ─── World manager model ─────────────────────────────────────────────
 // Pure data + decisions for the Worlds tab. IO (exists checks,
 // server.properties reads) lives in service/worlds.ts; the component
@@ -85,10 +70,10 @@ export interface WorldCandidate {
     generated: boolean;
 }
 
-// creation names must survive as fresh directories AND future shell
-// commands, so creation stays on the strict pattern (no spaces, no dots,
-// no leading dash). Switching to an existing directory only needs the
-// shell-safe check — a world created elsewhere may contain spaces.
+// creation names become fresh directories on every OS, so creation stays
+// on the strict pattern (no spaces, no dots, no leading dash). Switching to
+// an existing directory only needs the level-name check — a world created
+// elsewhere may contain spaces.
 export function assertCreatableWorldName(name: unknown): string {
     const clean = String(name ?? "").trim();
     if (!WORLD_NAME_PATTERN.test(clean)) {

@@ -46,17 +46,9 @@ mock.module("@paperboard-dev/paperapi", () => ({
             return { exitCode: listExitCode };
         },
     },
-    terminal: {
-        create: async () => true,
-        write: () => {},
-        onData: () => () => {},
-        onExit: () => () => {},
-        destroy: () => {},
-    },
 }));
 
 const { renderMapTile, listMapRegions } = await import("../src/service/map");
-const { cancelPendingPtyDestroys } = await import("../src/service/ptyCleanup");
 
 const ctx = {
     state: { serverStatus: "offline", serverSoftware: "paper", serverVersion: "26.1" },
@@ -130,7 +122,6 @@ function pngPixels(dataUrl: string): PNG {
 }
 
 beforeEach(() => {
-    cancelPendingPtyDestroys();
     disk = new Set(["server.properties", "world/region", "world/region/r.0.0.mca"]);
     serverProperties = "level-name=world\n";
     listExitCode = 0;

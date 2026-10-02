@@ -1,12 +1,6 @@
-// teardown bounds (bun test): player tracking state stays capped and
-// one-shot pty destroy timers are tracked, unref'd, and cancellable
+// teardown bounds (bun test): player tracking state stays capped
 import { describe, it, expect } from "bun:test";
 import { trackPlayerActivity, __playersTest } from "../src/service/players";
-import {
-    schedulePtyDestroy,
-    cancelPendingPtyDestroys,
-    pendingPtyDestroyCount,
-} from "../src/service/ptyCleanup";
 import { MAX_BUFFERED_ENTRIES } from "../src/service/types";
 
 function makeCtx(seen: string[] = []) {
@@ -56,41 +50,5 @@ describe("player tracking stays bounded", () => {
         }
         expect(ctx.state.seenPlayers.length).toBe(MAX_BUFFERED_ENTRIES);
         __playersTest.clearJoins();
-    });
-});
-
-describe("pty destroy timers", () => {
-    it("tracks, fires, and clears", async () => {
-        cancelPendingPtyDestroys();
-        const destroyed: string[] = [];
-        schedulePtyDestroy("pty-a", (id) => destroyed.push(id), "Test");
-        expect(pendingPtyDestroyCount()).toBe(1);
-        await new Promise((r) => setTimeout(r, 1200));
-        expect(destroyed).toEqual(["pty-a"]);
-        expect(pendingPtyDestroyCount()).toBe(0);
-    });
-
-    it("cancelPendingPtyDestroys prevents the destroy", async () => {
-        cancelPendingPtyDestroys();
-        const destroyed: string[] = [];
-        schedulePtyDestroy("pty-b", (id) => destroyed.push(id), "Test");
-        expect(pendingPtyDestroyCount()).toBe(1);
-        cancelPendingPtyDestroys();
-        expect(pendingPtyDestroyCount()).toBe(0);
-        await new Promise((r) => setTimeout(r, 1200));
-        expect(destroyed).toEqual([]);
-    });
-
-    it("destroy errors are logged, not thrown", async () => {
-        cancelPendingPtyDestroys();
-        schedulePtyDestroy(
-            "pty-c",
-            () => {
-                throw new Error("boom");
-            },
-            "Test",
-        );
-        await new Promise((r) => setTimeout(r, 1200));
-        expect(pendingPtyDestroyCount()).toBe(0);
     });
 });

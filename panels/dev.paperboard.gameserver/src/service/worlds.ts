@@ -4,7 +4,7 @@ import { sanitizeFileName, listDirectory } from "../lib/filesystem";
 import {
     buildWorldInfos,
     collectWorldDirs,
-    deleteWorldDirs,
+    getWorldDirsToDelete,
     planWorldActivation,
     WORLD_NAME_PATTERN,
     assertShellSafeLevelName,
@@ -13,6 +13,7 @@ import {
 import { parseProperties, extractLevelName } from "../core/properties";
 import { type GameServerState, PANEL_ID } from "./types";
 import { makeTrashRemoveDeps } from "./trashDeps";
+import { trashRemovePathsWith } from "./trash";
 
 export { WORLD_NAME_PATTERN };
 export type { WorldInfo };
@@ -62,7 +63,8 @@ export async function deleteActiveWorldDirs(
 ): Promise<void> {
     // enforce offline here, at the owner, not only in the action that calls it
     assertServerOffline(ctx);
-    await deleteWorldDirs(levelName, makeTrashRemoveDeps("Service:Worlds"));
+    // <level>, <level>_nether and <level>_the_end, trashed, never deleted
+    await trashRemovePathsWith(makeTrashRemoveDeps(), getWorldDirsToDelete(levelName));
     const pending = await readPendingWorlds();
     const next = pending.filter((n) => n.toLowerCase() !== levelName.toLowerCase());
     if (next.length !== pending.length) await writePendingWorlds(next);

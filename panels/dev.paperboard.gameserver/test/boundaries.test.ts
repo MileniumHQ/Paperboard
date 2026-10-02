@@ -1,69 +1,28 @@
-// Service-boundary proofs (bun test): ports, level names, player names,
-// and trash-remove commands are validated before they reach a shell.
+// Service-boundary proofs (bun test): ports, level names, player names and
+// trash paths are validated before they reach a command or the disk.
 import { describe, test, expect } from "bun:test";
-import {
-    assertPort,
-    buildKillPortCommand,
-    killConflictingProcessWith,
-} from "../src/core/diagnostics";
-import {
-    getWorldDirsToDelete,
-    assertShellSafeLevelName,
-    deleteWorldDirs,
-} from "../src/core/worlds";
-import {
-    buildTrashRemoveCommand,
-    trashRemovePathsWith,
-} from "../src/core/trash";
+import { assertPort, listeningPidsCommand, parseListeningPids } from "../src/core/diagnostics";
+import { killConflictingProcessWith, type KillPortDeps } from "../src/service/diagnostics";
+import { getWorldDirsToDelete, assertShellSafeLevelName } from "../src/core/worlds";
+import { trashRemovePathsWith } from "../src/service/trash";
 import { isWindowsTarget } from "../src/lib/platform";
 import { assertPlayerName, assertSingleLine } from "../src/core/players";
 
-function mockDeps() {
-    const calls: { op: string; arg?: unknown }[] = [];
-    return {
-        calls,
-        deps: {
-            getServerDir: () => Promise.resolve("/srv/mc"),
-            getTargetOs: () => Promise.resolve("linux"),
-            createPty: (id: string, opts: unknown) => {
-                calls.push({ op: "create", arg: { id, opts } });
-                return true;
-            },
-            writePty: (id: string, data: string) => {
-                calls.push({ op: "write", arg: { id, data } });
-                // model the real pty: the shell ECHOES the typed command
-                // line before executing it, so the terminal shows the
-                // typed (quote-scarred) marker form, never the bare marker
-                for (const dataCb of pendingDataCbs) dataCb(`${data}\r\n`);
-            },
-            onPtyData: (_id: string, cb: (chunk: string) => void) => {
-                calls.push({ op: "subscribe-data", arg: _id });
-                pendingDataCbs.push(cb);
-                return () => {};
-            },
-            onPtyExit: (id: string, cb: (code?: number) => void) => {
-                calls.push({ op: "subscribe-exit", arg: id });
-                // the shell then prints the marker chain's actual OUTPUT
-                // (unscarred) ahead of the exit — how a real success reads
-                queueMicrotask(() => {
-                    for (const dataCb of pendingDataCbs)
-                        dataCb("\r\nTRASH_REMOVE_OK\r\nTRASH_REMOVE_DONE\r\n");
-                    queueMicrotask(() => cb(0));
-                });
-                return () => {};
-            },
-            scheduleDestroy: (id: string) => {
-                calls.push({ op: "destroy", arg: id });
-            },
+function killDeps(opts: { isWin?: boolean; output?: string; exitCode?: number } = {}) {
+    const runs: { command: string; args: string[] }[] = [];
+    const killed: number[] = [];
+    const deps: KillPortDeps = {
+        isWindows: async () => opts.isWin ?? false,
+        run: async (command, args, onStdout) => {
+            runs.push({ command, args });
+            if (opts.output) onStdout(opts.output);
+            return opts.exitCode ?? 0;
         },
-        // test hook for failure modeling: push extra data chunks
-        feedOutput: (chunk: string) => {
-            for (const dataCb of pendingDataCbs) dataCb(chunk);
-        },
+        kill: (pid) => killed.push(pid),
+        ownPid: 4242,
     };
+    return { deps, runs, killed };
 }
-
-const pendingDataCbs: ((chunk: string) => void)[] = [];
 
 describe("assertPort", () => {
     test("accepts plain numeric ports", () => {
@@ -79,27 +38,50 @@ describe("assertPort", () => {
 });
 
 describe("killConflictingProcessWith", () => {
-    test("a UI-supplied injection never reaches the pty", async () => {
-        const { calls, deps } = mockDeps();
+    test("a UI-supplied injection never reaches a command", async () => {
+        const { deps, runs, killed } = killDeps();
         await expect(killConflictingProcessWith(deps, "25565; touch /tmp/pwned")).rejects.toThrow(
             /Refusing/,
         );
-        // the refusal happens before any pty exists
-        expect(calls).toEqual([]);
+        expect(runs).toEqual([]);
+        expect(killed).toEqual([]);
     });
 
-    test("a valid port builds the targeted kill command", async () => {
-        const { calls, deps } = mockDeps();
-        await killConflictingProcessWith(deps, "25565");
-        const write = calls.find((c) => c.op === "write")?.arg as { data: string };
-        expect(write.data).toContain("lsof -ti :25565");
-        expect(write.data).not.toContain("killall");
+    test("kills each listener lsof reports, never this service", async () => {
+        const { deps, runs, killed } = killDeps({ output: "311\n4242\n311\n977\n" });
+        expect(await killConflictingProcessWith(deps, "25565")).toBe(2);
+        expect(runs).toEqual([{ command: "lsof", args: ["-t", "-iTCP:25565", "-sTCP:LISTEN"] }]);
+        expect(killed).toEqual([311, 977]);
     });
 
-    test("windows target builds the powershell variant", () => {
-        const cmd = buildKillPortCommand("25565", true);
-        expect(cmd).toContain("LocalPort 25565");
-        expect(cmd).not.toContain("lsof");
+    test("nothing listening is a valid answer, not a failure", async () => {
+        // lsof exits 1 with no output when nothing matches
+        const { deps, killed } = killDeps({ exitCode: 1 });
+        expect(await killConflictingProcessWith(deps, "25565")).toBe(0);
+        expect(killed).toEqual([]);
+    });
+
+    test("a lookup that could not run fails instead of reporting a kill", async () => {
+        const { deps } = killDeps({ isWin: true, exitCode: 1 });
+        await expect(killConflictingProcessWith(deps, "25565")).rejects.toThrow(/Could not look up/);
+    });
+
+    test("windows asks PowerShell as one argv element, not a typed shell line", async () => {
+        // the old command was typed into a PowerShell pty as
+        // powershell -Command "... $_ ...": the outer shell expanded $_ to
+        // nothing inside the double quotes, so the kill never ran
+        const { deps, runs, killed } = killDeps({ isWin: true, output: "0\r\n5120\r\n" });
+        expect(await killConflictingProcessWith(deps, "25565")).toBe(1);
+        expect(runs[0].command).toBe("powershell.exe");
+        expect(runs[0].args.at(-1)).toContain("Get-NetTCPConnection -LocalPort 25565 -State Listen");
+        expect(killed).toEqual([5120]);
+    });
+});
+
+describe("listening pid parsing", () => {
+    test("keeps only positive pids, once each", () => {
+        expect(parseListeningPids("12\r\n\r\n0\nCOMMAND\n12\n 77 \n")).toEqual([12, 77]);
+        expect(listeningPidsCommand("80", false).command).toBe("lsof");
     });
 });
 
@@ -137,93 +119,30 @@ describe("level-name validation", () => {
             expect(() => assertShellSafeLevelName(bad)).toThrow(/Refusing/);
         }
     });
-
-    test("deleteWorldDirs refuses before touching a pty", async () => {
-        const { calls, deps } = mockDeps();
-        await expect(deleteWorldDirs("../evil", deps)).rejects.toThrow(/Refusing/);
-        expect(calls).toEqual([]);
-    });
 });
 
-describe("buildTrashRemoveCommand", () => {
-    test("posix moves each existing path to retained recovery", () => {
-        expect(buildTrashRemoveCommand(["world", "My World_nether"], ".trash-1", false)).toBe(
-            "mkdir -p '.trash-1' && ( [ ! -e 'world' ] || mv 'world' '.trash-1' ) && ( [ ! -e 'My World_nether' ] || mv 'My World_nether' '.trash-1' ) && echo TRASH_REMOVE_'OK' ; echo TRASH_REMOVE_'DONE'",
+describe("trashRemovePathsWith boundary", () => {
+    const untouchable = {
+        getServerDir: async () => {
+            throw new Error("the disk must not be touched");
+        },
+    };
+
+    test("an empty path list refuses", async () => {
+        await expect(trashRemovePathsWith(untouchable, [])).rejects.toThrow(/no paths/);
+    });
+
+    test("traversal, absolute and separator tricks refuse before the disk", async () => {
+        for (const bad of ["../x", "/etc", "a//b", "a\\b", "plugins/../..", "", ".hidden"]) {
+            await expect(trashRemovePathsWith(untouchable, [bad])).rejects.toThrow(/Refusing/);
+        }
+        await expect(trashRemovePathsWith(untouchable, ["world"], "../out")).rejects.toThrow(
+            /Refusing/,
         );
     });
 
-    test("windows moves each existing path to retained recovery", () => {
-        expect(buildTrashRemoveCommand(["world", "My Plugin.jar"], ".trash-1", true)).toBe(
-            'mkdir ".trash-1" && if exist "world" move "world" ".trash-1" && if exist "My Plugin.jar" move "My Plugin.jar" ".trash-1" && echo TRASH_REMOVE_O^K & echo TRASH_REMOVE_D^ONE',
-        );
-    });
-
-    test("an empty path list refuses instead of emitting a bare rm", () => {
-        expect(() => buildTrashRemoveCommand([], ".trash-1", false)).toThrow();
-    });
-
-    test("a missing dimension dir is skipped, not fatal", () => {
-        const cmd = buildTrashRemoveCommand(
-            ["world", "world_nether", "world_the_end"],
-            ".trash-1",
-            false,
-        );
-        // each move is existence-guarded, so a never-entered nether/end
-        // cannot abort the chain before the OK marker
-        expect(cmd).toContain("[ ! -e 'world_nether' ] || mv 'world_nether' '.trash-1'");
-        expect(cmd).toContain("[ ! -e 'world_the_end' ] || mv 'world_the_end' '.trash-1'");
-        expect(cmd.indexOf("TRASH_REMOVE_'OK'")).toBeGreaterThan(
-            cmd.indexOf("rm -rf '.trash-1'"),
-        );
-    });
-
-    test("trashRemovePathsWith runs in the server dir and destroys the pty", async () => {
-        const { calls, deps } = mockDeps();
-        await trashRemovePathsWith(deps, ["world"], "test-pty", ".trash-9");
-        expect(calls[0]).toEqual({
-            op: "create",
-            arg: { id: "test-pty", opts: { cwd: "/srv/mc", cols: 80, rows: 24 } },
-        });
-        // completion is verified: data + exit subscribed BEFORE the write
-        expect(calls[1]).toEqual({ op: "subscribe-data", arg: "test-pty" });
-        expect(calls[2]).toEqual({ op: "subscribe-exit", arg: "test-pty" });
-        const write = calls[3].arg as { data: string };
-        expect(write.data).toContain("mv 'world' '.trash-9'");
-        expect(write.data).toContain("echo TRASH_REMOVE_'OK'");
-        expect(calls[4]).toEqual({ op: "destroy", arg: "test-pty" });
-    });
-
-    test("the pty ECHO of the typed command cannot fake a success marker", async () => {
-        // a partial failure: the shell echoes the typed command (which
-        // contains the QUOTED marker fragments), the chain breaks before
-        // any real marker output, and the shell exits (exit is written
-        // after).
-        const { deps, calls } = mockDeps();
-        let resolveExit: (c?: number) => void = () => {};
-        const exitSub = {
-            onPtyExit: (id: string, cb: (code?: number) => void) => {
-                resolveExit = cb;
-                return () => {};
-            },
-        };
-        const failingDeps = {
-            ...deps,
-            ...exitSub,
-        };
-        // subscribe exits through calls[] wiring: run trash in a way that
-        // completions never receive the OK output
-        const pending = trashRemovePathsWith(failingDeps as any, ["world"], "p-echo", ".trash-e");
-        // after write, consumers saw ONLY the echoed command line
-        // (pendingDataCbs got the typed scarred form). Now the shell exits.
-        await new Promise<void>((resolve) => setTimeout(resolve, 5));
-        resolveExit(0);
-        await expect(pending).rejects.toThrow(/without the "TRASH_REMOVE_OK" marker/);
-        expect(calls[calls.length - 1]).toEqual({ op: "destroy", arg: "p-echo" });
-    });
-
-    test("the unscarred output marker satisfies the verified success path", async () => {
-        const { deps } = mockDeps();
-        await trashRemovePathsWith(deps, ["world"], "test-pty-ok", ".trash-10");
+    test("world dirs from an unsafe level name never get that far", () => {
+        expect(() => getWorldDirsToDelete("../evil")).toThrow(/Refusing/);
     });
 });
 

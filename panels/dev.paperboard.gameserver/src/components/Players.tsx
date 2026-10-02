@@ -535,8 +535,9 @@ export default function Players() {
                 }
             >
                 <PaperText preset="body">
-                    This permanently deletes this player's inventory, position, and
-                    progress. They will join as a fresh player. This cannot be undone.
+                    This moves this player's inventory, position, and progress to a
+                    .trash folder inside the server folder. They will join as a fresh
+                    player.
                 </PaperText>
             </PaperModal>
         </>
@@ -780,7 +781,7 @@ function PlayerModal(props: {
                                 Delete player data
                             </PaperText>
                             <PaperText size={2} color="text-subtle">
-                                Inventory, position and progress. This cannot be undone.
+                                Inventory, position and progress, moved to trash.
                             </PaperText>
                         </PaperFlex>
                         <PaperButton variant="danger" onClick={props.onDeleteRequest}>

@@ -1,6 +1,3 @@
-import { isWindowsTarget } from "../lib/platform";
-import { getWorldDirsToDelete } from "./worlds";
-import { trashRemovePathsWith, runPtyCommandWith, type TrashRemoveDeps } from "./trash";
 
 export interface ServerIssueAction {
     label: string;
@@ -87,14 +84,37 @@ export function checkLogForIssues(deps: IssueCheckDeps, cleanLine: string): void
     const issue = detectServerIssue(cleanLine, deps.serverPort);
     if (issue) deps.setIssue(issue);
 }
-export function buildKillPortCommand(port: string, isWin: boolean): string {
-    // the port is asserted numeric before it ever reaches this
-    // interpolation (see assertPort): a UI-supplied string must never
-    // become shell syntax
+// The processes listening on a TCP port, as an argv (never a shell line).
+// The port is asserted numeric before it reaches here (assertPort).
+export function listeningPidsCommand(
+    port: string,
+    isWin: boolean,
+): { command: string; args: string[] } {
     if (isWin) {
-        return `powershell -NoProfile -Command "Get-NetTCPConnection -LocalPort ${port} -State Listen | Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object { Stop-Process -Id $_ -Force }"`;
+        return {
+            command: "powershell.exe",
+            args: [
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                `Get-NetTCPConnection -LocalPort ${port} -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique`,
+            ],
+        };
     }
-    return `lsof -ti :${port} | xargs -r kill -9 || true`;
+    return { command: "lsof", args: ["-t", `-iTCP:${port}`, "-sTCP:LISTEN"] };
+}
+
+// one pid per line; anything else (headers, blank lines, the System
+// Idle "0" Windows reports for some sockets) is not a process to kill
+export function parseListeningPids(output: string): number[] {
+    const pids = new Set<number>();
+    for (const line of output.split(/\r?\n/)) {
+        const trimmed = line.trim();
+        if (!/^\d+$/.test(trimmed)) continue;
+        const pid = Number(trimmed);
+        if (pid > 0) pids.add(pid);
+    }
+    return [...pids];
 }
 
 // ports reach shell commands: numeric-only at the boundary, UI checks
@@ -109,36 +129,4 @@ export function assertPort(port: unknown, what = "port"): string {
         throw new Error(`Refusing out-of-range ${what} value: ${JSON.stringify(port)}`);
     }
     return String(n);
-}
-
-export interface ResetWorldDeps extends TrashRemoveDeps {}
-
-// world reset deletes the live world dirs — trash first, then remove
-// (see core/trash.ts), and for the server's actual level-name, never a
-// hardcoded "world"
-export async function resetWorldFilesWith(deps: ResetWorldDeps, levelName: string): Promise<void> {
-    await trashRemovePathsWith(deps, getWorldDirsToDelete(levelName), "clean-world-pty");
-}
-
-// a kill-port pty differs from a trash pty only in cwd (it doesn't need
-// the server dir — though the caller supplies it anyway via the OS probe)
-export interface KillProcessDeps extends TrashRemoveDeps {}
-
-
-export async function killConflictingProcessWith(
-    deps: KillProcessDeps,
-    port: string,
-): Promise<void> {
-    // last line of defense: even a service caller that forgot to validate
-    // cannot interpolate shell syntax through here
-    const safePort = assertPort(port);
-    const serverDir = await deps.getServerDir();
-    const targetOs = await deps.getTargetOs();
-    const killCmd = buildKillPortCommand(safePort, isWindowsTarget(serverDir, targetOs));
-    await deps.createPty("kill-port-pty", { cols: 80, rows: 24, cwd: serverDir });
-    // completion is verified the same way a trash remove is: the pty runs
-    // to exit. There is no success marker — `|| true` legitimately treats
-    // "nothing bound to this port" as success — but a dead pty is no
-    // longer reported as a completed kill.
-    await runPtyCommandWith(deps, "kill-port-pty", killCmd);
 }

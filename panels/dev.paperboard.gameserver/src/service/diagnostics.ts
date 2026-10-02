@@ -1,22 +1,65 @@
 import {
+    files as fileApi,
+    processApi,
+    system,
     type ServiceContext,
 } from "@paperboard-dev/paperapi";
-import type { GameServerState } from "./types";
+import { type GameServerState, PANEL_ID } from "./types";
 import {
     checkLogForIssues as coreCheckLogForIssues,
     detectServerIssue,
     assertPort,
-    killConflictingProcessWith,
-    resetWorldFilesWith,
+    listeningPidsCommand,
+    parseListeningPids,
 } from "../core/diagnostics";
+import { getWorldDirsToDelete } from "../core/worlds";
+import { isWindowsTarget } from "../lib/platform";
 import { makeTrashRemoveDeps } from "./trashDeps";
+import { trashRemovePathsWith } from "./trash";
 import { resolveLevelName, assertServerOffline } from "./worlds";
 
 export { detectServerIssue };
 
-// kill + reset both ride the trash transport factory (one implementation
-// for every pty-backed destructive/repair path)
-const makeDiagnosticsDeps = () => makeTrashRemoveDeps("Service:Diagnostics");
+export interface KillPortDeps {
+    isWindows: () => Promise<boolean>;
+    run: (command: string, args: string[], onStdout: (chunk: string) => void) => Promise<number>;
+    kill: (pid: number) => void;
+    ownPid: number;
+}
+
+const killPortDeps: KillPortDeps = {
+    isWindows: async () =>
+        isWindowsTarget(await fileApi.getPath("", PANEL_ID), (await system.getInfo()).os),
+    run: async (command, args, onStdout) =>
+        (await processApi.run({ command, args, onStdout })).exitCode,
+    // this service runs on the server's computer, so the pid is local
+    kill: (pid) => process.kill(pid, "SIGKILL"),
+    ownPid: process.pid,
+};
+
+// Kills whatever listens on the port and returns how many processes it
+// killed. Finding none is a valid answer (0); being unable to look is a
+// failure. lsof exits 1 when nothing matches, so only output decides.
+export async function killConflictingProcessWith(
+    deps: KillPortDeps,
+    port: unknown,
+): Promise<number> {
+    // last line of defense: even a caller that forgot to validate cannot
+    // put anything but digits into the lookup
+    const safePort = assertPort(port);
+    const isWin = await deps.isWindows();
+    const { command, args } = listeningPidsCommand(safePort, isWin);
+    let output = "";
+    const exitCode = await deps.run(command, args, (chunk) => {
+        output += chunk;
+    });
+    const pids = parseListeningPids(output).filter((pid) => pid !== deps.ownPid);
+    if (exitCode !== 0 && !(exitCode === 1 && !isWin && pids.length === 0)) {
+        throw new Error(`Could not look up the process on port ${safePort} (${command} exited ${exitCode})`);
+    }
+    for (const pid of pids) deps.kill(pid);
+    return pids.length;
+}
 
 export function checkLogForIssues(
     ctx: ServiceContext<GameServerState>,
@@ -43,7 +86,8 @@ export async function killConflictingProcess(
     // again inside killConflictingProcessWith as the last line of defense
     const targetPort = assertPort(port || ctx.state.serverPort, "port");
     try {
-        await killConflictingProcessWith(makeDiagnosticsDeps(), targetPort);
+        const killed = await killConflictingProcessWith(killPortDeps, targetPort);
+        console.log(`[Service:Diagnostics] killed ${killed} process(es) listening on port ${targetPort}`);
         return true;
     } catch (err) {
         // loud, and the RESULT is honest: the action must not report a
@@ -62,7 +106,7 @@ export async function resetWorldFiles(
     // renamed world must reset the renamed dirs, not hardcoded "world*"
     const levelName = await resolveLevelName();
     try {
-        await resetWorldFilesWith(makeDiagnosticsDeps(), levelName);
+        await trashRemovePathsWith(makeTrashRemoveDeps(), getWorldDirsToDelete(levelName));
         return true;
     } catch (err) {
         // honest result: the UI must not believe "world directories were

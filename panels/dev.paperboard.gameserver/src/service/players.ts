@@ -20,7 +20,7 @@ import {
     normalizePlayerKey,
     type PlayerPosition,
 } from "../core/players";
-import { trashRemovePathsWith } from "../core/trash";
+import { trashRemovePathsWith } from "./trash";
 import { uuidForPlayerName } from "./playerStats";
 import { resolveLevelName } from "./worlds";
 import { makeTrashRemoveDeps } from "./trashDeps";
@@ -351,14 +351,13 @@ export async function deletePlayerData(
     }
     const level = await resolveLevelName();
     await trashRemovePathsWith(
-        makeTrashRemoveDeps("Service:Players"),
+        makeTrashRemoveDeps(),
         [
             `${level}/playerdata/${safeUuid}.dat`,
             `${level}/playerdata/${safeUuid}.dat_old`,
             `${level}/advancements/${safeUuid}.json`,
             `${level}/stats/${safeUuid}.json`,
         ],
-        "delete-player-pty",
     );
     forgetPlayerData(ctx, safeName);
 }
