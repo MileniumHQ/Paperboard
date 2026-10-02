@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import {
     activeProviders,
+    credentialsAllowed,
     CUSTOM_PROVIDER_ID,
     DEFAULT_PROVIDER_ID,
     normalizeBaseUrl,
@@ -43,6 +44,17 @@ describe("providers", () => {
         expect(normalizeBaseUrl("https://example.com/v1/")).toBe("https://example.com/v1");
         expect(() => normalizeBaseUrl("file:///etc/passwd")).toThrow(/http/);
         expect(() => normalizeBaseUrl("not a url")).toThrow(/valid URL/);
+    });
+
+    it("only lets an API key travel over TLS or to this machine", () => {
+        expect(credentialsAllowed("https://api.example.com/v1")).toBe(true);
+        expect(credentialsAllowed("http://127.0.0.1:1234")).toBe(true);
+        expect(credentialsAllowed("http://localhost:11434")).toBe(true);
+        expect(credentialsAllowed("http://[::1]:1234")).toBe(true);
+        // plaintext to another host would put the key on the wire
+        expect(credentialsAllowed("http://192.168.1.5:1234")).toBe(false);
+        expect(credentialsAllowed("http://api.example.com")).toBe(false);
+        expect(credentialsAllowed("not a url")).toBe(false);
     });
 });
 

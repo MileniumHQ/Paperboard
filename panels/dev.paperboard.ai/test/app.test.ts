@@ -15,9 +15,19 @@ import type { ProcessHost } from "../src/service/runtime";
 import type { AiState } from "../src/core/types";
 
 const filesDir = fs.mkdtempSync(path.join(os.tmpdir(), "pb-ai-app-"));
+const secrets = new Map<string, string>();
 
 mock.module("@paperboard-dev/paperapi", () => ({
     config: { get: async () => null, set: async () => true },
+    secretsApi: {
+        get: async (name: string) => ({ found: secrets.has(name), value: secrets.get(name) }),
+        set: async (name: string, value: string) => {
+            secrets.set(name, value);
+        },
+        delete: async (name: string) => {
+            secrets.delete(name);
+        },
+    },
     fileApi: { getPath: async () => filesDir },
     packageApi: {
         isInstalled: async () => true,
@@ -80,6 +90,52 @@ function makeCtx() {
         emitTrigger() {},
     };
 }
+
+describe("AiApp provider credentials", () => {
+    async function withApp(run: (app: InstanceType<typeof AiApp>) => Promise<void>) {
+        const app = new AiApp(new HangingHost(), { readyTimeoutMs: 100 });
+        const ctx = makeCtx();
+        await app.init(ctx as any);
+        const original = globalThis.fetch;
+        // model listing dials the endpoint; tests are about the key, not it
+        globalThis.fetch = (async () => new Response(JSON.stringify({ data: [] }), { status: 200 })) as any;
+        try {
+            await run(app);
+        } finally {
+            globalThis.fetch = original;
+            await app.stopRuntime().catch((err) => console.debug("[ai] test teardown:", String(err)));
+        }
+    }
+
+    it("clears the stored key when the endpoint changes", async () => {
+        secrets.clear();
+        await withApp(async (app) => {
+            await app.setProvider({ id: "custom", baseUrl: "https://api.example.com/v1", apiKey: "k1" });
+            expect(secrets.get("openai-api-key")).toBe("k1");
+            // a key belongs to the endpoint it was entered for
+            await app.setProvider({ id: "custom", baseUrl: "https://other.example.com/v1" });
+            expect(secrets.has("openai-api-key")).toBe(false);
+        });
+    });
+
+    it("refuses to store a key for a plaintext non-loopback endpoint", async () => {
+        secrets.clear();
+        await withApp(async (app) => {
+            await expect(
+                app.setProvider({ id: "custom", baseUrl: "http://10.0.0.5:1234", apiKey: "k1" }),
+            ).rejects.toThrow(/plaintext/);
+            expect(secrets.size).toBe(0);
+        });
+    });
+
+    it("refuses to test with a stored key over plaintext", async () => {
+        secrets.clear();
+        await withApp(async (app) => {
+            await app.setProvider({ id: "custom", baseUrl: "https://api.example.com/v1", apiKey: "k1" });
+            await expect(app.testProvider({ baseUrl: "http://10.0.0.5:1234" })).rejects.toThrow(/plaintext/);
+        });
+    });
+});
 
 describe("AiApp readiness", () => {
     it("resolves init while Ollama is still starting, not after its boot timeout", async () => {

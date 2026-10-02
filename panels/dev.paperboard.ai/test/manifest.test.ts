@@ -10,11 +10,15 @@ describe("manifest", () => {
         expect(manifest.version).toMatch(/^0\.\d+\.\d+$/);
     });
 
-    it("declares the Ollama registry and the web search host", () => {
-        expect(manifest.network.hosts).toEqual(["registry.ollama.ai", "html.duckduckgo.com"]);
+    it("declares any-https because the endpoint is user-configured", () => {
+        // the static hosts (registry.ollama.ai, html.duckduckgo.com) are
+        // built in, but a custom provider can point anywhere, so a fixed
+        // host list would understate what the panel may reach
+        expect(manifest.network).toEqual({ mode: "any-https" });
     });
 
-    it("the service and UI reach no undeclared remote host (absence check)", () => {
+    it("hardcoded remote hosts stay the known static ones (absence check)", () => {
+        const known = new Set(["registry.ollama.ai", "html.duckduckgo.com"]);
         const root = path.join(import.meta.dir, "..", "src");
         const files: string[] = [];
         const walk = (dir: string) => {
@@ -29,7 +33,7 @@ describe("manifest", () => {
             const urls = fs.readFileSync(file, "utf8").match(/https?:\/\/[^\s"'`)]+/g) ?? [];
             for (const url of urls) {
                 if (/^http:\/\/127\.0\.0\.1/.test(url)) continue;
-                expect(manifest.network.hosts).toContain(new URL(url).hostname);
+                expect(known.has(new URL(url).hostname)).toBe(true);
             }
         }
     });

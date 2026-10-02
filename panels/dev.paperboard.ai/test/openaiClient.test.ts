@@ -86,6 +86,25 @@ describe("OpenAI-compatible client", () => {
         expect(lastAuth).toBeNull();
     });
 
+    it("never puts a configured key on a plaintext non-loopback wire", async () => {
+        let auth: string | null = "unset";
+        const original = globalThis.fetch;
+        globalThis.fetch = (async (_url: any, init?: RequestInit) => {
+            auth = new Headers(init?.headers).get("authorization");
+            return new Response(JSON.stringify({ data: [] }), { status: 200 });
+        }) as any;
+        try {
+            const client = new OpenAICompatibleClient(
+                { ...provider, baseUrl: "http://192.0.2.10:1234" },
+                async () => "secret-key",
+            );
+            await client.tags();
+        } finally {
+            globalThis.fetch = original;
+        }
+        expect(auth).toBeNull();
+    });
+
     it("streams content, reasoning, and assembled tool calls", async () => {
         const client = new OpenAICompatibleClient({ ...provider, baseUrl: start() });
         const chunks: ChatChunk[] = [];

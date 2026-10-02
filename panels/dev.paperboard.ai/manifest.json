@@ -8,10 +8,7 @@
     "service": "./dist/service.js",
     "icon": "./branding/icon.png",
     "network": {
-        "hosts": [
-            "registry.ollama.ai",
-            "html.duckduckgo.com"
-        ]
+        "mode": "any-https"
     },
     "store": {
         "about": "./store/about.md",

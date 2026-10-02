@@ -5,7 +5,7 @@
 // vault per request and never stored in panel config or state.
 
 import { LineSplitter } from "../core/ollamaLog";
-import type { ProviderDefinition } from "../core/providers";
+import { credentialsAllowed, type ProviderDefinition } from "../core/providers";
 import type { OllamaMessage } from "../core/conversation";
 import type { ChatRequest } from "./ollamaClient";
 import type { ChatChunk, ShowResponse, TagEntry } from "./ollamaClient";
@@ -85,6 +85,8 @@ export class OpenAICompatibleClient {
 
     private async authHeaders(): Promise<Record<string, string>> {
         if (!this.getApiKey) return {};
+        // never put a vault key on a plaintext non-loopback wire
+        if (!credentialsAllowed(this.baseUrl)) return {};
         const key = await this.getApiKey().catch(() => undefined);
         return key ? { Authorization: `Bearer ${key}` } : {};
     }

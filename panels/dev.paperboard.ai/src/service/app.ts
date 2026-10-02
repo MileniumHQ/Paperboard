@@ -22,6 +22,7 @@ import {
     CUSTOM_PROVIDER,
     CUSTOM_PROVIDER_ID,
     DEFAULT_PROVIDER_ID,
+    credentialsAllowed,
     normalizeBaseUrl,
     OLLAMA_PROVIDER_ID,
     providerFor,
@@ -190,10 +191,24 @@ export class AiApp {
                 throw new Error("An endpoint URL is required.");
             }
             baseUrl = normalizeBaseUrl(input.baseUrl);
+            const previous = this.stored.provider;
+            const previousBaseUrl =
+                previous?.id === CUSTOM_PROVIDER_ID && typeof previous.baseUrl === "string"
+                    ? previous.baseUrl
+                    : "";
             if (input.clearApiKey === true) {
                 await secretsApi.delete(OPENAI_API_KEY_SECRET, PANEL_ID);
             } else if (typeof input.apiKey === "string" && input.apiKey.trim()) {
+                if (!credentialsAllowed(baseUrl)) {
+                    throw new Error(
+                        "Refusing to store an API key for a plaintext http endpoint. Use https, or a loopback address.",
+                    );
+                }
                 await secretsApi.set(OPENAI_API_KEY_SECRET, input.apiKey.trim(), PANEL_ID);
+            } else if (baseUrl !== previousBaseUrl) {
+                // a key belongs to the endpoint it was entered for:
+                // changing the endpoint must not carry it to the new host
+                await secretsApi.delete(OPENAI_API_KEY_SECRET, PANEL_ID);
             }
         }
         await this.saveConfig((c) => {
@@ -219,6 +234,11 @@ export class AiApp {
         const baseUrl = normalizeBaseUrl(input.baseUrl);
         const typed = typeof input.apiKey === "string" && input.apiKey.trim() ? input.apiKey.trim() : undefined;
         const key = typed ?? (await this.apiKeyFor(CUSTOM_PROVIDER_ID));
+        if (key && !credentialsAllowed(baseUrl)) {
+            throw new Error(
+                "Refusing to send an API key over plaintext http. Use https, or a loopback address.",
+            );
+        }
         const client = new OpenAICompatibleClient({ ...CUSTOM_PROVIDER, baseUrl }, async () => key);
         const tags = await client.tags();
         return { models: tags.length };

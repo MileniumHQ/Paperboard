@@ -85,6 +85,25 @@ export function normalizeBaseUrl(raw: string): string {
 }
 
 /**
+ * Whether an API key may travel to this endpoint. A credential is only sent
+ * over TLS or to this machine: plaintext to any other host would put the key
+ * on the wire. The endpoint itself stays usable without a key (local
+ * servers usually ignore auth); it just never receives one.
+ */
+export function credentialsAllowed(baseUrl: string): boolean {
+    let url: URL;
+    try {
+        url = new URL(baseUrl);
+    } catch {
+        return false;
+    }
+    if (url.protocol === "https:") return true;
+    if (url.protocol !== "http:") return false;
+    const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+    return host === "localhost" || host === "127.0.0.1" || host === "::1";
+}
+
+/**
  * The providers reachable right now. The custom endpoint only joins when it
  * has a configured URL, so an unconfigured panel never dials an empty base.
  */
