@@ -17,10 +17,6 @@ const FILES: Record<string, { body: string; type: string }> = {
         body: "<!doctype html><title>PaperDocs</title>",
         type: "text/html",
     },
-    "/404.html": {
-        body: "<!doctype html><title>404</title><p>That page does not exist.</p>",
-        type: "text/html",
-    },
     "/assets/docs-abc.js": { body: "console.log(1)", type: "text/javascript" },
     "/assets/docs-abc.css": { body: "a{}", type: "text/css" },
     "/paperdocs.png": { body: "png", type: "image/png" },
@@ -59,6 +55,30 @@ describe("paperdocs worker routing", () => {
         const res = await get("/");
         expect(res.status).toBe(200);
         expect(await res.text()).toContain("Paperboard");
+    });
+
+    test("redirects the paperui alias to the docs section", async () => {
+        const res = await get("/paperui");
+        expect(res.status).toBe(308);
+        expect(new URL(res.headers.get("location")!).pathname).toBe(
+            "/docs/paperui",
+        );
+    });
+
+    test("redirects the paperapi alias, with or without a trailing slash", async () => {
+        for (const path of ["/paperapi", "/paperapi/"]) {
+            const res = await get(path);
+            expect(res.status).toBe(308);
+            expect(new URL(res.headers.get("location")!).pathname).toBe(
+                "/docs/paperapi",
+            );
+        }
+    });
+
+    test("the docs section root serves the shell, which renders its first page", async () => {
+        const res = await get("/docs/paperui");
+        expect(res.status).toBe(200);
+        expect(await res.text()).toContain("PaperDocs");
     });
 
     test("serves landing static files unchanged", async () => {
@@ -115,18 +135,19 @@ describe("paperdocs worker routing", () => {
     test("a missing top-level path stays a 404, never the landing", async () => {
         const res = await get("/nope");
         expect(res.status).toBe(404);
+        expect(await res.text()).not.toContain("Paperboard</title>");
     });
 
-    test("a missing root page serves the static 404 document", async () => {
+    test("a missing root page serves the docs shell's 404 sitewide", async () => {
         const res = await get("/nope");
         expect(res.status).toBe(404);
-        expect(await res.text()).toContain("That page does not exist.");
+        expect(await res.text()).toContain("PaperDocs");
     });
 
-    test("a missing asset is not answered with the 404 document", async () => {
+    test("a missing asset is not answered with the 404 shell", async () => {
         const res = await get("/nope.css", "*/*");
         expect(res.status).toBe(404);
-        expect(await res.text()).not.toContain("That page does not exist.");
+        expect(await res.text()).not.toContain("PaperDocs");
     });
 
     test("a static file sharing the docs prefix is not captured", async () => {

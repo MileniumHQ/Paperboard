@@ -4,7 +4,9 @@
 // prefix is stripped for asset lookups; the docs HTML entry itself is emitted
 // at /docs/index.html and reached through the /docs/ directory index. Only
 // requests that ask for HTML fall back to the docs shell, so a missing asset
-// stays a 404 and a static file is never answered with an SPA page.
+// stays a 404 and a static file is never answered with an SPA page. A missing
+// root page is served that same shell, whose NotFound renders sitewide: there
+// is no separate static landing 404.
 const DOCS_PREFIX = "/docs";
 const DOCS_MOUNT = `${DOCS_PREFIX}/`;
 const DOCS_INDEX = `${DOCS_MOUNT}index.html`;
@@ -12,6 +14,13 @@ const DOCS_INDEX = `${DOCS_MOUNT}index.html`;
 interface AssetsBinding {
     fetch(request: Request): Promise<Response>;
 }
+
+// Short aliases the package READMEs point at (paperboard.dev/paperui and
+// /paperapi). They resolve to the docs section, which renders its first page.
+const SECTION_ALIASES: Record<string, string> = {
+    "/paperui": `${DOCS_PREFIX}/paperui`,
+    "/paperapi": `${DOCS_PREFIX}/paperapi`,
+};
 
 function isDocsRequest(pathname: string): boolean {
     return pathname === DOCS_PREFIX || pathname.startsWith(DOCS_MOUNT);
@@ -35,24 +44,28 @@ export default {
     ): Promise<Response> {
         const url = new URL(request.url);
 
+        const alias =
+            SECTION_ALIASES[url.pathname.replace(/\/+$/, "") || "/"];
+        if (alias) {
+            url.pathname = alias;
+            return Response.redirect(url.toString(), 308);
+        }
+
         if (!isDocsRequest(url.pathname)) {
             const asset = await env.ASSETS.fetch(request);
             if (asset.status !== 404 || !acceptsHtml(request)) {
                 return asset;
             }
-            // A missing root page gets the static 404 document, still with a
-            // 404 status so crawlers do not treat it as a real page. The
-            // extensionless path is what the asset server resolves to
-            // 404.html (it redirects /404.html to /404).
-            const notFound = await env.ASSETS.fetch(
-                new Request(new URL("/404", url), request),
-            );
-            if (notFound.status === 404) {
+            // One 404 experience sitewide: a missing page renders the docs
+            // SPA's own NotFound (its route resolver reports unknown paths),
+            // served with a 404 status so crawlers do not index it.
+            const shell = await env.ASSETS.fetch(shellRequest(request));
+            if (shell.status === 404) {
                 return asset;
             }
-            return new Response(notFound.body, {
+            return new Response(shell.body, {
                 status: 404,
-                headers: notFound.headers,
+                headers: shell.headers,
             });
         }
 

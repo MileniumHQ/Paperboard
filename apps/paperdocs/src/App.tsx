@@ -38,6 +38,19 @@ export default function App() {
                             pageKey={route.pageKey!}
                         />
                     </Match>
+                    {/* A section root (/docs/paperui) is its first page, so
+                        the README aliases and site links land on real docs */}
+                    <Match
+                        when={
+                            route.kind === "section" &&
+                            firstPageFor(route.section!)
+                        }
+                    >
+                        <DocsPage
+                            section={route.section!}
+                            pageKey={firstPageFor(route.section!)!.pageKey}
+                        />
+                    </Match>
                     <Match
                         when={
                             route.kind === "notFound" ||
