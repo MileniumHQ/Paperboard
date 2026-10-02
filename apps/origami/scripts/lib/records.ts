@@ -28,6 +28,9 @@ export interface PlatformDownload {
     sha256: string;
     size?: number;
     layout?: PackageLayout;
+    // offline release-key signature over (name, version, platform, sha256);
+    // added at write time by kv.putRecord, verified by every daemon
+    signature?: string;
 }
 
 export interface PackageRecord {

@@ -1,4 +1,6 @@
+import type { KeyObject } from "node:crypto";
 import { putRecord, type CommandRunner } from "./kv";
+import { loadReleaseSigningKey } from "../../../../scripts/releaseSigning";
 import type { PackageRecord } from "./records";
 
 export interface UpdateOutcome {
@@ -13,9 +15,11 @@ export interface UpdateOutcome {
  */
 export async function writeRecords(
     built: { key: string; record?: PackageRecord; error?: string }[],
-    opts: { dryRun: boolean; run?: CommandRunner },
+    opts: { dryRun: boolean; run?: CommandRunner; key?: KeyObject; publicKey?: string },
 ): Promise<UpdateOutcome> {
     const outcome: UpdateOutcome = { written: [], errors: {} };
+    // a real write needs the offline release key; a dry run signs nothing
+    const signingKey = opts.dryRun ? undefined : (opts.key ?? loadReleaseSigningKey());
     for (const { key, record, error } of built) {
         if (!record) {
             outcome.errors[key] = error ?? "no record built";
@@ -27,7 +31,7 @@ export async function writeRecords(
             continue;
         }
         try {
-            await putRecord(record, opts.run);
+            await putRecord(record, signingKey!, opts.run, opts.publicKey);
             outcome.written.push(key);
         } catch (err) {
             outcome.errors[key] = err instanceof Error ? err.message : String(err);

@@ -5,6 +5,10 @@ import path from "node:path";
 import * as tar from "tar";
 import { PaperCraneEngine } from "../papercrane/engine";
 import { EmbeddedSupervisor } from "../papercrane/embeddedSupervisor";
+import { releaseMessage } from "../papercrane/releaseSignature";
+import { fixtureSign, FIXTURE_RELEASE_PUBLIC_KEY } from "./registryFixture";
+
+const platformKey = `${process.platform === "win32" ? "windows" : process.platform === "darwin" ? "macos" : "linux"}-${process.arch === "arm64" ? "arm64" : "x64"}`;
 
 test("runtime upgrades install new bytes and record the verified digest; bad replacement preserves old runtime", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "runtime-upgrade-"));
@@ -13,11 +17,13 @@ test("runtime upgrades install new bytes and record the verified digest; bad rep
     let version = "0.1.0";
     let base = "";
     const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: (request) => {
-        if (new URL(request.url).pathname.endsWith(".json")) return Response.json({ version, download: { url: `${base}/runtime.tar.gz`, sha256: digest } });
+        if (new URL(request.url).pathname.endsWith(".json")) {
+            return Response.json({ version, platforms: { [platformKey]: { url: `${base}/runtime.tar.gz`, sha256: digest, signature: fixtureSign(releaseMessage.package("runtime", version, platformKey, digest)) } } });
+        }
         return new Response(bytes);
     } });
     base = `http://127.0.0.1:${server.port}`;
-    const engine = new PaperCraneEngine(path.join(root, "host"), undefined, base);
+    const engine = new PaperCraneEngine(path.join(root, "host"), undefined, base, FIXTURE_RELEASE_PUBLIC_KEY);
     const release = async (value: string) => {
         const source = path.join(root, "source");
         fs.mkdirSync(path.join(source, "runtime", "bin"), { recursive: true });

@@ -14,6 +14,12 @@ import {
 import { writeRecords } from "../scripts/lib/cli";
 import { putRecord, wranglerPutArgs } from "../scripts/lib/kv";
 import type { PackageRecord } from "../scripts/lib/records";
+import * as crypto from "node:crypto";
+import { releaseMessage, verifyRelease } from "../../paperboard/papercrane/releaseSignature";
+
+// a throwaway release key: writes are signed with it and checked against it
+const keys = crypto.generateKeyPairSync("ed25519");
+const PUBLIC = keys.publicKey.export({ type: "spki", format: "pem" }).toString();
 
 const sha = (c: string) => c.repeat(64);
 
@@ -141,26 +147,41 @@ describe("KV writer", () => {
         platforms: { "linux-x64": { url: "https://x.test/a.tar.zst", sha256: sha("a"), layout: "root" } },
     };
 
-    it("spawns wrangler with an argv array against the remote PACKAGES binding", async () => {
+    it("spawns wrangler with an argv array against the remote PACKAGES binding, every platform signed", async () => {
         const calls: { command: string; args: string[] }[] = [];
-        await putRecord(record, async (command, args) => {
+        await putRecord(record, keys.privateKey, async (command, args) => {
             calls.push({ command, args });
             return { stdout: "", stderr: "" };
-        });
+        }, PUBLIC);
         expect(calls).toHaveLength(1);
         expect(calls[0]!.command).toBe("bunx");
-        expect(calls[0]!.args).toEqual(wranglerPutArgs("ollama", JSON.stringify(record, null, 2)));
+        const written = JSON.parse(calls[0]!.args[5]!) as PackageRecord;
+        expect(calls[0]!.args).toEqual(wranglerPutArgs("ollama", JSON.stringify(written, null, 2)));
         expect(calls[0]!.args).toContain("--remote");
+        const entry = written.platforms["linux-x64"]!;
+        expect(verifyRelease(releaseMessage.package("ollama", "1.0.0", "linux-x64", entry.sha256), entry.signature, PUBLIC)).toBe(true);
+    });
+
+    it("refuses to write with a key clients would not accept", async () => {
+        let ran = false;
+        const other = crypto.generateKeyPairSync("ed25519").privateKey;
+        await expect(
+            putRecord(record, other, async () => {
+                ran = true;
+                return { stdout: "", stderr: "" };
+            }, PUBLIC),
+        ).rejects.toThrow(/does not match/);
+        expect(ran).toBe(false);
     });
 
     it("never writes an invalid record", async () => {
         let ran = false;
         const bad = { ...record, platforms: { "linux-x64": { url: "http://x.test/a", sha256: sha("a") } } };
         await expect(
-            putRecord(bad, async () => {
+            putRecord(bad, keys.privateKey, async () => {
                 ran = true;
                 return { stdout: "", stderr: "" };
-            }),
+            }, PUBLIC),
         ).rejects.toThrow(/https/);
         expect(ran).toBe(false);
     });
@@ -168,6 +189,8 @@ describe("KV writer", () => {
     it("reports write failures instead of claiming success", async () => {
         const outcome = await writeRecords([{ key: "ollama", record }, { key: "java-8", error: "no assets" }], {
             dryRun: false,
+            key: keys.privateKey,
+            publicKey: PUBLIC,
             run: async () => {
                 throw new Error("not logged in");
             },

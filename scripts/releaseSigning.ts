@@ -33,7 +33,7 @@ export function loadReleaseSigningKey(file = releaseKeyPath()): crypto.KeyObject
 }
 
 export function signRelease(key: crypto.KeyObject, msg: Buffer): string {
-    return crypto.sign(null, msg, key).toString("base64");
+    return Buffer.from(crypto.sign(null, msg, key)).toString("base64");
 }
 
 // writes a new key (0600, refusing to overwrite) and returns the public PEM

@@ -22,7 +22,6 @@ import {
     writeFileAtomic,
     LimitError,
 } from "./storage";
-import { PAPERBOARD_USER_AGENT } from "./userAgent";
 import { getSocketsDir, getPaperboardDir } from "./paths";
 import { logger } from "./logger";
 import { spawnSupervisedClient } from "./engineSupervisor";
@@ -753,15 +752,12 @@ export class PaperCraneEngine {
             message: `Resolving package ${packageName}...`,
         });
 
-        const metaRes = await fetch(metaUrl, {
-            headers: { "User-Agent": PAPERBOARD_USER_AGENT },
-        });
-        if (!metaRes.ok) {
-            throw new Error(
-                `Package ${packageName} not found in repository (HTTP ${metaRes.status})`,
-            );
+        let meta: any;
+        try {
+            meta = await fetchRegistryRecord(metaUrl);
+        } catch (err) {
+            throw new Error(`Install refused for package "${packageName}": registry record unavailable (${err instanceof Error ? err.message : String(err)})`);
         }
-        const meta = (await metaRes.json()) as any;
 
         const currentOs =
             process.platform === "win32"
@@ -770,26 +766,32 @@ export class PaperCraneEngine {
                   ? "macos"
                   : "linux";
         const currentArch = process.arch === "arm64" ? "arm64" : "x64";
-        const downloadInfo =
-            meta.platforms?.[`${currentOs}-${currentArch}`] ||
-            meta.downloads?.[`${currentOs}-${currentArch}`] ||
-            meta.downloads?.[currentOs] ||
-            meta.download;
+        const platformKey = `${currentOs}-${currentArch}`;
+        // only the platforms map is a release record: the signature covers
+        // (name, version, platform, sha256) of exactly that entry
+        const downloadInfo = meta?.platforms?.[platformKey];
         if (!downloadInfo?.url) {
             throw new Error(
-                `No download available for ${packageName} on ${currentOs}-${currentArch}`,
+                `No download available for ${packageName} on ${platformKey}`,
             );
         }
-        log(`source: ${downloadInfo.url}`);
-        // the updater's checksum fact must agree with the metadata record;
-        // a mismatch means one of the two sources is lying — refuse
-        if (typeof downloadInfo.sha256 === "string" && downloadInfo.sha256.length > 0) {
-            if (downloadInfo.sha256.toLowerCase() !== expectedSha256.toLowerCase()) {
-                throw new Error(
-                    `Install refused for package "${packageName}": checksum mismatch between update plan and registry metadata`,
-                );
-            }
+        if (typeof meta.version !== "string" || !meta.version) {
+            throw new Error(`Install refused for package "${packageName}": registry did not provide a version`);
         }
+        log(`source: ${downloadInfo.url}`);
+        // the caller's checksum fact must agree with the record; a mismatch
+        // (or a record without one) means one of the two sources is lying
+        if (typeof downloadInfo.sha256 !== "string" || downloadInfo.sha256.toLowerCase() !== expectedSha256.toLowerCase()) {
+            throw new Error(
+                `Install refused for package "${packageName}": checksum mismatch between update plan and registry metadata`,
+            );
+        }
+        requireReleaseSignature(
+            releaseMessage.package(packageName, meta.version, platformKey, downloadInfo.sha256),
+            downloadInfo.signature,
+            `package "${packageName}"`,
+            this.releaseKey,
+        );
 
         // refused before any download: a layout this daemon does not know
         // would install binaries where no caller looks for them
@@ -855,7 +857,7 @@ export class PaperCraneEngine {
             const index = this.getPackageIndex();
             index[packageName] = {
                 name: packageName,
-                version: meta.version || "latest",
+                version: meta.version,
                 sha256: expectedSha256,
                 installedAt: new Date().toISOString(),
             };

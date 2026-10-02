@@ -9,6 +9,8 @@ import path from "node:path";
 import zlib from "node:zlib";
 import * as tar from "tar";
 import AdmZip from "adm-zip";
+import { releaseMessage } from "../papercrane/releaseSignature";
+import { fixtureSign, FIXTURE_RELEASE_PUBLIC_KEY } from "./registryFixture";
 import { PaperCraneEngine } from "../papercrane/engine";
 
 const key = `${process.platform === "win32" ? "windows" : process.platform === "darwin" ? "macos" : "linux"}-${process.arch === "arm64" ? "arm64" : "x64"}`;
@@ -38,7 +40,14 @@ function publish(name: string, file: string, bytes: Buffer, layout?: unknown): s
     records.set(name, {
         name,
         version: "1.0.0",
-        platforms: { [key]: { url: `${base}/dl/${file}`, sha256: digest, ...(layout === undefined ? {} : { layout }) } },
+        platforms: {
+            [key]: {
+                url: `${base}/dl/${file}`,
+                sha256: digest,
+                signature: fixtureSign(releaseMessage.package(name, "1.0.0", key, digest)),
+                ...(layout === undefined ? {} : { layout }),
+            },
+        },
     });
     return digest;
 }
@@ -70,7 +79,7 @@ afterAll(async () => {
 });
 
 function engine(): PaperCraneEngine {
-    return new PaperCraneEngine(path.join(root, "host"), undefined, base);
+    return new PaperCraneEngine(path.join(root, "host"), undefined, base, FIXTURE_RELEASE_PUBLIC_KEY);
 }
 
 describe("package archive layouts", () => {
@@ -136,5 +145,23 @@ describe("package archive layouts", () => {
         await expect(e.downloadPackage("oddlayout", "dl-odd", undefined, digest)).rejects.toThrow(/Unsupported package layout/);
         expect(archiveHits.get("odd.tgz") ?? 0).toBe(0);
         expect(fs.existsSync(path.join(root, "host", "packages", "oddlayout"))).toBe(false);
+    });
+});
+
+describe("package signatures", () => {
+    it("refuses an unsigned or mis-signed platform entry before downloading it", async () => {
+        const src = path.join(root, "unsigned-src");
+        writeTree(src, true);
+        const file = "unsigned.tar.gz";
+        await tar.c({ file: path.join(root, file), cwd: src, gzip: true }, fs.readdirSync(src));
+        const digest = publish("unsigned", file, fs.readFileSync(path.join(root, file)), "root");
+        const record = records.get("unsigned") as any;
+        delete record.platforms[key].signature;
+        await expect(engine().downloadPackage("unsigned", "u1", undefined, digest)).rejects.toThrow(/not signed/);
+        // a signature over another platform's entry does not cover this one
+        record.platforms[key].signature = fixtureSign(releaseMessage.package("unsigned", "1.0.0", "other-x64", digest));
+        await expect(engine().downloadPackage("unsigned", "u2", undefined, digest)).rejects.toThrow(/does not verify/);
+        expect(archiveHits.get(file) ?? 0).toBe(0);
+        expect(fs.existsSync(path.join(root, "host", "packages", "unsigned"))).toBe(false);
     });
 });
