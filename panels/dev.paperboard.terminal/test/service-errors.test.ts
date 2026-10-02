@@ -47,3 +47,16 @@ describe("trashScrollbackName", () => {
         expect(name.startsWith(".trash-")).toBe(true);
     });
 });
+
+// open-tab is how the panel shows a session. A shell that could not start
+// (every Windows terminal, when the crane could not load conpty) must fail
+// the open with the daemon's reason; it used to return an empty scrollback
+// and leave a blank terminal with no explanation.
+describe("open-tab reports a session that could not start", () => {
+    it("rejects instead of returning an empty scrollback", async () => {
+        __terminalTestState().registerTabForTest("tab_open_test");
+        const openTab = __terminalTestState().actionForTest("open-tab") as any;
+        const ctx = { emit: () => {}, broadcast: () => {} } as any;
+        await expect(openTab.run(ctx, { id: "tab_open_test" })).rejects.toThrow();
+    });
+});

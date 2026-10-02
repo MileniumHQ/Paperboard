@@ -141,8 +141,18 @@ export function TerminalComponent(props: TerminalComponentProps) {
         });
 
         let disconnectData: (() => void) | null = null;
-        term.onData((data) => terminalApi.write(props.id, data));
+        // set while the session could not be opened: the next keypress
+        // retries instead of typing into a shell that does not exist
+        let failedId: string | null = null;
+        term.onData((data) => {
+            if (failedId !== null) {
+                connect(failedId);
+                return;
+            }
+            terminalApi.write(props.id, data);
+        });
         const connect = (id: string) => {
+            failedId = null;
             disconnectData?.();
             term?.clear();
             disconnectData = terminalApi.onData(id, (data) => term?.write(data));
@@ -156,13 +166,16 @@ export function TerminalComponent(props: TerminalComponentProps) {
                     if (scrollback) term?.write(scrollback);
                 })
                 .catch((err) => {
-                    // open-tab failed (no such tab yet) — creating fresh is
-                    // the recovery, logged so a real outage stays visible
-                    console.debug("[terminal] open-tab failed, creating fresh session:", String(err));
-                    terminalApi.create(id, {
-                        cols: term?.cols,
-                        rows: term?.rows,
-                    });
+                    // the session's shell could not start (or the computer
+                    // is unreachable): say so in the terminal itself
+                    console.error("[terminal] could not open session:", err);
+                    if (props.id !== id) return;
+                    failedId = id;
+                    const reason = err instanceof Error ? err.message : String(err);
+                    term?.write(
+                        `\x1b[31mCould not open this terminal: ${reason}\x1b[0m\r\n` +
+                            "Press any key to try again.\r\n",
+                    );
                 });
         };
         createEffect(

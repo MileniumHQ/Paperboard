@@ -119,6 +119,7 @@ export function __terminalTestState() {
         // module-level tab list; never used by the runtime paths above
         tabIds: () => tabs.map((t) => t.id),
         registerTabForTest: (id: string) => tabs.push({ id, label: id }),
+        actionForTest: (id: string) => actions.find((a) => a.id === id),
         clearTabsForTest: () => {
             const prior = tabs;
             tabs = [];
@@ -140,9 +141,10 @@ export function isValidTerminalSize(cols: unknown, rows: unknown): boolean {
     );
 }
 
-// returns false when the session could not be probed AND not created:
-// keystrokes must never be sent into a void and reported as delivered
-async function ensureSession(id: string, cols?: number, rows?: number): Promise<boolean> {
+// throws when the session could not be probed AND not created, carrying
+// the daemon's reason (a shell that failed to start must reach the viewer,
+// never pass as an empty scrollback)
+async function ensureSession(id: string, cols?: number, rows?: number): Promise<void> {
     let exists = false;
     try {
         exists = await terminalApi.exists(id);
@@ -162,14 +164,19 @@ async function ensureSession(id: string, cols?: number, rows?: number): Promise<
                 console.error(`[TerminalService] session resize failed for ${id}:`, err);
             }
         }
-        return true;
+        return;
     }
+    await terminalApi.create(id, { cols, rows });
+}
+
+// startup and create-tab start shells ahead of any viewer; one shell that
+// cannot start must not stop the others or lose the tab. Opening the tab
+// (open-tab) retries and reports the failure to the viewer.
+async function tryEnsureSession(id: string): Promise<void> {
     try {
-        await terminalApi.create(id, { cols, rows });
-        return true;
+        await ensureSession(id);
     } catch (err) {
         console.error(`[TerminalService] session create failed for ${id}:`, err);
-        return false;
     }
 }
 
@@ -206,8 +213,13 @@ export async function writeToTerminal(
     inputs?: { tabId?: string; text?: string },
 ): Promise<boolean> {
     const id = resolveTabId(inputs?.tabId);
-    const ready = await ensureSession(id);
-    let live = ready;
+    let live = true;
+    try {
+        await ensureSession(id);
+    } catch (err) {
+        console.error(`[TerminalService] session create failed for ${id}:`, err);
+        live = false;
+    }
     if (live) {
         // verify the session is actually live: an unacknowledged create
         // must not pass as ready and swallow the keystrokes
@@ -287,7 +299,7 @@ const actions = [
             tabs.push({ id, label });
             lastActiveId = id;
             activeTabId = id;
-            await ensureSession(id);
+            await tryEnsureSession(id);
             subscribeSession(id, ctx);
             await persistTabs(ctx);
             return id;
@@ -541,7 +553,7 @@ export const terminalService = definePanelService({
             tabs.push({ id: "tab1", label: "Tab 1" });
             activeTabId = "tab1";
             lastActiveId = "tab1";
-            await ensureSession("tab1");
+            await tryEnsureSession("tab1");
             subscribeSession("tab1", ctx);
             await persistTabs(ctx);
         } else {
@@ -550,7 +562,7 @@ export const terminalService = definePanelService({
                 lastActiveId = tabs[0].id;
             }
             for (const tab of tabs) {
-                await ensureSession(tab.id);
+                await tryEnsureSession(tab.id);
             }
         }
 
