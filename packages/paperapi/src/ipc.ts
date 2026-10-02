@@ -300,22 +300,18 @@ async function invokeSpecial(
 
         case "panel-install": {
             const [panelId] = args;
+            // the daemon resolves the release from its own registry; the
+            // index entry the library showed travels as what we expect, so a
+            // release that changed in between refuses instead of installing
+            // something the user did not pick
             let sha256: string | undefined;
-            let signature: string | undefined;
             let version: string | undefined;
             try {
                 const registryData = await fetchRegistryIndex();
                 const record = registryData?.[panelId];
-                // the checksum and the download are separate facts: if the
-                // anchor can't produce a checksum, there is no install
-                sha256 = record?.sha256;
-                if (typeof sha256 !== "string" || !sha256) {
-                    throw new Error(
-                        `Refusing install: registry has no sha256 for "${panelId}"`,
-                    );
-                }
-                signature = record?.signature;
-                version = record?.version;
+                if (!record) throw new Error(`the registry does not list "${panelId}"`);
+                sha256 = typeof record.sha256 === "string" ? record.sha256 : undefined;
+                version = typeof record.version === "string" ? record.version : undefined;
             } catch (err: any) {
                 debugErr("panel-install registry lookup", err);
                 throw new Error(
@@ -326,10 +322,11 @@ async function invokeSpecial(
                 "panel:install",
                 {
                     panelId,
-                    downloadUrl: `${REGISTRY_URL}/panel/${panelId}/download`,
                     sha256,
-                    signature,
                     version,
+                    // TODO(remove after v0.2): daemons before registry-resolved
+                    // installs require this; current daemons ignore it
+                    downloadUrl: `${REGISTRY_URL}/panel/${panelId}/download`,
                 },
                 LONG_TIMEOUT,
             );

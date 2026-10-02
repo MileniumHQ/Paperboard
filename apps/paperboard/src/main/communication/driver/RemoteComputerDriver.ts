@@ -38,8 +38,8 @@ export class RemoteComputerDriver implements ComputerDriver {
         return this.client.listPanels();
     }
 
-    public async installPanel(panelId: string, downloadUrl: string, expectedSha256?: string): Promise<PanelManifest> {
-        return this.client.installPanel(panelId, downloadUrl, expectedSha256);
+    public async installPanel(panelId: string, expected: { version?: string; sha256?: string }): Promise<PanelManifest> {
+        return this.client.installPanel(panelId, expected);
     }
 
     public async updateCrane(version: string, downloadUrl: string, sha256?: string): Promise<void> {

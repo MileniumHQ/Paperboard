@@ -337,7 +337,7 @@ async function runOrchestratorInner(
                 case "local_panel":
                 case "ext_panel":
                     await withTimeout(
-                        driver.installPanel(task.id!, task.downloadUrl, task.sha256),
+                        driver.installPanel(task.id!, { version: task.version, sha256: task.sha256 }),
                         TASK_TIMEOUT_MS,
                     );
                     break;

@@ -48,8 +48,9 @@ test("real dotted identity survives pack, publish, metadata lookup, download and
         const record = await (await fetch(`${env.PANEL_BASE_URL}/panel/${manifest.id}.json`)).json() as any;
         expect(record.id).toBe(manifest.id);
         expect(record.sha256).toBe(packed.sha256);
-        const engine = new PaperCraneEngine(path.join(tmp, "host"));
-        expect((await engine.installPanel(manifest.id, record.downloadUrl, record.sha256)).id).toBe(manifest.id);
+        // the daemon reads the same origami worker as its registry
+        const engine = new PaperCraneEngine(path.join(tmp, "host"), undefined, env.PANEL_BASE_URL);
+        expect((await engine.installPanel(manifest.id, { version: record.version, sha256: record.sha256 })).id).toBe(manifest.id);
         expect((await engine.listPanels()).map((p) => p.id)).toEqual([manifest.id]);
         expect(fs.readFileSync(engine.resolvePath("panels", manifest.id, "dist/index.html"), "utf8")).toContain("Release fixture");
     } finally {

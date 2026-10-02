@@ -26,23 +26,15 @@ import { panelServices, PanelServicesManager } from "./panelServices";
 import { CredentialStore } from "./credentials";
 import { resolveRegistryUrl } from "./util";
 import { requirePanelId } from "../../../packages/paperapi/src/panelIdentity";
+import { fetchRegistryRecord } from "./registryRecord";
 
 export const REGISTRY_URL = resolveRegistryUrl();
 
-// install provenance: whether a panel arrived through the reviewed registry
-// or a direct checksummed URL is a daemon-owned fact, recorded at install
-// time and surfaced in the library ("Reviewed by Paperboard" vs "Direct
-// install"). The registry is closed and reviewed; a direct URL install is
-// checksum-verified but NOT reviewed — the two words must never blur.
-export function resolveInstallSource(downloadUrl: string): "registry" | "direct" {
-    try {
-        return new URL(downloadUrl).origin === new URL(REGISTRY_URL).origin
-            ? "registry"
-            : "direct";
-    } catch (err) {
-        logger.debug("[engine] install source resolve failed, treating as direct:", err);
-        return "direct";
-    }
+// what a caller expects to install (the release it showed the user or
+// planned an update to); the daemon's own registry lookup must agree
+export interface ExpectedPanelRelease {
+    version?: string;
+    sha256?: string;
 }
 
 // bounded payloads: file reads refuse past 16 MiB (larger blobs stream via
@@ -98,50 +90,9 @@ export class PaperCraneEngine {
         }
     }
 
-    // install provenance record: one small daemon-owned JSON beside the
-    // panels dir — OUTSIDE any panel directory, because upgrades swap that
-    // directory wholesale and the fact must survive them. One entry per
-    // panel id; removed when the panel is uninstalled.
-    private installSourcesPath(): string {
-        return path.join(this.panelsDir, ".install-sources.json");
-    }
-
-    private readInstallSources(): Record<string, { source: string; at: string }> {
-        try {
-            const raw = JSON.parse(fs.readFileSync(this.installSourcesPath(), "utf-8"));
-            return raw && typeof raw === "object" ? raw : {};
-        } catch (err: any) {
-            if (err?.code !== "ENOENT") {
-                logger.debug("[engine] install sources read failed:", err?.message || err);
-            }
-            return {};
-        }
-    }
-
-    private writeInstallSources(map: Record<string, { source: string; at: string }>): void {
-        try {
-            fs.writeFileSync(this.installSourcesPath(), JSON.stringify(map, null, 2));
-        } catch (err: any) {
-            logger.error(`[engine] install sources write failed: ${err?.message || err}`);
-        }
-    }
-
-    private recordInstallSource(cleanId: string, source: "registry" | "direct"): void {
-        const map = this.readInstallSources();
-        map[cleanId] = { source, at: new Date().toISOString() };
-        this.writeInstallSources(map);
-    }
-
     private requireRecoveryCapacity(dir: string, id: string): void {
         const count = fs.readdirSync(dir).filter((name) => (name.startsWith(".trash-") || name.startsWith(".failed-")) && name.endsWith(`-${id}`)).length;
         if (count >= 16) throw new LimitError(`Recovery storage for ${id} holds 16 releases. Archive or explicitly purge old recovery copies before replacing another release.`);
-    }
-
-    private forgetInstallSource(cleanId: string): void {
-        const map = this.readInstallSources();
-        if (!(cleanId in map)) return;
-        delete map[cleanId];
-        this.writeInstallSources(map);
     }
 
     // Removes interrupted download/install artifacts (*.tmp-*, *.staging-*).
@@ -894,7 +845,6 @@ export class PaperCraneEngine {
         if (!fs.existsSync(this.panelsDir)) return [];
         const entries = await fs.promises.readdir(this.panelsDir);
         const panels: PanelManifest[] = [];
-        const sources = this.readInstallSources();
 
         for (const entry of entries) {
             if (entry.startsWith(".")) continue;
@@ -917,12 +867,7 @@ export class PaperCraneEngine {
                         isInstalled: true,
                         isDevLink,
                         isLinked: isDevLink,
-                        installSource: isDevLink
-                            ? "dev"
-                            : (sources[entry]?.source as
-                                  | "registry"
-                                  | "direct"
-                                  | undefined),
+                        ...(isDevLink ? { installSource: "dev" as const } : {}),
                     } as PanelManifest);
                 } catch (err) {
                     logger.debug(
@@ -935,28 +880,52 @@ export class PaperCraneEngine {
         return panels;
     }
 
+    // Installs the registry's current release of a panel. The daemon asks
+    // its own registry which release that is and which bytes are right, and
+    // downloads only from the registry: a caller names the panel and may
+    // state what it expects, never where the bytes come from.
     public async installPanel(
         panelId: string,
-        downloadUrl: string,
-        expectedSha256?: string,
+        expected: ExpectedPanelRelease = {},
     ): Promise<PanelManifest> {
         const key = `panel:${requirePanelId(panelId)}`;
         if (this.operations.has(key)) throw new Error(`An operation on ${panelId} is already running`);
         if (this.operations.size >= 8) throw new LimitError("Too many concurrent installs");
         this.operations.add(key);
-        try { return await this.installPanelRelease(panelId, downloadUrl, expectedSha256); }
+        try { return await this.installPanelRelease(panelId, expected); }
         finally { this.operations.delete(key); }
     }
 
-    private async installPanelRelease(panelId: string, downloadUrl: string, expectedSha256?: string): Promise<PanelManifest> {
-        // trust boundary: no checksum fact from the anchor means no install,
-        // no matter where the URL came from
-        if (typeof expectedSha256 !== "string" || !/^[a-f0-9]{64}$/i.test(expectedSha256)) {
-            throw new Error(
-                `Install refused for "${panelId}": registry did not provide a sha256 checksum`,
-            );
+    // the registry record is the authority for the release; any caller
+    // expectation that disagrees with it refuses the install
+    private async resolvePanelRelease(id: string, expected: ExpectedPanelRelease): Promise<{ version: string; sha256: string }> {
+        let raw: any;
+        try {
+            raw = await fetchRegistryRecord(`${this.registryUrl}/panel/${encodeURIComponent(id)}.json`);
+        } catch (err) {
+            throw new Error(`Install refused for "${id}": registry record unavailable (${err instanceof Error ? err.message : String(err)})`);
         }
+        if (raw?.id !== id) throw new Error(`Install refused for "${id}": the registry record names a different panel`);
+        if (typeof raw.sha256 !== "string" || !/^[a-f0-9]{64}$/i.test(raw.sha256)) {
+            throw new Error(`Install refused for "${id}": registry did not provide a sha256 checksum`);
+        }
+        if (typeof raw.version !== "string" || !raw.version) {
+            throw new Error(`Install refused for "${id}": registry did not provide a version`);
+        }
+        const sha256 = raw.sha256.toLowerCase();
+        if (expected.sha256 !== undefined && expected.sha256.toLowerCase() !== sha256) {
+            throw new Error(`Install refused for "${id}": the registry now lists different bytes than the release requested`);
+        }
+        if (expected.version !== undefined && expected.version !== raw.version) {
+            throw new Error(`Install refused for "${id}": requested version ${expected.version}, the registry lists ${raw.version}`);
+        }
+        return { version: raw.version, sha256 };
+    }
+
+    private async installPanelRelease(panelId: string, expected: ExpectedPanelRelease): Promise<PanelManifest> {
         const cleanId = requirePanelId(panelId);
+        const release = await this.resolvePanelRelease(cleanId, expected);
+        const downloadUrl = `${this.registryUrl}/panel/${encodeURIComponent(cleanId)}/download`;
         const targetDir = path.join(this.panelsDir, cleanId);
         this.requireRecoveryCapacity(this.panelsDir, cleanId);
 
@@ -983,7 +952,7 @@ export class PaperCraneEngine {
                 tempArchive,
                 undefined,
                 undefined,
-                expectedSha256,
+                release.sha256,
             );
 
             if (fs.existsSync(stagingDir)) {
@@ -1005,14 +974,20 @@ export class PaperCraneEngine {
                 contentDir = path.join(stagingDir, stagingEntries[0]);
             }
 
+            // the archive must say what it is, and agree with the request
+            // and the registry record, before anything activates
             const manifestFile = this.findManifestFile(contentDir);
-
-            const rawManifest = manifestFile && fs.existsSync(manifestFile)
-                ? JSON.parse(await fs.promises.readFile(manifestFile, "utf-8"))
-                : null;
-            const manifest = rawManifest
-                ? validatePanelManifest(rawManifest, cleanId)
-                : { id: cleanId, name: cleanId };
+            if (!manifestFile) {
+                throw new Error(`Install refused for "${cleanId}": the archive has no manifest.json`);
+            }
+            const rawManifest = JSON.parse(await fs.promises.readFile(manifestFile, "utf-8"));
+            if (rawManifest?.id !== cleanId) {
+                throw new Error(`Install refused for "${cleanId}": the archive's manifest names ${JSON.stringify(rawManifest?.id)}`);
+            }
+            if (rawManifest.version !== release.version) {
+                throw new Error(`Install refused for "${cleanId}": the archive is version ${JSON.stringify(rawManifest.version)}, the registry lists ${release.version}`);
+            }
+            const manifest = validatePanelManifest(rawManifest, cleanId);
 
             await this.services.stopService(cleanId);
             for (const [id, client] of [...this.clients]) {
@@ -1045,10 +1020,6 @@ export class PaperCraneEngine {
                 .rm(stagingDir, { recursive: true, force: true })
                 .catch((err) => logger.debug("[engine] staging cleanup failed:", err));
 
-            // provenance is recorded only after the panel is actually in
-            // place: a failed install must not leave a Reviewed/Direct fact
-            // behind for something that does not exist
-            this.recordInstallSource(cleanId, resolveInstallSource(downloadUrl));
 
             return {
                 ...(manifest as PanelManifest),
@@ -1116,9 +1087,6 @@ export class PaperCraneEngine {
         // a removed panel stops authenticating immediately: its scoped
         // token is revoked, not left lingering in the vault
         this.services.revokePanel(cleanId);
-        // and its provenance fact goes with it — a record for a panel that
-        // is not installed is a lie
-        this.forgetInstallSource(cleanId);
 
         return true;
         } finally { this.operations.delete(key); }

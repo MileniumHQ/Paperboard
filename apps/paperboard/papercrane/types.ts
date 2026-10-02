@@ -19,11 +19,8 @@ export interface PanelManifest {
     // from the manifest by validatePanelManifest (surfaced at install,
     // enforced by the panel CSP — never granted here)
     network?: { hosts?: string[]; mode?: string };
-    // daemon-recorded install provenance: "registry" (reviewed, closed
-    // registry), "direct" (checksummed URL install, not reviewed), "dev"
-    // (symlinked dev link). Absent for panels installed before provenance
-    // shipped — the renderer says "Unsigned" for those, honestly.
-    installSource?: "registry" | "direct" | "dev";
+    // "dev" = symlinked from a working tree; registry installs carry none
+    installSource?: "dev";
 }
 
 export type BoardManifest = PanelManifest;

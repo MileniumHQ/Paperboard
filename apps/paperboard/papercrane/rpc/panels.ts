@@ -20,9 +20,13 @@ export async function handlePanels(action: string, id: unknown, params: any, ctx
                 // installing a panel is a host action, never panel equipment:
                 // a scoped token grants one panel claim and no wider reach
                 requireHost(ctx.callerPanelId(), action);
-                const downloadUrl = assertStr(params?.downloadUrl, "downloadUrl", 8192);
-                const sha256 = assertOptStr(params?.sha256, "sha256", 128);
-                const manifest = await engine.installPanel(panelId, downloadUrl, sha256);
+                // the daemon resolves the release and its bytes from its own
+                // registry; version/sha256 are what the caller expects, and
+                // a disagreement refuses. Any downloadUrl sent is ignored.
+                const manifest = await engine.installPanel(panelId, {
+                    version: assertOptStr(params?.version, "version", 64),
+                    sha256: assertOptStr(params?.sha256, "sha256", 128),
+                });
                 reply(id, { panel: manifest });
                 return true;
             }

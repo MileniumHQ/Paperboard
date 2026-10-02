@@ -12,6 +12,7 @@ import {
 import { PROTOCOL_VERSION } from "../../../../papercrane/protocol";
 import { readCraneHandshake } from "../../../../papercrane/handshake";
 import { getLocalDir } from "../../../../papercrane/paths";
+import { resolveRegistryUrl } from "../../../../papercrane/util";
 import {
     peerCertPem,
     pinnedRequest,
@@ -665,8 +666,15 @@ export class PaperCraneClient extends EventEmitter {
         return res.panels || [];
     }
 
-    public async installPanel(panelId: string, downloadUrl: string, expectedSha256?: string): Promise<PanelManifest> {
-        const res = await this.call<{ panel?: PanelManifest }>("panel:install", { panelId, downloadUrl, sha256: expectedSha256 });
+    public async installPanel(panelId: string, expected: { version?: string; sha256?: string }): Promise<PanelManifest> {
+        const res = await this.call<{ panel?: PanelManifest }>("panel:install", {
+            panelId,
+            version: expected.version,
+            sha256: expected.sha256,
+            // TODO(remove after v0.2): daemons before registry-resolved
+            // installs require this; current daemons ignore it
+            downloadUrl: `${resolveRegistryUrl()}/panel/${encodeURIComponent(panelId)}/download`,
+        });
         if (!res.panel) throw new Error(`Panel install failed for ${panelId}`);
         return res.panel;
     }

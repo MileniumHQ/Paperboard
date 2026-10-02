@@ -2,31 +2,28 @@ import { test, expect } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import * as tar from "tar";
 import { EventEmitter } from "node:events";
 import { PaperCraneEngine } from "../papercrane/engine";
 import { PaperCraneAuth } from "../papercrane/auth";
 import { PanelServicesManager } from "../papercrane/panelServices";
 import { CredentialStore } from "../papercrane/credentials";
 import { resolveDavPath } from "../papercrane/dav";
+import { startFixtureRegistry, manifestFile } from "./registryFixture";
 
 test("upgrade observes new service behavior; failed activation restores usable previous bytes", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "panel-upgrade-"));
     const auth = new PaperCraneAuth(false, path.join(root, "local"));
     const services = new PanelServicesManager(root);
     services.setAuth(auth);
-    const engine = new PaperCraneEngine(root, services);
-    let bytes = Buffer.alloc(0);
-    const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response(bytes) });
+    const registry = await startFixtureRegistry(root);
+    const engine = new PaperCraneEngine(root, services, registry.url);
+    const server = registry;
     const install = async (version: string, fail = false) => {
-        const source = path.join(root, "source");
-        fs.mkdirSync(source, { recursive: true });
-        fs.writeFileSync(path.join(source, "manifest.json"), JSON.stringify({ id: "dev.test.running", name: "Running", version, service: "service.mjs" }));
-        fs.writeFileSync(path.join(source, "service.mjs"), fail ? "process.exit(7)" : `import fs from 'node:fs';fs.writeFileSync('running-version',${JSON.stringify(version)});process.send({type:'paperboard:service-ready',panelId:'dev.test.running'});setInterval(()=>{},1000);`);
-        const archive = path.join(root, "release.tar.gz");
-        await tar.c({ file: archive, cwd: source, gzip: true }, ["manifest.json", "service.mjs"]);
-        bytes = fs.readFileSync(archive);
-        return engine.installPanel("dev.test.running", `http://127.0.0.1:${server.port}/archive`, new Bun.CryptoHasher("sha256").update(bytes).digest("hex"));
+        await registry.publish("dev.test.running", version, {
+            "manifest.json": manifestFile("dev.test.running", version, { service: "service.mjs" }),
+            "service.mjs": fail ? "process.exit(7)" : `import fs from 'node:fs';fs.writeFileSync('running-version',${JSON.stringify(version)});process.send({type:'paperboard:service-ready',panelId:'dev.test.running'});setInterval(()=>{},1000);`,
+        });
+        return engine.installPanel("dev.test.running", { version });
     };
     try {
         await install("0.1.0");
@@ -44,7 +41,7 @@ test("upgrade observes new service behavior; failed activation restores usable p
         expect(await engine.readFile("world.dat", "dev.test.running")).toBe("world bytes");
         expect(await engine.getConfig("dev.test.running")).toEqual({ retained: true });
         expect(engine.getSecret("token", "dev.test.running").value).toBe("fixture");
-    } finally { await services.stopService("dev.test.running"); auth.dispose(); await server.stop(true); fs.rmSync(root, { recursive: true, force: true }); }
+    } finally { await services.stopService("dev.test.running"); auth.dispose(); await server.stop(); fs.rmSync(root, { recursive: true, force: true }); }
 });
 
 test("uninstall uses the owner of mc-server and waits for observed exit before removal", async () => {

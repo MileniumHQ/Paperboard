@@ -21,10 +21,8 @@ export interface PanelItem {
     size?: string;
     updatedAt?: string;
     isInstalled?: boolean;
-    // daemon-recorded install provenance: "registry" (reviewed), "direct"
-    // (checksummed URL, not reviewed), "dev" (symlinked dev build). Absent
-    // for panels installed before provenance shipped.
-    installSource?: "registry" | "direct" | "dev";
+    // "dev" = symlinked from a working tree; registry installs carry none
+    installSource?: "dev";
     isLinked?: boolean;
     installedVersion?: string;
     /** newest release the registry offers; `version` is the installed one when installed */

@@ -35,10 +35,11 @@ export interface ComputerDriver {
     getPackageIndex(): Promise<Record<string, any>>;
 
     listPanels(): Promise<PanelManifest[]>;
+    /** The daemon resolves the release from its registry; `expected` is
+     * what the caller planned to install and must agree with it. */
     installPanel(
         panelId: string,
-        downloadUrl: string,
-        expectedSha256?: string,
+        expected: { version?: string; sha256?: string },
     ): Promise<PanelManifest>;
 
     downloadPackage(
