@@ -28,6 +28,7 @@ import {
 } from "../../../../packages/paperapi/src/panelMerge";
 import type { InstalledPanelMedia } from "../../../../packages/paperapi/src/storeListing";
 import { fetchRegistryJson } from "../../../../packages/paperapi/src/registryFetch";
+import { waitForContentPainted } from "../../../../packages/paperapi/src/paintReady";
 
 // The library runs on the registry origin, so archive URLs resolve
 // same-origin; the registry record's own downloadUrl stays authoritative
@@ -96,6 +97,10 @@ const PanelLibraryApp: Component<PanelLibraryAppProps> = (props) => {
         RegistryPanelRecord
     > | null>(null);
     const [loadFailed, setLoadFailed] = createSignal(false);
+    // Registry settled is distinct from succeeded: a failed load is still
+    // "settled" for readiness, because the library has something to show.
+    const [registrySettled, setRegistrySettled] = createSignal(false);
+    const [pendingMedia, setPendingMedia] = createSignal(0);
     const route = createLibraryRoute();
     const [busyPanelId, setBusyPanelId] = createSignal<string | null>(null);
     const [installError, setInstallError] = createSignal<string | null>(null);
@@ -111,6 +116,8 @@ const PanelLibraryApp: Component<PanelLibraryAppProps> = (props) => {
             // sees an empty library it would mistake for "nothing published".
             console.error("[library] registry unavailable:", err);
             setLoadFailed(true);
+        } finally {
+            setRegistrySettled(true);
         }
     };
 
@@ -141,7 +148,9 @@ const PanelLibraryApp: Component<PanelLibraryAppProps> = (props) => {
         const key = `${id}:${full ? "full" : "icon"}`;
         if (requestedMedia.has(key)) return;
         requestedMedia.add(key);
+        setPendingMedia((count) => count + 1);
         void props.bridge.media(id, full).then((media) => {
+            setPendingMedia((count) => Math.max(0, count - 1));
             if (!media) {
                 // unavailable, not empty: allow a later visit to retry
                 requestedMedia.delete(key);
@@ -171,6 +180,23 @@ const PanelLibraryApp: Component<PanelLibraryAppProps> = (props) => {
         for (const id of ids) requestMedia(id, false);
         const selected = route.panelId();
         if (selected && ids.includes(selected)) requestMedia(selected, true);
+    });
+
+    // The shell covers the frame until the library says it is done. Ready
+    // means the registry has settled, no installed-panel media is still in
+    // flight, and the rendered page has painted, so nothing shifts after
+    // the reveal.
+    let readySent = false;
+    createEffect(() => {
+        if (readySent) return;
+        const settled = registrySettled();
+        const mode = props.bridge.mode();
+        const pending = pendingMedia();
+        // track the installed list so a late reply still re-checks readiness
+        void props.bridge.installed();
+        if (!settled || mode === "detecting" || pending > 0) return;
+        readySent = true;
+        void waitForContentPainted().then(() => props.bridge.notifyReady());
     });
 
     const panels = createMemo(() => {

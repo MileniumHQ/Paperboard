@@ -2,7 +2,7 @@
 // is security-relevant: sender window, origin, and panel identity are all
 // checked before a request can reach the daemon install path.
 import { describe, it, expect } from "bun:test";
-import { parseLibraryMessage } from "../src/renderer/src/lib/libraryFrame";
+import { libraryFramePhase, parseLibraryMessage } from "../src/renderer/src/lib/libraryFrame";
 
 const ORIGIN = "https://origami.ariapis.com";
 const sourceWindow = {} as Window;
@@ -13,13 +13,35 @@ function event(overrides: Record<string, unknown> = {}) {
 }
 
 describe("library frame message boundary", () => {
-    it("accepts hello from its own frame and origin", () => {
+    it("accepts hello from its own frame and origin, carrying the ready capability", () => {
         expect(
             parseLibraryMessage(
                 event({ data: { type: "paperboard:library-hello" } }),
                 identity,
             ),
-        ).toEqual({ type: "paperboard:library-hello" });
+        ).toEqual({ type: "paperboard:library-hello", ready: false });
+        expect(
+            parseLibraryMessage(
+                event({ data: { type: "paperboard:library-hello", ready: true } }),
+                identity,
+            ),
+        ).toEqual({ type: "paperboard:library-hello", ready: true });
+    });
+
+    it("accepts library-ready only from its own frame and origin", () => {
+        expect(
+            parseLibraryMessage(
+                event({ data: { type: "paperboard:library-ready" } }),
+                identity,
+            ),
+        ).toEqual({ type: "paperboard:library-ready" });
+        const other = {} as Window;
+        expect(
+            parseLibraryMessage(
+                event({ source: other, data: { type: "paperboard:library-ready" } }),
+                identity,
+            ),
+        ).toBeNull();
     });
 
     it("refuses a message from another window", () => {
@@ -136,5 +158,40 @@ describe("library media requests", () => {
                 identity,
             ),
         ).toBeNull();
+    });
+});
+
+describe("library frame reveal gate", () => {
+    it("covers the frame until a capable library is connected AND ready", () => {
+        // nothing yet: the library has not even said hello
+        expect(
+            libraryFramePhase({ connected: false, ready: false, readyCapable: true, failure: false }),
+        ).toBe("loading");
+        // connected is not loaded; the library is still reading its registry
+        expect(
+            libraryFramePhase({ connected: true, ready: false, readyCapable: true, failure: false }),
+        ).toBe("loading");
+        // both: the only state that reveals the iframe
+        expect(
+            libraryFramePhase({ connected: true, ready: true, readyCapable: true, failure: false }),
+        ).toBe("ready");
+    });
+
+    it("reveals a legacy library on connect, since it promises no ready signal", () => {
+        expect(
+            libraryFramePhase({ connected: true, ready: false, readyCapable: false, failure: false }),
+        ).toBe("ready");
+        expect(
+            libraryFramePhase({ connected: false, ready: false, readyCapable: false, failure: false }),
+        ).toBe("loading");
+    });
+
+    it("a failure wins over any loading or ready state", () => {
+        expect(
+            libraryFramePhase({ connected: true, ready: true, readyCapable: true, failure: true }),
+        ).toBe("failed");
+        expect(
+            libraryFramePhase({ connected: true, ready: false, readyCapable: true, failure: true }),
+        ).toBe("failed");
     });
 });

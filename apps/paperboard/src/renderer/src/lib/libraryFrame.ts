@@ -9,7 +9,8 @@ import {
 } from "@paperboard-dev/paperapi";
 
 export type LibraryToShellMessage =
-    | { type: "paperboard:library-hello" }
+    | { type: "paperboard:library-hello"; ready: boolean }
+    | { type: "paperboard:library-ready" }
     | { type: "paperboard:library-install"; requestId: string; panelId: string }
     | { type: "paperboard:library-open"; panelId: string }
     | {
@@ -44,7 +45,12 @@ export function parseLibraryMessage(
     const message = data as Record<string, unknown>;
 
     if (message.type === "paperboard:library-hello") {
-        return { type: "paperboard:library-hello" };
+        // ready === true means this library will follow up with
+        // paperboard:library-ready once it has loaded and painted.
+        return { type: "paperboard:library-hello", ready: message.ready === true };
+    }
+    if (message.type === "paperboard:library-ready") {
+        return { type: "paperboard:library-ready" };
     }
     if (message.type === "paperboard:library-install") {
         if (typeof message.requestId !== "string" || !message.requestId) {
@@ -121,3 +127,23 @@ export const shellToLibrary: ShellToLibraryMessages = {
         error,
     }),
 };
+
+export type LibraryFramePhase = "failed" | "loading" | "ready";
+
+/**
+ * The single gate for what the shell shows over the library frame. The
+ * iframe is only revealed once the library has connected, and — when it
+ * advertises the painted-before-reveal protocol — reported ready. A legacy
+ * library that sends no capability is revealed on connect, so a shell
+ * update never leaves an older deployed library stuck behind the loader.
+ */
+export function libraryFramePhase(state: {
+    connected: boolean;
+    ready: boolean;
+    readyCapable: boolean;
+    failure: boolean;
+}): LibraryFramePhase {
+    if (state.failure) return "failed";
+    if (state.connected && (state.ready || !state.readyCapable)) return "ready";
+    return "loading";
+}

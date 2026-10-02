@@ -1,6 +1,7 @@
-import { PaperFlex, PaperText, PaperButton, getVarCss } from "@paperboard-dev/paperui";
+import { PaperFlex, getVarCss } from "@paperboard-dev/paperui";
 import { type Component, createEffect, createSignal, For, Show, onCleanup, onMount } from "solid-js";
 import { recordUse, liveKeys, MAX_LIVE_IFRAMES } from "./panelLru";
+import LoadingOverlay from "./LoadingOverlay";
 import { panelUrl } from "../../lib/shell";
 
 export type RestartState = { kind: "restarting" } | { kind: "failed"; message: string };
@@ -44,15 +45,23 @@ const PanelFrame: Component<{ panelKey: string; current: boolean; reload: number
             sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
             allow="clipboard-read; clipboard-write"
             onLoad={() => frame?.contentWindow?.postMessage({ type: "paperboard:initialize", generation }, "*")}
-            style={{ width: "100%", height: "100%", border: "none", "border-left": `${getVarCss("border-width")} solid ${getVarCss("border")}`, visibility: ready() && !failure() && !props.restart ? "visible" : "hidden" }} />
-        <Show when={props.restart}>{(restart) => <PaperFlex direction="column" center fullWidth fullHeight gap="half" style={{ position: "absolute", inset: "0" }}>
-            <PaperText role="status">{restart().kind === "failed" ? (restart() as { message: string }).message : "Restarting panel service…"}</PaperText>
-            <Show when={restart().kind === "failed"}><PaperButton onClick={props.retryRestart}>Restart panel</PaperButton></Show>
-        </PaperFlex>}</Show>
-        <Show when={!props.restart && (!ready() || failure())}><PaperFlex direction="column" center fullWidth fullHeight gap="half" style={{ position: "absolute", inset: "0" }}>
-            <PaperText role="status">{failure() || "Connecting panel…"}</PaperText>
-            <Show when={failure()}><PaperButton onClick={props.retry}>Reload panel</PaperButton></Show>
-        </PaperFlex></Show>
+            style={{ width: "100%", height: "100%", border: "none", "border-left": `${getVarCss("border-width")} solid ${getVarCss("border")}`, opacity: ready() && !failure() && !props.restart ? "1" : "0", "pointer-events": ready() && !failure() && !props.restart ? "auto" : "none" }} />
+        <Show when={props.restart}>{(restart) => (
+            <LoadingOverlay
+                label={restart().kind === "failed" ? undefined : "Restarting panel service…"}
+                error={restart().kind === "failed" ? (restart() as { message: string }).message : undefined}
+                retryLabel="Restart panel"
+                onRetry={props.retryRestart}
+            />
+        )}</Show>
+        <Show when={!props.restart && (!ready() || failure())}>
+            <LoadingOverlay
+                label={failure() ? undefined : "Connecting panel…"}
+                error={failure() || undefined}
+                retryLabel="Reload panel"
+                onRetry={props.retry}
+            />
+        </Show>
     </div>;
 };
 

@@ -7,9 +7,7 @@ import {
     Show,
 } from "solid-js";
 import {
-    PaperButton,
     PaperFlex,
-    PaperText,
     type ThemeMode,
 } from "@paperboard-dev/paperui";
 import {
@@ -18,12 +16,21 @@ import {
     type PanelItem,
 } from "@paperboard-dev/paperapi";
 import { logToMain } from "../../lib/shell";
-import { parseLibraryMessage, shellToLibrary } from "../../lib/libraryFrame";
+import {
+    libraryFramePhase,
+    parseLibraryMessage,
+    shellToLibrary,
+} from "../../lib/libraryFrame";
+import LoadingOverlay from "./LoadingOverlay";
 
 // Bounded retry window: an embedded library answers the hello in
 // milliseconds. Silence means the page never loaded (offline, blocked), and
 // the shell shows a reload action instead of a blank frame.
 const LIBRARY_CONNECT_TIMEOUT_MS = 10_000;
+// Connected is not loaded: the library then reads its registry (bounded at
+// 10s), any installed-panel media (bounded at 15s), and paints. This bound
+// sits beyond that sum so a slow-but-live library is not mistaken for dead.
+const LIBRARY_READY_TIMEOUT_MS = 30_000;
 
 export interface LibraryFrameProps {
     /** Library tab is the selected tab; mounting is lazy on first activation. */
@@ -42,9 +49,19 @@ export interface LibraryFrameProps {
 const LibraryFrame: Component<LibraryFrameProps> = (props) => {
     const [mounted, setMounted] = createSignal(false);
     const [connected, setConnected] = createSignal(false);
+    const [ready, setReady] = createSignal(false);
+    const [readyCapable, setReadyCapable] = createSignal(false);
     const [failure, setFailure] = createSignal(false);
     const [reloadToken, setReloadToken] = createSignal(0);
     let frame: HTMLIFrameElement | undefined;
+
+    const phase = () =>
+        libraryFramePhase({
+            connected: connected(),
+            ready: ready(),
+            readyCapable: readyCapable(),
+            failure: failure(),
+        });
 
     // VITE_PANEL_LIBRARY_URL lets `bun run dev` point at the library's own
     // dev server; production builds without it use the registry origin.
@@ -110,9 +127,14 @@ const LibraryFrame: Component<LibraryFrameProps> = (props) => {
         });
         if (!message) return;
         if (message.type === "paperboard:library-hello") {
+            setReadyCapable(message.ready);
             setConnected(true);
             setFailure(false);
             reply(shellToLibrary.connected(props.theme, props.installed));
+        } else if (message.type === "paperboard:library-ready") {
+            // a late ready still clears a connect-then-silent failure
+            setReady(true);
+            setFailure(false);
         } else if (message.type === "paperboard:library-install") {
             void handleInstall(message.requestId, message.panelId);
         } else if (message.type === "paperboard:library-media") {
@@ -134,6 +156,26 @@ const LibraryFrame: Component<LibraryFrameProps> = (props) => {
         const timer = setTimeout(
             () => setFailure(true),
             LIBRARY_CONNECT_TIMEOUT_MS,
+        );
+        onCleanup(() => clearTimeout(timer));
+    });
+
+    createEffect(() => {
+        // only a library that promised the ready signal can fail to send it;
+        // a legacy library is revealed on connect and has nothing to wait on
+        if (
+            !mounted() ||
+            !props.active ||
+            !connected() ||
+            !readyCapable() ||
+            ready() ||
+            failure()
+        ) {
+            return;
+        }
+        const timer = setTimeout(
+            () => setFailure(true),
+            LIBRARY_READY_TIMEOUT_MS,
         );
         onCleanup(() => clearTimeout(timer));
     });
@@ -172,31 +214,31 @@ const LibraryFrame: Component<LibraryFrameProps> = (props) => {
                         height: "100%",
                         border: "none",
                         display: props.active ? "block" : "none",
+                        // loaded is not painted: stay transparent until the
+                        // library reports ready. opacity, not visibility —
+                        // a hidden iframe stops rendering, which freezes the
+                        // page's rAF/font loading and stalls that report.
+                        opacity: phase() === "ready" ? "1" : "0",
+                        "pointer-events":
+                            phase() === "ready" ? "auto" : "none",
                     }}
                 />
             </Show>
-            <Show when={failure()}>
-                <PaperFlex
-                    direction="column"
-                    center
-                    fullWidth
-                    fullHeight
-                    gap="half"
-                    style={{ position: "absolute", inset: "0" }}
-                >
-                    <PaperText role="status">
-                        Couldn't reach the panel library.
-                    </PaperText>
-                    <PaperButton
-                        onClick={() => {
-                            setFailure(false);
-                            setConnected(false);
-                            setReloadToken((token) => token + 1);
-                        }}
-                    >
-                        Reload library
-                    </PaperButton>
-                </PaperFlex>
+            <Show when={phase() === "loading"}>
+                <LoadingOverlay label="Loading panel library…" />
+            </Show>
+            <Show when={phase() === "failed"}>
+                <LoadingOverlay
+                    error="Couldn't reach the panel library."
+                    retryLabel="Reload library"
+                    onRetry={() => {
+                        setFailure(false);
+                        setConnected(false);
+                        setReady(false);
+                        setReadyCapable(false);
+                        setReloadToken((token) => token + 1);
+                    }}
+                />
             </Show>
         </PaperFlex>
     );

@@ -49,7 +49,7 @@ describe("createLibraryBridge", () => {
         const bridge = createLibraryBridge(fake.host, {
             handshakeTimeoutMs: 50,
         });
-        expect(fake.sent[0]).toEqual({ type: "paperboard:library-hello" });
+        expect(fake.sent[0]).toEqual({ type: "paperboard:library-hello", ready: true });
 
         fake.receive({
             type: "paperboard:library-connected",
@@ -106,6 +106,20 @@ describe("createLibraryBridge", () => {
         expect(bridge.mode()).toBe("standalone");
         fake.receive({ type: "paperboard:library-connected" });
         expect(bridge.mode()).toBe("embedded");
+        bridge.dispose();
+    });
+
+    test("notifyReady is silent standalone and signals the shell when embedded", () => {
+        const standalone = createLibraryBridge(null);
+        standalone.notifyReady();
+        expect(() => standalone.notifyReady()).not.toThrow();
+        standalone.dispose();
+
+        const fake = createFakeHost();
+        const bridge = createLibraryBridge(fake.host);
+        fake.receive({ type: "paperboard:library-connected" });
+        bridge.notifyReady();
+        expect(fake.sent).toContainEqual({ type: "paperboard:library-ready" });
         bridge.dispose();
     });
 

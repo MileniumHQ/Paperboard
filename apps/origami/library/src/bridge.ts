@@ -39,6 +39,11 @@ export interface LibraryBridge {
     /** Ask the shell to open an installed panel. */
     open: (panelId: string) => void;
     /**
+     * Tell the shell the library has loaded its data and painted, so it can
+     * stop covering the frame with a loader. No-op when standalone.
+     */
+    notifyReady: () => void;
+    /**
      * Ask the shell for an installed panel's own icon (and listing when
      * `full`). Resolves null when unavailable; never rejects.
      */
@@ -175,7 +180,10 @@ export function createLibraryBridge(
     const unsubscribe = host ? host.listen(handleShellMessage) : () => {};
 
     if (host) {
-        host.send({ type: "paperboard:library-hello" });
+        // `ready: true` advertises the painted-before-reveal protocol; a
+        // shell that sees it holds its loader until notifyReady(). Older
+        // library builds omit it and the shell reveals on connect instead.
+        host.send({ type: "paperboard:library-hello", ready: true });
         handshakeTimer = setTimeout(() => {
             handshakeTimer = undefined;
             if (mode() === "detecting") setMode("standalone");
@@ -215,6 +223,11 @@ export function createLibraryBridge(
         host.send({ type: "paperboard:library-open", panelId });
     };
 
+    const notifyReady = () => {
+        if (!host || mode() === "standalone") return;
+        host.send({ type: "paperboard:library-ready" });
+    };
+
     const media = (panelId: string, full: boolean): Promise<InstalledPanelMedia | null> => {
         if (!host || mode() !== "embedded" || !isPanelId(panelId)) {
             return Promise.resolve(null);
@@ -247,5 +260,5 @@ export function createLibraryBridge(
         pendingMedia.clear();
     };
 
-    return { mode, installed, theme, install, open, media, dispose };
+    return { mode, installed, theme, install, open, notifyReady, media, dispose };
 }

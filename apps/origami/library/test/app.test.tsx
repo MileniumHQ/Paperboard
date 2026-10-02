@@ -107,6 +107,18 @@ describe("PanelLibraryApp", () => {
         bridge.dispose();
     });
 
+    test("the embedded library tells the shell it is ready after the registry settles", async () => {
+        const fake = createFakeHost();
+        const bridge = createLibraryBridge(fake.host, { handshakeTimeoutMs: 20 });
+        fake.receive({ type: "paperboard:library-connected", installed: [] });
+        renderApp(bridge);
+
+        await waitFor(() =>
+            expect(fake.sent).toContainEqual({ type: "paperboard:library-ready" }),
+        );
+        bridge.dispose();
+    });
+
     test("browser back from a panel page returns to the grid", async () => {
         const bridge = createLibraryBridge(null);
         renderApp(bridge);
