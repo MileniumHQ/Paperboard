@@ -274,23 +274,18 @@ export interface ServerOptions {
     advertise?: boolean;
 }
 
-// handshake file for local clients, written on every listen
+// handshake file for local clients, written on every listen. Throws: a
+// daemon whose handshake was not written is unreachable to its own host,
+// so startup fails instead of reporting a ready server nobody can find.
 function writeCraneJson(port: number, token: string | null) {
-    try {
-        const file = path.join(getPaperboardDir(), "local", "crane.json");
-        if (!fs.existsSync(path.dirname(file)))
-            fs.mkdirSync(path.dirname(file), { recursive: true });
-        writeFileAtomicSync(
-            file,
-            JSON.stringify({ port, token }, null, 2),
-            { mode: 0o600 },
-        );
-    } catch (err) {
-        logger.warn(
-            "[Paperboard Server] failed to write crane.json handshake file:",
-            err,
-        );
-    }
+    const file = path.join(getPaperboardDir(), "local", "crane.json");
+    if (!fs.existsSync(path.dirname(file)))
+        fs.mkdirSync(path.dirname(file), { recursive: true });
+    writeFileAtomicSync(
+        file,
+        JSON.stringify({ port, token }, null, 2),
+        { mode: 0o600 },
+    );
 }
 
 export interface ServerInstance {
@@ -475,6 +470,20 @@ export function startPaperCraneServer(
             };
 
             const onReady = (actualPort: number, localPort: number) => {
+                // the handshake comes first: nothing starts behind a daemon
+                // its own host cannot find
+                try {
+                    writeCraneJson(localPort, staticToken);
+                } catch (err) {
+                    logger.error("[Paperboard Server] could not write the crane.json handshake; not starting:", err);
+                    for (const client of wss.clients) client.terminate();
+                    wss.close();
+                    localServer?.close();
+                    server.close();
+                    auth.dispose();
+                    reject(err);
+                    return;
+                }
                 hasListened = true;
 
                 // children must never outlive the daemon
@@ -512,9 +521,6 @@ export function startPaperCraneServer(
                 // this instance owns the port now: safe to sweep interrupted
                 // artifacts (never before — see sweepStartupOrphans)
                 engine.sweepStartupOrphans();
-
-                // only standalone daemons claim the PID file
-                writeCraneJson(localPort, staticToken);
 
                 // announce over mDNS (loopback skips inside)
                 if (options.advertise !== false) {

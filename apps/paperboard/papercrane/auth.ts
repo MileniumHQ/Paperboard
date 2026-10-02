@@ -2,7 +2,7 @@ import * as path from "path";
 import * as crypto from "crypto";
 import { EventEmitter } from "events";
 import {
-    readJsonFileSync,
+    readStateFileSync,
     writeFileAtomicSync,
 } from "./storage";
 import { getLocalDir } from "./paths";
@@ -209,7 +209,9 @@ export class PaperCraneAuth extends EventEmitter {
     }
 
     private loadTokens() {
-        const list = readJsonFileSync<AuthorizedToken[]>(this.tokensFile, []);
+        // a corrupt store is quarantined, never read as "no paired devices"
+        // and overwritten by the next host-token save
+        const list = readStateFileSync<AuthorizedToken[]>(this.tokensFile, [], "paired token store");
         if (Array.isArray(list)) {
             for (const item of list) {
                 if (item?.token) this.authorizedTokens.set(item.token, item);

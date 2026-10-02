@@ -3,7 +3,7 @@ import * as os from "os";
 import * as path from "path";
 import { DEFAULT_PORT, getDetailedOsInfo, getNetworkIp } from "../../../../papercrane";
 import {
-    readJsonFileSync,
+    readStateFileSync,
     writeJsonAtomicSync,
     sanitizeId,
 } from "../../../../papercrane/storage";
@@ -80,10 +80,12 @@ export class ConnectionPool extends EventEmitter {
     }
 
     private loadConfig() {
-        const raw = readJsonFileSync<{
+        // corrupt = quarantined (paired tokens and pinned certs kept for
+        // recovery), never read as "no computers" and overwritten
+        const raw = readStateFileSync<{
             activeId?: string;
             computers?: StoredComputer[];
-        }>(this.configPath, {});
+        }>(this.configPath, {}, "paired computers") ?? {};
         this.activeId = raw.activeId || "local";
         if (Array.isArray(raw.computers)) {
             for (const c of raw.computers) {
@@ -98,16 +100,14 @@ export class ConnectionPool extends EventEmitter {
         }
     }
 
+    // throws: a pairing, rename or removal that was not saved must not
+    // report success (the caller's IPC answer carries the failure)
     private saveConfig() {
-        try {
-            const data = {
-                activeId: this.activeId,
-                computers: Array.from(this.computers.values()),
-            };
-            writeJsonAtomicSync(this.configPath, data, { mode: 0o600 });
-        } catch (err) {
-            logger.warn("[ConnectionPool] failed to save paired computers:", err);
-        }
+        const data = {
+            activeId: this.activeId,
+            computers: Array.from(this.computers.values()),
+        };
+        writeJsonAtomicSync(this.configPath, data, { mode: 0o600 });
     }
 
     private async ensureLocalComputer() {
@@ -171,9 +171,11 @@ export class ConnectionPool extends EventEmitter {
 
     public setActive(id: string): boolean {
         if (!this.computers.has(id)) return false;
+        const previous = this.activeId;
         this.activeId = id;
+        try { this.saveConfig(); }
+        catch (err) { this.activeId = previous; throw err; }
         this.getDriver(id);
-        this.saveConfig();
         this.emit("change");
         return true;
     }
@@ -258,7 +260,13 @@ export class ConnectionPool extends EventEmitter {
             // reconnects on its own
             tempClient.disconnect();
             this.computers.set(id, comp);
-            this.saveConfig();
+            try { this.saveConfig(); }
+            catch (err) {
+                // the remote issued a token we could not keep: say so, and
+                // keep memory equal to disk (the pairing did not stick here)
+                this.computers.delete(id);
+                throw new Error(`Paired, but this computer could not save the pairing: ${err instanceof Error ? err.message : String(err)}`);
+            }
             this.getDriver(id);
             this.emit("change");
             return comp;
@@ -281,8 +289,13 @@ export class ConnectionPool extends EventEmitter {
         }
         const comp = this.computers.get(id);
         if (!comp) return false;
+        const before = { ...comp };
         Object.assign(comp, updates);
-        this.saveConfig();
+        try { this.saveConfig(); }
+        catch (err) {
+            this.computers.set(id, before);
+            throw err;
+        }
         this.emit("change");
         return true;
     }
@@ -311,12 +324,21 @@ export class ConnectionPool extends EventEmitter {
             this.clients.delete(id);
         }
         this.remoteDrivers.delete(id);
+        const removedRecord = this.computers.get(id);
         const removed = this.computers.delete(id);
         if (removed) {
+            const previousActive = this.activeId;
             if (this.activeId === id) {
                 this.activeId = "local";
             }
-            this.saveConfig();
+            try { this.saveConfig(); }
+            catch (err) {
+                // disk still lists it: memory must too, or it reappears on
+                // the next launch without anyone having been told
+                this.computers.set(id, removedRecord!);
+                this.activeId = previousActive;
+                throw err;
+            }
             this.emit("change");
         }
         return removed;

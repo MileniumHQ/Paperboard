@@ -116,6 +116,34 @@ export function writeJsonAtomic(
     return writeFileAtomic(filePath, JSON.stringify(value, null, 2));
 }
 
+// Reads a daemon-owned state document. Missing = `empty`. Unparseable
+// state is never treated as empty and then overwritten: the bytes are
+// quarantined beside the file (<file>.corrupt-<ms>) for recovery, logged
+// loudly, and the caller starts from `empty`. A file that exists but cannot
+// be read (permissions, I/O) throws: unreadable is not empty either.
+export function readStateFileSync<T>(filePath: string, empty: T, label: string): T {
+    let text: string;
+    try {
+        text = fs.readFileSync(filePath, "utf8");
+    } catch (err) {
+        if ((err as NodeJS.ErrnoException)?.code === "ENOENT") return empty;
+        throw err;
+    }
+    try {
+        return JSON.parse(text) as T;
+    } catch (parseErr) {
+        const quarantine = `${filePath}.corrupt-${Date.now()}`;
+        try {
+            fs.renameSync(filePath, quarantine);
+        } catch (moveErr) {
+            logger.error(`[storage] ${label} is unreadable AND could not be quarantined; refusing to continue:`, moveErr);
+            throw moveErr;
+        }
+        logger.error(`[storage] ${label} was unreadable; its bytes are kept in ${quarantine}:`, parseErr);
+        return empty;
+    }
+}
+
 export function readJsonFileSync<T>(filePath: string, fallback: T): T {
     try {
         if (fs.existsSync(filePath)) {

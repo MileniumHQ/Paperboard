@@ -1,6 +1,6 @@
 import * as fs from "fs";
 import * as path from "path";
-import { writeFileAtomicSync, sanitizeId } from "./storage";
+import { readStateFileSync, writeFileAtomicSync, sanitizeId } from "./storage";
 import { logger } from "./logger";
 
 export const SECRET_MAX_LENGTH = 8192;
@@ -48,34 +48,16 @@ export class CredentialStore {
     }
 
     private load(): void {
-        try {
-            if (fs.existsSync(this.file)) {
-                const parsed: SecretFile = JSON.parse(fs.readFileSync(this.file, "utf-8"));
-                if (parsed && typeof parsed === "object") {
-                    for (const [key, entry] of Object.entries(parsed as Record<string, SecretEntry>)) {
-                        if (typeof entry?.value === "string") {
-                            this.secrets.set(key, { ...entry, setAt: entry.setAt ?? new Date().toISOString() });
-                        } else {
-                            logger.debug(`[Credentials] skipping malformed entry ${key}`);
-                        }
-                    }
-                }
+        // unparseable stores are quarantined by the shared state reader,
+        // never overwritten (storage.readStateFileSync)
+        const parsed = readStateFileSync<SecretFile | null>(this.file, null, "secrets store");
+        if (!parsed || typeof parsed !== "object") return;
+        for (const [key, entry] of Object.entries(parsed as Record<string, SecretEntry>)) {
+            if (typeof entry?.value === "string") {
+                this.secrets.set(key, { ...entry, setAt: entry.setAt ?? new Date().toISOString() });
+            } else {
+                logger.debug(`[Credentials] skipping malformed entry ${key}`);
             }
-        } catch (err) {
-            // quarantine before starting empty: never overwrite data we
-            // could not read — the bytes might be worth partial recovery
-            const quarry = `${this.file}.corrupt-${Date.now()}`;
-            try {
-                fs.renameSync(this.file, quarry);
-                logger.error(
-                    `[Credentials] secrets store unreadable, quarantined to ${quarry}:`,
-                    err,
-                );
-            } catch (moveErr) {
-                logger.error("[Credentials] secrets store unreadable AND quarantine failed:", moveErr);
-                throw moveErr;
-            }
-            this.secrets = new Map();
         }
     }
 
