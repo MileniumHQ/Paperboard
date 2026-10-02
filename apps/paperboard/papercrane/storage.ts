@@ -310,22 +310,32 @@ export function coerceRegistryRecord(
 // ─── Archive safety ──────────────────────────────────────────────────────────
 
 // Tar filter rejecting absolute paths and traversal members
-export function makeSafeTarFilter(destDir: string): (entryPath: string, entry?: { size?: number; linkpath?: string; type?: string }) => boolean {
+export function makeSafeTarFilter(destDir: string, strip = 0): (entryPath: string, entry?: { size?: number; linkpath?: string; type?: string }) => boolean {
     let total = 0;
     let count = 0;
-    return (entryPath: string, entry) => {
+    const root = path.resolve(destDir);
+    const destWithSep = root.endsWith(path.sep) ? root : root + path.sep;
+    return (entryPath, entry) => {
         total += entry?.size ?? 0;
         if (++count > 100_000 || total > 4 * 1024 * 1024 * 1024) throw new LimitError("Archive exceeds extraction budget");
         if (typeof entryPath !== "string") return false;
         const normalized = path.normalize(entryPath);
         if (path.isAbsolute(normalized)) return false;
-        const resolved = path.resolve(destDir, normalized);
-        const destWithSep = destDir.endsWith(path.sep)
-            ? destDir
-            : destDir + path.sep;
+        // node-tar strips `strip` leading segments after this filter runs,
+        // so the entry lands at the stripped path. Resolve it the same way
+        // tar will: a link that looks contained pre-strip can point outside
+        // once its directory moves.
+        let effective = normalized;
+        if (strip > 0) {
+            const parts = normalized.split(/[\\/]/);
+            if (parts.length < strip) return false;
+            effective = parts.slice(strip).join(path.sep);
+        }
+        if (!effective || effective === ".") return false;
+        const resolved = path.resolve(root, effective);
         if (entry?.linkpath) {
-            const target = path.resolve(entry.type === "SymbolicLink" ? path.dirname(resolved) : destDir, entry.linkpath);
-            if (target !== destDir && !target.startsWith(destWithSep)) throw new Error("Archive link escapes destination");
+            const target = path.resolve(entry.type === "SymbolicLink" ? path.dirname(resolved) : root, entry.linkpath);
+            if (target !== root && !target.startsWith(destWithSep)) throw new Error("Archive link escapes destination");
         }
         return resolved.startsWith(destWithSep);
     };

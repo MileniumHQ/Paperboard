@@ -139,7 +139,7 @@ export async function extractPackageArchive(
     // wrapped: strip the wrapper dir; a wrapper-less archive leaves no bin/
     // behind, so it is re-extracted flat
     try {
-        await tar.extract({ file: archivePath, cwd: pkgDir, strip: 1, filter: makeSafeTarFilter(path.resolve(pkgDir)) });
+        await tar.extract({ file: archivePath, cwd: pkgDir, strip: 1, filter: makeSafeTarFilter(path.resolve(pkgDir), 1) });
         if (fs.existsSync(path.join(pkgDir, "bin"))) return;
     } catch (err) {
         logger.debug(`[engineArchives.ts] wrapped tar extraction failed; retrying flat:`, err);

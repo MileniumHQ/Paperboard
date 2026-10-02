@@ -208,4 +208,13 @@ describe("makeSafeTarFilter", () => {
         expect(filter("../outside.txt")).toBe(false);
         expect(filter("dist/../../../outside")).toBe(false);
     });
+
+    it("checks symlink targets against the stripped location", () => {
+        const filter = makeSafeTarFilter("/dest", 1);
+        expect(filter("pkg/dist/index.html")).toBe(true);
+        expect(filter("pkg/bin/link", { type: "SymbolicLink", linkpath: "run" })).toBe(true);
+        // pre-strip the link sits one level deeper, so this resolves under
+        // /dest; after strip it lands at /dest/bin/link and points outside
+        expect(() => filter("pkg/bin/link", { type: "SymbolicLink", linkpath: "../../outside" })).toThrow(/escapes/);
+    });
 });
