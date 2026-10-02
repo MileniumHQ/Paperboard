@@ -10,9 +10,9 @@ import {
     PaperText,
 } from "@paperboard-dev/paperui";
 import { formatBytes } from "../core/fit";
-import { DEFAULT_PROVIDER_ID, providerFor } from "../core/providers";
+import { OLLAMA_PROVIDER_ID, providerFor } from "../core/providers";
 import { UI_ACTION_IDS } from "../contract";
-import { call, errorText, state } from "../lib/state";
+import { call, errorText, openProviderSetup, state } from "../lib/state";
 import PermissionsView from "./PermissionsView";
 import SettingsView from "./SettingsView";
 
@@ -20,7 +20,8 @@ import SettingsView from "./SettingsView";
 export default function SettingsTab() {
     const [busy, setBusy] = createSignal(false);
     const [error, setError] = createSignal("");
-    const provider = providerFor(DEFAULT_PROVIDER_ID);
+    const provider = () => providerFor(state.provider.id);
+    const usingOllama = () => state.provider.id === OLLAMA_PROVIDER_ID;
     const runtime = () => state.runtime;
 
     const run = async (action: typeof UI_ACTION_IDS.installRuntime | typeof UI_ACTION_IDS.startRuntime) => {
@@ -36,21 +37,22 @@ export default function SettingsTab() {
     };
 
     const statusText = () => {
+        const label = provider().label;
         switch (runtime().status) {
             case "ready":
-                return `${provider.label} is running${runtime().version ? ` (v${runtime().version})` : ""}.`;
+                return `${label} is running${runtime().version ? ` (v${runtime().version})` : ""}.`;
             case "installing":
-                return `Installing ${provider.label}...`;
+                return `Installing ${label}...`;
             case "starting":
-                return `Starting ${provider.label}...`;
+                return `Starting ${label}...`;
             case "stopped":
-                return `${provider.label} is not running.`;
+                return `${label} is not running.`;
             case "missing":
-                return `${provider.label} is not installed.`;
+                return `${label} is not installed.`;
             case "error":
-                return runtime().error || `${provider.label} stopped unexpectedly.`;
+                return runtime().error || `${label} stopped unexpectedly.`;
             default:
-                return `Checking ${provider.label}...`;
+                return `Checking ${label}...`;
         }
     };
 
@@ -67,13 +69,28 @@ export default function SettingsTab() {
             <PermissionsView />
             <PaperSeparator />
             <PaperCard padding="full" gap="half">
-                <PaperText preset="subtitle">{provider.label} runtime</PaperText>
+                <PaperText preset="subtitle">Provider</PaperText>
+                <PaperText size={2} color="text-muted">
+                    {usingOllama()
+                        ? `${provider().label} runs models on this computer.`
+                        : `${provider().label}: ${state.provider.baseUrl}${state.provider.hasApiKey ? " (API key stored)" : ""}`}
+                </PaperText>
+                <div>
+                    <PaperButton onClick={openProviderSetup}>
+                        <PaperIcon>swap_horiz</PaperIcon> Change provider
+                    </PaperButton>
+                </div>
+            </PaperCard>
+
+            <Show when={usingOllama()}>
+            <PaperCard padding="full" gap="half">
+                <PaperText preset="subtitle">{provider().label} runtime</PaperText>
                 <PaperText size={2} color="text-muted">{statusText()}</PaperText>
                 <Show when={runtime().status === "installing"}>
                     <PaperProgress
                         value={runtime().install?.percent ?? 0}
                         max={100}
-                        aria-label={`Installing ${provider.label}`}
+                        aria-label={`Installing ${provider().label}`}
                     />
                 </Show>
                 <Show when={state.runtime.errorDetail}>
@@ -91,7 +108,7 @@ export default function SettingsTab() {
                             disabled={busy() || runtime().status === "installing"}
                             onClick={() => void run(UI_ACTION_IDS.installRuntime)}
                         >
-                            <PaperIcon>download</PaperIcon> Install {provider.label}
+                            <PaperIcon>download</PaperIcon> Install {provider().label}
                         </PaperButton>
                     </Show>
                     <Show when={runtime().packageInstalled !== false && runtime().status !== "ready"}>
@@ -100,7 +117,7 @@ export default function SettingsTab() {
                             disabled={busy() || runtime().status === "starting" || runtime().status === "installing"}
                             onClick={() => void run(UI_ACTION_IDS.startRuntime)}
                         >
-                            <PaperIcon>play_arrow</PaperIcon> Start {provider.label}
+                            <PaperIcon>play_arrow</PaperIcon> Start {provider().label}
                         </PaperButton>
                     </Show>
                 </div>
@@ -108,6 +125,7 @@ export default function SettingsTab() {
                     <PaperText size={2} color="danger" role="alert">{error()}</PaperText>
                 </Show>
             </PaperCard>
+            </Show>
         </PaperFlex>
     );
 }

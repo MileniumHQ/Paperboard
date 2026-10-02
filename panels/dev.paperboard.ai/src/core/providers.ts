@@ -4,8 +4,6 @@
 // it does not: models always carry their provider id, so installs and stops
 // can be labelled truthfully and more providers can be added by declaring one
 // here plus an adapter (see service/provider.ts).
-//
-// No auth tokens: every provider this panel can reach is local or loopback.
 
 export type ProviderKind = "ollama" | "openai-compatible";
 
@@ -27,15 +25,32 @@ export interface ProviderDefinition {
 }
 
 export const OLLAMA_PROVIDER_ID = "ollama";
+export const CUSTOM_PROVIDER_ID = "custom";
+
+const OLLAMA_PROVIDER: ProviderDefinition = {
+    id: OLLAMA_PROVIDER_ID,
+    label: "Ollama",
+    kind: "ollama",
+    runtime: { packageId: "ollama" },
+    canPull: true,
+};
+
+/**
+ * The user-supplied OpenAI-compatible endpoint. Its baseUrl is empty until
+ * configured; `activeProviders` substitutes the stored URL at runtime so the
+ * static definition (label, kind, capabilities) resolves in both processes.
+ */
+export const CUSTOM_PROVIDER: ProviderDefinition = {
+    id: CUSTOM_PROVIDER_ID,
+    label: "OpenAI-compatible endpoint",
+    kind: "openai-compatible",
+    canPull: false,
+    defaultCapabilities: ["completion", "tools"],
+};
 
 export const PROVIDERS: readonly ProviderDefinition[] = [
-    {
-        id: OLLAMA_PROVIDER_ID,
-        label: "Ollama",
-        kind: "ollama",
-        runtime: { packageId: "ollama" },
-        canPull: true,
-    },
+    OLLAMA_PROVIDER,
+    CUSTOM_PROVIDER,
 ];
 
 export const DEFAULT_PROVIDER_ID = OLLAMA_PROVIDER_ID;
@@ -51,4 +66,30 @@ export function providerFor(id: string | undefined): ProviderDefinition {
 
 export function providerLabel(id: string | undefined): string {
     return providerFor(id).label;
+}
+
+// A custom endpoint must be a real http(s) URL; a typo is refused here, at
+// the boundary, never dialed.
+export function normalizeBaseUrl(raw: string): string {
+    const value = raw.trim().replace(/\/+$/, "");
+    let url: URL;
+    try {
+        url = new URL(value);
+    } catch {
+        throw new Error(`"${raw.trim()}" is not a valid URL.`);
+    }
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+        throw new Error("The endpoint URL must start with http:// or https://");
+    }
+    return value;
+}
+
+/**
+ * The providers reachable right now. The custom endpoint only joins when it
+ * has a configured URL, so an unconfigured panel never dials an empty base.
+ */
+export function activeProviders(customBaseUrl?: string | null): ProviderDefinition[] {
+    const base = (customBaseUrl ?? "").trim().replace(/\/+$/, "");
+    if (!base) return [OLLAMA_PROVIDER];
+    return [OLLAMA_PROVIDER, { ...CUSTOM_PROVIDER, baseUrl: base }];
 }

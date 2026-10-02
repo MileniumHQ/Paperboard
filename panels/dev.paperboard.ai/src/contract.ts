@@ -22,6 +22,8 @@ export const ACTION_IDS = {
 export const UI_ACTION_IDS = {
     installRuntime: "ui-install-runtime",
     startRuntime: "ui-start-runtime",
+    setProvider: "ui-set-provider",
+    testProvider: "ui-test-provider",
     pullModel: "ui-pull-model",
     cancelPull: "ui-cancel-pull",
     deleteModel: "ui-delete-model",

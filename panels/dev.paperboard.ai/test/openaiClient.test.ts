@@ -16,16 +16,19 @@ const provider: ProviderDefinition = {
 
 let server: ReturnType<typeof Bun.serve> | null = null;
 let lastChatBody: any = null;
+let lastAuth: string | null = null;
 
 function start(): string {
     lastChatBody = null;
+    lastAuth = null;
     server = Bun.serve({
         port: 0,
         hostname: "127.0.0.1",
         async fetch(req) {
             const url = new URL(req.url);
             if (req.method === "GET" && url.pathname === "/v1/models") {
-                return Response.json({ data: [{ id: "local:7b" }, { id: "vision:1" }] });
+                lastAuth = req.headers.get("authorization");
+                return Response.json({ data: [{ id: "local:7b" }, { id: "vision:1" }, { id: "models/gemini-x" }] });
             }
             if (req.method === "POST" && url.pathname === "/v1/chat/completions") {
                 lastChatBody = await req.json();
@@ -62,12 +65,25 @@ afterEach(() => {
 describe("OpenAI-compatible client", () => {
     it("lists models from /v1/models", async () => {
         const client = new OpenAICompatibleClient({ ...provider, baseUrl: start() });
-        expect((await client.tags()).map((t) => t.name)).toEqual(["local:7b", "vision:1"]);
+        // a Google-style "models/" prefix is stripped from every id
+        expect((await client.tags()).map((t) => t.name)).toEqual(["local:7b", "vision:1", "gemini-x"]);
     });
 
     it("reports the provider's declared capabilities", async () => {
         const client = new OpenAICompatibleClient({ ...provider, baseUrl: start() });
         expect((await client.show("local:7b")).capabilities).toEqual(["completion", "tools"]);
+    });
+
+    it("sends a configured vault API key as a bearer token", async () => {
+        const client = new OpenAICompatibleClient({ ...provider, baseUrl: start() }, async () => "secret-key");
+        await client.tags();
+        expect(lastAuth).toBe("Bearer secret-key");
+    });
+
+    it("sends no Authorization header when no key is configured", async () => {
+        const client = new OpenAICompatibleClient({ ...provider, baseUrl: start() });
+        await client.tags();
+        expect(lastAuth).toBeNull();
     });
 
     it("streams content, reasoning, and assembled tool calls", async () => {

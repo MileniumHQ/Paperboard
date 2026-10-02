@@ -1,6 +1,9 @@
 import { describe, expect, it } from "bun:test";
 import {
+    activeProviders,
+    CUSTOM_PROVIDER_ID,
     DEFAULT_PROVIDER_ID,
+    normalizeBaseUrl,
     PROVIDERS,
     providerFor,
     providerLabel,
@@ -20,6 +23,26 @@ describe("providers", () => {
     it("falls back to the default for an unknown provider id", () => {
         expect(providerFor("apple-foundation").id).toBe("ollama");
         expect(providerLabel(undefined)).toBe("Ollama");
+    });
+
+    it("only dials the custom endpoint once it has a URL", () => {
+        expect(activeProviders().map((p) => p.id)).toEqual([DEFAULT_PROVIDER_ID]);
+        expect(activeProviders("  ").map((p) => p.id)).toEqual([DEFAULT_PROVIDER_ID]);
+        const withCustom = activeProviders("http://127.0.0.1:1234/");
+        expect(withCustom.map((p) => p.id)).toEqual([DEFAULT_PROVIDER_ID, CUSTOM_PROVIDER_ID]);
+        expect(withCustom.find((p) => p.id === CUSTOM_PROVIDER_ID)?.baseUrl).toBe("http://127.0.0.1:1234");
+    });
+
+    it("resolves the custom provider's label in the UI", () => {
+        expect(providerLabel(CUSTOM_PROVIDER_ID)).toBe("OpenAI-compatible endpoint");
+        expect(PROVIDERS.some((p) => p.id === CUSTOM_PROVIDER_ID)).toBe(true);
+    });
+
+    it("refuses a non-http endpoint URL", () => {
+        expect(normalizeBaseUrl("http://127.0.0.1:1234/")).toBe("http://127.0.0.1:1234");
+        expect(normalizeBaseUrl("https://example.com/v1/")).toBe("https://example.com/v1");
+        expect(() => normalizeBaseUrl("file:///etc/passwd")).toThrow(/http/);
+        expect(() => normalizeBaseUrl("not a url")).toThrow(/valid URL/);
     });
 });
 

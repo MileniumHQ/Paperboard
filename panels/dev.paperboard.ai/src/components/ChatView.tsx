@@ -2,7 +2,7 @@ import { createEffect, createMemo, createSignal, Index, Match, on, onCleanup, on
 import { PaperButton, PaperEmptyState, PaperIcon, PaperText } from "@paperboard-dev/paperui";
 import { actionsApi } from "@paperboard-dev/paperapi";
 import { UI_ACTION_IDS } from "../contract";
-import { DEFAULT_PROVIDER_ID, providerLabel } from "../core/providers";
+import { OLLAMA_PROVIDER_ID, providerLabel } from "../core/providers";
 import type { ReasoningLevel } from "../core/reasoning";
 import type { Attachment, Conversation } from "../core/types";
 import {
@@ -87,16 +87,20 @@ export default function ChatView() {
     const installed = createMemo(() => state.models.find((m) => m.name === model()));
     const generating = () => Boolean(conversation() && state.generating.includes(conversation()!.id));
     const waitingHere = () => state.approvals.filter((a) => a.conversationId === conversation()?.id).length;
+    const usingOllama = () => state.provider.id === OLLAMA_PROVIDER_ID;
 
     const disabledReason = (): string | undefined => {
-        if (state.runtime.status !== "ready") return `${providerLabel(DEFAULT_PROVIDER_ID)} is not running.`;
+        // a URL endpoint has no local runtime to wait for; if it is down the
+        // send fails with the endpoint's own error
+        if (usingOllama() && state.runtime.status !== "ready") return `${providerLabel(state.provider.id)} is not running.`;
         if (!model()) return "Choose a model for this chat.";
         if (!installed()) return `${model()} is not downloaded. Pick one from Models.`;
         return undefined;
     };
 
     const runtimeNotice = (): { text: string; action?: boolean } | null => {
-        const label = providerLabel(DEFAULT_PROVIDER_ID);
+        if (!usingOllama()) return null;
+        const label = providerLabel(state.provider.id);
         switch (state.runtime.status) {
             case "ready":
                 return null;
@@ -237,7 +241,11 @@ export default function ChatView() {
                             <PaperEmptyState
                                 icon="smart_toy"
                                 title="Ask anything"
-                                description="Replies are generated on this computer. Web searches are the only thing sent out, and only when the model searches."
+                                description={
+                                    usingOllama()
+                                        ? "Replies are generated on this computer. Web searches are the only thing sent out, and only when the model searches."
+                                        : "Replies come from the endpoint you configured."
+                                }
                             />
                             <Show when={state.models.length === 0}>
                                 <PaperButton variant="primary" onClick={() => setModelsOpen(true)}>
@@ -277,7 +285,7 @@ export default function ChatView() {
                             <PaperText size={2} color="text-muted">{notice().text}</PaperText>
                             <Show when={notice().action}>
                                 <PaperButton size="small" disabled={starting()} onClick={() => void startRuntime()}>
-                                    <PaperIcon>play_arrow</PaperIcon> Start {providerLabel(DEFAULT_PROVIDER_ID)}
+                                    <PaperIcon>play_arrow</PaperIcon> Start {providerLabel(state.provider.id)}
                                 </PaperButton>
                             </Show>
                         </div>

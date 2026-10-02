@@ -8,8 +8,9 @@ import {
 import "@paperboard-dev/paperui/style.css";
 import "@paperboard-dev/paperui/panel.css";
 import "./style.css";
-import { hydrate, hydration, hydrationError } from "./lib/state";
+import { hydrate, hydration, hydrationError, setupRequested, state } from "./lib/state";
 import ChatView from "./components/ChatView";
+import Setup from "./components/Setup";
 
 export default function App() {
     onMount(() => void hydrate());
@@ -26,6 +27,9 @@ export default function App() {
                     <PaperEmptyState icon="cloud_off" title="The AI service is not answering" description={hydrationError()} />
                     <PaperButton variant="primary" onClick={() => void hydrate()}>Try again</PaperButton>
                 </PaperCenteredInterface>
+            </Match>
+            <Match when={!state.provider.configured || setupRequested()}>
+                <Setup />
             </Match>
             <Match when={true}>
                 <ChatView />

@@ -18,7 +18,7 @@ import {
 import { UI_ACTION_IDS } from "../contract";
 import { isValidModelRef, modelRef, searchCatalog, type CatalogModel, type CatalogSort } from "../core/catalog";
 import { formatBytes } from "../core/fit";
-import { DEFAULT_PROVIDER_ID, providerFor, providerLabel } from "../core/providers";
+import { OLLAMA_PROVIDER_ID, providerFor, providerLabel } from "../core/providers";
 import type { InstalledModel } from "../core/types";
 import { catalog, catalogEntry, fitFor, makerOf } from "../lib/catalog";
 import { ensureProviderReady } from "../lib/provisioning";
@@ -71,9 +71,20 @@ export default function ModelBrowser(props: ModelBrowserProps) {
     let root: HTMLDivElement | undefined;
 
     const mode = () => props.mode ?? "pick";
+    const isEndpoint = () => state.provider.id !== OLLAMA_PROVIDER_ID;
     const results = createMemo(() => searchCatalog(catalog, { text: query(), sort: sort() }));
     const pageCount = () => Math.max(1, Math.ceil(results().length / PAGE_SIZE));
     const visible = createMemo(() => results().slice((page() - 1) * PAGE_SIZE, page() * PAGE_SIZE));
+    // endpoint models have no catalog: they are the list, and search/pagination
+    // must cover them instead of a library that does not exist
+    const endpointResults = createMemo(() => {
+        const q = query().trim().toLowerCase();
+        return q ? state.models.filter((m) => m.name.toLowerCase().includes(q)) : state.models;
+    });
+    const endpointPageCount = () => Math.max(1, Math.ceil(endpointResults().length / PAGE_SIZE));
+    const endpointVisible = createMemo(() =>
+        endpointResults().slice((page() - 1) * PAGE_SIZE, page() * PAGE_SIZE),
+    );
     const tagOf = (model: CatalogModel) => tags[model.name] ?? defaultTag(model);
     const refOf = (model: CatalogModel) => modelRef(model.name, tagOf(model));
     const isSelected = (ref: string) => props.selected === ref;
@@ -85,7 +96,21 @@ export default function ModelBrowser(props: ModelBrowserProps) {
 
     const goToPage = (next: number) => {
         setPage(next);
-        root?.scrollTo({ top: 0, behavior: "smooth" });
+        // this flex column is not the scroller (the modal body owns it), so
+        // walk up to the nearest scrollable ancestor and reset it to the top
+        let el: HTMLElement | null = root?.parentElement ?? null;
+        while (el) {
+            const overflowY = getComputedStyle(el).overflowY;
+            if (
+                (overflowY === "auto" || overflowY === "scroll" || overflowY === "overlay") &&
+                el.scrollHeight > el.clientHeight
+            ) {
+                el.scrollTo({ top: 0, behavior: "smooth" });
+                return;
+            }
+            el = el.parentElement;
+        }
+        root?.scrollIntoView({ block: "start", behavior: "smooth" });
     };
 
     const download = async (ref: string) => {
@@ -134,27 +159,30 @@ export default function ModelBrowser(props: ModelBrowserProps) {
         }
     };
 
-    function InstalledCard(cardProps: { model: InstalledModel }) {
+    function InstalledCard(cardProps: { model: InstalledModel; endpoint?: boolean }) {
         const entry = () => catalogEntry(cardProps.model.name);
         const maker = () => makerOf(cardProps.model.name);
         const isDefault = () => state.settings.defaultModel === cardProps.model.name;
         const chosen = () => isSelected(cardProps.model.name);
+        const endpoint = () => Boolean(cardProps.endpoint);
         return (
             <PaperMediaCard
-                icon={<MakerLogo icon={maker()?.icon} size="large" />}
+                icon={endpoint() ? <PaperIcon>cloud</PaperIcon> : <MakerLogo icon={maker()?.icon} size="large" />}
                 title={cardProps.model.name}
-                subtitle={maker()?.name ?? "On this computer"}
-                description={entry()?.description ?? "Downloaded and ready to chat."}
+                subtitle={endpoint() ? undefined : (maker()?.name ?? "On this computer")}
+                description={endpoint() ? undefined : (entry()?.description ?? "Downloaded and ready to chat.")}
                 badge={
                     <Show when={isDefault()}>
                         <PaperBadge variant="primary" icon="star">Default</PaperBadge>
                     </Show>
                 }
                 footerLeft={
-                    <PaperText size={1} color="text-subtle">
-                        {[cardProps.model.parameterSize, cardProps.model.quantization, formatBytes(cardProps.model.sizeBytes)].filter(Boolean).join(" · ")}
-                        {cardProps.model.contextLength ? ` · ${Math.round(cardProps.model.contextLength / 1024)}K context` : ""}
-                    </PaperText>
+                    endpoint() ? undefined : (
+                        <PaperText size={1} color="text-subtle">
+                            {[cardProps.model.parameterSize, cardProps.model.quantization, formatBytes(cardProps.model.sizeBytes)].filter(Boolean).join(" · ")}
+                            {cardProps.model.contextLength ? ` · ${Math.round(cardProps.model.contextLength / 1024)}K context` : ""}
+                        </PaperText>
+                    )
                 }
                 footerRight={
                     <Show when={props.manage}>
@@ -169,15 +197,17 @@ export default function ModelBrowser(props: ModelBrowserProps) {
                             >
                                 star
                             </PaperButton>
-                            <PaperButton
-                                icon
-                                size="tiny"
-                                variant="text"
-                                aria-label={`Delete ${cardProps.model.name}`}
-                                onClick={() => setConfirmDelete(cardProps.model.name)}
-                            >
-                                delete
-                            </PaperButton>
+                            <Show when={!endpoint()}>
+                                <PaperButton
+                                    icon
+                                    size="tiny"
+                                    variant="text"
+                                    aria-label={`Delete ${cardProps.model.name}`}
+                                    onClick={() => setConfirmDelete(cardProps.model.name)}
+                                >
+                                    delete
+                                </PaperButton>
+                            </Show>
                         </span>
                     </Show>
                 }
@@ -228,13 +258,14 @@ export default function ModelBrowser(props: ModelBrowserProps) {
                 icon="search"
                 fullWidth
                 aria-label="Search models"
-                placeholder="Search by name, maker or use"
+                placeholder={isEndpoint() ? "Search models" : "Search by name, maker or use"}
                 value={query()}
                 onInput={(e) => {
                     setQuery(e.currentTarget.value);
                     setPage(1);
                 }}
             />
+            <Show when={!isEndpoint()}>
             <div class={styles.sortRow}>
                 <PaperSelectMenu
                     name="model-sort"
@@ -249,6 +280,7 @@ export default function ModelBrowser(props: ModelBrowserProps) {
                     <PaperSelectMenuItem value="downloads">Most downloaded</PaperSelectMenuItem>
                 </PaperSelectMenu>
             </div>
+            </Show>
 
             <Show when={error()}>
                 <div class={styles.error} role="alert">
@@ -257,14 +289,14 @@ export default function ModelBrowser(props: ModelBrowserProps) {
                 </div>
             </Show>
 
-            <Show when={state.runtime.status === "installing" || state.runtime.status === "starting"}>
+            <Show when={state.provider.id === OLLAMA_PROVIDER_ID && (state.runtime.status === "installing" || state.runtime.status === "starting")}>
                 <div class={styles.pulls} aria-label="Preparing the model provider">
                     <div class={styles.pull}>
                         <div class={styles.pullHead}>
                             <PaperText size={2} weight={600} truncate>
                                 {state.runtime.status === "installing"
-                                    ? `Installing ${providerFor(DEFAULT_PROVIDER_ID).label}...`
-                                    : `Starting ${providerFor(DEFAULT_PROVIDER_ID).label}...`}
+                                    ? `Installing ${providerFor(OLLAMA_PROVIDER_ID).label}...`
+                                    : `Starting ${providerFor(OLLAMA_PROVIDER_ID).label}...`}
                             </PaperText>
                             <PaperText size={1} color="text-muted">
                                 {state.runtime.status === "installing" ? `${state.runtime.install?.percent ?? 0}%` : ""}
@@ -274,7 +306,7 @@ export default function ModelBrowser(props: ModelBrowserProps) {
                             <PaperProgress
                                 value={state.runtime.install?.percent ?? 0}
                                 max={100}
-                                aria-label={`Installing ${providerFor(DEFAULT_PROVIDER_ID).label}`}
+                                aria-label={`Installing ${providerFor(OLLAMA_PROVIDER_ID).label}`}
                             />
                         </Show>
                     </div>
@@ -302,6 +334,28 @@ export default function ModelBrowser(props: ModelBrowserProps) {
                 </div>
             </Show>
 
+            <Show when={isEndpoint()}>
+                <PaperText preset="section">Available models</PaperText>
+                <Show
+                    when={endpointResults().length > 0}
+                    fallback={<PaperEmptyState icon="search_off" title="No models match" description="Try another search." />}
+                >
+                    <PaperMediaCardGroup>
+                        <For each={endpointVisible()}>{(m) => <InstalledCard model={m} endpoint />}</For>
+                    </PaperMediaCardGroup>
+                    <PaperPagination
+                        page={page()}
+                        pageCount={endpointPageCount()}
+                        onPageChange={goToPage}
+                        label="Model pages"
+                    />
+                    <PaperText size={1} color="text-muted" class={styles.count}>
+                        {endpointResults().length} model{endpointResults().length === 1 ? "" : "s"}
+                    </PaperText>
+                </Show>
+            </Show>
+
+            <Show when={!isEndpoint()}>
             <Show when={state.models.length > 0}>
                 <PaperText preset="section">On this computer</PaperText>
                 <PaperMediaCardGroup>
@@ -327,7 +381,9 @@ export default function ModelBrowser(props: ModelBrowserProps) {
                     {results().length} model{results().length === 1 ? "" : "s"}
                 </PaperText>
             </Show>
+            </Show>
 
+            <Show when={state.provider.id === OLLAMA_PROVIDER_ID}>
             <div class={styles.byName}>
                 <PaperText size={1} color="text-muted">Not listed? Download any Ollama library model by name.</PaperText>
                 <div class={styles.byNameRow}>
@@ -347,6 +403,7 @@ export default function ModelBrowser(props: ModelBrowserProps) {
                     </PaperButton>
                 </div>
             </div>
+            </Show>
 
             <ModelDetailModal
                 model={detail()}

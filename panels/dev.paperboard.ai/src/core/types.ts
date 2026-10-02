@@ -90,6 +90,22 @@ export interface Settings {
     promptStyle: PromptStyle;
 }
 
+export type ProviderChoice = "ollama" | "custom";
+
+/**
+ * Which provider the panel talks to. The API key never travels here: only
+ * whether one is stored in the vault (the key itself stays a vault secret).
+ */
+export interface ProviderConfig {
+    id: ProviderChoice;
+    /** the custom endpoint URL, empty for Ollama */
+    baseUrl: string;
+    /** an API key is stored in the vault for the custom endpoint */
+    hasApiKey: boolean;
+    /** the user has completed provider setup */
+    configured: boolean;
+}
+
 export type PromptStyle = "no-nonsense" | "standard" | "quirky" | "over-the-top";
 
 /** A file or image the user attached to a message. */
@@ -189,6 +205,8 @@ export interface PendingApproval {
 
 export interface AiState {
     runtime: RuntimeState;
+    /** the active provider and how the panel reaches it */
+    provider: ProviderConfig;
     hardware: HardwareState;
     models: InstalledModel[];
     pulls: PullProgress[];
@@ -217,6 +235,7 @@ export const DEFAULT_SETTINGS: Settings = {
 export function initialState(): AiState {
     return {
         runtime: { status: "checking", compute: [] },
+        provider: { id: "ollama", baseUrl: "", hasApiKey: false, configured: false },
         hardware: { gpus: [], ramBytes: 0, errors: [], loaded: false },
         models: [],
         pulls: [],

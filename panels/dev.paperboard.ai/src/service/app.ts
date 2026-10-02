@@ -11,12 +11,21 @@ import {
     packageApi,
     panelsApi,
     processApi,
+    secretsApi,
     systemApi,
     type ServiceContext,
 } from "@paperboard-dev/paperapi";
 import { EVENTS, OLLAMA_PACKAGE, OLLAMA_PROC_ID, PANEL_ID, TRIGGER_IDS } from "../contract";
 import { askSystemPrompt, isConversationId, isPromptStyle } from "../core/conversation";
-import { DEFAULT_PROVIDER_ID, PROVIDERS, providerFor } from "../core/providers";
+import {
+    activeProviders,
+    CUSTOM_PROVIDER,
+    CUSTOM_PROVIDER_ID,
+    DEFAULT_PROVIDER_ID,
+    normalizeBaseUrl,
+    OLLAMA_PROVIDER_ID,
+    providerFor,
+} from "../core/providers";
 import { isReasoningLevel } from "../core/reasoning";
 import type { RegistryAction } from "../core/tools";
 import {
@@ -25,6 +34,8 @@ import {
     type Conversation,
     type ModelSpeed,
     type PromptStyle,
+    type ProviderChoice,
+    type ProviderConfig,
     type RuntimeState,
     type Settings,
 } from "../core/types";
@@ -32,6 +43,7 @@ import { republishPublicActions } from "./actions";
 import { runShell, webSearch } from "./builtins";
 import { askOnce, ChatEngine, type ApprovalDecision } from "./chat";
 import { canonicalRef, ModelManager } from "./models";
+import { OpenAICompatibleClient } from "./openaiClient";
 import { providerClients } from "./provider";
 import { OllamaRuntime, type ProcessHost, type RuntimeLayout } from "./runtime";
 import { ConversationStore } from "./store";
@@ -42,7 +54,12 @@ interface StoredConfig {
     settings?: Partial<Settings>;
     alwaysAllowed?: string[];
     speeds?: Record<string, ModelSpeed>;
+    /** provider choice and custom endpoint; the API key lives in the vault */
+    provider?: { id?: string; baseUrl?: string };
 }
+
+// the custom endpoint's API key is a vault secret, never panel config
+const OPENAI_API_KEY_SECRET = "openai-api-key";
 
 const MAX_ALWAYS_ALLOWED = 500;
 const MAX_SPEEDS = 100;
@@ -94,7 +111,7 @@ export class AiApp {
             ...(options.readyTimeoutMs !== undefined ? { readyTimeoutMs: options.readyTimeoutMs } : {}),
         });
         this.models = new ModelManager({
-            clients: () => providerClients({ ollama: this.runtime.api }, PROVIDERS),
+            clients: () => this.buildProviderClients(),
             onModels: (models) => {
                 this.ctx.setState({ models });
                 // the model dropdowns on Ask AI and the triggers follow this list
@@ -115,6 +132,96 @@ export class AiApp {
         if (patch.status === "stopped" || patch.status === "error") {
             this.models.cancelAll();
         }
+    }
+
+    // ─── provider selection ────────────────────────────────────────────────
+
+    /** The providers reachable right now, from the stored provider choice. */
+    private configuredProviders() {
+        const provider = this.ctx?.state.provider;
+        return activeProviders(provider && provider.id === CUSTOM_PROVIDER_ID ? provider.baseUrl : undefined);
+    }
+
+    private async apiKeyFor(providerId: string): Promise<string | undefined> {
+        if (providerId !== CUSTOM_PROVIDER_ID) return undefined;
+        if (!this.ctx?.state.provider.hasApiKey) return undefined;
+        const { found, value } = await secretsApi.get(OPENAI_API_KEY_SECRET, PANEL_ID);
+        return found && value ? value : undefined;
+    }
+
+    private async secretExists(): Promise<boolean> {
+        try {
+            const { found, value } = await secretsApi.get(OPENAI_API_KEY_SECRET, PANEL_ID);
+            return found && Boolean(value);
+        } catch (err) {
+            console.warn("[ai] could not read the endpoint API key from the vault:", String(err));
+            return false;
+        }
+    }
+
+    private buildProviderClients() {
+        return providerClients(
+            { ollama: this.runtime.api, apiKeyFor: (id) => this.apiKeyFor(id) },
+            this.configuredProviders(),
+        );
+    }
+
+    private providerStateFromStored(): ProviderConfig {
+        const saved = this.stored.provider;
+        const id: ProviderChoice = saved?.id === CUSTOM_PROVIDER_ID ? CUSTOM_PROVIDER_ID : OLLAMA_PROVIDER_ID;
+        const baseUrl = id === CUSTOM_PROVIDER_ID && typeof saved?.baseUrl === "string" ? saved.baseUrl : "";
+        return { id, baseUrl, hasApiKey: false, configured: Boolean(saved?.id) };
+    }
+
+    /**
+     * Persists the chosen provider. The custom endpoint's API key goes to the
+     * vault (panel id explicit), never to the config document or state.
+     */
+    async setProvider(input: {
+        id?: unknown;
+        baseUrl?: unknown;
+        apiKey?: unknown;
+        clearApiKey?: unknown;
+    }): Promise<ProviderConfig> {
+        const id: ProviderChoice = input.id === CUSTOM_PROVIDER_ID ? CUSTOM_PROVIDER_ID : OLLAMA_PROVIDER_ID;
+        let baseUrl = "";
+        if (id === CUSTOM_PROVIDER_ID) {
+            if (typeof input.baseUrl !== "string" || !input.baseUrl.trim()) {
+                throw new Error("An endpoint URL is required.");
+            }
+            baseUrl = normalizeBaseUrl(input.baseUrl);
+            if (input.clearApiKey === true) {
+                await secretsApi.delete(OPENAI_API_KEY_SECRET, PANEL_ID);
+            } else if (typeof input.apiKey === "string" && input.apiKey.trim()) {
+                await secretsApi.set(OPENAI_API_KEY_SECRET, input.apiKey.trim(), PANEL_ID);
+            }
+        }
+        await this.saveConfig((c) => {
+            c.provider = { id, baseUrl };
+        });
+        const hasApiKey = id === CUSTOM_PROVIDER_ID ? await this.secretExists() : false;
+        const provider: ProviderConfig = { id, baseUrl, hasApiKey, configured: true };
+        this.ctx.setState({ provider });
+        if (id === CUSTOM_PROVIDER_ID) {
+            await this.models.refresh();
+        } else if (this.ctx.state.runtime.status !== "ready") {
+            // setup already started Ollama; never bounce a ready runtime
+            await this.startIfInstalled();
+        }
+        return provider;
+    }
+
+    /** Probes a custom endpoint's /v1/models without persisting anything. */
+    async testProvider(input: { baseUrl?: unknown; apiKey?: unknown }): Promise<{ models: number }> {
+        if (typeof input.baseUrl !== "string" || !input.baseUrl.trim()) {
+            throw new Error("An endpoint URL is required.");
+        }
+        const baseUrl = normalizeBaseUrl(input.baseUrl);
+        const typed = typeof input.apiKey === "string" && input.apiKey.trim() ? input.apiKey.trim() : undefined;
+        const key = typed ?? (await this.apiKeyFor(CUSTOM_PROVIDER_ID));
+        const client = new OpenAICompatibleClient({ ...CUSTOM_PROVIDER, baseUrl }, async () => key);
+        const tags = await client.tags();
+        return { models: tags.length };
     }
 
     async init(ctx: Ctx): Promise<void> {
@@ -157,7 +264,12 @@ export class AiApp {
         // state surfaces through patchRuntime either way.
         this.resolveReady();
         void this.refreshHardware();
-        void this.startIfInstalled().catch((err) => console.error("[ai] Ollama startup task failed:", String(err)));
+        if (this.ctx.state.provider.id === CUSTOM_PROVIDER_ID) {
+            // a URL provider needs no runtime; just read its model list
+            void this.models.refresh().catch((err) => console.error("[ai] listing endpoint models failed:", String(err)));
+        } else {
+            void this.startIfInstalled().catch((err) => console.error("[ai] Ollama startup task failed:", String(err)));
+        }
     }
 
     // ─── settings & permissions (the panel's config document) ────────────
@@ -167,8 +279,11 @@ export class AiApp {
             const saved = (await config.get<StoredConfig | null>(PANEL_ID)) ?? {};
             this.stored = typeof saved === "object" ? saved : {};
             this.configLoaded = true;
+            const provider = this.providerStateFromStored();
+            if (provider.id === CUSTOM_PROVIDER_ID) provider.hasApiKey = await this.secretExists();
             this.ctx.setState({
                 settings: clampSettings(this.stored.settings),
+                provider,
                 alwaysAllowed: Array.isArray(this.stored.alwaysAllowed) ? this.stored.alwaysAllowed.filter((k) => typeof k === "string") : [],
                 speeds: this.stored.speeds && typeof this.stored.speeds === "object" ? this.stored.speeds : {},
             });
@@ -413,7 +528,7 @@ export class AiApp {
     }
 
     private chatClientFor(providerId: string) {
-        const client = providerClients({ ollama: this.runtime.api }, PROVIDERS).get(providerId);
+        const client = this.buildProviderClients().get(providerId);
         if (!client) throw new Error(`${providerFor(providerId).label} is not running. Start it from the AI panel first.`);
         return client;
     }

@@ -1,5 +1,6 @@
 import { createSignal, Match, Show, Switch } from "solid-js";
 import { PaperButton, PaperCode, PaperIcon, PaperLoader, PaperText } from "@paperboard-dev/paperui";
+import { OLLAMA_PROVIDER_ID } from "../core/providers";
 import { UI_ACTION_IDS } from "../contract";
 import { call, errorText, state } from "../lib/state";
 import styles from "./RuntimeBanner.module.css";
@@ -23,7 +24,7 @@ export default function RuntimeBanner() {
     };
 
     return (
-        <Show when={state.runtime.status !== "ready"}>
+        <Show when={state.provider.id === OLLAMA_PROVIDER_ID && state.runtime.status !== "ready"}>
             <div class={styles.RuntimeBanner} data-status={state.runtime.status} role="status">
                 <Switch>
                     <Match when={state.runtime.status === "checking" || state.runtime.status === "starting"}>

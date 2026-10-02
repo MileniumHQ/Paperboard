@@ -26,6 +26,8 @@ export type ProviderClients = Map<string, ModelClient>;
 export interface ProviderClientDeps {
     /** the native Ollama client, or null while its runtime is not ready */
     ollama: ModelClient | null;
+    /** resolves a provider's vault-stored API key, if it has one */
+    apiKeyFor?: (providerId: string) => Promise<string | undefined>;
 }
 
 /**
@@ -41,7 +43,16 @@ export function providerClients(deps: ProviderClientDeps, providers: readonly Pr
             if (deps.ollama) clients.set(provider.id, deps.ollama);
             continue;
         }
-        if (provider.baseUrl) clients.set(provider.id, new OpenAICompatibleClient(provider));
+        if (provider.baseUrl) {
+            const apiKeyFor = deps.apiKeyFor;
+            clients.set(
+                provider.id,
+                new OpenAICompatibleClient(
+                    provider,
+                    apiKeyFor ? () => apiKeyFor(provider.id) : undefined,
+                ),
+            );
+        }
     }
     return clients;
 }

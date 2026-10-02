@@ -1,7 +1,8 @@
 // Chat and model listing over the OpenAI /v1 surface, for providers that are
 // an endpoint rather than a managed binary (llama.cpp server, LM Studio, an
-// Apple Foundation Models bridge, ...). The panel only ever talks to loopback
-// endpoints and sends no credentials, so this client has no auth surface.
+// Apple Foundation Models bridge, a hosted OpenAI-compatible API, ...). An
+// endpoint may require an API key; when one is configured it is read from the
+// vault per request and never stored in panel config or state.
 
 import { LineSplitter } from "../core/ollamaLog";
 import type { ProviderDefinition } from "../core/providers";
@@ -72,16 +73,26 @@ interface PendingToolCall {
 }
 
 export class OpenAICompatibleClient {
-    constructor(private readonly provider: ProviderDefinition) {}
+    constructor(
+        private readonly provider: ProviderDefinition,
+        /** resolves the vault-stored API key, if one is configured */
+        private readonly getApiKey?: () => Promise<string | undefined>,
+    ) {}
 
     private get baseUrl(): string {
         return (this.provider.baseUrl ?? "").replace(/\/+$/, "");
     }
 
+    private async authHeaders(): Promise<Record<string, string>> {
+        if (!this.getApiKey) return {};
+        const key = await this.getApiKey().catch(() => undefined);
+        return key ? { Authorization: `Bearer ${key}` } : {};
+    }
+
     private async json<T>(path: string, init?: RequestInit, timeoutMs = REQUEST_TIMEOUT_MS): Promise<T> {
         const res = await fetch(`${this.baseUrl}${path}`, {
             ...init,
-            headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+            headers: { "Content-Type": "application/json", ...(await this.authHeaders()), ...(init?.headers ?? {}) },
             signal: init?.signal ?? AbortSignal.timeout(timeoutMs),
         });
         if (!res.ok) {
@@ -97,7 +108,13 @@ export class OpenAICompatibleClient {
         const body = await this.json<{ data?: { id?: string }[] }>("/v1/models");
         if (!Array.isArray(body.data)) return [];
         return body.data
-            .map((m) => (typeof m.id === "string" ? { name: m.id, size: 0 } : null))
+            .map((m) => {
+                if (typeof m.id !== "string") return null;
+                // Google's compat endpoint prefixes ids with "models/";
+                // strip it so the name is what every other server returns
+                const name = m.id.replace(/^models\//, "");
+                return name ? { name, size: 0 } : null;
+            })
             .filter((m): m is TagEntry => m !== null);
     }
 
@@ -122,7 +139,7 @@ export class OpenAICompatibleClient {
 
         const res = await fetch(`${this.baseUrl}/v1/chat/completions`, {
             method: "POST",
-            headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+            headers: { "Content-Type": "application/json", Accept: "text/event-stream", ...(await this.authHeaders()) },
             body: JSON.stringify(body),
             signal,
         });

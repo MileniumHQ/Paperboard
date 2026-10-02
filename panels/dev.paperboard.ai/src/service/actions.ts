@@ -190,6 +190,12 @@ export function uiActions(app: AiApp): ActionDefinition[] {
     return [
         ui(UI_ACTION_IDS.installRuntime, "Install Ollama", () => ready(() => app.installRuntime())),
         ui(UI_ACTION_IDS.startRuntime, "Start Ollama", () => ready(() => app.startRuntime())),
+        ui(UI_ACTION_IDS.setProvider, "Set provider", (i) =>
+            ready(() => app.setProvider({ id: i.id, baseUrl: i.baseUrl, apiKey: i.apiKey, clearApiKey: i.clearApiKey })),
+        ),
+        ui(UI_ACTION_IDS.testProvider, "Test provider", (i) =>
+            ready(() => app.testProvider({ baseUrl: i.baseUrl, apiKey: i.apiKey })),
+        ),
         ui(UI_ACTION_IDS.pullModel, "Download model", (i) =>
             ready(() => {
                 // resolves when accepted; progress and failure travel in state
