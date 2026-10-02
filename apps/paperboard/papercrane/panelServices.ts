@@ -20,17 +20,35 @@ interface RunningService {
     startedAt: number;
 }
 
-function runtime(): { command: string; prefix: string[] } {
-    const base = path.basename(process.execPath).toLowerCase();
-    if (process.versions.electron || /^(node|bun)(\.exe)?$/.test(base)) return { command: process.execPath, prefix: [] };
+// How to spawn a panel service on this host. Node, Bun and Electron-as-node
+// run the service module directly. A compiled PaperCrane binary embeds Bun's
+// runtime, so it re-invokes its own executable in --panel-service mode and
+// needs NO external Node/Bun: a remote machine running only the daemon binary
+// can still run panel services. Exported pure for the decision test.
+export function resolveServiceRuntime(
+    execPath: string,
+    versions: NodeJS.ProcessVersions,
+    platform: NodeJS.Platform,
+    pathEnv: string,
+): { command: string; prefix: string[] } | null {
+    const base = path.basename(execPath).toLowerCase();
+    if (versions.electron || /^(node|bun)(\.exe)?$/.test(base)) return { command: execPath, prefix: [] };
+    // embedded Bun runtime (compiled binary): run the service through our own entrypoint
+    if ((versions as { bun?: string }).bun) return { command: execPath, prefix: ["--panel-service"] };
     for (const name of ["bun", "node"]) {
-        for (const dir of (process.env.PATH || "").split(path.delimiter)) {
-            const candidate = path.join(dir, process.platform === "win32" ? `${name}.exe` : name);
+        for (const dir of pathEnv.split(path.delimiter)) {
+            const candidate = path.join(dir, platform === "win32" ? `${name}.exe` : name);
             try { fs.accessSync(candidate, fs.constants.X_OK); return { command: candidate, prefix: [] }; }
             catch (err) { logger.debug(`[services] runtime candidate unavailable: ${candidate}`, err); }
         }
     }
-    throw new Error("Panel services require Node.js or Bun on this host. Install a runtime before starting this panel.");
+    return null;
+}
+
+function runtime(): { command: string; prefix: string[] } {
+    const resolved = resolveServiceRuntime(process.execPath, process.versions, process.platform, process.env.PATH || "");
+    if (!resolved) throw new Error("Panel services require Node.js or Bun on this host. Install a runtime before starting this panel.");
+    return resolved;
 }
 
 /** Every generation owns its child, readiness receipt and timers. No

@@ -8,6 +8,7 @@
 // in ./index — importing ./index has zero autostart side effects in any
 // host, so a GUI import can never shadow the embedded daemon and a test
 // import can never boot a server.
+import { pathToFileURL } from "url";
 import { parseCliArgs, startPaperCraneServer } from "./index";
 import { logger } from "./logger";
 import { getPaperboardDir } from "./paths";
@@ -38,6 +39,16 @@ async function main(): Promise<void> {
     if (typeof supervise === "string" && supervise) {
         const { runSupervisor } = await import("./supervisor");
         await runSupervisor(supervise);
+        return;
+    }
+    // Compiled-binary service mode: the daemon re-invokes itself to run an
+    // installed panel's service module in its own process, so a remote needs
+    // no separate Node/Bun. The parent daemon owns this child (kill by PID).
+    // No server is started here; the service opens its own socket and exits
+    // when the daemon stops it.
+    const panelService = (cliOptions as { panelService?: unknown }).panelService;
+    if (typeof panelService === "string" && panelService) {
+        await import(pathToFileURL(panelService).href);
         return;
     }
     await startPaperCraneServer(cliOptions);

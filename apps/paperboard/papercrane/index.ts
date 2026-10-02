@@ -603,7 +603,7 @@ export function startPaperCraneServer(
 
 import { Command } from "commander";
 
-export function parseCliArgs(argv: string[] = process.argv): ServerOptions & { supervise?: string } {
+export function parseCliArgs(argv: string[] = process.argv): ServerOptions & { supervise?: string; panelService?: string } {
     const program = new Command();
     program
         .name("papercrane")
@@ -615,10 +615,11 @@ export function parseCliArgs(argv: string[] = process.argv): ServerOptions & { s
         .option("--port <number>", "listen port", (v) => Number(v))
         .option("--host <host>", "listen host")
         .option("--allow-registry-override", "honor ORIGAMI_REGISTRY_URL even in production")
-        .option("--supervise <procId>", "run as supervisor for procId");
+        .option("--supervise <procId>", "run as supervisor for procId")
+        .option("--panel-service <path>", "run a panel's service module (internal)");
     program.parse(argv);
     const opts = program.opts();
-    const options: ServerOptions & { supervise?: string } = {};
+    const options: ServerOptions & { supervise?: string; panelService?: string } = {};
     // --no-auth surfaces as opts.auth === false, check both spellings
     if (opts.auth === false || opts.noAuth || opts.local) options.noAuth = true;
     if (opts.headless) options.headless = true;
@@ -629,6 +630,9 @@ export function parseCliArgs(argv: string[] = process.argv): ServerOptions & { s
     if (typeof opts.host === "string" && opts.host) options.host = opts.host;
     if (typeof opts.supervise === "string" && opts.supervise) {
         (options as any).supervise = opts.supervise;
+    }
+    if (typeof opts.panelService === "string" && opts.panelService) {
+        options.panelService = opts.panelService;
     }
     return options;
 }
