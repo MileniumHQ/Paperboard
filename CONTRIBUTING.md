@@ -19,7 +19,6 @@ Pull requests are welcome. By submitting one you agree to the
 
 - Large PRs and drive-by feature work.
 - Opinionated rewrites.
-- Anything that widens product scope without us asking for it first.
 
 ## Discuss first
 
@@ -34,12 +33,13 @@ guarantee we want the PR, but it saves you the time if we don't.
    logic without a test needs a one-line reason in the PR.
 4. Run the gate from the repo root and make sure it is green:
 
-   ```bash
-   bun run gate
-   ```
+    ```bash
+    bun run gate
+    ```
 
-   The gate does not rebuild panels. Run `bun run build:panels` to see panel
-   changes in the app.
+    The gate does not rebuild panels. Run `bun run build:panels` to see panel
+    changes in the app.
+
 5. Open the PR and accept the CLA in the description.
 
 ## What a good PR includes
