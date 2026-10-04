@@ -84,6 +84,8 @@ try {
                 .locator(".site-topbar__name")
                 .evaluate((element) => getComputedStyle(element).color),
         );
+        assert.equal(await page.locator('.site-topbar__name').evaluate(element => getComputedStyle(element).textShadow), 'none');
+        assert.ok(await page.locator('.site-topbar__name').evaluate(element => getComputedStyle(element).color === getComputedStyle(element).getPropertyValue('--paper-marketing-ink').trim() || getComputedStyle(element).color === 'rgb(8, 12, 18)'), 'Wordmark uses plain dark ink');
         await page.waitForFunction(() =>
             document
                 .querySelector(".download-cta paper-button")
