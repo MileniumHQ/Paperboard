@@ -43,13 +43,29 @@ export function resolveLocalPanelFile(
     // dist build wins over loose files
     const distCandidate = path.join(panelDir, "dist", normalized);
     let targetFile: string | null = null;
+    let intendedSubpath = normalized;
     if (fs.existsSync(distCandidate)) {
         targetFile = distCandidate;
+        intendedSubpath = path.join("dist", normalized);
     } else if (fs.existsSync(resolved)) {
         targetFile = resolved;
     }
     if (targetFile === null) return { kind: "not-found" };
     try {
+        // The panel directory itself may be a symlink: a dev-linked panel
+        // is installed exactly that way (`isDevLink`), and the engine lists
+        // it on purpose. Nothing BELOW the panel root may be a link though —
+        // a planted `dist/` or a leaf symlink would map the literal path
+        // outside the panel and turn the asset route into an arbitrary read.
+        // Canonicalize the root once, then require the target's real path to
+        // be exactly the intended file under it.
+        const realRoot = fs.realpathSync(panelDir);
+        const intended = path.resolve(realRoot, intendedSubpath);
+        const rootPrefix = realRoot.endsWith(path.sep) ? realRoot : realRoot + path.sep;
+        if (intended !== realRoot && !intended.startsWith(rootPrefix)) {
+            return { kind: "forbidden" };
+        }
+        if (fs.realpathSync(targetFile) !== intended) return { kind: "forbidden" };
         if (!fs.statSync(targetFile).isFile()) return { kind: "not-found" };
     } catch {
         // lost race with deletion — read as not-found

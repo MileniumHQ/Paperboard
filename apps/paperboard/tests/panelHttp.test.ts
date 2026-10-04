@@ -89,6 +89,39 @@ describe("/panel/ asset auth", () => {
         }
         expect(fs.readFileSync(sentinel, "utf8")).toBe("secret");
     });
+
+    it("refuses symlinks inside a panel but allows a dev-linked panel root", () => {
+        const sentinel = path.join(tmp, "outside-symlink.txt");
+        fs.writeFileSync(sentinel, "secret");
+        const panelsDir = path.join(tmp, "panels");
+
+        // leaf symlink inside the panel: refused outright
+        fs.symlinkSync(sentinel, path.join(panelsDir, "testpanel", "dist", "link.txt"));
+        expect(resolveLocalPanelFile(panelsDir, "testpanel", "dist/link.txt").kind).toBe("forbidden");
+
+        // a planted directory component below the root must not map elsewhere
+        fs.mkdirSync(path.join(panelsDir, "plantedpanel"), { recursive: true });
+        fs.symlinkSync(
+            path.join(panelsDir, "testpanel", "dist"),
+            path.join(panelsDir, "plantedpanel", "dist"),
+        );
+        expect(
+            resolveLocalPanelFile(panelsDir, "plantedpanel", "dist/index.html").kind,
+        ).toBe("forbidden");
+
+        // a dev-linked panel — the panel directory ITSELF is a symlink — is
+        // served: that is how dev panels install, and the root may be a link
+        // while nothing below it is
+        fs.symlinkSync(
+            path.join(panelsDir, "testpanel"),
+            path.join(panelsDir, "devlinked"),
+        );
+        const dev = resolveLocalPanelFile(panelsDir, "devlinked", "index.html");
+        expect(dev.kind).toBe("ok");
+        if (dev.kind === "ok") {
+            expect(fs.readFileSync(dev.file, "utf8")).toContain("hi");
+        }
+    });
 });
 
 describe("/shutdown demands a credential", () => {
