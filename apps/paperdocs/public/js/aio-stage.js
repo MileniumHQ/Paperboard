@@ -1,5 +1,3 @@
-import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { layoutModels, separatedModels } from './model-layout.mjs';
 
 const REST_POS = [0.5, 3.4, 15];
@@ -29,16 +27,68 @@ const MODEL_STYLE = {
 const HOVER_TURN = 0.35;
 const HOVER_LERP = 0.14;
 
+// Load the renderer only as the visitor approaches the showcase. The opening
+// screen needs neither Three.js nor model downloads, including on mobile.
+let THREE, GLTFLoader;
+let loading = false;
+let stageObserver;
+let pageClosed = false;
+function stageUnavailable(error) {
+    if (pageClosed) return;
+    canvas.dataset.stageState = 'unavailable';
+    console.error('Device preview unavailable', error);
+    if (!document.querySelector('.stage-unavailable')) {
+        const notice = document.createElement('div');
+        notice.className = 'stage-unavailable';
+        notice.setAttribute('role', 'status');
+        notice.append('Device preview unavailable. ');
+        const retry = document.createElement('button');
+        retry.type = 'button';
+        retry.textContent = 'Retry preview';
+        // Reload resets failed native-module imports as well as WebGL state.
+        retry.addEventListener('click', () => location.reload());
+        notice.append(retry);
+        // The canvas lives in an aria-hidden decorative layer. Recovery is an
+        // interactive UI outcome, so it belongs outside that layer.
+        document.body.append(notice);
+    }
+    window.dispatchEvent(new Event('paperboard:stage-change'));
+}
+async function loadStage() {
+    if (loading || pageClosed) return;
+    loading = true;
+    try {
+        [THREE, { GLTFLoader }] = await Promise.all([
+            import('three'), import('three/addons/loaders/GLTFLoader.js'),
+        ]);
+        if (pageClosed) return;
+        init();
+        stageObserver?.disconnect();
+        canvas.dataset.stageState = 'ready';
+        document.querySelector('.stage-unavailable')?.remove();
+    } catch (error) {
+        loading = false;
+        stageObserver?.disconnect();
+        stageUnavailable(error);
+    }
+}
 if (canvas && typeof window.createAllInOne === 'function') {
-    init();
+    stageObserver = new IntersectionObserver(entries => {
+        if (entries.some(entry => entry.isIntersecting && entry.intersectionRatio > 0)) loadStage();
+    }, { rootMargin: '35% 0px' });
+    stageObserver.observe(document.querySelector('.showcase-content') || canvas);
+    window.addEventListener('pagehide', () => {
+        pageClosed = true;
+        stageObserver.disconnect();
+    }, { once: true });
 }
 
 function init() {
-    let renderer;
-    try {
-        renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
-    } catch {
-        return;
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+    let frameId = 0;
+    let disposed = false;
+    function wake() {
+        if (!disposed && !document.hidden && !frameId) frameId = requestAnimationFrame(frame);
     }
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     renderer.shadowMap.enabled = true;
@@ -47,7 +97,7 @@ function init() {
     const camera = new THREE.PerspectiveCamera(FOV, 1, 0.1, 100);
     camera.position.set(REST_POS[0], REST_POS[1], REST_POS[2]);
 
-    const group = window.createAllInOne(THREE, { screenUrl: 'screens/gameserver.png' });
+    const group = window.createAllInOne(THREE);
     group.scale.setScalar(0.4);
     group.position.x = -5.5;
     scene.add(group);
@@ -121,7 +171,7 @@ function init() {
         if (!src || src === currentScreen) return;
         currentScreen = src;
         textureLoader.load(src, (texture) => {
-            if (src !== currentScreen) { texture.dispose(); return; }
+            if (disposed || src !== currentScreen) { texture.dispose(); return; }
             texture.colorSpace = THREE.SRGBColorSpace;
             const flippedTexture = texture.clone();
             flippedTexture.colorSpace = THREE.SRGBColorSpace;
@@ -135,7 +185,8 @@ function init() {
             api.screenVersion++;
             previous?.normal.dispose();
             previous?.flipped.dispose();
-        });
+            wake();
+        }, undefined, error => { if (!disposed && src === currentScreen) stageUnavailable(error); });
     }
 
     // companions start invisible, flight fades them in
@@ -148,7 +199,7 @@ function init() {
     const stageCopy = document.querySelector('.stage-copy');
     const stageSection = document.querySelector('.stage-section');
     const topbar = document.querySelector('.site-topbar__bar');
-    const layoutObserver = new ResizeObserver(() => { layoutDirty = true; });
+    const layoutObserver = new ResizeObserver(() => { layoutDirty = true; wake(); });
     if (stageCopy) layoutObserver.observe(stageCopy);
     if (topbar) layoutObserver.observe(topbar);
     const api = {
@@ -159,6 +210,8 @@ function init() {
         groupHover: 0,
         hoverTurn: HOVER_TURN,
         renders: 0,
+        frames: 0,
+        invalidate: wake,
         layoutVersion: 0,
         screenVersion: 0,
     };
@@ -171,10 +224,12 @@ function init() {
 
     api.setScreen = setScreen;
     api.screenTargets = screenTargets;
-    document.addEventListener("paperboard:slide", (event) => {
+    function onSlide(event) {
         if (event.detail && event.detail.src) setScreen(event.detail.src);
-    });
-    const initialSlide = document.querySelector(".card-slide-image");
+    }
+    document.addEventListener("paperboard:slide", onSlide);
+    const activeIndex = [...document.querySelectorAll('.dots-bar .dot')].findIndex(dot => dot.classList.contains('active'));
+    const initialSlide = document.querySelectorAll('.card-slide-image')[Math.max(0, activeIndex)];
     if (initialSlide) setScreen(initialSlide.getAttribute("src"));
 
     // Hover: a pointer move queues one raycast; the render loop eases the
@@ -197,23 +252,46 @@ function init() {
         return entry;
     }
 
-    window.addEventListener('pointermove', (e) => {
+    function onPointerMove(e) {
+        const s = window.scrollY / (window.innerHeight || 1);
+        if (s <= 1 || s >= 2.8) return;
         pointer.x = (e.clientX / (window.innerWidth || 1)) * 2 - 1;
         pointer.y = -(e.clientY / (window.innerHeight || 1)) * 2 + 1;
         pointerInside = true;
         pointerDirty = true;
-    }, { passive: true });
-    window.addEventListener('pointerleave', () => {
+        wake();
+    }
+    function onPointerLeave() {
         pointerInside = false;
         pointerDirty = true;
-    });
+        wake();
+    }
+    window.addEventListener('pointermove', onPointerMove, { passive: true });
+    window.addEventListener('pointerleave', onPointerLeave);
 
     const groupHoverEntry = registerHoverable(group, 'imac', null);
 
     const loader = new GLTFLoader();
+    function disposeTree(root) {
+        const geometries = new Set();
+        const materials = new Set();
+        const textures = new Set();
+        root.traverse(obj => {
+            if (!obj.isMesh) return;
+            geometries.add(obj.geometry);
+            for (const material of Array.isArray(obj.material) ? obj.material : [obj.material]) {
+                materials.add(material);
+                for (const value of Object.values(material)) if (value?.isTexture) textures.add(value);
+            }
+        });
+        for (const texture of textures) texture.dispose();
+        for (const material of materials) material.dispose();
+        for (const geometry of geometries) geometry.dispose();
+    }
     DEVICES.forEach((spec) => {
         loader.load(spec.file, (root) => {
             const obj = root.scene || root;
+            if (disposed) { disposeTree(obj); return; }
             registerScreens(obj, true);
             obj.position.set(0, 0, 0.3);
             const mats = new Set();
@@ -244,7 +322,8 @@ function init() {
             const hover = registerHoverable(obj, spec.id, entry);
             entry.hoverEntry = hover;
             layoutDirty = true;
-        });
+            wake();
+        }, undefined, error => { if (!disposed) stageUnavailable(error); });
     });
 
     function applyLayout() {
@@ -310,6 +389,7 @@ function init() {
     }
 
     function updateHover() {
+        let changed = false;
         if (pointerDirty) {
             pointerDirty = false;
             for (const entry of hoverables) entry.target = 0;
@@ -328,19 +408,24 @@ function init() {
             }
         }
         for (const entry of hoverables) {
+            const previous = entry.hover;
             entry.hover += (entry.target - entry.hover) * HOVER_LERP;
             if (Math.abs(entry.target - entry.hover) < 0.001) entry.hover = entry.target;
+            changed ||= entry.hover !== previous;
             if (entry === groupHoverEntry) {
                 api.groupHover = entry.hover;
             } else if (entry.root) {
                 entry.root.rotation.y = entry.baseRotY * (1 - HOVER_TURN * entry.hover);
             }
         }
+        return changed;
     }
 
     let lastFrame = -Infinity;
     let lastRenderedState = '';
     function frame(time) {
+        frameId = 0;
+        api.frames++;
         const w = canvas.clientWidth || 1;
         const h = canvas.clientHeight || 1;
         if (canvas.width !== Math.floor(w * renderer.getPixelRatio()) ||
@@ -349,6 +434,7 @@ function init() {
             layoutDirty = true;
         }
         camera.aspect = w / h;
+        let changed = layoutDirty;
         if (layoutDirty) { applyLayout(); layoutDirty = false; }
 
         // flight owns the group past the handoff, resting state only above it
@@ -360,7 +446,8 @@ function init() {
             group.rotation.y = 0;
             camera.lookAt(REST_LOOK[0], REST_LOOK[1], REST_LOOK[2]);
         }
-        updateHover();
+        changed = updateHover() || changed;
+        if (changed) window.dispatchEvent(new Event('paperboard:stage-change'));
         camera.updateProjectionMatrix();
         // The canvas is fully transparent outside the showcase/stage. Keep
         // layout available to flight, but skip GPU work there and in hidden tabs.
@@ -368,18 +455,39 @@ function init() {
             ...camera.position.toArray(), ...camera.quaternion.toArray(),
             ...group.position.toArray(), group.rotation.y, group.scale.x,
             ...companions.flatMap(entry => [entry.obj.visible, entry.obj.rotation.y, entry.mats[0]?.opacity])].join(',');
-        if (!document.hidden && s > 1 && s < 2.8 && renderState !== lastRenderedState && time - lastFrame >= 1000 / 30) {
-            renderer.render(scene, camera);
-            lastFrame = time;
-            lastRenderedState = renderState;
-            api.renders++;
+        if (!document.hidden && s > 1 && s < 2.8 && renderState !== lastRenderedState) {
+            if (time - lastFrame >= 1000 / 30) {
+                // Packed multi-row layouts have no floor. Skip its entire
+                // shadow pass too, rather than rendering invisible shadows.
+                renderer.shadowMap.enabled = ground.visible;
+                renderer.render(scene, camera);
+                lastFrame = time;
+                lastRenderedState = renderState;
+                api.renders++;
+            } else wake();
         }
+        if (hoverables.some(entry => entry.hover !== entry.target)) wake();
     }
 
-    renderer.setAnimationLoop(frame);
+    function onScroll() { pointerDirty = true; wake(); }
+    function onResize() { layoutDirty = true; wake(); }
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onResize, { passive: true });
+    document.addEventListener('visibilitychange', wake);
+    wake();
     window.addEventListener('pagehide', () => {
-        renderer.setAnimationLoop(null);
+        disposed = true;
+        cancelAnimationFrame(frameId);
         layoutObserver.disconnect();
+        window.removeEventListener('scroll', onScroll);
+        window.removeEventListener('resize', onResize);
+        window.removeEventListener('pointermove', onPointerMove);
+        window.removeEventListener('pointerleave', onPointerLeave);
+        document.removeEventListener('visibilitychange', wake);
+        document.removeEventListener('paperboard:slide', onSlide);
+        disposeTree(scene);
+        currentFaces?.normal.dispose();
+        currentFaces?.flipped.dispose();
         renderer.dispose();
     }, { once: true });
 }

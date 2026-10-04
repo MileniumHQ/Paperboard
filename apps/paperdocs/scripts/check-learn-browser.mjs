@@ -180,8 +180,8 @@ try {
     ]) {
         await page.setViewportSize({ width, height });
         await page.goto(`${origin}/`);
-        await page.waitForFunction(() => window.__aioStage?.companions.length === 4);
         await page.evaluate(() => window.scrollTo(0, innerHeight));
+        await page.waitForFunction(() => window.__aioStage?.companions.length === 4);
         await page.waitForTimeout(550);
         const progress = await page.locator('.dots-bar').evaluate(element => ({
             height: element.getBoundingClientRect().height,
@@ -296,17 +296,21 @@ try {
     // and when the visible scene has settled, then wakes for a hover turn.
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto(`${origin}/`);
-    await page.waitForFunction(() => window.__aioStage?.companions.length === 4);
+    await page.waitForTimeout(600);
+    assert.equal(await page.evaluate(() => Boolean(window.__aioStage)), false, 'Opening screen must defer the 3D stage');
+    assert.deepEqual(await page.evaluate(() => performance.getEntriesByType('resource').filter(entry => /\/js\/vendor\/|\/models\//.test(entry.name)).map(entry => entry.name)), [], 'No Three.js or model downloads before approaching the showcase');
+    const openingTicks = await page.evaluate(() => window.__flight.ticks);
     await page.waitForTimeout(300);
-    const hiddenRenders = await page.evaluate(() => window.__aioStage.renders);
-    await page.waitForTimeout(300);
-    assert.equal(await page.evaluate(() => window.__aioStage.renders), hiddenRenders);
+    assert.equal(await page.evaluate(() => window.__flight.ticks), openingTicks);
     await page.evaluate(() => scrollTo(0, innerHeight * 2));
+    await page.waitForFunction(() => window.__aioStage?.companions.length === 4);
     await page.waitForTimeout(800);
     const settledRenders = await page.evaluate(() => window.__aioStage.renders);
-    assert.ok(settledRenders > hiddenRenders);
+    assert.ok(settledRenders > 0);
+    const settledFrames = await page.evaluate(() => window.__aioStage.frames);
     await page.waitForTimeout(300);
     assert.equal(await page.evaluate(() => window.__aioStage.renders), settledRenders);
+    assert.equal(await page.evaluate(() => window.__aioStage.frames), settledFrames, 'Settled scene must stop animation callbacks as well as GPU rendering');
     const hoverPosition = await page.evaluate(() => {
         const stage = window.__aioStage;
         const point = new stage.THREE.Box3().setFromObject(stage.group).getCenter(new stage.THREE.Vector3()).project(stage.camera);
@@ -322,6 +326,23 @@ try {
         return boxes.every((box, index) => boxes.slice(index + 1).every(other => !box.intersectsBox(other)));
     }), 'Hover turns must not collide with neighbours');
     console.log('verified sleeping GPU rendering and live hover without model intersections');
+
+    const unavailableStage = await browser.newPage();
+    try {
+        await unavailableStage.route('**/js/vendor/three.module.js', route => route.abort());
+        await unavailableStage.goto(`${origin}/`);
+        await unavailableStage.evaluate(() => scrollTo(0, innerHeight * 2));
+        await unavailableStage.getByRole('button', { name: 'Retry preview' }).waitFor();
+        assert.equal(await unavailableStage.locator('#aio-stage').getAttribute('data-stage-state'), 'unavailable');
+        await unavailableStage.unroute('**/js/vendor/three.module.js');
+        const reloaded = unavailableStage.waitForEvent('load');
+        await unavailableStage.getByRole('button', { name: 'Retry preview' }).click();
+        await reloaded;
+        await unavailableStage.evaluate(() => scrollTo(0, innerHeight * 2));
+        await unavailableStage.waitForFunction(() => window.__aioStage?.companions.length === 4);
+        assert.equal(await unavailableStage.locator('.stage-unavailable').count(), 0);
+    } finally { await unavailableStage.close(); }
+    console.log('verified failed 3D loading stays visibly unavailable and Retry loads a fresh working scene');
 
     await page.setViewportSize({ width: 1440, height: 1080 });
     await page.goto(`${origin}/`);

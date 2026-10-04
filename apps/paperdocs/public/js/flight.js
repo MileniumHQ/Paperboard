@@ -171,12 +171,15 @@
 
     let flightRaf = 0;
     let lastState = '';
-    const nextFrame = () => { flightRaf = requestAnimationFrame(loop); };
+    const nextFrame = () => {
+        if (!flightRaf && !document.hidden) flightRaf = requestAnimationFrame(loop);
+    };
     function loop() {
+        flightRaf = 0;
         const stageState = window.__aioStage;
-        const state = [window.scrollY, innerWidth, innerHeight, stageState?.layoutVersion,
+        const state = [window.scrollY, innerWidth, innerHeight, canvas?.dataset.stageState, stageState?.layoutVersion,
             stageState?.groupHover, ...(stageState?.companions || []).map(entry => entry.obj.rotation.y)].join(',');
-        if (state === lastState || document.hidden) { nextFrame(); return; }
+        if (state === lastState || document.hidden) return;
         lastState = state;
         window.__flight.ticks++;
         const vh = V();
@@ -190,6 +193,8 @@
             clamp01((s - 1) / 0.25),
             1 - clamp01((s - 2.4) / 0.4),
         );
+        const notice = document.querySelector('.stage-unavailable');
+        if (notice) notice.hidden = stageFade <= 0;
         if (canvas) {
             canvas.style.opacity = String(stageFade);
         }
@@ -391,7 +396,7 @@
             }
         }
 
-        nextFrame();
+        stage?.invalidate();
     }
 
     window.__flight = { ticks: 0, error: null };
@@ -405,5 +410,15 @@
     window.addEventListener("touchmove", onTouchMove, { passive: false });
     window.addEventListener("keydown", onKeyDown);
     if (canvas && card) nextFrame();
-    window.addEventListener('pagehide', () => cancelAnimationFrame(flightRaf), { once: true });
+    window.addEventListener('scroll', nextFrame, { passive: true });
+    window.addEventListener('resize', nextFrame, { passive: true });
+    window.addEventListener('paperboard:stage-change', nextFrame);
+    document.addEventListener('visibilitychange', nextFrame);
+    window.addEventListener('pagehide', () => {
+        cancelAnimationFrame(flightRaf);
+        window.removeEventListener('scroll', nextFrame);
+        window.removeEventListener('resize', nextFrame);
+        window.removeEventListener('paperboard:stage-change', nextFrame);
+        document.removeEventListener('visibilitychange', nextFrame);
+    }, { once: true });
 })();

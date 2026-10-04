@@ -36,9 +36,9 @@
     return o;
   }
 
-  // builds the group, loads screens/gameserver.png as the default 4:3 screen map
+  // The caller owns screen texture loading so carousel changes share one map.
   function createAllInOne(THREE, opts = {}) {
-    const texUrl = opts.screenUrl || 'screens/gameserver.png';
+    const texUrl = opts.screenUrl;
     const g = new THREE.Group();
     g.name = 'aio-computer';
 
@@ -65,7 +65,7 @@
       color: 0xffffff, roughness: 0.3, metalness: 0.0,
       emissive: 0xffffff, emissiveIntensity: 1.0, flatShading: true,
     });
-    new THREE.TextureLoader().load(texUrl, (t) => {
+    if (texUrl) new THREE.TextureLoader().load(texUrl, (t) => {
       t.colorSpace = THREE.SRGBColorSpace;
       screenM.map = t;
       screenM.emissiveMap = t;
