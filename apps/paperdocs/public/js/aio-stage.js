@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { layoutModels } from './model-layout.mjs';
+import { layoutModels, separatedModels } from './model-layout.mjs';
 
 const REST_POS = [0.5, 3.4, 15];
 const REST_LOOK = [0.5, 0.5, 0];
@@ -313,6 +313,10 @@ function init() {
                 item.entry.obj.scale.setScalar(item.scale);
             }
         }
+        api.companionsClear = () => placements.slice(1).every(item => separatedModels(
+            { ...placements[0], x: group.position.x, y: group.position.y, scale: group.scale.x },
+            { ...item, x: item.entry.obj.position.x, y: item.entry.obj.position.y, scale: item.entry.obj.scale.x },
+        ));
         api.layoutVersion++;
 
         // The run is resolved in screen space by flight from the real objects:

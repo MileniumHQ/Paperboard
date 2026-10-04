@@ -269,8 +269,9 @@
             g.position.set(lerp(0, home.x, q), lerp(START_Y, home.y, q), 0);
             g.rotation.y = home.rot * q * (1 - turn * (stage.groupHover || 0));
 
-            // companions ride in late, only the ones this layout keeps
-            const fq = clamp01((q - 0.45) / 0.5);
+            // Wait for the moving all-in-one to reach its packed footprint.
+            // The same bounds used by layout guard the transition as well.
+            const fq = stage.companionsClear?.() ? clamp01((q - 0.985) / 0.015) : 0;
             if (stage.companions) {
                 stage.companions.forEach((c) => {
                     c.obj.visible = c.enabled !== false && fq > 0.001;

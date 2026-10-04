@@ -199,6 +199,16 @@ try {
             ),
             `All five devices must fit at ${width} × ${height}`,
         );
+        for (const fraction of [1.55, 1.7, 1.85, 1.92, 2]) {
+            await page.evaluate(s => scrollTo(0, innerHeight * s), fraction);
+            await page.waitForTimeout(80);
+            assert.ok(await page.evaluate(() => {
+                const stage = window.__aioStage;
+                const boxes = [stage.group, ...stage.companions.filter(entry => entry.obj.visible).map(entry => entry.obj)]
+                    .map(obj => new stage.THREE.Box3().setFromObject(obj));
+                return boxes.every((box, index) => boxes.slice(index + 1).every(other => !box.intersectsBox(other)));
+            }), `Moving models must not intersect at stage ${fraction}`);
+        }
     }
     console.log("verified five visible devices without clipping or intersecting at four viewport sizes");
     // Exercise real hover input and prove the renderer sleeps both when hidden

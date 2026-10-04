@@ -1,5 +1,11 @@
 // Horizontal cylinders contain the whole model through every hover rotation.
 // Pack those bounds, rather than guessing spacing from a model's origin.
+export function separatedModels(a, b) {
+    if (Math.abs(a.x - b.x) > a.radius * a.scale + b.radius * b.scale) return true;
+    const amin = a.y + a.minY * a.scale, bmin = b.y + b.minY * b.scale;
+    return amin + a.height * a.scale < bmin || bmin + b.height * b.scale < amin;
+}
+
 export function layoutModels(items, { stacked, halfWidth, halfHeight }) {
     const gap = 0.24;
     const widths = stacked
