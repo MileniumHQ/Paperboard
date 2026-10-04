@@ -101,7 +101,7 @@
     box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.25),
         inset 0 -2px 0 rgba(0, 0, 0, 0.12),
-        0 16px 34px -14px rgba(3, 45, 110, 0.8);
+        0 16px 34px -14px color-mix(in srgb, var(--paper-site-accent) 24%, var(--paper-marketing-ink));
 }
 
 /* pressed flush: the lift reads only while the button is not held down */
@@ -125,14 +125,14 @@
     --foreground: var(--paper-button-face, #ffffff);
 }
 
-/* GitHub: ink-black paper with a dark grey offset layer */
+/* GitHub: ink-black paper with an even darker offset layer */
 .PaperEffect.variant-black {
-    --transition-color: #3a3f45;
+    --transition-color: color-mix(in srgb, var(--paper-marketing-ink) 24%, black);
 }
 
 .PaperEffect.variant-black .PaperButton {
-    --foreground: #0a0b0d;
-    color: #ffffff;
+    --foreground: color-mix(in srgb, var(--paper-marketing-ink) 60%, black);
+    color: var(--paper-on-color);
     font-family: "SUSE Mono", ui-monospace, monospace;
     font-weight: 700;
     letter-spacing: -0.02em;

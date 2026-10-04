@@ -11,7 +11,7 @@
             <feOffset in="invertedAlpha" dx="{{innerOffset}}" dy="{{innerOffset}}" result="shiftedInverted" />
             <feGaussianBlur in="shiftedInverted" stdDeviation="{{innerBlur}}" result="blurredEdge" />
             <feComposite in="blurredEdge" in2="SourceAlpha" operator="in" result="innerEdgeMask" />
-            <feFlood flood-color="#5CA8FF" flood-opacity="0.4" result="shadowColor" />
+            <feFlood style="flood-color: var(--paper-site-accent)" flood-opacity="0.4" result="shadowColor" />
             <feComposite in="shadowColor" in2="innerEdgeMask" operator="in" result="coloredInnerShadow" />
             <feMerge>
                 <feMergeNode in="SourceGraphic" />
