@@ -125,6 +125,27 @@ describe("host header", () => {
     });
 });
 
+describe("malformed request target", () => {
+    it("answers 400 instead of throwing and hanging the socket", async () => {
+        const status = await new Promise<number>((resolve, reject) => {
+            const sock = net.connect(host.port, "127.0.0.1", () => {
+                // "//[" is a valid HTTP request target Node passes through,
+                // but `new URL("//[", base)` throws
+                sock.write(
+                    `GET //[ HTTP/1.1\r\nHost: ${BROWSER_HOST_SUFFIX}:${host.port}\r\nConnection: close\r\n\r\n`,
+                );
+            });
+            let data = "";
+            sock.on("data", (c) => (data += c.toString()));
+            sock.on("error", reject);
+            sock.on("close", () => resolve(Number(/HTTP\/1\.1 (\d+)/.exec(data)?.[1] ?? 0)));
+        });
+        expect(status).toBe(400);
+        // the host is still serving
+        expect((await request("/")).status).toBe(200);
+    });
+});
+
 describe("shell bridge", () => {
     it("answers the shell origin", async () => {
         const res = await bridge("echo", [{ id: "local" }]);

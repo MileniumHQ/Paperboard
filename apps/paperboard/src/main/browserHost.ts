@@ -256,7 +256,17 @@ export function startBrowserHost(opts: BrowserHostOptions): Promise<BrowserHost>
 
     const server = http.createServer((req, res) => {
         const host = String(req.headers.host || "").toLowerCase();
-        const url = new URL(req.url || "/", `http://${shellHost}`);
+        // a malformed request target (e.g. "//[") makes URL construction
+        // throw; that must be a 400, never an uncaught exception that leaves
+        // the socket hanging. A foreign Host is refused below (421).
+        let url: URL;
+        try {
+            url = new URL(req.url || "/", `http://${shellHost}`);
+        } catch {
+            logger.debug("[BrowserHost] malformed request target:", req.url);
+            sendText(res, 400, "Bad Request");
+            return;
+        }
         let work: Promise<void> | void;
         if (host === shellHost) {
             work = handleShell(req, res, url);
