@@ -1,4 +1,6 @@
-(() => {
+import { hullFromAlpha, worldHull, contactBetween, containsPoint } from "./icon-geometry.mjs";
+
+(async () => {
     const field = document.querySelector("[data-play-field]");
     if (!field) return;
     const icons = [...field.querySelectorAll(".play-icon")];
@@ -14,14 +16,24 @@
     const EDGE_INSET = 78;
     const MAX_SPEED = 1800;
     const CANDIDATES = 32;
-    // Circle collision radius; a bit under half so the irregular art can
-    // overlap visually before it bumps.
-    const RADIUS = SIZE * 0.44;
-    const MIN_DIST = RADIUS * 2;
     const reduceMotion =
         typeof window.matchMedia === "function" &&
         window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
+    const shapes = await Promise.all(
+        icons.map(async (icon) => {
+            await icon.decode();
+            const canvas = document.createElement("canvas");
+            canvas.width = canvas.height = 48;
+            const context = canvas.getContext("2d", { willReadFrequently: true });
+            if (!context) throw new Error("Icon collision canvas unavailable");
+            const scale = Math.min(48 / icon.naturalWidth, 48 / icon.naturalHeight);
+            const width = icon.naturalWidth * scale,
+                height = icon.naturalHeight * scale;
+            context.drawImage(icon, (48 - width) / 2, (48 - height) / 2, width, height);
+            return hullFromAlpha(context.getImageData(0, 0, 48, 48).data, 48, 48, SIZE);
+        }),
+    );
     const items = [];
     let W = 0;
     let H = 0;
@@ -87,10 +99,11 @@
         items.length = 0;
         const placed = [];
 
-        icons.forEach((el) => {
+        icons.forEach((el, index) => {
             const item = {
                 el,
                 size: SIZE,
+                hull: shapes[index],
                 x: 0,
                 y: 0,
                 vx: 0,
@@ -204,31 +217,17 @@
         item.y = clamp(item.y, 0, Math.max(0, H - item.size));
     }
 
-    // Pairwise circle collisions. A dragged icon acts as infinite mass, so it
-    // shoves the others instead of being shoved. The impulse feeds a little
-    // spin too, which is the satisfying part.
+    // Contacts follow each image's opaque silhouette and current rotation.
+    // A dragged icon acts as infinite mass and shoves its neighbour.
     function collide() {
         for (let i = 0; i < items.length; i += 1) {
             const a = items[i];
             for (let j = i + 1; j < items.length; j += 1) {
                 const b = items[j];
                 if (a.dragging && b.dragging) continue;
-                const ax = a.x + a.size / 2;
-                const ay = a.y + a.size / 2;
-                const bx = b.x + b.size / 2;
-                const by = b.y + b.size / 2;
-                let dx = bx - ax;
-                let dy = by - ay;
-                let dist = Math.hypot(dx, dy);
-                if (dist >= MIN_DIST) continue;
-                if (dist < 0.001) {
-                    dx = 0.01;
-                    dy = 0;
-                    dist = 0.01;
-                }
-                const nx = dx / dist;
-                const ny = dy / dist;
-                const overlap = MIN_DIST - dist;
+                const contact = contactBetween(worldHull(a), worldHull(b));
+                if (!contact) continue;
+                const { nx, ny, overlap } = contact;
 
                 const aShare = a.dragging ? 0 : b.dragging ? 1 : 0.5;
                 const bShare = b.dragging ? 0 : a.dragging ? 1 : 0.5;
@@ -313,6 +312,11 @@
     function onPointerDown(event) {
         const item = items.find((candidate) => candidate.el === event.currentTarget);
         if (!item) return;
+        const bounds = field.getBoundingClientRect();
+        if (
+            !containsPoint(worldHull(item), event.clientX - bounds.left, event.clientY - bounds.top)
+        )
+            return;
         event.preventDefault();
         item.dragging = true;
         item.pointerId = event.pointerId;
@@ -327,8 +331,12 @@
         item.vy = 0;
         try {
             event.currentTarget.setPointerCapture(event.pointerId);
-        } catch (e) {}
+        } catch (error) {
+            // Window listeners preserve dragging when pointer capture is unavailable.
+            console.debug("Icon pointer capture unavailable; using window events", error);
+        }
         event.currentTarget.classList.add("is-dragging");
+        start();
     }
 
     function onPointerMove(event) {
@@ -336,22 +344,12 @@
             (candidate) => candidate.dragging && candidate.pointerId === event.pointerId,
         );
         if (!item) return;
-        if (
-            Math.hypot(event.clientX - item.downX, event.clientY - item.downY) > 4
-        ) {
+        if (Math.hypot(event.clientX - item.downX, event.clientY - item.downY) > 4) {
             item.moved = true;
         }
         const rect = field.getBoundingClientRect();
-        const nextX = clamp(
-            event.clientX - rect.left - item.grabX,
-            0,
-            Math.max(0, W - item.size),
-        );
-        const nextY = clamp(
-            event.clientY - rect.top - item.grabY,
-            0,
-            Math.max(0, H - item.size),
-        );
+        const nextX = clamp(event.clientX - rect.left - item.grabX, 0, Math.max(0, W - item.size));
+        const nextY = clamp(event.clientY - rect.top - item.grabY, 0, Math.max(0, H - item.size));
         const dt = Math.max(0.008, (event.timeStamp - item.lastT) / 1000);
         item.vx = clamp((nextX - item.x) / dt, -MAX_SPEED, MAX_SPEED);
         item.vy = clamp((nextY - item.y) / dt, -MAX_SPEED, MAX_SPEED);
@@ -373,7 +371,10 @@
             if (item.el.hasPointerCapture(event.pointerId)) {
                 item.el.releasePointerCapture(event.pointerId);
             }
-        } catch (e) {}
+        } catch (error) {
+            // Pointer-up automatically releases capture; drag state is already cleared.
+            console.debug("Icon pointer capture already released", error);
+        }
 
         if (!item.moved) {
             // a click, not a drag: give it a playful spin in place
@@ -412,10 +413,12 @@
         if (scattered) return;
         scattered = true;
         scatter();
+        start();
     };
 
+    let observer;
     if ("IntersectionObserver" in window) {
-        const observer = new IntersectionObserver(
+        observer = new IntersectionObserver(
             (entries) => {
                 if (entries.some((entry) => entry.isIntersecting)) {
                     place();
@@ -430,4 +433,21 @@
     } else {
         place();
     }
-})();
+    window.addEventListener(
+        "pagehide",
+        () => {
+            stop();
+            observer?.disconnect();
+            for (const icon of icons) icon.removeEventListener("pointerdown", onPointerDown);
+            window.removeEventListener("pointermove", onPointerMove);
+            window.removeEventListener("pointerup", onPointerUp);
+            window.removeEventListener("pointercancel", onPointerUp);
+            window.removeEventListener("resize", clampAll);
+        },
+        { once: true },
+    );
+})().catch((error) => {
+    const field = document.querySelector("[data-play-field]");
+    if (field) field.dataset.playState = "unavailable";
+    console.error("Icon playground unavailable", error);
+});
