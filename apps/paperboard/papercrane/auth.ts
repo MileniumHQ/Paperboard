@@ -319,8 +319,11 @@ export class PaperCraneAuth extends EventEmitter {
             };
         }
 
+        // the pairing code is the credential that mints a host token, so it
+        // travels through the same constant-time compare as every other
+        // secret in the daemon (one invariant, one implementation)
         const cleanInput = String(code ?? "").replace(/\s+/g, "").trim();
-        if (cleanInput !== this.pairingCode) {
+        if (!secretsMatch(cleanInput, this.pairingCode)) {
             this.failedAttempts++;
             // short penalty first, long on clear brute-forcing
             const lockoutMs =
