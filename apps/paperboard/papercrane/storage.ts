@@ -6,6 +6,7 @@ import { requirePanelId } from "../../../packages/paperapi/src/panelIdentity";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { PAPERBOARD_USER_AGENT } from "./userAgent";
+import * as tar from "tar";
 
 // one-shot timers must never hold the process open: unref and move on.
 // (bun and node both expose unref on Timeout handles)
@@ -301,36 +302,97 @@ export function coerceRegistryRecord(
 
 // ─── Archive safety ──────────────────────────────────────────────────────────
 
-// Tar filter rejecting absolute paths and traversal members
+// the one extraction budget, enforced by the pre-extract scan; the filter
+// only drops members rather than throwing, because tar@7 turns filter
+// throws into unhandled stream errors instead of rejections
+export const TAR_BUDGET = {
+    maxEntries: 100_000,
+    maxBytes: 4 * 1024 * 1024 * 1024,
+};
+
+// Classification shared by the refuser (scanTarMembers) and the extractor
+// (makeSafeTarFilter): a member is written ("ok"), legitimately absent
+// under the strip depth ("drop"), or never allowed anywhere ("escape").
+// Escape members are refused by the scan — they must never become a
+// silent skip that installs bytes different from the verified archive.
+export function classifyTarMember(
+    destDir: string,
+    entryPath: unknown,
+    strip: number,
+    entry?: { size?: number; linkpath?: string; type?: string },
+): "ok" | "drop" | "escape" {
+    if (typeof entryPath !== "string") return "escape";
+    const root = path.resolve(destDir);
+    const destWithSep = root.endsWith(path.sep) ? root : root + path.sep;
+    const normalized = path.normalize(entryPath);
+    if (path.isAbsolute(normalized)) return "escape";
+    // node-tar strips `strip` leading segments after any filter runs, so
+    // the entry lands at the stripped path. Resolve it the same way tar
+    // will: a link that looks contained pre-strip can point outside once
+    // its directory moves.
+    let effective = normalized;
+    if (strip > 0) {
+        const parts = normalized.split(/[\\/]/);
+        if (parts.length < strip) return "drop";
+        effective = parts.slice(strip).join(path.sep);
+    }
+    if (!effective || effective === ".") return "drop";
+    const resolved = path.resolve(root, effective);
+    if (entry?.linkpath) {
+        const target = path.resolve(entry.type === "SymbolicLink" ? path.dirname(resolved) : root, entry.linkpath);
+        if (target !== root && !target.startsWith(destWithSep)) return "escape";
+    }
+    if (!resolved.startsWith(destWithSep) && resolved !== root) return "escape";
+    return "ok";
+}
+
+// Tar filter with budget accounting; refusal happens in scanTarMembers
 export function makeSafeTarFilter(destDir: string, strip = 0): (entryPath: string, entry?: { size?: number; linkpath?: string; type?: string }) => boolean {
     let total = 0;
     let count = 0;
-    const root = path.resolve(destDir);
-    const destWithSep = root.endsWith(path.sep) ? root : root + path.sep;
     return (entryPath, entry) => {
         total += entry?.size ?? 0;
-        if (++count > 100_000 || total > 4 * 1024 * 1024 * 1024) throw new LimitError("Archive exceeds extraction budget");
-        if (typeof entryPath !== "string") return false;
-        const normalized = path.normalize(entryPath);
-        if (path.isAbsolute(normalized)) return false;
-        // node-tar strips `strip` leading segments after this filter runs,
-        // so the entry lands at the stripped path. Resolve it the same way
-        // tar will: a link that looks contained pre-strip can point outside
-        // once its directory moves.
-        let effective = normalized;
-        if (strip > 0) {
-            const parts = normalized.split(/[\\/]/);
-            if (parts.length < strip) return false;
-            effective = parts.slice(strip).join(path.sep);
-        }
-        if (!effective || effective === ".") return false;
-        const resolved = path.resolve(root, effective);
-        if (entry?.linkpath) {
-            const target = path.resolve(entry.type === "SymbolicLink" ? path.dirname(resolved) : root, entry.linkpath);
-            if (target !== root && !target.startsWith(destWithSep)) throw new Error("Archive link escapes destination");
-        }
-        return resolved.startsWith(destWithSep);
+        if (++count > TAR_BUDGET.maxEntries || total > TAR_BUDGET.maxBytes) return false;
+        return classifyTarMember(destDir, entryPath, strip, entry) === "ok";
     };
+}
+
+// Pre-extract scan of a tar archive: every member is classified against
+// its planned destination. Any escape member refuses the whole archive
+// (the installed bytes must be the verified bytes), and the same budget
+// applies. The classify/throw loop runs AFTER tar.t resolves, never
+// inside the tar stream, so a refusal is a real rejection.
+export async function scanTarMembers(
+    archivePath: string,
+    destDir: string,
+    strip = 0,
+): Promise<void> {
+    const members: Array<{ path?: string; size?: number; linkpath?: string; type?: string }> = [];
+    await tar.t({
+        file: archivePath,
+        onReadEntry: (entry: any) => {
+            if (members.length < TAR_BUDGET.maxEntries) {
+                members.push({
+                    path: entry.path,
+                    size: entry.size,
+                    linkpath: entry.linkpath,
+                    type: entry.type,
+                });
+            }
+            return false;
+        },
+    });
+    let total = 0;
+    let count = 0;
+    for (const member of members) {
+        total += member.size ?? 0;
+        if (++count > TAR_BUDGET.maxEntries || total > TAR_BUDGET.maxBytes) {
+            throw new LimitError("Archive exceeds extraction budget");
+        }
+        if (classifyTarMember(destDir, member.path, strip, member) === "escape") {
+            throw new Error(`Archive entry escapes destination: ${member.path}`);
+        }
+    }
 }
 
 // ─── Downloads ───────────────────────────────────────────────────────────────

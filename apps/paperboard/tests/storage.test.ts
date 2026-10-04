@@ -11,6 +11,7 @@ import {
     validatePanelManifest,
     coerceRegistryRecord,
     makeSafeTarFilter,
+    classifyTarMember,
 } from "../papercrane/storage";
 
 let tmp: string;
@@ -198,19 +199,23 @@ describe("makeSafeTarFilter", () => {
         expect(filter("./assets/logo.png")).toBe(true);
     });
 
-    it("rejects absolute and traversal entries", () => {
+    it("keeps absolute and traversal entries away from extraction (they are refused by the scan)", () => {
         const filter = makeSafeTarFilter("/dest");
         expect(filter("/etc/passwd")).toBe(false);
         expect(filter("../outside.txt")).toBe(false);
         expect(filter("dist/../../../outside")).toBe(false);
     });
 
-    it("checks symlink targets against the stripped location", () => {
+    it("classifies escaping link targets as refused-at-the-scan, dropped-at-the-extract", () => {
         const filter = makeSafeTarFilter("/dest", 1);
         expect(filter("pkg/dist/index.html")).toBe(true);
         expect(filter("pkg/bin/link", { type: "SymbolicLink", linkpath: "run" })).toBe(true);
         // pre-strip the link sits one level deeper, so this resolves under
         // /dest; after strip it lands at /dest/bin/link and points outside
-        expect(() => filter("pkg/bin/link", { type: "SymbolicLink", linkpath: "../../outside" })).toThrow(/escapes/);
+        expect(filter("pkg/bin/link", { type: "SymbolicLink", linkpath: "../../outside" })).toBe(false);
+        expect(classifyTarMember("/dest", "pkg/bin/link", 1, { type: "SymbolicLink", linkpath: "../../outside" })).toBe("escape");
+        expect(classifyTarMember("/dest", "../evil", 0)).toBe("escape");
+        expect(classifyTarMember("/dest", "a/b/c", 2)).toBe("ok");
+        expect(classifyTarMember("/dest", "a", 2)).toBe("drop");
     });
 });

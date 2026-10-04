@@ -4,7 +4,7 @@ import { logger } from "./logger";
 import fs from "fs";
 import * as tar from "tar";
 import AdmZip from "adm-zip";
-import { moveFileSafe, makeSafeTarFilter } from "./storage";
+import { moveFileSafe, makeSafeTarFilter, scanTarMembers } from "./storage";
 
 // Extracts .tar.gz, .tgz, .zip or single files
 export async function extractArchive(
@@ -20,6 +20,9 @@ export async function extractArchive(
     const isZip = archivePath.endsWith(".zip");
 
     if (isTar) {
+        // scan first: an escape member refuses the whole archive before
+        // anything is written, and the budget is enforced on real members
+        await scanTarMembers(archivePath, path.resolve(destDir));
         await tar.extract({
             file: archivePath,
             cwd: destDir,
@@ -133,18 +136,24 @@ export async function extractPackageArchive(
         return;
     }
     if (layout !== "wrapped") {
+        await scanTarMembers(archivePath, path.resolve(dest));
         await tar.extract({ file: archivePath, cwd: dest, strip: 0, filter: makeSafeTarFilter(path.resolve(dest)) });
         return;
     }
     // wrapped: strip the wrapper dir; a wrapper-less archive leaves no bin/
     // behind, so it is re-extracted flat
     try {
+        await scanTarMembers(archivePath, path.resolve(pkgDir), 1);
         await tar.extract({ file: archivePath, cwd: pkgDir, strip: 1, filter: makeSafeTarFilter(path.resolve(pkgDir), 1) });
         if (fs.existsSync(path.join(pkgDir, "bin"))) return;
     } catch (err) {
+        // the scan's refusals (budget, escapes) are failures, not evidence
+        // of a wrapper-less layout — never retried with a fresh budget
+        if (err instanceof Error && (err.name === "LimitError" || /escapes destination/i.test(err.message))) throw err;
         logger.debug(`[engineArchives.ts] wrapped tar extraction failed; retrying flat:`, err);
     }
     await fs.promises.rm(pkgDir, { recursive: true, force: true });
     fs.mkdirSync(pkgDir, { recursive: true });
+    await scanTarMembers(archivePath, path.resolve(pkgDir));
     await tar.extract({ file: archivePath, cwd: pkgDir, strip: 0, filter: makeSafeTarFilter(path.resolve(pkgDir)) });
 }
