@@ -9,7 +9,8 @@
     "dev:vite": "vite",
     "build": "tsc -b && vite build && vite build -c vite.site.client.config.ts && vite build -c vite.site.config.ts && bun scripts/prerender-site.mjs",
     "test": "bun test",
-    "deploy": "bun run build && wrangler deploy"
+    "deploy": "bun run build && wrangler deploy",
+    "screenshots:actions": "bun scripts/capture-integrations.ts"
   },
   "dependencies": {
     "@paperboard-dev/paperui": "workspace:*",
@@ -17,6 +18,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.19.1",
+    "playwright": "1.61.1",
     "typescript": "^5.0.0",
     "vite": "^6.0.0",
     "vite-plugin-solid": "^2.11.0",

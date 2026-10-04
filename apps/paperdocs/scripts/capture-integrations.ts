@@ -20,6 +20,7 @@ const panelId = "dev.paperboard.actions";
 const capture = await captureBrowser(1.25);
 const context = capture.context;
 let closeupCapture: Awaited<ReturnType<typeof captureBrowser>> | undefined;
+let tallCapture: Awaited<ReturnType<typeof captureBrowser>> | undefined;
 try {
     const page = await context.newPage();
     await page.goto(process.env.PAPERBOARD_BROWSER_ORIGIN || "http://paperboard.localhost:4319");
@@ -84,8 +85,11 @@ try {
     closeupCapture = await captureBrowser(2);
     await installFixtureRoutes(closeupCapture.context);
     const closeup = await closeupCapture.context.newPage();
+    tallCapture = await captureBrowser(1.75);
+    await installFixtureRoutes(tallCapture.context);
+    const tallCloseup = await tallCapture.context.newPage();
     const captures = [
-        { name: "actions-overview.png", flows: [flows.startup, flows.leaving], shell: false, overview: true },
+        { name: "actions-overview.png", flows: [flows.gameNight, flows.helpDesk], shell: false, overview: true },
         { name: "actions.png", flows: [flows.model, flows.botReady], shell: true },
         { name: "gameserver-actions.png", flows: [flows.joined], shell: false },
         { name: "botcreator-actions.png", flows: [flows.button], shell: false },
@@ -100,13 +104,17 @@ try {
         // The schema stays real; each screenshot has its own purpose and data.
         fixture = { flows: structuredClone(shot.flows), notes: [], functions: [] };
         fixture.flows.forEach((flow, index) => {
-            flow.pos = { x: shot.shell ? 20 + index * 510 : shot.overview ? 70 + index * 560 : 160, y: 70 };
+            flow.pos = { x: shot.shell ? 20 + index * 510 : shot.overview ? 60 + index * 560 : 160, y: shot.shell || shot.overview ? 70 : 30 };
             validateMarketingFlow(flow);
         });
-        const target = shot.shell ? frame : shot.overview ? detail : closeup;
+        const target = shot.shell ? frame : shot.overview ? detail : shot.name === 'actions-discord-flow.png' ? tallCloseup : closeup;
         await target.goto(frame.url());
         await target.locator(".canvas-world > .triggerAction").first().waitFor();
         await target.getByTitle("Collapse Library").click();
+        if (shot.overview) {
+            // Make the rich message's typed connections visible in the real UI.
+            await target.locator('.action:not(.triggerAction)').filter({ hasText: "Tonight's Minecraft plans" }).getByTitle('Show extra options').click();
+        }
         const bounds = await target.locator(".canvas-world > .triggerAction").evaluateAll(elements =>
             elements.map(element => element.getBoundingClientRect().toJSON()));
         const size = await target.evaluate(() => ({ width: innerWidth, height: innerHeight }));
@@ -117,7 +125,16 @@ try {
         await target.locator(".canvas-world img").evaluateAll(images => Promise.all(images.map(image => image.decode())));
         assert.ok(await target.locator(".canvas-world img").evaluateAll(images => images.length > 0 && images.every(image => image.naturalWidth > 0)), "Real panel icons must load");
         await target.evaluate(() => document.fonts.ready);
-        await (shot.shell ? page : shot.overview ? detail : closeup).screenshot({
+        assert.ok(await target.locator('.actionVariableOnly[data-has-value="true"]').evaluateAll(fields =>
+            fields.length > 0 && fields.every(field => {
+                const copy = field.cloneNode(true);
+                const chips = copy.querySelectorAll('.actionVariableChip');
+                if (!chips.length) return false;
+                chips.forEach(chip => chip.remove());
+                return !copy.textContent.replace(/[\u200B\uFEFF\s]/g, '');
+            }),
+        ), "Every populated variable-only field must contain real typed chips, never raw IDs");
+        await (shot.shell ? page : target).screenshot({
             path: fileURLToPath(new URL(`../public/screens/${shot.name}`, import.meta.url)),
         });
         console.log(`Captured ${shot.name}: runtime-checked panel flows, loaded icons and valid references; external responses simulated.`);
@@ -125,6 +142,7 @@ try {
 
 } finally {
     closeTransport("local");
+    await tallCapture?.close();
     await closeupCapture?.close();
     await capture.close();
 }

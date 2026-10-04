@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import type { ActionInfo } from "../../../packages/paperapi/src/index";
 import { BUILTIN_DEFS } from "../../../panels/dev.paperboard.actions/src/lib/builtin";
 import { isCanvasBlock, type CanvasBlock } from "../../../panels/dev.paperboard.actions/src/lib/tree";
+import { isTypedOnlyInput } from "../../../panels/dev.paperboard.actions/src/lib/inputTypes";
 
 const GAME = "dev.paperboard.gameserver", BOT = "dev.paperboard.botcreator", AI = "dev.paperboard.ai";
 export const demoChannel = "124800000000000010";
@@ -31,19 +32,22 @@ export function buildMarketingFlows(registry: ActionInfo[], icons: Record<string
     };
     const ask = (id: string, prompt: string, model = "") => block(id, AI, "ask", { prompt, model, personality: "no-nonsense" });
     const truncate = (id: string, source: CanvasBlock, length: number) => block(id, "builtin.logic", "text-truncate", { text: ref(source), length, ellipsis: "..." });
-    const send = (id: string, content: string, extra = {}) => block(id, BOT, "send-message", { channel: demoChannel, content, ...extra });
+    const channel = (id: string) => block(id, BOT, "get-channel", { channelId: demoChannel });
+    const send = (id: string, target: CanvasBlock, content: string, extra = {}) => block(id, BOT, "send-message", { channel: ref(target), content, ...extra });
 
     const count = block("startup-count", GAME, "player-count");
     const startup = block("startup", GAME, "server-started", {}, [count,
         block("startup-announcement", "builtin.logic", "text", { value: `Minecraft is ready at play.example.com. ${ref(count)} players online.` }),
     ]);
-    startup.children!.push(send("startup-discord", ref(startup.children![1])));
+    const startupChannel = channel("startup-channel");
+    startup.children!.push(startupChannel, send("startup-discord", startupChannel, ref(startup.children![1])));
 
     const greeting = ask("join-greeting", "Welcome {{player:Username:person}} to our Minecraft world. Mention the town at spawn. One short sentence.");
     const shortGreeting = truncate("join-short", greeting, 160);
+    const joinChannel = channel("join-channel");
     const joined = block("player-welcome", GAME, "player-joined", { player: "" }, [greeting, shortGreeting,
         block("join-chat", GAME, "say-chat", { message: ref(shortGreeting) }),
-        send("join-discord", "{{player:Username:person}} joined Minecraft. Meet them at spawn!"),
+        joinChannel, send("join-discord", joinChannel, "{{player:Username:person}} joined Minecraft. Meet them at spawn!"),
     ]);
 
     const buttonCount = block("button-count", GAME, "player-count");
@@ -59,15 +63,18 @@ export function buildMarketingFlows(registry: ActionInfo[], icons: Record<string
 
     const welcome = ask("member-welcome", "Write a friendly two-sentence welcome for {{username:Username:person}}. Our Minecraft address is play.example.com. Mention the rules channel.");
     const shortWelcome = truncate("member-short", welcome, 600);
-    const member = block("member-joined", BOT, "on-member-join", {}, [welcome, shortWelcome,
-        block("member-dm", BOT, "send-dm", { user: "{{userId:User:person}}", content: ref(shortWelcome) }),
-        send("member-channel", "Welcome <@{{userId:User:person}}>! {{username:Username:person}} just joined our community."),
+    const newUser = block("member-user", BOT, "get-user", { userId: "{{userId:User:person}}" });
+    const welcomeChannel = channel("member-welcome-channel");
+    const member = block("member-joined", BOT, "on-member-join", {}, [newUser, welcome, shortWelcome,
+        block("member-dm", BOT, "send-dm", { user: ref(newUser), content: ref(shortWelcome) }),
+        welcomeChannel, send("member-channel", welcomeChannel, "Welcome <@{{userId:User:person}}>! {{username:Username:person}} just joined our community."),
     ]);
 
     const smokeAnswer = ask("model-test", "Give one practical Minecraft building tip in one sentence.", "{{string:Model:download_done}}");
     const shortTip = truncate("model-tip", smokeAnswer, 400);
-    const model = block("model-downloaded", AI, "model-downloaded", { model: "" }, [smokeAnswer, shortTip,
-        send("model-report", `Local model {{string:Model:download_done}} is ready. Test answer: ${ref(shortTip)}`),
+    const modelChannel = channel("model-channel");
+    const model = block("model-downloaded", AI, "model-downloaded", { model: "" }, [smokeAnswer, shortTip, modelChannel,
+        send("model-report", modelChannel, `Local model {{string:Model:download_done}} is ready. Test answer: ${ref(shortTip)}`),
     ]);
 
     const tipAnswer = ask("question-answer", "Answer this Minecraft question briefly: {{content:Message:chat}}");
@@ -80,21 +87,46 @@ export function buildMarketingFlows(registry: ActionInfo[], icons: Record<string
     ]);
 
     const remaining = block("leave-count", GAME, "player-count");
+    const emptyChannel = channel("empty-channel");
     const leaving = block("player-left", GAME, "player-left", { player: "" }, [remaining,
         block("last-player", "builtin.logic", "if", { left: ref(remaining), operator: "==", right: "0" }, [
-            send("empty-notice", "{{player:Username:person}} logged off. The Minecraft server is empty; tomorrow's builds are saved."),
+            emptyChannel, send("empty-notice", emptyChannel, "{{player:Username:person}} logged off. The Minecraft server is empty; tomorrow's builds are saved."),
         ]),
     ]);
     const statusButton = block("status-button", BOT, "create-button", { label: "Minecraft status", customId: "minecraft-status", style: "primary", disabled: false });
+    const botChannel = channel("bot-channel");
     const botReady = block("bot-ready", BOT, "on-bot-ready", {}, [
-        statusButton,
-        send("ready-notice", "Check who's playing, or use !tip for a local AI answer.", { components: ref(statusButton) }),
+        botChannel, statusButton,
+        send("ready-notice", botChannel, "Check who's playing, or use !tip for a local AI answer.", { components: ref(statusButton) }),
     ]);
-    return { startup, joined, button, member, model, question, leaving, botReady };
+    const nightChannel = channel("night-channel");
+    const nightCount = block("night-count", GAME, "player-count");
+    const nightAnswer = ask("night-copy", `Invite friends to our Minecraft game night at spawn. ${ref(nightCount)} players are online. Mention play.example.com. Two sentences.`);
+    const nightShort = truncate("night-short", nightAnswer, 500);
+    const nightEmbed = block("night-card", BOT, "create-embed", { title: "Lantern Town game night", description: ref(nightShort), color: "Blue" });
+    const nightButton = block("night-button", BOT, "create-button", { label: "Who's playing?", customId: "minecraft-status", style: "primary", disabled: false });
+    const nightPost = send("night-post", nightChannel, "Tonight's Minecraft plans", { embeds: ref(nightEmbed), components: ref(nightButton) });
+    const gameNight = block("game-night", "builtin.logic", "on-play", {}, [
+        nightChannel, nightCount, nightAnswer, nightShort, nightEmbed, nightButton, nightPost,
+        block("night-pin", BOT, "pin-message", { channel: ref(nightChannel), message: ref(nightPost) }),
+    ]);
+
+    const helpUser = block("guide-user", BOT, "get-user", { userId: "{{authorId:User:person}}" });
+    const guideAnswer = ask("guide-answer", "Explain this Minecraft question in three clear steps: {{content:Message:chat}}");
+    const guideShort = truncate("guide-short", guideAnswer, 600);
+    const helpDesk = block("guide-request", BOT, "on-message", {}, [
+        block("guide-filter", "builtin.logic", "if", { left: "{{content:Message:chat}}", operator: "starts-with", right: "!guide " }, [
+            helpUser, guideAnswer, guideShort,
+            block("guide-dm", BOT, "send-dm", { user: ref(helpUser), content: ref(guideShort) }),
+            block("guide-acknowledge", BOT, "send-message", { channel: "{{channelId:Channel:tag}}", reply: "{{messageId:Message:chat}}", content: "Your step-by-step guide is in your DMs." }),
+            block("guide-reaction", BOT, "add-reaction", { channel: "{{channelId:Channel:tag}}", message: "{{messageId:Message:chat}}", emoji: "✅" }),
+        ]),
+    ]);
+    return { startup, joined, button, member, model, question, leaving, botReady, gameNight, helpDesk };
 }
 
 /** Editorial fixture validation, not a substitute for a service boundary. */
-export function validateMarketingFlow(flow: CanvasBlock) {
+export function validateMarketingFlow(flow: CanvasBlock, { resolved = false } = {}) {
     assert.ok(isCanvasBlock(flow));
     assert.ok(flow.isTrigger, "A screenshot flow needs a trigger");
     const ids = new Set<string>();
@@ -111,6 +143,7 @@ export function validateMarketingFlow(flow: CanvasBlock) {
             if (input.required && !input.allowEmpty) assert.ok(value !== undefined && value !== "", `${item.id} needs ${key}`);
             if (value === undefined || value === "") continue;
             const tokens = typeof value === "string" ? [...value.matchAll(/\{\{([^}:]+):[^}]+\}\}/g)] : [];
+            if (!resolved && !item.isTrigger && isTypedOnlyInput(input)) assert.ok(tokens.length, `${item.id}.${key}: requires a typed block or trigger field`);
             for (const token of tokens) {
                 const sourceType = available.get(token[1]);
                 assert.ok(sourceType, `${item.id}: unavailable variable ${token[1]}`);

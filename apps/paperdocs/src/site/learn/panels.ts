@@ -75,7 +75,7 @@ export const LEARN_PANELS: LearnPanel[] = [
         description:
             "Build workflows with triggers, action blocks, and results from your other panels.",
         image: "/screens/actions-overview.png",
-        alt: "Actions canvas announcing Minecraft startup and checking when the last player logs off",
+        alt: "Actions canvas posting and pinning an AI-written Minecraft game-night card with a status button, alongside a Discord help-request workflow",
         features: [
             {
                 title: "Announce your server",

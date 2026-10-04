@@ -23,7 +23,9 @@ test("screenshot inputs retain typed trigger fields instead of accepting any ava
     flow.children![0].values.interactionId = "{{missing:Missing:reply}}";
     expect(() => validateMarketingFlow(flow)).toThrow(/unavailable variable/);
     flow.children![0].values.interactionId = "fake-interaction";
-    expect(() => validateMarketingFlow(flow)).toThrow(/Discord ID required/);
+    expect(() => validateMarketingFlow(flow)).toThrow(/requires a typed block/);
+    flow.children![0].values.interactionId = "124800000000000030";
+    expect(() => validateMarketingFlow(flow)).toThrow(/requires a typed block/);
 });
 
 test("panel screenshots require icons and cannot nest event-only blocks", () => {
