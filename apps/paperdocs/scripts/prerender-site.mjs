@@ -1,4 +1,5 @@
 import { siteMetadata } from "./site-metadata.mjs";
+import { withDownloadWarningAssets } from './download-warning-assets.mjs';
 import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -118,7 +119,7 @@ for (const href of ["/actions", "/docs/paperapi", "/downloads", "/contact"]) {
     }
 }
 
-await writeFile(landingPath, landing);
+await writeFile(landingPath, withDownloadWarningAssets(landing));
 
 // The SSR build's stylesheet covers every component the pages render, so it
 // replaces the client build's chrome-only CSS. Fonts ride along under
@@ -133,7 +134,7 @@ for (const path of paths) {
     const page = render(path);
     const file = join(dist, path, "index.html");
     await mkdir(dirname(file), { recursive: true });
-    await writeFile(file, documentFor(page, path));
+    await writeFile(file, withDownloadWarningAssets(documentFor(page, path)));
     console.log(`prerendered ${path}`);
 }
 

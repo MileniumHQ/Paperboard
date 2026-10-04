@@ -1,0 +1,24 @@
+/* Structure, surfaces, buttons and motion belong to PaperModal/PaperButton.
+   Only the installation-specific content needs site styles. */
+.paperui-root.download-warning .download-warning__steps {
+    margin: 0;
+    padding-left: var(--paper-uigap-sixfourths);
+    line-height: 1.5;
+}
+.paperui-root.download-warning .download-warning__steps li + li {
+    margin-top: var(--paper-uigap-half);
+}
+.paperui-root.download-warning .download-warning__source { color: var(--paper-primary); }
+.paperui-root.download-warning { max-width: min(var(--paper-size-panel-medium), calc(100vw - 32px)); }
+.paperui-root.download-warning .download-warning__source:focus-visible {
+    outline: var(--paper-focus-ring);
+    outline-offset: var(--paper-focus-offset);
+}
+.paperui-root.download-warning-error {
+    position: fixed;
+    inset: auto 16px 16px;
+    padding: var(--paper-uigap);
+    border: var(--paper-border-width) solid var(--paper-border);
+    border-radius: var(--paper-border-radius);
+    z-index: 1001;
+}

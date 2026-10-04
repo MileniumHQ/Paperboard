@@ -3,6 +3,11 @@ import "../index.css";
 import { SiteTopbar } from "./SiteTopbar";
 import { ContactForm } from "./pages/ContactForm";
 
+export async function showUnsignedDownload(download: import('../../public/js/unsigned-downloads.mjs').UnsignedDownload, trigger: HTMLElement) {
+    const warning = await import('./DownloadWarning');
+    warning.showUnsignedDownload(download, trigger);
+}
+
 // Islands are server-rendered for the static response, then re-rendered here
 // in the browser. A client render (not hydrate) is deliberate: partial
 // hydration is not supported by Solid's page-scoped hydration keys, and the

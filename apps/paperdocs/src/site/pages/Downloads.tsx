@@ -140,7 +140,8 @@ export function Downloads() {
             <PaperPageHeader icon="download" title="Downloads" />
             <PaperText preset="caption" color="text-subtle">
                 Paperboard is currently in alpha; some features may be buggy
-                or incomplete.
+                or incomplete. Windows and macOS builds are unsigned, so your
+                operating system may warn you when you open them.
             </PaperText>
             <div class={styles.downloadSections}>
                 <Section title="Paperboard" app="pb" platforms={PAPERBOARD} />

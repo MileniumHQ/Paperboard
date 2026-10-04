@@ -4,6 +4,7 @@ import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 import { resolve, extname, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { checkDownloads } from './check-download-browser.mjs';
 
 // Check the distributed static documents, not a Vite SPA fallback. The Worker
 // routing has its own tests; this loopback server owns and tears down its sockets.
@@ -396,6 +397,7 @@ try {
         "1",
     );
     assert.deepEqual(failures, []);
+    await checkDownloads(browser, origin);
     console.log(
         "verified reduced motion, no-JavaScript content, and no failed assets/browser errors",
     );
