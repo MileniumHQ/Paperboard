@@ -157,10 +157,15 @@ try {
     );
     console.log("verified main landing carousel: six slides, AI caption, and working selection");
     for (const [width, height] of [
+        [2560, 720],
+        [1920, 1080],
         [1440, 900],
         [1280, 720],
         [1024, 768],
+        [768, 1024],
+        [844, 390],
         [390, 844],
+        [320, 568],
     ]) {
         await page.setViewportSize({ width, height });
         await page.goto(`${origin}/`);
@@ -199,6 +204,14 @@ try {
             ),
             `All five devices must fit at ${width} × ${height}`,
         );
+        const safeArea = await page.evaluate(() => ({
+            top: document.querySelector('.site-topbar__bar').getBoundingClientRect().bottom + 8,
+            bottom: document.querySelector('.stage-copy').getBoundingClientRect().top - 8,
+        }));
+        assert.ok(devices.every(device => device.corners.every(point => {
+            const y = (1 - point.y) * height / 2;
+            return y > safeArea.top && y < safeArea.bottom;
+        })), `Models need space between navigation and copy at ${width} × ${height}`);
         for (const fraction of [1.55, 1.7, 1.85, 1.92, 2]) {
             await page.evaluate(s => scrollTo(0, innerHeight * s), fraction);
             await page.waitForTimeout(80);
@@ -210,7 +223,29 @@ try {
             }), `Moving models must not intersect at stage ${fraction}`);
         }
     }
-    console.log("verified five visible devices without clipping or intersecting at four viewport sizes");
+    // Change orientation while the stage is visible, without navigating away.
+    for (const [width, height] of [[844, 390], [390, 844], [768, 1024], [1024, 768]]) {
+        await page.setViewportSize({ width, height });
+        await page.evaluate(() => scrollTo(0, innerHeight * 2));
+        await page.waitForFunction(() => window.__aioStage.companions.every(entry => entry.obj.visible));
+        const points = await page.evaluate(() => {
+            const stage = window.__aioStage;
+            return [stage.group, ...stage.companions.map(entry => entry.obj)].map(obj => {
+                const centre = new stage.THREE.Box3().setFromObject(obj).getCenter(new stage.THREE.Vector3()).project(stage.camera);
+                return { x: (centre.x + 1) * innerWidth / 2, y: (1 - centre.y) * innerHeight / 2 };
+            });
+        });
+        for (const point of points) {
+            await page.mouse.move(point.x, point.y);
+            await page.waitForTimeout(120);
+            assert.ok(await page.evaluate(() => {
+                const stage = window.__aioStage;
+                const boxes = [stage.group, ...stage.companions.map(entry => entry.obj)].map(obj => new stage.THREE.Box3().setFromObject(obj));
+                return boxes.every((box, index) => boxes.slice(index + 1).every(other => !box.intersectsBox(other)));
+            }), `No hover or orientation-change intersections at ${width} × ${height}`);
+        }
+    }
+    console.log("verified all five devices across nine viewport sizes, live orientation changes, transition and hover");
     // Exercise real hover input and prove the renderer sleeps both when hidden
     // and when the visible scene has settled, then wakes for a hover turn.
     await page.setViewportSize({ width: 1440, height: 900 });

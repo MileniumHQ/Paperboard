@@ -16,32 +16,14 @@ const DEVICES = [
     { id: 'battlestation', file: 'models/battlestation.glb' },
 ];
 
-// Keep every device in a compact group; fit the measured footprints instead
-// of removing machines at progressively wider aspect-ratio breakpoints.
-const TIERS = [
-    {
-        minHalfW: 3.5, mode: 'h',
-        slots: {
-            imac: { x: -3.5, y: 0, scale: 0.36, rot: 0.7 },
-            laptop: { x: -1.5, y: 0, scale: 0.4, rot: 0.7 },
-            'mini-pc': { x: 0.1, y: 0, scale: 0.28, rot: 0.7 },
-            'dev-board': { x: 1.2, y: 0, scale: 0.24, rot: 0.7 },
-            battlestation: { x: 4.0, y: 0, scale: 0.36, rot: -0.75 },
-        },
-        dash: { from: 'dev-board', to: 'battlestation' },
-    },
-    {
-        minHalfW: 0, mode: 'v',
-        slots: {
-            imac: { x: -0.6, y: 1.3, scale: 0.22, rot: 0.3 },
-            laptop: { x: 0.9, y: 1.6, scale: 0.26, rot: -0.3 },
-            'mini-pc': { x: -0.5, y: 0.2, scale: 0.22, rot: 0.5 },
-            'dev-board': { x: 0.8, y: 0.3, scale: 0.22, rot: -0.4 },
-            battlestation: { x: 0.4, y: -1.2, scale: 0.3, rot: -0.5 },
-        },
-        dash: { from: 'imac', to: 'battlestation' },
-    },
-];
+// Model identity sets proportions, while the measured bounds choose the rows.
+const MODEL_STYLE = {
+    imac: { scale: 0.36, rot: 0.7 },
+    laptop: { scale: 0.4, rot: 0.7 },
+    'mini-pc': { scale: 0.28, rot: 0.7 },
+    'dev-board': { scale: 0.24, rot: 0.7 },
+    battlestation: { scale: 0.36, rot: -0.75 },
+};
 
 // 1 = no turn on hover, lower = turn further toward the viewer.
 const HOVER_TURN = 0.35;
@@ -163,6 +145,12 @@ function init() {
     groupBox.min.sub(group.position).divideScalar(group.scale.x);
     groupBox.max.sub(group.position).divideScalar(group.scale.x);
     let layoutDirty = true;
+    const stageCopy = document.querySelector('.stage-copy');
+    const stageSection = document.querySelector('.stage-section');
+    const topbar = document.querySelector('.site-topbar__bar');
+    const layoutObserver = new ResizeObserver(() => { layoutDirty = true; });
+    if (stageCopy) layoutObserver.observe(stageCopy);
+    if (topbar) layoutObserver.observe(topbar);
     const api = {
         THREE, scene, camera, renderer, group, companions, ground,
         REST_POS, REST_LOOK,
@@ -175,6 +163,11 @@ function init() {
         screenVersion: 0,
     };
     window.__aioStage = api;
+    api.applyHomePose = () => {
+        group.scale.setScalar(api.home.scale);
+        group.position.set(api.home.x, api.home.y, 0);
+        group.rotation.y = api.home.rot * (1 - HOVER_TURN * api.groupHover);
+    };
 
     api.setScreen = setScreen;
     api.screenTargets = screenTargets;
@@ -254,57 +247,45 @@ function init() {
         });
     });
 
-    function activeTier(halfW) {
-        for (const tier of TIERS) {
-            if (halfW >= tier.minHalfW) return tier;
-        }
-        return TIERS[TIERS.length - 1];
-    }
-
     function applyLayout() {
         const aspect = (canvas.clientWidth || 1) / (canvas.clientHeight || 1);
         const halfW = Math.tan((FOV * Math.PI) / 360) * CAM_DIST * aspect;
-        const tier = activeTier(halfW);
-
-        const enabled = new Set(Object.keys(tier.slots));
-        // a stacked layout floats the machines, so the floor shadow would lie
-        ground.visible = tier.mode !== 'v';
-
-        const imacSlot = tier.slots.imac;
-        api.home = {
-            x: imacSlot.x, y: imacSlot.y,
-            scale: imacSlot.scale, rot: imacSlot.rot,
-        };
-
-        for (const entry of companions) {
-            const slot = tier.slots[entry.id];
-            const on = !!slot && enabled.has(entry.id);
-            entry.enabled = on;
-            if (!on) {
-                entry.obj.visible = false;
-                continue;
-            }
-            if (tier.mode === 'v') {
-                entry.obj.position.set(slot.x, slot.y, slot.z ?? 0.2);
-            } else {
-                entry.obj.position.set(slot.x, slot.y, 0.3);
-            }
-            entry.obj.scale.setScalar(slot.scale);
-            entry.baseRotY = slot.rot;
-            entry.obj.rotation.y = slot.rot;
-            if (entry.hoverEntry) entry.hoverEntry.baseRotY = slot.rot;
+        const height = canvas.clientHeight || 1;
+        const top = (topbar?.getBoundingClientRect().bottom || 0) + 24;
+        const bottom = height - (stageCopy?.offsetHeight || 0)
+            - (stageSection ? parseFloat(getComputedStyle(stageSection).paddingBottom) || 0 : 0) - 24;
+        const usableHeight = Math.max(64, bottom - top);
+        const halfH = halfW / aspect;
+        const centerY = REST_LOOK[1] + (height / 2 - (top + bottom) / 2) * (2 * halfH / height);
+        api.home = { x: 0, y: 0, ...MODEL_STYLE.imac };
+        // A stable order keeps the composition unchanged by model download order.
+        const ordered = DEVICES.map(spec => companions.find(entry => entry.id === spec.id)).filter(Boolean);
+        for (const entry of ordered) {
+            const style = MODEL_STYLE[entry.id];
+            entry.enabled = true;
+            // Flight restores visibility after adopting this layout. Never
+            // render new neighbour positions beside the previous home pose.
+            entry.obj.visible = false;
+            entry.obj.position.set(0, 0, 0.3);
+            entry.obj.scale.setScalar(style.scale);
+            entry.baseRotY = style.rot;
+            entry.obj.rotation.y = style.rot;
+            entry.hoverEntry.baseRotY = style.rot;
         }
 
         // Pack bounds that include depth and every hover rotation. Models with
         // off-centre origins still get enough space beside their neighbours.
         const entries = [{ box: groupBox, scale: api.home.scale },
-            ...companions.filter(entry => entry.enabled).map(entry => ({ entry, box: entry.box, scale: entry.obj.scale.x }))];
+            ...ordered.map(entry => ({ entry, box: entry.box, scale: entry.obj.scale.x }))];
         const placements = layoutModels(entries.map(item => ({
             ...item,
             radius: Math.hypot(Math.max(Math.abs(item.box.min.x), Math.abs(item.box.max.x)), Math.max(Math.abs(item.box.min.z), Math.abs(item.box.max.z))),
             minY: item.box.min.y,
             height: item.box.max.y - item.box.min.y,
-        })), { stacked: tier.mode === 'v', halfWidth: halfW, halfHeight: halfW / aspect });
+        })), { halfWidth: halfW, halfHeight: halfH * usableHeight / height, centerY });
+        api.layoutRows = 1 + Math.max(...placements.map(item => item.row));
+        ground.visible = api.layoutRows === 1;
+        ground.position.y = placements[0].y + placements[0].minY * placements[0].scale - 0.002;
         for (const item of placements) {
             if (!item.entry) Object.assign(api.home, { x: item.x, y: item.y, scale: item.scale });
             else {
@@ -322,23 +303,13 @@ function init() {
         // The run is resolved in screen space by flight from the real objects:
         // a world-space edge can still project inside a yawed model, so passing
         // the objects is the only way to guarantee the line bridges them.
-        const dash = { enabled: false, mode: tier.mode, from: null, to: null };
-        if (enabled.has('battlestation') && tier.dash) {
-            const from =
-                tier.dash.from === 'imac'
-                    ? group
-                    : companions.find(
-                          (entry) => entry.id === tier.dash.from && entry.enabled,
-                      )?.obj;
-            const to = companions.find(
-                (entry) => entry.id === tier.dash.to && entry.enabled,
-            )?.obj;
-            if (from && to) {
-                dash.enabled = true;
-                dash.from = from;
-                dash.to = to;
-            }
-        }
+        const from = ordered.find(entry => entry.id === 'dev-board');
+        const to = ordered.find(entry => entry.id === 'battlestation');
+        const fromPlacement = placements.find(item => item.entry === from);
+        const toPlacement = placements.find(item => item.entry === to);
+        const dash = { enabled: Boolean(from && to),
+            mode: fromPlacement?.row === toPlacement?.row ? 'h' : 'v',
+            from: from?.obj, to: to?.obj };
         api.dash = dash;
     }
 
@@ -386,6 +357,7 @@ function init() {
 
         // flight owns the group past the handoff, resting state only above it
         const s = (window.scrollY || 0) / (window.innerHeight || 1);
+        if (s >= 2) api.applyHomePose();
         if (s < 0.9) {
             group.scale.setScalar(api.home.scale);
             group.position.set(api.home.x, api.home.y, 0);
@@ -411,6 +383,7 @@ function init() {
     renderer.setAnimationLoop(frame);
     window.addEventListener('pagehide', () => {
         renderer.setAnimationLoop(null);
+        layoutObserver.disconnect();
         renderer.dispose();
     }, { once: true });
 }

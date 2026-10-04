@@ -268,6 +268,7 @@
             g.scale.setScalar(S);
             g.position.set(lerp(0, home.x, q), lerp(START_Y, home.y, q), 0);
             g.rotation.y = home.rot * q * (1 - turn * (stage.groupHover || 0));
+            if (q === 1) stage.applyHomePose();
 
             // Wait for the moving all-in-one to reach its packed footprint.
             // The same bounds used by layout guard the transition as well.
@@ -380,12 +381,13 @@
                     let x1;
                     let y1;
                     if (dash.mode === "v") {
-                        x0 = x1 = (fromBox.minX + fromBox.maxX) / 2;
+                        x0 = (fromBox.minX + fromBox.maxX) / 2;
+                        x1 = (toBox.minX + toBox.maxX) / 2;
                         y0 = fromBox.maxY;
                         y1 = toBox.minY;
                     } else {
-                        const anchor = new THREE.Vector3(0, 0.5, 0.3).project(cam);
-                        y0 = y1 = (-anchor.y * 0.5 + 0.5) * chh;
+                        y0 = (fromBox.minY + fromBox.maxY) / 2;
+                        y1 = (toBox.minY + toBox.maxY) / 2;
                         x0 = fromBox.maxX;
                         x1 = toBox.minX;
                     }
