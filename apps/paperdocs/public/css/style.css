@@ -53,6 +53,7 @@ html {
 }
 
 .site-topbar {
+    text-align: left;
     position: fixed;
     top: 12px;
     left: 0;
@@ -1075,7 +1076,7 @@ BgOverlay:not(:defined) {
     display: block;
     width: 100%;
     height: auto;
-    border-radius: 26px;
+    border-radius: 4px;
 }
 
 @media (max-width: 860px) {
