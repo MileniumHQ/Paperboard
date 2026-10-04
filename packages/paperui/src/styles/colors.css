@@ -25,9 +25,9 @@
     /* Panel identities shared by the marketing site and future panel chrome. */
     --paper-marketing-ink: #080c12;
     --paper-panel-gameserver: #ee3865;
-    --paper-panel-ai: #8bf53e;
+    --paper-panel-ai: #00f5d4;
     --paper-panel-actions: #2454bd;
-    --paper-panel-botcreator: #7962ee;
+    --paper-panel-botcreator: #5865f2;
 
     /* text and icons on a colored fill */
     --paper-on-color: #ffffff;
