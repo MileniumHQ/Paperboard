@@ -352,6 +352,13 @@ export async function runSupervisor(procId: string): Promise<void> {
         isExited = true;
         broadcast({ type: "exit", code });
 
+        // every teardown path must reach the workload: a supervisor that
+        // exits on SIGTERM with its child still running orphans the child
+        try {
+            if (ptyInstance) ptyInstance.kill();
+            else childProcess?.kill("SIGTERM");
+        } catch (err) { logger.debug("[supervisor.ts] could not stop workload on teardown:", err) }
+
         for (const client of clients) {
             try { client.end(); } catch (err) { logger.debug("[supervisor.ts] op failed:", err) }
         }

@@ -17,6 +17,7 @@ import {
     supervisorEndpointName,
     supervisorSocketPathForName,
 } from "../papercrane/supervisor";
+import { stopSpawnedSupervisor } from "../papercrane/engineSupervisor";
 import { getSocketsDir } from "../papercrane/paths";
 import { PaperCraneEngine } from "../papercrane/engine";
 
@@ -140,5 +141,70 @@ describe("daemon restart recovery", () => {
         const engine = new PaperCraneEngine(root);
         await engine.recoverRunningSupervisors();
         expect((engine as any).clients.has("dev.test.impostor")).toBe(false);
+    });
+});
+
+// ─── Failed spawn must not orphan a detached supervisor ─────────────────────
+describe("failed spawn recovery", () => {
+    // stopping a detached supervisor is more than sending a signal: the
+    // exit is observed. In real daemon failure paths the spawned
+    // supervisor that never became ready (or never reported a start)
+    // goes through exactly this teardown; under `bun test` the daemon
+    // cannot spawn supervisor children itself (bun treats `--supervise`
+    // as a script path), so this drives the teardown directly.
+    it("observes the supervisor's exit and removes its endpoint", async () => {
+        const id = "dev.test.orphan.stop";
+        const child = await supervise(id);
+        expect(child.exitCode).toBeNull();
+        await stopSpawnedSupervisor(id, child);
+        expect(await exited(child, 8000)).toBe(true);
+        // endpoint cleanup, so nothing later mistakes it for a live one
+        expect(fs.existsSync(getSupervisorMetadataPath(id))).toBe(false);
+        expect(fs.existsSync(getSupervisorSocketPath(id))).toBe(false);
+    }, 30_000);
+
+    it("is a no-op on an already-exited supervisor", async () => {
+        const id = "dev.test.orphan.stopped";
+        const child = await supervise(id);
+        child.kill("SIGTERM");
+        await exited(child);
+        await stopSpawnedSupervisor(id, child);
+        expect(child.exitCode !== null).toBe(true);
+    }, 30_000);
+});
+
+// ─── Live workload budget ────────────────────────────────────────────────────
+describe("live workload budget", () => {
+    it("refuses creation past the budget instead of spawning another supervisor", async () => {
+        const root = fs.mkdtempSync(path.join(os.tmpdir(), "supervisor-cap-"));
+        cleanup.push(() => fs.rmSync(root, { recursive: true, force: true }));
+        const engine = new PaperCraneEngine(root);
+        for (let i = 0; i < 128; i++) {
+            (engine as any).clients.set(`dev.test.stub.${i}`, { id: `dev.test.stub.${i}`, isConnected: () => true, destroy: () => { /* stub */ } });
+        }
+        await expect(engine.startProcess("dev.test.stub.overhead", process.execPath, ["-e", "0"]))
+            .rejects.toThrow(/Too many live supervised workloads/);
+        expect((engine as any).clients.has("dev.test.stub.overhead")).toBe(false);
+    });
+
+    it("a dead entry does not consume budget: it is replaced, not rejected", async () => {
+        const root = fs.mkdtempSync(path.join(os.tmpdir(), "supervisor-cap-replace-"));
+        cleanup.push(() => fs.rmSync(root, { recursive: true, force: true }));
+        const engine = new PaperCraneEngine(root);
+        for (let i = 0; i < 127; i++) {
+            (engine as any).clients.set(`dev.test.stub.${i}`, { id: `dev.test.stub.${i}`, isConnected: () => true, destroy: () => { /* stub */ } });
+        }
+        let destroyed = false;
+        (engine as any).clients.set("dev.test.stale", {
+            id: "dev.test.stale",
+            isConnected: () => false,
+            destroy: () => { destroyed = true; },
+        });
+        // the spawn itself fails under `bun test` (see failed-spawn note),
+        // but that is proof enough the budget refusal never happened
+        await expect(engine.startProcess("dev.test.stale", process.execPath, ["-e", "0"]))
+            .rejects.not.toThrow(/Too many live supervised workloads/);
+        expect(destroyed).toBe(true);
+        expect((engine as any).clients.has("dev.test.stale")).toBe(false);
     });
 });
