@@ -28,14 +28,12 @@ describe("CredentialStore", () => {
         expect(store.get("nope", "dev.test.a")).toEqual({ found: false, value: null });
     });
 
-    it("lists names only, scoped to the calling panel unless explicitly widened", () => {
+    it("lists names only, never widened past the addressed panel", () => {
         store.set("aaa", "v", "dev.test.list");
         store.set("bbb", "v", "dev.test.list2");
         expect(store.list("dev.test.list")).toEqual(["dev.test.list/aaa"]);
-        const widened = store.list("dev.test.list", true);
-        expect(widened).toContain("dev.test.list/aaa");
-        expect(widened).toContain("dev.test.list2/bbb");
-        expect(widened.every((k) => /^[a-zA-Z0-9._-]+\/[a-zA-Z0-9._-]+$/.test(k))).toBe(true);
+        expect(store.list("dev.test.list2")).toEqual(["dev.test.list2/bbb"]);
+        expect(store.list("dev.test.list").every((k) => /^[a-zA-Z0-9._-]+\/[a-zA-Z0-9._-]+$/.test(k))).toBe(true);
     });
 
     it("rejects invalid panel ids at the boundary", () => {

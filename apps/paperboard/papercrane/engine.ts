@@ -1230,8 +1230,8 @@ export class PaperCraneEngine {
         return this.credentialsStore.delete(name, panelId);
     }
 
-    public listSecrets(panelId?: string, includeOtherPanels = false): string[] {
-        return this.credentialsStore.list(panelId, includeOtherPanels);
+    public listSecrets(panelId?: string): string[] {
+        return this.credentialsStore.list(panelId);
     }
 
     public purgeSecrets(panelId: string): number {

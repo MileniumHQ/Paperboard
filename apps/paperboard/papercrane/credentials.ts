@@ -140,12 +140,13 @@ export class CredentialStore {
         return existed;
     }
 
-    // names only, never values; defaults to the calling panel's keys
-    public list(panelId?: string, includeOtherPanels = false): string[] {
+    // names only, never values, and only one panel's keys: the wire (and
+    // every caller) resolves identity explicitly, no cross-panel widening
+    public list(panelId?: string): string[] {
         const panel = panelId !== undefined ? this.validatePanelId(panelId) : null;
         const keys: string[] = [];
         for (const key of this.secrets.keys()) {
-            if (!includeOtherPanels && key.split("/")[0] !== panel) continue;
+            if (panel !== null && key.split("/")[0] !== panel) continue;
             keys.push(key);
         }
         return keys.sort();

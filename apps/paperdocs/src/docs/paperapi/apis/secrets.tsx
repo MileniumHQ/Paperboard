@@ -66,8 +66,8 @@ if (secret.found) {
                     </tr>
                     <tr>
                         <td><PaperCode>list</PaperCode></td>
-                        <td><PaperCode>list(panelId?, includeOtherPanels?): Promise&lt;string[]&gt;</PaperCode></td>
-                        <td>Returns secret names only. Never returns secret values.</td>
+                        <td><PaperCode>list(panelId?): Promise&lt;string[]&gt;</PaperCode></td>
+                        <td>Returns secret names only, for the named panel (or the calling panel by token claim). Never returns secret values and never spans panels.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>purge</PaperCode></td>

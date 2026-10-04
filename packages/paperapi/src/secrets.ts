@@ -32,9 +32,11 @@ export const secretsApi = {
         return invoke<boolean>("secrets-delete", { name, panelId });
     },
 
-    list: (panelId?: string, includeOtherPanels?: boolean): Promise<string[]> => {
+    // names only, never values, and only the calling panel's keys: there
+    // is no cross-panel widening flag on the wire
+    list: (panelId?: string): Promise<string[]> => {
         if (panelId !== undefined) assertVaultArg(panelId, "panelId");
-        return invoke<string[]>("secrets-list", { panelId, includeOtherPanels: includeOtherPanels === true });
+        return invoke<string[]>("secrets-list", { panelId });
     },
 
     purge: (panelId: string): Promise<number> => {
