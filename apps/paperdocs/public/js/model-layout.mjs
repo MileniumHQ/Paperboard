@@ -7,7 +7,7 @@ export function separatedModels(a, b) {
 }
 
 export function layoutModels(items, { halfWidth, halfHeight, centerY = 0.5 }) {
-    const gap = 0.24;
+    const gap = 1.2;
     let best;
     // At most five models/candidates. Choose the arrangement that keeps the
     // models largest; balanced rows break ties instead of leaving a lone tile.

@@ -186,6 +186,17 @@ try {
         await page.waitForFunction(() =>
             window.__aioStage.companions.every((entry) => entry.obj.visible),
         );
+        const connector = await page.locator('.stage-dash').evaluate(element => ({
+            transform: getComputedStyle(element).transform,
+            width: element.getBoundingClientRect().width,
+            left: element.getBoundingClientRect().left,
+            right: element.getBoundingClientRect().right,
+            y: element.getBoundingClientRect().top,
+            visible: getComputedStyle(element).visibility,
+        }));
+        assert.equal(connector.transform, 'none', `The data line must be horizontal at ${width} × ${height}`);
+        assert.equal(connector.visible, 'visible');
+        assert.ok(connector.width >= 24, `The data line needs a legible run at ${width} × ${height}: ${connector.width}`);
         const devices = await page.evaluate(() => {
             const stage = window.__aioStage;
             return [stage.group, ...stage.companions.map((entry) => entry.obj)].map((object) => {
@@ -203,6 +214,12 @@ try {
             });
         });
         assert.equal(devices.length, 5);
+        assert.ok(devices.every(device => {
+            const xs = device.corners.map(point => (point.x + 1) * width / 2);
+            const ys = device.corners.map(point => (1 - point.y) * height / 2);
+            return connector.right <= Math.min(...xs) || connector.left >= Math.max(...xs)
+                || connector.y <= Math.min(...ys) || connector.y >= Math.max(...ys);
+        }), `The horizontal line must stay clear of devices at ${width} × ${height}`);
         for (const [index, a] of devices.entries()) for (const b of devices.slice(index + 1)) {
             assert.ok(a.max.x < b.min.x || b.max.x < a.min.x || a.max.y < b.min.y || b.max.y < a.min.y || a.max.z < b.min.z || b.max.z < a.min.z, `Models must not intersect at ${width} × ${height}`);
         }

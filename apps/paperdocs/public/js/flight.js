@@ -379,29 +379,31 @@
                     let x0;
                     let y0;
                     let x1;
-                    let y1;
                     if (dash.mode === "v") {
-                        x0 = (fromBox.minX + fromBox.maxX) / 2;
-                        x1 = (toBox.minX + toBox.maxX) / 2;
-                        y0 = fromBox.maxY;
-                        y1 = toBox.minY;
+                        // Rows keep a horizontal data run in the clear space
+                        // between them, rather than drawing a diagonal wire.
+                        const upper = fromBox.minY < toBox.minY ? fromBox : toBox;
+                        const lower = upper === fromBox ? toBox : fromBox;
+                        const centre = (fromBox.minX + fromBox.maxX + toBox.minX + toBox.maxX) / 4;
+                        const length = Math.min(160, cw * 0.3);
+                        x0 = centre - length / 2;
+                        x1 = centre + length / 2;
+                        y0 = (upper.maxY + lower.minY) / 2;
                     } else {
                         y0 = (fromBox.minY + fromBox.maxY) / 2;
-                        y1 = (toBox.minY + toBox.maxY) / 2;
-                        x0 = fromBox.maxX;
-                        x1 = toBox.minX;
+                        const left = fromBox.minX < toBox.minX ? fromBox : toBox;
+                        const right = left === fromBox ? toBox : fromBox;
+                        x0 = left.maxX + 2;
+                        x1 = right.minX - 2;
                     }
-                    const dx = x1 - x0;
-                    const dy = y1 - y0;
                     // Grow by width, not scaleX: scaling the element stretched
                     // the repeating dash pattern until it "normalised".
                     dashEl.style.left = `${x0.toFixed(1)}px`;
                     dashEl.style.top = `${y0.toFixed(1)}px`;
-                    dashEl.style.width = `${(Math.hypot(dx, dy) * fq).toFixed(1)}px`;
+                    dashEl.style.width = `${(Math.max(0, x1 - x0) * fq).toFixed(1)}px`;
                     dashEl.style.visibility = fq > 0.01 ? "visible" : "hidden";
                     dashEl.style.opacity = String(stageFade);
-                    dashEl.style.transform =
-                        `rotate(${Math.atan2(dy, dx).toFixed(3)}rad)`;
+                    dashEl.style.transform = "none";
                 }
             }
         }
