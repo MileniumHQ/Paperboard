@@ -350,6 +350,18 @@ export function takeInteraction(interactionId: string): RepliableInteraction {
     return entry.interaction;
 }
 
+// A terminally answered interaction (reply / followUp / editReply) is done:
+// drop it and clear its TTL timer so health counts stay honest and the
+// object is not retained. Lookup alone (takeInteraction) does not forget:
+// a deferred interaction is still answerable later, so defer -> respond ->
+// follow up must all resolve the same live interaction.
+export function forgetInteraction(interactionId: string): void {
+    const entry = pendingInteractions.get(interactionId);
+    if (!entry) return;
+    clearTimeout(entry.timer);
+    pendingInteractions.delete(interactionId);
+}
+
 export function clearPendingInteractions(): void {
     for (const entry of pendingInteractions.values()) clearTimeout(entry.timer);
     pendingInteractions.clear();
@@ -1532,7 +1544,7 @@ export const actions = [
             _ctx,
             inputs: { interactionId: string; ephemeral?: boolean },
         ) => {
-            const ops = new InteractionOps(takeInteraction);
+            const ops = new InteractionOps(takeInteraction, forgetInteraction);
             await ops.defer(inputs.interactionId, inputs.ephemeral);
             return true;
         },
@@ -1567,7 +1579,7 @@ export const actions = [
                 ephemeral?: boolean;
             },
         ) => {
-            const ops = new InteractionOps(takeInteraction);
+            const ops = new InteractionOps(takeInteraction, forgetInteraction);
             return ops.respond(inputs.interactionId, inputs);
         },
     }),
@@ -1600,7 +1612,7 @@ export const actions = [
                 ephemeral?: boolean;
             },
         ) => {
-            const ops = new InteractionOps(takeInteraction);
+            const ops = new InteractionOps(takeInteraction, forgetInteraction);
             return ops.followUp(inputs.interactionId, inputs);
         },
     }),

@@ -41,6 +41,7 @@ import {
     syncSlashCommands,
     rememberInteraction,
     takeInteraction,
+    forgetInteraction,
     pendingInteractionCount,
     clearPendingInteractions,
 } from "../src/service";
@@ -552,6 +553,51 @@ describe("pending interaction store", () => {
         clearPendingInteractions();
         expect(pendingInteractionCount()).toBe(0);
         expect(() => takeInteraction("a")).toThrow(/not pending/);
+    });
+
+    it("forgets an interaction once it is terminally answered", async () => {
+        const { InteractionOps } = await import("../src/discordOps");
+        const live: any = {
+            id: "live",
+            deferred: false,
+            replied: false,
+            reply: async () => {
+                live.replied = true;
+            },
+            editReply: async () => {},
+            followUp: async () => ({ id: "msg" }),
+        };
+        rememberInteraction(live);
+        expect(pendingInteractionCount()).toBe(1);
+
+        const ops = new InteractionOps(takeInteraction, forgetInteraction);
+        await ops.respond("live", { content: "hi" });
+        // answered => no longer pending, and a second answer refuses
+        expect(pendingInteractionCount()).toBe(0);
+        expect(() => takeInteraction("live")).toThrow(/not pending/);
+        await expect(ops.respond("live", { content: "again" })).rejects.toThrow(
+            /not pending/,
+        );
+    });
+
+    it("keeps a deferred interaction answerable later", async () => {
+        const { InteractionOps } = await import("../src/discordOps");
+        const live: any = {
+            id: "deferred",
+            deferred: false,
+            replied: false,
+            deferReply: async () => {
+                live.deferred = true;
+            },
+            editReply: async () => {},
+        };
+        rememberInteraction(live);
+        const ops = new InteractionOps(takeInteraction, forgetInteraction);
+        await ops.defer("deferred");
+        // still pending: defer is not a terminal answer
+        expect(pendingInteractionCount()).toBe(1);
+        await ops.respond("deferred", { content: "late" });
+        expect(pendingInteractionCount()).toBe(0);
     });
 });
 
