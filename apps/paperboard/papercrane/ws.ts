@@ -93,6 +93,30 @@ export function setupWebSocketServer(
 ) {
     // broadcast interest per socket: socket → declared event names
     const socketSubscriptions = new Map<WebSocket, Set<string>>();
+    // event name → sockets that declared it. A "*" entry receives every
+    // event. Broadcasting walks only the interested sockets, never the whole
+    // connection set: filtering after a broad scan is not scoping.
+    const eventSubscribers = new Map<string, Set<WebSocket>>();
+    const indexSubscriptions = (socket: WebSocket, names: Set<string>) => {
+        for (const name of names) {
+            let set = eventSubscribers.get(name);
+            if (!set) {
+                set = new Set();
+                eventSubscribers.set(name, set);
+            }
+            set.add(socket);
+        }
+    };
+    const unindexSubscriptions = (socket: WebSocket) => {
+        const names = socketSubscriptions.get(socket);
+        if (!names) return;
+        for (const name of names) {
+            const set = eventSubscribers.get(name);
+            if (!set) continue;
+            set.delete(socket);
+            if (set.size === 0) eventSubscribers.delete(name);
+        }
+    };
     const byToken = new Map<string, Set<WebSocket>>();
     const byPanel = new Map<string, Set<WebSocket>>();
     const preAuth = { loopback: 0, remote: 0, byAddress: new Map<string, number>() };
@@ -126,6 +150,7 @@ export function setupWebSocketServer(
     wss.options.maxPayload = Math.min(wss.options.maxPayload ?? MAX_WS_PAYLOAD, MAX_WS_PAYLOAD);
     const revokeSockets = (sockets?: Set<WebSocket>) => {
         for (const socket of sockets ?? []) {
+            unindexSubscriptions(socket);
             socketSubscriptions.delete(socket);
             socket.close(4401, "Credential revoked");
         }
@@ -140,6 +165,7 @@ export function setupWebSocketServer(
         byToken.clear();
         byPanel.clear();
         socketSubscriptions.clear();
+        eventSubscribers.clear();
     });
 
     wss.on("connection", (ws: WebSocket, req: any) => {
@@ -251,16 +277,15 @@ export function setupWebSocketServer(
         };
 
         const broadcastEvent = (event: string, payload: any) => {
+            const recipients = new Set<WebSocket>();
+            for (const client of eventSubscribers.get(event) ?? []) recipients.add(client);
+            for (const client of eventSubscribers.get("*") ?? []) recipients.add(client);
+            if (recipients.size === 0) return;
             const msg = JSON.stringify({ type: "event", event, payload });
-            for (const client of wss.clients) {
+            for (const client of recipients) {
                 if (client.readyState !== WebSocket.OPEN) continue;
                 if (client.bufferedAmount > 32 * 1024 * 1024) { client.close(4429, "Slow event consumer"); continue; }
-                // scope broadcasts to sockets that declared interest; a socket
-                // that never subscribed gets nothing, closing the blast radius
-                const subs = socketSubscriptions.get(client);
-                if (subs && (subs.has(event) || subs.has("*"))) {
-                    client.send(msg);
-                }
+                client.send(msg);
             }
         };
 
@@ -269,6 +294,7 @@ export function setupWebSocketServer(
             releasePreAuth?.();
             unindex(byToken, authedToken);
             unindex(byPanel, authedPanelId);
+            unindexSubscriptions(ws);
             socketSubscriptions.delete(ws);
             const registryChanged = actionsRegistry.handleSocketClose(ws);
             if (registryChanged) {
@@ -663,7 +689,12 @@ export function setupWebSocketServer(
                     for (const evt of events) {
                         if (typeof evt === "string") declared.add(evt);
                     }
+                    // full-replace: drop the old interest before indexing the
+                    // new declaration so the event index never holds a stale
+                    // membership
+                    unindexSubscriptions(ws);
                     socketSubscriptions.set(ws, declared);
+                    indexSubscriptions(ws, declared);
                     reply({ success: true, count: declared.size });
                     return;
                 }

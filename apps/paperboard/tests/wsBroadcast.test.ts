@@ -151,4 +151,22 @@ describe("events:subscribe broadcast filtering", () => {
         expect(resp.code).toBe("INVALID_PARAMS");
         a.ws.terminate();
     });
+
+    it("delivers only to the sockets indexed for that event", async () => {
+        const x = await connect();
+        const y = await connect();
+        send(x, { id: 1, action: "events:subscribe", params: { events: ["actions:dev.x:x"] } });
+        send(y, { id: 1, action: "events:subscribe", params: { events: ["actions:dev.x:y"] } });
+        await waitFor(x, (f) => f.id === 1 && !f.error);
+        await waitFor(y, (f) => f.id === 1 && !f.error);
+
+        send(x, { id: 2, action: "actions:emit", params: { panelId: "dev.x", event: "x" } });
+        await waitFor(x, (f) => f.type === "event" && f.event === "actions:dev.x:x");
+        await new Promise((r) => setTimeout(r, 100));
+        // the other subscriber's index set does not contain this event
+        expect(y.frames.filter((f) => f.type === "event")).toHaveLength(0);
+
+        x.ws.terminate();
+        y.ws.terminate();
+    });
 });
