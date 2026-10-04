@@ -68,6 +68,23 @@ describe("paired computers", () => {
         } finally { pool.dispose(); }
     });
 
+    it("readRemotes reads through the shared quarantine reader: pairing state is never read as empty", async () => {
+        if (process.platform === "win32" || process.getuid?.() === 0) return;
+        const { readRemotes } = await import("../papercrane/remotes");
+        const file = path.join(dir, "local", "paired_computers.json");
+        // unreadable, not unfound: that is a refusal, not "no pairings"
+        fs.writeFileSync(file, JSON.stringify({ computers: [] }));
+        fs.chmodSync(file, 0o000);
+        try {
+            expect(() => readRemotes(file)).toThrow();
+        } finally { fs.chmodSync(file, 0o600); }
+        // corrupt bytes are quarantined beside the file, and the refusal
+        // keeps the bytes recoverable
+        fs.writeFileSync(file, '{"computers":[{"id":"remote-1"');
+        readRemotes(file);
+        expect(quarantined(path.join(dir, "local"), "paired_computers.json")).toHaveLength(1);
+    });
+
     it("a rename that could not be saved is reported and not kept in memory", async () => {
         if (process.platform === "win32" || process.getuid?.() === 0) return;
         const { ConnectionPool } = await import("../src/main/communication/papercrane/ConnectionPool");

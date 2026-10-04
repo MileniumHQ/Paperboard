@@ -1,6 +1,5 @@
 // paired-computer registry for remote tunneling
-import * as fs from "fs";
-import { logger } from "./logger";
+import { readStateFileSync } from "./storage";
 
 export interface RemoteEntry {
     id: string;
@@ -15,15 +14,11 @@ export interface RemoteEntry {
 
 export function readRemotes(file: string | undefined): RemoteEntry[] {
     if (!file) return [];
-    let raw: any;
-    try {
-        raw = JSON.parse(fs.readFileSync(file, "utf8"));
-    } catch (err) {
-        // corrupt remotes file reads as empty (quarantine lives in
-        // credentials.ts; here the file is advisory, not trust)
-        logger.debug(`[remotes] unreadable remotes file ${file}, treating as empty:`, err);
-        return [];
-    }
+    // trust-relevant state (a pairing holds a pinned certificate) is never
+    // read as "no paired computers": the shared state reader quarantines
+    // unparseable bytes beside the file and refuses unreadable files, so
+    // dropped pairings are loud and recoverable, never silent.
+    const raw = readStateFileSync<{ computers?: unknown[] }>(file, {}, "paired_computers");
     const list: unknown[] = Array.isArray(raw?.computers) ? raw.computers : [];
     return (list as RemoteEntry[]).filter(
         (c) =>
