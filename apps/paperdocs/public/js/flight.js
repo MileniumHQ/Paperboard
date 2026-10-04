@@ -12,7 +12,7 @@
     };
     const ctaTop = () => sectionTop(".cta-section", 4);
     const closingTop = () => sectionTop(".outro-section", 5);
-    const snapStops = () => [0, V(), 2 * V(), 3 * V(), ctaTop(), closingTop()];
+    const snapStops = () => [0, V(), 2 * V(), ctaTop(), closingTop()];
     const stopIndex = () => {
         const y = window.scrollY || 0;
         const list = snapStops();
@@ -169,7 +169,15 @@
         }
     }
 
+    let flightRaf = 0;
+    let lastState = '';
+    const nextFrame = () => { flightRaf = requestAnimationFrame(loop); };
     function loop() {
+        const stageState = window.__aioStage;
+        const state = [window.scrollY, innerWidth, innerHeight, stageState?.layoutVersion,
+            stageState?.groupHover, ...(stageState?.companions || []).map(entry => entry.obj.rotation.y)].join(',');
+        if (state === lastState || document.hidden) { nextFrame(); return; }
+        lastState = state;
         window.__flight.ticks++;
         const vh = V();
         const W = window.innerWidth || 1;
@@ -177,7 +185,7 @@
         const stage = window.__aioStage;
 
         // The 3D lives for the showcase and stage; it fades out again before
-        // the chart section so the lineup does not sit behind that card.
+        // the developer section so the lineup does not sit behind that card.
         const stageFade = Math.min(
             clamp01((s - 1) / 0.25),
             1 - clamp01((s - 2.4) / 0.4),
@@ -395,7 +403,7 @@
             }
         }
 
-        requestAnimationFrame(loop);
+        nextFrame();
     }
 
     window.__flight = { ticks: 0, error: null };
@@ -408,5 +416,6 @@
     window.addEventListener("touchstart", onTouchStart, { passive: true });
     window.addEventListener("touchmove", onTouchMove, { passive: false });
     window.addEventListener("keydown", onKeyDown);
-    if (canvas && card) requestAnimationFrame(loop);
+    if (canvas && card) nextFrame();
+    window.addEventListener('pagehide', () => cancelAnimationFrame(flightRaf), { once: true });
 })();

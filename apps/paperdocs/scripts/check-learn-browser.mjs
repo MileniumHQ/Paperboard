@@ -58,6 +58,10 @@ try {
     for (const slug of ["actions", "game-server", "bot-creator", "ai"]) {
         assert.equal((await page.goto(`${origin}/${slug}/`)).status(), 200);
         assert.equal(await page.locator("h1").count(), 1);
+        assert.equal(await page.locator('link[rel="icon"]').getAttribute('href'), '/paperboard.png');
+        assert.equal(await page.locator('meta[property="og:url"]').getAttribute('content'), `https://paperboard.dev/${slug}/`);
+        assert.equal(await page.locator('meta[name="twitter:description"]').getAttribute('content'), await page.locator('meta[name="description"]').getAttribute('content'));
+        assert.equal(await page.locator('.site-topbar__item-text').first().evaluate(element => getComputedStyle(element).textAlign), 'left');
         assert.equal(await page.locator(".learn-kicker, .learn-eyebrow").count(), 0);
         assert.equal(await page.locator("h1.marketing-heading, .learn-feature h2.marketing-heading, .learn-outro h2.marketing-heading").count(), slug === "game-server" ? 6 : 5);
         assert.ok(!(await page.locator("main").innerText()).includes("—"));
@@ -136,7 +140,7 @@ try {
         await page
             .locator(".cta-image")
             .evaluate((element) => getComputedStyle(element).borderRadius),
-        "0px",
+        "4px",
     );
     assert.equal(await page.locator(".card-slide").count(), 6);
     assert.equal(await page.locator(".preview-card").evaluate(element => getComputedStyle(element, "::before").transform), "matrix(1, 0, 0, 1, 14, 16)");
@@ -176,11 +180,15 @@ try {
                             corners.push(new stage.THREE.Vector3(x, y, z).project(stage.camera));
                 return {
                     visible: object.visible,
+                    min: box.min, max: box.max,
                     corners: corners.map((point) => ({ x: point.x, y: point.y })),
                 };
             });
         });
         assert.equal(devices.length, 5);
+        for (const [index, a] of devices.entries()) for (const b of devices.slice(index + 1)) {
+            assert.ok(a.max.x < b.min.x || b.max.x < a.min.x || a.max.y < b.min.y || b.max.y < a.min.y || a.max.z < b.min.z || b.max.z < a.min.z, `Models must not intersect at ${width} × ${height}`);
+        }
         assert.ok(
             devices.every(
                 (device) =>
@@ -192,7 +200,37 @@ try {
             `All five devices must fit at ${width} × ${height}`,
         );
     }
-    console.log("verified five visible devices without clipping at four viewport sizes");
+    console.log("verified five visible devices without clipping or intersecting at four viewport sizes");
+    // Exercise real hover input and prove the renderer sleeps both when hidden
+    // and when the visible scene has settled, then wakes for a hover turn.
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto(`${origin}/`);
+    await page.waitForFunction(() => window.__aioStage?.companions.length === 4);
+    await page.waitForTimeout(300);
+    const hiddenRenders = await page.evaluate(() => window.__aioStage.renders);
+    await page.waitForTimeout(300);
+    assert.equal(await page.evaluate(() => window.__aioStage.renders), hiddenRenders);
+    await page.evaluate(() => scrollTo(0, innerHeight * 2));
+    await page.waitForTimeout(800);
+    const settledRenders = await page.evaluate(() => window.__aioStage.renders);
+    assert.ok(settledRenders > hiddenRenders);
+    await page.waitForTimeout(300);
+    assert.equal(await page.evaluate(() => window.__aioStage.renders), settledRenders);
+    const hoverPosition = await page.evaluate(() => {
+        const stage = window.__aioStage;
+        const point = new stage.THREE.Box3().setFromObject(stage.group).getCenter(new stage.THREE.Vector3()).project(stage.camera);
+        return { x: (point.x + 1) * innerWidth / 2, y: (1 - point.y) * innerHeight / 2 };
+    });
+    await page.mouse.move(hoverPosition.x, hoverPosition.y);
+    await page.waitForFunction(() => window.__aioStage.renders > 0 && window.__aioStage.groupHover > 0.05);
+    await page.waitForTimeout(800);
+    assert.ok(await page.evaluate(previous => window.__aioStage.renders > previous, settledRenders));
+    assert.ok(await page.evaluate(() => {
+        const s = window.__aioStage;
+        const boxes = [s.group, ...s.companions.map(entry => entry.obj)].map(obj => new s.THREE.Box3().setFromObject(obj));
+        return boxes.every((box, index) => boxes.slice(index + 1).every(other => !box.intersectsBox(other)));
+    }), 'Hover turns must not collide with neighbours');
+    console.log('verified sleeping GPU rendering and live hover without model intersections');
 
     await page.setViewportSize({ width: 1440, height: 1080 });
     await page.goto(`${origin}/`);

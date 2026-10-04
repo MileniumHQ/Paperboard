@@ -1,11 +1,11 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { layoutModels } from './model-layout.mjs';
 
 const REST_POS = [0.5, 3.4, 15];
 const REST_LOOK = [0.5, 0.5, 0];
 const FOV = 38;
 const CAM_DIST = REST_POS[2];
-const SHORT_HEIGHT = 620;
 
 const canvas = document.getElementById('aio-stage');
 
@@ -16,62 +16,28 @@ const DEVICES = [
     { id: 'battlestation', file: 'models/battlestation.glb' },
 ];
 
-// Stage layouts, widest first. Positions are fixed world coordinates, so the
-// gaps between machines never shrink as the window narrows — a fixed-FOV camera
-// means only the aspect (not the pixel width) decides how much room there is,
-// so the breakpoints are visible half-widths and the responsive step is to
-// drop a machine, never to squeeze the lineup. Narrowing drops the dev-board,
-// then the mini-pc, then the laptop; below that the imac sits on top and the
-// battlestation below it, joined by a short vertical data run.
+// Keep every device in a compact group; fit the measured footprints instead
+// of removing machines at progressively wider aspect-ratio breakpoints.
 const TIERS = [
     {
-        minHalfW: 9.0,
-        mode: 'h',
+        minHalfW: 3.5, mode: 'h',
         slots: {
-            imac: { x: -6.2, y: 0, scale: 0.4, rot: 0.9 },
-            laptop: { x: -3.2, y: 0, scale: 0.5, rot: 0.9 },
-            'mini-pc': { x: -1.3, y: 0, scale: 0.32, rot: 0.9 },
-            'dev-board': { x: 0.1, y: 0, scale: 0.25, rot: 0.9 },
-            battlestation: { x: 7.4, y: 0, scale: 0.42, rot: -0.95 },
+            imac: { x: -3.5, y: 0, scale: 0.36, rot: 0.7 },
+            laptop: { x: -1.5, y: 0, scale: 0.4, rot: 0.7 },
+            'mini-pc': { x: 0.1, y: 0, scale: 0.28, rot: 0.7 },
+            'dev-board': { x: 1.2, y: 0, scale: 0.24, rot: 0.7 },
+            battlestation: { x: 4.0, y: 0, scale: 0.36, rot: -0.75 },
         },
         dash: { from: 'dev-board', to: 'battlestation' },
     },
     {
-        minHalfW: 7.8,
-        mode: 'h',
+        minHalfW: 0, mode: 'v',
         slots: {
-            imac: { x: -5.0, y: 0, scale: 0.4, rot: 0.9 },
-            laptop: { x: -2.0, y: 0, scale: 0.5, rot: 0.9 },
-            'mini-pc': { x: -0.4, y: 0, scale: 0.32, rot: 0.9 },
-            battlestation: { x: 6.2, y: 0, scale: 0.42, rot: -0.95 },
-        },
-        dash: { from: 'mini-pc', to: 'battlestation' },
-    },
-    {
-        minHalfW: 6.9,
-        mode: 'h',
-        slots: {
-            imac: { x: -4.2, y: 0, scale: 0.4, rot: 0.9 },
-            laptop: { x: -1.4, y: 0, scale: 0.5, rot: 0.9 },
-            battlestation: { x: 5.2, y: 0, scale: 0.42, rot: -0.95 },
-        },
-        dash: { from: 'laptop', to: 'battlestation' },
-    },
-    {
-        minHalfW: 4.9,
-        mode: 'h',
-        slots: {
-            imac: { x: -2.8, y: 0, scale: 0.4, rot: 0.9 },
-            battlestation: { x: 3.4, y: 0, scale: 0.42, rot: -0.95 },
-        },
-        dash: { from: 'imac', to: 'battlestation' },
-    },
-    {
-        minHalfW: 0,
-        mode: 'v',
-        slots: {
-            imac: { x: 0.5, y: 1.6, scale: 0.28, rot: 0 },
-            battlestation: { x: 0.5, y: -1.2, z: 0.2, scale: 0.36, rot: -0.5 },
+            imac: { x: -0.6, y: 1.3, scale: 0.22, rot: 0.3 },
+            laptop: { x: 0.9, y: 1.6, scale: 0.26, rot: -0.3 },
+            'mini-pc': { x: -0.5, y: 0.2, scale: 0.22, rot: 0.5 },
+            'dev-board': { x: 0.8, y: 0.3, scale: 0.22, rot: -0.4 },
+            battlestation: { x: 0.4, y: -1.2, scale: 0.3, rot: -0.5 },
         },
         dash: { from: 'imac', to: 'battlestation' },
     },
@@ -173,6 +139,7 @@ function init() {
         if (!src || src === currentScreen) return;
         currentScreen = src;
         textureLoader.load(src, (texture) => {
+            if (src !== currentScreen) { texture.dispose(); return; }
             texture.colorSpace = THREE.SRGBColorSpace;
             const flippedTexture = texture.clone();
             flippedTexture.colorSpace = THREE.SRGBColorSpace;
@@ -180,17 +147,22 @@ function init() {
             flippedTexture.repeat.y = -1;
             flippedTexture.offset.y = 1;
             flippedTexture.needsUpdate = true;
+            const previous = currentFaces;
             currentFaces = { normal: texture, flipped: flippedTexture };
             for (const target of screenTargets) applyFace(target);
+            api.screenVersion++;
+            previous?.normal.dispose();
+            previous?.flipped.dispose();
         });
     }
 
     // companions start invisible, flight fades them in
     const companions = [];
     // group footprint per unit of its scale, for the data-run endpoint
-    const groupBase = new THREE.Box3().setFromObject(group)
-        .getSize(new THREE.Vector3())
-        .divideScalar(group.scale.x);
+    const groupBox = new THREE.Box3().setFromObject(group);
+    groupBox.min.sub(group.position).divideScalar(group.scale.x);
+    groupBox.max.sub(group.position).divideScalar(group.scale.x);
+    let layoutDirty = true;
     const api = {
         THREE, scene, camera, renderer, group, companions, ground,
         REST_POS, REST_LOOK,
@@ -198,6 +170,9 @@ function init() {
         dash: { enabled: false, p0: [0, 0, 0], p1: [0, 0, 0] },
         groupHover: 0,
         hoverTurn: HOVER_TURN,
+        renders: 0,
+        layoutVersion: 0,
+        screenVersion: 0,
     };
     window.__aioStage = api;
 
@@ -250,6 +225,8 @@ function init() {
             obj.position.set(0, 0, 0.3);
             const mats = new Set();
             const box = new THREE.Box3().setFromObject(obj);
+            box.min.sub(obj.position);
+            box.max.sub(obj.position);
             obj.traverse((o) => {
                 if (o.isMesh) {
                     if (!o.material.transparent) o.castShadow = true;
@@ -268,10 +245,12 @@ function init() {
             const entry = {
                 id: spec.id, obj, mats: [...mats], enabled: false,
                 baseRotY: 0, size: box.getSize(new THREE.Vector3()),
+                box,
             };
             companions.push(entry);
             const hover = registerHoverable(obj, spec.id, entry);
             entry.hoverEntry = hover;
+            layoutDirty = true;
         });
     });
 
@@ -285,11 +264,9 @@ function init() {
     function applyLayout() {
         const aspect = (canvas.clientWidth || 1) / (canvas.clientHeight || 1);
         const halfW = Math.tan((FOV * Math.PI) / 360) * CAM_DIST * aspect;
-        const short = (window.innerHeight || 1) < SHORT_HEIGHT;
         const tier = activeTier(halfW);
 
         const enabled = new Set(Object.keys(tier.slots));
-        if (short) enabled.delete('battlestation');
         // a stacked layout floats the machines, so the floor shadow would lie
         ground.visible = tier.mode !== 'v';
 
@@ -318,43 +295,31 @@ function init() {
             if (entry.hoverEntry) entry.hoverEntry.baseRotY = slot.rot;
         }
 
-        // Short viewports drop the battlestation, which leaves the machines
-        // huddled in the left third of a very wide frame; recentre what is left.
-        if (short && tier.mode === 'h') {
-            const halfImac = (groupBase.x * api.home.scale) / 2;
-            let min = api.home.x - halfImac;
-            let max = api.home.x + halfImac;
-            for (const entry of companions) {
-                if (!entry.enabled) continue;
-                const half = (entry.size.x * entry.obj.scale.x) / 2;
-                min = Math.min(min, entry.obj.position.x - half);
-                max = Math.max(max, entry.obj.position.x + half);
-            }
-            const shift = REST_LOOK[0] - (min + max) / 2;
-            api.home = { ...api.home, x: api.home.x + shift };
-            for (const entry of companions) {
-                if (entry.enabled) entry.obj.position.x += shift;
-            }
-        }
-
-        // In the stacked layout, centre the pc under the aio so the data run
-        // can be a straight vertical.
-        if (tier.mode === 'v') {
-            const bat = companions.find(
-                (entry) => entry.id === 'battlestation' && entry.enabled,
-            );
-            if (bat) {
-                const box = new THREE.Box3().setFromObject(bat.obj);
-                const centreX = (box.min.x + box.max.x) / 2;
-                bat.obj.position.x += api.home.x - centreX;
+        // Pack bounds that include depth and every hover rotation. Models with
+        // off-centre origins still get enough space beside their neighbours.
+        const entries = [{ box: groupBox, scale: api.home.scale },
+            ...companions.filter(entry => entry.enabled).map(entry => ({ entry, box: entry.box, scale: entry.obj.scale.x }))];
+        const placements = layoutModels(entries.map(item => ({
+            ...item,
+            radius: Math.hypot(Math.max(Math.abs(item.box.min.x), Math.abs(item.box.max.x)), Math.max(Math.abs(item.box.min.z), Math.abs(item.box.max.z))),
+            minY: item.box.min.y,
+            height: item.box.max.y - item.box.min.y,
+        })), { stacked: tier.mode === 'v', halfWidth: halfW, halfHeight: halfW / aspect });
+        for (const item of placements) {
+            if (!item.entry) Object.assign(api.home, { x: item.x, y: item.y, scale: item.scale });
+            else {
+                item.entry.obj.position.x = item.x;
+                item.entry.obj.position.y = item.y;
+                item.entry.obj.scale.setScalar(item.scale);
             }
         }
+        api.layoutVersion++;
 
         // The run is resolved in screen space by flight from the real objects:
         // a world-space edge can still project inside a yawed model, so passing
         // the objects is the only way to guarantee the line bridges them.
         const dash = { enabled: false, mode: tier.mode, from: null, to: null };
-        if (!short && enabled.has('battlestation') && tier.dash) {
+        if (enabled.has('battlestation') && tier.dash) {
             const from =
                 tier.dash.from === 'imac'
                     ? group
@@ -393,6 +358,7 @@ function init() {
         }
         for (const entry of hoverables) {
             entry.hover += (entry.target - entry.hover) * HOVER_LERP;
+            if (Math.abs(entry.target - entry.hover) < 0.001) entry.hover = entry.target;
             if (entry === groupHoverEntry) {
                 api.groupHover = entry.hover;
             } else if (entry.root) {
@@ -401,15 +367,18 @@ function init() {
         }
     }
 
-    function frame() {
+    let lastFrame = -Infinity;
+    let lastRenderedState = '';
+    function frame(time) {
         const w = canvas.clientWidth || 1;
         const h = canvas.clientHeight || 1;
         if (canvas.width !== Math.floor(w * renderer.getPixelRatio()) ||
             canvas.height !== Math.floor(h * renderer.getPixelRatio())) {
             renderer.setSize(w, h, false);
+            layoutDirty = true;
         }
         camera.aspect = w / h;
-        applyLayout();
+        if (layoutDirty) { applyLayout(); layoutDirty = false; }
 
         // flight owns the group past the handoff, resting state only above it
         const s = (window.scrollY || 0) / (window.innerHeight || 1);
@@ -421,8 +390,23 @@ function init() {
         }
         updateHover();
         camera.updateProjectionMatrix();
-        renderer.render(scene, camera);
+        // The canvas is fully transparent outside the showcase/stage. Keep
+        // layout available to flight, but skip GPU work there and in hidden tabs.
+        const renderState = [w, h, api.layoutVersion, api.screenVersion,
+            ...camera.position.toArray(), ...camera.quaternion.toArray(),
+            ...group.position.toArray(), group.rotation.y, group.scale.x,
+            ...companions.flatMap(entry => [entry.obj.visible, entry.obj.rotation.y, entry.mats[0]?.opacity])].join(',');
+        if (!document.hidden && s > 1 && s < 2.8 && renderState !== lastRenderedState && time - lastFrame >= 1000 / 30) {
+            renderer.render(scene, camera);
+            lastFrame = time;
+            lastRenderedState = renderState;
+            api.renders++;
+        }
     }
 
     renderer.setAnimationLoop(frame);
+    window.addEventListener('pagehide', () => {
+        renderer.setAnimationLoop(null);
+        renderer.dispose();
+    }, { once: true });
 }
