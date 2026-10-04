@@ -146,7 +146,18 @@ try {
     assert.equal(await page.locator(".preview-card").evaluate(element => getComputedStyle(element, "::before").transform), "matrix(1, 0, 0, 1, 14, 16)");
     assert.equal(await page.locator(".dots-bar .dot").count(), 6);
     await page.locator(".showcase-section").scrollIntoViewIfNeeded();
+    await page.waitForTimeout(500);
+    const captionBefore = await page.locator('.card-caption').boundingBox();
     await page.locator(".dots-bar .dot").nth(3).click();
+    await page.waitForTimeout(75);
+    const captionDuring = await page.locator('.card-caption').evaluate(element => ({
+        box: element.getBoundingClientRect().toJSON(),
+        transform: getComputedStyle(element).transform,
+        textTransform: getComputedStyle(element.querySelector('.caption-title')).transform,
+    }));
+    assert.equal(captionDuring.transform, 'none', 'The caption background must not move when the slide changes');
+    assert.ok(captionDuring.textTransform !== 'none', 'Only the caption text should animate');
+    assert.ok(Math.abs(captionBefore.y - captionDuring.box.y) < 0.5, 'The caption surface must stay fixed during a real slide change');
     await page.waitForFunction(
         () => document.querySelector(".caption-title").textContent === "Local AI",
     );
@@ -155,7 +166,7 @@ try {
             .locator(".card-slides-track")
             .evaluate((element) => getComputedStyle(element).transform !== "none"),
     );
-    console.log("verified main landing carousel: six slides, AI caption, and working selection");
+    console.log("verified main landing carousel: six slides, text-only caption animation, AI caption, and working selection");
     for (const [width, height] of [
         [2560, 720],
         [1920, 1080],

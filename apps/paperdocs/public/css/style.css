@@ -447,12 +447,15 @@ html {
     color: #4a6382;
     letter-spacing: -0.01em;
     user-select: none;
+}
+
+.card-caption > span {
     transition:
         opacity 0.22s ease,
         transform 0.22s ease;
 }
 
-.card-caption.fade {
+.card-caption.fade > span {
     opacity: 0;
     transform: translateY(4px);
 }
