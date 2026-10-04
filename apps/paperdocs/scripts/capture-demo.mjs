@@ -292,7 +292,8 @@ function fake(req) {
     return undefined;
 }
 (async () => {
-    const capture = await captureBrowser(1.25);
+    const zoom = process.env.CAPTURE_LEARN_HERO ? 1.5 : 1.25;
+    const capture = await captureBrowser(zoom);
     const context = capture.context;
     try {
         await context.routeWebSocket(
@@ -401,7 +402,7 @@ function fake(req) {
             height: innerHeight,
             dpr: devicePixelRatio,
         }));
-        if (metrics.width !== 1280 || metrics.height !== 960 || Math.abs(metrics.dpr - 1.25) > 0.01)
+        if (Math.abs(metrics.width - 1600 / zoom) > 1 || Math.abs(metrics.height - 1200 / zoom) > 1 || Math.abs(metrics.dpr - zoom) > 0.01)
             throw new Error("Chrome native page zoom was not applied");
         for (const [name, id] of [
             ["Game Server", "gameserver"],
@@ -418,6 +419,11 @@ function fake(req) {
             if (grantedPort !== expectedPort)
                 throw new Error("Refusing to capture a daemon outside the temporary install");
             await page.waitForTimeout(1500);
+            if (process.env.CAPTURE_LEARN_HERO) {
+                if (id === "gameserver") await frame.getByText("Overview", { exact: true }).click();
+                await page.screenshot({ path: root + `learn-${id}.png` });
+                continue;
+            }
             if (id === "gameserver") {
                 await frame.getByText("Overview", { exact: true }).click();
                 await page.waitForTimeout(500);

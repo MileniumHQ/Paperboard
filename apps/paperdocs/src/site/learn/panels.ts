@@ -7,6 +7,7 @@ export interface PanelFeature {
 export interface LearnPanel {
     slug: string;
     name: string;
+    seoTitle: string;
     icon: string;
     accent: string;
     headline: string;
@@ -25,11 +26,12 @@ export const LEARN_PANELS: LearnPanel[] = [
         slug: "game-server",
         summary: "Dedicated Minecraft & game server manager",
         name: "Game Server",
+        seoTitle: "Minecraft server manager | Paperboard",
         icon: "/pictures/game-server.png",
         accent: "var(--paper-panel-gameserver)",
         headline: "Minecraft, managed",
         description: "Run a Minecraft server. Manage players, worlds, and plugins in one place.",
-        image: "/screens/gameserver.png",
+        image: "/screens/learn-gameserver.png",
         alt: "Game Server dashboard in Paperboard",
         features: [
             {
@@ -57,7 +59,7 @@ export const LEARN_PANELS: LearnPanel[] = [
                 title: "Connect your panels",
                 description:
                     "Send a Discord message when the server starts, or welcome new players with an Actions workflow.",
-                image: "/screens/actions-library.png",
+                image: "/screens/gameserver-actions.png",
                 alt: "Minecraft server startup and player join events connected to Discord actions",
             },
         ],
@@ -66,34 +68,35 @@ export const LEARN_PANELS: LearnPanel[] = [
         slug: "actions",
         summary: "Visual automation and workflow builder",
         name: "Actions",
+        seoTitle: "Visual workflow automation | Paperboard",
         icon: "/pictures/blocks.png",
         accent: "var(--paper-panel-actions)",
         headline: "Connect your panels",
         description:
             "Build workflows with triggers, action blocks, and results from your other panels.",
-        image: "/screens/actions.png",
-        alt: "Actions canvas with two working, non-overlapping flows",
+        image: "/screens/actions-overview.png",
+        alt: "Actions canvas with Discord member welcomes and local AI download notifications",
         features: [
             {
-                title: "Build a flow",
+                title: "Announce your server",
                 description:
-                    "Drag in blocks, pass their results to the next step, and press play to test.",
-                image: "/screens/actions-flow.png",
-                alt: "A complete text-processing flow with valid variable references",
+                    "Connect Minecraft server events to Discord. Let your friends know when the server is ready.",
+                image: "/screens/actions-game-flow.png",
+                alt: "Minecraft server started trigger connected to a Discord message block",
             },
             {
-                title: "Add your logic",
+                title: "Welcome new members",
                 description:
-                    "Use calculations and conditions to decide what happens next. Check each step in the execution log.",
-                image: "/screens/actions-logic.png",
-                alt: "A complete calculation and conditional flow with its successful execution log",
+                    "Send new Discord members a direct message with your server address, and introduce them to the welcome channel.",
+                image: "/screens/actions-discord-flow.png",
+                alt: "Discord member join event connected to a direct message and channel welcome",
             },
             {
-                title: "Use your other panels",
+                title: "Respond to AI events",
                 description:
-                    "Send a Discord message when your Minecraft server starts. Use local AI in a workflow, or connect a service over HTTP.",
-                image: "/screens/actions-library.png",
-                alt: "Minecraft server events connected to Discord message actions",
+                    "Notify a Discord channel when a local AI model finishes downloading. Use panel events to connect your tools.",
+                image: "/screens/actions-ai-flow.png",
+                alt: "AI model download completion connected to a Discord notification",
             },
         ],
     },
@@ -101,19 +104,20 @@ export const LEARN_PANELS: LearnPanel[] = [
         slug: "bot-creator",
         summary: "Create and manage interactive Discord bots",
         name: "Bot Creator",
+        seoTitle: "Discord bot builder and automation | Paperboard",
         icon: "/pictures/discord-bot.png",
         accent: "var(--paper-panel-botcreator)",
-        headline: "Your Discord bot",
-        description: "Manage your bot, commands, and Discord servers without writing code.",
-        image: "/screens/botcreator.png",
+        headline: "Give your bot something to do",
+        description: "Build your bot’s behavior in Actions. Connect Discord commands and buttons to your other panels.",
+        image: "/screens/learn-botcreator.png",
         alt: "Bot Creator panel in Paperboard",
         features: [
             {
-                title: "Connect your bot",
+                title: "Build its behavior",
                 description:
-                    "Add your bot token to the vault. See its connection, activity, and recent messages.",
-                image: "/screens/botcreator.png",
-                alt: "Discord bot connection screen",
+                    "Use Actions to handle a Discord button, call another panel, and send a reply. Your bot becomes the way in to your tools.",
+                image: "/screens/botcreator-actions.png",
+                alt: "Actions workflow connecting a Discord button to a Minecraft announcement and reply",
             },
             {
                 title: "Create commands",
@@ -136,12 +140,13 @@ export const LEARN_PANELS: LearnPanel[] = [
         slug: "ai",
         summary: "Local language models with panel actions",
         name: "Local AI",
+        seoTitle: "Local AI chat and automation | Paperboard",
         icon: "/pictures/ai.png",
         accent: "var(--paper-panel-ai)",
         headline: "AI on your computer",
         description:
             "Run open-source models locally. Ask questions, work with files, and use panel tools.",
-        image: "/screens/ai.png",
+        image: "/screens/learn-ai.png",
         alt: "AI chat panel in Paperboard",
         features: [
             {
@@ -159,11 +164,11 @@ export const LEARN_PANELS: LearnPanel[] = [
                 alt: "Local AI explaining a Python script",
             },
             {
-                title: "Plan something useful",
+                title: "Use AI in a workflow",
                 description:
-                    "Turn a rough idea into a plan. Enable web search or panel tools when the task needs them.",
-                image: "/screens/ai-plan.png",
-                alt: "Local AI planning a Minecraft server launch",
+                    "Ask your local model from Actions and pass the answer to another panel, such as a welcome message in Minecraft.",
+                image: "/screens/ai-actions.png",
+                alt: "Actions asking local AI for a welcome and passing its answer to Minecraft chat",
             },
         ],
         note: "Local models need disk space and RAM; a GPU is recommended. Optional web search sends search queries to DuckDuckGo.",

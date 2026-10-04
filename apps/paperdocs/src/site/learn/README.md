@@ -13,7 +13,7 @@ single `--paper-site-accent` token, also used by the main landing page.
 Capture screenshots in Chrome browser mode with `--force-color-profile=srgb`,
 native 1600 × 1200 output. `capture-browser.mjs` sets Chrome's native page zoom
 to 125% through Chrome Settings, with device scale factor 1. Individual Actions
-flows use 200% page zoom. This reflows the actual UI without resizing images. Use a temporary
+flows use 200% page zoom; learn-page hero captures use 150%. This reflows the actual UI without resizing images. Use a temporary
 `PAPERBOARD_DIR` and isolated `XDG_CONFIG_HOME`; never capture private user data.
 Use realistic demo data for connected-state marketing captures; confine fixtures
 to the capture browser and never change production readiness or authentication.
@@ -41,6 +41,7 @@ browser-mode install on port 4319:
 PAPERBOARD_DIR=/tmp/paperboard-marketing-... bun run screenshots:demo
 PAPERBOARD_DIR=/tmp/paperboard-marketing-... bun run screenshots:actions
 PAPERBOARD_DIR=/tmp/paperboard-marketing-... bun scripts/capture-integrations.ts
+CAPTURE_LEARN_HERO=1 PAPERBOARD_DIR=/tmp/paperboard-marketing-... bun run screenshots:demo
 ```
 
 The script checks the temporary install's daemon socket, passes authentication
@@ -54,3 +55,7 @@ uses real Modrinth search results and Mojang profiles/skins. Public usernames ap
 in an illustrative roster; they do not indicate real sessions or endorsements.
 The integration examples use actual registry schemas but remain inside Chrome: no
 event subscriptions are registered and no Discord messages are sent.
+The integration capture owns the published Actions examples; the older generic
+flow capture is a separate SDK execution check. Run integrations last if refreshing
+both. Every published picture has its own filename and contents, including the
+main carousel; the content test rejects reused files and identical image bytes.
