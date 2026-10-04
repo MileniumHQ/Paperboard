@@ -10,7 +10,7 @@
     "icons": [
         {
             "src": "/paperboard.png",
-            "sizes": "any",
+            "sizes": "875x875",
             "type": "image/png",
             "purpose": "any"
         }
