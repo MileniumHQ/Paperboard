@@ -1,3 +1,4 @@
+import { siteMetadata } from "./site-metadata.mjs";
 import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -44,24 +45,14 @@ function injectMarkers(html, name, replacement) {
 }
 
 function documentFor(page, path) {
-    const canonical = `https://paperboard.dev${path}`;
     return `<!doctype html>
 <html lang="en">
     <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <meta name="color-scheme" content="dark light" />
-        <title>${escapeHtml(page.title)}</title>
-        <meta name="description" content="${escapeHtml(page.description)}" />
-        <link rel="canonical" href="${canonical}" />
-        <link rel="icon" href="/favicon.ico" />
+        ${siteMetadata(page, path)}
         <link rel="manifest" href="/site.webmanifest" />
-        <meta property="og:type" content="website" />
-        <meta property="og:site_name" content="Paperboard" />
-        <meta property="og:title" content="${escapeHtml(page.title)}" />
-        <meta property="og:description" content="${escapeHtml(page.description)}" />
-        <meta property="og:image" content="https://paperboard.dev/paperboard.png" />
-        <meta name="twitter:card" content="summary" />
         <link rel="stylesheet" href="/site.css" />
         <script>
             // Resolve the theme before first paint so the page never flashes
