@@ -98,4 +98,27 @@ describe("Origami Worker", () => {
     const body = await res.json();
     expect(body).toEqual(samplePackages);
   });
+
+  it("fails the panel index (5xx) when a published record cannot be read", async () => {
+    const kv = createMockKV({
+      "panel:dev.paperboard.terminal": {
+        id: "dev.paperboard.terminal",
+        name: "Terminal",
+        version: "0.1.0",
+      },
+    });
+    const originalGet = kv.get.bind(kv);
+    (kv as any).get = async (key: string, options?: any) => {
+      if (key.startsWith("panel:")) throw new Error("KV read failed");
+      return originalGet(key, options);
+    };
+    const env: Env = { PACKAGES: kv };
+    const res = await worker.fetch(
+      new Request("http://localhost/panels/index.json"),
+      env,
+      {} as any,
+    );
+    // unavailable is not unpublished: the panel must not silently vanish
+    expect(res.status).toBe(500);
+  });
 });

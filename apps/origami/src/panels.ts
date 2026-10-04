@@ -70,14 +70,11 @@ async function listRecordsByPrefix(
         );
         const records = await Promise.all(
             keys.map(async (k: string) => {
-                try {
-                    return (await kv.get(k, {
-                        type: "json",
-                    })) as PanelRecord | null;
-                } catch (err) {
-                    console.error(`[origami] KV read failed for ${k}:`, err);
-                    return null;
-                }
+                // an unreadable record must fail the index request, never be
+                // silently dropped: unavailable is not "unpublished"
+                return (await kv.get(k, {
+                    type: "json",
+                })) as PanelRecord | null;
             }),
         );
 
