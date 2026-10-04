@@ -474,6 +474,8 @@ html {
 .dots-bar {
     position: relative;
     height: 48px;
+    flex-shrink: 0;
+    min-height: 48px;
     padding: 0 20px;
     border-radius: 999px;
     background: #ffffff;
@@ -490,6 +492,7 @@ html {
 
 .dot {
     position: relative;
+    flex-shrink: 0;
     height: 12px;
     width: 12px;
     border-radius: 999px;

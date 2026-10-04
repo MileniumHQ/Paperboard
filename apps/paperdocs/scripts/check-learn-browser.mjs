@@ -170,6 +170,18 @@ try {
         await page.setViewportSize({ width, height });
         await page.goto(`${origin}/`);
         await page.waitForFunction(() => window.__aioStage?.companions.length === 4);
+        await page.evaluate(() => window.scrollTo(0, innerHeight));
+        await page.waitForTimeout(550);
+        const progress = await page.locator('.dots-bar').evaluate(element => ({
+            height: element.getBoundingClientRect().height,
+            dots: [...element.querySelectorAll('.dot')].map(dot => ({
+                active: dot.classList.contains('active'),
+                width: dot.getBoundingClientRect().width,
+                height: dot.getBoundingClientRect().height,
+            })),
+        }));
+        assert.equal(progress.height, 48, `Carousel indicator must keep its height at ${width} × ${height}`);
+        assert.ok(progress.dots.every(dot => dot.height === 12 && Math.abs(dot.width - (dot.active ? 58 : 12)) < 0.5), `Carousel dots must not shrink at ${width} × ${height}`);
         await page.evaluate(() => window.scrollTo(0, innerHeight * 2));
         await page.waitForFunction(() =>
             window.__aioStage.companions.every((entry) => entry.obj.visible),
