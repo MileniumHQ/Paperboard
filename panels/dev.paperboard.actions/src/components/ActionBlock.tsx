@@ -11,6 +11,7 @@ import type { ActionSchema } from "@paperboard-dev/paperapi";
 import type { CanvasBlock } from "../lib/tree";
 import { plainTextFromClipboard, sanitizeNumberText } from "../lib/textInput";
 import { parseVariableToken } from "../lib/variableTypes";
+import { isArrayInputType, innerTypeOf, isTypedOnlyInput, expectedTypeOf } from "../lib/inputTypes";
 import {
     appendVariableChip,
     commitEditableDom,
@@ -88,51 +89,6 @@ interface TemplateToken {
 function formatFallbackLabel(key: string): string {
     if (!key) return "";
     return key.charAt(0).toUpperCase() + key.slice(1);
-}
-
-// non-primitive types are variable-only, no keyboard entry
-const PRIMITIVE_INPUT_TYPES = new Set([
-    "string",
-    "number",
-    "boolean",
-    "object",
-    "any",
-    "file",
-    "void",
-    "select",
-    "url",
-    "color",
-]);
-
-function isArrayInputType(t?: string): boolean {
-    if (!t) return false;
-    return t === "array" || t.startsWith("list<") || t.startsWith("array<");
-}
-
-function innerTypeOf(t: string): string {
-    const m = t.match(/^(?:list|array)<(.+)>$/);
-    return m ? m[1] : t;
-}
-
-function isTypedOnlyInput(def: any): boolean {
-    if (!def?.type) return false;
-    if (def.options && def.options.length > 0) return false;
-    if (def.type === "boolean") return false;
-    if (isArrayInputType(def.type)) {
-        const inner = innerTypeOf(def.type);
-        if (inner === "array") return false;
-        return !PRIMITIVE_INPUT_TYPES.has(inner);
-    }
-    return !PRIMITIVE_INPUT_TYPES.has(def.type);
-}
-
-function expectedTypeOf(def: any): string {
-    if (!def?.type) return "any";
-    if (isArrayInputType(def.type)) {
-        const inner = innerTypeOf(def.type);
-        return inner === "array" ? "any" : inner;
-    }
-    return def.type;
 }
 
 const FRIENDLY_TYPE_NAMES: Record<string, string> = {
