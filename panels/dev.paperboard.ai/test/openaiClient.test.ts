@@ -4,6 +4,7 @@ import { describe, expect, it, afterEach } from "bun:test";
 import type { ProviderDefinition } from "../src/core/providers";
 import { OpenAICompatibleClient } from "../src/service/openaiClient";
 import type { ChatChunk } from "../src/service/ollamaClient";
+import { prepareArguments } from "../src/core/tools";
 
 const provider: ProviderDefinition = {
     id: "local",
@@ -17,12 +18,13 @@ const provider: ProviderDefinition = {
 let server: ReturnType<typeof Bun.serve> | null = null;
 let lastChatBody: any = null;
 let lastAuth: string | null = null;
+// the two streamed fragments that make up the tool call's argument JSON
+let toolArgFragments: string[] = ['{"a":', "1}"];
 
 function start(): string {
     lastChatBody = null;
     lastAuth = null;
-    server = Bun.serve({
-        port: 0,
+    server = Bun.serve({        port: 0,
         hostname: "127.0.0.1",
         async fetch(req) {
             const url = new URL(req.url);
@@ -36,8 +38,8 @@ function start(): string {
                 const events = [
                     { choices: [{ delta: { content: "Hel" } }] },
                     { choices: [{ delta: { content: "lo", reasoning_content: "hmm" } }] },
-                    { choices: [{ delta: { tool_calls: [{ index: 0, id: "call_1", function: { name: "do_thing", arguments: '{"a":' } }] } }] },
-                    { choices: [{ delta: { tool_calls: [{ index: 0, function: { arguments: "1}" } }] } }] },
+                    { choices: [{ delta: { tool_calls: [{ index: 0, id: "call_1", function: { name: "do_thing", arguments: toolArgFragments[0] } }] } }] },
+                    { choices: [{ delta: { tool_calls: [{ index: 0, function: { arguments: toolArgFragments[1] } }] } }] },
                     { choices: [{ finish_reason: "tool_calls" }], usage: { completion_tokens: 7 } },
                 ];
                 return new Response(
@@ -60,6 +62,7 @@ function start(): string {
 afterEach(() => {
     server?.stop(true);
     server = null;
+    toolArgFragments = ['{"a":', "1}"];
 });
 
 describe("OpenAI-compatible client", () => {
@@ -140,5 +143,27 @@ describe("OpenAI-compatible client", () => {
         expect(Array.isArray(userMessage.content)).toBe(true);
         expect(userMessage.content[0]).toEqual({ type: "text", text: "what is this" });
         expect(userMessage.content[1].type).toBe("image_url");
+    });
+
+    it("hands malformed tool arguments downstream instead of running on defaults", async () => {
+        // '{"a":' + 'oops' is not valid JSON; the raw text must survive so the
+        // validator can report a tool error rather than an empty call
+        toolArgFragments = ['{"a":', "oops"];
+        const client = new OpenAICompatibleClient({ ...provider, baseUrl: start() });
+        const chunks: ChatChunk[] = [];
+        await client.chat(
+            { model: "local:7b", messages: [{ role: "user", content: "x" }] },
+            AbortSignal.timeout(5_000),
+            (chunk) => chunks.push(chunk),
+        );
+        const call = chunks.at(-1)!.message!.tool_calls![0] as any;
+        expect(typeof call.function.arguments).toBe("string");
+        const target = {
+            panelId: "p",
+            action: "a",
+            label: "A",
+            inputs: { a: { type: "number" } },
+        } as any;
+        expect(() => prepareArguments(target, call.function.arguments)).toThrow(/JSON object/);
     });
 });

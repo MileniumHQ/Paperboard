@@ -204,12 +204,21 @@ export class OpenAICompatibleClient {
     }
 }
 
-function parseArguments(raw: string): Record<string, unknown> {
+function parseArguments(raw: string): unknown {
     if (!raw.trim()) return {};
     try {
         const parsed = JSON.parse(raw) as unknown;
-        return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+            return parsed as Record<string, unknown>;
+        }
+        // valid JSON that is not an object: keep the raw text so the
+        // downstream validator reports it, never a silent empty call
+        return raw;
     } catch {
-        return {};
+        // malformed JSON: hand the raw text to the validator, which reports
+        // "arguments must be a JSON object" to the model as a tool error
+        // instead of running the action on default arguments
+        console.debug("[ai] tool-call arguments were not valid JSON:", raw.slice(0, 200));
+        return raw;
     }
 }
