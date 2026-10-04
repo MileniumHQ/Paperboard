@@ -199,7 +199,7 @@ try {
         assert.ok(connector.width >= 24, `The data line needs a legible run at ${width} × ${height}: ${connector.width}`);
         const devices = await page.evaluate(() => {
             const stage = window.__aioStage;
-            return [stage.group, ...stage.companions.map((entry) => entry.obj)].map((object) => {
+            return [{ id: 'imac', object: stage.group }, ...stage.companions.map((entry) => ({ id: entry.id, object: entry.obj }))].map(({ id, object }) => {
                 const box = new stage.THREE.Box3().setFromObject(object);
                 const corners = [];
                 for (const x of [box.min.x, box.max.x])
@@ -207,6 +207,7 @@ try {
                         for (const z of [box.min.z, box.max.z])
                             corners.push(new stage.THREE.Vector3(x, y, z).project(stage.camera));
                 return {
+                    id,
                     visible: object.visible,
                     min: box.min, max: box.max,
                     corners: corners.map((point) => ({ x: point.x, y: point.y })),
@@ -214,6 +215,11 @@ try {
             });
         });
         assert.equal(devices.length, 5);
+        const station = devices.find(device => device.id === 'battlestation');
+        const stationLeft = Math.min(...station.corners.map(point => point.x));
+        assert.ok(devices.filter(device => device !== station).every(device =>
+            Math.max(...device.corners.map(point => point.x)) < stationLeft,
+        ), `Every other device must stay left of the battlestation at ${width} × ${height}`);
         assert.ok(devices.every(device => {
             const xs = device.corners.map(point => (point.x + 1) * width / 2);
             const ys = device.corners.map(point => (1 - point.y) * height / 2);
@@ -274,7 +280,7 @@ try {
             }), `No hover or orientation-change intersections at ${width} × ${height}`);
         }
     }
-    console.log("verified all five devices across nine viewport sizes, live orientation changes, transition and hover");
+    console.log("verified compact left device group and right battlestation across nine viewport sizes, live orientation changes, transition and hover");
     // Exercise real hover input and prove the renderer sleeps both when hidden
     // and when the visible scene has settled, then wakes for a hover turn.
     await page.setViewportSize({ width: 1440, height: 900 });

@@ -2,11 +2,11 @@ import { expect, test } from "bun:test";
 import { layoutModels } from "../public/js/model-layout.mjs";
 
 const items = [
-    { radius: 3.6, height: 4.16, minY: -0.001, scale: 0.36 },
-    { radius: 3.2, height: 2.43, minY: 0, scale: 0.4 },
-    { radius: 2.8, height: 0.96, minY: 0, scale: 0.28 },
-    { radius: 2.7, height: 0.75, minY: 0.005, scale: 0.24 },
-    { radius: 4.5, height: 4.85, minY: 0, scale: 0.36 },
+    { id: "imac", radius: 3.6, height: 4.16, minY: -0.001, scale: 0.36 },
+    { id: "laptop", radius: 3.2, height: 2.43, minY: 0, scale: 0.4 },
+    { id: "phone", radius: 2.8, height: 0.96, minY: 0, scale: 0.28 },
+    { id: "dev-board", radius: 2.7, height: 0.75, minY: 0.005, scale: 0.24 },
+    { id: "battlestation", radius: 4.5, height: 4.85, minY: 0, scale: 0.36 },
 ];
 
 test("all models fit and remain separated across portrait, square, and landscape layouts", () => {
@@ -28,11 +28,19 @@ test("all models fit and remain separated across portrait, square, and landscape
     }
 });
 
-test("moderate screens use balanced rows instead of shrinking everything into one line", () => {
+test("battlestation stays to the right of the entire compact device group at every aspect", () => {
+    for (const aspect of [0.3, 0.46, 0.75, 1, 1.33, 1.6, 2.16, 3.55]) {
+        const models = layoutModels(items, { halfWidth: 5.16 * aspect, halfHeight: 5.16 });
+        const station = models.find(item => item.id === "battlestation")!;
+        for (const item of models.filter(item => item !== station)) {
+            expect(item.x + item.radius * item.scale).toBeLessThan(station.x - station.radius * station.scale);
+        }
+    }
     const models = layoutModels(items, { halfWidth: 8.25, halfHeight: 5.16 });
-    expect(new Set(models.map(model => model.row)).size).toBe(2);
-    expect(models.map(model => model.row)).toEqual([0, 0, 0, 1, 1]);
-    expect(models[0].scale).toBeGreaterThan(items[0].scale);
-    const wide = layoutModels(items, { halfWidth: 18.3, halfHeight: 5.16 });
-    expect(new Set(wide.map(model => model.row)).size).toBe(1);
+    const group = models.filter(item => item.id !== "battlestation");
+    expect(new Set(group.map(model => model.row)).size).toBeGreaterThan(1);
+    // The smaller devices pack closely; the connection gap belongs between
+    // the group and the battlestation, not between every pair of devices.
+    const a = group[0], b = group[1];
+    expect(b.x - b.radius * b.scale - (a.x + a.radius * a.scale)).toBeLessThan(0.6);
 });

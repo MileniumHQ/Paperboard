@@ -374,28 +374,11 @@
                         }
                         return { minX, maxX, minY, maxY };
                     };
-                    const fromBox = projectBox(dash.from);
+                    const fromBoxes = dash.from.map(projectBox);
                     const toBox = projectBox(dash.to);
-                    let x0;
-                    let y0;
-                    let x1;
-                    if (dash.mode === "v") {
-                        // Rows keep a horizontal data run in the clear space
-                        // between them, rather than drawing a diagonal wire.
-                        const upper = fromBox.minY < toBox.minY ? fromBox : toBox;
-                        const lower = upper === fromBox ? toBox : fromBox;
-                        const centre = (fromBox.minX + fromBox.maxX + toBox.minX + toBox.maxX) / 4;
-                        const length = Math.min(160, cw * 0.3);
-                        x0 = centre - length / 2;
-                        x1 = centre + length / 2;
-                        y0 = (upper.maxY + lower.minY) / 2;
-                    } else {
-                        y0 = (fromBox.minY + fromBox.maxY) / 2;
-                        const left = fromBox.minX < toBox.minX ? fromBox : toBox;
-                        const right = left === fromBox ? toBox : fromBox;
-                        x0 = left.maxX + 2;
-                        x1 = right.minX - 2;
-                    }
+                    const x0 = Math.max(...fromBoxes.map(box => box.maxX)) + 2;
+                    const x1 = toBox.minX - 2;
+                    const y0 = (toBox.minY + toBox.maxY) / 2;
                     // Grow by width, not scaleX: scaling the element stretched
                     // the repeating dash pattern until it "normalised".
                     dashEl.style.left = `${x0.toFixed(1)}px`;

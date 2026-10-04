@@ -275,8 +275,8 @@ function init() {
 
         // Pack bounds that include depth and every hover rotation. Models with
         // off-centre origins still get enough space beside their neighbours.
-        const entries = [{ box: groupBox, scale: api.home.scale },
-            ...ordered.map(entry => ({ entry, box: entry.box, scale: entry.obj.scale.x }))];
+        const entries = [{ id: 'imac', box: groupBox, scale: api.home.scale },
+            ...ordered.map(entry => ({ id: entry.id, entry, box: entry.box, scale: entry.obj.scale.x }))];
         const placements = layoutModels(entries.map(item => ({
             ...item,
             radius: Math.hypot(Math.max(Math.abs(item.box.min.x), Math.abs(item.box.max.x)), Math.max(Math.abs(item.box.min.z), Math.abs(item.box.max.z))),
@@ -285,7 +285,7 @@ function init() {
         })), { halfWidth: halfW, halfHeight: halfH * usableHeight / height, centerY });
         api.layoutRows = 1 + Math.max(...placements.map(item => item.row));
         ground.visible = api.layoutRows === 1;
-        ground.position.y = placements[0].y + placements[0].minY * placements[0].scale - 0.002;
+        ground.position.y = Math.min(...placements.map(item => item.y + item.minY * item.scale)) - 0.002;
         for (const item of placements) {
             if (!item.entry) Object.assign(api.home, { x: item.x, y: item.y, scale: item.scale });
             else {
@@ -300,16 +300,12 @@ function init() {
         ));
         api.layoutVersion++;
 
-        // The run is resolved in screen space by flight from the real objects:
-        // a world-space edge can still project inside a yawed model, so passing
-        // the objects is the only way to guarantee the line bridges them.
-        const from = ordered.find(entry => entry.id === 'dev-board');
+        // Flight connects the entire left cluster to the right-hand station
+        // using projected bounds, including the models' live hover turns.
         const to = ordered.find(entry => entry.id === 'battlestation');
-        const fromPlacement = placements.find(item => item.entry === from);
-        const toPlacement = placements.find(item => item.entry === to);
-        const dash = { enabled: Boolean(from && to),
-            mode: fromPlacement?.row === toPlacement?.row ? 'h' : 'v',
-            from: from?.obj, to: to?.obj };
+        const dash = { enabled: Boolean(to),
+            from: [group, ...ordered.filter(entry => entry !== to).map(entry => entry.obj)],
+            to: to?.obj };
         api.dash = dash;
     }
 
