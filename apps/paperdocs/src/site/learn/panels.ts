@@ -58,9 +58,9 @@ export const LEARN_PANELS: LearnPanel[] = [
             {
                 title: "Connect your panels",
                 description:
-                    "Send a Discord message when the server starts, or welcome new players with an Actions workflow.",
+                    "Welcome players with a local AI message in Minecraft chat, then tell your Discord channel who joined. Build it in Actions.",
                 image: "/screens/gameserver-actions.png",
-                alt: "Minecraft server startup and player join events connected to Discord actions",
+                alt: "Player join trigger passing an AI welcome through a length limit to Minecraft chat and notifying Discord",
             },
         ],
     },
@@ -75,28 +75,28 @@ export const LEARN_PANELS: LearnPanel[] = [
         description:
             "Build workflows with triggers, action blocks, and results from your other panels.",
         image: "/screens/actions-overview.png",
-        alt: "Actions canvas with Discord member welcomes and local AI download notifications",
+        alt: "Actions canvas announcing Minecraft startup and checking when the last player logs off",
         features: [
             {
                 title: "Announce your server",
                 description:
-                    "Connect Minecraft server events to Discord. Let your friends know when the server is ready.",
+                    "Read the player count when Minecraft starts, build an announcement, and send your Discord channel the server address.",
                 image: "/screens/actions-game-flow.png",
-                alt: "Minecraft server started trigger connected to a Discord message block",
+                alt: "Minecraft startup reading the live player count and composing a Discord announcement",
             },
             {
                 title: "Welcome new members",
                 description:
-                    "Send new Discord members a direct message with your server address, and introduce them to the welcome channel.",
+                    "Write a personal welcome with local AI, limit its length, send it as a direct message, and introduce the member in Discord.",
                 image: "/screens/actions-discord-flow.png",
-                alt: "Discord member join event connected to a direct message and channel welcome",
+                alt: "Discord member join fields passed to local AI and a direct message, followed by a channel introduction",
             },
             {
                 title: "Respond to AI events",
                 description:
-                    "Notify a Discord channel when a local AI model finishes downloading. Use panel events to connect your tools.",
+                    "Test a model when its download finishes. Ask for a building tip and send the model name and answer to Discord.",
                 image: "/screens/actions-ai-flow.png",
-                alt: "AI model download completion connected to a Discord notification",
+                alt: "Newly downloaded model selected for an AI test and its shortened answer posted to Discord",
             },
         ],
     },
@@ -115,9 +115,9 @@ export const LEARN_PANELS: LearnPanel[] = [
             {
                 title: "Build its behavior",
                 description:
-                    "Use Actions to handle a Discord button, call another panel, and send a reply. Your bot becomes the way in to your tools.",
+                    "Use Actions to acknowledge a Discord button, read Minecraft's player count and player list, and reply to the person who clicked.",
                 image: "/screens/botcreator-actions.png",
-                alt: "Actions workflow connecting a Discord button to a Minecraft announcement and reply",
+                alt: "Discord status button deferred while Minecraft player count and player list are read, then answered privately",
             },
             {
                 title: "Create commands",
@@ -166,9 +166,9 @@ export const LEARN_PANELS: LearnPanel[] = [
             {
                 title: "Use AI in a workflow",
                 description:
-                    "Ask your local model from Actions and pass the answer to another panel, such as a welcome message in Minecraft.",
+                    "Filter Discord messages for !tip, ask your local model, limit the answer's length, and reply to the original message in Actions.",
                 image: "/screens/ai-actions.png",
-                alt: "Actions asking local AI for a welcome and passing its answer to Minecraft chat",
+                alt: "Discord command condition followed by local AI, a reply length limit and a reply to the original message",
             },
         ],
         note: "Local models need disk space and RAM; a GPU is recommended. Optional web search sends search queries to DuckDuckGo.",
