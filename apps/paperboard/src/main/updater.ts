@@ -10,7 +10,7 @@ import { resolveRegistryUrl, withTimeout } from "../../papercrane/util";
 import { validSha256 } from "./updatePlan";
 import { planUpdateTasks } from "./updatePlan";
 export type { UpdateTask, UpdateTaskType } from "./updatePlan";
-import { readJsonFileSync, writeFileAtomicSync } from "../../papercrane/storage";
+import { readStateFileSync, writeFileAtomicSync } from "../../papercrane/storage";
 import { getLocalDir } from "../../papercrane/paths";
 import { logger, getLogger } from "../../papercrane/logger";
 import { fetchRegistryJson } from "../../../../packages/paperapi/src/config";
@@ -48,27 +48,32 @@ interface UpdateState {
 export function shouldSkipUpdate(argv: string[]): boolean {
     if (argv.includes("--skip-update")) return true;
     if (argv.includes("--update")) return false;
-    const { lastUpdate } = readUpdateState();
+    let state: UpdateState;
+    try {
+        state = readUpdateState();
+    } catch (err) {
+        // an unreadable state file is not "no cooldown": don't run the
+        // updater on bookkeeping we cannot trust, and say so loudly
+        logger.warn("[Updater] update state unreadable; skipping this run:", err);
+        return true;
+    }
+    const { lastUpdate } = state;
     return Boolean(
         lastUpdate && Date.now() - lastUpdate < UPDATE_COOLDOWN_MS,
     );
 }
 
 function readUpdateState(): UpdateState {
-    try {
-        return readJsonFileSync<UpdateState>(TIMESTAMP_FILE, {});
-    } catch (err) {
-        logger.warn("[Updater] failed to read update state:", err);
-        return {};
-    }
+    // daemon-owned state: corrupt bytes are quarantined beside the file (not
+    // silently ignored) and an unreadable file throws, so cooldown and
+    // consecutive-failure bookkeeping cannot vanish without a trace
+    return readStateFileSync<UpdateState>(TIMESTAMP_FILE, {}, "last_update.json");
 }
 
 function writeUpdateState(state: UpdateState) {
-    try {
-        writeFileAtomicSync(TIMESTAMP_FILE, JSON.stringify(state));
-    } catch (err) {
-        logger.warn("[Updater] failed to save update state:", err);
-    }
+    // a failed write must surface: silently losing the cooldown/failure
+    // bookkeeping would make shouldSkipUpdate lie
+    writeFileAtomicSync(TIMESTAMP_FILE, JSON.stringify(state));
 }
 
 // clean run resets failure streak and arms cooldown

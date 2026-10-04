@@ -5,7 +5,7 @@ import * as path from "path";
 import {
     writeFileAtomic,
     writeJsonAtomicSync,
-    readJsonFileSync,
+    readStateFileSync,
     sanitizeId,
     resolveSecureTargetPath,
     validatePanelManifest,
@@ -43,14 +43,29 @@ describe("atomic writes", () => {
         const file = path.join(tmp, "state.json");
         writeJsonAtomicSync(file, { v: 1 });
         writeJsonAtomicSync(file, { v: 2 });
-        expect(readJsonFileSync(file, null)).toEqual({ v: 2 });
+        expect(JSON.parse(fs.readFileSync(file, "utf8"))).toEqual({ v: 2 });
     });
 
-    it("readJsonFileSync returns fallback for missing or corrupt files", () => {
-        expect(readJsonFileSync(path.join(tmp, "nope.json"), { d: 1 })).toEqual({ d: 1 });
+    // The old readJsonFileSync returned a fabricated fallback for a corrupt
+    // file (bad bytes silently ignored) and for an unreadable one. The
+    // sanctioned reader distinguishes all three cases: absent is empty,
+    // corrupt bytes are quarantined for recovery, unreadable refuses.
+    it("readStateFileSync treats missing as empty", () => {
+        expect(readStateFileSync(path.join(tmp, "nope.json"), { d: 1 }, "test")).toEqual({ d: 1 });
+    });
+
+    it("readStateFileSync quarantines corrupt bytes beside the file", () => {
         const bad = path.join(tmp, "bad.json");
         fs.writeFileSync(bad, "{not json", "utf8");
-        expect(readJsonFileSync(bad, [])).toEqual([]);
+        expect(readStateFileSync(bad, [] as unknown[], "test")).toEqual([]);
+        expect(fs.existsSync(bad)).toBe(false);
+        expect(fs.readdirSync(tmp).filter((f) => f.startsWith("bad.json.corrupt-"))).toHaveLength(1);
+    });
+
+    it("readStateFileSync throws for an unreadable file, never empty", () => {
+        const dir = path.join(tmp, "a-directory");
+        fs.mkdirSync(dir);
+        expect(() => readStateFileSync(dir, [] as unknown[], "test")).toThrow();
     });
 });
 

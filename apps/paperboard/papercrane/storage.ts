@@ -145,15 +145,6 @@ export function readStateFileSync<T>(filePath: string, empty: T, label: string):
     }
 }
 
-export function readJsonFileSync<T>(filePath: string, fallback: T): T {
-    try {
-        if (fs.existsSync(filePath)) {
-            return JSON.parse(fs.readFileSync(filePath, "utf8")) as T;
-        }
-    } catch (err) { logger.debug("[storage.ts] op failed:", err) }
-    return fallback;
-}
-
 // ─── Path containment ────────────────────────────────────────────────────────
 
 const SAFE_ID_RE = /^[a-zA-Z0-9._-]+$/;
