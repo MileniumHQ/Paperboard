@@ -1,13 +1,5 @@
-import {
-    PaperButton,
-    PaperCard,
-    PaperEffect,
-    PaperGrid,
-    PaperPageHeader,
-    PaperText,
-} from "@paperboard-dev/paperui";
+import { PaperText } from "@paperboard-dev/paperui";
 import { For } from "solid-js";
-import { PlatformIcon, type PlatformId } from "../platformIcons";
 import styles from "../site.module.css";
 
 // Versionless download aliases resolved by i.paperboard.dev to the current
@@ -19,19 +11,16 @@ interface DownloadLink {
 
 interface DownloadPlatform {
     os: string;
-    platform: PlatformId;
     links: DownloadLink[];
 }
 
 const PAPERBOARD: DownloadPlatform[] = [
     {
         os: "Windows",
-        platform: "windows",
         links: [{ arch: "x64", file: "paperboard-windows-x64-setup.exe" }],
     },
     {
         os: "macOS",
-        platform: "macos",
         links: [
             { arch: "Apple Silicon", file: "paperboard-macos-arm64.dmg" },
             { arch: "Intel", file: "paperboard-macos-x64.dmg" },
@@ -39,7 +28,6 @@ const PAPERBOARD: DownloadPlatform[] = [
     },
     {
         os: "Linux",
-        platform: "linux",
         links: [
             { arch: "x64", file: "paperboard-linux-x64.AppImage" },
             { arch: "ARM64", file: "paperboard-linux-arm64.AppImage" },
@@ -50,12 +38,10 @@ const PAPERBOARD: DownloadPlatform[] = [
 const SERVER: DownloadPlatform[] = [
     {
         os: "Windows",
-        platform: "windows",
         links: [{ arch: "x64", file: "crane-windows-x64.zip" }],
     },
     {
         os: "macOS",
-        platform: "macos",
         links: [
             { arch: "Apple Silicon", file: "crane-macos-arm64.tar.gz" },
             { arch: "Intel", file: "crane-macos-x64.tar.gz" },
@@ -63,7 +49,6 @@ const SERVER: DownloadPlatform[] = [
     },
     {
         os: "Linux",
-        platform: "linux",
         links: [
             { arch: "x64", file: "crane-linux-x64.tar.gz" },
             { arch: "ARM64", file: "crane-linux-arm64.tar.gz" },
@@ -73,84 +58,42 @@ const SERVER: DownloadPlatform[] = [
 
 function Section(props: {
     title: string;
+    description: string;
     app: "pb" | "crane";
     platforms: DownloadPlatform[];
 }) {
     return (
         <section class={styles.downloadSection}>
-            <PaperText preset="title" weight={700} as="h2">
-                {props.title}
-            </PaperText>
-            <PaperGrid min="280px">
-                <For each={props.platforms}>
-                    {(platform) => (
-                        <PaperCard
-                            surface="front"
-                            padding="sixfourths"
-                            gap="none"
-                        >
-                            <div class={styles.platformHead}>
-                                <PlatformIcon
-                                    platform={platform.platform}
-                                    class={styles.platformIcon}
-                                />
-                                <PaperText preset="title" weight={700}>
-                                    {platform.os}
-                                </PaperText>
-                            </div>
-                            <For each={platform.links}>
-                                {(link) => (
-                                    <div class={styles.downloadItem}>
-                                        <div class={styles.downloadRow}>
-                                            <PaperText preset="body" weight={700}>
-                                                {link.arch}
-                                            </PaperText>
-                                            <PaperEffect variant="brand">
-                                                <PaperButton
-                                                    variant="brand"
-                                                    size="small"
-                                                    href={`https://i.paperboard.dev/${props.app}/latest/${link.file}`}
-                                                >
-                                                    Download
-                                                </PaperButton>
-                                            </PaperEffect>
-                                        </div>
-                                        <PaperText
-                                            preset="caption"
-                                            family="code"
-                                            color="text-subtle"
-                                            breakWord
-                                        >
-                                            {link.file}
-                                        </PaperText>
-                                    </div>
-                                )}
-                            </For>
-                        </PaperCard>
-                    )}
-                </For>
-            </PaperGrid>
+            <PaperText preset="title" weight={700} as="h2">{props.title}</PaperText>
+            <PaperText as="p">{props.description}</PaperText>
+            <ul class={styles.downloadList}>
+                <For each={props.platforms}>{platform => (
+                    <li>
+                        <span>{platform.os}: </span>
+                        <For each={platform.links}>{(link, index) => <>
+                            {index() > 0 && " · "}
+                            <a href={`https://i.paperboard.dev/${props.app}/latest/${link.file}`}>
+                                {link.arch}{props.app === "pb" && platform.os === "Linux" ? " AppImage" : ""}
+                            </a>
+                        </>}</For>
+                    </li>
+                )}</For>
+            </ul>
         </section>
     );
 }
 
 export function Downloads() {
     return (
-        <>
-            <PaperPageHeader icon="download" title="Downloads" />
-            <PaperText preset="caption" color="text-subtle">
-                Paperboard is currently in alpha; some features may be buggy
-                or incomplete. Windows and macOS builds are unsigned, so your
-                operating system may warn you when you open them.
+        <div class={styles.downloadPage}>
+            <PaperText as="h1" preset="header" weight={700}>Downloads</PaperText>
+            <PaperText as="p" color="text-subtle">
+                Paperboard is in alpha. Some features may be buggy or incomplete.
+                Windows and macOS builds are unsigned; your operating system may warn you when you open them.
             </PaperText>
-            <div class={styles.downloadSections}>
-                <Section title="Paperboard" app="pb" platforms={PAPERBOARD} />
-                <Section
-                    title="Paperboard server daemon"
-                    app="crane"
-                    platforms={SERVER}
-                />
-            </div>
-        </>
+            <Section title="Paperboard" description="The desktop app. Includes the server daemon for this computer." app="pb" platforms={PAPERBOARD} />
+            <Section title="Paperboard server daemon" description="For a headless computer you want to manage from Paperboard on another device." app="crane" platforms={SERVER} />
+            <PaperText as="p" color="text-subtle">Linux AppImages need FUSE 2. Make the downloaded file executable before opening it.</PaperText>
+        </div>
     );
 }

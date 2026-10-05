@@ -21,6 +21,12 @@ export async function checkDownloads(browser, origin) {
         let downloads = 0;
         page.on('download', () => downloads++);
         await page.goto(`${origin}/downloads/`);
+        assert.equal(await page.getByRole('heading', { name: 'Downloads', exact: true }).count(), 1);
+        assert.equal(await page.getByRole('heading', { name: 'Paperboard server daemon', exact: true }).count(), 1);
+        assert.equal(await page.locator('main ul').count(), 2, 'Each product has a plain text list');
+        assert.equal(await page.locator('main a[href^="https://i.paperboard.dev/"]').count(), 10, 'Both products retain every architecture');
+        assert.equal(await page.locator('main a[href^="https://i.paperboard.dev/"]').filter({ hasText: /^Download$/ }).count(), 0, 'Links identify the architecture rather than repeating Download');
+
         for (const [app, file, os] of [
             ['pb', 'paperboard-windows-x64-setup.exe', 'Windows'],
             ['pb', 'paperboard-macos-arm64.dmg', 'macOS'],
@@ -104,6 +110,7 @@ export async function checkDownloads(browser, origin) {
         await page.setViewportSize({ width: 390, height: 844 });
         await page.emulateMedia({ reducedMotion: 'reduce' });
         await page.goto(`${origin}/downloads/`);
+        assert.equal(await page.locator('main').evaluate(node => node.scrollWidth <= node.clientWidth), true, 'Text downloads fit the mobile viewport');
         await page.locator('a[href$="paperboard-macos-arm64.dmg"]').click();
         const mac = page.getByRole('dialog', { name: 'Installing on macOS' });
         await mac.waitFor();
