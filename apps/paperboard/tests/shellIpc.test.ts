@@ -6,28 +6,9 @@ import { describe, it, expect, mock, beforeAll, afterAll } from "bun:test";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
+import { electronStub } from "./electronStub";
 
-mock.module("electron", () => ({
-    app: {
-        getVersion: () => "0.0.0-test",
-        relaunch: () => undefined,
-        quit: () => undefined,
-        requestSingleInstanceLock: () => true,
-        on: () => undefined,
-    },
-    clipboard: { readText: async () => "", writeText: async () => undefined },
-    shell: { openPath: async () => "" },
-    BrowserWindow: class {},
-    Menu: {},
-    protocol: {},
-    nativeTheme: { themeSource: "system", shouldUseDarkColors: false, on: () => undefined },
-    nativeImage: {},
-    session: {},
-    ipcMain: {},
-    webContents: {},
-    webFrameMain: {},
-    dialog: {},
-}));
+mock.module("electron", () => electronStub());
 
 const PANEL_URL = "panel://local.dev.evil.panel/index.html";
 const panelEvent = () => ({ senderFrame: { url: PANEL_URL } });

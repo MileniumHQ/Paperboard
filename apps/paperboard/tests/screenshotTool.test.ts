@@ -3,13 +3,9 @@
 // is exercised by hand; these assertions need no Electron window. Electron is
 // stubbed because the module imports it for installScreenshotTool.
 import { describe, it, expect, mock, beforeAll } from "bun:test";
+import { electronStub } from "./electronStub";
 
-mock.module("electron", () => ({
-    app: { on: () => undefined, off: () => undefined },
-    BrowserWindow: class {},
-    dialog: {},
-    ipcMain: { handle: () => undefined, removeHandler: () => undefined },
-}));
+mock.module("electron", () => electronStub());
 
 type Tool = typeof import("../src/main/screenshotTool");
 let tool: Tool;
