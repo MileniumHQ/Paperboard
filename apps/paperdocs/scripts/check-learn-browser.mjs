@@ -487,6 +487,22 @@ try {
         assert.notEqual(await page.locator("#site-mobile-menu").getAttribute("hidden"), null);
         console.log(`verified mobile ${slug}: layout and navigation dismissal`);
     }
+    for (const path of ["/", "/game-server/"]) {
+        for (const width of [320, 390, 460, 500, 700, 900]) {
+            await page.setViewportSize({ width, height: 800 });
+            await page.goto(`${origin}${path}`);
+            await page.waitForFunction(() => document.querySelector(".site-topbar__download paper-button")?.shadowRoot?.querySelector("a"));
+            const bar = await page.evaluate(() => {
+                const box = (selector) => document.querySelector(selector).getBoundingClientRect();
+                return { bar: box(".site-topbar__bar"), toggle: box(".site-topbar__mobile-toggle"), download: box(".site-topbar__download paper-button") };
+            });
+            assert.ok(bar.toggle.width > 0 && bar.download.width > 0, `Menu toggle and Download both show at ${width}px on ${path}`);
+            assert.ok(bar.download.left - bar.toggle.right >= 8, `Download needs space from the menu toggle at ${width}px on ${path} (${bar.download.left - bar.toggle.right}px)`);
+            assert.ok(bar.download.right <= bar.bar.right && bar.bar.right <= width, `Download must stay inside the bar at ${width}px on ${path}`);
+            await page.locator(".site-topbar__download paper-button").getByRole("link", { name: "Download" }).waitFor();
+        }
+    }
+    console.log("verified the topbar keeps Download spaced from the menu toggle and inside the bar from 320px to 900px");
     await page.setViewportSize({ width: 1440, height: 1080 });
     await page.goto(`${origin}/game-server/`);
     const shot = page.locator(".learn-feature-shot").first();

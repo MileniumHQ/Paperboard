@@ -88,10 +88,12 @@
     transition: opacity 0.2s, background 0.2s, filter 0.2s;
 }
 
+/* The host page can tighten a medium button (the topbar's icon-only
+   Download on narrow phones) through these inherited properties. */
 .PaperButton.size-medium {
-    padding: 12px 28px;
+    padding: var(--paper-button-padding, 12px 28px);
     font-size: 18px;
-    gap: 10px;
+    gap: var(--paper-button-gap, 10px);
 }
 
 .PaperButton.size-large {

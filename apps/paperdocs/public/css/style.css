@@ -283,6 +283,7 @@ html {
     margin-left: auto;
     display: flex;
     align-items: center;
+    gap: 10px;
     flex: none;
 }
 
@@ -384,12 +385,6 @@ html {
         display: inline-flex;
     }
 
-    /* The mobile panel carries Download, so the button would only crowd the
-       bar. */
-    .site-topbar__download {
-        display: none;
-    }
-
     .site-topbar__bar {
         gap: 8px;
         padding: 6px 6px 6px 12px;
@@ -401,6 +396,24 @@ html {
 
     .site-topbar__name {
         font-size: 17px;
+    }
+}
+
+/* Too narrow for the labelled button beside the menu toggle: Download keeps
+   its icon and its accessible name, and drops the visible label. */
+@media (max-width: 460px) {
+    .site-topbar__download {
+        --paper-button-padding: 12px 15px;
+        --paper-button-gap: 0;
+    }
+
+    .site-topbar__download .download-label {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
     }
 }
 
