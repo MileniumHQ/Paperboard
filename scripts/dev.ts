@@ -2,7 +2,7 @@
 // Paperboard developer bootstrap. One command takes a fresh checkout to a
 // running dev environment:
 //
-//   bun run setup          install, build shared libs + every panel, link them
+//   bun run setup          install, fetch Electron, build shared libs + panels, link
 //   bun run build:panels   build shared libs + every panel
 //   bun run link:panels    symlink panels/* into $PAPERBOARD_DIR/panels
 //   bun run unlink:panels  remove the links created by link:panels
@@ -13,12 +13,15 @@
 // this script stays a thin driver and never re-implements that policy.
 import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { linkAllPanels, unlinkPanel, listLinkedPanels } from "../packages/paperapi/src/link";
+import { ensureElectron } from "./ensureElectron";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const SHARED_PACKAGES = ["packages/paperapi", "packages/paperui"];
+const APP_DIR = join(ROOT, "apps/paperboard");
 
 function run(label: string, command: string, args: string[], cwd = ROOT): void {
     console.log(`\n=== ${label}`);
@@ -70,6 +73,16 @@ function buildPanels(): void {
     }
 }
 
+// electron 44 dropped its postinstall, so `bun install` no longer downloads the
+// runtime binary and `bun run dev` starts against a missing Electron. Fetch it
+// here so setup leaves a runnable dev environment (see ensureElectron.ts).
+function ensureAppElectron(): void {
+    const require = createRequire(join(APP_DIR, "package.json"));
+    const electronDir = dirname(require.resolve("electron/package.json"));
+    const electronPkg = JSON.parse(readFileSync(join(electronDir, "package.json"), "utf8")) as { version: string };
+    ensureElectron(electronDir, electronPkg.version);
+}
+
 function linkPanels(force: boolean): void {
     // linkAllPanels owns the linking policy (trash-rename recovery, skip
     // reporting); this driver only presents the result.
@@ -97,7 +110,7 @@ function usage(): never {
     console.log(`Usage: bun scripts/dev.ts <command>
 
 Commands:
-  setup      install, build shared packages + panels, then link panels
+  setup      install, fetch the Electron binary, build shared packages + panels, then link panels
   build      build shared packages + every panel
   link       symlink every panel into $PAPERBOARD_DIR/panels
   unlink     remove the symlinks created by link
@@ -120,6 +133,7 @@ function main(): void {
             return;
         case "setup":
             install();
+            ensureAppElectron();
             buildShared();
             buildPanels();
             linkPanels(force);

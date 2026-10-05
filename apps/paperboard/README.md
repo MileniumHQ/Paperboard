@@ -14,7 +14,7 @@ Paperboard is split into a frontend that displays panel UI and a backend (PaperC
 You can download directly from Paperboard's website or GitHub Releases, but if you don't trust those (fair enough), you can also compile and run the code yourself.
 Note that Paperboard is not yet signed or notarized for macOS or Windows, so SmartScreen or Gatekeeper may have a fit if you download it from the web.
 
-To build from source, clone the repository and run the setup command from the root — see the [root README](../../README.md#development). Then run the commands below from `apps/paperboard`.
+To build from source, clone the repository and run the setup command from the root — see the [root README](../../README.md#development). `setup` also fetches the Electron runtime binary, so `bun run dev` works immediately. Then run the commands below from `apps/paperboard`.
 
 ### Dev Mode
 To run Paperboard without building the entire app:
