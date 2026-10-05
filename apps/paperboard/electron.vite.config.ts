@@ -12,13 +12,17 @@ export default defineConfig({
             },
         },
     },
-    preload: {},
+    preload: { build: { rollupOptions: { input: {
+        index: resolve(__dirname, "src/preload/index.ts"),
+        screenshot: resolve(__dirname, "src/preload/screenshot.ts"),
+    } } } },
     renderer: {
         build: {
             rollupOptions: {
                 input: {
                     index: resolve(__dirname, "src/renderer/index.html"),
                     updater: resolve(__dirname, "src/renderer/updater.html"),
+                    screenshot: resolve(__dirname, "src/renderer/screenshot.html"),
                 },
             },
         },

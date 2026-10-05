@@ -34,6 +34,7 @@ import { keepAliveWithoutWindows, secondLaunchAction } from "./instancePolicy";
 import { createDesktopTray, destroyDesktopTray, hasDesktopTray, refreshDesktopTray } from "./tray";
 import { pollTrayCount } from "./trayCount";
 import icon from "../../resources/icon.png?asset";
+import { installScreenshotTool } from "./screenshotTool";
 
 const log = logger;
 
@@ -43,6 +44,7 @@ let stopCommunicator: (() => void) | null = null;
 // sticky flag so window close-to-tray lets before-quit proceed when the
 // user actually quits from the tray/menu instead of looping on hide()
 let quitting = false;
+let stopScreenshotTool: (() => void) | null = null;
 
 // show (or recreate) the desktop window and focus it
 function showMainWindow(): void {
@@ -421,6 +423,10 @@ app.whenReady().then(async () => {
     app.on("browser-window-created", (_, window) => {
         optimizer.watchWindowShortcuts(window);
     });
+    const controllerUrl = is.dev && process.env["ELECTRON_RENDERER_URL"]
+        ? new URL("screenshot.html", process.env["ELECTRON_RENDERER_URL"]).href
+        : `${SHELL_ORIGIN}/screenshot.html`;
+    stopScreenshotTool = installScreenshotTool(controllerUrl);
 
     log.info(
         `Paperboard v${app.getVersion()} starting (electron ${process.versions.electron}, node ${process.versions.node}, ${process.platform}-${process.arch})`,
@@ -538,6 +544,7 @@ app.on("window-all-closed", () => {
 
 // kill local processes and disconnect clients on quit
 app.on("before-quit", () => {
+    stopScreenshotTool?.();
     disposeAppUpdater();
     quitting = true;
     log.info("[Main] quitting; cleaning up local processes and connections");

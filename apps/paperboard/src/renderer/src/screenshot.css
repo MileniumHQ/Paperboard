@@ -1,0 +1,21 @@
+.paperui-root .screenshot-controller {
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+.paperui-root .screenshot-controller h1 { margin: 0; font-size: 22px; }
+.paperui-root .screenshot-controller form { display: flex; flex-direction: column; gap: 12px; }
+.paperui-root .screenshot-dimensions { display: flex; gap: 12px; }
+.paperui-root .screenshot-dimensions label { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 6px; }
+.paperui-root .screenshot-dimensions input { width: 100%; box-sizing: border-box; padding: 8px; }
+.paperui-root .screenshot-controller p { margin: 0; overflow-wrap: anywhere; }
+.paperui-root .screenshot-controller > label { display: flex; flex-direction: column; gap: 6px; }
+.paperui-root .screenshot-controller input {
+    padding: 8px;
+    font: inherit;
+    color: var(--paper-text);
+    background: var(--paper-surface-inset);
+    border: 1px solid var(--paper-border);
+    border-radius: 6px;
+}
