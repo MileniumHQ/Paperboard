@@ -34,7 +34,7 @@
         "services": [
             {
                 "name": "Mojang",
-                "detail": "Downloading vanilla servers"
+                "detail": "Downloading vanilla servers and player skins"
             },
             {
                 "name": "PaperMC",
@@ -47,10 +47,6 @@
             {
                 "name": "Modrinth",
                 "detail": "Finding plugins and mods"
-            },
-            {
-                "name": "mc-heads.net",
-                "detail": "Showing player heads"
             }
         ],
         "credits": [

@@ -35,6 +35,7 @@ import {
     seenPlayerNames,
     serverStatus,
 } from "../lib/server";
+import { loadHead } from "../lib/skins";
 
 const MIN_SCALE = 0.05;
 const MAX_SCALE = 3;
@@ -79,21 +80,30 @@ export default function MapView() {
     const pending = new Set<string>();
     const headImages = new Map<string, HTMLImageElement>();
 
-    // player heads from mc-heads.net (declared in the manifest's network
-    // hosts). Loaded lazily; until they arrive markers draw as dots, and a
-    // load triggers a redraw.
+    // player heads are composited from Mojang by the service (the browser
+    // cannot read the profile endpoint across origins). Loaded lazily; until
+    // they arrive markers draw as dots, and a load triggers a redraw.
     const getHead = (name: string): HTMLImageElement | null => {
         const key = name.toLowerCase();
         const existing = headImages.get(key);
         if (existing) return existing.complete && existing.naturalWidth > 0 ? existing : null;
-        const image = new Image();
-        image.onload = () => setRevision((v) => v + 1);
-        image.onerror = () => {
-            // keep the dot fallback; mark as loaded-empty so we don't retry
-            console.debug(`[Map] no head image for ${name}`);
-        };
-        image.src = `https://mc-heads.net/avatar/${encodeURIComponent(name)}/32`;
-        headImages.set(key, image);
+        // reserve the slot so a redraw does not start a second lookup
+        headImages.set(key, new Image());
+        void loadHead({ name })
+            .then((dataUrl) => {
+                if (!dataUrl) {
+                    console.debug(`[Map] no head image for ${name}`);
+                    return;
+                }
+                const image = new Image();
+                image.onload = () => {
+                    headImages.set(key, image);
+                    setRevision((v) => v + 1);
+                };
+                image.onerror = () => console.error(`[Map] head decode failed for ${name}`);
+                image.src = dataUrl;
+            })
+            .catch((err) => console.error(`[Map] head lookup failed for ${name}:`, String(err)));
         return null;
     };
 

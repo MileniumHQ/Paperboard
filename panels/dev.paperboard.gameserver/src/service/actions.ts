@@ -40,6 +40,7 @@ import { loadConfigAndProperties, updatePanelConfig } from "./config";
 import { listMapRegions, renderMapTile } from "./map";
 import type { MapDimension } from "../core/map";
 import { listPlayerStats } from "./playerStats";
+import { getHeadDataUrl } from "./skins";
 import { listLogFiles, readLogFile } from "./logs";
 import { queryGamerules, setGamerule } from "./gamerules";
 import { applyRuntimeProperties } from "./runtimeProperties";
@@ -999,6 +1000,35 @@ export const panelActions: ActionDefinition[] = [
                 throw new Error(`No username on file for UUID ${inputs.uuid}`);
             }
             return name;
+        },
+    }),
+
+    defineAction({
+        // decorative lookup the Players/Map/Chat UI calls directly; not a
+        // flow block, so it stays out of the Actions library
+        id: ACTION_IDS.getPlayerSkin,
+        name: "Get Player Skin",
+        category: "Players",
+        description: "Builds a layered player head from Mojang's skin service",
+        template: "Get skin for {player}",
+        internal: true,
+        inputs: {
+            player: { type: "string", label: "Player", optional: true },
+            uuid: { type: "string", label: "UUID", optional: true },
+            size: { type: "number", label: "Size", optional: true },
+        },
+        output: { type: "string", label: "Head image" },
+        quick: false,
+        icon: "person",
+        run: async (
+            _ctx: ServiceContext<GameServerState>,
+            inputs: { player?: string; uuid?: string; size?: number },
+        ) => {
+            return getHeadDataUrl({
+                name: inputs?.player,
+                uuid: inputs?.uuid,
+                size: inputs?.size,
+            });
         },
     }),
 

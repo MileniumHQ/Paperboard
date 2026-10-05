@@ -145,7 +145,7 @@ export default function App() {
                             </PaperInterfaceItem>
                         </Show>
                         <Show when={showPlayers()}>
-                            <PaperInterfaceItem value="players">
+                            <PaperInterfaceItem value="players" variant="full">
                                 <Players />
                             </PaperInterfaceItem>
                         </Show>

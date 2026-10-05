@@ -7,7 +7,6 @@ import {
     type JSX,
 } from "solid-js";
 import {
-    PaperAvatar,
     PaperFlex,
     PaperPage,
     PaperCard,
@@ -24,11 +23,12 @@ import {
     serverStatus,
     initServerListeners,
 } from "../lib/server";
+import PlayerHead from "./PlayerHead";
 
 export function PlayerAvatar(props: { name: string }) {
     return (
-        <PaperAvatar
-            src={`https://mc-heads.net/avatar/${encodeURIComponent(props.name)}/32`}
+        <PlayerHead
+            name={props.name}
             alt={props.name}
             size="small"
             shape="square"
