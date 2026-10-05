@@ -198,7 +198,9 @@ export function paperboardArtifacts(target: Target, version: string): {
     const releaseFile = assetFileName("pb", target);
     const buildFile = osOf(target) === "macos"
         ? `paperboard-${version}-${archOf(target)}.dmg`
-        : releaseFile.replace("paperboard-", `paperboard-${version}-`);
+        : target === "linux-x64"
+          ? `paperboard-${version}-linux-x86_64.AppImage`
+          : releaseFile.replace("paperboard-", `paperboard-${version}-`);
     const installer = { buildFile, releaseFile, updateOnly: false };
     return osOf(target) === "macos"
         ? [installer, {

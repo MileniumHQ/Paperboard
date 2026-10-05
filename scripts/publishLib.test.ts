@@ -374,3 +374,8 @@ describe("first-party store listings", () => {
         expect(parts.files.length).toBeGreaterThan(0);
     });
 });
+
+
+it("Linux x64 build input matches electron-builder while release name stays canonical", () => {
+    expect(paperboardArtifacts("linux-x64", "0.1.0")[0]).toEqual({ buildFile: "paperboard-0.1.0-linux-x86_64.AppImage", releaseFile: "paperboard-linux-x64.AppImage", updateOnly: false });
+});
