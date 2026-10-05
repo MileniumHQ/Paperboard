@@ -145,7 +145,8 @@ gstep paperconvert "paperconvert typecheck" run_in "$ROOT/apps/paperconvert" bun
 gstep paperconvert "paperconvert tests" run_in "$ROOT/apps/paperconvert" bun run test
 gstep paperconvert "paperconvert silent-catches" run_in "$ROOT/apps/paperconvert" bash "$CATCH" src
 
-# ── paperdocs: tests plus the static site build (typecheck, SPA, prerender) ──
+# ── paperdocs: tests plus the static site build (typecheck, site + docs
+# prerender, alias files, shared 404) ────────────────────────────────────────
 gstep paperdocs "paperdocs tests" run_in "$ROOT/apps/paperdocs" bun test
 gstep paperdocs "paperdocs build" run_in "$ROOT/apps/paperdocs" bun run build
 

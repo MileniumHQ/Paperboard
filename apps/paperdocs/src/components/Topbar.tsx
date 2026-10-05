@@ -17,7 +17,7 @@ import {
     type JSX,
 } from "solid-js";
 import { metaSections } from "../docs/meta";
-import { BASE, withBase } from "../utils/base";
+import { docsPath, withBase } from "../utils/base";
 import {
     BRAND,
     DOCS_LINKS,
@@ -27,6 +27,9 @@ import {
 } from "../site/links";
 
 interface TopbarProps {
+    /** "docs" shows the search slot and the PaperDocs brand; "site" (the
+        default) shows the Paperboard brand and the Download action. */
+    variant?: "docs" | "site";
     theme?: "dark" | "light";
     toggleTheme?: () => void;
     section?: string;
@@ -35,16 +38,17 @@ interface TopbarProps {
     search?: JSX.Element;
 }
 
-// One topbar for the docs SPA and the prerendered root pages. The brand
+// One topbar for the docs pages and the prerendered root pages. The brand
 // follows the section prop: a section page is "<Section> docs". Without a
-// section the docs build keeps its PaperDocs brand, while the site build
-// (base /) shows the site brand. The actions differ by build: the site adds a
-// Download link. Menus are PaperContextMenu in both; the static pages hydrate.
+// section the docs variant keeps its PaperDocs brand, while the site variant
+// shows the site brand. The actions differ by variant: the site adds a
+// Download link. Menus are PaperContextMenu in both; the static pages render
+// the chrome client-side.
 export function Topbar(props: TopbarProps) {
     const docsMenu = useContextMenuState();
     const learnMenu = useContextMenuState();
     const [mobileOpen, setMobileOpen] = createSignal(false);
-    const isSite = () => BASE === "/";
+    const isSite = () => props.variant !== "docs";
 
     // The mobile panel is a plain disclosure, not a portalled menu, so it
     // matches the landing. Close it on Escape or a click outside.
@@ -76,7 +80,7 @@ export function Topbar(props: TopbarProps) {
         props.section ? metaSections[props.section] : undefined;
 
     const brandHref = () =>
-        withBase(sectionMeta() ? `/${props.section}` : "/");
+        sectionMeta() ? docsPath(props.section!) : "/";
     const brandImage = () =>
         withBase(
             sectionMeta()

@@ -1,11 +1,18 @@
-// Deployment base, e.g. "/docs/". Vite exposes the configured `base` as
-// BASE_URL with a trailing slash. This is the one place that knows how to
-// join a site-root-relative path onto it, so links and assets can never
-// double or drop the prefix.
+// Site-root-relative URLs. The whole site (root pages and docs) builds with
+// Vite base "/", so withBase only normalizes the leading slash now; the docs
+// section is not a separate Vite root any more.
 export const BASE = import.meta.env.BASE_URL;
 
-/** Prefix a site-root-relative path ("/paperui") with the deployment base. */
+/** Normalize a site-root-relative path ("/paperui.png"). */
 export function withBase(path: string): string {
     const clean = path.replace(/^\/+/, "");
-    return clean ? `${BASE}${clean}` : BASE;
+    return clean ? `/${clean}` : "/";
+}
+
+/** A docs section or page route, trailing-slashed to match its static file:
+    "/docs/paperui/" or "/docs/paperui/overview/". */
+export function docsPath(section: string, pageKey?: string): string {
+    return pageKey
+        ? `/docs/${section}/${pageKey}/`
+        : `/docs/${section}/`;
 }

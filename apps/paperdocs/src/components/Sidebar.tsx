@@ -5,7 +5,7 @@ import {
 } from "@paperboard-dev/paperui";
 import { For, Show } from "solid-js";
 import { subsectionsFor } from "../utils/routeUtils";
-import { withBase } from "../utils/base";
+import { docsPath } from "../utils/base";
 
 interface SidebarProps {
     section: string;
@@ -28,8 +28,9 @@ export function Sidebar(props: SidebarProps) {
                                     <PaperMenuItem
                                         value={p.pageKey}
                                         onClick={() => {
-                                            window.location.href = withBase(
-                                                `/${props.section}/${p.pageKey}`,
+                                            window.location.href = docsPath(
+                                                props.section,
+                                                p.pageKey,
                                             );
                                         }}
                                     >

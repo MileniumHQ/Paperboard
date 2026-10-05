@@ -9,7 +9,7 @@ import {
 } from "@paperboard-dev/paperui";
 import { For, Show } from "solid-js";
 import { metaSections, sectionKeys } from "../utils/routeUtils";
-import { withBase } from "../utils/base";
+import { docsPath, withBase } from "../utils/base";
 import styles from "./landing.module.css";
 
 // Entrance stagger is capped so a growing section list never stretches the
@@ -31,7 +31,7 @@ function sectionCard(key: string, index: number) {
                 icon={meta.image ? withBase(meta.image) : meta.icon || "description"}
                 title={meta.name}
                 description={meta.description}
-                href={withBase(`/${key}`)}
+                href={docsPath(key)}
             />
         </div>
     );

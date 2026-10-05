@@ -39,6 +39,4 @@ export interface SearchRecord {
     title: string;
     headings: string[];
     body: string;
-    /** Base-relative route without the deployment prefix: "paperui/overview". */
-    url: string;
 }

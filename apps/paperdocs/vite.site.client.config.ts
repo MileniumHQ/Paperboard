@@ -1,19 +1,22 @@
 import { defineConfig } from "vite";
 import solid from "vite-plugin-solid";
+import { docsSearchPlugin } from "./vite-plugin-docs-search";
 import { paperuiAlias } from "./vite.site.shared";
 
-// Root-site client build: the hydration bundle and stylesheet for the
-// prerendered pages. Output lands next to the docs build in dist/ without
-// clearing it, under stable names the prerender script can link.
+// Browser bundle for the prerendered pages: the interactive islands (site
+// topbar, contact form) and the docs app, plus their stylesheet. Output lands
+// in dist/ under stable names the prerender script links; it is the first
+// build, so it clears dist/ and copies public/ (including the landing) in.
 export default defineConfig({
     base: "/",
-    // ssr: true here means "hydratable": the client pass must be compiled with
-    // hydration support to attach to the SSR markup.
-    plugins: [solid({ ssr: true })],
+    // ssr: true here means "compiled for the same markup the server produced":
+    // the docs app and the islands render client-side, but the components must
+    // match the server build.
+    plugins: [docsSearchPlugin(), solid({ ssr: true })],
     resolve: { alias: paperuiAlias },
     build: {
         outDir: "dist",
-        emptyOutDir: false,
+        emptyOutDir: true,
         target: "esnext",
         cssCodeSplit: false,
         lib: {
@@ -32,3 +35,4 @@ export default defineConfig({
         },
     },
 });
+

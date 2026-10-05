@@ -1,8 +1,9 @@
 import { createSignal } from "solid-js";
 
-// One theme implementation for the docs SPA and the prerendered root pages.
+// One theme implementation for the docs app and the prerendered root pages.
 // Both read the theme the inline bootstrap script already resolved on <html>,
-// so a page painted from storage and a hydrated app agree on the first frame.
+// so a page painted from storage and a re-rendered island agree on the first
+// frame.
 export const THEME_KEY = "paper-docs-theme";
 
 export type PaperTheme = "dark" | "light";

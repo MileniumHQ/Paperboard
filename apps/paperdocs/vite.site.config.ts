@@ -1,14 +1,17 @@
 import { defineConfig } from "vite";
 import solid from "vite-plugin-solid";
+import { docsSearchPlugin } from "./vite-plugin-docs-search";
 import { paperuiAlias } from "./vite.site.shared";
 
-// Root-site prerender build. The docs SPA keeps vite.config.ts (base "/docs/").
-// This SSR pass renders the root pages to static HTML into dist/ via
-// scripts/prerender-site.mjs. The client pass (vite.site.client.config.ts)
-// emits site-client.js and site.css, which the prerendered pages link.
+// Site SSR build for every prerendered page: the root pages and the docs
+// pages share this one entry. The client pass (vite.site.client.config.ts)
+// emits site-client.js and site.css; scripts/prerender-site.mjs turns the SSR
+// output into static documents. public/ is copied by the client build, so this
+// pass only carries the SSR module graph.
 export default defineConfig({
     base: "/",
-    plugins: [solid({ ssr: true })],
+    plugins: [docsSearchPlugin(), solid({ ssr: true })],
+    publicDir: false,
     resolve: { alias: paperuiAlias },
     build: {
         ssr: "src/site/entry-server.tsx",
@@ -33,3 +36,4 @@ export default defineConfig({
         noExternal: true,
     },
 });
+

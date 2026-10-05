@@ -162,7 +162,6 @@ function buildIndex(root: string): SearchRecord[] {
             title: title || ref.pageName,
             headings,
             body: body.slice(0, 2000),
-            url: `${ref.sectionKey}/${ref.pageKey}`,
         });
     }
     return records;

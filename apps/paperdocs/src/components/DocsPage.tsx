@@ -22,7 +22,7 @@ import {
     isKnownSection,
     siblingsFor,
 } from "../utils/routeUtils";
-import { withBase } from "../utils/base";
+import { docsPath } from "../utils/base";
 import { tocLevel } from "../utils/toc";
 import type { TocItem } from "../types/docs";
 
@@ -194,8 +194,9 @@ export function DocsPage(props: DocsPageProps) {
                                         icon="arrow_back"
                                         description={siblings().prev!.name}
                                         onClick={() => {
-                                            window.location.href = withBase(
-                                                `/${props.section}/${siblings().prev!.pageKey}`,
+                                            window.location.href = docsPath(
+                                                props.section,
+                                                siblings().prev!.pageKey,
                                             );
                                         }}
                                     >
@@ -209,8 +210,9 @@ export function DocsPage(props: DocsPageProps) {
                                         reverse
                                         description={siblings().next!.name}
                                         onClick={() => {
-                                            window.location.href = withBase(
-                                                `/${props.section}/${siblings().next!.pageKey}`,
+                                            window.location.href = docsPath(
+                                                props.section,
+                                                siblings().next!.pageKey,
                                             );
                                         }}
                                     >

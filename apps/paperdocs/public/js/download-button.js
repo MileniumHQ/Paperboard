@@ -62,7 +62,8 @@
                         : targets.linuxX64;
                 }
             } catch (error) {
-                // High-entropy hints are optional; the user agent still works.
+                // High-entropy hints are optional; recover with the user agent.
+                return fromUserAgent();
             }
         }
         return fromUserAgent();
@@ -79,7 +80,8 @@
                     `https://i.paperboard.dev/pb/latest/${target.file}`,
                 );
                 if (label) {
-                    label.textContent = `Download for ${target.label}`;
+                    label.textContent = button.dataset.downloadLabel === "short"
+                        ? "Download" : `Download for ${target.label}`;
                 }
             } else if (label) {
                 label.textContent = "Download";

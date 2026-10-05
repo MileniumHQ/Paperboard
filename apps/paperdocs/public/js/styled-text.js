@@ -3,8 +3,8 @@
     function loadAssets() {
         if (!assetsPromise) {
             assetsPromise = Promise.all([
-                fetch('html/styled-text.html').then((r) => r.text()),
-                fetch('css/styled-text.css').then((r) => r.text()),
+                fetch('/html/styled-text.html').then((r) => r.text()),
+                fetch('/css/styled-text.css').then((r) => r.text()),
             ]);
         }
         return assetsPromise;

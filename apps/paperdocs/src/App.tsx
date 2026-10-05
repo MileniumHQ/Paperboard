@@ -10,26 +10,30 @@ import { NotFound } from "./components/NotFound";
 import { firstPageFor, resolveRoute } from "./utils/routeUtils";
 import { createPaperTheme } from "./utils/theme";
 
-// App root/layout: theme state, the persistent topbar, and the footer. The
-// current route is read from window.location once per full page load.
-export default function App() {
-    const route = resolveRoute();
+// The docs app: theme state, the persistent topbar, and the footer. Each
+// deployment is a static document, so the path is passed in during SSR and
+// read from window.location in the browser.
+export default function App(props: { pathname?: string }) {
+    const route = resolveRoute(props.pathname ?? window.location.pathname);
     const { theme, toggleTheme } = createPaperTheme();
 
     const section = () =>
-        route.kind === "docs" ? route.section : undefined;
+        route.kind === "docs" || route.kind === "section"
+            ? route.section
+            : undefined;
 
     return (
         <PaperProvider theme={theme()} styleBody>
             <PaperFlex direction="column" style={{ "min-height": "100vh" }}>
                 <Topbar
+                    variant="docs"
                     theme={theme()}
                     toggleTheme={toggleTheme}
                     section={section()}
                     search={<DocsSearch class="topbar-search" />}
                 />
                 <Switch>
-                    <Match when={route.kind === "landing"}>
+                    <Match when={route.kind === "docsLanding"}>
                         <Landing />
                     </Match>
                     <Match when={route.kind === "docs"}>
@@ -39,7 +43,8 @@ export default function App() {
                         />
                     </Match>
                     {/* A section root (/docs/paperui) is its first page, so
-                        the README aliases and site links land on real docs */}
+                        the section links and the README aliases land on real
+                        docs */}
                     <Match
                         when={
                             route.kind === "section" &&

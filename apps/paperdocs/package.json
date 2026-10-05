@@ -6,10 +6,11 @@
   "type": "module",
   "scripts": {
     "dev": "bun run build && wrangler dev",
-    "dev:vite": "vite",
-    "build": "tsc -b && vite build && vite build -c vite.site.client.config.ts && vite build -c vite.site.config.ts && bun scripts/prerender-site.mjs",
+    "build": "tsc -b && vite build -c vite.site.client.config.ts && vite build -c vite.site.config.ts && bun scripts/prerender-site.mjs && node scripts/check-learn-artifacts.mjs",
     "test": "bun test",
     "deploy": "bun run build && wrangler deploy",
+    "test:browser": "node scripts/check-learn-browser.mjs",
+    "screenshots:demo": "node scripts/capture-demo.mjs",
     "screenshots:actions": "bun scripts/capture-integrations.ts"
   },
   "dependencies": {

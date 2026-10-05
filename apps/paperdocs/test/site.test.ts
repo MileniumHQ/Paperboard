@@ -1,7 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { landingChrome } from "../src/site/chrome";
+import {
+    docsDropdownHtml,
+    footerDocsHtml,
+    footerLearnHtml,
+    footerSiteHtml,
+    learnDropdownHtml,
+    mobileMenuHtml,
+} from "../src/site/landing/chromeHtml";
 import {
     BRAND,
     DOCS_LINKS,
@@ -9,79 +16,60 @@ import {
     SITE_LINKS,
 } from "../src/site/links";
 
-const landing = readFileSync(
-    join(import.meta.dir, "../public/index.html"),
-    "utf8",
-);
+// The landing's link contents come from src/site/chromeHtml.ts, which reads
+// the shared nav source (src/site/links.ts). The Solid page hands these
+// fragments to its custom-element host wrappers as innerHTML, so the same
+// escaping and href shapes the old injected chrome had must survive.
 
-const REGIONS = [
-    "learn",
-    "docs",
-    "footer-learn",
-    "footer-docs",
-    "footer-site",
-];
-
-describe("site nav contents", () => {
-    test("the landing keeps a marker pair for every generated region", () => {
-        for (const name of REGIONS) {
-            expect(landing).toContain(`<!-- site-nav:${name} -->`);
-            expect(landing).toContain(`<!-- /site-nav:${name} -->`);
-        }
-    });
-
+describe("landing chrome contents", () => {
     test("the generated topbar chrome carries every learn link", () => {
         for (const link of LEARN_LINKS) {
-            expect(landingChrome.topbarLearn).toContain(
-                `href="${link.href}"`,
-            );
-            expect(landingChrome.topbarLearn).toContain(link.label);
+            expect(learnDropdownHtml).toContain(`href="${link.href}"`);
+            expect(learnDropdownHtml).toContain(link.label);
         }
     });
 
     test("the generated docs chrome mirrors the docs sections", () => {
         expect(DOCS_LINKS.length).toBeGreaterThan(0);
         for (const link of DOCS_LINKS) {
-            expect(link.href).toMatch(/^\/docs\/[a-z0-9-]+$/);
-            expect(landingChrome.topbarDocs).toContain(
-                `href="${link.href}"`,
-            );
-            expect(landingChrome.footerDocs).toContain(
-                `href="${link.href}"`,
-            );
+            expect(link.href).toMatch(/^\/docs\/[a-z0-9-]+\/$/);
+            expect(docsDropdownHtml).toContain(`href="${link.href}"`);
+            expect(footerDocsHtml).toContain(`href="${link.href}"`);
         }
     });
 
     test("the footer columns carry the shared link lists", () => {
         for (const link of SITE_LINKS) {
-            expect(landingChrome.footerSite).toContain(
-                `href="${link.href}"`,
-            );
+            expect(footerSiteHtml).toContain(`href="${link.href}"`);
         }
-        expect(landingChrome.footerLearn).toContain('href="/"');
+        expect(footerLearnHtml).toContain('href="/"');
         for (const link of LEARN_LINKS) {
-            expect(landingChrome.footerLearn).toContain(
-                `href="${link.href}"`,
-            );
+            expect(footerLearnHtml).toContain(`href="${link.href}"`);
+        }
+    });
+
+    test("the mobile panel carries every section", () => {
+        for (const link of LEARN_LINKS) {
+            expect(mobileMenuHtml).toContain(`href="${link.href}"`);
+        }
+        for (const link of DOCS_LINKS) {
+            expect(mobileMenuHtml).toContain(`href="${link.href}"`);
+        }
+        for (const link of SITE_LINKS) {
+            expect(mobileMenuHtml).toContain(`href="${link.href}"`);
         }
     });
 
     test("generated chrome escapes labels and attributes", () => {
-        expect(landingChrome.topbarLearn).toContain("Game Server");
-        expect(landingChrome.topbarLearn).not.toContain("&amp;amp;");
-        expect(landingChrome.topbarLearn).toContain(
+        expect(learnDropdownHtml).toContain("Game Server");
+        expect(learnDropdownHtml).not.toContain("&amp;amp;");
+        expect(learnDropdownHtml).toContain(
             "Dedicated Minecraft &amp; game server manager",
         );
     });
 
     test("the landing brand is Paperboard, not PaperDocs", () => {
         expect(BRAND.name).toBe("Paperboard");
-        expect(landing).toContain("site-topbar__name\">Paperboard");
-    });
-
-    test("every landing download action points at /downloads", () => {
-        const matches = landing.match(/href="\/downloads"/g) ?? [];
-        expect(matches.length).toBeGreaterThanOrEqual(3);
     });
 
     test("the docs and site builds share one theme implementation", () => {

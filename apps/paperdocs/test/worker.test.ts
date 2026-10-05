@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import worker from "../src/worker";
 
-// Mirrors the built dist layout: the landing at the root, the docs HTML entry
-// at /docs/index.html, docs assets at the root but linked through the /docs
-// base, and the docs' own public files at the root.
+// Mirrors the built dist layout: the landing at the root, every docs page a
+// real file under /docs, the README aliases as static meta-redirect files, and
+// the shared 404 document at the root.
 const FILES: Record<string, { body: string; type: string }> = {
     "/": { body: "<!doctype html><title>Paperboard</title>", type: "text/html" },
     "/index.html": {
@@ -11,28 +11,58 @@ const FILES: Record<string, { body: string; type: string }> = {
         type: "text/html",
     },
     "/css/style.css": { body: "body{}", type: "text/css" },
-    "/js/vendor/three.module.js": { body: "export {}", type: "text/javascript" },
-    "/screens/paperconsole-docs.png": { body: "png", type: "image/png" },
+    "/paperui.html": {
+        body: '<meta http-equiv="refresh" content="0; url=/docs/paperui/">',
+        type: "text/html",
+    },
+    "/paperapi.html": {
+        body: '<meta http-equiv="refresh" content="0; url=/docs/paperapi/">',
+        type: "text/html",
+    },
     "/docs/index.html": {
-        body: "<!doctype html><title>PaperDocs</title>",
+        body: '<!doctype html><title>PaperDocs</title><div id="docs-root"></div>',
+        type: "text/html",
+    },
+    "/docs/paperapi/index.html": {
+        body: '<!doctype html><title>Overview | Paperboard Docs</title><div id="docs-root"></div>',
+        type: "text/html",
+    },
+    "/docs/paperapi/overview/index.html": {
+        body: '<!doctype html><title>Overview | Paperboard Docs</title><div id="docs-root"></div>',
         type: "text/html",
     },
     "/assets/docs-abc.js": { body: "console.log(1)", type: "text/javascript" },
-    "/assets/docs-abc.css": { body: "a{}", type: "text/css" },
-    "/paperdocs.png": { body: "png", type: "image/png" },
-    "/site.webmanifest": { body: "{}", type: "application/manifest+json" },
+    "/404": {
+        body: '<!doctype html><title>Page not found</title><div id="docs-root"></div>',
+        type: "text/html",
+    },
     "/docslike.txt": { body: "static", type: "text/plain" },
 };
 
 function createAssets() {
     return {
         async fetch(request: Request): Promise<Response> {
-            // The asset server maps a directory request to its index file.
-            const pathname = new URL(request.url).pathname.replace(
-                /\/$/,
-                "/index.html",
-            );
-            const file = FILES[pathname] ?? FILES[`${pathname}.html`];
+            const url = new URL(request.url);
+            const pathname = url.pathname;
+
+            // The real asset server canonicalizes an explicit .html request to
+            // the extensionless path with a 307, so a worker that asks for
+            // /404.html gets an empty redirect body instead of the document.
+            if (pathname.endsWith(".html")) {
+                const target = new URL(url);
+                target.pathname = pathname.slice(0, -".html".length);
+                return new Response(null, {
+                    status: 307,
+                    headers: { location: target.pathname },
+                });
+            }
+
+            // A directory request maps to its index file, and an extensionless
+            // request maps to its .html file.
+            const resolved = pathname.endsWith("/")
+                ? `${pathname}index.html`
+                : pathname;
+            const file = FILES[resolved] ?? FILES[`${resolved}.html`];
             if (!file) return new Response("not found", { status: 404 });
             return new Response(file.body, {
                 headers: { "content-type": file.type },
@@ -51,43 +81,24 @@ function get(path: string, accept = "text/html") {
 }
 
 describe("paperdocs worker routing", () => {
-    test("serves the landing at the root, not the docs shell", async () => {
+    test("serves the landing at the root, not the docs app", async () => {
         const res = await get("/");
         expect(res.status).toBe(200);
         expect(await res.text()).toContain("Paperboard");
     });
 
-    test("redirects the paperui alias to the docs section", async () => {
+    test("serves the paperui alias as a static meta redirect", async () => {
         const res = await get("/paperui");
-        expect(res.status).toBe(308);
-        expect(new URL(res.headers.get("location")!).pathname).toBe(
-            "/docs/paperui",
-        );
-    });
-
-    test("redirects the paperapi alias, with or without a trailing slash", async () => {
-        for (const path of ["/paperapi", "/paperapi/"]) {
-            const res = await get(path);
-            expect(res.status).toBe(308);
-            expect(new URL(res.headers.get("location")!).pathname).toBe(
-                "/docs/paperapi",
-            );
-        }
-    });
-
-    test("the docs section root serves the shell, which renders its first page", async () => {
-        const res = await get("/docs/paperui");
         expect(res.status).toBe(200);
-        expect(await res.text()).toContain("PaperDocs");
+        const body = await res.text();
+        expect(body).toContain('http-equiv="refresh"');
+        expect(body).toContain("/docs/paperui/");
     });
 
-    test("serves landing static files unchanged", async () => {
-        const css = await get("/css/style.css", "*/*");
-        expect(css.status).toBe(200);
-        expect(css.headers.get("content-type")).toBe("text/css");
-
-        const model = await get("/js/vendor/three.module.js", "*/*");
-        expect(model.status).toBe(200);
+    test("serves the paperapi alias as a static meta redirect", async () => {
+        const res = await get("/paperapi");
+        expect(res.status).toBe(200);
+        expect(await res.text()).toContain("/docs/paperapi/");
     });
 
     test("redirects the bare docs mount to its trailing-slash form", async () => {
@@ -102,52 +113,47 @@ describe("paperdocs worker routing", () => {
         expect(new URL(res.headers.get("location")!).pathname).toBe("/docs/");
     });
 
-    test("serves the docs shell at /docs/", async () => {
+    test("serves the docs landing as a static file", async () => {
         const res = await get("/docs/");
         expect(res.status).toBe(200);
         expect(await res.text()).toContain("PaperDocs");
     });
 
-    test("strips the docs prefix for built assets", async () => {
-        const js = await get("/docs/assets/docs-abc.js", "*/*");
-        expect(js.status).toBe(200);
-        expect(await js.text()).toContain("console.log");
-
-        const png = await get("/docs/paperdocs.png", "*/*");
-        expect(png.status).toBe(200);
-        expect(png.headers.get("content-type")).toBe("image/png");
-
-        const manifest = await get("/docs/site.webmanifest", "*/*");
-        expect(manifest.status).toBe(200);
-    });
-
-    test("falls back to the docs shell for client-side routes", async () => {
-        const res = await get("/docs/paperapi/general/overview");
+    test("serves a docs section root as a static file", async () => {
+        const res = await get("/docs/paperapi/");
         expect(res.status).toBe(200);
-        expect(await res.text()).toContain("PaperDocs");
+        expect(await res.text()).toContain("Overview");
     });
 
-    test("a missing docs asset stays a 404, never the shell", async () => {
+    test("serves a docs page as a static file, no shell fallback", async () => {
+        const res = await get("/docs/paperapi/overview/");
+        expect(res.status).toBe(200);
+        expect(await res.text()).toContain("Overview");
+    });
+
+    test("a missing docs page gets the shared 404, not the docs app", async () => {
+        const res = await get("/docs/paperapi/missing");
+        expect(res.status).toBe(404);
+        const body = await res.text();
+        expect(body).toContain("Page not found");
+        expect(body).not.toContain("<title>PaperDocs</title>");
+    });
+
+    test("a missing docs asset stays a 404, never the 404 page", async () => {
         const res = await get("/docs/assets/missing.js", "*/*");
         expect(res.status).toBe(404);
     });
 
-    test("a missing top-level path stays a 404, never the landing", async () => {
+    test("a missing root page serves the shared 404 document", async () => {
         const res = await get("/nope");
         expect(res.status).toBe(404);
-        expect(await res.text()).not.toContain("Paperboard</title>");
+        expect(await res.text()).toContain("Page not found");
     });
 
-    test("a missing root page serves the docs shell's 404 sitewide", async () => {
-        const res = await get("/nope");
-        expect(res.status).toBe(404);
-        expect(await res.text()).toContain("PaperDocs");
-    });
-
-    test("a missing asset is not answered with the 404 shell", async () => {
+    test("a missing asset is not answered with the 404 document", async () => {
         const res = await get("/nope.css", "*/*");
         expect(res.status).toBe(404);
-        expect(await res.text()).not.toContain("PaperDocs");
+        expect(await res.text()).not.toContain("docs-root");
     });
 
     test("a static file sharing the docs prefix is not captured", async () => {

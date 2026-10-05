@@ -3,8 +3,8 @@
     function loadAssets() {
         if (!assetsPromise) {
             assetsPromise = Promise.all([
-                fetch('html/paper-button.html').then((r) => r.text()),
-                fetch('css/paper-button.css').then((r) => r.text()),
+                fetch('/html/paper-button.html').then((r) => r.text()),
+                fetch('/css/paper-button.css').then((r) => r.text()),
             ]);
         }
         return assetsPromise;

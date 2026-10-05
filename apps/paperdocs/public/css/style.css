@@ -1,31 +1,29 @@
 @import "./fonts.css";
 
 :root {
-    --bg-top: #80bbff;
-    --bg-bottom: #0479ff;
+    --paper-site-accent: var(--paper-primary);
+    --bg-top: color-mix(in srgb, var(--paper-site-accent) 50%, var(--paper-on-color));
+    --bg-bottom: var(--paper-site-accent);
     --bg-noise-opacity: 0.4;
-    /* PaperUI action roles: the flat fill and its deep offset layer */
-    --paper-primary: #2981e5;
-    --paper-primary-deep: #1764bc;
-    --paper-on-color: #ffffff;
-    --paper-border-strong: #adb3be;
-    --paper-front-blue: var(--paper-primary);
-    --paper-back-blue: var(--paper-primary-deep);
-    --paper-front-green: #0d9d0d;
-    --paper-back-green: #0b720b;
+    --paper-front-blue: var(--paper-site-accent);
+    --paper-back-blue: color-mix(in srgb, var(--paper-site-accent) 78%, var(--paper-marketing-ink));
+    --paper-front-green: var(--paper-success);
+    --paper-back-green: var(--paper-success-deep);
     --paper-border-radius: 12px;
-    /* Landing paper buttons: the site's blue stock, white ink, same grain as cards */
-    --paper-button-face: #1478e6;
-    --paper-button-ink: #ffffff;
-    --paper-button-deep: #0a52b0;
+    --paper-button-face: var(--paper-site-accent);
+    --paper-button-ink: var(--paper-on-color);
+    --paper-button-deep: color-mix(in srgb, var(--paper-site-accent) 70%, var(--paper-marketing-ink));
     --paper-button-noise: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.45'/%3E%3C/svg%3E");
 }
 
-* {
-    box-sizing: border-box;
-    margin: 0;
-    padding: 0;
-}
+.paperui-root * { box-sizing: border-box; }
+body { margin: 0; }
+.page-layout, .learn-page, .site-topbar, .site-footer,
+.page-layout :where(div, section, main, figure, p, h1, h2, h3, a, button, img, span, canvas),
+.learn-page :where(div, section, main, figure, p, h1, h2, h3, a, button, img, span),
+.site-topbar :where(div, nav, a, button, img, span),
+.site-footer :where(div, nav, a, img, span) { box-sizing: border-box; }
+.page-layout :where(h1, h2, p, figure), .learn-page :where(h1, h2, p, figure) { margin: 0; }
 
 body,
 html {
@@ -38,7 +36,7 @@ html {
         180deg,
         var(--bg-top) 0%,
         var(--bg-bottom) 40%,
-        #0252bf 100%
+        color-mix(in srgb, var(--paper-site-accent) 65%, var(--paper-marketing-ink)) 100%
     );
     background-attachment: fixed;
 }
@@ -81,7 +79,7 @@ html {
     backdrop-filter: blur(18px) saturate(1.5);
     box-shadow:
         0 18px 40px -16px rgba(2, 26, 62, 0.4),
-        0 8px 18px -10px rgba(4, 121, 255, 0.28);
+        0 8px 18px -10px color-mix(in srgb, var(--paper-site-accent) 28%, transparent);
 }
 
 .site-topbar__brand {
@@ -147,7 +145,7 @@ html {
     border: 0;
     border-radius: 999px;
     background: none;
-    color: #1a2a3a;
+    color: var(--paper-marketing-ink);
     font-family: "Nunito", sans-serif;
     font-size: 15px;
     font-weight: 700;
@@ -163,7 +161,7 @@ html {
 .site-topbar__link:hover,
 .site-topbar__menu.is-open .site-topbar__trigger {
     background: #eef4fb;
-    color: #0f63c8;
+    color: var(--paper-marketing-ink);
 }
 
 .site-topbar__caret {
@@ -190,7 +188,7 @@ html {
     border-radius: 26px;
     box-shadow:
         0 24px 50px -16px rgba(2, 26, 62, 0.45),
-        0 8px 20px -10px rgba(4, 121, 255, 0.3);
+        0 8px 20px -10px color-mix(in srgb, var(--paper-site-accent) 30%, transparent);
     opacity: 0;
     visibility: hidden;
     transform: translateY(-6px);
@@ -237,7 +235,7 @@ html {
 .site-topbar__item-text strong {
     font-size: 15px;
     font-weight: 700;
-    color: #1a2a3a;
+    color: var(--paper-marketing-ink);
 }
 
 .site-topbar__item-text small {
@@ -266,7 +264,7 @@ html {
     border: 0;
     border-radius: 999px;
     background: none;
-    color: #1a2a3a;
+    color: var(--paper-marketing-ink);
     cursor: pointer;
     transition: background-color 0.18s ease;
 }
@@ -294,11 +292,19 @@ html {
     backdrop-filter: blur(18px) saturate(1.5);
     box-shadow:
         0 24px 50px -16px rgba(2, 26, 62, 0.45),
-        0 8px 20px -10px rgba(4, 121, 255, 0.3);
+        0 8px 20px -10px color-mix(in srgb, var(--paper-site-accent) 30%, transparent);
 }
 
 .site-topbar__mobile[hidden] {
     display: none;
+}
+
+/* The heading/link list is handed to a host div, so it carries the panel's
+   column gap itself. */
+.site-topbar__mobile-links {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
 }
 
 .site-topbar__mobile-heading {
@@ -314,7 +320,7 @@ html {
     display: block;
     padding: 10px 14px;
     border-radius: 16px;
-    color: #1a2a3a;
+    color: var(--paper-marketing-ink);
     font-size: 15px;
     font-weight: 700;
     text-decoration: none;
@@ -323,7 +329,7 @@ html {
 
 .site-topbar__mobile-link:hover {
     background: #eef4fb;
-    color: #0f63c8;
+    color: var(--paper-marketing-ink);
 }
 
 .icon-menu {
@@ -405,18 +411,38 @@ html {
     z-index: 20;
 }
 
-.preview-card {
+/* One surface and solid offset layer for every marketing screenshot card. */
+.screenshot-card {
     position: relative;
-    width: min(1100px, 94vw, 78vh);
-    background: #ffffff;
-    padding: 38px 44px 24px 44px;
-    border-radius: 40px;
-    box-shadow:
-        0 28px 64px -12px rgba(0, 0, 0, 0.32),
-        0 14px 28px -6px rgba(4, 121, 255, 0.22);
-    transform-origin: center center;
+    isolation: isolate;
+    border-radius: 12px;
+    border: 1px solid color-mix(in srgb, var(--paper-on-color) 22%, transparent);
+    --paper-card-face: color-mix(in srgb, var(--paper-site-accent) 12%, var(--paper-marketing-ink));
+    background: var(--paper-card-face);
+    box-shadow: 0 28px 65px -20px var(--paper-scrim);
+}
+.screenshot-card::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    background: color-mix(in srgb, var(--paper-site-accent) 55%, var(--paper-marketing-ink));
+    transform: translate3d(14px, 16px, 0);
+    pointer-events: none;
+}
+.marketing-screenshot {
+    display: block;
+    width: 100%;
+    height: auto;
+    border-radius: inherit;
+}
+.preview-card {
+    width: min(1100px, 94vw, 86vh);
+    padding: 0;
+    transform-origin: center;
     cursor: pointer;
-    overflow: hidden;
+    overflow: visible;
     will-change: transform;
 }
 
@@ -424,9 +450,9 @@ html {
     position: relative;
     width: 100%;
     aspect-ratio: 4 / 3;
-    border-radius: 0;
+    border-radius: 12px 12px 0 0;
     overflow: hidden;
-    background: #eef4fb;
+    background: var(--paper-marketing-ink);
 }
 
 .card-slides-track {
@@ -436,6 +462,8 @@ html {
     transition: transform 0.55s cubic-bezier(0.25, 1, 0.5, 1);
     will-change: transform;
 }
+
+.card-slide { flex: 0 0 100%; min-width: 0; height: 100%; }
 
 .card-slide-image {
     flex: 0 0 100%;
@@ -448,15 +476,17 @@ html {
 
 .card-caption {
     width: 100%;
-    padding-top: 14px;
-    padding-bottom: 2px;
+    position: relative;
+    padding: 14px 14px 18px;
+    border-radius: 0 0 12px 12px;
+    background: var(--paper-card-face);
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 10px;
     font-size: 14px;
     font-weight: 600;
-    color: #4a6382;
+    color: color-mix(in srgb, var(--paper-on-color) 85%, transparent);
     letter-spacing: -0.01em;
     user-select: none;
 }
@@ -474,7 +504,7 @@ html {
 
 .caption-title {
     font-weight: 800;
-    color: #1a2a3a;
+    color: var(--paper-on-color);
 }
 
 .caption-separator {
@@ -482,7 +512,7 @@ html {
 }
 
 .caption-desc {
-    color: #556c88;
+    color: color-mix(in srgb, var(--paper-on-color) 85%, transparent);
     font-weight: 600;
 }
 
@@ -499,7 +529,7 @@ html {
     gap: 12px;
     box-shadow:
         0 16px 36px -6px rgba(0, 0, 0, 0.24),
-        0 6px 16px -3px rgba(4, 121, 255, 0.18);
+        0 6px 16px -3px color-mix(in srgb, var(--paper-site-accent) 18%, transparent);
     overflow: hidden;
     user-select: none;
     z-index: 20;
@@ -545,7 +575,7 @@ html {
     left: 0;
     bottom: 0;
     width: 0%;
-    background: #0479ff;
+    background: var(--paper-site-accent);
     border-radius: inherit;
     pointer-events: none;
     transition: opacity 0.25s ease;
@@ -665,8 +695,12 @@ html {
     }
 }
 
-bg-overlay,
-BgOverlay {
+/* Host wrappers for the landing's custom elements. The landing markup is
+   rendered by Solid (src/site/landing/Landing.tsx), which hands the
+   BgOverlay/StyledText/PaperButton markup to these wrappers as innerHTML; the
+   scripts in public/js still upgrade the tags. The wrappers carry the
+   element-level placement the old element selectors held. */
+.bg-overlay-host {
     position: fixed;
     inset: 0;
     width: 100%;
@@ -677,8 +711,7 @@ BgOverlay {
     z-index: 1;
 }
 
-styled-text,
-StyledText {
+.styled-text-host {
     position: relative;
     z-index: 10;
     display: inline-flex;
@@ -688,19 +721,17 @@ StyledText {
     max-width: 95vw;
 }
 
-paper-button,
-PaperButton {
+.paper-button-host {
     position: relative;
     z-index: 10;
     display: inline-flex;
 }
 
-styled-text:not(:defined),
-StyledText:not(:defined),
-paper-button:not(:defined),
-PaperButton:not(:defined),
-bg-overlay:not(:defined),
-BgOverlay:not(:defined) {
+/* Until the scripts upgrade the tags, the custom elements are undefined and
+   would flash unstyled; keep them hidden. */
+.bg-overlay-host > bg-overlay:not(:defined),
+.styled-text-host > styled-text:not(:defined),
+.paper-button-host > paper-button:not(:defined) {
     visibility: hidden;
 }
 
@@ -830,7 +861,7 @@ BgOverlay:not(:defined) {
     border-radius: 40px;
     box-shadow:
         0 28px 64px -12px rgba(0, 0, 0, 0.32),
-        0 14px 28px -6px rgba(4, 121, 255, 0.22);
+        0 14px 28px -6px color-mix(in srgb, var(--paper-site-accent) 22%, transparent);
     overflow: hidden;
 }
 
@@ -854,7 +885,7 @@ BgOverlay:not(:defined) {
     font-weight: 800;
     line-height: 1.1;
     letter-spacing: -0.02em;
-    color: #1a2a3a;
+    color: var(--paper-on-color);
 }
 
 .chart-subtitle {
@@ -914,7 +945,7 @@ BgOverlay:not(:defined) {
 }
 
 .bar-row.is-best .bar-fill {
-    background: linear-gradient(180deg, #3b93ff, var(--bg-bottom));
+    background: linear-gradient(180deg, var(--paper-site-accent), var(--bg-bottom));
 }
 
 .chart-section.bars-in .bar-fill {
@@ -1032,9 +1063,9 @@ BgOverlay:not(:defined) {
 }
 
 .cta-shell {
-    width: min(1040px, 100%);
+    width: min(1380px, 100%);
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.6fr);
     gap: clamp(28px, 5vw, 72px);
     align-items: center;
 }
@@ -1072,16 +1103,7 @@ BgOverlay:not(:defined) {
     margin-top: 6px;
 }
 
-.cta-card {
-    position: relative;
-    padding: clamp(14px, 2vw, 20px);
-    background: #ffffff;
-    border-radius: 40px;
-    box-shadow:
-        0 28px 64px -12px rgba(0, 0, 0, 0.32),
-        0 14px 28px -6px rgba(4, 121, 255, 0.22);
-    overflow: hidden;
-}
+.cta-card { padding: 0; overflow: visible; }
 
 .cta-card .card-texture-layer {
     opacity: 0.2;
@@ -1174,7 +1196,17 @@ BgOverlay:not(:defined) {
     min-width: 0;
 }
 
-.site-footer__column styled-text {
+/* The link list is rendered into its own container (the Solid page hands the
+   shared link HTML to a host div), so the column gap does not reach the
+   anchors; the container carries it. */
+.site-footer__links {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-width: 0;
+}
+
+.site-footer__column .styled-text-host {
     margin-bottom: 6px;
 }
 
@@ -1332,3 +1364,14 @@ BgOverlay:not(:defined) {
         transform: none;
     }
 }
+
+.marketing-heading { position: relative; font-weight: 900; text-align: center; width: 100%; }
+.marketing-heading styled-text:not(:defined) { display: none; }
+.marketing-heading:has(styled-text:defined) .marketing-heading-label {
+    position: absolute; width: 1px; height: 1px; overflow: hidden;
+    clip-path: inset(50%); white-space: nowrap;
+}
+.marketing-heading .styled-text-host { display: flex; line-height: 0; width: 100%; max-width: 100%; justify-content: center; }
+.marketing-heading styled-text { vertical-align: top; }
+
+.showcase-content, .cta-copy { text-align: center; align-items: center; }

@@ -7,13 +7,10 @@
         const captionDesc = document.querySelector('.caption-desc');
         if (!dots.length) return;
 
-        const captions = [
-            { title: "Game Server", desc: "Run, and manage Minecraft Servers" },
-            { title: "Bot Creator", desc: "Create Discord bots without any coding." },
-            { title: "Actions", desc: "Build flows and automate panels to work together." },
-            { title: "Expand-ability", desc: "Download more panels from the Panel Library" },
-            { title: "Terminal", desc: "Access a PTY from anywhere" }
-        ];
+        const captions = [...track.children].map(slide => ({
+            title: slide.dataset.slideTitle,
+            desc: slide.dataset.slideDescription,
+        }));
 
         let activeIndex = 0;
         let startTime = null;
@@ -52,7 +49,8 @@
         // Tell the 3D stage which screen to render (the models mirror the carousel).
         function announce(newIndex) {
             const slide = track ? track.children[newIndex] : null;
-            const src = slide ? slide.getAttribute('src') : null;
+            const image = slide?.querySelector('img');
+            const src = image?.getAttribute('src');
             if (!src) return;
             document.dispatchEvent(
                 new CustomEvent('paperboard:slide', {

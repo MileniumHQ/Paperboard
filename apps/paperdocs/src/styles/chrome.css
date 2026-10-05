@@ -1,6 +1,5 @@
-/* Topbar chrome shared by the docs SPA (src/index.css) and the prerendered
-   root pages (src/site/site.css). The two builds load different page CSS, so
-   these rules live here once instead of drifting between them. */
+/* Topbar chrome shared by the docs app and the prerendered root pages. Both
+   bundles load this once (src/index.css) instead of drifting between them. */
 
 .logo {
     width: 30px;

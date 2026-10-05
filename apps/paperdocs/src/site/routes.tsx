@@ -12,9 +12,10 @@ export interface SiteRoute {
     component: Component;
 }
 
-// Every root page that the site build prerenders. The landing ("/") is not
-// here: it stays hand-written HTML in public/index.html and only its chrome
-// is generated from src/site/links.ts.
+// Every PaperUI root page that the site build prerenders. The landing ("/")
+// is not here: it renders its own document chrome through a Solid component
+// (src/site/landing/Landing.tsx) instead of SitePage, so entry-server handles
+// it as its own kind.
 export const SITE_ROUTES: SiteRoute[] = [
     {
         path: "/blog/",

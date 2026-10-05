@@ -2,7 +2,7 @@ import { PaperInput } from "@paperboard-dev/paperui";
 import { createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import records from "virtual:docs-search";
 import { searchDocs } from "../utils/search";
-import { withBase } from "../utils/base";
+import { docsPath } from "../utils/base";
 import styles from "./docsSearch.module.css";
 
 const MAX_RESULTS = 12;
@@ -49,7 +49,7 @@ export function DocsSearch(props: { class?: string }) {
             const hit = results()[active()];
             if (hit) {
                 e.preventDefault();
-                window.location.href = withBase(`/${hit.url}`);
+                window.location.href = docsPath(hit.section, hit.page);
             }
         } else if (e.key === "Escape") {
             setOpen(false);
@@ -114,7 +114,10 @@ export function DocsSearch(props: { class?: string }) {
                                     id={optionId(index())}
                                     role="option"
                                     aria-selected={index() === active()}
-                                    href={withBase(`/${record.url}`)}
+                                    href={docsPath(
+                                        record.section,
+                                        record.page,
+                                    )}
                                     onPointerEnter={() => setActive(index())}
                                 >
                                     <span class={styles.itemTitle}>

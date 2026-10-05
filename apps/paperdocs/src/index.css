@@ -1,6 +1,6 @@
 @import "./styles/chrome.css";
 
-/* Shared base for the docs SPA and the prerendered root pages. Both import
+/* Shared base for the docs app and the prerendered root pages. Both import
    this file, so the canvas, theme tokens, and chrome rules cannot drift. The
    docs-only layout lives in src/docs/docsLayout.css. */
 
@@ -20,7 +20,13 @@ body {
     overflow: visible;
 }
 
+/* The app surface is the raised color. The selector must not require the
+   theme attribute: the prerender strips it from the static markup (so the
+   server's default theme cannot redefine tokens over the stored one), and
+   PaperUI's own `.paperui-root` rule would otherwise paint the darker app
+   surface until the client re-render adds the attribute back. That is the
+   load flash. This rule follows PaperUI's in the bundle, so it wins. */
 body[data-paperui-theme],
-.paperui-root[data-paperui-theme] {
+.paperui-root {
     background-color: var(--paper-surface-raised);
 }

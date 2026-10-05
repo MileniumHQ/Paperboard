@@ -15,6 +15,10 @@ export async function showUnsignedDownload(download: import('../../public/js/uns
 //
 // The shared base stylesheet is imported here because this entry, not
 // SitePage, is the bundle root the browser loads.
+//
+// Root pages have a #site-topbar island (plus #site-contact on /contact). Docs
+// pages have a #docs-root island; the docs app is imported only there so the
+// root pages never download it or the search index.
 
 const topbarRoot = document.getElementById("site-topbar");
 if (topbarRoot) {
@@ -22,10 +26,16 @@ if (topbarRoot) {
     render(() => <SiteTopbar />, topbarRoot);
 }
 
-// Contact lives only on /contact; every other prerendered page has no such
-// node, so the form bundle is inert there.
 const contactRoot = document.getElementById("site-contact");
 if (contactRoot) {
     contactRoot.replaceChildren();
     render(() => <ContactForm />, contactRoot);
+}
+
+const docsRoot = document.getElementById("docs-root");
+if (docsRoot) {
+    void import("../App").then(({ default: App }) => {
+        docsRoot.replaceChildren();
+        render(() => <App />, docsRoot);
+    });
 }

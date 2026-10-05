@@ -3,8 +3,8 @@
     function loadAssets() {
         if (!assetsPromise) {
             assetsPromise = Promise.all([
-                fetch('html/bg-overlay.html').then((r) => r.text()),
-                fetch('css/bg-overlay.css').then((r) => r.text()),
+                fetch('/html/bg-overlay.html').then((r) => r.text()),
+                fetch('/css/bg-overlay.css').then((r) => r.text()),
             ]).then(([html, css]) => `<style>${css}</style>${html}`);
         }
         return assetsPromise;
