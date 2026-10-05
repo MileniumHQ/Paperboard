@@ -24,7 +24,6 @@ import {
     parseUsbArgs,
     r2YmlKey,
     releaseAssetUrl,
-    storedRecordOrigin,
     tagFor,
     targetsForOses,
     USB_ARCHES,
@@ -258,35 +257,6 @@ describe("legacy download redirects", () => {
     it("returns null for unknown targets instead of fabricating a URL", () => {
         expect(legacyDownloadRedirect("paperboard", "solaris-sparc")).toBeNull();
         expect(legacyDownloadRedirect("crane", "")).toBeNull();
-    });
-});
-
-describe("stored record origin guard", () => {
-    it("flags records whose stored origin is not the publish target", () => {
-        expect(
-            storedRecordOrigin(
-                "http://localhost:8787",
-                "https://origami.ariapis.com/panel/panel.a/icon",
-            ),
-        ).toBe("https://origami.ariapis.com");
-        expect(
-            storedRecordOrigin(
-                "http://localhost:8787",
-                "https://origami.ariapis.com/panel/panel.a/download",
-            ),
-        ).toBe("https://origami.ariapis.com");
-    });
-
-    it("accepts matching origins and ignores unusable values", () => {
-        expect(
-            storedRecordOrigin(
-                "https://origami.ariapis.com",
-                "https://origami.ariapis.com/panel/panel.a/icon",
-            ),
-        ).toBeNull();
-        expect(storedRecordOrigin("http://localhost:8787", undefined)).toBeNull();
-        expect(storedRecordOrigin("http://localhost:8787", "")).toBeNull();
-        expect(storedRecordOrigin("not a url", "also not a url")).toBeNull();
     });
 });
 

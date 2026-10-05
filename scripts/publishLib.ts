@@ -366,30 +366,6 @@ export function legacyDownloadRedirect(
     return dlFileUrl(seg, "latest", assetFileName(seg, t));
 }
 
-// A registry stores record URLs from its configured PANEL_BASE_URL, not
-// from the request host (Host-header poisoning is refused at the worker).
-// Publishing to a local dev server whose PANEL_BASE_URL still names the
-// production origin bakes unreachable URLs into every record — the panel
-// library then renders icons/downloads from the wrong host. Returns the
-// stored origin when it disagrees with the registry the publish targeted.
-export function storedRecordOrigin(
-    publishBase: string,
-    recordUrl: unknown,
-): string | null {
-    if (typeof recordUrl !== "string" || !recordUrl) return null;
-    try {
-        const expected = new URL(publishBase).origin;
-        const stored = new URL(recordUrl).origin;
-        return expected === stored ? null : stored;
-    } catch (err) {
-        console.debug(
-            "storedRecordOrigin: unparseable URL, skipping comparison:",
-            String(err),
-        );
-        return null;
-    }
-}
-
 // The files a panel's store listing names, as publish-form parts. The
 // manifest block is validated by the same parser Origami enforces, so a
 // listing the registry would refuse fails here, before the upload. `read`

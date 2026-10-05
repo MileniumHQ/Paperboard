@@ -5,6 +5,7 @@ import path from "node:path";
 import { packPanel } from "../../../packages/paperapi/src/pack";
 import { isPanelId } from "../../../packages/paperapi/src/panelIdentity";
 import worker from "../../origami/src/index";
+import { publishPanel, type PanelStorage } from "../../origami/scripts/lib/panelPublish";
 import { PaperCraneEngine } from "../papercrane/engine";
 import { releaseMessage } from "../papercrane/releaseSignature";
 import { fixtureSign, FIXTURE_RELEASE_PUBLIC_KEY } from "./registryFixture";
@@ -21,8 +22,15 @@ test("real dotted identity survives pack, publish, metadata lookup, download and
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "paperboard-release-"));
     const records = new Map<string, string>();
     const archives = new Map<string, Uint8Array>();
+    records.set("panels:index", JSON.stringify({}));
+    // the operator publishes through this storage; the worker below reads
+    // the same bytes (there is no publish route to POST to)
+    const storage: PanelStorage = {
+        getJson: async (key) => (records.has(key) ? JSON.parse(records.get(key)!) : null),
+        putJson: async (key, value) => { records.set(key, JSON.stringify(value)); },
+        putObject: async (key, bytes) => { archives.set(key, bytes); },
+    };
     const env: any = {
-        AUTH_KEY: "fixture-publisher",
         PACKAGES: {
             get: async (key: string, options: any) => records.has(key) ? (options?.type === "json" ? JSON.parse(records.get(key)!) : records.get(key)) : null,
             put: async (key: string, value: string) => { records.set(key, value); },
@@ -42,13 +50,20 @@ test("real dotted identity survives pack, publish, metadata lookup, download and
         fs.writeFileSync(path.join(source, "manifest.json"), JSON.stringify(manifest));
         fs.writeFileSync(path.join(source, "dist", "index.html"), "<html><title>Release fixture</title></html>");
         const packed = packPanel({ targetDir: source, outputDir: path.join(tmp, "archives"), autoBuild: false });
-        const form = new FormData();
-        // the publisher signs offline; origami stores the signature it is given
+        // the publisher signs offline and writes directly; origami stores
+        // the signature it is given and serves the record back
         const signature = fixtureSign(releaseMessage.panel(manifest.id, manifest.version, packed.sha256));
-        form.set("metadata", JSON.stringify({ ...manifest, manifest, signature }));
-        form.set("archive", new Blob([fs.readFileSync(packed.archivePath)]), packed.archiveName);
-        const published = await fetch(`${env.PANEL_BASE_URL}/panel/publish`, { method: "POST", body: form, headers: { Authorization: "Bearer fixture-publisher" } });
-        expect(published.status).toBe(200);
+        await publishPanel(
+            {
+                id: manifest.id,
+                name: manifest.name,
+                version: manifest.version,
+                signature,
+                manifest,
+                archive: fs.readFileSync(packed.archivePath),
+            },
+            { storage, origin: env.PANEL_BASE_URL },
+        );
         const record = await (await fetch(`${env.PANEL_BASE_URL}/panel/${manifest.id}.json`)).json() as any;
         expect(record.id).toBe(manifest.id);
         expect(record.sha256).toBe(packed.sha256);

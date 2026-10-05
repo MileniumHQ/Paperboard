@@ -21,7 +21,7 @@ Binaries live on GitHub Releases; Origami only 302-redirects to them (plus the s
 - **`GET /pb/latest/:file`** and **`GET /crane/latest/:file`**: redirect to the current release asset (not cached).
 - **`GET /pb/:version/:file`** and **`GET /crane/:version/:file`**: redirect to that version's asset (immutable, cached). Previous versions keep working.
 - **`GET /pb/latest.yml`**, **`/pb/latest-mac.yml`**, **`/pb/latest-linux.yml`**: electron-updater feeds (R2).
-- Everything else on this host — including `/`, the registry, panels, and publish routes — is a 404.
+- Everything else on this host — including `/`, the registry, and panels — is a 404.
 
 The same routes exist under `/paperdl/` on the main host (`origami.ariapis.com`). The old `/paperdl/:app/:target/download` paths 302 to the canonical latest file so existing installs keep updating.
 
@@ -41,7 +41,7 @@ bun run typecheck
 bun run deploy
 ```
 
-Local publish needs an `AUTH_KEY` in `.dev.vars` (gitignored); without one every publish is a 401 by design. The `dev` script pins `PANEL_BASE_URL` to `http://localhost:8787` because record URLs are stored from that setting, not from the request host — a local record written with the production base URL would serve its icon and download from production. If you run on another port, override `PANEL_BASE_URL` in `.dev.vars` to match. Records written before the override keep their stale URLs; republish.
+Panels are published by the operator, not by a worker route: `bun run publish` in the repo root (Publish panels) writes the archive, icon, store media, `panel:<id>` record, and `panels:index` straight to production through `wrangler`, using the same Cloudflare login as the package updaters. There is no registry key and no `/panel/publish` endpoint. Record URLs are baked from the canonical production origin, so a local `wrangler dev` cannot store production URLs.
 
 ## Package records
 

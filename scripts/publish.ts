@@ -55,8 +55,8 @@ import {
     kvKeyFor,
     mergeVersionRecord,
     osOf,
+    ORIGAMI_HOST,
     parseUsbArgs,
-    storedRecordOrigin,
     storeUploadParts,
     tagFor,
     targetsForOses,
@@ -74,6 +74,11 @@ import {
 import { applyWindowsIcon } from "./windowsIcon";
 import { loadReleaseSigningKey, releaseMessage, signRelease } from "./releaseSigning";
 import { RELEASE_PUBLIC_KEY, verifyRelease } from "../apps/paperboard/papercrane/releaseSignature";
+import {
+    createWranglerStorage,
+    publishPanel,
+    type PanelUpload,
+} from "../apps/origami/scripts/lib/panelPublish";
 import type { KeyObject } from "node:crypto";
 
 // signs one release fact and proves the signature verifies against the
@@ -747,55 +752,36 @@ async function packPanel(info: PanelInfo): Promise<PackedPanel> {
     };
 }
 
-async function uploadPanel(packed: PackedPanel, authKey: string): Promise<void> {
+// Writes a packed panel straight to the registry through wrangler (the
+// operator's Cloudflare session). There is no publish route and no registry
+// key: the record URLs are baked from the canonical production origin.
+async function publishPackedPanel(packed: PackedPanel): Promise<void> {
     const { info, bytes, meta, store } = packed;
-    const archiveName = `${info.id}-${info.version}.tar.gz`;
-    const formData = new FormData();
-    formData.append("archive", new Blob([bytes], { type: "application/gzip" }), archiveName);
-    formData.append("metadata", JSON.stringify(meta));
-    if (meta["icon"]) {
-        const iconPath = join(info.dir, String(meta["icon"]).replace(/^\.\//, ""));
-        if (existsSync(iconPath)) {
-            const iconBuffer = readFileSync(iconPath);
-            const ext = basename(iconPath).split(".").pop()?.toLowerCase();
-            const mimeType =
-                ext === "svg" ? "image/svg+xml" : ext === "webp" ? "image/webp" : "image/png";
-            formData.append("icon", new Blob([iconBuffer], { type: mimeType }), basename(iconPath));
-        }
-    }
-    if (store.about !== undefined) formData.append("about", store.about);
-    for (const part of store.files) {
-        formData.append(part.field, new Blob([part.bytes as BlobPart], { type: part.type }), part.fileName);
-    }
-    const res = await fetch(`${ORIGAMI_URL}/panel/publish`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${authKey}`, "X-Auth-Key": authKey },
-        body: formData,
-    });
-    if (!res.ok) {
-        throw new Error(`Publish failed (${res.status} ${res.statusText}): ${await res.text()}`);
-    }
+    const iconPath = meta["icon"]
+        ? join(info.dir, String(meta["icon"]).replace(/^\.\//, ""))
+        : null;
+    const files = new Map<string, Uint8Array>();
+    for (const part of store.files) files.set(part.field, part.bytes);
 
-    // The registry bakes PANEL_BASE_URL into every record URL. A local dev
-    // server whose PANEL_BASE_URL still names production stores unreachable
-    // icon/download URLs — catch it here, not as broken images later.
-    let body: { panel?: { iconUrl?: unknown; downloadUrl?: unknown } } | null =
-        null;
-    try {
-        body = (await res.json()) as typeof body;
-    } catch (err) {
-        console.debug("publish response was not JSON:", String(err));
-    }
-    const wrongOrigin =
-        storedRecordOrigin(ORIGAMI_URL, body?.panel?.iconUrl) ??
-        storedRecordOrigin(ORIGAMI_URL, body?.panel?.downloadUrl);
-    if (wrongOrigin) {
-        p.log.warn(
-            `The registry stored URLs on ${wrongOrigin} while you published to ${ORIGAMI_URL}: ` +
-                `records will point at the wrong host. Set PANEL_BASE_URL to your dev origin ` +
-                `(see apps/origami/README.md) and republish.`,
-        );
-    }
+    const upload: PanelUpload = {
+        id: info.id,
+        name: info.name,
+        version: info.version,
+        description:
+            typeof meta["description"] === "string" ? meta["description"] : undefined,
+        signature: String(meta["signature"]),
+        manifest: meta["manifest"] as Record<string, unknown>,
+        icon:
+            iconPath && existsSync(iconPath)
+                ? { name: basename(iconPath), bytes: readFileSync(iconPath) }
+                : undefined,
+        store: { about: store.about, files },
+        archive: bytes,
+    };
+    await publishPanel(upload, {
+        storage: createWranglerStorage(),
+        origin: `https://${ORIGAMI_HOST}`,
+    });
 }
 
 async function flowPublishPanels(): Promise<void> {
@@ -842,15 +828,9 @@ async function flowPublishPanels(): Promise<void> {
         cancelled();
     }
 
-    // The registry key is prompted once per run and never stored anywhere.
-    const authKey = checkCancel(
-        await p.password({ message: "Origami registry key (asked once, never stored)" }),
-    );
-    if (!authKey) fail("No registry key given. Aborting before anything uploads.");
-
     const upBar = bar(packed.length);
     for (const x of packed) {
-        await uploadPanel(x, authKey);
+        await publishPackedPanel(x);
         try {
             unlinkSync(x.archivePath);
         } catch (err) {

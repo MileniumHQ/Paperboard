@@ -48,7 +48,6 @@ export default {
                         "/panels/index.json",
                         "/panel/:id.json",
                         "/panel/:id/download",
-                        "/panel/publish",
                         "/paperdl/:app/index.json",
                         "/paperdl/:app/:target/download",
                         "/paperdl/paperboard/latest.yml",
@@ -66,7 +65,6 @@ export default {
             const panelsRes = await handlePanelsRoutes(
                 request,
                 env,
-                url,
                 pathname,
                 bucket,
             );

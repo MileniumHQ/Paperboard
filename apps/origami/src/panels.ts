@@ -28,17 +28,8 @@ export interface PanelRecord {
     store?: StoreListing;
 }
 
-export interface PanelsEnv {
-    PACKAGES: KVNamespace;
-    PANELS_BUCKET?: R2Bucket;
-    AUTH_KEY?: string;
-}
-
-const PANEL_KEY_PREFIX = "panel:";
-const PANELS_INDEX_KEY = "panels:index";
-
-// trash prefix for recoverable deletes (see trashPanel below)
-const TRASH_KEY_PREFIX = "trash:";
+export const PANEL_KEY_PREFIX = "panel:";
+export const PANELS_INDEX_KEY = "panels:index";
 
 // publisher-supplied id/version reach KV keys, R2 keys, and the
 // Content-Disposition header on download. Unvalidated strings let
@@ -138,148 +129,8 @@ export async function getPanel(
     }
 }
 
-// Strict read for write boundaries: an unreadable record must refuse the
-// write, never read as "nothing exists yet" and be overwritten. Read
-// routes keep the lenient getPanel so a flaky KV read degrades to 404
-// instead of a 500.
-export async function readPanelStrict(
-    kv: KVNamespace,
-    id: string,
-): Promise<PanelRecord | null> {
-    const record = await kv.get(`${PANEL_KEY_PREFIX}${id}`, {
-        type: "json",
-    });
-    return (record as PanelRecord) || null;
-}
-
-export async function savePanel(
-    kv: KVNamespace,
-    record: PanelRecord,
-): Promise<void> {
-    await kv.put(`${PANEL_KEY_PREFIX}${record.id}`, JSON.stringify(record));
-
-    // the index is REBUILT from the panel:* keys, not read-modify-written:
-    // a get→mutate→put loses concurrent publishes (two writers race the
-    // same cached index) and KV's eventual consistency can serve a stale
-    // get even single-threaded. The record write above is the source of
-    // truth; the walk below is bounded and makes the index a projection.
-    const index = await rebuildPanelsIndex(kv);
-    await kv.put(PANELS_INDEX_KEY, JSON.stringify(index));
-}
-
-// bounded walk over every live panel record; the authoritative index shape
-async function rebuildPanelsIndex(
-    kv: KVNamespace,
-): Promise<Record<string, PanelRecord>> {
-    const index: Record<string, PanelRecord> = {};
-    await listRecordsByPrefix(kv, PANEL_KEY_PREFIX, index);
-    return index;
-}
-
-// recoverable delete: the live keys are removed but the record survives
-// under trash:<ts>:<id> and the archive (if any) is copied to a trash/
-// prefix before the original is deleted. Destructive boundaries are
-// recoverable — the old code destroyed archive + KV immediately.
-export async function trashPanel(
-    kv: KVNamespace,
-    bucket: R2Bucket | undefined,
-    id: string,
-): Promise<boolean> {
-    const existing = await getPanel(kv, id);
-    if (!existing) return false;
-
-    const stamp = Date.now();
-    const trashed: PanelRecord = {
-        ...existing,
-        trashedAt: new Date(stamp).toISOString(),
-    };
-    await kv.put(
-        `${TRASH_KEY_PREFIX}${stamp}:${id}`,
-        JSON.stringify(trashed),
-    );
-
-    if (bucket && existing.archiveKey) {
-        try {
-            const object = await bucket.get(existing.archiveKey);
-            if (object) {
-                await bucket.put(`trash/${stamp}-${existing.archiveKey}`, object.body, {
-                    httpMetadata: { contentType: "application/gzip" },
-                    customMetadata: {
-                        id,
-                        trashedAt: trashed.trashedAt!,
-                    },
-                });
-                await bucket.delete(existing.archiveKey);
-            }
-        } catch (err) {
-            console.error(`[origami] archive trash failed for ${existing.archiveKey}:`, err);
-        }
-    }
-
-    // O6: the icon goes with the panel. Leaving `panels/<id>/icon.*` in R2
-    // served a taken-down panel's branding forever (the icon route serves
-    // by key, with no record check). Every extension variant is trashed —
-    // a republish with a different extension would otherwise be shadowed.
-    if (bucket) {
-        for (const ext of ["png", "svg", "webp"]) {
-            try {
-                const iconKey = `panels/${id}/icon.${ext}`;
-                const icon = await bucket.get(iconKey);
-                if (icon) {
-                    await bucket.put(`trash/${stamp}-${iconKey}`, icon.body, {
-                        httpMetadata: icon.httpMetadata,
-                        customMetadata: {
-                            id,
-                            trashedAt: trashed.trashedAt!,
-                        },
-                    });
-                    await bucket.delete(iconKey);
-                }
-            } catch (err) {
-                console.error(`[origami] icon trash failed for panels/${id}/icon.${ext}:`, err);
-            }
-        }
-    }
-
-    // store screenshots follow the icon: the ones the live record
-    // references are copied to trash before their originals are deleted
-    if (bucket && existing.store?.screenshots) {
-        const marker = `/panel/${id}/media/`;
-        for (const shot of existing.store.screenshots) {
-            for (const url of [shot.light, shot.dark]) {
-                const at = typeof url === "string" ? url.indexOf(marker) : -1;
-                if (at < 0) continue;
-                const mediaKey = `panels/${id}/media/${url!.slice(at + marker.length)}`;
-                try {
-                    const media = await bucket.get(mediaKey);
-                    if (media) {
-                        await bucket.put(`trash/${stamp}-${mediaKey}`, media.body, {
-                            httpMetadata: media.httpMetadata,
-                            customMetadata: { id, trashedAt: trashed.trashedAt! },
-                        });
-                        await bucket.delete(mediaKey);
-                    }
-                } catch (err) {
-                    console.error(`[origami] media trash failed for ${mediaKey}:`, err);
-                }
-            }
-        }
-    }
-
-    await kv.delete(`${PANEL_KEY_PREFIX}${id}`);
-
-    // same projection rule as savePanel: rebuild from live keys, never
-    // read-modify-write the cached index
-    const index = await rebuildPanelsIndex(kv);
-    await kv.put(PANELS_INDEX_KEY, JSON.stringify(index));
-
-    return true;
-}
-
-export async function deletePanel(
-    kv: KVNamespace,
-    bucket: R2Bucket | undefined,
-    id: string,
-): Promise<boolean> {
-    return trashPanel(kv, bucket, id);
+// Media keys are shared by the write path (panelPublish.ts, operator-side)
+// and the read route; one definition so they cannot drift.
+export function storeMediaPrefix(panelId: string): string {
+    return `panels/${panelId}/media/`;
 }

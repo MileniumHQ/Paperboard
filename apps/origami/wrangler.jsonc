@@ -39,13 +39,6 @@
             "bucket_name": "paperboard-paperdl"
         }
     ],
-    "vars": {
-        // canonical public origin for record URLs. Derived-at-publish
-        // request origins are a Host-header poisoning vector (O10): the
-        // stored downloadUrl/iconUrl must come from configuration, not
-        // from whoever sent the publish request.
-        "PANEL_BASE_URL": "https://origami.ariapis.com"
-    },
     "observability": {
         "enabled": true
     }
