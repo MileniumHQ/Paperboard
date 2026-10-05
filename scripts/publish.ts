@@ -47,6 +47,7 @@ import {
     KV_PACKAGES_BINDING,
     PAPERDL_R2_BUCKET,
     assetFileName,
+    paperboardArtifacts,
     buildCraneIndex,
     buildLatestYml,
     dlFileUrl,
@@ -338,31 +339,6 @@ const PB_BUILD_SCRIPT: Record<Target, string> = {
 
 const distDir = join(HERE, "dist");
 
-function findPaperboardArtifact(target: Target): string {
-    const os = osOf(target);
-    const exts =
-        os === "macos" ? [".zip", ".dmg"] : os === "windows" ? ["-setup.exe"] : [".AppImage"];
-    let files = readdirSync(distDir).filter((f) => exts.some((e) => f.endsWith(e)));
-    if (!files.length) throw new Error(`No artifact found in ${distDir}`);
-    if (os === "macos" || os === "linux") {
-        const isArm = target.endsWith("arm64");
-        files = files.filter((f) =>
-            isArm ? f.includes("arm64") : !f.includes("arm64"),
-        );
-        if (!files.length)
-            throw new Error(
-                `No ${target} artifact found in ${distDir}. Got: ${readdirSync(distDir).join(", ")}`,
-            );
-    }
-    // Newest first so stale artifacts from earlier builds never win
-    files.sort(
-        (a, b) =>
-            Bun.file(join(distDir, b)).lastModified -
-            Bun.file(join(distDir, a)).lastModified,
-    );
-    return join(distDir, files[0]);
-}
-
 // Windows version-info metadata for standalone crane binaries. Bun only
 // accepts these flags when compiling ON Windows (cross-compiles from other
 // hosts reject them), so elsewhere the exe keeps default version info. The
@@ -389,13 +365,20 @@ interface BuiltBinary {
     sha256: string;
     sha512: string;
     size: number;
+    updateOnly?: boolean;
 }
 
-async function buildPbTarget(target: Target): Promise<BuiltBinary> {
+async function buildPbTarget(target: Target): Promise<BuiltBinary[]> {
     await sh([process.execPath, "run", PB_BUILD_SCRIPT[target]], { quiet: false });
-    const filePath = findPaperboardArtifact(target);
-    const { sha256, sha512, size } = await hashFile(filePath);
-    return { app: "pb", target, filePath, filename: basename(filePath), sha256, sha512, size };
+    const built: BuiltBinary[] = [];
+    for (const artifact of paperboardArtifacts(target, version)) {
+        const filePath = join(distDir, artifact.buildFile);
+        if (!existsSync(filePath)) throw new Error(`Missing ${target} artifact: ${filePath}`);
+        const { sha256, sha512, size } = await hashFile(filePath);
+        built.push({ app: "pb", target, filePath, filename: artifact.buildFile,
+            updateOnly: artifact.updateOnly, sha256, sha512, size });
+    }
+    return built;
 }
 
 async function buildCraneTarget(target: Target): Promise<BuiltBinary> {
@@ -432,7 +415,9 @@ async function stageReleaseAssets(built: BuiltBinary[]): Promise<BuiltBinary[]> 
     mkdirSync(stagedDir, { recursive: true });
     const staged: BuiltBinary[] = [];
     for (const b of built) {
-        const file = assetFileName(b.app, b.target);
+        const file = b.app === "pb"
+            ? paperboardArtifacts(b.target, version).find((a) => a.updateOnly === !!b.updateOnly)!.releaseFile
+            : assetFileName(b.app, b.target);
         const outPath = join(stagedDir, file);
         if (b.app === "pb") {
             cpSync(b.filePath, outPath);
@@ -494,15 +479,15 @@ async function flowBuildBinaries(): Promise<void> {
     const built: BuiltBinary[] = [];
     for (const j of jobs) {
         const b =
-            j.app === "pb" ? await buildPbTarget(j.target) : await buildCraneTarget(j.target);
-        built.push(b);
-        progress.increment(1, { task: `${b.app} ${b.target}` });
+            j.app === "pb" ? await buildPbTarget(j.target) : [await buildCraneTarget(j.target)];
+        built.push(...b);
+        progress.increment(1, { task: `${j.app} ${j.target}` });
     }
     progress.stop();
 
     // Local record (informational; the USB bundle rebuilds from scratch).
     for (const app of ["pb", "crane"] as DlApp[]) {
-        const mine = built.filter((b) => b.app === app);
+        const mine = built.filter((b) => b.app === app && !b.updateOnly);
         if (!mine.length) continue;
         const record: Record<string, unknown> = {};
         for (const b of mine) {
@@ -553,9 +538,9 @@ async function flowPublishBinaries(): Promise<void> {
     const built: BuiltBinary[] = [];
     for (const j of jobs) {
         const b =
-            j.app === "pb" ? await buildPbTarget(j.target) : await buildCraneTarget(j.target);
-        built.push(b);
-        progress.increment(1, { task: `${b.app} ${b.target}` });
+            j.app === "pb" ? await buildPbTarget(j.target) : [await buildCraneTarget(j.target)];
+        built.push(...b);
+        progress.increment(1, { task: `${j.app} ${j.target}` });
     }
     progress.stop();
 
@@ -963,7 +948,7 @@ async function flowPublishPackages(): Promise<void> {
 // Builds Paperboard installers + crane binaries + all panels into ../usb/:
 //
 //   usb/
-//     installers/    win setup exe, mac tarballs, linux AppImage (per selected arch)
+//     installers/    win setup exe, mac DMG, linux AppImage (per selected arch)
 //     crane/         papercrane-<target> binaries
 //     panels/        <board-id>/ (manifest.json + dist/ + branding/)
 //     link-panels.sh symlinks panels/ into ~/.paperboard/panels/ for testing
@@ -972,7 +957,7 @@ async function flowPublishPackages(): Promise<void> {
 // Only the requested operating systems and architectures are bundled: a
 // Windows-only or arm64-only run skips the other crane/target builds and
 // stages only the selected installers. (macOS still compiles both arches in
-// its single electron-builder pass; only the selected one is tarred.)
+// its single electron-builder pass; only the selected DMGs are copied.)
 //
 //   bun scripts/publish.ts usb                       # pick OSes+arches (TTY)
 //   bun scripts/publish.ts usb --os windows          # Windows only
@@ -1091,7 +1076,7 @@ async function buildUsbFolder(oses: Os[], arches: Arch[]) {
         return fresh;
     };
 
-    // 1. Paperboard installers per OS (win + linux direct; mac via tarball below)
+    // 1. Paperboard installers per OS (macOS DMGs are copied below)
     const osBuilds: {
         os: Os;
         arch: Arch;
@@ -1114,26 +1099,17 @@ async function buildUsbFolder(oses: Os[], arches: Arch[]) {
         console.log(`   → ${fresh.join(", ")}`);
     }
 
-    // macOS ships as tarballs, not zips: tar preserves unix modes and the
-    // Frameworks symlinks inside the .app, and a single file survives
-    // FAT32 USB sticks — users double-click and drag to Applications, no
-    // chmod, no DMG tooling needed (hdiutil is macOS-only). The zip stays
-    // in dist/ for the updater feed.
+    // Bundle the same DMGs we publish; ZIP companions remain update payloads.
     if (selected.has("macos")) {
         console.log(`\n🔨 Building Paperboard for macos…\n`);
+        const before = snapshotDist();
         await $`bun run build:mac`.cwd(HERE);
-        const macApps: { dir: string; arch: string }[] = [
-            { dir: join(usbDistDir, "mac"), arch: "x64" },
-            { dir: join(usbDistDir, "mac-arm64"), arch: "arm64" },
-        ];
-        for (const { dir, arch } of macApps) {
-            if (!selectedArches.has(arch as Arch)) continue;
-            const appPath = join(dir, "Paperboard.app");
-            if (!existsSync(appPath)) throw new Error(`No app bundle at ${appPath}`);
-            const tarName = `paperboard-${version}-macos-${arch}.tar.gz`;
-            await $`tar czf ${join(installersDir, tarName)} -C ${dir} Paperboard.app`.cwd(HERE);
-            installerFiles.push(`installers/${tarName}`);
-            console.log(`   → ${tarName}`);
+        for (const target of targetsForOses(["macos"], arches)) {
+            const installer = paperboardArtifacts(target, version)[0];
+            const fresh = copyNew(before, installersDir, (f) => f === installer.buildFile);
+            if (!fresh.length) throw new Error(`No fresh DMG found: ${installer.buildFile}`);
+            installerFiles.push(...fresh.map((f) => `installers/${f}`));
+            console.log(`   → ${fresh.join(", ")}`);
         }
     }
 
@@ -1230,8 +1206,7 @@ INSTALLERS (installers/)
 ${installerFiles.map((f) => `  ${f}`).join("\n")}
 
   Install: Windows -> run the setup exe; macOS -> double-click the
-  .tar.gz to extract, then drag Paperboard.app to Applications (the tarball
-  preserves permissions; never copy the .app itself off the stick);
+  .dmg to mount it, then drag Paperboard.app to the Applications shortcut;
   Linux -> chmod +x the .AppImage, then run it.
 
   PAPERBOARD SERVER BINARIES (crane/)

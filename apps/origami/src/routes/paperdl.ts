@@ -159,8 +159,8 @@ function legacyRedirectTarget(
     const pbFiles: Record<string, string> = {
         "linux-x64": "paperboard-linux-x64.AppImage",
         "linux-arm64": "paperboard-linux-arm64.AppImage",
-        "macos-x64": "paperboard-macos-x64.zip",
-        "macos-arm64": "paperboard-macos-arm64.zip",
+        "macos-x64": "paperboard-macos-x64.dmg",
+        "macos-arm64": "paperboard-macos-arm64.dmg",
         "windows-x64": "paperboard-windows-x64-setup.exe",
     };
     if (app === "paperboard") {

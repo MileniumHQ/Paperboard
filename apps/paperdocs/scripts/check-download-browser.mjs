@@ -23,8 +23,8 @@ export async function checkDownloads(browser, origin) {
         await page.goto(`${origin}/downloads/`);
         for (const [app, file, os] of [
             ['pb', 'paperboard-windows-x64-setup.exe', 'Windows'],
-            ['pb', 'paperboard-macos-arm64.zip', 'macOS'],
-            ['pb', 'paperboard-macos-x64.zip', 'macOS'],
+            ['pb', 'paperboard-macos-arm64.dmg', 'macOS'],
+            ['pb', 'paperboard-macos-x64.dmg', 'macOS'],
             ['crane', 'crane-windows-x64.zip', 'Windows'],
             ['crane', 'crane-macos-arm64.tar.gz', 'macOS'],
             ['crane', 'crane-macos-x64.tar.gz', 'macOS'],
@@ -104,7 +104,7 @@ export async function checkDownloads(browser, origin) {
         await page.setViewportSize({ width: 390, height: 844 });
         await page.emulateMedia({ reducedMotion: 'reduce' });
         await page.goto(`${origin}/downloads/`);
-        await page.locator('a[href$="paperboard-macos-arm64.zip"]').click();
+        await page.locator('a[href$="paperboard-macos-arm64.dmg"]').click();
         const mac = page.getByRole('dialog', { name: 'Installing on macOS' });
         await mac.waitFor();
         assert.equal(await mac.locator('a.download-warning__source').getAttribute('href'), 'https://support.apple.com/en-us/102445');

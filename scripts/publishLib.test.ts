@@ -8,6 +8,7 @@ import {
     ALL_TARGETS,
     archOf,
     assetFileName,
+    paperboardArtifacts,
     buildCraneIndex,
     buildLatestYml,
     dlFileUrl,
@@ -142,9 +143,18 @@ describe("canonical asset names", () => {
     it("names every shipped app target versionlessly", () => {
         expect(assetFileName("pb", "linux-x64")).toBe("paperboard-linux-x64.AppImage");
         expect(assetFileName("pb", "linux-arm64")).toBe("paperboard-linux-arm64.AppImage");
-        expect(assetFileName("pb", "macos-x64")).toBe("paperboard-macos-x64.zip");
-        expect(assetFileName("pb", "macos-arm64")).toBe("paperboard-macos-arm64.zip");
+        expect(assetFileName("pb", "macos-x64")).toBe("paperboard-macos-x64.dmg");
+        expect(assetFileName("pb", "macos-arm64")).toBe("paperboard-macos-arm64.dmg");
         expect(assetFileName("pb", "windows-x64")).toBe("paperboard-windows-x64-setup.exe");
+    });
+
+    it("keeps each Mac installer and update payload distinct", () => {
+        for (const arch of ["x64", "arm64"] as const) {
+            expect(paperboardArtifacts(`macos-${arch}`, "0.1.0")).toEqual([
+                { buildFile: `paperboard-0.1.0-${arch}.dmg`, releaseFile: `paperboard-macos-${arch}.dmg`, updateOnly: false },
+                { buildFile: `paperboard-0.1.0-${arch}.zip`, releaseFile: `paperboard-macos-${arch}.zip`, updateOnly: true },
+            ]);
+        }
     });
 
     it("ships crane binaries as tarballs on posix, zip on windows", () => {
@@ -231,10 +241,27 @@ describe("latest.yml feeds", () => {
     });
 });
 
+describe("Mac DMG releases with automatic updates", () => {
+    it("publishes a ZIP feed for both architectures while installers use DMG", () => {
+        const entries = (["macos-x64", "macos-arm64"] as const).flatMap((target) =>
+            paperboardArtifacts(target, "0.1.0").map((a) => ({
+                target, file: a.releaseFile, sha512: a.updateOnly ? "zip-hash" : "dmg-hash", size: 10,
+            })),
+        );
+        const { text } = buildLatestYml("macos", "0.1.0", entries, "2026-10-05T00:00:00Z");
+        expect(text).toContain("paperboard-macos-x64.zip");
+        expect(text).toContain("paperboard-macos-arm64.zip");
+        expect(text).not.toContain(".dmg");
+        expect(text).not.toContain("dmg-hash");
+        expect(() => buildLatestYml("macos", "0.1.0", entries.filter((e) => !e.file.endsWith(".zip")), "now"))
+            .toThrow("Missing macOS update ZIP");
+    });
+});
+
 describe("legacy download redirects", () => {
     it("maps old paperboard targets to canonical latest files", () => {
         expect(legacyDownloadRedirect("paperboard", "macos-x64")).toBe(
-            "https://i.paperboard.dev/pb/latest/paperboard-macos-x64.zip",
+            "https://i.paperboard.dev/pb/latest/paperboard-macos-x64.dmg",
         );
         expect(legacyDownloadRedirect("paperboard", "windows-x64")).toBe(
             "https://i.paperboard.dev/pb/latest/paperboard-windows-x64-setup.exe",

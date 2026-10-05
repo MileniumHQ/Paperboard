@@ -180,12 +180,33 @@ export function assetFileName(app: DlApp, target: Target): string {
         case "linux-arm64":
             return "paperboard-linux-arm64.AppImage";
         case "macos-x64":
-            return "paperboard-macos-x64.zip";
+            return "paperboard-macos-x64.dmg";
         case "macos-arm64":
-            return "paperboard-macos-arm64.zip";
+            return "paperboard-macos-arm64.dmg";
         case "windows-x64":
             return "paperboard-windows-x64-setup.exe";
     }
+}
+
+// Every artifact a Paperboard build must produce. DMG is the Mac installer;
+// ZIP is a separately hashed and published automatic-update payload.
+export function paperboardArtifacts(target: Target, version: string): {
+    buildFile: string;
+    releaseFile: string;
+    updateOnly: boolean;
+}[] {
+    const releaseFile = assetFileName("pb", target);
+    const buildFile = osOf(target) === "macos"
+        ? `paperboard-${version}-${archOf(target)}.dmg`
+        : releaseFile.replace("paperboard-", `paperboard-${version}-`);
+    const installer = { buildFile, releaseFile, updateOnly: false };
+    return osOf(target) === "macos"
+        ? [installer, {
+            buildFile: buildFile.replace(/\.dmg$/, ".zip"),
+            releaseFile: releaseFile.replace(/\.dmg$/, ".zip"),
+            updateOnly: true,
+        }]
+        : [installer];
 }
 
 // Direct GitHub release-asset URL. publish.ts uploads here; Origami only
@@ -315,6 +336,17 @@ export function buildLatestYml(
     entries: YmlEntry[],
     releaseDate: string,
 ): { key: string; text: string } {
+    if (os === "macos") {
+        // The feed selects update ZIPs even though the release also contains DMGs.
+        const targets = new Set(entries.map((e) => e.target));
+        entries = entries.filter((e) => e.file === paperboardArtifacts(e.target, version)[1]?.releaseFile);
+        for (const target of targets) {
+            if (!entries.some((e) => e.target === target)) {
+                throw new Error(`Missing macOS update ZIP for ${target}`);
+            }
+        }
+    }
+    if (!entries.length) throw new Error(`No update artifacts for ${os}`);
     const yamlLines = [`version: ${version}`, `files:`];
     for (const e of entries) {
         yamlLines.push(

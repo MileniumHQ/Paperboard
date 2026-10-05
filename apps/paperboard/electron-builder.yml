@@ -43,6 +43,11 @@ mac:
     icon: build/icon.icns
     category: public.app-category.utilities
     target:
+        - target: dmg
+          arch:
+              - x64
+              - arm64
+        # ZIP is the payload required by electron-updater on macOS.
         - target: zip
           arch:
               - x64
@@ -53,6 +58,21 @@ mac:
           channel: latest
     notarize: false
     artifactName: ${name}-${version}-${arch}.${ext}
+dmg:
+    # Figma background canvas: 540 x 380 px (export a 1x PNG).
+    # build/background.png is discovered automatically when provided.
+    window:
+        width: 540
+        height: 380
+    iconSize: 80
+    contents:
+        - x: 130
+          y: 220
+          type: file
+        - x: 410
+          y: 220
+          type: link
+          path: /Applications
 linux:
     icon: resources/icon.png
     target:

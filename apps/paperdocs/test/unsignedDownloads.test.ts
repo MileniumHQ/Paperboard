@@ -5,8 +5,8 @@ describe('unsigned release downloads', () => {
     test('both apps and both Mac architectures select their actual download platform', () => {
         for (const [app, file, platform] of [
             ['pb', 'paperboard-windows-x64-setup.exe', 'windows'],
-            ['pb', 'paperboard-macos-arm64.zip', 'macos'],
-            ['pb', 'paperboard-macos-x64.zip', 'macos'],
+            ['pb', 'paperboard-macos-arm64.dmg', 'macos'],
+            ['pb', 'paperboard-macos-x64.dmg', 'macos'],
             ['crane', 'crane-windows-x64.zip', 'windows'],
             ['crane', 'crane-macos-arm64.tar.gz', 'macos'],
             ['crane', 'crane-macos-x64.tar.gz', 'macos'],

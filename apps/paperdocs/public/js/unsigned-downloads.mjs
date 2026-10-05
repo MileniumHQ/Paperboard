@@ -1,8 +1,8 @@
 // One policy for every download entry point, including links inside shadow DOM.
 const files = new Map([
     ['paperboard-windows-x64-setup.exe', ['pb', 'windows']],
-    ['paperboard-macos-arm64.zip', ['pb', 'macos']],
-    ['paperboard-macos-x64.zip', ['pb', 'macos']],
+    ['paperboard-macos-arm64.dmg', ['pb', 'macos']],
+    ['paperboard-macos-x64.dmg', ['pb', 'macos']],
     ['crane-windows-x64.zip', ['crane', 'windows']],
     ['crane-macos-arm64.tar.gz', ['crane', 'macos']],
     ['crane-macos-x64.tar.gz', ['crane', 'macos']],
@@ -36,7 +36,7 @@ export const installationGuidance = {
         label: 'macOS',
         summary: 'This build is unsigned and not notarized. macOS may say it cannot verify the developer or check the app for malicious software.',
         steps: [
-            'Extract the download. For Paperboard, move the app to Applications, then try opening it.',
+            'For Paperboard, open the DMG and drag the app to Applications, then try opening it. For the server daemon, extract the download.',
             'If it is blocked because the developer cannot be verified, open System Settings, then Privacy & Security.',
             'If you trust this download, find Open Anyway and confirm Open when prompted.',
         ],

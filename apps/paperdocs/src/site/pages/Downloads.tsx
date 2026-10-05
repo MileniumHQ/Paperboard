@@ -33,8 +33,8 @@ const PAPERBOARD: DownloadPlatform[] = [
         os: "macOS",
         platform: "macos",
         links: [
-            { arch: "Apple Silicon", file: "paperboard-macos-arm64.zip" },
-            { arch: "Intel", file: "paperboard-macos-x64.zip" },
+            { arch: "Apple Silicon", file: "paperboard-macos-arm64.dmg" },
+            { arch: "Intel", file: "paperboard-macos-x64.dmg" },
         ],
     },
     {
