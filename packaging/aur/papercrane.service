@@ -1,0 +1,16 @@
+[Unit]
+Description=Paperboard server daemon
+Documentation=https://paperboard.dev
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/papercrane --headless
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+KillMode=control-group
+UMask=0077
+
+[Install]
+WantedBy=default.target

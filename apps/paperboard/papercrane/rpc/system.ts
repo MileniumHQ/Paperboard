@@ -104,6 +104,10 @@ export async function handleSystem(action: string, id: unknown, params: any, ctx
                 reply(id, null, "Self-update is not supported when the daemon runs embedded in Electron");
                 return true;
             }
+            if (process.env.PAPERBOARD_PACKAGE_MANAGED === "1") {
+                reply(id, null, "This Paperboard server daemon is package-managed. Update it with your package manager.");
+                return true;
+            }
             if (typeof version !== "string" || !version || /[\n\r]/.test(version)) {
                 reply(id, null, "Refusing update: the release version is required");
                 return true;
