@@ -12,6 +12,7 @@ for (const slug of ["actions", "game-server", "bot-creator", "ai"]) {
     );
     assert.ok(html.includes('href="/css/learn.css"'), `${slug} needs its styles`);
     assert.ok(html.includes('src="/js/learn-reveal.js"'), `${slug} needs ordinary scroll reveals`);
+    assert.ok(html.includes('src="/js/learn-lightbox.js"'), `${slug} needs full-screen screenshots`);
     assert.ok(!html.includes('src="/js/card-scroll.js"'), `${slug} must not capture scrolling`);
     assert.ok(
         html.includes(`href="https://paperboard.dev/${slug}/"`),

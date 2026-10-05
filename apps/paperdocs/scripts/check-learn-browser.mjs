@@ -89,8 +89,27 @@ try {
             const canvas = document.createElement("canvas"); canvas.width = canvas.height = 1;
             const ctx = canvas.getContext("2d"); ctx.fillStyle = getComputedStyle(element).color; ctx.fillRect(0, 0, 1, 1);
             const rgb = ctx.getImageData(0, 0, 1, 1).data;
-            return Math.max(rgb[0], rgb[1], rgb[2]) < 60;
-        })), "Dropdown items keep dark ink on their white menu");
+            return Math.min(rgb[0], rgb[1], rgb[2]) > 180;
+        })), "Dropdown items need light ink on the smoked glass menu");
+        assert.ok(
+            luminance(await page.locator(".site-topbar__dropdown").first().evaluate(element => getComputedStyle(element).backgroundColor)) < 40,
+            "The dropdown must be the same smoked glass as the bar, not a white card",
+        );
+        assert.deepEqual(
+            await page.locator(".site-topbar__bar").evaluate(element => [getComputedStyle(element).backdropFilter, getComputedStyle(element, "::before").backdropFilter.includes("blur"), getComputedStyle(element.querySelector(".site-topbar__dropdown")).backdropFilter.includes("blur")]),
+            ["none", true, true],
+            "The bar's glass must sit on its ::before layer: a backdrop-filter on the bar itself makes it the dropdowns' backdrop root, so they could not blur the page",
+        );
+        const heroTilt = await page.locator(".learn-hero-shot").evaluate(element => new DOMMatrix(getComputedStyle(element).transform));
+        assert.ok(
+            heroTilt.m11 === 1 && heroTilt.m12 === 0 && heroTilt.m13 === 0 && heroTilt.m23 > 0.05,
+            "The hero screenshot only leans back",
+        );
+        const featureTilt = await page.locator(".learn-feature-shot").evaluateAll(elements => elements.map(element => new DOMMatrix(getComputedStyle(element).transform)));
+        assert.ok(
+            featureTilt.every((matrix, index) => matrix.m12 === 0 && matrix.m21 === 0 && matrix.m23 === 0 && (index % 2 ? matrix.m13 > 0.05 : matrix.m13 < -0.05)),
+            "Feature screenshots turn on their vertical axis only, toward their copy, with no lean or skew",
+        );
         assert.equal(await page.locator(".learn-hero-shot").evaluate(element => getComputedStyle(element, "::before").transform), "matrix(1, 0, 0, 1, 14, 16)");
         assert.equal(
             await page.locator(".site-topbar__download .download-label").innerText(),
@@ -231,6 +250,10 @@ try {
     assert.equal(await page.locator(".card-slide").count(), 6);
     assert.equal(await page.locator(".preview-card").evaluate(element => getComputedStyle(element, "::before").transform), "matrix(1, 0, 0, 1, 14, 16)");
     assert.equal(await page.locator(".dots-bar .dot").count(), 6);
+    assert.ok(
+        luminance(await page.locator(".dots-bar").evaluate(element => getComputedStyle(element).backgroundColor)) < 40,
+        "The carousel dots sit on the topbar's smoked glass, not a white pill",
+    );
     await page.locator(".showcase-section").scrollIntoViewIfNeeded();
     await page.waitForTimeout(500);
     const captionBefore = await page.locator('.card-caption').boundingBox();
@@ -464,9 +487,63 @@ try {
         assert.notEqual(await page.locator("#site-mobile-menu").getAttribute("hidden"), null);
         console.log(`verified mobile ${slug}: layout and navigation dismissal`);
     }
+    await page.setViewportSize({ width: 1440, height: 1080 });
+    await page.goto(`${origin}/game-server/`);
+    const shot = page.locator(".learn-feature-shot").first();
+    await shot.scrollIntoViewIfNeeded();
+    const restingTilt = await shot.evaluate(element => new DOMMatrix(getComputedStyle(element).transform).m13);
+    await shot.hover();
+    await page.waitForTimeout(700);
+    const hoverTilt = await shot.evaluate(element => new DOMMatrix(getComputedStyle(element).transform).m13);
+    assert.ok(Math.abs(hoverTilt) < 0.01 && Math.abs(restingTilt) > 0.05, `Hover must turn the screenshot to face the camera (${restingTilt} -> ${hoverTilt})`);
+    const shotLink = shot.locator(".learn-shot-link");
+    const shotAlt = await shotLink.locator("img").getAttribute("alt");
+    await shotLink.click();
+    const lightbox = page.getByRole("dialog", { name: shotAlt });
+    await lightbox.waitFor();
+    assert.equal(page.url(), `${origin}/game-server/`, "Clicking a screenshot opens it in place instead of navigating");
+    await page.waitForFunction(() => document.querySelector(".learn-lightbox-image").complete);
+    const opened = await page.locator(".learn-lightbox-image").evaluate(element => {
+        const box = element.getBoundingClientRect();
+        return {
+            src: element.getAttribute("src"),
+            fills: box.width > innerWidth * 0.85 || box.height > innerHeight * 0.85,
+            fits: box.left >= 0 && box.top >= 0 && box.right <= innerWidth && box.bottom <= innerHeight,
+        };
+    });
+    assert.equal(opened.src, `${origin}${await shotLink.getAttribute("href")}`);
+    assert.ok(opened.fills, "The opened screenshot must fill the viewport");
+    assert.ok(opened.fits, "The opened screenshot must fit inside the viewport, never larger than it");
+    assert.equal(await page.evaluate(() => document.activeElement?.className), "learn-lightbox-close");
+    await page.keyboard.press("Escape");
+    await lightbox.waitFor({ state: "hidden" });
+    assert.ok(await shotLink.evaluate(element => element === document.activeElement), "Closing returns focus to the screenshot");
+    await shotLink.click();
+    await lightbox.waitFor();
+    await page.mouse.click(8, 540);
+    await lightbox.waitFor({ state: "hidden" });
+    for (const [width, height] of [[390, 844], [844, 390], [2560, 720], [800, 2000]]) {
+        await page.setViewportSize({ width, height });
+        await page.locator(".learn-hero-shot .learn-shot-link").click();
+        await page.getByRole("dialog").waitFor();
+        await page.waitForFunction(() => document.querySelector(".learn-lightbox-image").complete);
+        const box = await page.locator(".learn-lightbox-image").evaluate(element => element.getBoundingClientRect().toJSON());
+        assert.ok(
+            box.left >= 0 && box.top >= 0 && box.right <= width && box.bottom <= height && box.width > 0,
+            `The opened screenshot must fit a ${width} × ${height} viewport (${JSON.stringify(box)})`,
+        );
+        await page.keyboard.press("Escape");
+        await page.locator(".learn-lightbox").waitFor({ state: "hidden" });
+    }
+    await page.setViewportSize({ width: 1440, height: 1080 });
+    console.log("verified learn screenshots: vertical tilt, hover facing the camera, and full-screen open/dismiss");
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.goto(`${origin}/actions/`);
     assert.equal(await page.locator(".is-pending").count(), 0);
+    await page.locator(".learn-hero-shot .learn-shot-link").click();
+    await page.locator(".learn-lightbox").waitFor();
+    await page.getByRole("button", { name: "Close" }).click();
+    await page.locator(".learn-lightbox").waitFor({ state: "hidden" });
     assert.equal(
         await page
             .locator(".learn-feature-shot")
@@ -476,6 +553,11 @@ try {
     );
     const staticPage = await browser.newPage({ javaScriptEnabled: false });
     await staticPage.goto(`${origin}/ai/`);
+    assert.equal(
+        await staticPage.locator(".learn-hero-shot .learn-shot-link").getAttribute("href"),
+        await staticPage.locator(".learn-hero-shot img").getAttribute("src"),
+        "Without JavaScript a screenshot still links to its full-size image",
+    );
     assert.equal(await staticPage.locator("h1").innerText(), "AI on your computer");
     assert.equal(
         (await staticPage.locator(".site-topbar__name").innerText()).trim(),

@@ -81,7 +81,39 @@
 .learn-hero-shot {
     width: min(1040px, 100%);
     margin: 64px auto 0;
-    transform: perspective(1500px) rotateX(5deg) rotateY(-3deg);
+}
+/* The hero screenshot leans back; each feature screenshot turns on its
+   vertical axis toward its copy. Hovering or focusing one turns it to face
+   the camera and lifts it toward the reader. */
+.learn-hero-shot,
+.learn-feature-shot {
+    transition: transform 0.5s cubic-bezier(0.25, 1, 0.5, 1);
+}
+.learn-hero-shot {
+    transform: perspective(1400px) rotateX(9deg);
+}
+.learn-feature-shot {
+    transform: perspective(1400px) rotateY(10deg);
+}
+.learn-feature--reverse .learn-feature-shot {
+    transform: perspective(1400px) rotateY(-10deg);
+}
+.learn-hero-shot:hover,
+.learn-hero-shot:focus-within {
+    transform: perspective(1400px) rotateX(0deg) translateZ(40px);
+}
+.learn-feature .learn-feature-shot:hover,
+.learn-feature .learn-feature-shot:focus-within {
+    transform: perspective(1400px) rotateY(0deg) translateZ(40px);
+}
+.learn-shot-link {
+    display: block;
+    border-radius: inherit;
+    cursor: zoom-in;
+}
+.learn-shot-link:focus-visible {
+    outline: 2px solid var(--paper-on-color);
+    outline-offset: 6px;
 }
 .learn-features {
     padding: 80px 0;
@@ -101,10 +133,6 @@
 }
 .learn-feature-shot {
     margin: 0;
-    transform: perspective(1200px) rotateY(5deg) rotateX(3deg) rotateZ(-1deg);
-}
-.learn-feature--reverse .learn-feature-shot {
-    transform: perspective(1200px) rotateY(-5deg) rotateX(3deg) rotateZ(1deg);
 }
 .learn-feature h2,
 .learn-outro h2 {
@@ -155,6 +183,80 @@
     outline: 2px solid var(--paper-on-color);
     outline-offset: 5px;
 }
+.learn-lightbox {
+    box-sizing: border-box;
+    width: 100vw;
+    height: 100dvh;
+    max-width: none;
+    max-height: none;
+    margin: 0;
+    padding: 24px;
+    overflow: hidden;
+    border: 0;
+    background: transparent;
+    cursor: zoom-out;
+}
+.learn-lightbox[open] {
+    display: grid;
+    place-items: center;
+    animation: learn-lightbox-in 0.24s ease;
+}
+.learn-lightbox::backdrop {
+    background: color-mix(in srgb, var(--paper-marketing-ink) 82%, transparent);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+}
+.learn-lightbox-image {
+    display: block;
+    /* Contained to the viewport less the dialog padding: never larger than
+       the screen, and never scaled past the file's own size. */
+    max-width: calc(100vw - 48px);
+    max-height: calc(100dvh - 48px);
+    width: auto;
+    height: auto;
+    object-fit: contain;
+    border-radius: 12px;
+    box-shadow: 0 28px 65px -20px var(--paper-scrim);
+}
+.learn-lightbox-close {
+    position: fixed;
+    top: 18px;
+    right: 18px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    border: 1px solid var(--site-glass-border);
+    border-radius: 999px;
+    background: var(--site-glass);
+    color: var(--site-glass-ink);
+    -webkit-backdrop-filter: var(--site-glass-filter);
+    backdrop-filter: var(--site-glass-filter);
+    cursor: pointer;
+}
+.learn-lightbox-close:hover {
+    background: var(--site-glass-menu);
+    color: var(--paper-on-color);
+}
+.learn-lightbox-close:focus-visible {
+    outline: 2px solid var(--paper-on-color);
+    outline-offset: 3px;
+}
+.learn-lightbox-close .icon {
+    width: 22px;
+    height: 22px;
+}
+@keyframes learn-lightbox-in {
+    from {
+        opacity: 0;
+        transform: scale(0.96);
+    }
+}
+html:has(.learn-lightbox[open]),
+html:has(.learn-lightbox[open]) body {
+    overflow: hidden;
+}
 .learn-page .site-footer {
     position: relative;
     z-index: 2;
@@ -202,9 +304,15 @@
         translate: none;
     }
     .learn-hero-shot,
-    .learn-feature-shot,
-    .learn-feature--reverse .learn-feature-shot {
+    .learn-hero-shot:hover,
+    .learn-hero-shot:focus-within,
+    .learn-feature .learn-feature-shot,
+    .learn-feature .learn-feature-shot:hover,
+    .learn-feature .learn-feature-shot:focus-within {
         transform: none;
+    }
+    .learn-lightbox[open] {
+        animation: none;
     }
 }
 

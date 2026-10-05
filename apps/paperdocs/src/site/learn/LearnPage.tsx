@@ -2,7 +2,24 @@ import { For, Show } from "solid-js";
 import { MarketingChrome, DownloadCta } from "../landing/Landing";
 import { MarketingHeading } from "../landing/MarketingHeading";
 import { Screenshot } from "../landing/Screenshot";
+import { withBase } from "../../utils/base";
 import { LEARN_PANELS, type LearnPanel } from "./panels";
+
+// Each screenshot links to its image file, so it still opens without
+// JavaScript; public/js/learn-lightbox.js upgrades the link to open the image
+// full screen in the page's one <dialog>.
+function ZoomableScreenshot(props: { src: string; alt: string; eager?: boolean }) {
+    return (
+        <a
+            class="learn-shot-link"
+            href={withBase(props.src)}
+            aria-label={`View full size: ${props.alt}`}
+            data-lightbox
+        >
+            <Screenshot src={props.src} alt={props.alt} eager={props.eager} />
+        </a>
+    );
+}
 
 export function LearnPage(props: { panel: LearnPanel }) {
     return (
@@ -18,7 +35,7 @@ export function LearnPage(props: { panel: LearnPanel }) {
                         <p class="learn-intro">{props.panel.description}</p>
                         <DownloadCta />
                         <figure class="learn-hero-shot screenshot-card">
-                            <Screenshot src={props.panel.image} alt={props.panel.alt} eager />
+                            <ZoomableScreenshot src={props.panel.image} alt={props.panel.alt} eager />
                         </figure>
                     </section>
                     <div class="learn-features">
@@ -29,7 +46,7 @@ export function LearnPage(props: { panel: LearnPanel }) {
                                     data-reveal
                                 >
                                     <figure class="learn-feature-shot screenshot-card">
-                                        <Screenshot src={feature.image} alt={feature.alt} />
+                                        <ZoomableScreenshot src={feature.image} alt={feature.alt} />
                                     </figure>
                                     <div class="learn-feature-copy">
                                         <MarketingHeading
@@ -66,6 +83,12 @@ export function LearnPage(props: { panel: LearnPanel }) {
                         </nav>
                     </section>
                 </main>
+                <dialog class="learn-lightbox" aria-label="Screenshot">
+                    <button class="learn-lightbox-close" type="button" aria-label="Close">
+                        <span class="icon icon-close" aria-hidden="true" />
+                    </button>
+                    <img class="learn-lightbox-image" alt="" />
+                </dialog>
             </MarketingChrome>
         </div>
     );

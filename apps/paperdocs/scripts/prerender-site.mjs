@@ -58,7 +58,7 @@ ${stripSsrArtifacts(page.html)}
         <script src="/js/paper-button.js"></script>
         <script src="/js/topbar.js"></script>
         <script src="/js/download-button.js"></script>
-        ${page.learn ? '<script src="/js/learn-reveal.js"></script>' : `<script src="/js/card-scroll.js"></script>
+        ${page.learn ? '<script src="/js/learn-reveal.js"></script>\n        <script src="/js/learn-lightbox.js"></script>' : `<script src="/js/card-scroll.js"></script>
         <script src="/js/dots-bar.js"></script>
         <script src="/js/all-in-one.js"></script>
         <script src="/js/flight.js"></script>
