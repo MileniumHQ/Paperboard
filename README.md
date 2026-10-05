@@ -47,6 +47,6 @@ The code license varies by project, but most code here is under PolyForm Noncomm
 
 Thanks for taking a look. Let's build the future of Paperboard together!
 
-___
+---
 
 © 2026 Milenium
