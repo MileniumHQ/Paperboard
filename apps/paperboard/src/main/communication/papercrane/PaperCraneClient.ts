@@ -666,6 +666,12 @@ export class PaperCraneClient extends EventEmitter {
         return res.panels || [];
     }
 
+    /** Running panel services on this computer, for the shell tray summary. */
+    public async runningServiceCount(): Promise<number> {
+        const res = await this.call<{ running?: number }>("service:count");
+        return typeof res.running === "number" ? res.running : 0;
+    }
+
     public async installPanel(panelId: string, expected: { version?: string; sha256?: string }): Promise<PanelManifest> {
         const res = await this.call<{ panel?: PanelManifest }>("panel:install", {
             panelId,

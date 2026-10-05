@@ -32,6 +32,7 @@ import { createShellInvokeHandlers, SHARED_SHELL_INVOKE_CHANNELS } from "./commu
 import { applySavedAppSettings } from "./communication/shelldata";
 import { addShellPushSink } from "./communication/shellPush";
 import { keepAliveWithoutWindows, secondLaunchAction } from "./instancePolicy";
+import { createDesktopTray, destroyDesktopTray, hasDesktopTray, refreshDesktopTray } from "./tray";
 import icon from "../../resources/icon.png?asset";
 
 const log = logger;
@@ -39,6 +40,49 @@ const log = logger;
 let mainWindowRef: BrowserWindow | null = null;
 // communicator teardown, captured when the shell boots; fired in before-quit
 let stopCommunicator: (() => void) | null = null;
+// sticky flag so window close-to-tray lets before-quit proceed when the
+// user actually quits from the tray/menu instead of looping on hide()
+let quitting = false;
+
+// show (or recreate) the desktop window and focus it
+function showMainWindow(): void {
+    if (!mainWindowRef || mainWindowRef.isDestroyed()) {
+        createWindow();
+        return;
+    }
+    if (mainWindowRef.isMinimized()) mainWindowRef.restore();
+    mainWindowRef.show();
+    mainWindowRef.focus();
+}
+
+// The desktop tray: available in the normal app, absent in --browser mode
+// (whose own tray is created by ensureBrowserHost). Its label is the running
+// service count, refreshed on a slow poll.
+let desktopTrayCount: number | null = null;
+let trayPoll: ReturnType<typeof setInterval> | null = null;
+
+function ensureDesktopTray(): void {
+    if (browserMode) return;
+    createDesktopTray({
+        icon,
+        openWindow: showMainWindow,
+        runningCount: () => desktopTrayCount,
+    });
+    if (!trayPoll) {
+        const refresh = () => {
+            connectionPool
+                .runningServiceCount()
+                .then((count) => {
+                    desktopTrayCount = count;
+                    refreshDesktopTray();
+                })
+                .catch((err) => log.debug("[Tray] service count refresh failed:", err));
+        };
+        refresh();
+        trayPoll = setInterval(refresh, 10_000);
+        trayPoll.unref?.();
+    }
+}
 
 // `--browser`: no windows; the shell opens in the user's browser, served by
 // browserHost.ts. `--browser-port=<n>` pins the port (default: any free one).
@@ -149,6 +193,16 @@ function createWindow(): void {
     mainWindow.on("closed", () => {
         if (mainWindowRef === mainWindow) mainWindowRef = null;
     });
+
+    // closing the window hides Paperboard to the tray; running services keep
+    // going and the tray icon brings the window back. Quit from the tray or
+    // an explicit app.quit() really closes.
+    mainWindow.on("close", (event) => {
+        if (quitting) return;
+        event.preventDefault();
+        mainWindow.hide();
+    });
+    ensureDesktopTray();
 
     mainWindow.on("ready-to-show", () => {
         mainWindow.show();
@@ -492,11 +546,16 @@ app.whenReady().then(async () => {
             void openInBrowser();
             return;
         }
-        if (BrowserWindow.getAllWindows().length === 0) createWindow();
+        // click on the dock/Taskbar icon: bring back the (hidden) window
+        showMainWindow();
     });
 });
 
 app.on("window-all-closed", () => {
+    // With a tray, the app lives on with no windows so services keep
+    // running; without one (browser mode is windowless anyway) the platform
+    // rule decides, as before.
+    if (browserMode || hasDesktopTray()) return;
     if (!keepAliveWithoutWindows(process.platform, browserMode)) {
         app.quit();
     }
@@ -504,6 +563,7 @@ app.on("window-all-closed", () => {
 
 // kill local processes and disconnect clients on quit
 app.on("before-quit", () => {
+    quitting = true;
     log.info("[Main] quitting; cleaning up local processes and connections");
     try {
         connectionPool.dispose();
@@ -512,6 +572,11 @@ app.on("before-quit", () => {
     }
     removeBrowserPushSink?.();
     removeBrowserPushSink = null;
+    if (trayPoll) {
+        clearInterval(trayPoll);
+        trayPoll = null;
+    }
+    destroyDesktopTray();
     browserTray?.destroy();
     browserTray = null;
     void browserHost

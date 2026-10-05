@@ -938,6 +938,11 @@ export class PaperCraneEngine {
         return panels;
     }
 
+    /** Panel services currently running (spawned and not stopped). */
+    public runningServiceCount(): number {
+        return this.services.runningCount();
+    }
+
     // Installs the registry's current release of a panel. The daemon asks
     // its own registry which release that is and which bytes are right, and
     // downloads only from the registry: a caller names the panel and may

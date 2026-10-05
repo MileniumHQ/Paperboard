@@ -169,6 +169,19 @@ export class ConnectionPool extends EventEmitter {
         return this.activeId;
     }
 
+    /** Running panel services across every connected computer, for the tray. */
+    public async runningServiceCount(): Promise<number> {
+        let total = 0;
+        for (const client of this.clients.values()) {
+            try {
+                total += await client.runningServiceCount();
+            } catch (err) {
+                logger.debug("[ConnectionPool] service count failed for a computer:", err);
+            }
+        }
+        return total;
+    }
+
     public setActive(id: string): boolean {
         if (!this.computers.has(id)) return false;
         const previous = this.activeId;

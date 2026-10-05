@@ -15,6 +15,13 @@ export async function handlePanels(action: string, id: unknown, params: any, ctx
                 reply(id, { panels: await engine.listPanels() });
                 return true;
             }
+            case "service:count": {
+                // control-plane readout for the shell tray; a scoped panel
+                // token must not learn the whole machine's service count
+                requireHost(ctx.callerPanelId(), action);
+                reply(id, { running: engine.runningServiceCount() });
+                return true;
+            }
             case "panel:install": {
                 const panelId = assertPanelId(params?.panelId);
                 // installing a panel is a host action, never panel equipment:

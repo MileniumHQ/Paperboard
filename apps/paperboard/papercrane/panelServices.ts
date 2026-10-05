@@ -154,6 +154,22 @@ export class PanelServicesManager {
         const entry = this.services.get(id);
         if (entry) await entry.ready;
     }
+    /** Services currently spawned and not stopped (starting, ready, stopping). */
+    public runningCount(): number {
+        let count = 0;
+        for (const entry of this.services.values()) {
+            if (!entry.stopped) count++;
+        }
+        return count;
+    }
+    /** Panel ids of the running services, for a tray summary. */
+    public runningPanelIds(): string[] {
+        const ids: string[] = [];
+        for (const [id, entry] of this.services) {
+            if (!entry.stopped) ids.push(id);
+        }
+        return ids;
+    }
     public async stopService(id: string, graceMs = 3000): Promise<void> {
         const entry = this.services.get(requirePanelId(id));
         if (!entry) return;
