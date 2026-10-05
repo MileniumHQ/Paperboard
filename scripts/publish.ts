@@ -257,7 +257,16 @@ async function kvReadRecord(app: DlApp): Promise<DlAppRecord | null> {
     let listed: { name: string }[];
     try {
         listed = JSON.parse(
-            await wr(["kv", "key", "list", "--binding", KV_PACKAGES_BINDING, "--prefix", key]),
+            await wr([
+                "kv",
+                "key",
+                "list",
+                "--binding",
+                KV_PACKAGES_BINDING,
+                "--prefix",
+                key,
+                "--remote",
+            ]),
         );
     } catch (err) {
         throw new Error(
@@ -265,13 +274,21 @@ async function kvReadRecord(app: DlApp): Promise<DlAppRecord | null> {
         );
     }
     if (!listed.some((k) => k.name === key)) return null;
-    const raw = await wr(["kv", "key", "get", "--binding", KV_PACKAGES_BINDING, key]);
+    const raw = await wr([
+        "kv",
+        "key",
+        "get",
+        "--binding",
+        KV_PACKAGES_BINDING,
+        key,
+        "--remote",
+    ]);
     let rec: unknown;
     try {
         rec = JSON.parse(raw);
     } catch {
         fail(
-            `KV record ${key} exists but is not valid JSON. Refusing to overwrite it — inspect it with \`wrangler kv key get --binding ${KV_PACKAGES_BINDING} "${key}"\` first.`,
+            `KV record ${key} exists but is not valid JSON. Refusing to overwrite it — inspect it with \`wrangler kv key get --binding ${KV_PACKAGES_BINDING} "${key}" --remote\` first.`,
         );
     }
     if (
@@ -286,6 +303,9 @@ async function kvReadRecord(app: DlApp): Promise<DlAppRecord | null> {
 }
 
 async function kvWriteRecord(app: DlApp, rec: DlAppRecord): Promise<void> {
+    // --remote is load-bearing: without it wrangler writes to local
+    // miniflare state and the publish "succeeds" while production stays
+    // empty (the index then never reaches i.paperboard.dev).
     await wr([
         "kv",
         "key",
@@ -294,6 +314,7 @@ async function kvWriteRecord(app: DlApp, rec: DlAppRecord): Promise<void> {
         KV_PACKAGES_BINDING,
         kvKeyFor(app),
         JSON.stringify(rec),
+        "--remote",
     ]);
 }
 
@@ -307,6 +328,7 @@ async function r2Put(key: string, filePath: string, contentType: string): Promis
         filePath,
         "--content-type",
         contentType,
+        "--remote",
     ]);
 }
 
@@ -682,6 +704,114 @@ async function publishIndex(signingKey: KeyObject, v: string, staged: BuiltBinar
             }
         }
     }
+}
+
+// ─── Flow: repair the live index from an existing release ───────────────────
+// The binary flow uploads to GitHub, then writes the index. If the upload
+// succeeded but the index write did not, the release exists but nothing can
+// download. This re-derives the index from the bytes actually hosted on the
+// release — it hashes the released assets and refuses when an expected one
+// is missing, so it can never record a file that is not there.
+async function flowRepublishIndex(yes: boolean): Promise<void> {
+    p.intro(`Republish download index for v${version} (from the GitHub release)`);
+    if (!isValidVersionSegment(version)) {
+        fail(`Refusing version ${JSON.stringify(version)}: not a safe tag segment.`);
+    }
+    const signingKey = loadReleaseSigningKey();
+    const tag = tagFor(version);
+
+    await ensureGithubAuth();
+    await ensureCloudflareAuth();
+
+    let releaseAssets: Map<string, { size: number; digest: string | null }>;
+    try {
+        const raw = await sh(
+            ["gh", "release", "view", tag, "--repo", GH_REPO, "--json", "assets"],
+            { quiet: true },
+        );
+        const assets = (JSON.parse(raw) as {
+            assets: { name: string; size: number; digest?: string | null }[];
+        }).assets;
+        releaseAssets = new Map(assets.map((a) => [a.name, { size: a.size, digest: a.digest ?? null }]));
+    } catch (err) {
+        fail(`Release ${tag} not found or unreadable: ${err instanceof Error ? err.message : String(err)}`);
+    }
+
+    const jobs: { app: DlApp; target: Target; file: string }[] = [
+        ...ALL_TARGETS.map((target) => ({ app: "pb" as DlApp, target, file: assetFileName("pb", target) })),
+        ...ALL_TARGETS.map((target) => ({ app: "crane" as DlApp, target, file: assetFileName("crane", target) })),
+    ];
+    const missing = jobs.filter((j) => !releaseAssets.has(j.file)).map((j) => j.file);
+    if (missing.length) {
+        fail(`Release ${tag} is missing expected asset(s):\n  ${missing.join("\n  ")}`);
+    }
+
+    if (!yes) {
+        if (!process.stdin.isTTY) {
+            fail("Refusing to move the live index without a TTY; pass --yes to confirm.");
+        }
+        if (
+            !checkCancel(
+                await p.confirm({
+                    message: `Hash the ${jobs.length} assets on ${tag} and move "latest" to v${version}?`,
+                    initialValue: false,
+                }),
+            )
+        ) {
+            cancelled();
+        }
+    }
+
+    // Prefer the staged bytes publish.ts uploaded (same files, no 1.3 GB
+    // re-download) but verify each against the release's sha256 digest, so a
+    // stale or changed local file can never be recorded. Missing/renamed
+    // local files fall back to downloading the hosted asset.
+    const stagedDir = join(HERE, "dist", "release");
+    const dir = join(tmpdir(), `paperboard-index-${Date.now()}`);
+    mkdirSync(dir, { recursive: true });
+    const staged: BuiltBinary[] = [];
+    try {
+        const dl = bar(jobs.length);
+        for (const j of jobs) {
+            const release = releaseAssets.get(j.file)!;
+            const local = join(stagedDir, j.file);
+            let filePath: string;
+            if (existsSync(local) && statSync(local).size === release.size) {
+                filePath = local;
+            } else {
+                await sh(
+                    ["gh", "release", "download", tag, "--repo", GH_REPO, "--pattern", j.file, "--dir", dir, "--clobber"],
+                    { quiet: true },
+                );
+                filePath = join(dir, j.file);
+                if (!existsSync(filePath)) throw new Error(`gh did not download ${j.file}`);
+            }
+            const { sha256, sha512, size } = await hashFile(filePath);
+            if (size !== release.size) {
+                fail(`${j.file}: hashed size ${size} does not match the release's ${release.size}`);
+            }
+            if (release.digest) {
+                const expected = release.digest.replace(/^sha256:/i, "");
+                if (expected && expected !== sha256) {
+                    fail(`${j.file}: sha256 does not match the release digest; refusing to index changed bytes`);
+                }
+            }
+            staged.push({ app: j.app, target: j.target, filePath, filename: j.file, sha256, sha512, size });
+            dl.increment(1, { task: j.file });
+        }
+        dl.stop();
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+
+    p.log.info("Hashed as hosted on the release:");
+    printTable([
+        ["file", "size", "sha256"],
+        ...staged.map((b) => [b.filename, `${mb(b.size)} MB`, b.sha256.slice(0, 16)]),
+    ]);
+
+    await publishIndex(signingKey, version, staged);
+    p.outro(`Index for v${version} is live.`);
 }
 
 // ─── Flow: publish panels ───────────────────────────────────────────────────
@@ -1235,8 +1365,12 @@ async function main(): Promise<void> {
         await buildUsbFolder(await chooseUsbOses(oses), await chooseUsbArches(arches));
         return;
     }
+    if (argv[0] === "republish-index") {
+        await flowRepublishIndex(argv.includes("--yes"));
+        return;
+    }
     if (!process.stdin.isTTY || !process.stdout.isTTY) {
-        console.error("publish.ts is interactive — run it in a terminal (or `bun scripts/publish.ts usb` headless).");
+        console.error("publish.ts is interactive — run it in a terminal (or `bun scripts/publish.ts usb` / `bun scripts/publish.ts republish-index --yes` headless).");
         process.exit(1);
     }
 
