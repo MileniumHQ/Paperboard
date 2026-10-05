@@ -130,7 +130,10 @@ export default function AppSettings(props: {
 
             <PaperText preset="subtitle">Licenses</PaperText>
             <PaperSettingList autoHeight>
-                <PaperSettingItem title="PolyForm Noncommercial 1.0.0">
+                <PaperSettingItem
+                    title="PolyForm Noncommercial 1.0.0"
+                    description="Your Paperboard experience"
+                >
                     <PaperButton
                         size="small"
                         onClick={() => setLicense("paperboard")}
@@ -139,7 +142,7 @@ export default function AppSettings(props: {
                         View
                     </PaperButton>
                 </PaperSettingItem>
-                <PaperSettingItem title="MIT license">
+                <PaperSettingItem title="MIT license" description="Applies to SDKs">
                     <PaperButton
                         size="small"
                         onClick={() => setLicense("mit")}
