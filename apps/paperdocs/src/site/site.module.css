@@ -46,6 +46,13 @@
     color: var(--paper-text-faint);
 }
 
+/* Post images share the banner's border. The :is() carries a class so this
+   outranks PaperMarkdown's own img rule regardless of stylesheet order. */
+.postBody :is(figure, p, .carouselSlide) img {
+    border: var(--paper-border-width) solid var(--paper-border);
+    border-radius: var(--paper-border-radius);
+}
+
 .postBanner {
     width: 100%;
     height: auto;
@@ -96,7 +103,6 @@
     width: 100%;
     height: auto;
     display: block;
-    border-radius: var(--paper-border-radius-half);
 }
 
 .carouselDots {

@@ -590,7 +590,7 @@ try {
     );
     assert.deepEqual(failures, []);
     await checkDownloads(browser, origin);
-    await checkBlog(browser, origin);
+    await checkBlog(browser, origin, dist);
     console.log(
         "verified reduced motion, no-JavaScript content, and no failed assets/browser errors",
     );

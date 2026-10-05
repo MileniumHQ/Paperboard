@@ -1,8 +1,10 @@
 // Brings a server-rendered BlogCarousel to life: the dots pick a slide, and
 // autoplay advances one every SLIDE_MS while the active dot's progress bar
-// fills. Autoplay runs only while the carousel is on screen and not hovered or
-// focused, never under reduced motion, and stops for good once the reader
-// picks a slide themselves. Returns the teardown for its observer and frame.
+// fills. Autoplay runs only while the carousel is on screen, never under
+// reduced motion, and pauses while a dot holds keyboard focus. Picking a slide
+// restarts its timer. Hover does not pause: a pointer resting where the page
+// scrolled it reads as a broken carousel, with nothing saying why it stopped.
+// Returns the teardown for its observer and frame.
 const SLIDE_MS = 5000;
 // a background tab resumes with one frame's worth of progress, not a jump
 const MAX_FRAME_MS = 100;
@@ -21,7 +23,6 @@ export function startCarousel(root: HTMLElement): () => void {
     let last: number | null = null;
     let autoplay = !matchMedia("(prefers-reduced-motion: reduce)").matches;
     let visible = false;
-    let hovered = false;
     let focused = false;
 
     const fill = (index: number) =>
@@ -55,7 +56,7 @@ export function startCarousel(root: HTMLElement): () => void {
 
     // one place decides whether a frame is scheduled
     function sync() {
-        const running = autoplay && visible && !hovered && !focused;
+        const running = autoplay && visible && !focused;
         if (running && !frame) {
             frame = requestAnimationFrame(tick);
         } else if (!running && frame) {
@@ -67,26 +68,19 @@ export function startCarousel(root: HTMLElement): () => void {
 
     dots.forEach((dot, index) => {
         dot.addEventListener("click", () => {
-            autoplay = false;
             show(index);
             sync();
         });
-    });
-    root.addEventListener("pointerenter", () => {
-        hovered = true;
-        sync();
-    });
-    root.addEventListener("pointerleave", () => {
-        hovered = false;
-        sync();
-    });
-    root.addEventListener("focusin", () => {
-        focused = true;
-        sync();
-    });
-    root.addEventListener("focusout", (event) => {
-        focused = root.contains(event.relatedTarget as Node | null);
-        sync();
+        // a mouse click focuses the button too; only keyboard focus pauses,
+        // so a clicked dot does not leave autoplay stuck
+        dot.addEventListener("focus", () => {
+            focused = dot.matches(":focus-visible");
+            sync();
+        });
+        dot.addEventListener("blur", () => {
+            focused = false;
+            sync();
+        });
     });
 
     const observer = new IntersectionObserver(
