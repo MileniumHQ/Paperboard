@@ -20,7 +20,8 @@ export default function CreatingPanelsDoc() {
             <PaperText preset="subheader" id="scaffolding">Scaffolding a panel</PaperText>
             <PaperText preset="body">
                 Generate a new panel project using the create-panel template.
-                Pass your desired panel identifier and human-readable display name.
+                Pass your desired panel identifier and human-readable display name, or run it with no arguments to be prompted.
+                The panel is written to a folder named after its identifier, and it builds and tests with Bun.
             </PaperText>
             <PaperCode block language="bash">
 {`npm create @paperboard-dev/panel dev.paperboard.my-panel "My Panel"`}

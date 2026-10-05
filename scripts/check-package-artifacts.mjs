@@ -14,7 +14,8 @@ function run(command, args, cwd = tmp) {
 }
 try {
     const dependencies = { "solid-js": "1.9.13", vite: "7.3.1", "vite-plugin-solid": "2.11.14" };
-    for (const name of ["paperapi", "paperui"]) {
+    const tarballs = {};
+    for (const name of ["paperapi", "paperui", "create-panel"]) {
         const dir = path.join(root, "packages", name);
         // bun pm pack prints "packed <size> <path>" per file and the tarball
         // path on its own line, so one pack yields both the file list and the
@@ -35,6 +36,8 @@ try {
             if (value && typeof value === "object") Object.values(value).forEach(check);
         };
         check(manifest.exports);
+        for (const bin of Object.values(manifest.bin ?? {})) check(bin);
+        tarballs[manifest.name] = tarball;
         dependencies[manifest.name] = `file:${tarball}`;
     }
     fs.writeFileSync(path.join(tmp, "package.json"), JSON.stringify({ private: true, type: "module", dependencies, scripts: { build: "vite build" } }));
@@ -50,7 +53,31 @@ render(() => <PaperProvider><PaperButton>Consumer</PaperButton></PaperProvider>,
     run("node", ["--input-type=module", "-e", 'import { config } from "@paperboard-dev/paperapi"; if (typeof config.get !== "function") process.exit(1)']);
     run("node", ["-e", 'const { config } = require("@paperboard-dev/paperapi"); if (typeof config.get !== "function") process.exit(1)']);
     run("bun", ["run", "build"]);
-    console.log("Package artifacts: exports exist; SDK ESM/CJS imports and packed Solid/Vite consumer build passed");
+
+    // npm create @paperboard-dev/panel runs the packed bin under Node in the
+    // user's directory; the scaffolded panel must install, test, build and
+    // link on its own. Its ^x.y.z library ranges point at the packed
+    // tarballs here, since this check must not depend on the npm registry.
+    const projects = path.join(tmp, "projects");
+    fs.mkdirSync(projects);
+    run("node", [path.join(tmp, "node_modules", "@paperboard-dev", "create-panel", "dist", "cli.js"), "dev.paperboard.my-panel", "My Panel"], projects);
+    const panel = path.join(projects, "dev.paperboard.my-panel");
+    const panelPkg = JSON.parse(fs.readFileSync(path.join(panel, "package.json"), "utf8"));
+    for (const name of ["@paperboard-dev/paperapi", "@paperboard-dev/paperui"]) {
+        if (!/^\^\d/.test(panelPkg.dependencies[name])) throw new Error(`scaffolded ${name} is not a published range: ${panelPkg.dependencies[name]}`);
+        panelPkg.dependencies[name] = `file:${tarballs[name]}`;
+    }
+    fs.writeFileSync(path.join(panel, "package.json"), JSON.stringify(panelPkg, null, 4));
+    run("bun", ["install"], panel);
+    run("bun", ["test"], panel);
+    run("bun", ["run", "build"], panel);
+    for (const built of ["dist/index.html", "dist/service.js"]) {
+        if (!fs.existsSync(path.join(panel, built))) throw new Error(`scaffolded panel build is missing ${built}`);
+    }
+    run("node", [path.join(panel, "node_modules", ".bin", "paperapi"), "link"], panel);
+    const linked = path.join(tmp, "data", "panels", "dev.paperboard.my-panel");
+    if (fs.realpathSync(linked) !== fs.realpathSync(panel)) throw new Error(`paperapi link did not link the scaffolded panel at ${linked}`);
+    console.log("Package artifacts: exports exist; SDK ESM/CJS imports, packed Solid/Vite consumer build, and packed create-panel scaffold/install/test/build/link passed");
 } catch (err) {
     console.error("Package consumer check failed:", err.message, err.stdout?.toString(), err.stderr?.toString());
     process.exitCode = 1;

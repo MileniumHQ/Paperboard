@@ -11,13 +11,13 @@
         "test": "bun test"
     },
     "dependencies": {
-        "@paperboard-dev/paperapi": "workspace:*",
-        "@paperboard-dev/paperui": "workspace:*",
-        "solid-js": "^1.9.13"
+        "@paperboard-dev/paperapi": "__PAPERAPI_DEP__",
+        "@paperboard-dev/paperui": "__PAPERUI_DEP__",
+        "solid-js": "^1.9.15"
     },
     "devDependencies": {
-        "typescript": "~6.0.2",
-        "vite": "^8.1.0",
+        "typescript": "~6.0.3",
+        "vite": "^8.3.2",
         "vite-plugin-solid": "^2.11.14"
     }
 }

@@ -115,6 +115,17 @@
         "wrangler": "^3.114.17",
       },
     },
+    "packages/create-panel": {
+      "name": "@paperboard-dev/create-panel",
+      "version": "0.1.0",
+      "bin": {
+        "create-panel": "./dist/cli.js",
+      },
+      "devDependencies": {
+        "@types/node": "^22.20.5",
+        "typescript": "~6.0.3",
+      },
+    },
     "packages/paperapi": {
       "name": "@paperboard-dev/paperapi",
       "version": "0.1.0",
@@ -524,6 +535,8 @@
     "@noble/hashes": ["@noble/hashes@2.4.0", "", {}, "sha512-X5XaVWZIBCT7HHZGm5I7ZQXDwLG+bGXuSrMQAW+7Zvl87h1kmc1ZB1VSRJcpUfoUrGQp4Fkoxm5kZ+Ms+aW+eA=="],
 
     "@oxc-project/types": ["@oxc-project/types@0.152.0", "", {}, "sha512-oM/5rLBm2tPkg0iBgkH/FOeR3PCDpY19GTgAZjMFM8h9WI9VW7cLgzp6nwtarYKmovavIQZ+Fe/RKX/8C8O/Rw=="],
+
+    "@paperboard-dev/create-panel": ["@paperboard-dev/create-panel@workspace:packages/create-panel"],
 
     "@paperboard-dev/paperapi": ["@paperboard-dev/paperapi@workspace:packages/paperapi"],
 

@@ -1,0 +1,38 @@
+{
+    "name": "@paperboard-dev/create-panel",
+    "version": "0.1.0",
+    "type": "module",
+    "description": "Scaffold a Paperboard panel: npm create @paperboard-dev/panel",
+    "bin": {
+        "create-panel": "./dist/cli.js"
+    },
+    "files": [
+        "dist",
+        "template"
+    ],
+    "scripts": {
+        "build": "tsc --noEmit && bun build ./bin/cli.ts --outfile dist/cli.js --target=node",
+        "test": "bun test ./test",
+        "prepublishOnly": "bun run build"
+    },
+    "devDependencies": {
+        "@types/node": "^22.20.5",
+        "typescript": "~6.0.3"
+    },
+    "keywords": [
+        "paperboard",
+        "panel",
+        "create"
+    ],
+    "author": "Paperboard <https://paperboard.dev>",
+    "homepage": "https://paperboard.dev",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/MileniumHQ/Paperboard.git",
+        "directory": "packages/create-panel"
+    },
+    "license": "MIT",
+    "publishConfig": {
+        "access": "public"
+    }
+}

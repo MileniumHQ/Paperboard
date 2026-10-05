@@ -9,6 +9,7 @@
 #     packages       shared library builds + packed external consumer check
 #     paperapi       SDK: build, typecheck, tests, silent-catches
 #     paperui        design system: build, tests, styling, silent-catches
+#     create-panel   panel scaffolder: build, tests, silent-catches
 #     paperboard     desktop app: typechecks, tests, lint, silent-catches
 #     paperconvert   converter app: typecheck, tests, silent-catches
 #     paperdocs      docs site: tests, build
@@ -51,7 +52,7 @@ run_in() {
 # Every selectable target. The *-build names are prerequisites, not
 # user-facing: they exist so a filtered run can pull in the shared library
 # artifact a consumer needs without running that library's whole suite.
-KNOWN_TARGETS="packages paperapi paperui paperapi-build paperui-build paperboard paperconvert paperdocs origami origami-library scripts actions ai botcreator gameserver terminal"
+KNOWN_TARGETS="packages paperapi paperui create-panel paperapi-build paperui-build create-panel-build paperboard paperconvert paperdocs origami origami-library scripts actions ai botcreator gameserver terminal"
 
 # Prerequisites per target, expanded transitively. A panel (and any app that
 # bundles the SDK/design system) needs paperapi/paperui dist present; the
@@ -60,7 +61,8 @@ target_deps() {
     case "$1" in
         paperapi) echo "paperapi-build" ;;
         paperui) echo "paperui-build" ;;
-        packages) echo "paperapi-build paperui-build" ;;
+        create-panel) echo "create-panel-build" ;;
+        packages) echo "paperapi-build paperui-build create-panel-build" ;;
         paperboard | paperconvert | paperdocs | origami-library) echo "paperapi-build paperui-build" ;;
         actions | ai | botcreator | gameserver | terminal) echo "paperapi-build paperui-build" ;;
         *) echo "" ;;
@@ -127,6 +129,7 @@ gstep() {
 # Test current shared artifacts, never whatever an earlier developer built.
 gstep paperapi-build "paperapi build" run_in "$ROOT/packages/paperapi" bun run build
 gstep paperui-build "paperui build" run_in "$ROOT/packages/paperui" bun run build
+gstep create-panel-build "create-panel build" run_in "$ROOT/packages/create-panel" bun run build
 gstep packages "packed external consumers" node "$ROOT/scripts/check-package-artifacts.mjs"
 
 # ── Paperboard app: node + web typechecks, full suite, lint, silent-catches ──
@@ -157,6 +160,8 @@ gstep paperapi "paperapi silent-catches" run_in "$ROOT/packages/paperapi" bash "
 gstep paperui "paperui tests" run_in "$ROOT/packages/paperui" bun run test
 gstep paperui "paperui styling invariant" bash "$ROOT/scripts/check-paperui-styling.sh"
 gstep paperui "paperui silent-catches" run_in "$ROOT/packages/paperui" bash "$CATCH" src
+gstep create-panel "create-panel tests" run_in "$ROOT/packages/create-panel" bun run test
+gstep create-panel "create-panel silent-catches" run_in "$ROOT/packages/create-panel" bash "$CATCH" src bin test template
 
 # ── registry service: typecheck plus its worker suite (the library division
 # has its own vitest suite below; `bun test ./test` scopes bun to the worker) ─
