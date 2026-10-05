@@ -17,9 +17,9 @@
         "update:ollama": "bun scripts/update-ollama.ts"
     },
     "devDependencies": {
-        "@cloudflare/workers-types": "^5.20260818.1",
+        "@cloudflare/workers-types": "^5.20261005.1",
         "@types/bun": "latest",
-        "wrangler": "^4.124.0"
+        "wrangler": "^4.147.0"
     },
     "peerDependencies": {
         "typescript": "^5"

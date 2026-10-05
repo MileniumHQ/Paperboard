@@ -220,17 +220,20 @@ describe("PaperAudio", () => {
         await vi.waitFor(() => expect(screen.queryByRole("slider", { name: "Volume" })).toBeNull());
     });
 
-    it("changes volume with arrow keys on the focused volume button", () => {
+    it("changes volume with arrow keys on the focused volume button", async () => {
         const { getByRole, audio } = setup();
         const button = getByRole("button", { name: "Mute" });
         fireEvent.focus(button);
         expect(screen.getByRole("slider", { name: "Volume" })).toBeTruthy();
         fireEvent.keyDown(button, { key: "ArrowDown" });
-        audio.dispatchEvent(new Event("volumechange"));
-        expect(audio.volume).toBeCloseTo(0.95);
+        await vi.waitFor(() =>
+            expect(button.getAttribute("aria-description")).toContain("Volume 95%"),
+        );
         fireEvent.keyDown(button, { key: "ArrowUp" });
+        await vi.waitFor(() =>
+            expect(button.getAttribute("aria-description")).toContain("Volume 100%"),
+        );
         expect(audio.volume).toBeCloseTo(1);
-        expect(button.getAttribute("aria-description")).toContain("Volume 100%");
     });
 
     it("puts playback speed in a submenu reachable from the keyboard, and loop beside it", () => {

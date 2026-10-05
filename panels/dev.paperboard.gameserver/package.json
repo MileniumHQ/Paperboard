@@ -13,18 +13,18 @@
     "dependencies": {
         "@paperboard-dev/paperapi": "workspace:*",
         "@paperboard-dev/paperui": "workspace:*",
-        "dot-properties": "^1.1.1",
+        "dot-properties": "^1.1.2",
         "pngjs": "^7.0.0",
         "prismarine-nbt": "^2.8.0",
         "semver": "^7.8.5",
-        "solid-js": "^1.9.13",
+        "solid-js": "^1.9.15",
         "strip-ansi": "^7.2.0"
     },
     "devDependencies": {
         "@types/pngjs": "^6.0.5",
         "@types/semver": "^7.8.0",
-        "typescript": "~6.0.2",
-        "vite": "^8.1.0",
+        "typescript": "~6.0.3",
+        "vite": "^8.3.2",
         "vite-plugin-solid": "^2.11.14"
     }
 }

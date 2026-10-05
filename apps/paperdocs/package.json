@@ -15,14 +15,14 @@
   },
   "dependencies": {
     "@paperboard-dev/paperui": "workspace:*",
-    "solid-js": "^1.9.0"
+    "solid-js": "^1.9.15"
   },
   "devDependencies": {
-    "@types/node": "^22.19.1",
+    "@types/node": "^22.20.5",
     "playwright": "1.61.1",
-    "typescript": "^5.0.0",
-    "vite": "^6.0.0",
-    "vite-plugin-solid": "^2.11.0",
-    "wrangler": "^3.0.0"
+    "typescript": "^5.9.3",
+    "vite": "^6.4.3",
+    "vite-plugin-solid": "^2.11.14",
+    "wrangler": "^3.114.17"
   }
 }
