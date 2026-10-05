@@ -13,6 +13,7 @@
     "gate": "bash scripts/gate.sh",
     "setup": "bun scripts/dev.ts setup",
     "build:panels": "bun scripts/dev.ts build",
+    "build:libs": "bun scripts/dev.ts libs",
     "link:panels": "bun scripts/dev.ts link",
     "unlink:panels": "bun scripts/dev.ts unlink",
     "panels:status": "bun scripts/dev.ts status",

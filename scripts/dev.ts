@@ -112,6 +112,7 @@ function usage(): never {
 Commands:
   setup      install, fetch the Electron binary, build shared packages + panels, then link panels
   build      build shared packages + every panel
+  libs       build shared packages only (what the app/CI builds consume)
   link       symlink every panel into $PAPERBOARD_DIR/panels
   unlink     remove the symlinks created by link
   status     list active dev links
@@ -141,6 +142,9 @@ function main(): void {
         case "build":
             buildShared();
             buildPanels();
+            return;
+        case "libs":
+            buildShared();
             return;
         case "link":
             linkPanels(force);
