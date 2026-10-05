@@ -1,7 +1,7 @@
 // bot connection state machine (bun test): a failed login must null the
 // client, record the typed error, and emit it — never report "connected"
 import { describe, it, expect } from "bun:test";
-import type { Client } from "discord.js";
+import { Client } from "discord.js";
 import {
     __botTest,
     clearRecentMessages,
@@ -75,6 +75,21 @@ const serviceCtx = (emitted: { triggerId: string; output: unknown }[]) =>
     }) as any;
 
 describe("gateway disconnect truth", () => {
+    it("clientReady restores connection status without subscribing to deprecated ready", async () => {
+        const bot = new Client({ intents: [] });
+        bot.login = async () => "test-token";
+        try {
+            await __botTest.startBot("test-token", serviceCtx([]), () => bot);
+            expect(bot.listenerCount("ready")).toBe(0);
+            bot.emit("shardDisconnect", { code: 1006 } as any, 0);
+            expect(getConnectionStatus().connected).toBe(false);
+            bot.emit("clientReady", bot as Client<true>);
+            expect(getConnectionStatus()).toEqual({ connected: true });
+        } finally {
+            await bot.destroy();
+        }
+    });
+
     it("shardDisconnect invalidates connected status and emits the error", async () => {
         const handlers = new Map<string, Handler>();
         const emitted: { triggerId: string; output: unknown }[] = [];

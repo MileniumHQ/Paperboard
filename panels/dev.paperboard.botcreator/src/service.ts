@@ -179,7 +179,7 @@ let connectSequence = 0;
 // the on-connection-error trigger), so the UI can never show "online"
 // for a bot that isn't running. The same rule applies mid-session:
 // gateway disconnects invalidate the status (see attachListeners), and a
-// successful reconnect marks it live again via ready/shardReady.
+// successful reconnect marks it live again via clientReady/shardReady.
 export interface ConnectionStatus {
     connected: boolean;
     error?: string;
@@ -714,7 +714,7 @@ function attachListeners(bot: Client, ctx: ServiceContext<any>) {
         }
     };
 
-    // discord.js retries these internally; shardReady/ready below restores
+    // discord.js retries these internally; shardReady/clientReady below restores
     // the connected flag when the gateway actually comes back
     bot.on("disconnect", (err?) => markGatewayDown("disconnect", err));
     bot.on("shardDisconnect", (event) =>
@@ -763,7 +763,7 @@ function attachListeners(bot: Client, ctx: ServiceContext<any>) {
     });
 
     // reconnect success: back online
-    bot.on("ready", () => {
+    bot.on("clientReady", () => {
         if (!ownsSession()) return;
         connectionStatus = { connected: true };
     });
