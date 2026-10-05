@@ -55,6 +55,40 @@ describe("PaperMarkdown", () => {
         expect(img?.getAttribute("src")).toBe("https://example.com/a.png");
     });
 
+    it("captions a titled image that stands alone in its paragraph", () => {
+        const { container } = render(() => (
+            <PaperMarkdown
+                allowImages
+                text={'![The panel](/a.png "Setting up a server")\n\nSee ![inline](/b.png "Tooltip") here.'}
+            />
+        ));
+
+        const figures = container.querySelectorAll("figure");
+        expect(figures).toHaveLength(1);
+        const figure = figures[0];
+        expect(figure.querySelector("img")?.getAttribute("alt")).toBe(
+            "The panel",
+        );
+        expect(figure.querySelector("img")?.hasAttribute("title")).toBe(false);
+        expect(figure.querySelector("figcaption")?.textContent).toBe(
+            "Setting up a server",
+        );
+        // an image inside running text keeps its title as a tooltip
+        const inline = container.querySelector('img[alt="inline"]');
+        expect(inline?.closest("figure")).toBeNull();
+        expect(inline?.getAttribute("title")).toBe("Tooltip");
+    });
+
+    it("never captions an image the caller did not allow", () => {
+        const { container } = render(() => (
+            <PaperMarkdown text={'![The panel](/a.png "Setting up a server")'} />
+        ));
+
+        expect(container.querySelector("figure")).toBeNull();
+        expect(container.querySelector("img")).toBeNull();
+        expect(container.textContent).toContain("The panel");
+    });
+
     it("never renders raw HTML as markup", () => {
         const { container, getByText } = render(() => (
             <PaperMarkdown text={"<script>alert(1)</script>"} />

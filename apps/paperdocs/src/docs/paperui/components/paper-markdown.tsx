@@ -72,7 +72,7 @@ export function ReleaseNotes() {
                         <td><PaperCode>allowImages</PaperCode></td>
                         <td><PaperCode>boolean</PaperCode></td>
                         <td><PaperCode>false</PaperCode></td>
-                        <td>Renders <PaperCode>![alt](src)</PaperCode> images. Off by default: remote images are beacons.</td>
+                        <td>Renders <PaperCode>![alt](src)</PaperCode> images. Off by default: remote images are beacons. A titled image alone in its paragraph, <PaperCode>![alt](src "Caption")</PaperCode>, renders as a figure with that caption under it.</td>
                     </tr>
                 </tbody>
             </PaperTable>

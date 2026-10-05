@@ -15,11 +15,17 @@ import type { PaperTextPreset } from "../../types";
  * owns the trust decision: `allowImages` is off by default because a remote
  * image is a beacon, and raw HTML in the source is shown as literal text, not
  * executed.
+ *
+ * An image alone in its paragraph with a title, `![alt](src "Caption")`, is a
+ * figure: the title renders as its visible caption instead of a tooltip.
  */
 export interface PaperMarkdownProps {
     text: string;
     preset?: PaperTextPreset;
-    /** Render `![alt](src)`. Off by default: remote images are beacons. */
+    /**
+     * Render `![alt](src)`. Off by default: remote images are beacons. A
+     * titled image alone in a paragraph renders as a captioned figure.
+     */
     allowImages?: boolean;
     class?: string;
     classList?: JSX.HTMLAttributes<HTMLDivElement>["classList"];
@@ -49,6 +55,16 @@ function safeImageSrc(raw: string | null | undefined): string | null {
     if (!value) return null;
     if (/^data:/i.test(value)) return null;
     return value;
+}
+
+// the paragraph's one image, if it has nothing else but surrounding whitespace
+function soleImage(tokens: Token[] | undefined): Tokens.Image | null {
+    const content = (tokens ?? []).filter(
+        (token) => !(token.type === "text" && !token.raw.trim()),
+    );
+    return content.length === 1 && content[0].type === "image"
+        ? (content[0] as Tokens.Image)
+        : null;
 }
 
 export function PaperMarkdown(props: PaperMarkdownProps) {
@@ -191,12 +207,30 @@ export function PaperMarkdown(props: PaperMarkdownProps) {
                     </PaperText>
                 );
             }
-            case "paragraph":
+            case "paragraph": {
+                const paragraph = token as Tokens.Paragraph;
+                const image = soleImage(paragraph.tokens);
+                const src = image ? safeImageSrc(image.href) : null;
+                if (local.allowImages && image?.title && src) {
+                    return (
+                        <figure class={styles.figure}>
+                            <img src={src} alt={image.text} loading="lazy" />
+                            <PaperText
+                                preset="caption"
+                                color="text-subtle"
+                                as="figcaption"
+                            >
+                                {image.title}
+                            </PaperText>
+                        </figure>
+                    );
+                }
                 return (
                     <PaperText preset={textPreset()} as="p">
-                        <Inline tokens={(token as Tokens.Paragraph).tokens} />
+                        <Inline tokens={paragraph.tokens} />
                     </PaperText>
                 );
+            }
             case "list": {
                 const list = token as Tokens.List;
                 return (
