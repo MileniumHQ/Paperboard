@@ -4,7 +4,7 @@ import {
     PaperFlex,
     PaperTable,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 
 export default function PaperProviderDoc() {
     return (
@@ -22,7 +22,7 @@ export default function PaperProviderDoc() {
                 Specify theme="system" to synchronize automatically with the host system theme.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { PaperProvider, PaperCard, PaperText } from "@paperboard-dev/paperui";
+{`import { PaperProvider, PaperCard, PaperText } from "@mileniumhq/paperui";
 
 export function App() {
     return (
@@ -97,7 +97,7 @@ export function App() {
                 Toggle themes programmatically using usePaper.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { usePaper, PaperButton } from "@paperboard-dev/paperui";
+{`import { usePaper, PaperButton } from "@mileniumhq/paperui";
 
 export function ThemeToggle() {
     const paper = usePaper();

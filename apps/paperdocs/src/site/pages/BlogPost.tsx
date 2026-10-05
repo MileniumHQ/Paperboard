@@ -1,4 +1,4 @@
-import { PaperMarkdown, PaperText } from "@paperboard-dev/paperui";
+import { PaperMarkdown, PaperText } from "@mileniumhq/paperui";
 import { For, Match, Show, Switch } from "solid-js";
 import type { Post } from "../blog";
 import { BlogCarousel } from "../BlogCarousel";

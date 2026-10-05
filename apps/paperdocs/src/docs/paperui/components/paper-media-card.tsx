@@ -8,7 +8,7 @@ import {
     PaperMediaCardGroup,
     PaperTable,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 
 export default function PaperMediaCardDoc() {
     return (
@@ -26,7 +26,7 @@ export default function PaperMediaCardDoc() {
                 Add action buttons in the footerLeft or footerRight slots.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { PaperMediaCard, PaperBadge, PaperButton, PaperCard } from "@paperboard-dev/paperui";
+{`import { PaperMediaCard, PaperBadge, PaperButton, PaperCard } from "@mileniumhq/paperui";
 
 export function Example() {
     return (

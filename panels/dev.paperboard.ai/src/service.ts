@@ -1,4 +1,4 @@
-import { definePanelService } from "@paperboard-dev/paperapi";
+import { definePanelService } from "@mileniumhq/paperapi";
 import { PANEL_ID } from "./contract";
 import { initialState, type AiState } from "./core/types";
 import { AiApp } from "./service/app";

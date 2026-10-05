@@ -5,7 +5,7 @@ import {
     PaperFlex,
     PaperTable,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 
 export default function PaperBadgeDoc() {
     return (
@@ -23,7 +23,7 @@ export default function PaperBadgeDoc() {
                 Pass an optional semantic variant to tint the background and text colors.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { PaperBadge, PaperCard, PaperFlex } from "@paperboard-dev/paperui";
+{`import { PaperBadge, PaperCard, PaperFlex } from "@mileniumhq/paperui";
 
 export function Example() {
     return (

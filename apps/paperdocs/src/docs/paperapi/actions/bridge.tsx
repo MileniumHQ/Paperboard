@@ -3,7 +3,7 @@ import {
     PaperFlex,
     PaperTable,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 
 export default function BridgeApiDoc() {
     return (
@@ -21,7 +21,7 @@ export default function BridgeApiDoc() {
                 Access the current state, listen for delta updates, and call service actions directly through bridge.actions.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { createPanelBridge } from "@paperboard-dev/paperapi";
+{`import { createPanelBridge } from "@mileniumhq/paperapi";
 import { createSignal, onCleanup } from "solid-js";
 
 interface PanelState {

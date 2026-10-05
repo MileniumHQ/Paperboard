@@ -10,7 +10,7 @@ const starts: string[] = [];
 let savedConfig: Record<string, unknown> = {};
 const configSets: Record<string, unknown>[] = [];
 
-mock.module("@paperboard-dev/paperapi", () => ({
+mock.module("@mileniumhq/paperapi", () => ({
     config: {
         get: async () => savedConfig,
         set: async (value: Record<string, unknown>) => {

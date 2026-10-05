@@ -9,12 +9,12 @@ import {
 import {
     PaperFlex,
     type ThemeMode,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 import {
     PANEL_LIBRARY_URL,
     type InstalledPanelMedia,
     type PanelItem,
-} from "@paperboard-dev/paperapi";
+} from "@mileniumhq/paperapi";
 import { logToMain } from "../../lib/shell";
 import {
     libraryFramePhase,

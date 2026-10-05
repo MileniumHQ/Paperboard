@@ -8,8 +8,8 @@ import {
     PaperQuote,
     PaperSettingList,
     PaperSettingItem,
-} from "@paperboard-dev/paperui";
-import { config, secretsApi, actionsApi } from "@paperboard-dev/paperapi";
+} from "@mileniumhq/paperui";
+import { config, secretsApi, actionsApi } from "@mileniumhq/paperapi";
 
 const PANEL_ID = "dev.paperboard.botcreator";
 const TOKEN_NAME = "bot-token";

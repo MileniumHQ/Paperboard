@@ -1,4 +1,4 @@
-import type { ActionInfo } from "@paperboard-dev/paperapi";
+import type { ActionInfo } from "@mileniumhq/paperapi";
 
 // reserved synthetic panel id for core-provided actions
 export const BUILTIN_PANEL_ID = "builtin.computer";

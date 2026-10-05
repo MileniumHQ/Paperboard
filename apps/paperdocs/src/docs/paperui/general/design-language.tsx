@@ -3,7 +3,7 @@ import {
     PaperCode,
     PaperFlex,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 
 export default function DesignLanguageDoc() {
     return (
@@ -42,7 +42,7 @@ export default function DesignLanguageDoc() {
                 Standard containers expose padding and gap props that accept token identifiers: none, half, full, double, and triple.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { PaperCard, PaperFlex, PaperText } from "@paperboard-dev/paperui";
+{`import { PaperCard, PaperFlex, PaperText } from "@mileniumhq/paperui";
 
 export function Section() {
     return (

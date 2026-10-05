@@ -14,7 +14,7 @@
     "screenshots:actions": "bun scripts/capture-integrations.ts"
   },
   "dependencies": {
-    "@paperboard-dev/paperui": "workspace:*",
+    "@mileniumhq/paperui": "workspace:*",
     "solid-js": "^1.9.15"
   },
   "devDependencies": {

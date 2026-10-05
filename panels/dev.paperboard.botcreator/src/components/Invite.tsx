@@ -9,8 +9,8 @@ import {
     PaperIcon,
     PaperPageHeader,
     PaperSeparator,
-} from "@paperboard-dev/paperui";
-import { actionsApi } from "@paperboard-dev/paperapi";
+} from "@mileniumhq/paperui";
+import { actionsApi } from "@mileniumhq/paperapi";
 import {
     PERMISSION_DEFINITIONS,
     DEFAULT_SELECTED_PERMISSIONS,

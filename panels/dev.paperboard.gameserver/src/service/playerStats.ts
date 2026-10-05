@@ -1,4 +1,4 @@
-import { files as fileApi, type ServiceContext } from "@paperboard-dev/paperapi";
+import { files as fileApi, type ServiceContext } from "@mileniumhq/paperapi";
 import { listDirectory } from "../lib/filesystem";
 import {
     parsePlayerStats,

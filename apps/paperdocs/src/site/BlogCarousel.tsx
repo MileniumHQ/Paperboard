@@ -1,4 +1,4 @@
-import { PaperText } from "@paperboard-dev/paperui";
+import { PaperText } from "@mileniumhq/paperui";
 import { For } from "solid-js";
 import type { Slide } from "./blogBlocks";
 import styles from "./site.module.css";

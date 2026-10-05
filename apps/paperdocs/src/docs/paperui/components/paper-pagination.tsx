@@ -5,7 +5,7 @@ import {
     PaperPagination,
     PaperTable,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 import { createSignal } from "solid-js";
 
 export default function PaperPaginationDoc() {
@@ -26,7 +26,7 @@ export default function PaperPaginationDoc() {
                 A count of one page renders nothing.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { PaperPagination } from "@paperboard-dev/paperui";
+{`import { PaperPagination } from "@mileniumhq/paperui";
 import { createSignal } from "solid-js";
 
 export function Example() {

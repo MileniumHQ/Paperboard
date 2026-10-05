@@ -5,7 +5,7 @@ import {
     PaperPage,
     PaperTable,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 
 export default function PaperPageDoc() {
     return (
@@ -23,7 +23,7 @@ export default function PaperPageDoc() {
                 Choose between standard, wide, and full column width presets.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { PaperPage, PaperCard, PaperText } from "@paperboard-dev/paperui";
+{`import { PaperPage, PaperCard, PaperText } from "@mileniumhq/paperui";
 
 export function Example() {
     return (

@@ -1,6 +1,6 @@
 /* PaperConvert — layout powered by PaperUI design system. */
 
-@import "@paperboard-dev/paperui/style.css";
+@import "@mileniumhq/paperui/style.css";
 
 html, body {
   margin: 0;

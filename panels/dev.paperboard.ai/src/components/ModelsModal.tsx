@@ -1,4 +1,4 @@
-import { PaperModal } from "@paperboard-dev/paperui";
+import { PaperModal } from "@mileniumhq/paperui";
 import ModelBrowser from "./ModelBrowser";
 
 /** The model picker: one modal with installed models first, then the library. */

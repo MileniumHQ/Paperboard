@@ -1,6 +1,6 @@
 // Names and icons of installed panels, for tool cards and permissions.
 import { createSignal } from "solid-js";
-import { actionsApi, panelAssetUrl, panelsApi, type PanelItem } from "@paperboard-dev/paperapi";
+import { actionsApi, panelAssetUrl, panelsApi, type PanelItem } from "@mileniumhq/paperapi";
 
 const [panels, setPanels] = createSignal<PanelItem[]>([]);
 const [labels, setLabels] = createSignal<Record<string, string>>({});

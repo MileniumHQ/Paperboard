@@ -4,7 +4,7 @@ import {
     PaperFlex,
     PaperTable,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 
 export default function PaperCodeDoc() {
     return (
@@ -22,7 +22,7 @@ export default function PaperCodeDoc() {
                 Omit the block prop for inline monospace text.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { PaperCode, PaperCard, PaperFlex, PaperText } from "@paperboard-dev/paperui";
+{`import { PaperCode, PaperCard, PaperFlex, PaperText } from "@mileniumhq/paperui";
 
 export function Example() {
     return (
@@ -104,12 +104,12 @@ export function Example() {
             </PaperText>
             <PaperCode block language="tsx">
 {`<PaperCode block language="bash">
-    {\`bun add @paperboard-dev/paperui\`}
+    {\`bun add @mileniumhq/paperui\`}
 </PaperCode>`}
             </PaperCode>
             <PaperCard padding="double" surface="front">
                 <PaperCode block language="bash">
-                    {`bun add @paperboard-dev/paperui`}
+                    {`bun add @mileniumhq/paperui`}
                 </PaperCode>
             </PaperCard>
         </PaperFlex>

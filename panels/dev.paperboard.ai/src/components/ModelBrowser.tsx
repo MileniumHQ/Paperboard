@@ -14,7 +14,7 @@ import {
     PaperSelectMenu,
     PaperSelectMenuItem,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 import { UI_ACTION_IDS } from "../contract";
 import { isValidModelRef, modelRef, searchCatalog, type CatalogModel, type CatalogSort } from "../core/catalog";
 import { formatBytes } from "../core/fit";

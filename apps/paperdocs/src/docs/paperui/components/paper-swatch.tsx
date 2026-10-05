@@ -5,7 +5,7 @@ import {
     PaperSwatch,
     PaperTable,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 
 export default function PaperSwatchDoc() {
     return (
@@ -23,7 +23,7 @@ export default function PaperSwatchDoc() {
                 Adjust dimensions using the size prop.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { PaperSwatch, PaperCard, PaperFlex, PaperText } from "@paperboard-dev/paperui";
+{`import { PaperSwatch, PaperCard, PaperFlex, PaperText } from "@mileniumhq/paperui";
 
 export function Example() {
     return (

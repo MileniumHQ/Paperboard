@@ -30,12 +30,12 @@ export function findPackageDir(): string {
             const parsed = JSON.parse(readFileSync(manifest, "utf8")) as {
                 name?: string;
             };
-            if (parsed.name === "@paperboard-dev/paperui") return dir;
+            if (parsed.name === "@mileniumhq/paperui") return dir;
         }
         dir = dirname(dir);
     }
     throw new Error(
-        `could not locate @paperboard-dev/paperui from ${process.cwd()}`,
+        `could not locate @mileniumhq/paperui from ${process.cwd()}`,
     );
 }
 

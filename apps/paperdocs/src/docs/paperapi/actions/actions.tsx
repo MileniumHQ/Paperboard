@@ -3,7 +3,7 @@ import {
     PaperFlex,
     PaperTable,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 
 export default function ActionsApiDoc() {
     return (
@@ -17,11 +17,11 @@ export default function ActionsApiDoc() {
 
             <PaperText preset="subheader" id="overview">Overview</PaperText>
             <PaperText preset="body">
-                Import actionsApi or its alias actions from @paperboard-dev/paperapi.
+                Import actionsApi or its alias actions from @mileniumhq/paperapi.
                 Register RPC handlers within backend services and invoke them from frontend interfaces or automation flows.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { actionsApi } from "@paperboard-dev/paperapi";
+{`import { actionsApi } from "@mileniumhq/paperapi";
 
 // Call an action registered on a target panel
 const result = await actionsApi.call<string>(
@@ -105,7 +105,7 @@ const result = await actionsApi.call<string>(
                 Define typed trigger events that start automation flows in Paperboard.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { actionsApi, defineAction } from "@paperboard-dev/paperapi";
+{`import { actionsApi, defineAction } from "@mileniumhq/paperapi";
 
 const playerJoinedAction = defineAction({
     id: "player-joined",

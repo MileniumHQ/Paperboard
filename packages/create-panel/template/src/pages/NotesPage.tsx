@@ -5,8 +5,8 @@ import {
     PaperInput,
     PaperText,
     PaperQuote,
-} from "@paperboard-dev/paperui";
-import { config } from "@paperboard-dev/paperapi";
+} from "@mileniumhq/paperui";
+import { config } from "@mileniumhq/paperapi";
 
 const PANEL_ID = "__PANEL_ID__";
 

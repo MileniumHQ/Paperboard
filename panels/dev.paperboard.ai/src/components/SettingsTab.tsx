@@ -8,7 +8,7 @@ import {
     PaperProgress,
     PaperSeparator,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 import { formatBytes } from "../core/fit";
 import { OLLAMA_PROVIDER_ID, providerFor } from "../core/providers";
 import { UI_ACTION_IDS } from "../contract";

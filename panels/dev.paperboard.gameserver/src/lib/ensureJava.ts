@@ -1,4 +1,4 @@
-import { packageApi, type PackageProgress } from "@paperboard-dev/paperapi";
+import { packageApi, type PackageProgress } from "@mileniumhq/paperapi";
 
 export interface JavaInstallStages {
     onDownload?: (percent: number) => void;

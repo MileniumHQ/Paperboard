@@ -6,7 +6,7 @@ import {
     PaperText,
     PaperWizard,
     PaperWizardStep,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 
 export default function PaperWizardDoc() {
     return (
@@ -24,7 +24,7 @@ export default function PaperWizardDoc() {
                 Receive harvested step data through the onComplete callback.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { PaperWizard, PaperWizardStep, PaperCard, PaperText } from "@paperboard-dev/paperui";
+{`import { PaperWizard, PaperWizardStep, PaperCard, PaperText } from "@mileniumhq/paperui";
 
 export function Example() {
     return (

@@ -3,7 +3,7 @@ import {
     PaperFlex,
     PaperTable,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 
 export default function PackageApiDoc() {
     return (
@@ -21,12 +21,12 @@ export default function PackageApiDoc() {
                 Overview
             </PaperText>
             <PaperText preset="body">
-                Import packageApi or packages from @paperboard-dev/paperapi.
+                Import packageApi or packages from @mileniumhq/paperapi.
                 Verify package installation state or initiate downloads with
                 stage tracking.
             </PaperText>
             <PaperCode block language="tsx">
-                {`import { packageApi } from "@paperboard-dev/paperapi";
+                {`import { packageApi } from "@mileniumhq/paperapi";
 
 // Verify if a package is installed
 const installed = await packageApi.isInstalled("java-25");

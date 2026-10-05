@@ -56,7 +56,7 @@ KNOWN_TARGETS="packages paperapi paperui create-panel paperapi-build paperui-bui
 
 # Prerequisites per target, expanded transitively. A panel (and any app that
 # bundles the SDK/design system) needs paperapi/paperui dist present; the
-# panel's vite build resolves @paperboard-dev/paperapi to dist, not source.
+# panel's vite build resolves @mileniumhq/paperapi to dist, not source.
 target_deps() {
     case "$1" in
         paperapi) echo "paperapi-build" ;;

@@ -1,4 +1,4 @@
-import type { PaperConsoleEntry } from "@paperboard-dev/paperui";
+import type { PaperConsoleEntry } from "@mileniumhq/paperui";
 import stripAnsi from "strip-ansi";
 
 export function parseLogLine(rawLine: string): PaperConsoleEntry {

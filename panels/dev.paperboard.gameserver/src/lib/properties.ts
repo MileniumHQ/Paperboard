@@ -1,5 +1,5 @@
 import { PANEL_ID } from "../service/types";
-import {   fileApi } from "@paperboard-dev/paperapi";
+import {   fileApi } from "@mileniumhq/paperapi";
 import properties from "dot-properties";
 import { parseProperties } from "../core/properties";
 import { supports, type CapabilityName } from "./capabilities";

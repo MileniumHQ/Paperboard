@@ -2,7 +2,7 @@
 // are grouped by the category their schema declares. Panels can attach an
 // icon and sort order to a category through PaperAPI's declared-category
 // array; without an order, categories sort alphabetically.
-import type { ActionInfo } from "@paperboard-dev/paperapi";
+import type { ActionInfo } from "@mileniumhq/paperapi";
 
 export interface LibrarySection {
     /** stable key: the category name */

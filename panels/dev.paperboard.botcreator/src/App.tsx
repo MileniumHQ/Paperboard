@@ -5,8 +5,8 @@ import {
     PaperMenuItem,
     PaperInterfaceGroup,
     PaperInterfaceItem,
-} from "@paperboard-dev/paperui";
-import { config } from "@paperboard-dev/paperapi";
+} from "@mileniumhq/paperui";
+import { config } from "@mileniumhq/paperapi";
 
 const PANEL_ID = "dev.paperboard.botcreator";
 import Setup from "./components/Setup";
@@ -15,8 +15,8 @@ import Commands from "./components/Commands";
 import Servers from "./components/Servers";
 import Invite from "./components/Invite";
 import Configuration from "./components/Configuration";
-import "@paperboard-dev/paperui/style.css";
-import "@paperboard-dev/paperui/panel.css";
+import "@mileniumhq/paperui/style.css";
+import "@mileniumhq/paperui/panel.css";
 
 export default function App() {
     const [configured, setConfigured] = createSignal<boolean | null>(null);

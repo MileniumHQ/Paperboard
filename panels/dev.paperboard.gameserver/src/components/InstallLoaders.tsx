@@ -3,7 +3,7 @@ import {
     PaperLoader,
     PaperLoaderGroup,
     type LoaderStatus,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 
 export interface InstallLoaderItem {
     label: string;

@@ -1,5 +1,5 @@
 import { createEffect, createSignal, For, Match, Show, Switch } from "solid-js";
-import { PaperButton, PaperIcon, PaperMarkdown, PaperModal, PaperText } from "@paperboard-dev/paperui";
+import { PaperButton, PaperIcon, PaperMarkdown, PaperModal, PaperText } from "@mileniumhq/paperui";
 import { compactCount, isRoundEmpty, turnStats } from "../core/chain";
 import type { AssistantMessage, UserMessage as UserMessageData } from "../core/types";
 import { errorText, rewindOpen } from "../lib/state";

@@ -15,9 +15,9 @@ import {
     PaperQuote,
     useWizard,
     type LoaderStatus,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 import InstallLoaders from "./InstallLoaders";
-import { fileApi } from "@paperboard-dev/paperapi";
+import { fileApi } from "@mileniumhq/paperapi";
 import { ensureJavaRuntime } from "../lib/ensureJava";
 import {
     getSoftwareDownload,

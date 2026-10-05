@@ -32,7 +32,7 @@ const fileApiFake = {
     getPath: async () => regionFile,
 };
 
-mock.module("@paperboard-dev/paperapi", () => ({
+mock.module("@mileniumhq/paperapi", () => ({
     config: {
         get: async () => null,
         set: async () => true,

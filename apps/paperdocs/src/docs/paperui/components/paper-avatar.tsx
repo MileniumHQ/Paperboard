@@ -5,7 +5,7 @@ import {
     PaperFlex,
     PaperTable,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 
 export default function PaperAvatarDoc() {
     return (
@@ -23,7 +23,7 @@ export default function PaperAvatarDoc() {
                 When no image URL is provided, the component renders a fallback glyph inside an avatar tile.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { PaperAvatar, PaperCard, PaperFlex } from "@paperboard-dev/paperui";
+{`import { PaperAvatar, PaperCard, PaperFlex } from "@mileniumhq/paperui";
 
 export function Example() {
     return (

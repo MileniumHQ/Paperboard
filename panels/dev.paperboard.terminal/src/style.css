@@ -1,6 +1,6 @@
 /* xterm.js compatibility shims only: the library sets inline sizes and a
  * viewport background that do not follow PaperUI surfaces. The document
- * reset lives in @paperboard-dev/paperui/panel.css. */
+ * reset lives in @mileniumhq/paperui/panel.css. */
 .xterm {
     height: 100%;
     padding: 0;

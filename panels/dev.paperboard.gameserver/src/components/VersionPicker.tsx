@@ -9,7 +9,7 @@ import {
     PaperQuote,
     PaperText,
     getVarCss,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 import {
     getDetailedVersionsForSoftware,
     type ServerSoftwareType,

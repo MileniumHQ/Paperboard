@@ -1,5 +1,5 @@
 import { render } from "solid-js/web";
-import { PaperProvider } from "@paperboard-dev/paperui";
+import { PaperProvider } from "@mileniumhq/paperui";
 import App from "./App";
 
 const root = document.getElementById("app");

@@ -6,7 +6,7 @@ import {
     isPanelId,
     type InstalledPanelMedia,
     type PanelItem,
-} from "@paperboard-dev/paperapi";
+} from "@mileniumhq/paperapi";
 
 export type LibraryToShellMessage =
     | { type: "paperboard:library-hello"; ready: boolean }

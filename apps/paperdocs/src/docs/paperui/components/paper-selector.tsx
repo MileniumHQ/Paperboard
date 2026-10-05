@@ -6,7 +6,7 @@ import {
     PaperSelectorItem,
     PaperTable,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 
 export default function PaperSelectorDoc() {
     return (
@@ -24,7 +24,7 @@ export default function PaperSelectorDoc() {
                 Set horizontal to arrange options in a side-by-side row.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { PaperSelector, PaperSelectorItem, PaperCard } from "@paperboard-dev/paperui";
+{`import { PaperSelector, PaperSelectorItem, PaperCard } from "@mileniumhq/paperui";
 
 export function Example() {
     return (

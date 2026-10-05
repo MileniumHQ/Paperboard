@@ -1,4 +1,4 @@
-import { files as fileApi } from "@paperboard-dev/paperapi";
+import { files as fileApi } from "@mileniumhq/paperapi";
 import type { TrashRemoveDeps } from "./trash";
 import { PANEL_ID } from "./types";
 

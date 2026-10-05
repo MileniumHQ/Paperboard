@@ -1,9 +1,9 @@
-import "@paperboard-dev/paperui/style.css";
+import "@mileniumhq/paperui/style.css";
 import "./shell.css";
 import "./screenshot.css";
 import { render } from "solid-js/web";
 import { createSignal } from "solid-js";
-import { PaperProvider, PaperButton } from "@paperboard-dev/paperui";
+import { PaperProvider, PaperButton } from "@mileniumhq/paperui";
 
 declare global {
     interface Window {

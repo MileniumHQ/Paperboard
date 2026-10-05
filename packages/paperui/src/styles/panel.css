@@ -4,7 +4,7 @@
  * deliberately styles nothing outside .paperui-root. This is the one file a
  * panel needs for the document itself: import it and write no CSS.
  *
- *   import "@paperboard-dev/paperui/panel.css";
+ *   import "@mileniumhq/paperui/panel.css";
  */
 html,
 body,

@@ -1,4 +1,4 @@
-import { PaperInput } from "@paperboard-dev/paperui";
+import { PaperInput } from "@mileniumhq/paperui";
 import { createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import records from "virtual:docs-search";
 import { searchDocs } from "../utils/search";

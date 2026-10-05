@@ -1,6 +1,6 @@
-import "@paperboard-dev/paperui/style.css";
+import "@mileniumhq/paperui/style.css";
 import { render } from "solid-js/web";
-import { PaperProvider, PaperFlex } from "@paperboard-dev/paperui";
+import { PaperProvider, PaperFlex } from "@mileniumhq/paperui";
 import { type AppUpdateState } from "../../../src/shared/appUpdate";
 import { useAppUpdate } from "../../../src/renderer/src/hooks/useAppUpdate";
 import ComputerRail from "../../../src/renderer/src/components/computer/ComputerRail";

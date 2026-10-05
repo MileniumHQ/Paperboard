@@ -25,7 +25,7 @@ import {
     getVarCss,
     PaperCard,
     PaperAvatar,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 import { FieldControl } from "./PropertyFieldControl";
 import { readServerProperties, writeServerProperties } from "../lib/properties";
 import {

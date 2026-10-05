@@ -5,7 +5,7 @@ import {
     config,
     normalizeMatchRules,
     type ServiceContext,
-} from "@paperboard-dev/paperapi";
+} from "@mileniumhq/paperapi";
 import {
     type ExecutionLog,
     executeFlow,

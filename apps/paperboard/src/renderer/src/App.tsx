@@ -9,12 +9,12 @@ import {
     PaperText,
     useContextMenuState,
     getVarCss,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 import {
     loadInstalledPanelMedia,
     panelsApi,
     type PanelItem,
-} from "@paperboard-dev/paperapi";
+} from "@mileniumhq/paperapi";
 import {
     computersApi,
     logToMain,

@@ -14,7 +14,7 @@ import {
     PaperWizard,
     PaperWizardStep,
     type LoaderStatus,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 import { UI_ACTION_IDS } from "../contract";
 import { call, closeProviderSetup, errorText, state } from "../lib/state";
 

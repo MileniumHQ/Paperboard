@@ -1,4 +1,4 @@
-import { PaperCard, PaperCode, PaperFlex, PaperText } from "@paperboard-dev/paperui";
+import { PaperCard, PaperCode, PaperFlex, PaperText } from "@mileniumhq/paperui";
 
 export default function PaperUiOverviewDoc() {
     return (
@@ -44,8 +44,8 @@ export default function PaperUiOverviewDoc() {
                 Wrap the application tree in PaperProvider to establish theme inheritance.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { PaperProvider, PaperCard, PaperButton, PaperText } from "@paperboard-dev/paperui";
-import "@paperboard-dev/paperui/style.css";
+{`import { PaperProvider, PaperCard, PaperButton, PaperText } from "@mileniumhq/paperui";
+import "@mileniumhq/paperui/style.css";
 
 export function App() {
     return (

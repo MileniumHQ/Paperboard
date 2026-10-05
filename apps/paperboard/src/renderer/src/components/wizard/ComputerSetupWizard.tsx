@@ -8,7 +8,7 @@ import {
     PaperFlex,
     PaperText,
     useWizard,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 import {
     computersApi as computers,
     discoveryApi,

@@ -1,5 +1,5 @@
 import { type Component } from "solid-js";
-import { PaperFlex, PaperText } from "@paperboard-dev/paperui";
+import { PaperFlex, PaperText } from "@mileniumhq/paperui";
 import type { ComputerItem } from "../../App";
 
 export interface LandingViewProps {

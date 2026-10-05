@@ -1,4 +1,4 @@
-import { PaperFlex, getVarCss } from "@paperboard-dev/paperui";
+import { PaperFlex, getVarCss } from "@mileniumhq/paperui";
 import { type Component, createEffect, createSignal, For, Show, onCleanup, onMount } from "solid-js";
 import { recordUse, liveKeys, MAX_LIVE_IFRAMES } from "./panelLru";
 import LoadingOverlay from "./LoadingOverlay";

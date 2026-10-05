@@ -1,5 +1,5 @@
-import { PaperFlex, PaperProvider } from "@paperboard-dev/paperui";
-import "@paperboard-dev/paperui/style.css";
+import { PaperFlex, PaperProvider } from "@mileniumhq/paperui";
+import "@mileniumhq/paperui/style.css";
 import { Switch, Match } from "solid-js";
 import { Footer } from "./components/Footer";
 import { Topbar } from "./components/Topbar";

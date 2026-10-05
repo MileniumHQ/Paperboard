@@ -52,7 +52,7 @@ async function buildFixture(outDir: string): Promise<void> {
         plugins: [solidPlugin()],
         resolve: {
             alias: {
-                "@paperboard-dev/paperui": join(
+                "@mileniumhq/paperui": join(
                     panelDir,
                     "test/fixtures/paperuiStub.tsx",
                 ),

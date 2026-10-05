@@ -1,5 +1,5 @@
 import { createSignal } from "solid-js";
-import { PaperFlex, PaperButton, PaperText } from "@paperboard-dev/paperui";
+import { PaperFlex, PaperButton, PaperText } from "@mileniumhq/paperui";
 
 export default function CounterPage() {
     const [count, setCount] = createSignal(0);

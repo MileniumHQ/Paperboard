@@ -5,7 +5,7 @@ import {
     PaperProse,
     PaperTable,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 
 export default function PaperProseDoc() {
     return (
@@ -22,7 +22,7 @@ export default function PaperProseDoc() {
                 Place rendered rich text or markdown HTML elements inside PaperProse.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { PaperProse, PaperCard } from "@paperboard-dev/paperui";
+{`import { PaperProse, PaperCard } from "@mileniumhq/paperui";
 
 export function Example() {
     return (

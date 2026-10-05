@@ -6,7 +6,7 @@ import {
     PaperRange,
     PaperTable,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 
 export default function PaperRangeDoc() {
     const [value, setValue] = createSignal(40);
@@ -27,7 +27,7 @@ export default function PaperRangeDoc() {
             </PaperText>
             <PaperCode block language="tsx">
 {`import { createSignal } from "solid-js";
-import { PaperCard, PaperRange, PaperText } from "@paperboard-dev/paperui";
+import { PaperCard, PaperRange, PaperText } from "@mileniumhq/paperui";
 
 export function Example() {
     const [value, setValue] = createSignal(40);

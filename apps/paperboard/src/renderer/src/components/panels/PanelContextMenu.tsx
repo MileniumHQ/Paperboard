@@ -3,7 +3,7 @@ import {
     PaperContextMenu,
     PaperContextMenuItem,
     useContextMenuState,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 
 interface PanelContextMenuProps {
     menu: ReturnType<typeof useContextMenuState>;

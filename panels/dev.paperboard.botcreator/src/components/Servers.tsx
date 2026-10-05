@@ -15,8 +15,8 @@ import {
     PaperSelectMenu,
     PaperSelectMenuItem,
     PaperSwatch,
-    PaperTable, getVarCss } from "@paperboard-dev/paperui";
-import { actionsApi } from "@paperboard-dev/paperapi";
+    PaperTable, getVarCss } from "@mileniumhq/paperui";
+import { actionsApi } from "@mileniumhq/paperapi";
 import {
     CHANNEL_KIND_LABELS,
     errorToMessage,

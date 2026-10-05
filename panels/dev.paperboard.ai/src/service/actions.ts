@@ -1,4 +1,4 @@
-import { actionsApi, defineAction, type ActionDefinition } from "@paperboard-dev/paperapi";
+import { actionsApi, defineAction, type ActionDefinition } from "@mileniumhq/paperapi";
 import { ACTION_IDS, PANEL_ID, TRIGGER_IDS, UI_ACTION_IDS } from "../contract";
 import { isPromptStyle, PROMPT_STYLES, PROMPT_STYLE_DESCRIPTIONS, PROMPT_STYLE_LABELS } from "../core/conversation";
 import { isReasoningLevel } from "../core/reasoning";

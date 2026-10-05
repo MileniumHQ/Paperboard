@@ -19,8 +19,8 @@ import {
   PaperToggle,
   getVarCss,
   PaperAvatar,
-} from "@paperboard-dev/paperui";
-import "@paperboard-dev/paperui/style.css";
+} from "@mileniumhq/paperui";
+import "@mileniumhq/paperui/style.css";
 import "./app.css";
 import {
   createEffect,

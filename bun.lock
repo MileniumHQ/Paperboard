@@ -28,7 +28,7 @@
       "name": "paperboard-panel-library",
       "version": "0.1.0",
       "dependencies": {
-        "@paperboard-dev/paperui": "workspace:*",
+        "@mileniumhq/paperui": "workspace:*",
         "solid-js": "^1.9.15",
       },
       "devDependencies": {
@@ -47,8 +47,8 @@
       "dependencies": {
         "@electron-toolkit/preload": "^3.0.2",
         "@electron-toolkit/utils": "^4.0.0",
-        "@paperboard-dev/paperapi": "workspace:*",
-        "@paperboard-dev/paperui": "workspace:*",
+        "@mileniumhq/paperapi": "workspace:*",
+        "@mileniumhq/paperui": "workspace:*",
         "adm-zip": "^0.6.1",
         "bonjour-service": "^1.4.4",
         "commander": "^15.0.0",
@@ -84,7 +84,7 @@
         "@ffmpeg/core": "^0.12.10",
         "@ffmpeg/ffmpeg": "^0.12.15",
         "@ffmpeg/util": "^0.12.2",
-        "@paperboard-dev/paperui": "workspace:*",
+        "@mileniumhq/paperui": "workspace:*",
         "fflate": "^0.8.3",
         "gifenc": "^1.0.3",
         "heic-decode": "^2.1.0",
@@ -103,7 +103,7 @@
       "name": "paperdocs",
       "version": "0.1.0",
       "dependencies": {
-        "@paperboard-dev/paperui": "workspace:*",
+        "@mileniumhq/paperui": "workspace:*",
         "solid-js": "^1.9.15",
       },
       "devDependencies": {
@@ -116,7 +116,7 @@
       },
     },
     "packages/create-panel": {
-      "name": "@paperboard-dev/create-panel",
+      "name": "@mileniumhq/create-panel",
       "version": "0.1.0",
       "bin": {
         "create-panel": "./dist/cli.js",
@@ -127,7 +127,7 @@
       },
     },
     "packages/paperapi": {
-      "name": "@paperboard-dev/paperapi",
+      "name": "@mileniumhq/paperapi",
       "version": "0.1.0",
       "bin": {
         "paperapi": "./dist/cli.js",
@@ -147,7 +147,7 @@
       },
     },
     "packages/paperui": {
-      "name": "@paperboard-dev/paperui",
+      "name": "@mileniumhq/paperui",
       "version": "0.1.0",
       "dependencies": {
         "anser": "^2.3.5",
@@ -174,8 +174,8 @@
     "panels/dev.paperboard.actions": {
       "name": "dev.paperboard.actions",
       "dependencies": {
-        "@paperboard-dev/paperapi": "workspace:*",
-        "@paperboard-dev/paperui": "workspace:*",
+        "@mileniumhq/paperapi": "workspace:*",
+        "@mileniumhq/paperui": "workspace:*",
         "expr-eval": "^2.0.2",
         "solid-js": "^1.9.15",
       },
@@ -188,8 +188,8 @@
     "panels/dev.paperboard.ai": {
       "name": "dev.paperboard.ai",
       "dependencies": {
-        "@paperboard-dev/paperapi": "workspace:*",
-        "@paperboard-dev/paperui": "workspace:*",
+        "@mileniumhq/paperapi": "workspace:*",
+        "@mileniumhq/paperui": "workspace:*",
         "solid-js": "^1.9.15",
       },
       "devDependencies": {
@@ -202,8 +202,8 @@
     "panels/dev.paperboard.botcreator": {
       "name": "dev.paperboard.botcreator",
       "dependencies": {
-        "@paperboard-dev/paperapi": "workspace:*",
-        "@paperboard-dev/paperui": "workspace:*",
+        "@mileniumhq/paperapi": "workspace:*",
+        "@mileniumhq/paperui": "workspace:*",
         "discord.js": "^14.27.0",
         "solid-js": "^1.9.15",
       },
@@ -216,8 +216,8 @@
     "panels/dev.paperboard.gameserver": {
       "name": "dev.paperboard.gameserver",
       "dependencies": {
-        "@paperboard-dev/paperapi": "workspace:*",
-        "@paperboard-dev/paperui": "workspace:*",
+        "@mileniumhq/paperapi": "workspace:*",
+        "@mileniumhq/paperui": "workspace:*",
         "dot-properties": "^1.1.2",
         "pngjs": "^7.0.0",
         "prismarine-nbt": "^2.8.0",
@@ -236,8 +236,8 @@
     "panels/dev.paperboard.terminal": {
       "name": "dev.paperboard.terminal",
       "dependencies": {
-        "@paperboard-dev/paperapi": "workspace:*",
-        "@paperboard-dev/paperui": "workspace:*",
+        "@mileniumhq/paperapi": "workspace:*",
+        "@mileniumhq/paperui": "workspace:*",
         "@xterm/addon-fit": "^0.11.0",
         "@xterm/xterm": "^6.0.0",
         "solid-js": "^1.9.15",
@@ -530,17 +530,17 @@
 
     "@malept/flatpak-bundler": ["@malept/flatpak-bundler@0.4.0", "", { "dependencies": { "debug": "^4.1.1", "fs-extra": "^9.0.0", "lodash": "^4.17.15", "tmp-promise": "^3.0.2" } }, "sha512-9QOtNffcOF/c1seMCDnjckb3R9WHcG34tky+FHpNKKCW0wc/scYLwMtO+ptyGUfMW0/b/n4qRiALlaFHc9Oj7Q=="],
 
+    "@mileniumhq/create-panel": ["@mileniumhq/create-panel@workspace:packages/create-panel"],
+
+    "@mileniumhq/paperapi": ["@mileniumhq/paperapi@workspace:packages/paperapi"],
+
+    "@mileniumhq/paperui": ["@mileniumhq/paperui@workspace:packages/paperui"],
+
     "@napi-rs/lzma-linux-x64-gnu": ["@napi-rs/lzma-linux-x64-gnu@1.5.1", "", { "os": "linux", "cpu": "x64" }, "sha512-oTXEIha4SsuXdTA4Iyskj0kpdx2yVXdhd75c2v3xGrHFfVMsbhTPZU/nMPL4sWKo4pBHm3aucLaqGlF696dTyQ=="],
 
     "@noble/hashes": ["@noble/hashes@2.4.0", "", {}, "sha512-X5XaVWZIBCT7HHZGm5I7ZQXDwLG+bGXuSrMQAW+7Zvl87h1kmc1ZB1VSRJcpUfoUrGQp4Fkoxm5kZ+Ms+aW+eA=="],
 
     "@oxc-project/types": ["@oxc-project/types@0.152.0", "", {}, "sha512-oM/5rLBm2tPkg0iBgkH/FOeR3PCDpY19GTgAZjMFM8h9WI9VW7cLgzp6nwtarYKmovavIQZ+Fe/RKX/8C8O/Rw=="],
-
-    "@paperboard-dev/create-panel": ["@paperboard-dev/create-panel@workspace:packages/create-panel"],
-
-    "@paperboard-dev/paperapi": ["@paperboard-dev/paperapi@workspace:packages/paperapi"],
-
-    "@paperboard-dev/paperui": ["@paperboard-dev/paperui@workspace:packages/paperui"],
 
     "@pdf-lib/standard-fonts": ["@pdf-lib/standard-fonts@1.0.0", "", { "dependencies": { "pako": "^1.0.6" } }, "sha512-hU30BK9IUN/su0Mn9VdlVKsWBS6GyhVfqjwl1FjZN4TxP6cCw0jP2w7V3Hf5uX7M0AZJ16vey9yE0ny7Sa59ZA=="],
 

@@ -19,13 +19,13 @@ import {
     PaperModal,
     PaperInput,
     PaperFlex,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 import {
     config as configApi,
     actions as actionsApi,
     getType,
     type ActionInfo,
-} from "@paperboard-dev/paperapi";
+} from "@mileniumhq/paperapi";
 import { ACTIONS_PANEL_ID } from "./panelId";
 import { variableFieldIcon } from "./lib/variableTypes";
 import { filterPickerItems } from "./lib/variablePicker";
@@ -51,7 +51,7 @@ import {
     buildCallSchema,
     buildTriggerSchema,
 } from "./lib/functions";
-import "@paperboard-dev/paperui/style.css";
+import "@mileniumhq/paperui/style.css";
 import "./style.css";
 
 export default function App() {

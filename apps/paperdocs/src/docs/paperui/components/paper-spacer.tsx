@@ -5,7 +5,7 @@ import {
     PaperSpacer,
     PaperTable,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 
 export default function PaperSpacerDoc() {
     return (
@@ -22,7 +22,7 @@ export default function PaperSpacerDoc() {
                 Insert PaperSpacer between elements and set the size prop to a spacing token.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { PaperSpacer, PaperCard, PaperFlex, PaperText } from "@paperboard-dev/paperui";
+{`import { PaperSpacer, PaperCard, PaperFlex, PaperText } from "@mileniumhq/paperui";
 
 export function Example() {
     return (

@@ -4,7 +4,7 @@ const calls: string[] = [];
 let installed = false;
 let failDownload = false;
 
-mock.module("@paperboard-dev/paperapi", () => ({
+mock.module("@mileniumhq/paperapi", () => ({
     packageApi: {
         isInstalled: async (_id: string) => installed,
         download: async (_id: string, onProgress: (progress: any) => void) => {

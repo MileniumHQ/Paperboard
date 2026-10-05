@@ -5,7 +5,7 @@ import {
     PaperMarkdown,
     PaperTable,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 
 export default function PaperMarkdownDoc() {
     return (
@@ -26,7 +26,7 @@ export default function PaperMarkdownDoc() {
                 unless the caller opts in, because a remote image is a beacon.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { PaperMarkdown } from "@paperboard-dev/paperui";
+{`import { PaperMarkdown } from "@mileniumhq/paperui";
 
 export function ReleaseNotes() {
     return (

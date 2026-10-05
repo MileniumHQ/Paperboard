@@ -1,4 +1,4 @@
-import type { ActionParamDefinition } from "@paperboard-dev/paperapi";
+import type { ActionParamDefinition } from "@mileniumhq/paperapi";
 
 const PRIMITIVE_INPUT_TYPES = new Set([
     "string", "number", "boolean", "object", "any", "file", "void", "select", "url", "color",

@@ -6,7 +6,7 @@ import {
     PaperFlex,
     PaperTable,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 
 export default function PaperCenteredInterfaceDoc() {
     return (
@@ -24,7 +24,7 @@ export default function PaperCenteredInterfaceDoc() {
                 Specify a size preset or direct width to control maximum layout boundaries.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { PaperCenteredInterface, PaperCard, PaperFlex, PaperText, PaperButton } from "@paperboard-dev/paperui";
+{`import { PaperCenteredInterface, PaperCard, PaperFlex, PaperText, PaperButton } from "@mileniumhq/paperui";
 
 export function Example() {
     return (

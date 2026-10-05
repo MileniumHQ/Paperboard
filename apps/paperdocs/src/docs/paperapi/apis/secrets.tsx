@@ -3,7 +3,7 @@ import {
     PaperFlex,
     PaperTable,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 
 export default function SecretsApiDoc() {
     return (
@@ -17,11 +17,11 @@ export default function SecretsApiDoc() {
 
             <PaperText preset="subheader" id="overview">Overview</PaperText>
             <PaperText preset="body">
-                Import secretsApi or secrets from @paperboard-dev/paperapi.
+                Import secretsApi or secrets from @mileniumhq/paperapi.
                 Always supply the explicit panelId parameter when storing, retrieving, or deleting secrets.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { secretsApi } from "@paperboard-dev/paperapi";
+{`import { secretsApi } from "@mileniumhq/paperapi";
 
 const PANEL_ID = "dev.paperboard.my-panel";
 

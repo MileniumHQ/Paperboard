@@ -15,7 +15,7 @@ mock.module("../src/lib/server", () => ({
     },
 }));
 
-mock.module("@paperboard-dev/paperapi", () => ({
+mock.module("@mileniumhq/paperapi", () => ({
     fileApi: {},
     files: {},
     config: { get: async () => ({}), set: async () => true },

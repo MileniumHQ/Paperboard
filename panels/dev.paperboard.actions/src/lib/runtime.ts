@@ -4,7 +4,7 @@ import {
     systemApi,
     files,
     resolveOneShotShell,
-} from "@paperboard-dev/paperapi";
+} from "@mileniumhq/paperapi";
 import { Parser as ExprParser } from "expr-eval";
 import type { CanvasBlock } from "./tree";
 import { BUILTIN_DEFS } from "./builtinRegistry";

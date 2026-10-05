@@ -1,4 +1,4 @@
-import { config, files as fileApi, type ServiceContext } from "@paperboard-dev/paperapi";
+import { config, files as fileApi, type ServiceContext } from "@mileniumhq/paperapi";
 import properties from "dot-properties";
 import { sanitizeFileName, listDirectory } from "../lib/filesystem";
 import {

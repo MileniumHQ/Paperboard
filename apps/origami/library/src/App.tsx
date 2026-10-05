@@ -16,7 +16,7 @@ import {
     PaperMediaCardGroup,
     PaperText,
     getVarCss,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 import bannerImg from "./assets/PanelLibraryBanner.png";
 import type { LibraryBridge } from "./bridge";
 import PanelPage, { iconGlyph, publisherLabel } from "./PanelPage";

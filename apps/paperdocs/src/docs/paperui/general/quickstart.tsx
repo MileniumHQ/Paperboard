@@ -5,7 +5,7 @@ import {
     PaperFlex,
     PaperInput,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 
 export default function QuickstartDoc() {
     return (
@@ -22,13 +22,13 @@ export default function QuickstartDoc() {
                 Install the package alongside SolidJS using your preferred package manager.
             </PaperText>
             <PaperCode block language="bash">
-{`bun add @paperboard-dev/paperui solid-js`}
+{`bun add @mileniumhq/paperui solid-js`}
             </PaperCode>
             <PaperText preset="body">
                 With npm:
             </PaperText>
             <PaperCode block language="bash">
-{`npm install @paperboard-dev/paperui solid-js`}
+{`npm install @mileniumhq/paperui solid-js`}
             </PaperCode>
 
             <PaperText preset="subheader" id="importing-styles">Importing styles</PaperText>
@@ -37,7 +37,7 @@ export default function QuickstartDoc() {
                 This stylesheet registers design tokens, fonts, and animation variables.
             </PaperText>
             <PaperCode block language="tsx">
-{`import "@paperboard-dev/paperui/style.css";`}
+{`import "@mileniumhq/paperui/style.css";`}
             </PaperCode>
 
             <PaperText preset="subheader" id="root-provider">Root provider</PaperText>
@@ -47,8 +47,8 @@ export default function QuickstartDoc() {
             </PaperText>
             <PaperCode block language="tsx">
 {`import { render } from "solid-js/web";
-import { PaperProvider, PaperFlex, PaperText } from "@paperboard-dev/paperui";
-import "@paperboard-dev/paperui/style.css";
+import { PaperProvider, PaperFlex, PaperText } from "@mileniumhq/paperui";
+import "@mileniumhq/paperui/style.css";
 
 function App() {
     return (
@@ -68,7 +68,7 @@ render(() => <App />, document.getElementById("root")!);`}
                 Combine input and action components within a container card.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { PaperButton, PaperCard, PaperFlex, PaperInput, PaperText } from "@paperboard-dev/paperui";
+{`import { PaperButton, PaperCard, PaperFlex, PaperInput, PaperText } from "@mileniumhq/paperui";
 
 export function SearchCard() {
     return (

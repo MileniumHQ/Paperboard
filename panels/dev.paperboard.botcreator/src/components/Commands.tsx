@@ -15,8 +15,8 @@ import {
     PaperSettingItem,
     PaperSelectMenu,
     PaperSelectMenuItem,
-    PaperCheckbox, getVarCss } from "@paperboard-dev/paperui";
-import { actionsApi, config } from "@paperboard-dev/paperapi";
+    PaperCheckbox, getVarCss } from "@mileniumhq/paperui";
+import { actionsApi, config } from "@mileniumhq/paperapi";
 import {
     GLOBAL_SCOPE,
     COMMAND_DESCRIPTION_MAX_LENGTH,

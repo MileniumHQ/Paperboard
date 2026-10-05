@@ -1,6 +1,6 @@
 import { createEffect, createMemo, createSignal, Index, Match, on, onCleanup, onMount, Show, Switch } from "solid-js";
-import { PaperButton, PaperEmptyState, PaperIcon, PaperText } from "@paperboard-dev/paperui";
-import { actionsApi } from "@paperboard-dev/paperapi";
+import { PaperButton, PaperEmptyState, PaperIcon, PaperText } from "@mileniumhq/paperui";
+import { actionsApi } from "@mileniumhq/paperapi";
 import { UI_ACTION_IDS } from "../contract";
 import { OLLAMA_PROVIDER_ID, providerLabel } from "../core/providers";
 import type { ReasoningLevel } from "../core/reasoning";

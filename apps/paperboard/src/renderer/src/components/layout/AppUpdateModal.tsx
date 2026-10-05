@@ -1,5 +1,5 @@
 import { createSignal, Show } from "solid-js";
-import { PaperModal, PaperFlex, PaperText, PaperButton, PaperProgress } from "@paperboard-dev/paperui";
+import { PaperModal, PaperFlex, PaperText, PaperButton, PaperProgress } from "@mileniumhq/paperui";
 import type { AppUpdateState } from "../../../../shared/appUpdate";
 import { shellIpc } from "../../lib/shell";
 

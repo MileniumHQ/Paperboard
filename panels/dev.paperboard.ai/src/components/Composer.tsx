@@ -7,7 +7,7 @@ import {
     PaperIcon,
     PaperText,
     useContextMenuState,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 import { MAX_ATTACHMENTS } from "../core/attachments";
 import { REASONING_LABELS, REASONING_LEVELS, type ReasoningLevel } from "../core/reasoning";
 import type { Attachment } from "../core/types";

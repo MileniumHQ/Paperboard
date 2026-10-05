@@ -3,7 +3,7 @@ import {
     PaperFlex,
     PaperTable,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 
 export default function TerminalApiDoc() {
     return (
@@ -17,11 +17,11 @@ export default function TerminalApiDoc() {
 
             <PaperText preset="subheader" id="overview">Overview</PaperText>
             <PaperText preset="body">
-                Import terminalApi or terminal from @paperboard-dev/paperapi.
+                Import terminalApi or terminal from @mileniumhq/paperapi.
                 Create a terminal instance using an explicit identifier and subscribe to data events.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { terminalApi } from "@paperboard-dev/paperapi";
+{`import { terminalApi } from "@mileniumhq/paperapi";
 
 const termId = "main-shell";
 

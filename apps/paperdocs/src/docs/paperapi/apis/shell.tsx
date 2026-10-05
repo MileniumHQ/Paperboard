@@ -3,7 +3,7 @@ import {
     PaperFlex,
     PaperTable,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 
 export default function ShellApiDoc() {
     return (
@@ -17,11 +17,11 @@ export default function ShellApiDoc() {
 
             <PaperText preset="subheader" id="overview">Overview</PaperText>
             <PaperText preset="body">
-                Import resolveOneShotShell or detectHostPlatform from @paperboard-dev/paperapi.
+                Import resolveOneShotShell or detectHostPlatform from @mileniumhq/paperapi.
                 Append your command string to baseArgs and pass the resulting array to processApi.run.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { resolveOneShotShell, processApi } from "@paperboard-dev/paperapi";
+{`import { resolveOneShotShell, processApi } from "@mileniumhq/paperapi";
 
 const shell = resolveOneShotShell();
 const args = [...shell.baseArgs, "echo $USER"];
@@ -69,7 +69,7 @@ console.log(stdout);`}
                 Inspect host platform to conditionally adjust command parameters.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { detectHostPlatform } from "@paperboard-dev/paperapi";
+{`import { detectHostPlatform } from "@mileniumhq/paperapi";
 
 const platform = detectHostPlatform();
 const clearCmd = platform === "win32" ? "cls" : "clear";`}

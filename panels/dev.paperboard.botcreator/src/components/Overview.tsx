@@ -8,8 +8,8 @@ import {
     PaperBadge,
     PaperIcon,
     PaperTable,
-    PaperCard, getVarCss } from "@paperboard-dev/paperui";
-import { actionsApi, config } from "@paperboard-dev/paperapi";
+    PaperCard, getVarCss } from "@mileniumhq/paperui";
+import { actionsApi, config } from "@mileniumhq/paperapi";
 import {
     appendCapped,
     DEFAULT_DISCORD_AVATAR,

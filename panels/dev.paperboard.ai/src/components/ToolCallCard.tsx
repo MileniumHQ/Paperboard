@@ -1,5 +1,5 @@
 import { createSignal, For, Match, Show, Switch } from "solid-js";
-import { PaperBadge, PaperButton, PaperCode, PaperCopyButton, PaperIcon, PaperText, type PaperBadgeVariant } from "@paperboard-dev/paperui";
+import { PaperBadge, PaperButton, PaperCode, PaperCopyButton, PaperIcon, PaperText, type PaperBadgeVariant } from "@mileniumhq/paperui";
 import { UI_ACTION_IDS } from "../contract";
 import type { ToolCallRecord } from "../core/types";
 import { call, errorText, state } from "../lib/state";

@@ -1,5 +1,5 @@
 {
-    "name": "@paperboard-dev/paperapi",
+    "name": "@mileniumhq/paperapi",
     "version": "0.1.0",
     "type": "module",
     "main": "./dist/paperapi.cjs",

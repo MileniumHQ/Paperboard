@@ -5,7 +5,7 @@ import {
     PaperFlex,
     PaperTable,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 
 export default function PaperCheckboxDoc() {
     return (
@@ -23,7 +23,7 @@ export default function PaperCheckboxDoc() {
                 Listen to state changes through the onChange callback.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { PaperCheckbox, PaperCard, PaperFlex } from "@paperboard-dev/paperui";
+{`import { PaperCheckbox, PaperCard, PaperFlex } from "@mileniumhq/paperui";
 
 export function Example() {
     return (

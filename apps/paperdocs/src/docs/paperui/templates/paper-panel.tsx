@@ -9,7 +9,7 @@ import {
     PaperPanel,
     PaperTable,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 
 export default function PaperPanelDoc() {
     return (
@@ -35,7 +35,7 @@ export default function PaperPanelDoc() {
     PaperInterfaceItem,
     PaperCard,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 
 export function Example() {
     return (

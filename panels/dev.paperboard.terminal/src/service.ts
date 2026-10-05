@@ -7,7 +7,7 @@ import {
     files,
     resolveOneShotShell,
     type ServiceContext,
-} from "@paperboard-dev/paperapi";
+} from "@mileniumhq/paperapi";
 import { SCROLLBACK_CHARS, applyScrollbackCap, readWholeLines } from "./lib/scrollback";
 
 // pass PANEL_ID explicitly, ambient scope resolves to last-imported panel

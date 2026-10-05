@@ -9,9 +9,9 @@ import {
     PaperSettingList,
     PaperText,
     PaperCard,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 import { FieldControl } from "./PropertyFieldControl";
-import { PaperPageHeader } from "@paperboard-dev/paperui";
+import { PaperPageHeader } from "@mileniumhq/paperui";
 import { supports } from "../lib/capabilities";
 import {
     MAX_RAM_GB,

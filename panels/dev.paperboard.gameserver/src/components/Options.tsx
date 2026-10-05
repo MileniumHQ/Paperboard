@@ -5,9 +5,9 @@ import {
     PaperSettingItem,
     PaperSettingList,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 import { FieldControl } from "./PropertyFieldControl";
-import { PaperPageHeader } from "@paperboard-dev/paperui";
+import { PaperPageHeader } from "@mileniumhq/paperui";
 import { serverBridge } from "../lib/server";
 import { ACTION_IDS } from "../service/contract";
 import {

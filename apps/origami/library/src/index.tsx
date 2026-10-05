@@ -1,6 +1,6 @@
 import { render } from "solid-js/web";
-import { PaperProvider } from "@paperboard-dev/paperui";
-import "@paperboard-dev/paperui/style.css";
+import { PaperProvider } from "@mileniumhq/paperui";
+import "@mileniumhq/paperui/style.css";
 import PanelLibraryApp from "./App";
 import { createLibraryBridge } from "./bridge";
 import { createWindowHost } from "./host";

@@ -14,7 +14,7 @@ import {
     secretsApi,
     systemApi,
     type ServiceContext,
-} from "@paperboard-dev/paperapi";
+} from "@mileniumhq/paperapi";
 import { EVENTS, OLLAMA_PACKAGE, OLLAMA_PROC_ID, PANEL_ID, TRIGGER_IDS } from "../contract";
 import { askSystemPrompt, isConversationId, isPromptStyle } from "../core/conversation";
 import {

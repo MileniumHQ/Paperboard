@@ -1,7 +1,7 @@
 import { PANEL_ID, ACTION_IDS } from "../service/contract";
 import { createSignal } from "solid-js";
-import { createPanelBridge } from "@paperboard-dev/paperapi";
-import type { PaperConsoleEntry, PaperBadgeVariant } from "@paperboard-dev/paperui";
+import { createPanelBridge } from "@mileniumhq/paperapi";
+import type { PaperConsoleEntry, PaperBadgeVariant } from "@mileniumhq/paperui";
 import stripAnsi from "strip-ansi";
 import { SOFTWARE_NAMES, type ServerSoftwareType } from "./software";
 import type { InstallProgress } from "../core/state";

@@ -5,7 +5,7 @@ import {
     PaperGrid,
     PaperTable,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 
 export default function PaperGridDoc() {
     return (
@@ -23,7 +23,7 @@ export default function PaperGridDoc() {
                 Use the min prop to define the smallest allowable column size before wrapping occurs.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { PaperGrid, PaperCard, PaperText } from "@paperboard-dev/paperui";
+{`import { PaperGrid, PaperCard, PaperText } from "@mileniumhq/paperui";
 
 export function Example() {
     return (

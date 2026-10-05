@@ -1,4 +1,4 @@
-import { PaperLink, PaperPageHeader, PaperText } from "@paperboard-dev/paperui";
+import { PaperLink, PaperPageHeader, PaperText } from "@mileniumhq/paperui";
 import { CONTACT_EMAIL } from "../contact";
 import { ContactForm } from "./ContactForm";
 import styles from "../site.module.css";

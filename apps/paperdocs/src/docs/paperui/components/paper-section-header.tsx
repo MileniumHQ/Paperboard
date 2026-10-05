@@ -6,7 +6,7 @@ import {
     PaperSectionHeader,
     PaperTable,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 
 export default function PaperSectionHeaderDoc() {
     return (
@@ -24,7 +24,7 @@ export default function PaperSectionHeaderDoc() {
                 Render supplementary controls inside the children slot.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { PaperSectionHeader, PaperButton, PaperCard } from "@paperboard-dev/paperui";
+{`import { PaperSectionHeader, PaperButton, PaperCard } from "@mileniumhq/paperui";
 
 export function Example() {
     return (

@@ -1,5 +1,5 @@
 import { createSignal, Match, Show, Switch } from "solid-js";
-import { PaperButton, PaperCode, PaperIcon, PaperLoader, PaperText } from "@paperboard-dev/paperui";
+import { PaperButton, PaperCode, PaperIcon, PaperLoader, PaperText } from "@mileniumhq/paperui";
 import { OLLAMA_PROVIDER_ID } from "../core/providers";
 import { UI_ACTION_IDS } from "../contract";
 import { call, errorText, state } from "../lib/state";

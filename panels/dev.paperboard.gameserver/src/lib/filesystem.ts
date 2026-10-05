@@ -1,4 +1,4 @@
-import { fileApi, processApi, system } from "@paperboard-dev/paperapi";
+import { fileApi, processApi, system } from "@mileniumhq/paperapi";
 import { PANEL_ID } from "../service/types";
 import { isWindowsTarget } from "./platform";
 import { isValidEntryName, isListableDirArg, windowsDirArgs } from "../core/dirs";

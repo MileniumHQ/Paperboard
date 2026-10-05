@@ -5,7 +5,7 @@ import {
     PaperProgress,
     PaperTable,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 
 export default function PaperProgressDoc() {
     return (
@@ -23,7 +23,7 @@ export default function PaperProgressDoc() {
                 Omit the value prop to trigger the continuous indeterminate animation.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { PaperProgress, PaperCard, PaperFlex } from "@paperboard-dev/paperui";
+{`import { PaperProgress, PaperCard, PaperFlex } from "@mileniumhq/paperui";
 
 export function Example() {
     return (

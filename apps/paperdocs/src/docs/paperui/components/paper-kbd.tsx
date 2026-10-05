@@ -5,7 +5,7 @@ import {
     PaperKbd,
     PaperTable,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 
 export default function PaperKbdDoc() {
     return (
@@ -22,7 +22,7 @@ export default function PaperKbdDoc() {
                 Pass key names or symbol characters as children to PaperKbd.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { PaperKbd, PaperCard, PaperFlex, PaperText } from "@paperboard-dev/paperui";
+{`import { PaperKbd, PaperCard, PaperFlex, PaperText } from "@mileniumhq/paperui";
 
 export function Example() {
     return (

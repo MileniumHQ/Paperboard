@@ -1,5 +1,5 @@
-import { PaperFlex, PaperProvider } from "@paperboard-dev/paperui";
-import "@paperboard-dev/paperui/style.css";
+import { PaperFlex, PaperProvider } from "@mileniumhq/paperui";
+import "@mileniumhq/paperui/style.css";
 import "../index.css";
 import type { ParentProps } from "solid-js";
 import { Footer } from "../components/Footer";

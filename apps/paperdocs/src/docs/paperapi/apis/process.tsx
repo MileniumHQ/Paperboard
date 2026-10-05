@@ -3,7 +3,7 @@ import {
     PaperFlex,
     PaperTable,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 
 export default function ProcessApiDoc() {
     return (
@@ -17,11 +17,11 @@ export default function ProcessApiDoc() {
 
             <PaperText preset="subheader" id="overview">Overview</PaperText>
             <PaperText preset="body">
-                Import processApi or process from @paperboard-dev/paperapi.
+                Import processApi or process from @mileniumhq/paperapi.
                 Execute one-shot commands using exec or supervise long-lived children using run and start.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { processApi } from "@paperboard-dev/paperapi";
+{`import { processApi } from "@mileniumhq/paperapi";
 
 // Execute a one-shot command
 const { stdout, exitCode } = await processApi.exec("git", ["status", "--short"]);

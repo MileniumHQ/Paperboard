@@ -6,8 +6,8 @@ import {
     PaperButton,
     PaperSelectMenu,
     PaperSelectMenuItem,
-} from "@paperboard-dev/paperui";
-import type { ActionSchema } from "@paperboard-dev/paperapi";
+} from "@mileniumhq/paperui";
+import type { ActionSchema } from "@mileniumhq/paperapi";
 import type { CanvasBlock } from "../lib/tree";
 import { plainTextFromClipboard, sanitizeNumberText } from "../lib/textInput";
 import { parseVariableToken } from "../lib/variableTypes";

@@ -5,7 +5,7 @@ import {
     PaperFlex,
     PaperTable,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 
 const sample = "https://minecraft.wiki/images/Where_are_we_now.ogg";
 
@@ -24,7 +24,7 @@ export default function PaperAudioDoc() {
                 Set <PaperCode>label</PaperCode> to name the player for assistive technology.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { PaperAudio, PaperCard } from "@paperboard-dev/paperui";
+{`import { PaperAudio, PaperCard } from "@mileniumhq/paperui";
 
 export function Example() {
     return (

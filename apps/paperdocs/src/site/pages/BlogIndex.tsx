@@ -4,7 +4,7 @@ import {
     PaperMediaCardGroup,
     PaperPageHeader,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 import { For } from "solid-js";
 import { BLOG_POSTS } from "../blog";
 

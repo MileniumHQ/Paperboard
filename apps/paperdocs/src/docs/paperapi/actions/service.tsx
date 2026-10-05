@@ -3,7 +3,7 @@ import {
     PaperFlex,
     PaperTable,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 
 export default function ServiceApiDoc() {
     return (
@@ -21,7 +21,7 @@ export default function ServiceApiDoc() {
                 Specify initial state, action handlers, and an optional asynchronous onInit hook.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { definePanelService } from "@paperboard-dev/paperapi";
+{`import { definePanelService } from "@mileniumhq/paperapi";
 
 interface ServiceState {
     status: string;

@@ -1,4 +1,4 @@
-import type { PaperConsoleEntry } from "@paperboard-dev/paperui";
+import type { PaperConsoleEntry } from "@mileniumhq/paperui";
 import type { ServerSoftwareType } from "../lib/software";
 import type { ServerStatus as CoreServerStatus, ChatMessage as CoreChatMessage, InstallProgress } from "../core/state";
 import {

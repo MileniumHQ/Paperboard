@@ -6,7 +6,7 @@ import {
     PaperKeyValueList,
     PaperTable,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 
 export default function PaperKeyValueListDoc() {
     return (
@@ -24,7 +24,7 @@ export default function PaperKeyValueListDoc() {
                 Pass term descriptions through the label prop and definitions as children.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { PaperKeyValueList, PaperKeyValue, PaperCard } from "@paperboard-dev/paperui";
+{`import { PaperKeyValueList, PaperKeyValue, PaperCard } from "@mileniumhq/paperui";
 
 export function Example() {
     return (

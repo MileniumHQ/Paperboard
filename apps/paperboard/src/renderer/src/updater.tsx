@@ -1,4 +1,4 @@
-import "@paperboard-dev/paperui/style.css";
+import "@mileniumhq/paperui/style.css";
 import "./shell.css";
 import { render } from "solid-js/web";
 import { createSignal, onMount, onCleanup, Show } from "solid-js";
@@ -8,7 +8,7 @@ import {
     PaperFlex,
     PaperText,
     PaperProgress,
-    PaperButton, getVarCss } from "@paperboard-dev/paperui";
+    PaperButton, getVarCss } from "@mileniumhq/paperui";
 
 function PaperUpdater() {
     const [progress, setProgress] = createSignal<number | null>(null);

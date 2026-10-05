@@ -1,4 +1,4 @@
-import { config, processApi, type ServiceContext } from "@paperboard-dev/paperapi";
+import { config, processApi, type ServiceContext } from "@mileniumhq/paperapi";
 import {
     assertGameruleName,
     assertGameruleValue,

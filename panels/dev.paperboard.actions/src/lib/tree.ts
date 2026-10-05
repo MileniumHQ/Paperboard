@@ -1,4 +1,4 @@
-import type { ActionSchema } from "@paperboard-dev/paperapi";
+import type { ActionSchema } from "@mileniumhq/paperapi";
 
 export interface CanvasBlock {
     id: string;

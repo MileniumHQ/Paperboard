@@ -1,7 +1,7 @@
 // Library category grouping (bun test): panels name categories and can
 // attach an icon and order; without an order, sections sort alphabetically.
 import { describe, test, expect } from "bun:test";
-import type { ActionInfo } from "@paperboard-dev/paperapi";
+import type { ActionInfo } from "@mileniumhq/paperapi";
 import {
     buildLibrarySections,
     UNCATEGORIZED_SECTION,

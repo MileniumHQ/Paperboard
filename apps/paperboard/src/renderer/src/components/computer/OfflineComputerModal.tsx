@@ -1,5 +1,5 @@
 import { type Component, createEffect, createSignal, Show } from "solid-js";
-import { PaperFlex, PaperText, PaperButton, PaperIcon, PaperModal } from "@paperboard-dev/paperui";
+import { PaperFlex, PaperText, PaperButton, PaperIcon, PaperModal } from "@mileniumhq/paperui";
 import type { ComputerItem } from "../../App";
 import { computersApi } from "../../lib/shell";
 

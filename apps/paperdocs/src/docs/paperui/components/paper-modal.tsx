@@ -6,7 +6,7 @@ import {
     PaperModal,
     PaperTable,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 import { createSignal } from "solid-js";
 
 export default function PaperModalDoc() {
@@ -28,7 +28,7 @@ export default function PaperModalDoc() {
             </PaperText>
             <PaperCode block language="tsx">
 {`import { createSignal } from "solid-js";
-import { PaperModal, PaperButton, PaperCard, PaperText } from "@paperboard-dev/paperui";
+import { PaperModal, PaperButton, PaperCard, PaperText } from "@mileniumhq/paperui";
 
 export function Example() {
     const [open, setOpen] = createSignal(false);

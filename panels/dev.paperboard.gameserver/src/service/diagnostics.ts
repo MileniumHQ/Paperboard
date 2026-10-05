@@ -3,7 +3,7 @@ import {
     processApi,
     system,
     type ServiceContext,
-} from "@paperboard-dev/paperapi";
+} from "@mileniumhq/paperapi";
 import { type GameServerState, PANEL_ID } from "./types";
 import {
     checkLogForIssues as coreCheckLogForIssues,

@@ -3,7 +3,7 @@ import {
     PaperFlex,
     PaperTable,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 
 export default function PanelsApiDoc() {
     return (
@@ -17,11 +17,11 @@ export default function PanelsApiDoc() {
 
             <PaperText preset="subheader" id="overview">Overview</PaperText>
             <PaperText preset="body">
-                Import panelsApi or panels from @paperboard-dev/paperapi.
+                Import panelsApi or panels from @mileniumhq/paperapi.
                 Query local panels or merge installed state with the online catalog.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { panelsApi } from "@paperboard-dev/paperapi";
+{`import { panelsApi } from "@mileniumhq/paperapi";
 
 // List all installed panels
 const installedPanels = await panelsApi.list();

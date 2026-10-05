@@ -1,4 +1,4 @@
-import { PaperMarkdown, PaperPageHeader } from "@paperboard-dev/paperui";
+import { PaperMarkdown, PaperPageHeader } from "@mileniumhq/paperui";
 import text from "./downloads.md?raw";
 import styles from "../site.module.css";
 

@@ -6,7 +6,7 @@ import {
     PaperStatTile,
     PaperTable,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 
 export default function PaperStatTileDoc() {
     return (
@@ -24,7 +24,7 @@ export default function PaperStatTileDoc() {
                 Stack tiles in a PaperGrid to build responsive stat panels.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { PaperStatTile, PaperGrid, PaperCard } from "@paperboard-dev/paperui";
+{`import { PaperStatTile, PaperGrid, PaperCard } from "@mileniumhq/paperui";
 
 export function Example() {
     return (

@@ -4,7 +4,7 @@ import {
     PaperSelectMenu,
     PaperSelectMenuItem,
     PaperToggle,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 import { hasKnownMcVersion } from "../lib/capabilities";
 import type { PropertyField } from "../lib/properties";
 

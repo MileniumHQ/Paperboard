@@ -1,5 +1,5 @@
 import { createSignal, createEffect } from "solid-js";
-import { config } from "@paperboard-dev/paperapi";
+import { config } from "@mileniumhq/paperapi";
 import { logToMain, notifyAppSettingsChanged } from "../lib/shell";
 import {
     APP_SETTINGS_DEFAULTS,

@@ -5,7 +5,7 @@ import {
     PaperInput,
     PaperTable,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 
 export default function PaperInputDoc() {
     return (
@@ -24,7 +24,7 @@ export default function PaperInputDoc() {
                 Pass an icon string to show a leading glyph inside the input frame.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { PaperInput, PaperCard, PaperFlex } from "@paperboard-dev/paperui";
+{`import { PaperInput, PaperCard, PaperFlex } from "@mileniumhq/paperui";
 
 export function Example() {
     return (
@@ -125,7 +125,7 @@ export function Example() {
                 Pass rows to control the visible height, and resize to remove the drag handle when the surrounding layout should stay fixed.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { PaperCard, PaperFlex, PaperInput } from "@paperboard-dev/paperui";
+{`import { PaperCard, PaperFlex, PaperInput } from "@mileniumhq/paperui";
 
 export function Example() {
     return (

@@ -1,4 +1,4 @@
-import { PaperText } from "@paperboard-dev/paperui";
+import { PaperText } from "@mileniumhq/paperui";
 import { For } from "solid-js";
 import { withBase } from "../utils/base";
 import { DOCS_LINKS, LEARN_LINKS, SITE_LINKS } from "../site/links";

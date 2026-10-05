@@ -5,8 +5,8 @@ import {
     PaperMenuItem,
     PaperInterfaceGroup,
     PaperInterfaceItem,
-} from "@paperboard-dev/paperui";
-import { config } from "@paperboard-dev/paperapi";
+} from "@mileniumhq/paperui";
+import { config } from "@mileniumhq/paperapi";
 import { PANEL_ID } from "./service/contract";
 import { serverSoftware } from "./lib/server";
 import { hasKnownMcVersion, supports } from "./lib/capabilities";
@@ -22,8 +22,8 @@ import MapView from "./components/Map";
 import Advanced from "./components/Advanced";
 import Logs from "./components/Logs";
 import Versions from "./components/Versions";
-import "@paperboard-dev/paperui/style.css";
-import "@paperboard-dev/paperui/panel.css";
+import "@mileniumhq/paperui/style.css";
+import "@mileniumhq/paperui/panel.css";
 
 export default function App() {
     const [configured, setConfigured] = createSignal<boolean | null>(null);

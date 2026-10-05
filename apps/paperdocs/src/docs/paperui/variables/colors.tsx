@@ -4,7 +4,7 @@ import {
     PaperSwatch,
     PaperTable,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 
 export default function ColorsDoc() {
     return (

@@ -17,7 +17,7 @@ import {
     PaperText,
     getVarCss,
     getVar,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 import {
     listMapRegions,
     renderMapTile,

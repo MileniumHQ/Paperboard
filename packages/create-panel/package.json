@@ -1,8 +1,8 @@
 {
-    "name": "@paperboard-dev/create-panel",
+    "name": "@mileniumhq/create-panel",
     "version": "0.1.0",
     "type": "module",
-    "description": "Scaffold a Paperboard panel: npm create @paperboard-dev/panel",
+    "description": "Scaffold a Paperboard panel: npm create @mileniumhq/panel",
     "bin": {
         "create-panel": "./dist/cli.js"
     },

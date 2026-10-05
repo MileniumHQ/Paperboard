@@ -3,7 +3,7 @@
 // download the registry archive, not pretend to install.
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
-import { PaperProvider } from "@paperboard-dev/paperui";
+import { PaperProvider } from "@mileniumhq/paperui";
 import PanelLibraryApp from "../src/App";
 import { createLibraryBridge, type BridgeHost } from "../src/bridge";
 

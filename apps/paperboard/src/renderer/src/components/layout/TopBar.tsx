@@ -1,5 +1,5 @@
 import { type Component, createSignal, onMount, onCleanup, Show } from "solid-js";
-import { PaperText, PaperButton, PaperIcon, getVarCss } from "@paperboard-dev/paperui";
+import { PaperText, PaperButton, PaperIcon, getVarCss } from "@mileniumhq/paperui";
 import { shellApi, logToMain, isBrowserShell } from "../../lib/shell";
 import { versionLabel as formatVersionLabel } from "../../lib/versionLabel";
 import type { AppUpdateState } from "../../../../shared/appUpdate";

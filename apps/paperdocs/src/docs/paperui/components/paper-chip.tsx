@@ -5,7 +5,7 @@ import {
     PaperFlex,
     PaperTable,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 
 export default function PaperChipDoc() {
     return (
@@ -23,7 +23,7 @@ export default function PaperChipDoc() {
                 An optional count renders as a trailing figure, and an optional icon leads the label.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { PaperChip, PaperCard, PaperFlex } from "@paperboard-dev/paperui";
+{`import { PaperChip, PaperCard, PaperFlex } from "@mileniumhq/paperui";
 
 export function Example() {
     return (

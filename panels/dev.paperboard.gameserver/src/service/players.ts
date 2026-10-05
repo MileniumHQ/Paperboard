@@ -1,4 +1,4 @@
-import { processApi, type ServiceContext } from "@paperboard-dev/paperapi";
+import { processApi, type ServiceContext } from "@mileniumhq/paperapi";
 import {
     type GameServerState,
     type PlayerStatData,

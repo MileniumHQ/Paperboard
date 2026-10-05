@@ -5,7 +5,7 @@ import {
     PaperFlex,
     PaperTable,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 
 export default function PaperFlexDoc() {
     return (
@@ -23,7 +23,7 @@ export default function PaperFlexDoc() {
                 Use the gap and padding props with standard spacing tokens.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { PaperFlex, PaperButton, PaperCard } from "@paperboard-dev/paperui";
+{`import { PaperFlex, PaperButton, PaperCard } from "@mileniumhq/paperui";
 
 export function Example() {
     return (

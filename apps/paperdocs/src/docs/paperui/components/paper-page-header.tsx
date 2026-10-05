@@ -6,7 +6,7 @@ import {
     PaperPageHeader,
     PaperTable,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 
 export default function PaperPageHeaderDoc() {
     return (
@@ -24,7 +24,7 @@ export default function PaperPageHeaderDoc() {
                 Supply action buttons inside the children slot.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { PaperPageHeader, PaperButton, PaperCard } from "@paperboard-dev/paperui";
+{`import { PaperPageHeader, PaperButton, PaperCard } from "@mileniumhq/paperui";
 
 export function Example() {
     return (

@@ -16,7 +16,7 @@ import {
     PaperButton,
     PaperIcon,
     getVarCss,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 import {
     chatMessages,
     sendChatMessage,

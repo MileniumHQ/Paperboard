@@ -7,7 +7,7 @@ import {
     PaperSelectMenu,
     PaperSelectMenuItem,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 import { createSignal, For, Show } from "solid-js";
 import {
     buildMailto,

@@ -1,8 +1,8 @@
 import { onMount, onCleanup, createEffect, on } from "solid-js";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
-import { getVar, getVarCss } from "@paperboard-dev/paperui";
-import { terminalApi, actions as actionsApi } from "@paperboard-dev/paperapi";
+import { getVar, getVarCss } from "@mileniumhq/paperui";
+import { terminalApi, actions as actionsApi } from "@mileniumhq/paperapi";
 import "@xterm/xterm/css/xterm.css";
 
 const TERMINAL_PANEL_ID = "dev.paperboard.terminal";

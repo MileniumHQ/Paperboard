@@ -11,7 +11,7 @@ import {
 } from "../src/service/lifecycle";
 import { TRIGGER_IDS } from "../src/service/contract";
 import type { GameServerState } from "../src/service/types";
-import type { ServiceContext } from "@paperboard-dev/paperapi";
+import type { ServiceContext } from "@mileniumhq/paperapi";
 
 function makeCtx(overrides: Partial<GameServerState> = {}) {
     const state: GameServerState = {

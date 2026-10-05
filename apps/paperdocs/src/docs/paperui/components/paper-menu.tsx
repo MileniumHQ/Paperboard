@@ -7,7 +7,7 @@ import {
     PaperMenuSection,
     PaperTable,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 
 export default function PaperMenuDoc() {
     return (
@@ -25,7 +25,7 @@ export default function PaperMenuDoc() {
                 Track active selections via value and onValueChange props.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { PaperMenu, PaperMenuSection, PaperMenuItem, PaperCard } from "@paperboard-dev/paperui";
+{`import { PaperMenu, PaperMenuSection, PaperMenuItem, PaperCard } from "@mileniumhq/paperui";
 
 export function Example() {
     return (

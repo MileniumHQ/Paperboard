@@ -3,7 +3,7 @@ import {
     PaperFlex,
     PaperTable,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 
 export default function SystemApiDoc() {
     return (
@@ -17,11 +17,11 @@ export default function SystemApiDoc() {
 
             <PaperText preset="subheader" id="overview">Overview</PaperText>
             <PaperText preset="body">
-                Import systemApi or system from @paperboard-dev/paperapi.
+                Import systemApi or system from @mileniumhq/paperapi.
                 Query system details or trigger desktop alerts with straightforward async calls.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { systemApi } from "@paperboard-dev/paperapi";
+{`import { systemApi } from "@mileniumhq/paperapi";
 
 // Retrieve host system information
 const info = await systemApi.getInfo();

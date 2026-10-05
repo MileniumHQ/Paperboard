@@ -2,7 +2,7 @@ import {
     files as fileApi,
     config,
     type ServiceContext,
-} from "@paperboard-dev/paperapi";
+} from "@mileniumhq/paperapi";
 import { sanitizeFileName, tryListDirectory, listDirectory } from "../lib/filesystem";
 import {
     INSTALL_RECORDS_KEY,

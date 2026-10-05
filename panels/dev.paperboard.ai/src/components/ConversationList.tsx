@@ -9,7 +9,7 @@ import {
     PaperModal,
     PaperText,
     useContextMenuState,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 import type { ConversationSummary } from "../core/types";
 import { state } from "../lib/state";
 import styles from "./ConversationList.module.css";

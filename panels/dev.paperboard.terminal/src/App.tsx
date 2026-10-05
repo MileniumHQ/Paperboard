@@ -13,13 +13,13 @@ import {
     useContextMenuState,
     PaperContextMenu,
     PaperContextMenuItem,
-} from "@paperboard-dev/paperui";
-import "@paperboard-dev/paperui/style.css";
-import "@paperboard-dev/paperui/panel.css";
+} from "@mileniumhq/paperui";
+import "@mileniumhq/paperui/style.css";
+import "@mileniumhq/paperui/panel.css";
 import "@xterm/xterm/css/xterm.css";
 import "./style.css";
 import TerminalComponent, { copySelection, pasteClipboard } from "./Terminal";
-import { actions as actionsApi } from "@paperboard-dev/paperapi";
+import { actions as actionsApi } from "@mileniumhq/paperapi";
 import { onMount } from "solid-js";
 
 const TERMINAL_PANEL_ID = "dev.paperboard.terminal";

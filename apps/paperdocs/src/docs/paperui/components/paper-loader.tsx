@@ -5,7 +5,7 @@ import {
     PaperLoader,
     PaperTable,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 
 export default function PaperLoaderDoc() {
     return (
@@ -23,7 +23,7 @@ export default function PaperLoaderDoc() {
                 Provide an optional label to explain the current background task.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { PaperLoader, PaperCard, PaperFlex } from "@paperboard-dev/paperui";
+{`import { PaperLoader, PaperCard, PaperFlex } from "@mileniumhq/paperui";
 
 export function Example() {
     return (

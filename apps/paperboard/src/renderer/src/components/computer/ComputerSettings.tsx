@@ -8,7 +8,7 @@ import {
     PaperModal,
     PaperPage,
     PaperPageHeader,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 import type { ComputerItem } from "../../App";
 import { formatOsVersion } from "./ComputerHeader";
 

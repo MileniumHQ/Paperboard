@@ -1,5 +1,5 @@
 import { createSignal } from "solid-js";
-import { PaperIcon, PaperButton, PaperText } from "@paperboard-dev/paperui";
+import { PaperIcon, PaperButton, PaperText } from "@mileniumhq/paperui";
 
 export interface CanvasNote {
     id: string;

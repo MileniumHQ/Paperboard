@@ -5,7 +5,7 @@ import {
     PaperTable,
     PaperText,
     PaperTextList,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 
 export default function PaperTextListDoc() {
     return (
@@ -23,7 +23,7 @@ export default function PaperTextListDoc() {
                 Set ordered to true to render numbered items.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { PaperTextList, PaperCard } from "@paperboard-dev/paperui";
+{`import { PaperTextList, PaperCard } from "@mileniumhq/paperui";
 
 export function Example() {
     return (

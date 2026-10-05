@@ -11,7 +11,7 @@
         "test": "vitest run"
     },
     "dependencies": {
-        "@paperboard-dev/paperui": "workspace:*",
+        "@mileniumhq/paperui": "workspace:*",
         "solid-js": "^1.9.15"
     },
     "devDependencies": {

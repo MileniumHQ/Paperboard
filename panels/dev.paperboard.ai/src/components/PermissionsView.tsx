@@ -1,5 +1,5 @@
 import { createSignal, For, onMount, Show } from "solid-js";
-import { PaperButton, PaperCard, PaperEmptyState, PaperModal, PaperText } from "@paperboard-dev/paperui";
+import { PaperButton, PaperCard, PaperEmptyState, PaperModal, PaperText } from "@mileniumhq/paperui";
 import { UI_ACTION_IDS } from "../contract";
 import { actionLabel, loadPanelInfo, panelIcon, panelName } from "../lib/panels";
 import { call, errorText, state } from "../lib/state";

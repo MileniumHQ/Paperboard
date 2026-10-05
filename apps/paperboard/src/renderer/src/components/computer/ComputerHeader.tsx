@@ -5,7 +5,7 @@ import {
     PaperText,
     PaperFlex,
     getVarCss,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 import libraryIcon from "../../assets/PanelLibrary.png";
 import type { ComputerItem } from "../../App";
 

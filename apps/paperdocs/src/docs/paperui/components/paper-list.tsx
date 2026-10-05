@@ -6,7 +6,7 @@ import {
     PaperListItem,
     PaperTable,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 
 export default function PaperListDoc() {
     return (
@@ -24,7 +24,7 @@ export default function PaperListDoc() {
                 Track the selected item through value and onValueChange props.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { PaperList, PaperListItem, PaperCard } from "@paperboard-dev/paperui";
+{`import { PaperList, PaperListItem, PaperCard } from "@mileniumhq/paperui";
 
 export function Example() {
     return (

@@ -30,8 +30,8 @@ describe("scaffoldPanel", () => {
 
         const pkg = readJson(join(targetDir, "package.json"));
         expect(pkg.name).toBe("dev.paperboard.my-panel");
-        expect(pkg.dependencies["@paperboard-dev/paperapi"]).toBe(`^${paperapiPackage.version}`);
-        expect(pkg.dependencies["@paperboard-dev/paperui"]).toBe(`^${paperuiPackage.version}`);
+        expect(pkg.dependencies["@mileniumhq/paperapi"]).toBe(`^${paperapiPackage.version}`);
+        expect(pkg.dependencies["@mileniumhq/paperui"]).toBe(`^${paperuiPackage.version}`);
         expect(pkg.license).toBe("UNLICENSED");
 
         const manifest = readJson(join(targetDir, "manifest.json"));
@@ -55,8 +55,8 @@ describe("scaffoldPanel", () => {
     it("writes a workspace panel wired to workspace:* as first-party", () => {
         const { targetDir } = scaffoldPanel({ mode: "workspace", id: "dev.paperboard.my-panel", parentDir });
         const pkg = readJson(join(targetDir, "package.json"));
-        expect(pkg.dependencies["@paperboard-dev/paperapi"]).toBe("workspace:*");
-        expect(pkg.dependencies["@paperboard-dev/paperui"]).toBe("workspace:*");
+        expect(pkg.dependencies["@mileniumhq/paperapi"]).toBe("workspace:*");
+        expect(pkg.dependencies["@mileniumhq/paperui"]).toBe("workspace:*");
         expect(pkg.license).toBe("PolyForm-Noncommercial-1.0.0");
         expect(readJson(join(targetDir, "manifest.json")).publisher).toBe("Paperboard");
         expect(readJson(join(targetDir, "manifest.json")).name).toBe("My Panel");

@@ -35,7 +35,7 @@ import {
     secretsApi,
     actionsApi,
     type ServiceContext,
-} from "@paperboard-dev/paperapi";
+} from "@mileniumhq/paperapi";
 import { randomUUID } from "node:crypto";
 import {
     extractApplicationIdFromToken,

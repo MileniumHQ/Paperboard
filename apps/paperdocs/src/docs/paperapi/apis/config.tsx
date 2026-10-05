@@ -3,7 +3,7 @@ import {
     PaperFlex,
     PaperTable,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 
 export default function ConfigApiDoc() {
     return (
@@ -17,11 +17,11 @@ export default function ConfigApiDoc() {
 
             <PaperText preset="subheader" id="overview">Overview</PaperText>
             <PaperText preset="body">
-                Import configApi or config from @paperboard-dev/paperapi.
+                Import configApi or config from @mileniumhq/paperapi.
                 Call get and set to retrieve and store JSON data.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { configApi } from "@paperboard-dev/paperapi";
+{`import { configApi } from "@mileniumhq/paperapi";
 
 interface UserPreferences {
     theme: string;

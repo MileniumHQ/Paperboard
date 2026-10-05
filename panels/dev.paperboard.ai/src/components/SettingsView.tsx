@@ -9,7 +9,7 @@ import {
     PaperSettingList,
     PaperText,
     PaperToggle,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 import { UI_ACTION_IDS } from "../contract";
 import { PROMPT_STYLE_DESCRIPTIONS, PROMPT_STYLE_LABELS, PROMPT_STYLES } from "../core/conversation";
 import { call, errorText, state } from "../lib/state";

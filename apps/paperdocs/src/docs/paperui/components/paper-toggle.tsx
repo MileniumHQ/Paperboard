@@ -5,7 +5,7 @@ import {
     PaperTable,
     PaperText,
     PaperToggle,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 
 export default function PaperToggleDoc() {
     return (
@@ -23,7 +23,7 @@ export default function PaperToggleDoc() {
                 Listen to user interactions through the onChange callback.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { PaperToggle, PaperCard, PaperFlex, PaperText } from "@paperboard-dev/paperui";
+{`import { PaperToggle, PaperCard, PaperFlex, PaperText } from "@mileniumhq/paperui";
 
 export function Example() {
     return (

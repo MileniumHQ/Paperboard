@@ -6,7 +6,7 @@ import {
     PaperMediaCardGroup,
     PaperSeparator,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 import { For, Show } from "solid-js";
 import { metaSections, sectionKeys } from "../utils/routeUtils";
 import { docsPath, withBase } from "../utils/base";

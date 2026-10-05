@@ -14,7 +14,7 @@ import {
     PaperIcon,
     PaperMarkdown,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 import type { PanelItem } from "../../../../packages/paperapi/src/panelMerge";
 import type { StoreRow, StoreScreenshot } from "../../../../packages/paperapi/src/storeListing";
 import type { LibraryMode } from "./bridge";

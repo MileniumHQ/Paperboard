@@ -7,7 +7,7 @@ import {
     PaperInterfaceItem,
     PaperTable,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 import { createSignal } from "solid-js";
 
 export default function PaperInterfaceGroupDoc() {
@@ -36,7 +36,7 @@ import {
     PaperCard,
     PaperFlex,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 
 export function Example() {
     const [tab, setTab] = createSignal("first");

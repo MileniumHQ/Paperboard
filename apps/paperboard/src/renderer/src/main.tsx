@@ -1,9 +1,9 @@
-import "@paperboard-dev/paperui/style.css";
+import "@mileniumhq/paperui/style.css";
 import "./shell.css";
 
 import { render } from "solid-js/web";
 import App from "./App";
-import { configureHostConnection, initPaperApi } from "@paperboard-dev/paperapi";
+import { configureHostConnection, initPaperApi } from "@mileniumhq/paperapi";
 import { shellIpc } from "./lib/shell";
 
 async function startShell() {

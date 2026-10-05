@@ -5,7 +5,7 @@ import {
     PaperFlex,
     PaperTable,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 
 export default function PaperCopyButtonDoc() {
     return (
@@ -23,14 +23,14 @@ export default function PaperCopyButtonDoc() {
                 Provide an optional label to display text alongside the icon.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { PaperCopyButton, PaperCard, PaperFlex } from "@paperboard-dev/paperui";
+{`import { PaperCopyButton, PaperCard, PaperFlex } from "@mileniumhq/paperui";
 
 export function Example() {
     return (
         <PaperCard padding="double" surface="front">
             <PaperFlex direction="row" gap="full" align="center">
                 <PaperCopyButton text="https://paperboard.dev" />
-                <PaperCopyButton text="npm install @paperboard-dev/paperui" label="Copy command" />
+                <PaperCopyButton text="npm install @mileniumhq/paperui" label="Copy command" />
             </PaperFlex>
         </PaperCard>
     );
@@ -40,7 +40,7 @@ export function Example() {
             <PaperCard padding="double" surface="front">
                 <PaperFlex direction="row" gap="full" align="center">
                     <PaperCopyButton text="https://paperboard.dev" />
-                    <PaperCopyButton text="npm install @paperboard-dev/paperui" label="Copy command" />
+                    <PaperCopyButton text="npm install @mileniumhq/paperui" label="Copy command" />
                 </PaperFlex>
             </PaperCard>
 

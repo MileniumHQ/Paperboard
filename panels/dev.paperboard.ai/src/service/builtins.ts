@@ -3,7 +3,7 @@
 // so the child is owned, time-limited and output-capped.
 
 import os from "node:os";
-import { processApi } from "@paperboard-dev/paperapi";
+import { processApi } from "@mileniumhq/paperapi";
 import {
     parseDuckDuckGoResults,
     SearchUnavailableError,

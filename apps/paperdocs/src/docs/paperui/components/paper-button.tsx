@@ -7,7 +7,7 @@ import {
     PaperIcon,
     PaperTable,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 
 export default function PaperButtonDoc() {
     return (
@@ -25,7 +25,7 @@ export default function PaperButtonDoc() {
                 Pass variant and size props to adapt visual weight.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { PaperButton, PaperCard, PaperFlex } from "@paperboard-dev/paperui";
+{`import { PaperButton, PaperCard, PaperFlex } from "@mileniumhq/paperui";
 
 export function Example() {
     return (
@@ -110,7 +110,7 @@ export function Example() {
                 PaperEffect coordinates hover lift and active press depression matching the button color role.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { PaperButton, PaperEffect, PaperCard, PaperFlex } from "@paperboard-dev/paperui";
+{`import { PaperButton, PaperEffect, PaperCard, PaperFlex } from "@mileniumhq/paperui";
 
 export function EffectExample() {
     return (

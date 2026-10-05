@@ -3,7 +3,7 @@ import {
     PaperFlex,
     PaperTable,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 
 export default function FileApiDoc() {
     return (
@@ -17,11 +17,11 @@ export default function FileApiDoc() {
 
             <PaperText preset="subheader" id="overview">Overview</PaperText>
             <PaperText preset="body">
-                Import fileApi or files from @paperboard-dev/paperapi.
+                Import fileApi or files from @mileniumhq/paperapi.
                 Call file operations with paths relative to the panel storage root.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { fileApi } from "@paperboard-dev/paperapi";
+{`import { fileApi } from "@mileniumhq/paperapi";
 
 const PANEL_ID = "dev.example.panel";
 

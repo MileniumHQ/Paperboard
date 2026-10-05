@@ -1,6 +1,6 @@
 import { type Component, createSignal, Show } from "solid-js";
 import { createReducedMotion } from "../../utils/reducedMotion";
-import { PaperFlex, PaperText, PaperButton, PaperIcon, getVarCss } from "@paperboard-dev/paperui";
+import { PaperFlex, PaperText, PaperButton, PaperIcon, getVarCss } from "@mileniumhq/paperui";
 import type { ComputerItem } from "../../App";
 import { computersApi, logToMain } from "../../lib/shell";
 

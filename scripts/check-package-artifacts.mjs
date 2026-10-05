@@ -43,27 +43,27 @@ try {
     fs.writeFileSync(path.join(tmp, "package.json"), JSON.stringify({ private: true, type: "module", dependencies, scripts: { build: "vite build" } }));
     fs.writeFileSync(path.join(tmp, "index.html"), '<div id="root"></div><script type="module" src="/main.tsx"></script>');
     fs.writeFileSync(path.join(tmp, "main.tsx"), `import { render } from "solid-js/web";
-import { PaperProvider, PaperButton } from "@paperboard-dev/paperui";
-import { config } from "@paperboard-dev/paperapi";
-import "@paperboard-dev/paperui/style.css";
+import { PaperProvider, PaperButton } from "@mileniumhq/paperui";
+import { config } from "@mileniumhq/paperapi";
+import "@mileniumhq/paperui/style.css";
 if (!config.get) throw new Error("SDK export missing");
 render(() => <PaperProvider><PaperButton>Consumer</PaperButton></PaperProvider>, document.getElementById("root")!);`);
     fs.writeFileSync(path.join(tmp, "vite.config.mjs"), 'import solid from "vite-plugin-solid"; export default { plugins: [solid()] };');
     run("bun", ["install", "--ignore-scripts"]);
-    run("node", ["--input-type=module", "-e", 'import { config } from "@paperboard-dev/paperapi"; if (typeof config.get !== "function") process.exit(1)']);
-    run("node", ["-e", 'const { config } = require("@paperboard-dev/paperapi"); if (typeof config.get !== "function") process.exit(1)']);
+    run("node", ["--input-type=module", "-e", 'import { config } from "@mileniumhq/paperapi"; if (typeof config.get !== "function") process.exit(1)']);
+    run("node", ["-e", 'const { config } = require("@mileniumhq/paperapi"); if (typeof config.get !== "function") process.exit(1)']);
     run("bun", ["run", "build"]);
 
-    // npm create @paperboard-dev/panel runs the packed bin under Node in the
+    // npm create @mileniumhq/panel runs the packed bin under Node in the
     // user's directory; the scaffolded panel must install, test, build and
     // link on its own. Its ^x.y.z library ranges point at the packed
     // tarballs here, since this check must not depend on the npm registry.
     const projects = path.join(tmp, "projects");
     fs.mkdirSync(projects);
-    run("node", [path.join(tmp, "node_modules", "@paperboard-dev", "create-panel", "dist", "cli.js"), "dev.paperboard.my-panel", "My Panel"], projects);
+    run("node", [path.join(tmp, "node_modules", "@mileniumhq", "create-panel", "dist", "cli.js"), "dev.paperboard.my-panel", "My Panel"], projects);
     const panel = path.join(projects, "dev.paperboard.my-panel");
     const panelPkg = JSON.parse(fs.readFileSync(path.join(panel, "package.json"), "utf8"));
-    for (const name of ["@paperboard-dev/paperapi", "@paperboard-dev/paperui"]) {
+    for (const name of ["@mileniumhq/paperapi", "@mileniumhq/paperui"]) {
         if (!/^\^\d/.test(panelPkg.dependencies[name])) throw new Error(`scaffolded ${name} is not a published range: ${panelPkg.dependencies[name]}`);
         panelPkg.dependencies[name] = `file:${tarballs[name]}`;
     }

@@ -7,8 +7,8 @@ import {
     PaperText,
     PaperIcon,
     PaperQuote,
-} from "@paperboard-dev/paperui";
-import { files as fileApi } from "@paperboard-dev/paperapi";
+} from "@mileniumhq/paperui";
+import { files as fileApi } from "@mileniumhq/paperapi";
 import { activeIssue, clearActiveIssue, killConflictingProcess, resetWorldFiles } from "../lib/diagnostics";
 import { serverPort, startServer } from "../lib/server";
 

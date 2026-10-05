@@ -2,7 +2,7 @@ import {
     PaperMenu,
     PaperMenuItem,
     PaperMenuSection,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 import { For, Show } from "solid-js";
 import { subsectionsFor } from "../utils/routeUtils";
 import { docsPath } from "../utils/base";

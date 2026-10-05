@@ -4,7 +4,7 @@ import {
     PaperFlex,
     PaperProgress,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 
 export interface LoadingOverlayProps {
     /** Accessible name for the bar; never rendered as visible text. */

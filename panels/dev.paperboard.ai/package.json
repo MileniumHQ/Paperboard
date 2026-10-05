@@ -5,14 +5,14 @@
     "type": "module",
     "scripts": {
         "dev": "vite",
-        "build": "tsc && vite build && bun build ./src/service.ts --outfile ./dist/service.js --target=node --external @paperboard-dev/paperui",
+        "build": "tsc && vite build && bun build ./src/service.ts --outfile ./dist/service.js --target=node --external @mileniumhq/paperui",
         "pack": "bunx paperapi pack",
         "preview": "vite preview",
         "test": "bun test"
     },
     "dependencies": {
-        "@paperboard-dev/paperapi": "workspace:*",
-        "@paperboard-dev/paperui": "workspace:*",
+        "@mileniumhq/paperapi": "workspace:*",
+        "@mileniumhq/paperui": "workspace:*",
         "solid-js": "^1.9.15"
     },
     "devDependencies": {

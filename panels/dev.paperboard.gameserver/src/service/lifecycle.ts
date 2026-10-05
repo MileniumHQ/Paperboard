@@ -5,7 +5,7 @@ import {
     config,
     system,
     type ServiceContext,
-} from "@paperboard-dev/paperapi";
+} from "@mileniumhq/paperapi";
 import stripAnsi from "strip-ansi";
 import { getRequiredJavaVersion, SOFTWARE_NAMES } from "../lib/software";
 import { isWindowsTarget } from "../lib/platform";

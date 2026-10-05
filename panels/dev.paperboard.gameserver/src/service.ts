@@ -1,4 +1,4 @@
-import { definePanelService, processApi } from "@paperboard-dev/paperapi";
+import { definePanelService, processApi } from "@mileniumhq/paperapi";
 import { SERVER_PROC_ID, type GameServerState } from "./service/types";
 import { loadConfigAndProperties } from "./service/config";
 import { handleProcessData, handleProcessExit } from "./service/lifecycle";

@@ -3,7 +3,7 @@ import {
     files as fileApi,
     system,
     type ServiceContext,
-} from "@paperboard-dev/paperapi";
+} from "@mileniumhq/paperapi";
 import { parseProperties, extractServerPort, cleanMotdValue } from "../core/properties";
 import type { GameServerState } from "./types";
 import { PANEL_ID } from "./types";

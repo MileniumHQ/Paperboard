@@ -4,7 +4,7 @@ import {
     PaperFlex,
     PaperTable,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 
 export default function PaperCardDoc() {
     return (
@@ -22,7 +22,7 @@ export default function PaperCardDoc() {
                 Adjust internal spacing using the padding and gap props.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { PaperCard, PaperText } from "@paperboard-dev/paperui";
+{`import { PaperCard, PaperText } from "@mileniumhq/paperui";
 
 export function Example() {
     return (

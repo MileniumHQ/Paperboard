@@ -6,7 +6,7 @@ import {
     PaperSeparator,
     PaperTable,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 
 export default function PaperSeparatorDoc() {
     return (
@@ -24,7 +24,7 @@ export default function PaperSeparatorDoc() {
                 Set vertical to true when partitioning horizontal rows.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { PaperSeparator, PaperButton, PaperCard, PaperFlex, PaperText } from "@paperboard-dev/paperui";
+{`import { PaperSeparator, PaperButton, PaperCard, PaperFlex, PaperText } from "@mileniumhq/paperui";
 
 export function Example() {
     return (

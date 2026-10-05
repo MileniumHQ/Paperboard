@@ -4,7 +4,7 @@
 
 import { createSignal } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
-import { actionsApi, createPanelBridge } from "@paperboard-dev/paperapi";
+import { actionsApi, createPanelBridge } from "@mileniumhq/paperapi";
 import { EVENTS, PANEL_ID, UI_ACTION_IDS } from "../contract";
 import { initialState, type AiState, type ChatMessage, type Conversation } from "../core/types";
 

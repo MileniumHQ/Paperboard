@@ -7,7 +7,7 @@ import { WebSocket, WebSocketServer } from "ws";
 import { PaperCraneEngine } from "../papercrane/engine";
 import { PaperCraneAuth } from "../papercrane/auth";
 import { setupWebSocketServer } from "../papercrane/ws";
-import { initPaperApi, closeTransport, actionsApi, getTransport } from "@paperboard-dev/paperapi";
+import { initPaperApi, closeTransport, actionsApi, getTransport } from "@mileniumhq/paperapi";
 
 test("two flows sharing one event each execute once through the real SDK and authenticated daemon", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "flow-wire-"));

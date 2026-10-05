@@ -5,7 +5,7 @@ import {
     PaperSplit,
     PaperTable,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 
 export default function PaperSplitDoc() {
     return (
@@ -23,7 +23,7 @@ export default function PaperSplitDoc() {
                 At wide sizes the panes sit side by side; below the collapse width the side fills the space and the detail presents as a modal.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { PaperSplit, PaperCard, PaperText } from "@paperboard-dev/paperui";
+{`import { PaperSplit, PaperCard, PaperText } from "@mileniumhq/paperui";
 
 export function Example() {
     return (

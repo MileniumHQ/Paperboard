@@ -13,7 +13,7 @@ import {
     PaperSelectMenu,
     PaperSelectMenuItem,
     getVarCss,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 import {
     listLogFiles,
     readLogFile,

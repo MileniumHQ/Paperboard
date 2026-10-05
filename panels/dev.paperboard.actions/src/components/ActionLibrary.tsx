@@ -17,7 +17,7 @@ import {
     PaperInput,
     PaperButton,
     PaperIcon,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 import {
     actions as actionsApi,
     panels as panelsApi,
@@ -25,7 +25,7 @@ import {
     type ActionInfo,
     type PanelItem,
     type ActionSchema,
-} from "@paperboard-dev/paperapi";
+} from "@mileniumhq/paperapi";
 import { createStore } from "solid-js/store";
 import ActionBlock from "./ActionBlock";
 import { BUILTIN_CATEGORIES, type BuiltinCategory } from "../lib/builtins";
@@ -37,7 +37,7 @@ import {
     buildTriggerSchema,
     createFunctionId,
 } from "../lib/functions";
-import { PaperModal, PaperSelectMenu, PaperSelectMenuItem } from "@paperboard-dev/paperui";
+import { PaperModal, PaperSelectMenu, PaperSelectMenuItem } from "@mileniumhq/paperui";
 import { ACTIONS_PANEL_ID } from "../panelId";
 import {
     buildLibrarySections,

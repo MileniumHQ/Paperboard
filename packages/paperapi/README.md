@@ -16,7 +16,7 @@ the deprecated fallbacks listed below.
 ## Install
 
 ```sh
-bun add @paperboard-dev/paperapi
+bun add @mileniumhq/paperapi
 ```
 
 ## Quickstart — panel UI
@@ -26,7 +26,7 @@ into the iframe at serve time (`__PAPERBOARD_CRANE`). The SDK reads them for
 you; there is no token parsing in your code.
 
 ```ts
-import { initPaperApi, getPanelId, terminalApi, configApi } from "@paperboard-dev/paperapi";
+import { initPaperApi, getPanelId, terminalApi, configApi } from "@mileniumhq/paperapi";
 
 await initPaperApi(); // connects to the daemon for this panel's scope
 
@@ -42,7 +42,7 @@ await configApi.set({ theme: "dark" }); // keyed to this panel's id
 State sync between a panel's UI and its service uses the bridge:
 
 ```ts
-import { createPanelBridge } from "@paperboard-dev/paperapi";
+import { createPanelBridge } from "@mileniumhq/paperapi";
 
 const bridge = createPanelBridge({ defaultState: { count: 0 } });
 bridge.onStateChange((patch, full) => render(full));
@@ -61,8 +61,8 @@ host at `$~/.paperboard/local/crane.json`) holding the local daemon's port
 and token. The SDK reads it; you never touch tokens.
 
 ```ts
-import { definePanelService } from "@paperboard-dev/paperapi";
-import { defineAction, defineTrigger } from "@paperboard-dev/paperapi";
+import { definePanelService } from "@mileniumhq/paperapi";
+import { defineAction, defineTrigger } from "@mileniumhq/paperapi";
 
 definePanelService({
     // optional here; defaults to PAPERBOARD_PANEL_ID resolved by the runtime
@@ -107,7 +107,7 @@ Bot tokens and API keys never go in panel config files. They live in the
 daemon's secret vault, addressed always by an explicit `panelId`:
 
 ```ts
-import { secretsApi } from "@paperboard-dev/paperapi";
+import { secretsApi } from "@mileniumhq/paperapi";
 
 await secretsApi.set("BOT_TOKEN", token, "dev.example.bot");
 const { found, value } = await secretsApi.get("BOT_TOKEN", "dev.example.bot");
@@ -124,7 +124,7 @@ clear identity error when this panel's id cannot be resolved, rather than
 silently subscribing to nothing.
 
 ```ts
-import { actionsApi } from "@paperboard-dev/paperapi";
+import { actionsApi } from "@mileniumhq/paperapi";
 
 // register for this panel (identity must be resolvable)
 await actionsApi.register("reset", () => ({ ok: true }));

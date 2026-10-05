@@ -6,7 +6,7 @@ import {
     PaperFlex,
     PaperTable,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 
 export default function PaperEffectDoc() {
     return (
@@ -24,7 +24,7 @@ export default function PaperEffectDoc() {
                 Pass a semantic role variant to color the offset shadow, or pass colorless for a border-toned shadow.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { PaperEffect, PaperButton, PaperCard, PaperFlex } from "@paperboard-dev/paperui";
+{`import { PaperEffect, PaperButton, PaperCard, PaperFlex } from "@mileniumhq/paperui";
 
 export function Example() {
     return (

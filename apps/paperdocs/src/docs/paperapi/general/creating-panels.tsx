@@ -5,7 +5,7 @@ import {
     PaperQuote,
     PaperTable,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 
 export default function CreatingPanelsDoc() {
     return (
@@ -24,7 +24,7 @@ export default function CreatingPanelsDoc() {
                 The panel is written to a folder named after its identifier, and it builds and tests with Bun.
             </PaperText>
             <PaperCode block language="bash">
-{`npm create @paperboard-dev/panel dev.paperboard.my-panel "My Panel"`}
+{`npm create @mileniumhq/panel dev.paperboard.my-panel "My Panel"`}
             </PaperCode>
             <PaperText preset="body">
                 If developing directly inside the Paperboard source repository, invoke the local script:
@@ -164,7 +164,7 @@ export default function CreatingPanelsDoc() {
                 Use the PaperAPI CLI to create a development link:
             </PaperText>
             <PaperCode block language="bash">
-{`npx @paperboard-dev/paperapi link`}
+{`npx @mileniumhq/paperapi link`}
             </PaperCode>
             <PaperText preset="body">
                 You can also create the symbolic link manually using standard shell utilities:
@@ -180,7 +180,7 @@ export default function CreatingPanelsDoc() {
                 To remove a link when development finishes, run:
             </PaperText>
             <PaperCode block language="bash">
-{`npx @paperboard-dev/paperapi unlink dev.paperboard.my-panel`}
+{`npx @mileniumhq/paperapi unlink dev.paperboard.my-panel`}
             </PaperCode>
 
             <PaperText preset="subheader" id="panel-review">Panel review and submission</PaperText>

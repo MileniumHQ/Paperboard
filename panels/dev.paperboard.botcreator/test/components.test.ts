@@ -11,7 +11,7 @@ import {
 } from "../src/discordOps";
 import { staticTriggers, actions } from "../src/service";
 import { INPUTS } from "../src/discordOps";
-import { validateActionDefinition } from "@paperboard-dev/paperapi";
+import { validateActionDefinition } from "@mileniumhq/paperapi";
 
 const WRITING_ACTIONS = [
     "send-message",

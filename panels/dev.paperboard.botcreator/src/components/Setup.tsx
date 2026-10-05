@@ -9,8 +9,8 @@ import {
     PaperLink,
     PaperQuote,
     PaperInput,
-} from "@paperboard-dev/paperui";
-import { config, secretsApi, actionsApi } from "@paperboard-dev/paperapi";
+} from "@mileniumhq/paperui";
+import { config, secretsApi, actionsApi } from "@mileniumhq/paperapi";
 import { errorToMessage, extractApplicationIdFromToken } from "../types";
 
 const PANEL_ID = "dev.paperboard.botcreator";

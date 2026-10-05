@@ -2,7 +2,7 @@ import {
     definePanelService,
     defineAction,
     type ServiceContext,
-} from "@paperboard-dev/paperapi";
+} from "@mileniumhq/paperapi";
 import { buildGreeting } from "./lib/greet";
 
 // pass PANEL_ID explicitly, ambient scope resolves to last-imported panel

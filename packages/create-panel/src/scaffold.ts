@@ -7,7 +7,7 @@
 // Two modes share this one implementation:
 //   workspace  - `bun scripts/create-panel.ts` inside the Paperboard repo:
 //                writes panels/<id>/, depends on the libraries via workspace:*
-//   standalone - `npm create @paperboard-dev/panel`: writes ./<id>/ in the
+//   standalone - `npm create @mileniumhq/panel`: writes ./<id>/ in the
 //                caller's directory, depends on the published libraries
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "fs";
 import { dirname, join, relative, resolve } from "path";
@@ -228,7 +228,7 @@ export async function runCli(cli: CliOptions): Promise<number> {
         console.log(`  1. cd ${where} && bun install`);
         console.log(`  2. bun test                   # hermetic unit tests`);
         console.log(`  3. bun run build              # typecheck + UI + service bundles`);
-        console.log(`  4. npx @paperboard-dev/paperapi link   # load it in Paperboard`);
+        console.log(`  4. npx @mileniumhq/paperapi link   # load it in Paperboard`);
     }
     console.log(`  5. Edit manifest.json (description, version) and make it yours.`);
     return 0;

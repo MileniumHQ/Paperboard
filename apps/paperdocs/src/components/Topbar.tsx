@@ -7,7 +7,7 @@ import {
     PaperSpacer,
     PaperText,
     useContextMenuState,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 import {
     createEffect,
     createSignal,

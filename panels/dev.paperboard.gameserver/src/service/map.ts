@@ -2,7 +2,7 @@ import * as fs from "node:fs";
 import { gunzipSync, inflateSync } from "node:zlib";
 import nbt from "prismarine-nbt";
 import { PNG } from "pngjs";
-import { files as fileApi, type ServiceContext } from "@paperboard-dev/paperapi";
+import { files as fileApi, type ServiceContext } from "@mileniumhq/paperapi";
 import { tryListDirectory } from "../lib/filesystem";
 import { resolveVersionProfile, worldPathsFor, type VersionProfile } from "../lib/versionProfile";
 import {

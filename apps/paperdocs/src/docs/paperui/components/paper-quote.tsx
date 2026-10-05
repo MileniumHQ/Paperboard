@@ -5,7 +5,7 @@ import {
     PaperQuote,
     PaperTable,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 
 export default function PaperQuoteDoc() {
     return (
@@ -23,7 +23,7 @@ export default function PaperQuoteDoc() {
                 Pass a semantic variant to tint the accent border and icon.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { PaperQuote, PaperCard, PaperFlex } from "@paperboard-dev/paperui";
+{`import { PaperQuote, PaperCard, PaperFlex } from "@mileniumhq/paperui";
 
 export function Example() {
     return (

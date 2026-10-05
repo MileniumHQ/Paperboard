@@ -28,9 +28,9 @@ import {
     PaperText,
     getVarCss,
     PaperCard,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 import { serverSoftware, serverVersion } from "../lib/server";
-import { PaperPageHeader } from "@paperboard-dev/paperui";
+import { PaperPageHeader } from "@mileniumhq/paperui";
 import {
     checkPluginUpdates,
     deletePlugin,

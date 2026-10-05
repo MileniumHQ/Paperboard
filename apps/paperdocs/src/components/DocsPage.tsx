@@ -3,7 +3,7 @@ import {
     PaperSeparator,
     PaperSelector,
     PaperSelectorItem,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 import "../docs/docsLayout.css";
 import {
     createEffect,

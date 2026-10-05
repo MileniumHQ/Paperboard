@@ -7,7 +7,7 @@ import {
     type ActionDefinition,
     type CustomTypeDefinition,
     type ServiceContext,
-} from "@paperboard-dev/paperapi";
+} from "@mileniumhq/paperapi";
 import {
     startServerInstance,
     stopServerInstance,

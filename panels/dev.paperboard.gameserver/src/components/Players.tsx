@@ -26,8 +26,8 @@ import {
     PaperText,
     PaperToggle,
     getVarCss,
-} from "@paperboard-dev/paperui";
-import { fileApi } from "@paperboard-dev/paperapi";
+} from "@mileniumhq/paperui";
+import { fileApi } from "@mileniumhq/paperapi";
 import {
     forgetPlayerData,
     getPlayerPlaytimeSeconds,

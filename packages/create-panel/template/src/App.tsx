@@ -5,9 +5,9 @@ import {
     PaperMenuItem,
     PaperInterfaceGroup,
     PaperInterfaceItem,
-} from "@paperboard-dev/paperui";
-import "@paperboard-dev/paperui/style.css";
-import "@paperboard-dev/paperui/panel.css";
+} from "@mileniumhq/paperui";
+import "@mileniumhq/paperui/style.css";
+import "@mileniumhq/paperui/panel.css";
 import "./style.css";
 import CounterPage from "./pages/CounterPage";
 import NotesPage from "./pages/NotesPage";

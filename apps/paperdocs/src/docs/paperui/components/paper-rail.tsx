@@ -7,7 +7,7 @@ import {
     PaperRailItem,
     PaperTable,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 
 export default function PaperRailDoc() {
     return (
@@ -25,7 +25,7 @@ export default function PaperRailDoc() {
                 Manage the active destination using value and onValueChange props.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { PaperRail, PaperRailItem, PaperRailAction, PaperCard } from "@paperboard-dev/paperui";
+{`import { PaperRail, PaperRailItem, PaperRailAction, PaperCard } from "@mileniumhq/paperui";
 
 export function Example() {
     return (

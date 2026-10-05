@@ -12,8 +12,8 @@ import {
     type LoaderStatus,
     PaperCard,
     getVarCss,
-} from "@paperboard-dev/paperui";
-import { config } from "@paperboard-dev/paperapi";
+} from "@mileniumhq/paperui";
+import { config } from "@mileniumhq/paperapi";
 import { ensureJavaRuntime } from "../lib/ensureJava";
 import InstallLoaders from "./InstallLoaders";
 import { PANEL_ID } from "../service/types";

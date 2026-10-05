@@ -1,5 +1,5 @@
 import { Show } from "solid-js";
-import { PaperIcon, PaperText } from "@paperboard-dev/paperui";
+import { PaperIcon, PaperText } from "@mileniumhq/paperui";
 import { FIT_LABELS, formatBytes, type FitEstimate, type FitRating } from "../core/fit";
 import styles from "./FitMeter.module.css";
 

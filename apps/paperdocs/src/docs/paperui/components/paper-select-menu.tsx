@@ -6,7 +6,7 @@ import {
     PaperSelectMenuItem,
     PaperTable,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 
 export default function PaperSelectMenuDoc() {
     return (
@@ -24,7 +24,7 @@ export default function PaperSelectMenuDoc() {
                 Bind selection using value and onValueChange props.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { PaperSelectMenu, PaperSelectMenuItem, PaperCard } from "@paperboard-dev/paperui";
+{`import { PaperSelectMenu, PaperSelectMenuItem, PaperCard } from "@mileniumhq/paperui";
 
 export function Example() {
     return (

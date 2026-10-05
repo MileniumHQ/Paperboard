@@ -5,7 +5,7 @@ import {
     PaperFlex,
     PaperTable,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 
 export default function PaperConsoleDoc() {
     return (
@@ -23,7 +23,7 @@ export default function PaperConsoleDoc() {
                 Listen to user submissions using the onCommand callback.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { PaperConsole, PaperCard } from "@paperboard-dev/paperui";
+{`import { PaperConsole, PaperCard } from "@mileniumhq/paperui";
 
 export function Example() {
     const entries = [

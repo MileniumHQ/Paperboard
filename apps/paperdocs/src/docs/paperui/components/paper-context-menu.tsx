@@ -9,7 +9,7 @@ import {
     PaperTable,
     PaperText,
     useContextMenuState,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 
 export default function PaperContextMenuDoc() {
     const menu = useContextMenuState();
@@ -36,7 +36,7 @@ export default function PaperContextMenuDoc() {
     PaperButton,
     PaperCard,
     useContextMenuState,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 
 export function Example() {
     const menu = useContextMenuState();

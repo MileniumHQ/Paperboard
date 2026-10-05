@@ -1,5 +1,5 @@
 import { createSignal } from "solid-js";
-import { panelsApi, type PanelItem } from "@paperboard-dev/paperapi";
+import { panelsApi, type PanelItem } from "@mileniumhq/paperapi";
 import { logToMain } from "../lib/shell";
 
 // placeholder divs render per opened key (PanelView), so the list itself

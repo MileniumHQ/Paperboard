@@ -10,7 +10,7 @@ import {
     PaperSelectMenuItem,
     PaperTable,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 import { UI_ACTION_IDS } from "../contract";
 import { modelRef, type CatalogModel } from "../core/catalog";
 import { FIT_LABELS, formatBytes } from "../core/fit";

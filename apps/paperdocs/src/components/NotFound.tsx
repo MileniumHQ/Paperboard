@@ -1,4 +1,4 @@
-import { PaperFlex, PaperLink, PaperText } from "@paperboard-dev/paperui";
+import { PaperFlex, PaperLink, PaperText } from "@mileniumhq/paperui";
 import { createMemo } from "solid-js";
 import { allPagesFor, sectionKeys } from "../utils/routeUtils";
 import { docsPath } from "../utils/base";

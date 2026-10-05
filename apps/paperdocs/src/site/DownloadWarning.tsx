@@ -1,4 +1,4 @@
-import { PaperButton, PaperEffect, PaperModal, PaperText } from '@paperboard-dev/paperui';
+import { PaperButton, PaperEffect, PaperModal, PaperText } from '@mileniumhq/paperui';
 import { createSignal, For, onCleanup, Show } from 'solid-js';
 import { render } from 'solid-js/web';
 import { installationGuidance, unsignedExplanation, type UnsignedDownload } from '../../public/js/unsigned-downloads.mjs';

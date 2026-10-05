@@ -1,5 +1,5 @@
 import { createResource } from "solid-js";
-import { PaperAvatar, type PaperAvatarSize } from "@paperboard-dev/paperui";
+import { PaperAvatar, type PaperAvatarSize } from "@mileniumhq/paperui";
 import { loadHead } from "../lib/skins";
 
 /**

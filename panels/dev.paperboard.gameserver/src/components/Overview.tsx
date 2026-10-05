@@ -11,7 +11,7 @@ import {
     PaperBadge,
     PaperEffect,
     PaperQuote,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 import {
     serverActionError,
     serverStatus,

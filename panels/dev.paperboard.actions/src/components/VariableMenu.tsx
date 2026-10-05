@@ -1,5 +1,5 @@
 import { Show, For, createSignal, createMemo, createEffect, onMount, onCleanup } from "solid-js";
-import { PaperIcon } from "@paperboard-dev/paperui";
+import { PaperIcon } from "@mileniumhq/paperui";
 import { variableFieldIcon } from "../lib/variableTypes";
 
 export interface VariableMenuItem {

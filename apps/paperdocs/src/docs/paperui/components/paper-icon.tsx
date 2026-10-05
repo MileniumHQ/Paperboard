@@ -5,7 +5,7 @@ import {
     PaperIcon,
     PaperTable,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 
 export default function PaperIconDoc() {
     return (
@@ -23,7 +23,7 @@ export default function PaperIconDoc() {
                 Pass an image URL through the src prop when rendering custom graphic assets.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { PaperIcon, PaperCard, PaperFlex } from "@paperboard-dev/paperui";
+{`import { PaperIcon, PaperCard, PaperFlex } from "@mileniumhq/paperui";
 
 export function Example() {
     return (

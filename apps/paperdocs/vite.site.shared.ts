@@ -7,11 +7,11 @@ const paperuiRoot = resolve(__dirname, "../../packages/paperui");
 // so the CSS-module hashes and markup agree for hydration.
 export const paperuiAlias = [
     {
-        find: /^@paperboard-dev\/paperui\/style\.css$/,
+        find: /^@mileniumhq\/paperui\/style\.css$/,
         replacement: resolve(paperuiRoot, "src/styles/styles.css"),
     },
     {
-        find: /^@paperboard-dev\/paperui$/,
+        find: /^@mileniumhq\/paperui$/,
         replacement: resolve(paperuiRoot, "src/index.ts"),
     },
 ];

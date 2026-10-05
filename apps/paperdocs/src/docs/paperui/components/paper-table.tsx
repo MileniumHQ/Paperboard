@@ -3,7 +3,7 @@ import {
     PaperFlex,
     PaperTable,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 
 export default function PaperTableDoc() {
     return (
@@ -20,7 +20,7 @@ export default function PaperTableDoc() {
                 Place standard table elements (thead, tbody, tr, th, td) inside PaperTable.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { PaperTable } from "@paperboard-dev/paperui";
+{`import { PaperTable } from "@mileniumhq/paperui";
 
 export function Example() {
     return (

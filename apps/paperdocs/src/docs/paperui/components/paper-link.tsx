@@ -5,7 +5,7 @@ import {
     PaperLink,
     PaperTable,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 
 export default function PaperLinkDoc() {
     return (
@@ -23,7 +23,7 @@ export default function PaperLinkDoc() {
                 External links automatically open in a new tab with noopener security attributes.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { PaperLink, PaperCard, PaperFlex } from "@paperboard-dev/paperui";
+{`import { PaperLink, PaperCard, PaperFlex } from "@mileniumhq/paperui";
 
 export function Example() {
     return (

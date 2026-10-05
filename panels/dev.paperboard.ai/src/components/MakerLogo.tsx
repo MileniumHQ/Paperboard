@@ -1,5 +1,5 @@
 import { Show } from "solid-js";
-import { PaperIcon } from "@paperboard-dev/paperui";
+import { PaperIcon } from "@mileniumhq/paperui";
 import styles from "./MakerLogo.module.css";
 
 // bundled monochrome SVGs (fill="currentColor"), so they follow the theme

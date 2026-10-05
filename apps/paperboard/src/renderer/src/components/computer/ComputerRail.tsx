@@ -6,7 +6,7 @@ import {
     PaperRailAction,
     PaperSeparator,
     PaperIcon,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 import styles from "./ComputerRail.module.css";
 
 import type { AppUpdateState } from "../../../../shared/appUpdate";

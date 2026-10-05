@@ -17,7 +17,7 @@ import type { AiState } from "../src/core/types";
 const filesDir = fs.mkdtempSync(path.join(os.tmpdir(), "pb-ai-app-"));
 const secrets = new Map<string, string>();
 
-mock.module("@paperboard-dev/paperapi", () => ({
+mock.module("@mileniumhq/paperapi", () => ({
     config: { get: async () => null, set: async () => true },
     secretsApi: {
         get: async (name: string) => ({ found: secrets.has(name), value: secrets.get(name) }),

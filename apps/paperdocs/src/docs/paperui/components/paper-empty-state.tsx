@@ -6,7 +6,7 @@ import {
     PaperFlex,
     PaperTable,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 
 export default function PaperEmptyStateDoc() {
     return (
@@ -24,7 +24,7 @@ export default function PaperEmptyStateDoc() {
                 Render recovery action buttons inside the children slot.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { PaperEmptyState, PaperButton, PaperCard } from "@paperboard-dev/paperui";
+{`import { PaperEmptyState, PaperButton, PaperCard } from "@mileniumhq/paperui";
 
 export function Example() {
     return (

@@ -9,13 +9,13 @@ import {
     PaperText,
     PaperToggle,
     PaperCard,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 import { serverStatus, serverBridge, gamerules } from "../lib/server";
 import { ACTION_IDS } from "../service/contract";
 import { mcVersionAtLeast } from "../lib/capabilities";
 import { humanizeIdentifier } from "../core/format";
 import { GAMERULES } from "../generated/gamerules.generated";
-import { PaperPageHeader } from "@paperboard-dev/paperui";
+import { PaperPageHeader } from "@mileniumhq/paperui";
 
 const WIKI_URL = "https://minecraft.wiki/w/Game_rule";
 

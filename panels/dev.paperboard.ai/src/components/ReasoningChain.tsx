@@ -1,5 +1,5 @@
 import { createSignal, For, Match, Show, Switch, type JSX } from "solid-js";
-import { PaperIcon, PaperLoader, PaperMarkdown, PaperText } from "@paperboard-dev/paperui";
+import { PaperIcon, PaperLoader, PaperMarkdown, PaperText } from "@mileniumhq/paperui";
 import { isThinkingLive } from "../core/chain";
 import type { AssistantMessage, BuiltinTool, ToolCallRecord } from "../core/types";
 import { state } from "../lib/state";

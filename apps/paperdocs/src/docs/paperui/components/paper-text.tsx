@@ -4,7 +4,7 @@ import {
     PaperFlex,
     PaperTable,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 
 export default function PaperTextDoc() {
     return (
@@ -22,7 +22,7 @@ export default function PaperTextDoc() {
                 Set color to a semantic token to adjust text contrast.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { PaperText, PaperCard, PaperFlex } from "@paperboard-dev/paperui";
+{`import { PaperText, PaperCard, PaperFlex } from "@mileniumhq/paperui";
 
 export function Example() {
     return (

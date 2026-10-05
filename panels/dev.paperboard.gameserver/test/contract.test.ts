@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { validateActionDefinition } from "@paperboard-dev/paperapi";
+import { validateActionDefinition } from "@mileniumhq/paperapi";
 import { ACTION_IDS, TRIGGER_IDS } from "../src/service/contract";
 import {
     bindDynamicAction,

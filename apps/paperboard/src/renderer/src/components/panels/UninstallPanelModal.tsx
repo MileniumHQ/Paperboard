@@ -5,8 +5,8 @@ import {
     PaperFlex,
     PaperButton,
     PaperText,
-} from "@paperboard-dev/paperui";
-import { type PanelItem } from "@paperboard-dev/paperapi";
+} from "@mileniumhq/paperui";
+import { type PanelItem } from "@mileniumhq/paperapi";
 
 export interface UninstallTarget {
     compId: string;

@@ -7,7 +7,7 @@ import {
     PaperTable,
     PaperText,
     PaperToggle,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 
 export default function PaperSettingListDoc() {
     return (
@@ -25,7 +25,7 @@ export default function PaperSettingListDoc() {
                 Embed interactive controls like toggles or select menus in the item children slot.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { PaperSettingList, PaperSettingItem, PaperToggle, PaperCard } from "@paperboard-dev/paperui";
+{`import { PaperSettingList, PaperSettingItem, PaperToggle, PaperCard } from "@mileniumhq/paperui";
 
 export function Example() {
     return (

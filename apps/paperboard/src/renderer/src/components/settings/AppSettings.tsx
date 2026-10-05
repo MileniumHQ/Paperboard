@@ -12,7 +12,7 @@ import {
     PaperPage,
     PaperPageHeader,
     PaperText,
-} from "@paperboard-dev/paperui";
+} from "@mileniumhq/paperui";
 import { isBrowserShell, shellIpc } from "../../lib/shell";
 // Inlined at build time: the viewer always shows the exact files shipped
 // in this repo, so the text cannot drift from the license on disk.
