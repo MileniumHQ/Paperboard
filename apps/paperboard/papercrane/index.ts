@@ -359,7 +359,15 @@ export function startPaperCraneServer(
             });
 
             const onRequest = (req: http.IncomingMessage, res: http.ServerResponse) => {
-                handleHttpRequest(engine, req, res, { auth, sessions });
+                try {
+                    handleHttpRequest(engine, req, res, { auth, sessions });
+                } catch (err) {
+                    logger.debug("[Paperboard Server] request handler threw (staying up):", err);
+                    try {
+                        if (!res.headersSent) res.writeHead(400, { "Content-Type": "text/plain" });
+                        res.end("Bad Request");
+                    } catch { res.destroy(); }
+                }
             };
             const server = tlsIdentity
                 ? https.createServer({ key: tlsIdentity.key, cert: tlsIdentity.cert }, onRequest)

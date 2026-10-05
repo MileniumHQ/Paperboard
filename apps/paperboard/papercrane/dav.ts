@@ -518,8 +518,15 @@ export async function handleDavRequest(
     req: http.IncomingMessage,
     res: http.ServerResponse,
 ): Promise<void> {
-    const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
-    const rel = davRooted(url.pathname);
+    let rel: string | null;
+    try {
+        const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
+        rel = davRooted(url.pathname);
+    } catch {
+        res.writeHead(400, { "Content-Type": "text/plain" });
+        res.end("Bad Request");
+        return;
+    }
     if (rel === null) {
         res.writeHead(404, { "Content-Type": "text/plain" });
         res.end("Not Found");
@@ -554,7 +561,7 @@ export async function handleDavRequest(
         res.end("Forbidden");
         return;
     }
-    const isRoot = rel === "/";
+    const isRoot = target === root;
 
     if (method === "GET" || method === "HEAD") {
         if (!fs.existsSync(target)) {
@@ -703,7 +710,7 @@ export async function handleDavRequest(
         const dRel = destRel(req, res);
         if (dRel === null) return;
         const dest = resolveDavPath(root, dRel);
-        if (!dest) {
+        if (!dest || dest === root) {
             res.writeHead(403, { "Content-Type": "text/plain" });
             res.end("Forbidden");
             return;

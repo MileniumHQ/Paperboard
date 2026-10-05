@@ -31,8 +31,17 @@ export function handleHttpRequest(
 ) {
     // no CORS by default, cross-origin browser reads denied
 
-    const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
-    const pathname = url.pathname;
+    // malformed Host (e.g. "Host: [") makes base-URL construction throw;
+    // that must be a 400, never an uncaught exception that kills the daemon
+    let pathname: string;
+    try {
+        const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
+        pathname = url.pathname;
+    } catch {
+        res.writeHead(400, { "Content-Type": "text/plain" });
+        res.end("Bad Request");
+        return;
+    }
     const sessions = ctx.sessions ?? new DavSessionStore();
 
     // WebDAV access plus session minting, matched before the prefix

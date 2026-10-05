@@ -426,6 +426,49 @@ describe("WebDAV symlink refusal", () => {
     });
 });
 
+describe("WebDAV root traversal guard", () => {
+    it("refuses DELETE /dav/%2f and keeps the data dir plus vault", async () => {
+        const sess = await mintSession();
+        const auth = basic(sess.user, sess.pass);
+        const marker = path.join(tmp, "files", "note.txt");
+        expect(fs.existsSync(marker)).toBe(true);
+        const del = await fetch(`${base}/dav/%2f`, {
+            method: "DELETE",
+            headers: { Authorization: auth },
+        });
+        expect([403, 404]).toContain(del.status);
+        const dot = await fetch(`${base}/dav/%2e`, {
+            method: "DELETE",
+            headers: { Authorization: auth },
+        });
+        expect([403, 404]).toContain(dot.status);
+        expect(fs.existsSync(tmp)).toBe(true);
+        expect(fs.existsSync(marker)).toBe(true);
+        expect(fs.existsSync(path.join(tmp, "local", "secrets.json"))).toBe(true);
+    });
+});
+
+describe("malformed Host header", () => {
+    it("answers 400 instead of throwing", async () => {
+        const addr = server.address();
+        const port = typeof addr === "object" && addr ? addr.port : 0;
+        const status = await new Promise<number>((resolve, reject) => {
+            const { Socket } = require("net") as typeof import("net");
+            const sock = new Socket();
+            sock.on("error", reject);
+            sock.connect(port, "127.0.0.1", () => {
+                sock.write("GET /health HTTP/1.1\r\nHost: [\r\nConnection: close\r\n\r\n");
+            });
+            let data = "";
+            sock.on("data", (c) => (data += c.toString()));
+            sock.on("close", () => resolve(Number(/HTTP\/1\.1 (\d+)/.exec(data)?.[1] ?? 0)));
+        });
+        expect(status).toBe(400);
+        const health = await fetch(`${base}/health`);
+        expect(health.status).toBe(200);
+    });
+});
+
 describe("parseBasic", () => {
     const enc = (s: string) => Buffer.from(s).toString("base64");
     it("reads user and password, scheme case-insensitive, any whitespace run", () => {
