@@ -59,8 +59,8 @@ mac:
     notarize: false
     artifactName: ${name}-${version}-${arch}.${ext}
 dmg:
-    # Figma background canvas: 540 x 380 px (export a 1x PNG).
-    # build/background.png is discovered automatically when provided.
+    # 540 x 380 canvas; background@2x.png supplies the Retina representation.
+    background: build/background.png
     window:
         width: 540
         height: 380

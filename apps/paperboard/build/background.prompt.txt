@@ -1,0 +1,13 @@
+Create one finished PNG asset: a minimal macOS DMG installer background for Paperboard, exactly 540 pixels wide by 380 pixels high. This is only the flat background artwork, NOT a screenshot, mockup, Finder window, app icon, or folder icon.
+
+Brand context: Paperboard's actual landing page says "Do more with your computer" and uses rounded Nunito typography, bold white lettering with a compact dark blue offset shadow, and a bright blue subtly textured background. Palette from PaperUI: primary blue #2981e5, deep blue #1764bc, marketing ink #080c12, white #ffffff. Match this simple friendly software brand.
+
+Layout in the 540 x 380 coordinate system:
+- Edge-to-edge blue backdrop: gently lighter blue toward the top, primary blue toward the bottom. Extremely subtle fine paper grain / barely visible tiny dot texture, quiet not busy.
+- Centered near top, word "Paperboard" in big bold rounded white Nunito-like letters, about 38 pixels tall, a small restrained dark blue offset shadow. Title baseline near y=72.
+- Under it, exact text "Do more with your computer" in white rounded clean small lettering, centered near y=105.
+- The central installation area is spacious and empty: do not draw icons or circles. The real Paperboard app icon will sit centered at x=130,y=220, and the real Applications folder icon at x=410,y=220. Both are 80x80; keep the rectangles x=75..185,y=170..295 and x=355..465,y=170..295 free of artwork and text for Finder icons and their labels.
+- A single small understated white right-pointing arrow centered x=270,y=220 (from app toward Applications), no other central graphics.
+- Small centered white instruction near y=335, exact text "Drag Paperboard to Applications".
+- No additional text, borders, panels, badges, computer graphics, paper cranes, logos, drop zones, buttons, or macOS chrome. Do not rasterize the app/folder icons into the background.
+Output exact 540 x 380 PNG, crisp clean lettering and uncomplicated layout.
