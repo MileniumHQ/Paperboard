@@ -89,6 +89,14 @@ Never compromise on: panels are first-party, not sandboxed; the registry is clos
 - `bun run gate` typechecks, tests, **and rebuilds** panels; the daemon runs the built `dist/service.js`, so the build is the artifact proof. `bun run build:panels` builds panels alone.
 - `bun run gate <target...>` runs only those targets (plus the shared-library builds they consume): `bun run gate terminal`, `bun run gate paperapi paperui`, `bun run gate gameserver`. Targets: `packages`, `paperapi`, `paperui`, `paperboard`, `paperconvert`, `paperdocs`, `origami`, `origami-library`, `scripts`, and the panels `actions` `ai` `botcreator` `gameserver` `terminal`. Repo-wide checks (changelog, TODO expiry) run only in the full gate. Editing one panel or library should not force the whole gate.
 
+**Browser (web) mode**
+- The shell can run in a real browser instead of an Electron window. Dev launcher: `bun run dev:browser` (from `apps/paperboard`), or `bun scripts/launch.ts dev -- --browser --browser-port=<n>` to pin a port. It prints `Paperboard (browser, DEV TOOL) is running at http://paperboard.localhost:<n>`.
+- Agents may use this to view the real shell and panels — good for screenshots and end-to-end checks the Electron window can't easily give a headless session. `*.localhost` resolves to loopback, so `paperboard.localhost:<n>` and `<comp>.<panelId>.paperboard.localhost:<n>` both work.
+- Set `PAPERBOARD_NO_BROWSER=1` so the launcher does not try to open a browser (useful headless/over SSH); then open the origin yourself, over an `ssh -L <n>:127.0.0.1:<n>` tunnel if remote.
+- **It is a dev tool and has no sign-in.** It binds to `127.0.0.1` only and must never be exposed on a network interface; the Host check (DNS rebinding) and the shell bridge's exact-Origin check are the only remaining boundary. Treat browser mode like an open local daemon: development on a trusted, single-user machine.
+- It reads the default `~/.paperboard` install unless you pass a temporary `PAPERBOARD_DIR`; for agent work, point `PAPERBOARD_DIR` at a temp dir so you never touch the real install.
+
+
 **Git**
 - Conventional commits (`feat:`, `fix:`, `chore:`). Never `stuff` or `checkpoint`.
 - One concern per commit; a too-big change is several real commits. Commit each finished change as it lands, so files don't mix unrelated work.

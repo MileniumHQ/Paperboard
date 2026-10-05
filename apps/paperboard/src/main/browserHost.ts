@@ -2,39 +2,36 @@
 // instead of an Electron window. This module is the HTTP host for it and
 // imports nothing from Electron; the caller supplies the handlers.
 //
+// THIS IS A DEV TOOL. There is no sign-in: the loopback port is served to
+// any local client, and a panel document carries a freshly issued panel
+// token, so anything that can reach the port can reach the daemon. It binds
+// to 127.0.0.1 only and must never be exposed on a network interface. Two
+// checks remain even in this mode: the Host header must be ours
+// (DNS-rebinding defense) and the shell bridge must carry the exact shell
+// Origin (a panel frame, same-site but a different origin, cannot call
+// shell-only channels).
+//
 // Origins mirror the Electron layout so panels keep their isolation:
 //   shell   http://paperboard.localhost:<port>/
 //   panels  http://<computerId>.<panelId>.paperboard.localhost:<port>/
-// Browsers resolve *.localhost to loopback and treat it as a secure
-// context. Every panel gets its own origin (storage, DOM, cookies), exactly
-// like panel://<computerId>.<panelId>/ in Electron. All of them share the
-// site "paperboard.localhost", so one SameSite=Strict session cookie reaches
-// the shell and its panel frames and nothing cross-site.
-//
-// Authentication: the process mints single-use launch keys and opens
-// /_shell/launch?key=… in the browser; the exchange sets an HttpOnly
-// session cookie. Without it nothing is served — the loopback port is
-// shared with every local user and process, and a panel document carries a
-// freshly issued panel token. The bridge (/_shell/invoke, /_shell/send)
-// additionally requires the exact shell Origin, so a panel frame (same
-// site, different origin) cannot call shell-only channels. The Host header
-// is checked on every request (DNS-rebinding defense).
+// Browsers resolve *.localhost to loopback and treat it as a secure context.
 import * as http from "http";
-import * as crypto from "crypto";
 import { logger } from "../../papercrane/logger";
-import { secretsMatch } from "../../papercrane/secretCompare";
 import { parsePanelHost } from "./panelAssets";
 import { readShellFile } from "./shellAssets";
 
 export const BROWSER_HOST_SUFFIX = "paperboard.localhost";
-export const SESSION_COOKIE = "pb_shell";
 
-// bounds: tabs listening for pushes, outstanding launch links, bridge bodies
+// a Host header that is a plain loopback alias rather than our canonical name
+function isLoopbackAlias(host: string): boolean {
+    const bare = host.replace(/:\d+$/, "").replace(/^\[|\]$/g, "");
+    return bare === "localhost" || bare === "127.0.0.1" || bare === "::1";
+}
+
+// bounds: tabs listening for pushes, bridge bodies
 export const MAX_EVENT_CLIENTS = 16;
-export const MAX_LAUNCH_KEYS = 8;
-export const LAUNCH_KEY_TTL_MS = 2 * 60_000;
 export const MAX_BRIDGE_BODY_BYTES = 64 * 1024;
-// a tab that stops reading its stream is dropped, not buffered for
+// a tab that stops reading its stream is dropped, not buffered without bound
 export const MAX_EVENT_BACKLOG_BYTES = 1024 * 1024;
 const EVENT_HEARTBEAT_MS = 25_000;
 
@@ -53,7 +50,6 @@ export interface BrowserHostOptions {
 export interface BrowserHost {
     readonly port: number;
     readonly origin: string;
-    mintLaunchUrl(): string;
     push(channel: string, payload: unknown): void;
     close(): Promise<void>;
 }
@@ -65,17 +61,6 @@ class HttpError extends Error {
     ) {
         super(message);
     }
-}
-
-function readCookie(req: http.IncomingMessage, name: string): string | null {
-    const header = req.headers.cookie;
-    if (!header) return null;
-    for (const part of header.split(";")) {
-        const eq = part.indexOf("=");
-        if (eq < 0) continue;
-        if (part.slice(0, eq).trim() === name) return part.slice(eq + 1).trim();
-    }
-    return null;
 }
 
 function readJsonBody(req: http.IncomingMessage): Promise<unknown> {
@@ -122,56 +107,16 @@ function sendJson(res: http.ServerResponse, status: number, body: unknown) {
     res.end(JSON.stringify(body));
 }
 
-const SIGNED_OUT_TEXT =
-    "This Paperboard tab is not signed in.\n\n" +
-    "Open the link Paperboard printed when it started, or choose\n" +
-    '"Open in browser" from the Paperboard tray icon.';
 
 export function startBrowserHost(opts: BrowserHostOptions): Promise<BrowserHost> {
-    const sessionSecret = crypto.randomBytes(32).toString("base64url");
-    const launchKeys = new Map<string, number>(); // key -> expiry
     const eventClients = new Set<http.ServerResponse>();
     let port = 0;
     let shellHost = "";
     let origin = "";
     let closed = false;
 
-    const pruneLaunchKeys = () => {
-        const now = Date.now();
-        for (const [key, expiry] of launchKeys) {
-            if (expiry <= now) launchKeys.delete(key);
-        }
-    };
-
-    const hasSession = (req: http.IncomingMessage) => {
-        const cookie = readCookie(req, SESSION_COOKIE);
-        return cookie !== null && secretsMatch(cookie, sessionSecret);
-    };
-
-    const sessionCookie = () =>
-        `${SESSION_COOKIE}=${sessionSecret}; Path=/; Domain=${BROWSER_HOST_SUFFIX}; HttpOnly; SameSite=Strict`;
-
-    const handleLaunch = (url: URL, res: http.ServerResponse) => {
-        pruneLaunchKeys();
-        const key = url.searchParams.get("key") ?? "";
-        // single use: the key only ever travels in one URL
-        const known = [...launchKeys.keys()].find((k) => secretsMatch(k, key));
-        if (!known) {
-            sendText(res, 403, `This Paperboard link has expired or was already used.\n\n${SIGNED_OUT_TEXT}`);
-            return;
-        }
-        launchKeys.delete(known);
-        res.writeHead(303, {
-            Location: "/",
-            "Set-Cookie": sessionCookie(),
-            "Cache-Control": "no-store",
-            "Referrer-Policy": "no-referrer",
-        });
-        res.end();
-    };
-
-    // bridge calls must come from the shell document itself: the session
-    // cookie also reaches same-site panel frames, the Origin does not match
+    // bridge calls must come from the shell document itself: a panel frame
+    // is same-site but a different Origin, so it cannot call shell channels
     const assertShellCaller = (req: http.IncomingMessage) => {
         if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
         if (req.headers.origin !== origin) throw new HttpError(403, "Shell bridge is shell-origin only");
@@ -277,11 +222,6 @@ export function startBrowserHost(opts: BrowserHostOptions): Promise<BrowserHost>
         });
 
     const handleShell = async (req: http.IncomingMessage, res: http.ServerResponse, url: URL) => {
-        if (url.pathname === "/_shell/launch") return handleLaunch(url, res);
-        if (!hasSession(req)) {
-            sendText(res, 401, SIGNED_OUT_TEXT);
-            return;
-        }
         if (url.pathname.startsWith("/_shell/invoke/")) {
             return handleInvoke(url.pathname.slice("/_shell/invoke/".length), req, res);
         }
@@ -295,10 +235,6 @@ export function startBrowserHost(opts: BrowserHostOptions): Promise<BrowserHost>
     };
 
     const handlePanel = async (req: http.IncomingMessage, res: http.ServerResponse, url: URL, prefix: string) => {
-        if (!hasSession(req)) {
-            sendText(res, 401, SIGNED_OUT_TEXT);
-            return;
-        }
         if (req.method !== "GET" && req.method !== "HEAD") throw new HttpError(405, "Method not allowed");
         const scope = parsePanelHost(prefix);
         if (!scope) throw new HttpError(400, "Malformed panel URL: missing computer scope prefix");
@@ -326,6 +262,15 @@ export function startBrowserHost(opts: BrowserHostOptions): Promise<BrowserHost>
             work = handleShell(req, res, url);
         } else if (host.endsWith(`.${shellHost}`)) {
             work = handlePanel(req, res, url, host.slice(0, -(shellHost.length + 1)));
+        } else if (isLoopbackAlias(host)) {
+            // A loopback alias (localhost / 127.0.0.1 / ::1) is how someone
+            // reaches the port when they were only told the number. Redirect
+            // to the canonical origin so the session cookie (Domain=
+            // paperboard.localhost) and the panel origins line up; never
+            // serve content under a foreign Host.
+            res.writeHead(302, { location: `http://${shellHost}${req.url || "/"}` });
+            res.end();
+            work = Promise.resolve();
         } else {
             // not our name: a rebinding page or a stray client
             work = sendText(res, 421, "Misdirected request");
@@ -356,19 +301,13 @@ export function startBrowserHost(opts: BrowserHostOptions): Promise<BrowserHost>
             port = typeof address === "object" && address ? address.port : opts.port;
             shellHost = `${BROWSER_HOST_SUFFIX}:${port}`;
             origin = `http://${shellHost}`;
+            logger.warn(
+                `[Browser] DEV TOOL: Paperboard browser mode is serving ${origin} with no sign-in. ` +
+                    "THIS IS A DEV TOOL AND SHOULD NOT BE USED for anything but development on a trusted machine.",
+            );
             resolve({
                 port,
                 origin,
-                mintLaunchUrl() {
-                    pruneLaunchKeys();
-                    while (launchKeys.size >= MAX_LAUNCH_KEYS) {
-                        const oldest = launchKeys.keys().next().value as string;
-                        launchKeys.delete(oldest);
-                    }
-                    const key = crypto.randomBytes(24).toString("base64url");
-                    launchKeys.set(key, Date.now() + LAUNCH_KEY_TTL_MS);
-                    return `${origin}/_shell/launch?key=${key}`;
-                },
                 push(channel, payload) {
                     const frame = `event: ${channel}\ndata: ${JSON.stringify(payload ?? null)}\n\n`;
                     for (const client of eventClients) writeEvent(client, frame);
@@ -377,7 +316,6 @@ export function startBrowserHost(opts: BrowserHostOptions): Promise<BrowserHost>
                     if (closed) return Promise.resolve();
                     closed = true;
                     clearInterval(heartbeat);
-                    launchKeys.clear();
                     for (const client of eventClients) client.end();
                     eventClients.clear();
                     return new Promise<void>((done) => {

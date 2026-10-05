@@ -30,13 +30,22 @@ export function rightReserve(
     wco: OverlayLike | undefined,
     windowWidth: number,
     userAgent: string,
+    browserShell = false,
 ): number {
+    // a browser tab has no OS caption buttons: never reserve for them, no
+    // matter what platform the client's user agent claims
+    if (browserShell) return 0;
     const rect = visibleRect(wco);
     if (rect) return Math.max(0, windowWidth - rect.x - rect.width);
     return userAgent.includes("Windows") ? WINDOWS_CAPTION_FALLBACK : 0;
 }
 
-export function leftReserve(wco: OverlayLike | undefined, userAgent: string): number {
+export function leftReserve(
+    wco: OverlayLike | undefined,
+    userAgent: string,
+    browserShell = false,
+): number {
+    if (browserShell) return DEFAULT_LEFT_RESERVE;
     const rect = visibleRect(wco);
     if (rect && rect.x > 0) return rect.x + DEFAULT_LEFT_RESERVE;
     return userAgent.includes("Mac") ? MAC_TRAFFIC_LIGHT_RESERVE : DEFAULT_LEFT_RESERVE;

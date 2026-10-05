@@ -243,14 +243,19 @@ function ensureBrowserHost(): Promise<BrowserHost> {
     return browserHostStarting;
 }
 
-// every open mints a new single-use launch link; the printed copy is for
-// terminals where no browser opens (it never goes to the log file)
+// Browser mode is a development tool: there is no sign-in, so opening the
+// origin is all that is needed. Never expose the port beyond loopback.
 async function openInBrowser(): Promise<void> {
     try {
         const host = await ensureBrowserHost();
-        const url = host.mintLaunchUrl();
-        console.log(`\nPaperboard is running at ${host.origin}\nSign-in link (single use, 2 minutes): ${url}\n`);
-        await shell.openExternal(url);
+        console.log(
+            `\nPaperboard (browser, DEV TOOL) is running at ${host.origin}\n` +
+                "No sign-in is required; do not expose this port on a network.\n",
+        );
+        // headless/SSH: there is no browser here to open; let the remote user
+        // open the origin themselves
+        if (process.env.PAPERBOARD_NO_BROWSER === "1") return;
+        await shell.openExternal(host.origin);
     } catch (err: any) {
         log.error("[Browser] could not open Paperboard in the browser:", err?.message || err);
         if (browserMode && !browserHost) {

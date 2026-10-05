@@ -34,6 +34,14 @@ describe("right reserve (caption buttons)", () => {
     it("reserves nothing in a plain browser tab", () => {
         expect(rightReserve(undefined, 1100, LINUX_UA)).toBe(0);
     });
+
+    it("reserves nothing in browser mode on any client platform", () => {
+        // browser mode has no OS caption buttons: a Windows/Mac client UA
+        // must not leave a 140px / traffic-light margin on the top bar
+        expect(rightReserve(undefined, 1100, WIN_UA, true)).toBe(0);
+        expect(rightReserve(undefined, 1100, MAC_UA, true)).toBe(0);
+        expect(rightReserve(hiddenOverlay, 1100, WIN_UA, true)).toBe(0);
+    });
 });
 
 describe("left reserve (traffic lights)", () => {
@@ -48,5 +56,10 @@ describe("left reserve (traffic lights)", () => {
 
     it("hugs the edge elsewhere", () => {
         expect(leftReserve(undefined, LINUX_UA)).toBe(12);
+    });
+
+    it("hugs the edge in browser mode even on a Mac client", () => {
+        expect(leftReserve(hiddenOverlay, MAC_UA, true)).toBe(12);
+        expect(leftReserve(undefined, MAC_UA, true)).toBe(12);
     });
 });

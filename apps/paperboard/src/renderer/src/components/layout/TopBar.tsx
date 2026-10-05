@@ -19,7 +19,12 @@ const TopBar: Component<{
     onMount(() => {
         // browser mode has no updater: the app updates when it next runs
         // as a window, so there is nothing to listen for
-        if (!isBrowserShell()) {
+        if (isBrowserShell()) {
+            console.warn(
+                "Paperboard browser mode has no sign-in. THIS IS A DEV TOOL AND SHOULD NOT BE USED " +
+                    "outside development on a trusted machine, and never exposed on a network.",
+            );
+        } else {
             const ipc = shellIpc();
             const handler = (_: unknown, data: { version?: string | null }) => {
                 setUpdateReady(data?.version ?? "new version");
@@ -33,8 +38,8 @@ const TopBar: Component<{
         // macOS traffic lights push the version label right instead.
         const wco = (navigator as any).windowControlsOverlay as OverlayLike | undefined;
         const update = () => {
-            setCaptionReserve(rightReserve(wco, window.innerWidth, navigator.userAgent));
-            setLabelInset(leftReserve(wco, navigator.userAgent));
+            setCaptionReserve(rightReserve(wco, window.innerWidth, navigator.userAgent, isBrowserShell()));
+            setLabelInset(leftReserve(wco, navigator.userAgent, isBrowserShell()));
         };
         update();
         const target = wco as unknown as EventTarget | undefined;
