@@ -668,8 +668,11 @@ export class PaperCraneClient extends EventEmitter {
 
     /** Running panel services on this computer, for the shell tray summary. */
     public async runningServiceCount(): Promise<number> {
-        const res = await this.call<{ running?: number }>("service:count");
-        return typeof res.running === "number" ? res.running : 0;
+        const res = await this.call<{ running: number }>("service:count", {}, 5000);
+        if (!Number.isSafeInteger(res?.running) || res.running < 0) {
+            throw new Error("Daemon returned an invalid running panel count");
+        }
+        return res.running;
     }
 
     public async installPanel(panelId: string, expected: { version?: string; sha256?: string }): Promise<PanelManifest> {

@@ -938,7 +938,7 @@ export class PaperCraneEngine {
         return panels;
     }
 
-    /** Panel services currently running (spawned and not stopped). */
+    /** Panel service children that have not exited. */
     public runningServiceCount(): number {
         return this.services.runningCount();
     }

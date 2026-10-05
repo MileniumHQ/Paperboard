@@ -173,11 +173,7 @@ export class ConnectionPool extends EventEmitter {
     public async runningServiceCount(): Promise<number> {
         let total = 0;
         for (const client of this.clients.values()) {
-            try {
-                total += await client.runningServiceCount();
-            } catch (err) {
-                logger.debug("[ConnectionPool] service count failed for a computer:", err);
-            }
+            total += await client.runningServiceCount();
         }
         return total;
     }

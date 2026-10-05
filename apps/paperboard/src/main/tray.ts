@@ -1,9 +1,9 @@
 // Desktop tray. Closing the window hides the app to the tray instead of
 // quitting: panel services keep running, and the tray icon reopens the
-// window or quits for real. The tooltip and menu show how many processes
+// window or quits for real. The tooltip and menu show how many panels
 // are still running, so a backgrounded Paperboard is never a mystery.
 import { app, Menu, Tray, nativeImage } from "electron";
-import { traySummary } from "./traySummary";
+import { trayMenu, traySummary } from "./traySummary";
 
 let tray: Tray | null = null;
 
@@ -21,22 +21,14 @@ export function createDesktopTray(deps: DesktopTrayDeps): Tray {
 
     const refresh = () => {
         if (!tray) return;
-        const label = traySummary(deps.runningCount());
-        tray.setToolTip(label);
-        tray.setContextMenu(
-            Menu.buildFromTemplate([
-                { label: "Open Paperboard", click: () => deps.openWindow() },
-                { type: "separator" },
-                { label, enabled: false },
-                { type: "separator" },
-                { label: "Quit Paperboard", click: () => app.quit() },
-            ]),
-        );
+        const count = deps.runningCount();
+        tray.setToolTip(traySummary(count));
+        tray.setContextMenu(Menu.buildFromTemplate(trayMenu(count, deps.openWindow, () => app.quit())));
     };
 
     refresh();
     tray.on("click", () => deps.openWindow());
-    // non-enumerable hook the shell calls to re-render the count
+    // hook the shell calls to re-render the count
     (tray as Tray & { refreshSummary?: () => void }).refreshSummary = refresh;
     return tray;
 }

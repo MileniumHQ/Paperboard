@@ -39,6 +39,16 @@ afterAll(() => {
 });
 
 describe("PaperCraneClient wire shape", () => {
+    it("a daemon response without a valid count is unavailable, never zero", async () => {
+        const client = new PaperCraneClient();
+        try {
+            await client.connect("127.0.0.1", port, "tok");
+            await expect(client.runningServiceCount()).rejects.toThrow("invalid running panel count");
+        } finally {
+            client.disconnect();
+        }
+    });
+
     it("sends token last and carries the protocol version from the shared constant", async () => {
         const client = new PaperCraneClient();
         try {

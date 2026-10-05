@@ -154,11 +154,11 @@ export class PanelServicesManager {
         const entry = this.services.get(id);
         if (entry) await entry.ready;
     }
-    /** Services currently spawned and not stopped (starting, ready, stopping). */
+    /** Live service children, including those whose stop has not finished. */
     public runningCount(): number {
         let count = 0;
         for (const entry of this.services.values()) {
-            if (!entry.stopped) count++;
+            if (entry.process.pid !== undefined && entry.process.exitCode === null && entry.process.signalCode === null) count++;
         }
         return count;
     }

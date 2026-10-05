@@ -8,7 +8,6 @@ import {
     nativeTheme,
     nativeImage,
     session,
-    Tray,
     powerMonitor,
 } from "electron";
 import * as fs from "fs";
@@ -33,6 +32,7 @@ import { applySavedAppSettings } from "./communication/shelldata";
 import { addShellPushSink } from "./communication/shellPush";
 import { keepAliveWithoutWindows, secondLaunchAction } from "./instancePolicy";
 import { createDesktopTray, destroyDesktopTray, hasDesktopTray, refreshDesktopTray } from "./tray";
+import { pollTrayCount } from "./trayCount";
 import icon from "../../resources/icon.png?asset";
 
 const log = logger;
@@ -55,33 +55,24 @@ function showMainWindow(): void {
     mainWindowRef.focus();
 }
 
-// The desktop tray: available in the normal app, absent in --browser mode
-// (whose own tray is created by ensureBrowserHost). Its label is the running
-// service count, refreshed on a slow poll.
+// Both launch modes use the same tray and daemon-owned service count.
 let desktopTrayCount: number | null = null;
-let trayPoll: ReturnType<typeof setInterval> | null = null;
+let stopTrayPoll: (() => void) | null = null;
 
 function ensureDesktopTray(): void {
-    if (browserMode) return;
     createDesktopTray({
         icon,
         openWindow: showMainWindow,
         runningCount: () => desktopTrayCount,
     });
-    if (!trayPoll) {
-        const refresh = () => {
-            connectionPool
-                .runningServiceCount()
-                .then((count) => {
-                    desktopTrayCount = count;
-                    refreshDesktopTray();
-                })
-                .catch((err) => log.debug("[Tray] service count refresh failed:", err));
-        };
-        refresh();
-        trayPoll = setInterval(refresh, 10_000);
-        trayPoll.unref?.();
-    }
+    stopTrayPoll ??= pollTrayCount({
+        read: () => connectionPool.runningServiceCount(),
+        render: (count) => {
+            desktopTrayCount = count;
+            refreshDesktopTray();
+        },
+        onError: (err) => log.debug("[Tray] service count refresh failed:", err),
+    });
 }
 
 // `--browser`: no windows; the shell opens in the user's browser, served by
@@ -254,7 +245,6 @@ function createWindow(): void {
 let browserHost: BrowserHost | null = null;
 let browserHostStarting: Promise<BrowserHost> | null = null;
 let removeBrowserPushSink: (() => void) | null = null;
-let browserTray: Tray | null = null;
 
 function browserPortSwitch(): number {
     const raw = app.commandLine.getSwitchValue("browser-port");
@@ -287,7 +277,7 @@ function ensureBrowserHost(): Promise<BrowserHost> {
             servePanel: servePanelAsset,
         });
         removeBrowserPushSink = addShellPushSink((channel, payload) => host.push(channel, payload));
-        createBrowserTray();
+        ensureDesktopTray();
         browserHost = host;
         log.info(`[Browser] shell served at ${host.origin}`);
         return host;
@@ -320,21 +310,6 @@ async function openInBrowser(): Promise<void> {
             app.quit();
         }
     }
-}
-
-// a windowless app still needs a way back in and a way out
-function createBrowserTray(): void {
-    if (browserTray) return;
-    browserTray = new Tray(nativeImage.createFromPath(icon).resize({ width: 16, height: 16 }));
-    browserTray.setToolTip("Paperboard");
-    browserTray.setContextMenu(
-        Menu.buildFromTemplate([
-            { label: "Open in browser", click: () => void openInBrowser() },
-            { type: "separator" },
-            { label: "Quit Paperboard", click: () => app.quit() },
-        ]),
-    );
-    browserTray.on("click", () => void openInBrowser());
 }
 
 function createUpdaterWindow(): BrowserWindow {
@@ -572,13 +547,9 @@ app.on("before-quit", () => {
     }
     removeBrowserPushSink?.();
     removeBrowserPushSink = null;
-    if (trayPoll) {
-        clearInterval(trayPoll);
-        trayPoll = null;
-    }
+    stopTrayPoll?.();
+    stopTrayPoll = null;
     destroyDesktopTray();
-    browserTray?.destroy();
-    browserTray = null;
     void browserHost
         ?.close()
         .catch((err) => log.warn("[Paperboard] browser host close failed:", err));
