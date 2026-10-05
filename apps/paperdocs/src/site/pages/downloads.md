@@ -3,7 +3,7 @@
 The desktop app. Includes the server daemon for this computer.
 
 - Windows: [x64](https://i.paperboard.dev/pb/latest/paperboard-windows-x64-setup.exe)
-- macOS: [Apple Silicon](https://i.paperboard.dev/pb/latest/paperboard-macos-arm64.dmg) · [Intel](https://i.paperboard.dev/pb/latest/paperboard-macos-x64.dmg)
+- macOS: [Apple Silicon](https://i.paperboard.dev/pb/latest/paperboard-macos-arm64.zip) · [Intel](https://i.paperboard.dev/pb/latest/paperboard-macos-x64.zip)
 - Linux: [x64 AppImage](https://i.paperboard.dev/pb/latest/paperboard-linux-x64.AppImage) · [ARM64 AppImage](https://i.paperboard.dev/pb/latest/paperboard-linux-arm64.AppImage)
 
 ## Paperboard server daemon

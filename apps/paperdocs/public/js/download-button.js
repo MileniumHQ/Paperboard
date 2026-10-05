@@ -7,9 +7,9 @@
         windows: { label: "Windows", file: "paperboard-windows-x64-setup.exe" },
         macosArm: {
             label: "Mac (Apple Silicon)",
-            file: "paperboard-macos-arm64.dmg",
+            file: "paperboard-macos-arm64.zip",
         },
-        macosIntel: { label: "Mac (Intel)", file: "paperboard-macos-x64.dmg" },
+        macosIntel: { label: "Mac (Intel)", file: "paperboard-macos-x64.zip" },
         linuxX64: { label: "Linux (x64)", file: "paperboard-linux-x64.AppImage" },
         linuxArm: {
             label: "Linux (ARM64)",

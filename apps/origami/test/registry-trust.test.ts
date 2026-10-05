@@ -635,7 +635,7 @@ describe("download redirects", () => {
         const mac = await get("http://localhost/paperdl/paperboard/macos-x64/download", env);
         expect(mac.status).toBe(302);
         expect(mac.headers.get("Location")).toBe(
-            "https://i.paperboard.dev/pb/latest/paperboard-macos-x64.dmg",
+            "https://i.paperboard.dev/pb/latest/paperboard-macos-x64.zip",
         );
         const crane = await get("http://localhost/paperdl/crane/linux-x64/download", env);
         expect(crane.status).toBe(302);

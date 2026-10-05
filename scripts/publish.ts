@@ -357,6 +357,18 @@ function applyCraneWindowsIcon(filePath: string): void {
     if (existsSync(icon)) applyWindowsIcon(filePath, icon);
 }
 
+// npm ships node-pty's spawn-helper without the exec bit and electron-builder
+// copies it verbatim, so an unsigned macOS .app packaged on any host (Linux
+// CI included) would get a pty helper that can never execute. Restore the bit
+// in-place before packaging; a missing helper is left as-is (node-pty may not
+// ship every arch).
+function ensureMacSpawnHelpers(): void {
+    for (const arch of ["x64", "arm64"]) {
+        const helper = join(HERE, "node_modules", "node-pty", "prebuilds", `darwin-${arch}`, "spawn-helper");
+        if (existsSync(helper)) chmodSync(helper, 0o755);
+    }
+}
+
 interface BuiltBinary {
     app: DlApp;
     target: Target;
@@ -365,20 +377,16 @@ interface BuiltBinary {
     sha256: string;
     sha512: string;
     size: number;
-    updateOnly?: boolean;
 }
 
-async function buildPbTarget(target: Target): Promise<BuiltBinary[]> {
+async function buildPbTarget(target: Target): Promise<BuiltBinary> {
+    if (osOf(target) === "macos") ensureMacSpawnHelpers();
     await sh([process.execPath, "run", PB_BUILD_SCRIPT[target]], { quiet: false });
-    const built: BuiltBinary[] = [];
-    for (const artifact of paperboardArtifacts(target, version)) {
-        const filePath = join(distDir, artifact.buildFile);
-        if (!existsSync(filePath)) throw new Error(`Missing ${target} artifact: ${filePath}`);
-        const { sha256, sha512, size } = await hashFile(filePath);
-        built.push({ app: "pb", target, filePath, filename: artifact.buildFile,
-            updateOnly: artifact.updateOnly, sha256, sha512, size });
-    }
-    return built;
+    const artifact = paperboardArtifacts(target, version);
+    const filePath = join(distDir, artifact.buildFile);
+    if (!existsSync(filePath)) throw new Error(`Missing ${target} artifact: ${filePath}`);
+    const { sha256, sha512, size } = await hashFile(filePath);
+    return { app: "pb", target, filePath, filename: artifact.buildFile, sha256, sha512, size };
 }
 
 async function buildCraneTarget(target: Target): Promise<BuiltBinary> {
@@ -416,7 +424,7 @@ async function stageReleaseAssets(built: BuiltBinary[]): Promise<BuiltBinary[]> 
     const staged: BuiltBinary[] = [];
     for (const b of built) {
         const file = b.app === "pb"
-            ? paperboardArtifacts(b.target, version).find((a) => a.updateOnly === !!b.updateOnly)!.releaseFile
+            ? paperboardArtifacts(b.target, version).releaseFile
             : assetFileName(b.app, b.target);
         const outPath = join(stagedDir, file);
         if (b.app === "pb") {
@@ -447,6 +455,22 @@ async function stageReleaseAssets(built: BuiltBinary[]): Promise<BuiltBinary[]> 
     return staged;
 }
 
+// Build the selected app/target jobs, each hashed as produced. Shared by the
+// interactive build flow and the headless CI builder; the CI builder then
+// stages the canonical release assets with stageReleaseAssets.
+async function buildSelected(jobs: { app: DlApp; target: Target }[]): Promise<BuiltBinary[]> {
+    const progress = bar(jobs.length);
+    const built: BuiltBinary[] = [];
+    for (const j of jobs) {
+        const b =
+            j.app === "pb" ? [await buildPbTarget(j.target)] : [await buildCraneTarget(j.target)];
+        built.push(...b);
+        progress.increment(1, { task: `${j.app} ${j.target}` });
+    }
+    progress.stop();
+    return built;
+}
+
 // ─── Flow: build binaries (local only) ──────────────────────────────────────
 
 async function flowBuildBinaries(): Promise<void> {
@@ -475,19 +499,11 @@ async function flowBuildBinaries(): Promise<void> {
         return { app, target };
     });
 
-    const progress = bar(jobs.length);
-    const built: BuiltBinary[] = [];
-    for (const j of jobs) {
-        const b =
-            j.app === "pb" ? await buildPbTarget(j.target) : [await buildCraneTarget(j.target)];
-        built.push(...b);
-        progress.increment(1, { task: `${j.app} ${j.target}` });
-    }
-    progress.stop();
+    const built = await buildSelected(jobs);
 
     // Local record (informational; the USB bundle rebuilds from scratch).
     for (const app of ["pb", "crane"] as DlApp[]) {
-        const mine = built.filter((b) => b.app === app && !b.updateOnly);
+        const mine = built.filter((b) => b.app === app);
         if (!mine.length) continue;
         const record: Record<string, unknown> = {};
         for (const b of mine) {
@@ -534,15 +550,7 @@ async function flowPublishBinaries(): Promise<void> {
         ...ALL_TARGETS.map((target) => ({ app: "pb" as DlApp, target })),
         ...ALL_TARGETS.map((target) => ({ app: "crane" as DlApp, target })),
     ];
-    const progress = bar(jobs.length);
-    const built: BuiltBinary[] = [];
-    for (const j of jobs) {
-        const b =
-            j.app === "pb" ? await buildPbTarget(j.target) : [await buildCraneTarget(j.target)];
-        built.push(...b);
-        progress.increment(1, { task: `${j.app} ${j.target}` });
-    }
-    progress.stop();
+    const built = await buildSelected(jobs);
 
     p.log.step("Staging canonical release assets in dist/release/…");
     const staged = await stageReleaseAssets(built);
@@ -583,7 +591,22 @@ async function flowPublishBinaries(): Promise<void> {
         p.log.success(`${tag}: ${files.length} asset(s) uploaded.`);
     }
 
-    // KV version database: record this version's files, move latest.
+    await publishIndex(signingKey, version, staged);
+
+    p.log.success("Published:");
+    printTable([
+        ["what", "url"],
+        [`release pb`, `https://github.com/${GH_REPO}/releases/tag/${tagFor("pb", version)}`],
+        [`release crane`, `https://github.com/${GH_REPO}/releases/tag/${tagFor("crane", version)}`],
+        [`latest pb`, dlFileUrl("pb", "latest", assetFileName("pb", "macos-arm64"))],
+        [`latest crane`, dlFileUrl("crane", "latest", assetFileName("crane", "linux-x64"))],
+    ]);
+    p.outro(`Paperboard v${version} is live.`);
+}
+
+// Move the live index to a finished release: KV version records, the signed
+// crane update index on R2, and the electron-updater feeds.
+async function publishIndex(signingKey: KeyObject, v: string, staged: BuiltBinary[]): Promise<void> {
     for (const app of ["pb", "crane"] as DlApp[]) {
         const prev = await kvReadRecord(app);
         const files: VersionFileEntry[] = staged
@@ -594,13 +617,13 @@ async function flowPublishBinaries(): Promise<void> {
                 sha512: b.sha512,
                 size: b.size,
                 signature: app === "crane"
-                    ? signVerified(signingKey, releaseMessage.crane(version, b.sha256), b.filename)
-                    : signVerified(signingKey, releaseMessage.app(version, b.filename, b.sha512), b.filename),
+                    ? signVerified(signingKey, releaseMessage.crane(v, b.sha256), b.filename)
+                    : signVerified(signingKey, releaseMessage.app(v, b.filename, b.sha512), b.filename),
             }));
-        const next = mergeVersionRecord(prev, version, files);
+        const next = mergeVersionRecord(prev, v, files);
         await kvWriteRecord(app, next);
         p.log.success(
-            `Index ${kvKeyFor(app)}: recorded v${version} (${prev ? Object.keys(prev.versions).length : 0} → ${Object.keys(next.versions).length} versions, latest → v${version}).`,
+            `Index ${kvKeyFor(app)}: recorded v${v} (${prev ? Object.keys(prev.versions).length : 0} → ${Object.keys(next.versions).length} versions, latest → v${v}).`,
         );
     }
 
@@ -608,14 +631,14 @@ async function flowPublishBinaries(): Promise<void> {
     // carries the signed version/sha256 facts the daemon verifies, so a
     // remote self-update has an authoritative entry to act on.
     const craneIndex = buildCraneIndex(
-        version,
+        v,
         staged
             .filter((b) => b.app === "crane")
             .map((b) => ({
                 target: b.target,
                 file: b.filename,
                 sha256: b.sha256,
-                signature: signVerified(signingKey, releaseMessage.crane(version, b.sha256), b.filename),
+                signature: signVerified(signingKey, releaseMessage.crane(v, b.sha256), b.filename),
             })),
     );
     const craneIndexTmp = join(tmpdir(), `crane-index-${Date.now()}.json`);
@@ -644,7 +667,7 @@ async function flowPublishBinaries(): Promise<void> {
         byOs.get(os)!.push({ target: b.target, file: b.filename, sha512: b.sha512, size: b.size });
     }
     for (const [os, entries] of byOs) {
-        const { key, text } = buildLatestYml(os, version, entries, releaseDate);
+        const { key, text } = buildLatestYml(os, v, entries, releaseDate);
         const tmp = join(tmpdir(), `pb-${ymlKeyFor(os)}-${Date.now()}.yml`);
         try {
             writeFileSync(tmp, text);
@@ -658,16 +681,6 @@ async function flowPublishBinaries(): Promise<void> {
             }
         }
     }
-
-    p.log.success("Published:");
-    printTable([
-        ["what", "url"],
-        [`release pb`, `https://github.com/${GH_REPO}/releases/tag/${tagFor("pb", version)}`],
-        [`release crane`, `https://github.com/${GH_REPO}/releases/tag/${tagFor("crane", version)}`],
-        [`latest pb`, dlFileUrl("pb", "latest", assetFileName("pb", "macos-arm64"))],
-        [`latest crane`, dlFileUrl("crane", "latest", assetFileName("crane", "linux-x64"))],
-    ]);
-    p.outro(`Paperboard v${version} is live.`);
 }
 
 // ─── Flow: publish panels ───────────────────────────────────────────────────
@@ -948,7 +961,7 @@ async function flowPublishPackages(): Promise<void> {
 // Builds Paperboard installers + crane binaries + all panels into ../usb/:
 //
 //   usb/
-//     installers/    win setup exe, mac DMG, linux AppImage (per selected arch)
+//     installers/    win setup exe, mac ZIP, linux AppImage (per selected arch)
 //     crane/         papercrane-<target> binaries
 //     panels/        <board-id>/ (manifest.json + dist/ + branding/)
 //     link-panels.sh symlinks panels/ into ~/.paperboard/panels/ for testing
@@ -957,7 +970,7 @@ async function flowPublishPackages(): Promise<void> {
 // Only the requested operating systems and architectures are bundled: a
 // Windows-only or arm64-only run skips the other crane/target builds and
 // stages only the selected installers. (macOS still compiles both arches in
-// its single electron-builder pass; only the selected DMGs are copied.)
+// its single electron-builder pass; only the selected ZIPs are copied.)
 //
 //   bun scripts/publish.ts usb                       # pick OSes+arches (TTY)
 //   bun scripts/publish.ts usb --os windows          # Windows only
@@ -1041,24 +1054,10 @@ async function buildUsbFolder(oses: Os[], arches: Arch[]) {
     mkdirSync(craneDir, { recursive: true });
     mkdirSync(panelsDir, { recursive: true });
 
-    // npm ships node-pty's spawn-helper without the exec bit; restore it or
-    // every packaged mac app gets a pty helper that can never execute.
-    // (Runtime self-heal in pty.ts covers copies; this covers the build.)
-    if (selected.has("macos")) {
-        for (const arch of ["x64", "arm64"]) {
-            const helper = join(
-                HERE,
-                "node_modules",
-                "node-pty",
-                "prebuilds",
-                `darwin-${arch}`,
-                "spawn-helper",
-            );
-            try {
-                if (existsSync(helper)) await $`chmod +x ${helper}`;
-            } catch (err) { console.debug("spawn-helper chmod skipped:", String(err)); }
-        }
-    }
+    // A packaged mac app gets a pty helper that can never execute unless
+    // its exec bit is restored first. (Runtime self-heal in pty.ts covers
+    // copies; this covers the build.)
+    if (selected.has("macos")) ensureMacSpawnHelpers();
 
     const snapshotDist = () => Date.now();
     const copyNew = (buildStart: number, dest: string, match: (f: string) => boolean) => {
@@ -1076,7 +1075,7 @@ async function buildUsbFolder(oses: Os[], arches: Arch[]) {
         return fresh;
     };
 
-    // 1. Paperboard installers per OS (macOS DMGs are copied below)
+    // 1. Paperboard installers per OS (macOS ZIPs are copied below)
     const osBuilds: {
         os: Os;
         arch: Arch;
@@ -1099,15 +1098,15 @@ async function buildUsbFolder(oses: Os[], arches: Arch[]) {
         console.log(`   → ${fresh.join(", ")}`);
     }
 
-    // Bundle the same DMGs we publish; ZIP companions remain update payloads.
+    // Bundle the same macOS ZIPs we publish (installer and updater payload).
     if (selected.has("macos")) {
         console.log(`\n🔨 Building Paperboard for macos…\n`);
         const before = snapshotDist();
         await $`bun run build:mac`.cwd(HERE);
         for (const target of targetsForOses(["macos"], arches)) {
-            const installer = paperboardArtifacts(target, version)[0];
+            const installer = paperboardArtifacts(target, version);
             const fresh = copyNew(before, installersDir, (f) => f === installer.buildFile);
-            if (!fresh.length) throw new Error(`No fresh DMG found: ${installer.buildFile}`);
+            if (!fresh.length) throw new Error(`No fresh macOS ZIP found: ${installer.buildFile}`);
             installerFiles.push(...fresh.map((f) => `installers/${f}`));
             console.log(`   → ${fresh.join(", ")}`);
         }
@@ -1205,9 +1204,8 @@ echo done. Restart Paperboard to pick up the panels.
 INSTALLERS (installers/)
 ${installerFiles.map((f) => `  ${f}`).join("\n")}
 
-  Install: Windows -> run the setup exe; macOS -> double-click the
-  .dmg to mount it, then drag Paperboard.app to the Applications shortcut;
-  Linux -> chmod +x the .AppImage, then run it.
+  Install: Windows -> run the setup exe; macOS -> unzip and drag
+  Paperboard.app to Applications; Linux -> chmod +x the .AppImage, then run it.
 
   PAPERBOARD SERVER BINARIES (crane/)
   Standalone Paperboard server daemon per target. Mostly useful for headless boxes:
