@@ -35,7 +35,7 @@ cd Paperboard
 bun run setup
 ```
 
-`setup` installs every workspace's dependencies and builds the shared libraries and panels. After that, each project has its own README with dev and build instructions — for the app, that's [apps/paperboard](apps/paperboard/README.md).
+`setup` installs every workspace's dependencies, fetches the Electron runtime binary (a one-time download of roughly 100 MB), builds the shared libraries and panels, and links the panels into your Paperboard install. After that, each project has its own README with dev and build instructions — for the app, that's [apps/paperboard](apps/paperboard/README.md).
 
 ## Agents & Contributing
 
