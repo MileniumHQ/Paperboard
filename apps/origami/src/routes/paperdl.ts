@@ -110,6 +110,24 @@ async function serveDownloadRedirect(
     return redirectResponse(r.url, r.immutable);
 }
 
+// A missing index object is an empty registry (the host's update planner
+// treats {} as "nothing to do"), not a 404 — unlike a missing yml feed.
+async function serveR2Index(env: Env, key: string): Promise<Response> {
+    const dl = env.PAPERDL_BUCKET;
+    if (!dl) {
+        return jsonResponse({ error: "PAPERDL_BUCKET not configured" }, 500);
+    }
+    const obj = await dl.get(key);
+    if (!obj) return jsonResponse({});
+    return new Response(await obj.text(), {
+        headers: {
+            "Content-Type": "application/json",
+            "Cache-Control": "no-cache",
+            "Access-Control-Allow-Origin": "*",
+        },
+    });
+}
+
 async function serveR2Yml(env: Env, name: string): Promise<Response> {
     const dl = env.PAPERDL_BUCKET;
     if (!dl) {
@@ -192,6 +210,15 @@ export async function handlePaperdlRoutes(
         ) {
             return serveR2Yml(env, sub.slice(1));
         }
+        // The index is served under the versioned scheme too: the host
+        // updater fetches /paperdl/crane/index.json, and this branch would
+        // otherwise shadow the legacy index handler below.
+        if (
+            request.method === "GET" &&
+            (sub === "/index.json" || sub === "" || sub === "/")
+        ) {
+            return serveR2Index(env, `${app}/index.json`);
+        }
         const m =
             request.method === "GET" ? sub.match(/^\/([^/]+)\/([^/]+)$/) : null;
         if (m) {
@@ -230,28 +257,12 @@ export async function handlePaperdlRoutes(
     if (paperdlMatch) {
         const app = paperdlMatch[1] as "crane" | "paperboard";
         const sub = paperdlMatch[2] || "";
-        const dl = env.PAPERDL_BUCKET;
 
         if (
             request.method === "GET" &&
             (sub === "/index.json" || sub === "" || sub === "/")
         ) {
-            if (!dl) {
-                return jsonResponse(
-                    { error: "PAPERDL_BUCKET not configured" },
-                    500,
-                );
-            }
-            const obj = await dl.get(`${app}/index.json`);
-            if (!obj) return jsonResponse({});
-            const text = await obj.text();
-            return new Response(text, {
-                headers: {
-                    "Content-Type": "application/json",
-                    "Cache-Control": "no-cache",
-                    "Access-Control-Allow-Origin": "*",
-                },
-            });
+            return serveR2Index(env, `${app}/index.json`);
         }
 
         if (

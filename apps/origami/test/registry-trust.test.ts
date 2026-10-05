@@ -176,6 +176,7 @@ describe("download redirects", () => {
             "pb/latest-mac.yml": "version: 3.0.0-alpha\n",
             "pb/latest-linux.yml": "version: 3.0.0-alpha\n",
             "paperboard/index.json": JSON.stringify({ frozen: true }),
+            "crane/index.json": JSON.stringify({ "linux-x64": { version: "0.1.0" } }),
         };
         const dl = {
             async get(key: string) {
@@ -353,6 +354,13 @@ describe("download redirects", () => {
         const res = await get("http://localhost/paperdl/paperboard/index.json", env);
         expect(res.status).toBe(200);
         expect(await res.json()).toEqual({ frozen: true });
+    });
+
+    it("serves the crane index under the versioned scheme (the updater's URL)", async () => {
+        const env = envWithDownloads();
+        const res = await get("http://localhost/paperdl/crane/index.json", env);
+        expect(res.status).toBe(200);
+        expect(await res.json()).toEqual({ "linux-x64": { version: "0.1.0" } });
     });
 
     it("does not serve short routes on the main host", async () => {
