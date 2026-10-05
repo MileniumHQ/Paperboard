@@ -115,17 +115,18 @@ describe("usb OS and arch selection", () => {
 });
 
 describe("release tags and URLs", () => {
-    it("tags carry the app so one repo hosts both lines", () => {
-        expect(tagFor("pb", "3.0.0-alpha")).toBe("pb-v3.0.0-alpha");
-        expect(tagFor("crane", "2.0.0-alpha")).toBe("crane-v2.0.0-alpha");
+    it("uses one tag per version for both release lines", () => {
+        expect(tagFor("3.0.0-alpha")).toBe("v3.0.0-alpha");
+        expect(tagFor("0.1.0")).toBe("v0.1.0");
     });
 
     it("release assets address the GitHub tag, never Origami bytes", () => {
-        expect(releaseAssetUrl("pb", "3.0.0-alpha", "paperboard-macos-x64.zip")).toBe(
-            "https://github.com/MileniumHQ/Paperboard/releases/download/pb-v3.0.0-alpha/paperboard-macos-x64.zip",
+        // the app and its embedded server share the version's one tag
+        expect(releaseAssetUrl("3.0.0-alpha", "paperboard-macos-x64.zip")).toBe(
+            "https://github.com/MileniumHQ/Paperboard/releases/download/v3.0.0-alpha/paperboard-macos-x64.zip",
         );
-        expect(releaseAssetUrl("crane", "2.0.0-alpha", "crane-linux-arm64.tar.gz")).toBe(
-            "https://github.com/MileniumHQ/Paperboard/releases/download/crane-v2.0.0-alpha/crane-linux-arm64.tar.gz",
+        expect(releaseAssetUrl("3.0.0-alpha", "crane-linux-arm64.tar.gz")).toBe(
+            "https://github.com/MileniumHQ/Paperboard/releases/download/v3.0.0-alpha/crane-linux-arm64.tar.gz",
         );
     });
 

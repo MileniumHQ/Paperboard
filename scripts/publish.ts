@@ -56,7 +56,6 @@ import {
     mergeVersionRecord,
     osOf,
     parseUsbArgs,
-    releaseAssetUrl,
     storedRecordOrigin,
     storeUploadParts,
     tagFor,
@@ -574,30 +573,27 @@ async function flowPublishBinaries(): Promise<void> {
     await ensureGithubAuth();
     await ensureCloudflareAuth();
 
-    // GitHub releases (one line per app; tags carry the app).
-    for (const app of ["pb", "crane"] as DlApp[]) {
-        const tag = tagFor(app, version);
-        const files = staged.filter((b) => b.app === app).map((b) => b.filePath);
-        const title = app === "pb" ? `Paperboard v${version}` : `Paperboard Server v${version}`;
-        await ghReleaseEnsure(tag, title);
-        const up = bar(files.length);
-        for (const f of files) {
-            await sh(["gh", "release", "upload", tag, f, "--clobber", "--repo", GH_REPO], {
-                quiet: true,
-            });
-            up.increment(1, { task: basename(f) });
-        }
-        up.stop();
-        p.log.success(`${tag}: ${files.length} asset(s) uploaded.`);
+    // One GitHub release per version (tag v<version>) holding every app and
+    // server binary: the app embeds its daemon, so they ship as one artifact
+    // set under one tag.
+    const tag = tagFor(version);
+    await ghReleaseEnsure(tag, `Paperboard v${version}`);
+    const up = bar(staged.length);
+    for (const b of staged) {
+        await sh(["gh", "release", "upload", tag, b.filePath, "--clobber", "--repo", GH_REPO], {
+            quiet: true,
+        });
+        up.increment(1, { task: b.filename });
     }
+    up.stop();
+    p.log.success(`${tag}: ${staged.length} asset(s) uploaded.`);
 
     await publishIndex(signingKey, version, staged);
 
     p.log.success("Published:");
     printTable([
         ["what", "url"],
-        [`release pb`, `https://github.com/${GH_REPO}/releases/tag/${tagFor("pb", version)}`],
-        [`release crane`, `https://github.com/${GH_REPO}/releases/tag/${tagFor("crane", version)}`],
+        [`release`, `https://github.com/${GH_REPO}/releases/tag/${tagFor(version)}`],
         [`latest pb`, dlFileUrl("pb", "latest", assetFileName("pb", "macos-arm64"))],
         [`latest crane`, dlFileUrl("crane", "latest", assetFileName("crane", "linux-x64"))],
     ]);

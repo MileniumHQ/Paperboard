@@ -7,8 +7,8 @@ import { jsonResponse, type Env } from "../lib";
 // Canonical facts duplicated in scripts/publishLib.ts
 // (the worker cannot import scripts): DOWNLOAD_HOST, GH_REPO, the
 // /<app>/<version|latest>/<file> redirect contract, VERSION_SEGMENT,
-// FILE_SEGMENT, the <app>-v<version> tag scheme, and the canonical asset
-// names below. Change both sides together.
+// FILE_SEGMENT, the v<version> tag scheme (one release holds both apps'
+// assets), and the canonical asset names below. Change both sides together.
 export const DOWNLOAD_HOST = "i.paperboard.dev";
 const GH_REPO = "MileniumHQ/Paperboard";
 
@@ -77,7 +77,7 @@ function resolveDownloadUrl(
     ) {
         return null;
     }
-    const tag = `${app}-v${version}`;
+    const tag = `v${version}`;
     return {
         url: `https://github.com/${GH_REPO}/releases/download/${tag}/${file}`,
         immutable,

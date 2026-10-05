@@ -155,10 +155,11 @@ export function parseUsbArgs(args: string[]): UsbArgs {
     };
 }
 
-// One repo hosts both release lines, so tags carry the app:
-// pb-v3.0.0-alpha, crane-v3.0.0-alpha.
-export function tagFor(app: DlApp, version: string): string {
-    return `${app}-v${version}`;
+// One repo, one release line: a version's tag is `v<version>` and its single
+// GitHub release holds both the app and the server (crane) binaries. The app
+// embeds its daemon, so a crane change always ships under a new app tag too.
+export function tagFor(version: string): string {
+    return `v${version}`;
 }
 
 // Canonical release-asset filename per app+target. Versionless on purpose:
@@ -209,11 +210,10 @@ export function paperboardArtifacts(target: Target, version: string): {
 // Direct GitHub release-asset URL. publish.ts uploads here; Origami only
 // ever 302-redirects here, it never proxies bytes.
 export function releaseAssetUrl(
-    app: DlApp,
     version: string,
     file: string,
 ): string {
-    return `https://github.com/${GH_REPO}/releases/download/${tagFor(app, version)}/${file}`;
+    return `https://github.com/${GH_REPO}/releases/download/${tagFor(version)}/${file}`;
 }
 
 // Public download URL. versionOrLatest is a real version ("3.0.0-alpha")

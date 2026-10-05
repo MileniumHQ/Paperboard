@@ -525,7 +525,7 @@ describe("download redirects", () => {
         );
         expect(res.status).toBe(302);
         expect(res.headers.get("Location")).toBe(
-            "https://github.com/MileniumHQ/Paperboard/releases/download/pb-v3.0.0-alpha/paperboard-macos-x64.zip",
+            "https://github.com/MileniumHQ/Paperboard/releases/download/v3.0.0-alpha/paperboard-macos-x64.zip",
         );
         expect(res.headers.get("Cache-Control")).toContain("immutable");
     });
@@ -535,7 +535,7 @@ describe("download redirects", () => {
         const res = await get(dl("/crane/latest/crane-linux-arm64.tar.gz"), env);
         expect(res.status).toBe(302);
         expect(res.headers.get("Location")).toBe(
-            "https://github.com/MileniumHQ/Paperboard/releases/download/crane-v2.0.0-alpha/crane-linux-arm64.tar.gz",
+            "https://github.com/MileniumHQ/Paperboard/releases/download/v2.0.0-alpha/crane-linux-arm64.tar.gz",
         );
         expect(res.headers.get("Cache-Control")).toBe("no-cache");
     });
@@ -545,7 +545,7 @@ describe("download redirects", () => {
         const res = await get(dl("/pb/2.0.0-alpha/paperboard-macos-x64.zip"), env);
         expect(res.status).toBe(302);
         expect(res.headers.get("Location")).toBe(
-            "https://github.com/MileniumHQ/Paperboard/releases/download/pb-v2.0.0-alpha/paperboard-macos-x64.zip",
+            "https://github.com/MileniumHQ/Paperboard/releases/download/v2.0.0-alpha/paperboard-macos-x64.zip",
         );
     });
 
@@ -615,7 +615,7 @@ describe("download redirects", () => {
         );
         expect(versioned.status).toBe(302);
         expect(versioned.headers.get("Location")).toBe(
-            "https://github.com/MileniumHQ/Paperboard/releases/download/pb-v3.0.0-alpha/paperboard-macos-x64.zip",
+            "https://github.com/MileniumHQ/Paperboard/releases/download/v3.0.0-alpha/paperboard-macos-x64.zip",
         );
         const latest = await get(
             "http://localhost/paperdl/crane/latest/crane-linux-arm64.tar.gz",
@@ -623,7 +623,7 @@ describe("download redirects", () => {
         );
         expect(latest.status).toBe(302);
         expect(latest.headers.get("Location")).toBe(
-            "https://github.com/MileniumHQ/Paperboard/releases/download/crane-v2.0.0-alpha/crane-linux-arm64.tar.gz",
+            "https://github.com/MileniumHQ/Paperboard/releases/download/v2.0.0-alpha/crane-linux-arm64.tar.gz",
         );
         const feed = await get("http://localhost/paperdl/pb/latest.yml", env);
         expect(feed.status).toBe(200);
