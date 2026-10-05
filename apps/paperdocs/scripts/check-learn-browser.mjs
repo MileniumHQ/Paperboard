@@ -6,6 +6,16 @@ import { resolve, extname, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { checkDownloads } from './check-download-browser.mjs';
 
+// Perceived brightness of an "rgb(...)"/"color(srgb ...)" string, so a test can
+// assert one layer actually sits darker than the field it rests on.
+function luminance(color) {
+    const values = color.match(/[\d.]+/g).slice(0, 3).map(Number);
+    const [r, g, b] = color.startsWith("color(")
+        ? values.map((value) => value * 255)
+        : values;
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
 // Check the distributed static documents, not a Vite SPA fallback. The Worker
 // routing has its own tests; this loopback server owns and tears down its sockets.
 const dist = resolve(fileURLToPath(new URL("../dist/", import.meta.url)));
@@ -69,24 +79,53 @@ try {
         assert.ok(await page.locator(".learn-outro h2").evaluate(element => element.classList.contains("marketing-heading")));
         assert.equal(await page.locator(".learn-outro h2 .marketing-heading-label").innerText(), `Get ${slug === "ai" ? "Local AI" : slug === "game-server" ? "Game Server" : slug === "bot-creator" ? "Bot Creator" : "Actions"}`);
         assert.ok(await page.locator(".learn-feature-copy").evaluateAll(elements => elements.every(element => getComputedStyle(element).textAlign === "center")));
-        assert.ok(await page.locator(".site-topbar__trigger, .site-topbar__link, .site-topbar__item-text strong").evaluateAll(elements => elements.every(element => {
+        assert.ok(await page.locator(".site-topbar__trigger, .site-topbar__link").evaluateAll(elements => elements.every(element => {
+            const canvas = document.createElement("canvas"); canvas.width = canvas.height = 1;
+            const ctx = canvas.getContext("2d"); ctx.fillStyle = getComputedStyle(element).color; ctx.fillRect(0, 0, 1, 1);
+            const rgb = ctx.getImageData(0, 0, 1, 1).data;
+            return Math.min(rgb[0], rgb[1], rgb[2]) > 180;
+        })), "Topbar links need light ink on the smoked glass bar");
+        assert.ok(await page.locator(".site-topbar__item-text strong").evaluateAll(elements => elements.every(element => {
             const canvas = document.createElement("canvas"); canvas.width = canvas.height = 1;
             const ctx = canvas.getContext("2d"); ctx.fillStyle = getComputedStyle(element).color; ctx.fillRect(0, 0, 1, 1);
             const rgb = ctx.getImageData(0, 0, 1, 1).data;
             return Math.max(rgb[0], rgb[1], rgb[2]) < 60;
-        })), "Topbar links need dark ink on the frosted light surface");
+        })), "Dropdown items keep dark ink on their white menu");
         assert.equal(await page.locator(".learn-hero-shot").evaluate(element => getComputedStyle(element, "::before").transform), "matrix(1, 0, 0, 1, 14, 16)");
         assert.equal(
             await page.locator(".site-topbar__download .download-label").innerText(),
             "Download",
         );
+        await page.waitForFunction(() =>
+            document
+                .querySelector(".site-topbar__name styled-text")
+                ?.shadowRoot?.querySelector("#mainText"),
+        );
         logoColors.add(
             await page
-                .locator(".site-topbar__name")
-                .evaluate((element) => getComputedStyle(element).color),
+                .locator(".site-topbar__name styled-text")
+                .evaluate((element) =>
+                    getComputedStyle(
+                        element.shadowRoot.querySelector("#mainText"),
+                    ).fill,
+                ),
         );
-        assert.equal(await page.locator('.site-topbar__name').evaluate(element => getComputedStyle(element).textShadow), 'none');
-        assert.ok(await page.locator('.site-topbar__name').evaluate(element => getComputedStyle(element).color === getComputedStyle(element).getPropertyValue('--paper-marketing-ink').trim() || getComputedStyle(element).color === 'rgb(8, 12, 18)'), 'Wordmark uses plain dark ink');
+        const wordmarkAccent = await page
+            .locator(".site-topbar__name")
+            .evaluate((element) => {
+                const style = getComputedStyle(element);
+                return {
+                    accent: style
+                        .getPropertyValue("--paper-site-accent")
+                        .trim(),
+                    primary: style.getPropertyValue("--paper-primary").trim(),
+                };
+            });
+        assert.equal(
+            wordmarkAccent.accent,
+            wordmarkAccent.primary,
+            "Wordmark must pin its accent to the landing blue instead of inheriting the panel accent",
+        );
         await page.waitForFunction(() =>
             document
                 .querySelector(".download-cta paper-button")
@@ -101,6 +140,29 @@ try {
                         getComputedStyle(element.shadowRoot.querySelector(".PaperButton"))
                             .boxShadow,
                 ),
+        );
+        const backLayer = await page
+            .locator(".download-cta paper-button")
+            .first()
+            .evaluate((element) =>
+                getComputedStyle(
+                    element.shadowRoot.querySelector(".PaperEffect"),
+                    "::before",
+                ).backgroundColor,
+            );
+        const pageField = await page.evaluate(() => {
+            const field = document.querySelector(".learn-page");
+            const probe = document.createElement("div");
+            probe.style.background =
+                "color-mix(in srgb, var(--paper-site-accent) 25%, var(--paper-marketing-ink))";
+            field.appendChild(probe);
+            const color = getComputedStyle(probe).backgroundColor;
+            probe.remove();
+            return color;
+        });
+        assert.ok(
+            luminance(backLayer) < luminance(pageField),
+            `The button back layer on ${slug} must sit darker than the page field`,
         );
         assert.equal(await page.locator(".learn-feature").count(), slug === "game-server" ? 4 : 3);
         assert.ok((await page.locator(".is-pending").count()) > 0);
@@ -134,10 +196,31 @@ try {
     assert.equal(
         logoColors.size,
         1,
-        "Paperboard branding must keep the same color on every panel page",
+        "The Paperboard wordmark must render the same texture color on every panel page",
+    );
+    assert.equal(
+        [...logoColors][0],
+        "rgb(255, 255, 255)",
+        "The wordmark must use the white header glyph texture, not a recolored fill",
     );
     assert.equal(buttonShadows.size, 4, "Download button shadows must follow each panel accent");
     await page.goto(`${origin}/`);
+    await page.waitForFunction(() =>
+        document
+            .querySelector(".site-topbar__name styled-text")
+            ?.shadowRoot?.querySelector("#mainText"),
+    );
+    assert.equal(
+        await page
+            .locator(".site-topbar__name styled-text")
+            .evaluate((element) =>
+                getComputedStyle(
+                    element.shadowRoot.querySelector("#mainText"),
+                ).fill,
+            ),
+        [...logoColors][0],
+        "The landing wordmark must use the same blue as every panel page",
+    );
     assert.equal(await page.locator('.chart-section, script[src="/js/bar-chart.js"]').count(), 0);
     assert.equal(
         await page
@@ -371,7 +454,12 @@ try {
         );
         await page.getByRole("button", { name: "Open navigation" }).click();
         assert.equal(await page.locator("#site-mobile-menu").getAttribute("hidden"), null);
-        assert.ok(await page.locator(".site-topbar__mobile-link").evaluateAll(elements => elements.every(element => getComputedStyle(element).color !== "rgb(255, 255, 255)")));
+        assert.ok(await page.locator(".site-topbar__mobile-link").evaluateAll(elements => elements.every(element => {
+            const canvas = document.createElement("canvas"); canvas.width = canvas.height = 1;
+            const ctx = canvas.getContext("2d"); ctx.fillStyle = getComputedStyle(element).color; ctx.fillRect(0, 0, 1, 1);
+            const rgb = ctx.getImageData(0, 0, 1, 1).data;
+            return Math.min(rgb[0], rgb[1], rgb[2]) > 180;
+        })), "Mobile menu links need light ink on the smoked glass panel");
         await page.keyboard.press("Escape");
         assert.notEqual(await page.locator("#site-mobile-menu").getAttribute("hidden"), null);
         console.log(`verified mobile ${slug}: layout and navigation dismissal`);
@@ -389,6 +477,11 @@ try {
     const staticPage = await browser.newPage({ javaScriptEnabled: false });
     await staticPage.goto(`${origin}/ai/`);
     assert.equal(await staticPage.locator("h1").innerText(), "AI on your computer");
+    assert.equal(
+        (await staticPage.locator(".site-topbar__name").innerText()).trim(),
+        "Paperboard",
+        "Without JavaScript the wordmark must fall back to a single plain label",
+    );
     assert.equal(
         await staticPage
             .locator(".learn-feature")

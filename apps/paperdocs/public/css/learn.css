@@ -6,7 +6,7 @@
     );
     --paper-button-deep: color-mix(
         in srgb,
-        var(--paper-site-accent) 38%,
+        var(--paper-site-accent) 18%,
         var(--paper-marketing-ink)
     );
     --paper-button-ink: var(--paper-on-color);

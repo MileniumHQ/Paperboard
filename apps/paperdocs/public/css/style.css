@@ -72,14 +72,18 @@ html {
     align-items: center;
     gap: clamp(8px, 1.6vw, 22px);
     padding: 7px 7px 7px 18px;
-    background: rgba(255, 255, 255, 0.5);
-    border: 1px solid rgba(255, 255, 255, 0.45);
+    /* Smoked ink glass, independent of the page behind it. The white paper
+       wordmark and light links stay readable over the landing hero and the
+       learn pages alike. */
+    background: color-mix(in srgb, var(--paper-marketing-ink) 72%, transparent);
+    border: 1px solid rgba(255, 255, 255, 0.12);
     border-radius: 999px;
     -webkit-backdrop-filter: blur(18px) saturate(1.5);
     backdrop-filter: blur(18px) saturate(1.5);
     box-shadow:
-        0 18px 40px -16px rgba(2, 26, 62, 0.4),
-        0 8px 18px -10px color-mix(in srgb, var(--paper-site-accent) 28%, transparent);
+        0 18px 40px -16px rgba(2, 8, 20, 0.55),
+        0 8px 18px -10px color-mix(in srgb, var(--paper-site-accent) 30%, transparent),
+        inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 .site-topbar__brand {
@@ -145,7 +149,7 @@ html {
     border: 0;
     border-radius: 999px;
     background: none;
-    color: var(--paper-marketing-ink);
+    color: rgba(255, 255, 255, 0.88);
     font-family: "Nunito", sans-serif;
     font-size: 15px;
     font-weight: 700;
@@ -160,8 +164,8 @@ html {
 .site-topbar__trigger:hover,
 .site-topbar__link:hover,
 .site-topbar__menu.is-open .site-topbar__trigger {
-    background: #eef4fb;
-    color: var(--paper-marketing-ink);
+    background: rgba(255, 255, 255, 0.14);
+    color: #ffffff;
 }
 
 .site-topbar__caret {
@@ -264,13 +268,14 @@ html {
     border: 0;
     border-radius: 999px;
     background: none;
-    color: var(--paper-marketing-ink);
+    color: rgba(255, 255, 255, 0.88);
     cursor: pointer;
     transition: background-color 0.18s ease;
 }
 
 .site-topbar__mobile-toggle:hover {
-    background: #eef4fb;
+    background: rgba(255, 255, 255, 0.14);
+    color: #ffffff;
 }
 
 .site-topbar__mobile-toggle .icon {
@@ -285,14 +290,15 @@ html {
     display: flex;
     flex-direction: column;
     gap: 2px;
-    background: rgba(255, 255, 255, 0.94);
-    border: 1px solid rgba(255, 255, 255, 0.5);
+    background: color-mix(in srgb, var(--paper-marketing-ink) 88%, transparent);
+    border: 1px solid rgba(255, 255, 255, 0.12);
     border-radius: 28px;
     -webkit-backdrop-filter: blur(18px) saturate(1.5);
     backdrop-filter: blur(18px) saturate(1.5);
     box-shadow:
-        0 24px 50px -16px rgba(2, 26, 62, 0.45),
-        0 8px 20px -10px color-mix(in srgb, var(--paper-site-accent) 30%, transparent);
+        0 24px 50px -16px rgba(2, 8, 20, 0.6),
+        0 8px 20px -10px color-mix(in srgb, var(--paper-site-accent) 30%, transparent),
+        inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 .site-topbar__mobile[hidden] {
@@ -313,14 +319,14 @@ html {
     font-weight: 800;
     letter-spacing: 0.06em;
     text-transform: uppercase;
-    color: #6b7f96;
+    color: rgba(255, 255, 255, 0.55);
 }
 
 .site-topbar__mobile-link {
     display: block;
     padding: 10px 14px;
     border-radius: 16px;
-    color: var(--paper-marketing-ink);
+    color: rgba(255, 255, 255, 0.88);
     font-size: 15px;
     font-weight: 700;
     text-decoration: none;
@@ -328,8 +334,8 @@ html {
 }
 
 .site-topbar__mobile-link:hover {
-    background: #eef4fb;
-    color: var(--paper-marketing-ink);
+    background: rgba(255, 255, 255, 0.14);
+    color: #ffffff;
 }
 
 .icon-menu {

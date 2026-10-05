@@ -5,6 +5,47 @@
     width: 30px;
 }
 
+/* The "Paperboard" wordmark: the same styled-text paper texture as the
+   marketing headings (white glyphs, soft shadow, grain), but its inner-shadow
+   hue is pinned to the landing blue instead of inheriting each page's accent.
+   Shared by the landing chrome and the app topbar so the brand reads the same
+   on every page. */
+.paper-wordmark {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    --paper-site-accent: var(--paper-primary);
+}
+
+.paper-wordmark-label {
+    font-size: 20px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    /* Only shows before the script upgrades the texture; blue keeps it
+       readable on the light frosted bar, then the white glyphs take over. */
+    color: var(--paper-primary);
+}
+
+/* Until the styled-text script upgrades the tag it would flash unstyled; the
+   plain label stands in, then gives way to the textured glyphs. */
+.paper-wordmark styled-text:not(:defined) {
+    display: none;
+}
+
+.paper-wordmark:has(styled-text:defined) .paper-wordmark-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+
+.paper-wordmark .styled-text-host {
+    display: inline-flex;
+    line-height: 0;
+}
+
 .paperui-root .topbar {
     border-bottom: var(--paper-border-width) solid var(--paper-border);
     padding: var(--paper-uigap-half);

@@ -18,6 +18,7 @@ import {
 } from "solid-js";
 import { metaSections } from "../docs/meta";
 import { docsPath, withBase } from "../utils/base";
+import { styledText } from "../site/landing/TextEffect";
 import {
     BRAND,
     DOCS_LINKS,
@@ -91,6 +92,9 @@ export function Topbar(props: TopbarProps) {
         );
     const brandName = () =>
         sectionMeta()?.name || (isSite() ? BRAND.name : "PaperDocs");
+    // The site brand is the "Paperboard" wordmark, textured like the
+    // marketing headers. Docs and section brands stay plain PaperUI text.
+    const isWordmark = () => isSite() && !sectionMeta();
 
     return (
         <>
@@ -102,12 +106,26 @@ export function Topbar(props: TopbarProps) {
             >
                 <a class="topbar-brand" href={brandHref()}>
                     <img src={brandImage()} class="logo" />
-                    <PaperText rounded weight={800} size={5}>
-                        {brandName()}{" "}
-                        <Show when={sectionMeta()}>
-                            <PaperText weight={600}>docs</PaperText>
-                        </Show>
-                    </PaperText>
+                    <Show
+                        when={isWordmark()}
+                        fallback={
+                            <PaperText rounded weight={800} size={5}>
+                                {brandName()}{" "}
+                                <Show when={sectionMeta()}>
+                                    <PaperText weight={600}>docs</PaperText>
+                                </Show>
+                            </PaperText>
+                        }
+                    >
+                        <span class="paper-wordmark">
+                            <span class="paper-wordmark-label">Paperboard</span>
+                            <span
+                                class="styled-text-host"
+                                aria-hidden="true"
+                                innerHTML={styledText("Paperboard", 20)}
+                            />
+                        </span>
+                    </Show>
                 </a>
                 <PaperFlex gap="half" direction="row" class="topbar-links">
                     <PaperButton

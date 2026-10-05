@@ -110,6 +110,7 @@ function documentFor(page, path) {
     <body>
 ${stripSsrArtifacts(page.html)}
         <script type="module" src="/site-client.js"></script>
+        ${isDocsPath(path) ? "" : '<script src="/js/styled-text.js"></script>'}
     </body>
 </html>
 `;

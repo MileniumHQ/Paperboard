@@ -131,7 +131,14 @@ export function Topbar() {
             <div class="site-topbar__bar">
                 <a class="site-topbar__brand" href="/">
                     <img class="site-topbar__logo" src={withBase("/paperboard.png")} alt="" />
-                    <span class="site-topbar__name">Paperboard</span>
+                    <span class="site-topbar__name paper-wordmark">
+                        <span class="paper-wordmark-label">Paperboard</span>
+                        <span
+                            class="styled-text-host"
+                            aria-hidden="true"
+                            innerHTML={styledText("Paperboard", 20)}
+                        />
+                    </span>
                 </a>
                 <nav class="site-topbar__nav" aria-label="Primary">
                     <div class="site-topbar__menu" data-topbar-menu>
