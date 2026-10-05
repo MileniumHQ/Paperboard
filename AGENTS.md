@@ -55,7 +55,7 @@ Never compromise on: panels are first-party, not sandboxed; the registry is clos
 
 ## Fix discipline
 
-- **A fix ships with its proof.** A behavioral change needs a regression test of the intended contract that fails without the fix. Names and comments are not proof. Prefer the public path over private fields. For integration defects cross the real boundary (real SDK plus authenticated daemon, pack/publish/install, running child plus stop/update); don't mock away the mechanism that failed. A source grep proves absence of a construct, not runtime behavior.
+- **A fix ships with its proof, scaled to the fix.** A behavioral change needs a regression test of the intended contract that fails without the fix, and the proof scales to the change: a one-line guard gets one assertion, not a suite for the subsystem around it. A change with no behavior to verify (comments, docs, renames, formatting, version bumps) needs a one-line reason instead of a test. Names and comments are not proof. Prefer the public path over private fields. For integration defects cross the real boundary (real SDK plus authenticated daemon, pack/publish/install, running child plus stop/update); don't mock away the mechanism that failed. A source grep proves absence of a construct, not runtime behavior.
 - **A fix closes its own record.** If it contradicts a comment, change the comment in the same commit. If it closes a private ledger entry, delete the entry in the same commit.
 - **One invariant, one implementation.** A security/validation invariant that exists twice is extracted to one module with shared tests, or it isn't fixed.
 - **No half-shipped deprecations.** The loud warning, the `TODO(remove after vX)` marker, and the enforcement date land in one commit. Legacy/fallback code needs that marker and dies in one release.
@@ -104,7 +104,7 @@ Never compromise on: panels are first-party, not sandboxed; the registry is clos
 
 **Done means**
 - Start with a finite checklist of the requested defects. Read the full failing path before editing; state what owns the invariant and what evidence will establish it. Keep unrelated strategy, licensing, and features out of bug fixes.
-- Run targeted tests while working, then `bun run gate` plus any packed-artifact or browser check that applies. A command exiting 0 is not proof; read its output. Pure logic without a test needs a one-line reason.
+- Run targeted tests while working, then `bun run gate` plus any packed-artifact or browser check that applies. A command exiting 0 is not proof; read its output. Pure logic or a non-behavioral change without a test needs a one-line reason.
 - Test data, listeners, children, and servers are torn down even when assertions fail.
 - The final report separates implemented and verified from unfinished or unverified. Don't tick a checklist item because code was written, and don't call a ledger entry closed until its whole path is proven.
 - Commentary is for findings and decisions, not deliberation or routine tool narration.

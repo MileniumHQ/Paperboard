@@ -29,8 +29,9 @@ guarantee we want the PR, but it saves you the time if we don't.
 
 1. Branch from `main`.
 2. Use conventional commits (`feat:`, `fix:`, `chore:`), one concern per commit.
-3. Add a test for any behavioral change; it should fail without your fix. Pure
-   logic without a test needs a one-line reason in the PR.
+3. Add a test for any behavioral change; it should fail without your fix, but
+   keep it proportional to the change. A non-behavioral change needs a one-line
+   reason in the PR instead.
 4. Run the gate from the repo root and make sure it is green:
 
     ```bash
