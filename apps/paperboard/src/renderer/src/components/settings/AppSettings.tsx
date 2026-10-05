@@ -113,7 +113,7 @@ export default function AppSettings(props: {
                 <Show when={!isBrowserShell()}>
                     <PaperSettingItem
                         title="Updates"
-                        description="Runs a full update sweep right now: every panel, package, and Paperboard Server daemon on every connected computer is checked and updated, then Paperboard restarts."
+                        description="Runs a full update sweep right now: every panel, package, and Paperboard server daemon on every connected computer is checked and updated, then Paperboard restarts."
                     >
                         <PaperEffect variant="primary">
                             <PaperButton

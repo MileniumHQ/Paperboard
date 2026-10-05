@@ -371,7 +371,7 @@ export class PaperCraneClient extends EventEmitter {
             ws.on("error", (err: Error) => {
                 if (!current()) return;
                 fail(
-                    `Cannot connect to the Paperboard Server daemon at ${host}:${this.port}` +
+                    `Cannot connect to the Paperboard server daemon at ${host}:${this.port}` +
                         (err?.message ? `: ${err.message}` : ""),
                 );
                 this.emit("status", this.getStatus());
@@ -575,7 +575,7 @@ export class PaperCraneClient extends EventEmitter {
             await this.connect(t.host, t.port, t.token, t.cert);
         }
         if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-            throw new Error(`Cannot connect to the Paperboard Server daemon at ${this.host}:${this.port}`);
+            throw new Error(`Cannot connect to the Paperboard server daemon at ${this.host}:${this.port}`);
         }
 
         return this.request_<T>(action, params, timeoutMs, this.ws);

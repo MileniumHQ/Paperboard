@@ -1210,7 +1210,7 @@ ${installerFiles.map((f) => `  ${f}`).join("\n")}
   Linux -> chmod +x the .AppImage, then run it.
 
   PAPERBOARD SERVER BINARIES (crane/)
-  Standalone Paperboard Server daemon per target. Mostly useful for headless boxes:
+  Standalone Paperboard server daemon per target. Mostly useful for headless boxes:
     ./papercrane-linux-x64 --help
   Plus node-pty/: helper files the Windows binary needs for real terminal
   emulation (keep the folder next to the .exe).
@@ -1232,7 +1232,7 @@ ${panelEntries.map((p) => `  ${p.id} (${p.name} v${p.version})`).join("\n")}
   The Paperboard Server never overwrites a symlinked panel on registry install.
 
   LAN PAIRING / WINDOWS FIREWALL
-  Remote devices reach the Paperboard Server daemon over TLS on its port (default 45464).
+  Remote devices reach the Paperboard server daemon over TLS on its port (default 45464).
   Pairing trusts the certificate the daemon shows the first time, and every later
   connection is pinned to it, so pair on a home or other trusted network you control.
   On Windows, accept the Firewall first-listen prompt for the server/app binary.

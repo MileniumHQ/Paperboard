@@ -99,7 +99,7 @@ export const ConnectionLostOverlay: Component<ConnectionLostOverlayProps> = (
                     Cannot communicate with{" "}
                     <strong>{props.computer.name}</strong> at{" "}
                     {props.computer.host}:{props.computer.port}. Make sure
-                    the Paperboard Server daemon is running. Paperboard
+                    the Paperboard server daemon is running. Paperboard
                     keeps retrying on its own.
                 </PaperText>
                 <Show when={props.computer.status?.error}>

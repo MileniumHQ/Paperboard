@@ -276,7 +276,7 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
                             </PaperText>
                             <PaperText preset="body">
                                 Enter the IP address of a computer running
-                                the Paperboard Server daemon.
+                                the Paperboard server daemon.
                             </PaperText>
                         </PaperFlex>
 
@@ -332,7 +332,7 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
                             </PaperText>
                             <PaperText preset="body">
                                 Enter the 6-digit pairing code shown by the
-                                Paperboard Server daemon on{" "}
+                                Paperboard server daemon on{" "}
                                 {name() || host() || "the target computer"}.
                             </PaperText>
                         </PaperFlex>

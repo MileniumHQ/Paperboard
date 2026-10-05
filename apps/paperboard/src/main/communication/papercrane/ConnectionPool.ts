@@ -38,11 +38,11 @@ function bracketHost(host: string): string {
 export function classifyProbeError(err: any): string {
     const msg = String(err?.message || "");
     if (err?.name === "TimeoutError" || /aborted|timeout/i.test(msg)) {
-        return "Timed out with no response. The computer may be offline, on a different network, or its firewall is blocking the Paperboard Server daemon";
+        return "Timed out with no response. The computer may be offline, on a different network, or its firewall is blocking the Paperboard server daemon";
     }
     const code = (err as any)?.cause?.code || (err as any)?.code;
     if (code === "ECONNREFUSED") {
-        return "Connection refused. The Paperboard Server daemon isn't running on that computer";
+        return "Connection refused. The Paperboard server daemon isn't running on that computer";
     }
     if (code === "ENOTFOUND" || code === "EAI_AGAIN") {
         return "Host not found. Check the address";
