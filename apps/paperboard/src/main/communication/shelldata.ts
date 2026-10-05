@@ -7,6 +7,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { getLocalDir } from "../../../papercrane/paths";
 import { logger } from "../../../papercrane/logger";
+import { getAppUpdateState } from "../appUpdateSession";
 import { assertShellFrame, isRefusedFrame } from "./shellGuard";
 import { createShellInvokeHandlers, SHARED_SHELL_INVOKE_CHANNELS } from "./shellHandlers";
 
@@ -62,6 +63,15 @@ export default function registerShellIpc(ipcMain: IpcMain) {
             return handler(args);
         });
     }
+
+    ipcMain.handle("app-update-state", (event) => {
+        assertShellFrame(event, "app-update-state");
+        return getAppUpdateState();
+    });
+    ipcMain.handle("open-update-download", async (event) => {
+        assertShellFrame(event, "open-update-download");
+        await shell.openExternal("https://paperboard.dev/downloads/");
+    });
 
     // restart into staged update; no-op without a download
     ipcMain.on("quit-and-install", (event) => {

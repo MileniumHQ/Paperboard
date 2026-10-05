@@ -1,17 +1,19 @@
 import { type Component, createSignal, onMount, onCleanup, Show } from "solid-js";
 import { PaperText, PaperButton, PaperIcon, getVarCss } from "@paperboard-dev/paperui";
-import { shellApi, logToMain, shellIpc, isBrowserShell } from "../../lib/shell";
+import { shellApi, logToMain, isBrowserShell } from "../../lib/shell";
 import { versionLabel as formatVersionLabel } from "../../lib/versionLabel";
+import type { AppUpdateState } from "../../../../shared/appUpdate";
 import { leftReserve, rightReserve, type OverlayLike } from "./titlebarInsets";
 
 // Tabs that have no panel files dir — the folder button opens .paperboard/ for these
 const NON_PANEL_TABS = new Set(["landing", "library", "settings"]);
 
 const TopBar: Component<{
+    updateState: AppUpdateState;
+    onOpenUpdate: () => void;
     getComputerId: () => string;
     getSelectedTab: () => string;
 }> = (props) => {
-    const [updateReady, setUpdateReady] = createSignal<string | null>(null);
     const [captionReserve, setCaptionReserve] = createSignal(0);
     const [labelInset, setLabelInset] = createSignal(12);
     const [versionLabel, setVersionLabel] = createSignal<string | null>(null);
@@ -24,13 +26,6 @@ const TopBar: Component<{
                 "Paperboard browser mode has no sign-in. THIS IS A DEV TOOL AND SHOULD NOT BE USED " +
                     "outside development on a trusted machine, and never exposed on a network.",
             );
-        } else {
-            const ipc = shellIpc();
-            const handler = (_: unknown, data: { version?: string | null }) => {
-                setUpdateReady(data?.version ?? "new version");
-            };
-            ipc.on("app-update-downloaded", handler);
-            onCleanup(() => ipc.removeListener("app-update-downloaded", handler));
         }
 
         // Window Controls Overlay: exact caption-button geometry so the
@@ -123,12 +118,10 @@ const TopBar: Component<{
                     onClick={handleFolder}>
                     <PaperIcon>folder_open</PaperIcon>
                 </PaperButton>
-                <Show when={updateReady() !== null}>
+                <Show when={props.updateState.status === "ready"}>
                     <PaperButton
-                        title={`Restart to install ${updateReady()}`}
-                        onClick={() =>
-                            shellIpc().send("quit-and-install")
-                        }>
+                        title={`Install ${props.updateState.version}`}
+                        onClick={props.onOpenUpdate}>
                         Restart to update
                     </PaperButton>
                 </Show>

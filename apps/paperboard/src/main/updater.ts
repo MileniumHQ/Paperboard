@@ -1,5 +1,8 @@
 import * as path from "path";
-import { BrowserWindow } from "electron";
+import { app, BrowserWindow } from "electron";
+import { AppUpdateSession, getAppUpdateState, retainAppUpdateState } from "./appUpdateSession";
+import { ManualAppUpdater } from "./manualAppUpdater";
+import { isShellUrl } from "./communication/shellGuard";
 import { autoUpdater } from "electron-updater";
 import { is } from "@electron-toolkit/utils";
 import connectionPool from "./communication/papercrane/ConnectionPool";
@@ -141,93 +144,62 @@ export async function runUpdateOrchestrator(
         return;
     }
     orchestratorRunning = true;
+    let failures = 0;
+    let appRun: Promise<import("../shared/appUpdate").AppUpdateState> | null = null;
     try {
-        await runOrchestratorInner(win);
+        appRun = appUpdater().check();
+        failures = await runOrchestratorInner(win);
     } catch (err) {
+        failures++;
         logger.error("[Updater] update check failed:", err);
         sendProgress(win, null, "Could not check for updates. Try again when the registry is reachable", true);
-        recordRunOutcome(1);
     } finally {
-        orchestratorRunning = false;
+        try {
+            const state = appRun ? await appRun : getAppUpdateState();
+            if (state.status === "failed") failures++;
+            recordRunOutcome(failures);
+        } finally {
+            orchestratorRunning = false;
+        }
     }
 }
 
 const appUpdaterLog = getLogger("electron-updater");
 
-// electron-updater needs info/warn/error/debug; route to file logger
-function wireAppUpdater(win: BrowserWindow): void {
-    try {
-        autoUpdater.logger = {
-            info: (msg: string) => appUpdaterLog.info(String(msg)),
-            warn: (msg: string) => appUpdaterLog.warn(String(msg)),
-            error: (msg: string) => appUpdaterLog.error(String(msg)),
-            debug: (msg: string) => appUpdaterLog.debug(String(msg)),
-        } as any;
-        autoUpdater.autoDownload = true;
-        autoUpdater.autoInstallOnAppQuit = true;
-        autoUpdater.removeAllListeners("update-available");
-        autoUpdater.removeAllListeners("download-progress");
-        autoUpdater.removeAllListeners("update-downloaded");
-        autoUpdater.removeAllListeners("error");
-        const broadcast = (channel: string, payload: unknown) => {
-            for (const w of BrowserWindow.getAllWindows()) {
-                // R11: updater pushes are shell-surface events; the updater
-                // window and main window are the only audiences. Panels
-                // live in iframes of the main window and receive them via
-                // the window's webContents — filtered by URL.
-                if (w.isDestroyed()) continue;
-                try {
-                    const url = w.webContents.getURL?.() ?? "";
-                    if (url.startsWith("panel://")) continue;
-                    w.webContents.send(channel, payload);
-                } catch (err) { logger.debug("[updater.ts] op failed:", err) }
+let appUpdateSession: AppUpdateSession | null = null;
+
+function appUpdater(): AppUpdateSession {
+    if (appUpdateSession) return appUpdateSession;
+    autoUpdater.logger = {
+        info: (msg: string) => appUpdaterLog.info(String(msg)),
+        warn: (msg: string) => appUpdaterLog.warn(String(msg)),
+        error: (msg: string) => appUpdaterLog.error(String(msg)),
+        debug: (msg: string) => appUpdaterLog.debug(String(msg)),
+    } as any;
+    autoUpdater.autoDownload = true;
+    autoUpdater.autoInstallOnAppQuit = true;
+    const packageManaged = process.platform === "linux" && !process.env.APPIMAGE;
+    const updater = packageManaged
+        ? new ManualAppUpdater(app.getVersion(), "https://i.paperboard.dev/pb/latest-linux.yml")
+        : autoUpdater;
+    appUpdateSession = new AppUpdateSession(updater, (state) => {
+        retainAppUpdateState(state);
+        for (const window of BrowserWindow.getAllWindows()) {
+            if (!window.isDestroyed() && isShellUrl(window.webContents.getURL())) {
+                window.webContents.send("app-update-state", state);
             }
-        };
-        autoUpdater.on("update-available", (info: any) => {
-            appUpdaterLog.info(`[Updater] app update available: ${info?.version ?? "unknown"}`);
-            sendProgress(win, null, `Downloading app update ${info?.version ?? ""}…`.trim());
-            broadcast("app-update-available", { version: info?.version ?? null });
-        });
-        autoUpdater.on("download-progress", (p: any) => {
-            const percent = typeof p?.percent === "number" ? Math.round(p.percent) : null;
-            sendProgress(
-                win,
-                percent,
-                `Downloading app update${percent !== null ? ` ${percent}%` : ""}…`,
-            );
-            broadcast("app-update-progress", {
-                percent,
-                transferred: p?.transferred ?? null,
-                total: p?.total ?? null,
-            });
-        });
-        autoUpdater.on("update-downloaded", (info: any) => {
-            appUpdaterLog.info(`[Updater] app update downloaded: ${info?.version ?? "unknown"}`);
-            sendProgress(win, 100,         "App update ready. Restart to apply");
-            broadcast("app-update-downloaded", { version: info?.version ?? null });
-        });
-        autoUpdater.on("error", (err: any) => {
-            appUpdaterLog.warn("[Updater] app self-update error:", err?.message ?? err);
-            // R7: the updater window's only failure terminal state comes
-            // from here — without it the window sat on "Downloading app
-            // update…" forever. `failed: true` is the renderer's signal
-            // to render the error state; Skip stays the only control.
-            sendProgress(win, null,         "Update failed. You can keep using Paperboard", true);
-        });
-        autoUpdater
-            .checkForUpdates()
-            .catch((err) =>
-                appUpdaterLog.debug("[Updater] app self-update check failed:", err),
-            );
-    } catch (err) {
-        logger.debug("[Updater] failed to initialize electron-updater:", err);
-    }
+        }
+    }, TASK_TIMEOUT_MS, packageManaged ? "package-manager" : "automatic");
+    return appUpdateSession;
+}
+
+export function disposeAppUpdater(): void {
+    appUpdateSession?.dispose();
 }
 
 async function runOrchestratorInner(
     win: BrowserWindow,
-): Promise<void> {
-    wireAppUpdater(win);
+): Promise<number> {
 
     sendProgress(win, null, "Checking for updates…");
 
@@ -321,9 +293,8 @@ async function runOrchestratorInner(
 
     const total = tasks.length;
     if (total === 0) {
-        sendProgress(win, 100, unavailableComputers ? `Could not check ${unavailableComputers} computer(s). Reconnect and try again` : "Everything is up to date!", unavailableComputers > 0);
-        recordRunOutcome(unavailableComputers);
-        return;
+        sendProgress(win, 100, unavailableComputers ? `Could not check ${unavailableComputers} computer(s). Reconnect and try again` : "Panel and server check complete", unavailableComputers > 0);
+        return unavailableComputers;
     }
 
     let failures = unavailableComputers;
@@ -416,7 +387,6 @@ async function runOrchestratorInner(
         }
     }
 
-    sendProgress(win, 100, failures > 0 ? `Done (${failures} failed)` : "Done!");
-
-    recordRunOutcome(failures);
+    sendProgress(win, 100, failures > 0 ? `Done (${failures} failed)` : "Done!", failures > 0);
+    return failures;
 }

@@ -7,8 +7,14 @@ import {
     PaperSeparator,
     PaperIcon,
 } from "@paperboard-dev/paperui";
+import styles from "./ComputerRail.module.css";
+
+import type { AppUpdateState } from "../../../../shared/appUpdate";
 
 interface ComputerRailProps {
+    updateState?: AppUpdateState;
+    showUpdate?: boolean;
+    onOpenUpdate?: () => void;
     computers: {
         id: string;
         name: string;
@@ -29,6 +35,7 @@ interface ComputerRailProps {
 const ComputerRail = (props: ComputerRailProps): JSX.Element => {
     return (
         <PaperRail
+            class={styles.rail}
             name="computer-selection"
             value={props.value}
             onValueChange={(val) => props.onSelect(String(val))}
@@ -81,6 +88,14 @@ const ComputerRail = (props: ComputerRailProps): JSX.Element => {
                 icon="settings"
                 label="Settings"
             />
+            <Show when={props.showUpdate && ["downloading", "ready", "failed", "manual"].includes(props.updateState?.status ?? "")}>
+                <PaperRailAction
+                    icon="browser_updated"
+                    class={`${styles.updateAction} ${props.updateState?.status === "failed" ? styles.updateFailed : styles.updateAvailable}`}
+                    label={props.updateState?.status === "failed" ? "Paperboard update failed" : "Paperboard update available"}
+                    onClick={() => props.onOpenUpdate?.()}
+                />
+            </Show>
         </PaperRail>
     );
 };

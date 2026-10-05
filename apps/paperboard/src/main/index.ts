@@ -16,7 +16,7 @@ import { electronApp, optimizer, is } from "@electron-toolkit/utils";
 import { startCommunicator, logRendererMessage } from "./communication/communication";
 import { allowDevShellOrigin, isRefusedFrame, keepShellNavigation } from "./communication/shellGuard";
 import connectionPool from "./communication/papercrane/ConnectionPool";
-import { shouldSkipUpdate, runUpdateOrchestrator } from "./updater";
+import { shouldSkipUpdate, runUpdateOrchestrator, disposeAppUpdater } from "./updater";
 import { initAppSettingsSync } from "./appSettings";
 import { logger } from "../../papercrane/logger";
 import {
@@ -538,6 +538,7 @@ app.on("window-all-closed", () => {
 
 // kill local processes and disconnect clients on quit
 app.on("before-quit", () => {
+    disposeAppUpdater();
     quitting = true;
     log.info("[Main] quitting; cleaning up local processes and connections");
     try {

@@ -1,0 +1,18 @@
+.rail {
+    box-sizing: border-box;
+    height: 100%;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+.updateAction.updateAvailable,
+.updateAction.updateAvailable:hover,
+.updateAction.updateAvailable:active {
+    color: var(--paper-success);
+}
+
+.updateAction.updateFailed,
+.updateAction.updateFailed:hover,
+.updateAction.updateFailed:active {
+    color: var(--paper-danger);
+}

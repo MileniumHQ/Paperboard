@@ -14,6 +14,8 @@ export const SHELL_INVOKE_CHANNELS = [
     "open-panel-folder",
     "panel-listing-file",
     "app-version",
+    "app-update-state",
+    "open-update-download",
 ] as const;
 
 export const SHELL_SEND_CHANNELS = [
@@ -28,9 +30,7 @@ export const SHELL_SEND_CHANNELS = [
 export const SHELL_ON_CHANNELS = [
     "pong",
     "updater-progress",
-    "app-update-available",
-    "app-update-progress",
-    "app-update-downloaded",
+    "app-update-state",
     "computers-changed",
     "discovery-changed",
 ] as const;

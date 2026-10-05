@@ -39,9 +39,9 @@ function PaperUpdater() {
         ) => {
             setProgress(data.progress);
             setLabel(data.label);
-            // R7: main reports `failed: true` on autoUpdater error. The
-            // window renders a terminal error state — no fake progress,
-            // no hang — and Skip remains the only control.
+            // Registry and task failures stay visible until Skip. App
+            // update failures are retained separately for the Home modal,
+            // including failures that occur after this window closes.
             if (data.failed) {
                 setFailed(true);
                 setProgress(null);

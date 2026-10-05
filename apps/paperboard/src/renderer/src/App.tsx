@@ -38,6 +38,8 @@ import ConnectionLostOverlay from "./components/computer/ConnectionLostOverlay";
 import OfflineComputerModal from "./components/computer/OfflineComputerModal";
 import ComputerRail from "./components/computer/ComputerRail";
 import ComputerContextMenu from "./components/computer/ComputerContextMenu";
+import AppUpdateModal from "./components/layout/AppUpdateModal";
+import { useAppUpdate } from "./hooks/useAppUpdate";
 import TopBar from "./components/layout/TopBar";
 import { useAppSettings } from "./hooks/useAppSettings";
 import { useComputers } from "./hooks/useComputers";
@@ -45,6 +47,7 @@ import { usePanels } from "./hooks/usePanels";
 
 export type { ComputerItem };
 const App: Component = () => {
+    const appUpdate = useAppUpdate();
     const {
         computers,
         activeComputerId,
@@ -418,6 +421,8 @@ const App: Component = () => {
                 style={{ width: "100vw", height: "100vh", overflow: "hidden" }}
             >
                 <TopBar
+                    updateState={appUpdate.state()}
+                    onOpenUpdate={() => appUpdate.setOpen(true)}
                     getComputerId={activeComputerId}
                     getSelectedTab={() => getSelectedTab(activeComputerId())}
                 />
@@ -430,6 +435,9 @@ const App: Component = () => {
                     }}
                 >
                     <ComputerRail
+                        updateState={appUpdate.state()}
+                        showUpdate={!showAppSettings() && getSelectedTab(activeComputerId()) === "landing"}
+                        onOpenUpdate={() => appUpdate.setOpen(true)}
                         computers={computers()}
                         value={
                             showAppSettings()
@@ -757,6 +765,8 @@ const App: Component = () => {
                     </Show>
                 </PaperFlex>
             </PaperFlex>
+
+            <AppUpdateModal state={appUpdate.state()} open={appUpdate.open()} onClose={() => appUpdate.setOpen(false)} />
 
             <OfflineComputerModal
                 open={!!offlineTarget()}
