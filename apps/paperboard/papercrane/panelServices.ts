@@ -162,14 +162,6 @@ export class PanelServicesManager {
         }
         return count;
     }
-    /** Panel ids of the running services, for a tray summary. */
-    public runningPanelIds(): string[] {
-        const ids: string[] = [];
-        for (const [id, entry] of this.services) {
-            if (!entry.stopped) ids.push(id);
-        }
-        return ids;
-    }
     public async stopService(id: string, graceMs = 3000): Promise<void> {
         const entry = this.services.get(requirePanelId(id));
         if (!entry) return;
