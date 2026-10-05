@@ -41,9 +41,14 @@ export async function handlePackagesRoutes(
                 .map((k) => k.name)
                 .filter(
                     (name) =>
+                        // only package records belong in the package index.
+                        // panel records, the panel index, trashed records,
+                        // and the binary download-version database (dl/*)
+                        // share this namespace and must not leak as packages.
                         !name.startsWith("panel:") &&
                         !name.startsWith("panels:") &&
                         !name.startsWith("trash:") &&
+                        !name.startsWith("dl/") &&
                         // pre-rename deployed KV still holds board:*/boards:*
                         // keys; no code reads them, but they must not leak
                         // into the package listing either

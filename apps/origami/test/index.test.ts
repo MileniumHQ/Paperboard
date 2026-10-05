@@ -81,7 +81,17 @@ describe("Origami Worker", () => {
       "paper-server": { name: "paper-server", version: "1.21.4", checksum: "sha256:222" },
     };
 
-    const env: Env = { PACKAGES: createMockKV(samplePackages) };
+    // non-package keys share the namespace and must not leak: the panel
+    // records, the panel index, and the binary download-version DB (dl/*)
+    const env: Env = {
+      PACKAGES: createMockKV({
+        ...samplePackages,
+        "panel:dev.x": { id: "dev.x" },
+        "panels:index": { "dev.x": {} },
+        "dl/pb": { latest: "0.1.0" },
+        "dl/crane": { latest: "0.1.0" },
+      }),
+    };
     const req = new Request("http://localhost/package/index.json");
     const res = await worker.fetch(req, env, {} as any);
     expect(res.status).toBe(200);
