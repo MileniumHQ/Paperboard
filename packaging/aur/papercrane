@@ -1,3 +1,0 @@
-#!/bin/sh
-export PAPERBOARD_PACKAGE_MANAGED=1
-exec /usr/lib/papercrane/papercrane "$@"

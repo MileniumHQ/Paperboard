@@ -261,18 +261,3 @@ test("a remote-served panel's credential only relays to its computer and never l
         await local.close(); await remote.close();
     }
 });
-
-
-test("package-managed daemon refuses self-update through authenticated SDK", async () => {
-    const previous = process.env.PAPERBOARD_PACKAGE_MANAGED;
-    process.env.PAPERBOARD_PACKAGE_MANAGED = "1";
-    const f = await fixture();
-    const sdk = new CraneTransport({ port: f.port, token: "test-host", computerId: "local" });
-    try {
-        await expect(sdk.call("system:update", { downloadUrl: "https://example.invalid/crane", sha256: "a".repeat(64), version: "99.0.0" })).rejects.toThrow("Update it with your package manager");
-    } finally {
-        sdk.close(); await f.close();
-        if (previous === undefined) delete process.env.PAPERBOARD_PACKAGE_MANAGED;
-        else process.env.PAPERBOARD_PACKAGE_MANAGED = previous;
-    }
-});

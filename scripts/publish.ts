@@ -4,7 +4,6 @@
  *
  *   bun scripts/publish.ts        # interactive menu (needs a TTY)
  *   bun scripts/publish.ts usb    # headless USB test bundle (bun run usb)
- *   bun scripts/publish.ts aur --help  # local AUR recipe preparation
  *
  * Nothing leaves the machine except through the Publish flows, and each of
  * those confirms twice before any upload. Pure release-math (tags, asset
@@ -18,7 +17,6 @@
  * There are no key files. .dev.vars / R2_* env keys are gone on purpose.
  */
 
-import { runAur } from "./aur";
 import * as p from "@clack/prompts";
 import { Presets, SingleBar } from "cli-progress";
 import { $ } from "bun";
@@ -512,8 +510,7 @@ async function flowBuildBinaries(): Promise<void> {
         ["app", "target", "size", "sha256"],
         ...built.map((b) => [b.app, b.target, `${mb(b.size)} MB`, b.sha256.slice(0, 16)]),
     ]);
-    await stageReleaseAssets(built);
-    p.outro("Done — binaries are in dist/; release archives are in dist/release/ (nothing uploaded).");
+    p.outro("Done — artifacts are in dist/.");
 }
 
 // ─── Flow: publish binaries (GitHub Releases + live index) ──────────────────
@@ -1255,10 +1252,6 @@ ${panelEntries.map((p) => `  ${p.id} (${p.name} v${p.version})`).join("\n")}
 
 async function main(): Promise<void> {
     const argv = process.argv.slice(2);
-    if (argv[0] === "aur") {
-        runAur(argv.slice(1), version);
-        return;
-    }
     if (argv[0] === "usb") {
         const { oses, arches, help } = parseUsbArgs(argv.slice(1));
         if (help) {
