@@ -120,6 +120,7 @@ const TopBar: Component<{
                 </PaperButton>
                 <Show when={props.updateState.status === "ready"}>
                     <PaperButton
+                        size="tiny"
                         title={`Install ${props.updateState.version}`}
                         onClick={props.onOpenUpdate}>
                         Restart to update

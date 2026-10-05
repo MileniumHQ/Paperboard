@@ -19,6 +19,22 @@ const hydration = new Promise<AppUpdateState>((resolve) => { resolveHydration = 
     hydrate(next: AppUpdateState) { resolveHydration(next); },
     actions,
     listeners: () => listeners.size,
+    assertAppearance(status: "ready" | "failed") {
+        const action = document.querySelector<HTMLButtonElement>(`[aria-label="Paperboard update ${status === "failed" ? "failed" : "available"}"]`)!;
+        const icon = action.querySelector<HTMLElement>('[aria-hidden="true"]')!;
+        const probe = document.createElement("span");
+        probe.style.color = `var(--paper-${status === "failed" ? "danger" : "success"})`;
+        action.append(probe);
+        try {
+            if (getComputedStyle(icon).color !== getComputedStyle(probe).color) throw new Error("Update icon does not use its status color");
+            if (getComputedStyle(action).backgroundColor !== "rgba(0, 0, 0, 0)") throw new Error("Update action has a filled background");
+            if (status === "ready") {
+                const restart = [...document.querySelectorAll("button")].find((button) => button.textContent === "Restart to update")!;
+                if (restart.getBoundingClientRect().height > 28) throw new Error("Top-right update button is too tall");
+            }
+            return "Update appearance passed";
+        } finally { probe.remove(); }
+    },
 };
 (window as any).electron = { ipcRenderer: {
     invoke: async (channel: string) => {

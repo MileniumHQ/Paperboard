@@ -16,3 +16,8 @@
 .updateAction.updateFailed:active {
     color: var(--paper-danger);
 }
+
+/* PaperRail gives its icon a separate color; inherit this action's status. */
+.updateAction > [aria-hidden="true"] {
+    color: inherit;
+}
