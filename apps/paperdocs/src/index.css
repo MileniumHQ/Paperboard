@@ -16,10 +16,6 @@ body {
     background-color: var(--paper-surface-raised);
 }
 
-.paperui-root {
-    overflow: visible;
-}
-
 /* The app surface is the raised color. The selector must not require the
    theme attribute: the prerender strips it from the static markup (so the
    server's default theme cannot redefine tokens over the stored one), and

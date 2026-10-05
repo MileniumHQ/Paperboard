@@ -34,6 +34,11 @@
     overflow: hidden;
     position: relative;
     transform: translateZ(0);
+    /* The dialog element is focused to trap focus and as the fallback when it
+       has no focusable children. It is not an actionable control, so it must
+       not paint the UA focus ring: on Linux that ring follows the system
+       accent (orange on Ubuntu), which wrapped the whole modal. */
+    outline: none;
 }
 
 .small {
@@ -92,6 +97,13 @@
     flex-direction: column;
     gap: var(--paper-uigap);
     flex: 1;
+}
+
+/* The body is a flex column with a gap, and the whole dialog clips to its
+   rounded border. Browser margins on paragraphs, headings and lists would
+   stack on top of that gap and push the content off the rounded top edge. */
+.body :is(p, h1, h2, h3, h4, h5, h6, ul, ol) {
+    margin: 0;
 }
 
 .noPadding {

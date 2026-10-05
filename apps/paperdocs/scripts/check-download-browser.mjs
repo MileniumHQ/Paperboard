@@ -21,7 +21,11 @@ export async function checkDownloads(browser, origin) {
         let downloads = 0;
         page.on('download', () => downloads++);
         await page.goto(`${origin}/downloads/`);
-        assert.equal(await page.getByRole('heading', { name: 'Downloads', exact: true }).count(), 1);
+        // Downloads is introduced by the shared PaperPageHeader (icon chip,
+        // title, subtitle) like the blog and contact pages. Its title is a
+        // PaperText span, not an h1, so assert the visible title in the page
+        // column rather than a heading role.
+        assert.equal(await page.locator('main').getByText('Downloads', { exact: true }).count(), 1);
         assert.equal(await page.getByRole('heading', { name: 'Paperboard server daemon', exact: true }).count(), 1);
         assert.equal(await page.locator('main ul').count(), 2, 'Each product has a plain text list');
         assert.equal(await page.locator('main a[href^="https://i.paperboard.dev/"]').count(), 10, 'Both products retain every architecture');
@@ -117,6 +121,14 @@ export async function checkDownloads(browser, origin) {
         assert.equal(await mac.locator('a.download-warning__source').getAttribute('href'), 'https://support.apple.com/en-us/102445');
         assert.ok((await mac.innerText()).includes('Privacy & Security'));
         assert.ok(await mac.evaluate(node => node.getBoundingClientRect().width <= innerWidth && node.clientWidth >= node.scrollWidth), 'Mobile modal must fit without horizontal clipping');
+        // A site-level `.paperui-root` reset must not defeat the dialog's own
+        // clipping, or header/footer surfaces bleed past its rounded corners.
+        // Block margins must not stack on top of the body's flex gap.
+        assert.deepEqual(await mac.evaluate(() => {
+            const dialog = document.querySelector('.download-warning');
+            const paragraph = dialog.querySelector('p');
+            return { overflow: getComputedStyle(dialog).overflow, paragraphMarginTop: getComputedStyle(paragraph).marginTop };
+        }), { overflow: 'hidden', paragraphMarginTop: '0px' }, 'Dialog clips to its rounded corners and uses its gap for block spacing');
         await page.keyboard.press('Escape');
         await page.locator('.download-warning').waitFor({ state: 'detached' });
         assert.equal(await page.getByRole('dialog').count(), 0, 'Reduced motion dismissal stays immediate');
