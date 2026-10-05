@@ -195,6 +195,9 @@ body[data-unselectable="true"],
     --paper-size-field: 160px;
     --paper-size-bar: 54px;
     --paper-size-card-min: 256px;
+    /* master-detail side pane (PaperSplit): a roster/list rail beside a
+       fluid detail pane; the pane collapses below this when space is tight */
+    --paper-size-split-side: 320px;
     /* menus grow to their content up to this, then the items ellipsize */
     --paper-size-menu-max: 416px;
 

@@ -95,6 +95,12 @@ export function Example() {
                             <td><PaperCode>false</PaperCode></td>
                             <td>Rounds corners without applying a background tone.</td>
                         </tr>
+                        <tr>
+                            <td><PaperCode>accent</PaperCode></td>
+                            <td><PaperCode>PaperRole</PaperCode></td>
+                            <td><PaperCode>undefined</PaperCode></td>
+                            <td>Tints the surface and border with a semantic role for danger zones and alerts.</td>
+                        </tr>
                     </tbody>
                 </PaperTable>
 
@@ -121,6 +127,19 @@ export function Example() {
                 <PaperCard padding="full" surface="front">
                     <PaperText color="text-subtle">Nested item</PaperText>
                 </PaperCard>
+            </PaperCard>
+            <PaperText preset="body">
+                Use the accent prop to tint a card for destructive or alerting content.
+            </PaperText>
+            <PaperCode block language="tsx">
+{`<PaperCard accent="danger" padding="full">
+    <PaperText weight={600}>Delete player data</PaperText>
+    <PaperText color="text-subtle">Moved to trash.</PaperText>
+</PaperCard>`}
+            </PaperCode>
+            <PaperCard accent="danger" padding="full">
+                <PaperText weight={600}>Delete player data</PaperText>
+                <PaperText color="text-subtle">Moved to trash.</PaperText>
             </PaperCard>
         </PaperFlex>
     );

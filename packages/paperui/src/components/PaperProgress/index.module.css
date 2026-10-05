@@ -17,6 +17,11 @@
     transition: width var(--paper-mid-transition) var(--paper-ease-symmetric);
 }
 
+/* role variants recolor the fill through the shared role vars */
+.variantRole .bar {
+    background: var(--role-base);
+}
+
 .indeterminate .bar {
     width: 35%;
     position: absolute;

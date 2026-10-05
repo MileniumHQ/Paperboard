@@ -31,6 +31,7 @@ export function Example() {
             <PaperFlex direction="column" gap="full">
                 <PaperProgress value={45} />
                 <PaperProgress value={80} max={100} />
+                <PaperProgress value={30} variant="success" />
                 <PaperProgress />
             </PaperFlex>
         </PaperCard>
@@ -42,6 +43,7 @@ export function Example() {
                 <PaperFlex direction="column" gap="full">
                     <PaperProgress value={45} />
                     <PaperProgress value={80} max={100} />
+                    <PaperProgress value={30} variant="success" />
                     <PaperProgress />
                 </PaperFlex>
             </PaperCard>
@@ -71,6 +73,12 @@ export function Example() {
                             <td><PaperCode>number</PaperCode></td>
                             <td><PaperCode>100</PaperCode></td>
                             <td>Upper bound value defining 100% completion.</td>
+                        </tr>
+                        <tr>
+                            <td><PaperCode>variant</PaperCode></td>
+                            <td><PaperCode>PaperRole</PaperCode></td>
+                            <td><PaperCode>undefined</PaperCode></td>
+                            <td>Fill color role. Defaults to the primary action color.</td>
                         </tr>
                     </tbody>
                 </PaperTable>

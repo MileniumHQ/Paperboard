@@ -41,6 +41,13 @@
     flex-shrink: 0;
 }
 
+/* A scrollable list must scroll, not crush its rows. Items are
+   overflow:hidden, which zeroes their auto min-size, so without this an
+   over-tall list shrinks every row instead of overflowing. */
+.PaperList.scrollable > .PaperListItem {
+    flex-shrink: 0;
+}
+
 .PaperList.reorderable .PaperListItem {
     touch-action: none;
     user-select: none;

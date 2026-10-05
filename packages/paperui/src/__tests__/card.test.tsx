@@ -18,3 +18,18 @@ describe("PaperCard flex shrinking", () => {
         expect((container.firstElementChild as HTMLElement).style.flexShrink).toBe("");
     });
 });
+
+describe("PaperCard accent", () => {
+    it("exposes the role variables for a tinted surface and border", () => {
+        const { container } = render(() => <PaperCard accent="danger" />);
+        const card = container.firstElementChild as HTMLElement;
+        expect(card.style.getPropertyValue("--role-base")).toBe("var(--paper-danger)");
+        expect(card.style.getPropertyValue("--role-deep")).toBe("var(--paper-danger-deep)");
+    });
+
+    it("sets no role variables without an accent", () => {
+        const { container } = render(() => <PaperCard />);
+        const card = container.firstElementChild as HTMLElement;
+        expect(card.style.getPropertyValue("--role-base")).toBe("");
+    });
+});

@@ -1,0 +1,41 @@
+.PaperChip {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--paper-uigap-half);
+    height: var(--paper-control-size-small);
+    padding: 0 var(--paper-uigap-threefourths);
+    border-radius: var(--paper-border-radius-pill);
+    border: var(--paper-border-width) solid var(--paper-border);
+    background: var(--paper-surface-raised);
+    color: var(--paper-text-subtle);
+    font: inherit;
+    font-size: var(--paper-text-size-2);
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition:
+        background var(--paper-tiny-transition) ease,
+        color var(--paper-tiny-transition) ease,
+        border-color var(--paper-tiny-transition) ease;
+}
+
+.PaperChip:hover {
+    background: var(--paper-surface-inset);
+    color: var(--paper-text);
+}
+
+.PaperChip.selected {
+    background: color-mix(in srgb, var(--paper-primary) 12%, transparent);
+    border-color: color-mix(in srgb, var(--paper-primary) 40%, transparent);
+    color: var(--paper-primary-deep);
+}
+
+.PaperChip:focus-visible {
+    outline: var(--paper-thickest-border-width) solid var(--paper-primary);
+    outline-offset: var(--paper-focus-offset);
+}
+
+.count {
+    font-weight: 700;
+    opacity: 0.75;
+}

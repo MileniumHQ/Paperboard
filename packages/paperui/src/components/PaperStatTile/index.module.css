@@ -1,0 +1,43 @@
+.PaperStatTile {
+    display: flex;
+    align-items: center;
+    gap: var(--paper-uigap-threefourths);
+    padding: var(--paper-uigap);
+    background: var(--paper-surface-raised);
+    border: var(--paper-border-width) solid var(--paper-border);
+    border-radius: var(--paper-border-radius);
+    min-width: 0;
+    box-sizing: border-box;
+}
+
+.icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--paper-control-size-medium);
+    height: var(--paper-control-size-medium);
+    background: transparent;
+    color: var(--paper-text-subtle);
+    font-size: var(--paper-icon-size-medium);
+    flex-shrink: 0;
+}
+
+.tone .icon {
+    color: var(--role-deep);
+}
+
+.text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    flex: 1;
+    gap: var(--paper-uigap-onefourth);
+}
+
+.value {
+    line-height: 1.15;
+}
+
+.meter {
+    margin-top: var(--paper-uigap-onefourth);
+}

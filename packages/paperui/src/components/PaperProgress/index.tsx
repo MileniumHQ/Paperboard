@@ -1,19 +1,27 @@
 import styles from "./index.module.css";
 import { splitProps, type JSX } from "solid-js";
+import { roleVars, isPaperRole } from "../../utils/colors";
+import type { PaperRole } from "../../types";
 
 export interface PaperProgressProps extends JSX.HTMLAttributes<HTMLDivElement> {
     value?: number;
     max?: number;
+    /** fill color role; defaults to the primary action color */
+    variant?: PaperRole;
 }
 
 export function PaperProgress(props: PaperProgressProps) {
     const [local, rest] = splitProps(props, [
         "value",
         "max",
+        "variant",
         "class",
         "classList",
         "style",
     ]);
+
+    const roleStyle = () =>
+        isPaperRole(local.variant) ? roleVars(local.variant) : {};
 
     const maxVal = () =>
         local.max !== undefined && local.max > 0 ? local.max : 100;
@@ -28,6 +36,7 @@ export function PaperProgress(props: PaperProgressProps) {
     const className = () =>
         [
             styles.PaperProgress,
+            local.variant ? styles.variantRole : "",
             isIndeterminate() ? styles.indeterminate : "",
             local.class,
         ]
@@ -48,7 +57,7 @@ export function PaperProgress(props: PaperProgressProps) {
             }
             class={className()}
             classList={local.classList}
-            style={local.style}
+            style={{ ...roleStyle(), ...(typeof local.style === "object" ? local.style : {}) }}
         >
             <div
                 class={styles.bar}

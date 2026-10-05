@@ -1,12 +1,13 @@
 import styles from "./index.module.css";
 import { splitProps, type JSX, type ParentProps } from "solid-js";
 import { resolveSpacing } from "../../utils/theme";
+import { roleVars, isPaperRole } from "../../utils/colors";
 import {
     resolveLayoutStyles,
     usePaperLayout,
     type PaperLayoutProps,
 } from "../../contexts/layout";
-import type { PaperSpacing } from "../../types";
+import type { PaperSpacing, PaperRole } from "../../types";
 
 /** surface tone; front is the standard panel card */
 export type PaperCardSurface =
@@ -27,6 +28,8 @@ export interface PaperCardProps
     borderless?: boolean;
     /** round the corners only, without a surface tone */
     plain?: boolean;
+    /** tint the surface and border with a semantic role (danger zones, alerts) */
+    accent?: PaperRole;
 }
 
 /**
@@ -44,6 +47,7 @@ export function PaperCard(props: ParentProps<PaperCardProps>) {
         "gap",
         "borderless",
         "plain",
+        "accent",
         "class",
         "classList",
         "style",
@@ -69,6 +73,7 @@ export function PaperCard(props: ParentProps<PaperCardProps>) {
             local.surface ? styles[local.surface] : "",
             local.borderless ? styles.borderless : "",
             local.plain ? styles.plain : "",
+            local.accent ? styles.accent : "",
             local.class,
         ]
             .filter(Boolean)
@@ -82,6 +87,7 @@ export function PaperCard(props: ParentProps<PaperCardProps>) {
         return {
             // a growing card must also be able to shrink, or it overflows
             ...(local.grow && local.shrink === undefined ? { "flex-shrink": 1 } : {}),
+            ...(isPaperRole(local.accent) ? roleVars(local.accent) : {}),
             ...resolveLayoutStyles(local, layoutCtx),
             ...(axisPadding
                 ? {

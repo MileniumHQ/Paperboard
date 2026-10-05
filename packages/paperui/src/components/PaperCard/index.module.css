@@ -36,3 +36,9 @@
     background: transparent;
     border: none;
 }
+
+/* accent: a role-tinted surface and border for danger zones and alerts */
+.PaperCard.accent {
+    border-color: color-mix(in srgb, var(--role-base) 45%, transparent);
+    background: color-mix(in srgb, var(--role-base) 5%, var(--paper-surface));
+}

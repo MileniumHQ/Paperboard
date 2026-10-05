@@ -100,6 +100,10 @@
                         "name": "PaperCheckbox",
                         "file": "paper-checkbox"
                     },
+                    "paperchip": {
+                        "name": "PaperChip",
+                        "file": "paper-chip"
+                    },
                     "papercode": {
                         "name": "PaperCode",
                         "file": "paper-code"
@@ -224,6 +228,10 @@
                         "name": "PaperSpacer",
                         "file": "paper-spacer"
                     },
+                    "paperstattile": {
+                        "name": "PaperStatTile",
+                        "file": "paper-stat-tile"
+                    },
                     "paperswatch": {
                         "name": "PaperSwatch",
                         "file": "paper-swatch"
@@ -274,6 +282,10 @@
                     "papersettinglist": {
                         "name": "PaperSettingList",
                         "file": "paper-setting-list"
+                    },
+                    "papersplit": {
+                        "name": "PaperSplit",
+                        "file": "paper-split"
                     },
                     "paperwizard": {
                         "name": "PaperWizard",
