@@ -5,6 +5,7 @@ import { readFile } from "node:fs/promises";
 import { resolve, extname, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { checkDownloads } from './check-download-browser.mjs';
+import { checkBlog } from './check-blog-browser.mjs';
 
 // Perceived brightness of an "rgb(...)"/"color(srgb ...)" string, so a test can
 // assert one layer actually sits darker than the field it rests on.
@@ -589,6 +590,7 @@ try {
     );
     assert.deepEqual(failures, []);
     await checkDownloads(browser, origin);
+    await checkBlog(browser, origin);
     console.log(
         "verified reduced motion, no-JavaScript content, and no failed assets/browser errors",
     );

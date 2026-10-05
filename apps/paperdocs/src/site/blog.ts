@@ -1,6 +1,9 @@
 // Blog posts are markdown files. Frontmatter carries the article metadata
 // (title, date, image, optional author, summary); the body is rendered by
 // PaperMarkdown (PaperUI elements, no innerHTML), which owns the typography.
+// Carousels are the one block of our own; blogBlocks.ts owns their syntax.
+import { parsePostBlocks, type PostBlock } from "./blogBlocks";
+
 export interface Post {
     slug: string;
     title: string;
@@ -9,6 +12,7 @@ export interface Post {
     image: string;
     summary: string;
     body: string;
+    blocks: PostBlock[];
     readingMinutes: number;
 }
 
@@ -81,6 +85,7 @@ function toPost(path: string, source: string): Post {
         image: required(data, "image", file),
         summary: required(data, "summary", file),
         body,
+        blocks: parsePostBlocks(body, file),
         readingMinutes: readingMinutes(body),
     };
 }

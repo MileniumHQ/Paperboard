@@ -2,6 +2,7 @@ import { render } from "solid-js/web";
 import "../index.css";
 import { SiteTopbar } from "./SiteTopbar";
 import { ContactForm } from "./pages/ContactForm";
+import { startCarousel } from "./blogCarousel";
 
 export async function showUnsignedDownload(download: import('../../public/js/unsigned-downloads.mjs').UnsignedDownload, trigger: HTMLElement) {
     const warning = await import('./DownloadWarning');
@@ -30,6 +31,12 @@ const contactRoot = document.getElementById("site-contact");
 if (contactRoot) {
     contactRoot.replaceChildren();
     render(() => <ContactForm />, contactRoot);
+}
+
+// Post carousels stay static markup; the script only moves and times them.
+// They live as long as the page, so their teardown is never needed here.
+for (const carousel of document.querySelectorAll<HTMLElement>("[data-carousel]")) {
+    startCarousel(carousel);
 }
 
 const docsRoot = document.getElementById("docs-root");

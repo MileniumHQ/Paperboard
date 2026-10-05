@@ -1,6 +1,7 @@
 import { PaperMarkdown, PaperText } from "@paperboard-dev/paperui";
-import { Show } from "solid-js";
+import { For, Match, Show, Switch } from "solid-js";
 import type { Post } from "../blog";
+import { BlogCarousel } from "../BlogCarousel";
 import styles from "../site.module.css";
 
 export function BlogPost(props: { post: Post }) {
@@ -35,7 +36,25 @@ export function BlogPost(props: { post: Post }) {
             </header>
             <img class={styles.postBanner} src={props.post.image} alt="" />
             <div class={styles.postBody}>
-                <PaperMarkdown text={props.post.body} />
+                <For each={props.post.blocks}>
+                    {(block) => (
+                        <Switch>
+                            <Match when={block.kind === "markdown" && block}>
+                                {(markdown) => (
+                                    <PaperMarkdown
+                                        allowImages
+                                        text={markdown().text}
+                                    />
+                                )}
+                            </Match>
+                            <Match when={block.kind === "carousel" && block}>
+                                {(carousel) => (
+                                    <BlogCarousel slides={carousel().slides} />
+                                )}
+                            </Match>
+                        </Switch>
+                    )}
+                </For>
             </div>
         </>
     );

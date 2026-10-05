@@ -54,10 +54,96 @@
     border-radius: var(--paper-border-radius);
 }
 
+/* Carousels split the body into several PaperMarkdown blocks; the gap
+   matches PaperMarkdown's own so the seams between them don't show. */
 .postBody {
     display: flex;
     flex-direction: column;
-    gap: var(--paper-uigap);
+    gap: var(--paper-uigap-half);
+}
+
+/* Post carousel: an image and its caption per slide, and a row of dots whose
+   active one fills as the slide's time runs out. src/site/blogCarousel.ts
+   moves the track and drives the fill. */
+.carousel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--paper-uigap-half);
+}
+
+.carouselFrame {
+    width: 100%;
+    overflow: hidden;
+}
+
+.carouselTrack {
+    display: flex;
+    align-items: flex-start;
+    transition: transform 0.45s var(--paper-ease-standard);
+}
+
+.carouselSlide {
+    flex: 0 0 100%;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap-half);
+    text-align: center;
+}
+
+.carouselSlide img {
+    width: 100%;
+    height: auto;
+    display: block;
+    border-radius: var(--paper-border-radius-half);
+}
+
+.carouselDots {
+    display: flex;
+    align-items: center;
+    gap: var(--paper-uigap-half);
+}
+
+.carouselDot {
+    position: relative;
+    width: 10px;
+    height: 10px;
+    padding: 0;
+    border: none;
+    border-radius: 999px;
+    background: var(--paper-border);
+    overflow: hidden;
+    cursor: pointer;
+    transition: width 0.3s var(--paper-ease-standard);
+}
+
+.carouselDot[aria-current="true"] {
+    width: 40px;
+}
+
+.carouselDot:focus-visible {
+    outline: var(--paper-focus-ring);
+    outline-offset: var(--paper-focus-offset);
+}
+
+.carouselProgress {
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 0;
+    background: var(--paper-text-subtle);
+    border-radius: inherit;
+}
+
+.carouselDot[aria-current="true"] .carouselProgress {
+    width: 100%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .carouselTrack,
+    .carouselDot {
+        transition: none;
+    }
 }
 
 /* Contact form: one column of labelled fields. The island mounts into
