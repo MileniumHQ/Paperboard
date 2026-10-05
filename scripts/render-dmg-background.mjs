@@ -36,7 +36,7 @@ try {
                 filters: heading.shadowRoot.querySelectorAll('filter').length,
             };
         });
-        assert.equal(facts.headingSize, '90');
+        assert.equal(facts.headingSize, '64');
         assert.equal(facts.text, 'Paperboard');
         assert.equal(facts.filters, 3);
         assert.equal(facts.arrow, 'arrow_forward');

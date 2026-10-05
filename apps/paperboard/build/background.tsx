@@ -7,7 +7,7 @@ export function renderBackground() {
         <main class="dmg-canvas">
             <bg-overlay opacity="0.4" aria-hidden="true" />
             <div class="dmg-heading">
-                <MarketingHeading level={1} text="Paperboard" size={90} />
+                <MarketingHeading level={1} text="Paperboard" size={64} />
             </div>
             <p class="hero-sub dmg-tagline">Do more with your computer</p>
             <PaperIcon class="dmg-arrow" aria-hidden="true">arrow_forward</PaperIcon>
