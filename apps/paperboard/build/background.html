@@ -3,7 +3,8 @@
     <head>
         <meta charset="utf-8" />
         <title>Paperboard DMG background</title>
-        <link rel="stylesheet" href="/paperui/colors.css" />
+        <link rel="stylesheet" href="{{paperuiRoot}}/styles/styles.css?direct" />
+        <link rel="stylesheet" href="{{paperuiRoot}}/components/PaperIcon/index.module.css?direct" />
         <link rel="stylesheet" href="/css/style.css" />
         <style>
             .paperui-root { margin: 0; overflow: hidden; }
@@ -16,8 +17,8 @@
             }
             .paperui-root .dmg-heading {
                 position: absolute;
-                inset: 35px 0 auto;
-                height: 60px;
+                inset: 10px 0 auto;
+                height: 110px;
                 display: flex;
                 align-items: center;
                 justify-content: center;
@@ -25,7 +26,7 @@
             }
             .paperui-root .dmg-tagline {
                 position: absolute;
-                top: 95px;
+                top: 125px;
                 width: 100%;
                 max-width: none;
                 font-size: 16px;
@@ -33,10 +34,12 @@
             }
             .paperui-root .dmg-arrow {
                 position: absolute;
-                left: 252px;
-                top: 207px;
-                width: 36px;
-                height: 26px;
+                left: 250px;
+                top: 200px;
+                width: 40px;
+                height: 40px;
+                font-size: 40px;
+                line-height: 1;
                 z-index: 2;
             }
             .paperui-root .dmg-instruction {
@@ -52,16 +55,7 @@
         </style>
     </head>
     <body class="paperui-root">
-        <!-- Render the landing's real component, font, palette, and backdrop. -->
-        <main class="dmg-canvas">
-            <bg-overlay opacity="0.4" aria-hidden="true"></bg-overlay>
-            <div class="dmg-heading"><styled-text size="44">Paperboard</styled-text></div>
-            <p class="hero-sub dmg-tagline">Do more with your computer</p>
-            <svg class="dmg-arrow" viewBox="0 0 36 26" fill="none" aria-hidden="true">
-                <path d="M3 13H32M22 3L32 13L22 23" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
-            </svg>
-            <p class="dmg-instruction">Drag Paperboard to Applications</p>
-        </main>
+        <!--dmg-body-->
         <script>
             if (new URLSearchParams(location.search).get('scale') === '2') {
                 document.documentElement.style.setProperty('--dmg-export-scale', '2');
