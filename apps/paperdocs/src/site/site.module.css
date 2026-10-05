@@ -92,40 +92,6 @@
     margin: 0;
 }
 
-.downloadPage {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--paper-uigap-double);
-    max-width: 70ch;
-    line-height: 1.6;
-}
-
-.downloadPage :is(h1, h2, p, ul) {
-    margin: 0;
-}
-
-.downloadSection {
-    display: flex;
-    flex-direction: column;
-    gap: var(--paper-uigap-half);
-}
-
-.downloadList {
-    padding-left: var(--paper-uigap-sixfourths);
-}
-
-.downloadPage a {
-    color: var(--paper-text);
-    text-decoration: underline;
-    text-underline-offset: 0.2em;
-}
-
-.downloadPage a:focus-visible {
-    outline: var(--paper-border-width) solid var(--paper-text);
-    outline-offset: var(--paper-uigap-onefourth);
-}
-
 @media (max-width: 720px) {
     .main {
         padding: var(--paper-uigap) var(--paper-uigap-sixfourths);
