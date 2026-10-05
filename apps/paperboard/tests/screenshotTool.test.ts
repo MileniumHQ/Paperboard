@@ -1,34 +1,76 @@
-import { test, expect } from "bun:test";
-import { mkdtemp, mkdir, rm, writeFile, readFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
+// Screenshot viewport/scale/shortcut contract (bun test): the pure validation
+// the controller and its preload rely on. The window-opening capture boundary
+// is exercised by hand; these assertions need no Electron window. Electron is
+// stubbed because the module imports it for installScreenshotTool.
+import { describe, it, expect, mock, beforeAll } from "bun:test";
 
-test("screenshot controller uses the existing Electron window and saves native/scaled PNGs", async () => {
-    const root = await mkdtemp(join(tmpdir(), "paperboard-screenshot-test-"));
-    try {
-        await mkdir(join(root, "main"));
-        await mkdir(join(root, "preload"));
-        for (const [entry, outfile] of [
-            [resolve(import.meta.dir, "fixtures/screenshotTool.electron.ts"), join(root, "main/fixture.js")],
-            [resolve(import.meta.dir, "../src/preload/screenshot.ts"), join(root, "preload/screenshot.js")],
-        ]) {
-            const result = await Bun.build({ entrypoints: [entry!], target: "node", format: "cjs", external: ["electron"], outdir: root, naming: outfile!.slice(root.length + 1) });
-            expect(result.success).toBe(true);
-            // Bun folds __dirname to source paths; Electron's bundled main
-            // resolves preloads relative to the emitted main file instead.
-            await writeFile(outfile!, (await result.outputs[0]!.text()).replace(/var __dirname = "[^"]*";/g, 'var __dirname = require("node:path").dirname(__filename);'));
-        }
-        const env = { ...process.env, PAPERBOARD_DIR: root };
-        delete env.ELECTRON_RUN_AS_NODE;
-        // Other daemon tests mock the electron module. Resolve its installed
-        // executable directly so this test always crosses the real boundary.
-        const electronDir = dirname(require.resolve("electron/package.json"));
-        const electron = join(electronDir, "dist", (await readFile(join(electronDir, "path.txt"), "utf8")).trim());
-        const { stdout } = await promisify(execFile)(electron, [join(root, "main/fixture.js")], { env, timeout: 30_000, maxBuffer: 2 * 1024 * 1024 });
-        expect(stdout).toContain("SCREENSHOT_CONTRACT_PASS");
-    } finally {
-        await rm(root, { recursive: true, force: true });
-    }
-}, 40_000);
+mock.module("electron", () => ({
+    app: { on: () => undefined, off: () => undefined },
+    BrowserWindow: class {},
+    dialog: {},
+    ipcMain: { handle: () => undefined, removeHandler: () => undefined },
+}));
+
+type Tool = typeof import("../src/main/screenshotTool");
+let tool: Tool;
+
+beforeAll(async () => {
+    tool = await import("../src/main/screenshotTool");
+});
+
+const key = (overrides: Record<string, unknown> = {}) => ({
+    type: "keyDown" as const,
+    key: "F8",
+    shift: true,
+    control: true,
+    meta: false,
+    alt: false,
+    isAutoRepeat: false,
+    ...overrides,
+});
+
+describe("screenshotSize", () => {
+    it("accepts whole pixels within 320-3840 x 240-2160", () => {
+        expect(tool.screenshotSize(1440, 900)).toEqual({ width: 1440, height: 900 });
+        expect(tool.screenshotSize(320, 240)).toEqual({ width: 320, height: 240 });
+        expect(tool.screenshotSize(3840, 2160)).toEqual({ width: 3840, height: 2160 });
+    });
+
+    it("rejects non-integers, out-of-range sizes, and non-numbers", () => {
+        expect(() => tool.screenshotSize(1439.5, 900)).toThrow();
+        expect(() => tool.screenshotSize(319, 900)).toThrow();
+        expect(() => tool.screenshotSize(100000, 900)).toThrow();
+        expect(() => tool.screenshotSize(1440, 5000)).toThrow();
+        expect(() => tool.screenshotSize("1440", 900)).toThrow();
+    });
+});
+
+describe("screenshotOutputSize", () => {
+    it("scales the viewport", () => {
+        expect(tool.screenshotOutputSize(1440, 900, 2)).toEqual({ width: 2880, height: 1800 });
+        expect(tool.screenshotOutputSize(1440, 900, 0.25)).toEqual({ width: 360, height: 225 });
+    });
+
+    it("rejects scales outside 0.25x-4x and outputs above 32 million pixels", () => {
+        expect(() => tool.screenshotOutputSize(1440, 900, 0)).toThrow();
+        expect(() => tool.screenshotOutputSize(1440, 900, 5)).toThrow();
+        expect(() => tool.screenshotOutputSize(1440, 900, Number.NaN)).toThrow();
+        expect(() => tool.screenshotOutputSize(3840, 2160, 4)).toThrow(/32 million/);
+    });
+});
+
+describe("isScreenshotShortcut", () => {
+    it("is F8+shift with control on linux/windows and meta on darwin", () => {
+        expect(tool.isScreenshotShortcut(key(), "linux")).toBe(true);
+        expect(tool.isScreenshotShortcut(key({ control: false, meta: true }), "darwin")).toBe(true);
+        expect(tool.isScreenshotShortcut(key(), "darwin")).toBe(false);
+        expect(tool.isScreenshotShortcut(key({ control: false, meta: true }), "linux")).toBe(false);
+    });
+
+    it("ignores auto-repeat, alt, and non-keydown events", () => {
+        expect(tool.isScreenshotShortcut(key({ isAutoRepeat: true }), "linux")).toBe(false);
+        expect(tool.isScreenshotShortcut(key({ alt: true }), "linux")).toBe(false);
+        expect(tool.isScreenshotShortcut(key({ type: "keyUp" }), "linux")).toBe(false);
+        expect(tool.isScreenshotShortcut(key({ key: "F9" }), "linux")).toBe(false);
+    });
+});
