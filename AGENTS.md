@@ -83,7 +83,7 @@ Never compromise on: panels are first-party, not sandboxed; the registry is clos
 ## Working in this repo
 
 **Ways to hurt yourself**
-- Never `pkill -f`, or kill a PID found by matching a name or path; your own shell matches. Kill only a PID you captured at spawn.
+- Never `pkill -f`; your own shell can match. Before stopping a process, verify its owner, executable, and command line, and stop only the workload owned by your task.
 - Never touch `~/.paperboard` (the real install). Use a temporary `PAPERBOARD_DIR`, loopback fixtures, and temp dirs. Tests must never find the user's daemon, credentials, registry, or workloads.
 - Launching the app from an agent shell: unset `ELECTRON_RUN_AS_NODE`.
 - `bun run gate` typechecks, tests, **and rebuilds** panels; the daemon runs the built `dist/service.js`, so the build is the artifact proof. `bun run build:panels` builds panels alone.
