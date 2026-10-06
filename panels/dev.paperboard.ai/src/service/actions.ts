@@ -189,7 +189,14 @@ export function uiActions(app: AiApp): ActionDefinition[] {
     };
     return [
         ui(UI_ACTION_IDS.installRuntime, "Install Ollama", () => ready(() => app.installRuntime())),
-        ui(UI_ACTION_IDS.startRuntime, "Start Ollama", () => ready(() => app.startRuntime())),
+        ui(UI_ACTION_IDS.startRuntime, "Start Ollama", () =>
+            ready(() => {
+                // the boot can outlive a request/response deadline; readiness
+                // and failure travel through state.runtime, so acknowledge now
+                void app.startIfInstalled().catch((err) => console.error("[ai] Ollama did not start:", String(err)));
+                return { started: true };
+            }),
+        ),
         ui(UI_ACTION_IDS.setProvider, "Set provider", (i) =>
             ready(() => app.setProvider({ id: i.id, baseUrl: i.baseUrl, apiKey: i.apiKey, clearApiKey: i.clearApiKey })),
         ),

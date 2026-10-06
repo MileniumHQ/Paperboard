@@ -17,6 +17,10 @@ import type { AiState } from "../src/core/types";
 const filesDir = fs.mkdtempSync(path.join(os.tmpdir(), "pb-ai-app-"));
 const secrets = new Map<string, string>();
 
+// mutable so the install test can control the package check and the download
+let packageInstalled = true;
+let downloadImpl: () => Promise<void> = async () => {};
+
 mock.module("@mileniumhq/paperapi", () => ({
     config: { get: async () => null, set: async () => true },
     secretsApi: {
@@ -30,9 +34,9 @@ mock.module("@mileniumhq/paperapi", () => ({
     },
     fileApi: { getPath: async () => filesDir },
     packageApi: {
-        isInstalled: async () => true,
+        isInstalled: async () => packageInstalled,
         getPath: async () => "/fake/ollama",
-        download: async () => {},
+        download: () => downloadImpl(),
     },
     panelsApi: { list: async () => [] },
     actionsApi: {
@@ -149,6 +153,48 @@ describe("AiApp readiness", () => {
             expect(app.runtime.api).toBeNull();
             expect(ctx.state.runtime.status).not.toBe("ready");
         } finally {
+            await app.stopRuntime().catch((err) => console.debug("[ai] test teardown:", String(err)));
+        }
+    });
+});
+
+async function waitFor(cond: () => boolean, ms = 3000): Promise<void> {
+    const start = Date.now();
+    while (!cond()) {
+        if (Date.now() - start > ms) throw new Error("waitFor timeout");
+        await new Promise((r) => setTimeout(r, 5));
+    }
+}
+
+describe("AiApp installRuntime", () => {
+    it("acknowledges before the download finishes and reports through state", async () => {
+        packageInstalled = false;
+        let downloadStarted = false;
+        let finishDownload: (() => void) | null = null;
+        downloadImpl = () => {
+            downloadStarted = true;
+            return new Promise<void>((resolve) => {
+                finishDownload = resolve;
+            });
+        };
+        const app = new AiApp(new HangingHost(), { readyTimeoutMs: 150 });
+        const ctx = makeCtx();
+        try {
+            await app.init(ctx as any);
+            await waitFor(() => ctx.state.runtime.status === "missing");
+            const started = Date.now();
+            await app.installRuntime();
+            // the action call returns while the download is still in flight
+            expect(Date.now() - started).toBeLessThan(200);
+            expect(ctx.state.runtime.status).toBe("installing");
+            await waitFor(() => downloadStarted);
+            finishDownload!();
+            // download done, boot attempted; the hanging host times out and
+            // the failure surfaces in state, never as a rejected action call
+            await waitFor(() => ctx.state.runtime.status === "error");
+        } finally {
+            packageInstalled = true;
+            downloadImpl = async () => {};
             await app.stopRuntime().catch((err) => console.debug("[ai] test teardown:", String(err)));
         }
     });

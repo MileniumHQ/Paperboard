@@ -220,8 +220,10 @@ export class AiApp {
         if (id === CUSTOM_PROVIDER_ID) {
             await this.models.refresh();
         } else if (this.ctx.state.runtime.status !== "ready") {
-            // setup already started Ollama; never bounce a ready runtime
-            await this.startIfInstalled();
+            // setup already started Ollama; never bounce a ready runtime.
+            // Do not await the boot here: it can outlive the caller's
+            // deadline, and readiness/failure travel through state.runtime.
+            void this.startIfInstalled().catch((err) => console.error("[ai] Ollama did not start:", String(err)));
         }
         return provider;
     }
@@ -458,7 +460,7 @@ export class AiApp {
         };
     }
 
-    private async startIfInstalled(): Promise<void> {
+    async startIfInstalled(): Promise<void> {
         let installed: boolean;
         try {
             installed = await packageApi.isInstalled(OLLAMA_PACKAGE);
@@ -488,6 +490,13 @@ export class AiApp {
         const status = this.ctx.state.runtime.status;
         if (status === "installing") throw new Error("Ollama is already being installed.");
         this.patchRuntime({ status: "installing", error: undefined, errorDetail: undefined, install: { stage: "checking", percent: 0 } });
+        // the download can outlive any caller's patience: acknowledge now,
+        // and let progress/failure travel through state.runtime (the UI
+        // renders `install` and `error`), never a request/response deadline
+        void this.runInstall();
+    }
+
+    private async runInstall(): Promise<void> {
         try {
             // replacing a runtime requires its workload to be stopped first
             await this.runtime.stop();
@@ -497,9 +506,10 @@ export class AiApp {
             this.patchRuntime({ install: undefined, packageInstalled: true });
         } catch (err) {
             this.patchRuntime({ status: "error", error: `Installing Ollama failed: ${err instanceof Error ? err.message : String(err)}`, install: undefined });
-            throw err;
+            return;
         }
-        await this.startRuntime();
+        // start reports its own progress and failure through state too
+        void this.startRuntime().catch((err) => console.error("[ai] Ollama did not start:", String(err)));
     }
 
     // ─── hardware & fit ────────────────────────────────────────────────────
