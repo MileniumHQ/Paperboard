@@ -26,7 +26,7 @@
     },
     "apps/origami/library": {
       "name": "paperboard-panel-library",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "dependencies": {
         "@mileniumhq/paperui": "workspace:*",
         "solid-js": "^1.9.15",
@@ -43,7 +43,7 @@
     },
     "apps/paperboard": {
       "name": "paperboard",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "dependencies": {
         "@electron-toolkit/preload": "^3.0.2",
         "@electron-toolkit/utils": "^4.0.0",
@@ -101,7 +101,7 @@
     },
     "apps/paperdocs": {
       "name": "paperdocs",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "dependencies": {
         "@mileniumhq/paperui": "workspace:*",
         "solid-js": "^1.9.15",
@@ -128,7 +128,7 @@
     },
     "packages/paperapi": {
       "name": "@mileniumhq/paperapi",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "bin": {
         "paperapi": "./dist/cli.js",
       },
@@ -148,7 +148,7 @@
     },
     "packages/paperui": {
       "name": "@mileniumhq/paperui",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "dependencies": {
         "anser": "^2.3.5",
         "marked": "^18.0.14",

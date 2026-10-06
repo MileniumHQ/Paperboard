@@ -1,7 +1,7 @@
 {
     "name": "Game Server",
     "id": "dev.paperboard.gameserver",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "description": "Dedicated Minecraft & game server manager",
     "publisher": "Paperboard",
     "base": "./dist/index.html",
