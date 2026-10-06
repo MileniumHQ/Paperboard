@@ -209,12 +209,12 @@ export async function searchModrinth(query: string, signal?: AbortSignal): Promi
     const eco = getEcosystem(serverSoftware());
     if (!eco) return [];
     const mcVersion = serverVersion();
-    if (!mcVersion) throw new Error("Choose a server version before browsing Modrinth.");
+    if (eco.kind === "mod" && !mcVersion) throw new Error("Choose a server version before browsing Modrinth.");
 
     const facets = JSON.stringify([
         [`project_type:${eco.projectType}`],
         [`categories:${eco.loaderCategory}`],
-        [`versions:${mcVersion}`],
+        ...(eco.kind === "mod" ? [[`versions:${mcVersion}`]] : []),
         SERVER_ENVIRONMENTS.map((environment) => `environment:${environment}`),
     ]);
 
@@ -238,6 +238,9 @@ export async function searchModrinth(query: string, signal?: AbortSignal): Promi
             iconUrl: hit.icon_url || undefined,
         });
     }
+    // Plugins browse across Minecraft versions; exact builds are required only for mods.
+    if (eco.kind === "plugin") return hits;
+
     // Project facets can match different releases (e.g. Fabric on 1.20,
     // Forge on 1.21). Verify an actual server build for this loader/version.
     // At most four requests at once, and at most one search page of projects.

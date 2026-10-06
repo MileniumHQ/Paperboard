@@ -45,7 +45,7 @@ test("detail uses project followers and ISO updated; search retains follows", as
     expect(project.dateModified).toBe("2026-10-05T12:34:56Z");
 });
 
-for (const loader of ["fabric", "paper"]) {
+for (const loader of ["fabric"]) {
     test(`${loader} front page scopes server environments and requires an actual matching build`, async () => {
         software = loader;
         respond = (url) => {
@@ -72,6 +72,24 @@ for (const loader of ["fabric", "paper"]) {
         }
     });
 }
+
+// Plugins intentionally browse across Minecraft versions; the previous Paper
+// test incorrectly applied the mod compatibility requirement to them.
+test("Paper plugins browse without a version facet or matching-build lookup", async () => {
+    software = "paper";
+    respond = (url) => url.pathname.endsWith("/search")
+        ? { hits: [hit("older-plugin")] }
+        : Response.json({ description: "Plugin browsing must not query versions" }, { status: 503 });
+    for (const serverVersion of ["1.21.1", ""]) {
+        version = serverVersion;
+        requests.length = 0;
+        expect((await searchModrinth("")).map((hit) => hit.projectId)).toEqual(["older-plugin"]);
+        expect(requests).toHaveLength(1);
+        const facets = JSON.parse(requests[0].searchParams.get("facets")!);
+        expect(facets).toContainEqual(["categories:paper"]);
+        expect(facets.flat().some((facet: string) => facet.startsWith("versions:"))).toBe(false);
+    }
+});
 
 test("unknown server version cannot produce unfiltered results", async () => {
     version = "";
