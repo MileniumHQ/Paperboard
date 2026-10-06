@@ -22,6 +22,10 @@ export function PaperToggle(props: PaperToggleProps) {
         "disabled",
         "class",
         "classList",
+        // the name belongs on the switch people focus, not the hidden checkbox
+        "aria-label",
+        "aria-labelledby",
+        "aria-describedby",
     ]);
 
     const [internalChecked, setInternalChecked] = createSignal(
@@ -65,6 +69,9 @@ export function PaperToggle(props: PaperToggleProps) {
         <div
             role="switch"
             aria-checked={isChecked()}
+            aria-label={local["aria-label"]}
+            aria-labelledby={local["aria-labelledby"]}
+            aria-describedby={local["aria-describedby"]}
             tabIndex={local.disabled ? -1 : 0}
             class={[
                 styles.PaperToggle,

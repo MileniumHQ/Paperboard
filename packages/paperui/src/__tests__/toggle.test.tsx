@@ -12,6 +12,13 @@ describe("PaperToggle - Accessibility & State Tests", () => {
         expect(toggle.getAttribute("tabindex")).toBe("0");
     });
 
+    test("an aria-label names the switch itself, not the hidden checkbox", () => {
+        const { getByRole } = render(() => <PaperToggle aria-label="Mute audio" />);
+        const toggle = getByRole("switch", { name: "Mute audio" });
+        expect(toggle.getAttribute("aria-label")).toBe("Mute audio");
+        expect(toggle.querySelector("input")?.hasAttribute("aria-label")).toBe(false);
+    });
+
     test("toggles state on click when uncontrolled", async () => {
         const handleChange = vi.fn();
         const { getByRole } = render(() => <PaperToggle onChange={handleChange} />);
