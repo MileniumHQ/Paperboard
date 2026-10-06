@@ -13,12 +13,15 @@ import { SCROLLBACK_CHARS, applyScrollbackCap, readWholeLines } from "./lib/scro
 // pass PANEL_ID explicitly, ambient scope resolves to last-imported panel
 const PANEL_ID = "dev.paperboard.terminal";
 
-interface TerminalTab {
+export interface TerminalTab {
     id: string;
     label: string;
 }
 
-interface TerminalServiceState {
+export interface TerminalServiceState {
+    // the tab list every window mirrors; which tab a window shows is that
+    // window's own choice, so open windows and computers stay in step
+    tabs: TerminalTab[];
     tabCount: number;
     activeTabId: string;
 }
@@ -57,7 +60,7 @@ function schedulePersist(id: string) {
 }
 
 function updateCounts(ctx: Ctx) {
-    ctx.setState({ tabCount: tabs.length, activeTabId });
+    ctx.setState({ tabs: tabs.map((t) => ({ ...t })), tabCount: tabs.length, activeTabId });
 }
 
 async function persistTabs(ctx: Ctx | null) {
@@ -511,6 +514,7 @@ const eventActions = [
 export const terminalService = definePanelService({
     id: "dev.paperboard.terminal",
     state: {
+        tabs: [] as TerminalTab[],
         tabCount: 0,
         activeTabId: "",
     },

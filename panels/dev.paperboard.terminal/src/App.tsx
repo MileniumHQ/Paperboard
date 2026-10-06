@@ -1,4 +1,5 @@
-import { createSignal, For, Show } from "solid-js";
+import { createEffect, createSignal, For, Show } from "solid-js";
+import { createStore, reconcile } from "solid-js/store";
 import {
     PaperFlex,
     PaperList,
@@ -19,7 +20,7 @@ import "@mileniumhq/paperui/panel.css";
 import "@xterm/xterm/css/xterm.css";
 import "./style.css";
 import TerminalComponent, { copySelection, pasteClipboard } from "./Terminal";
-import { actions as actionsApi } from "@mileniumhq/paperapi";
+import { actions as actionsApi, createPanelBridge } from "@mileniumhq/paperapi";
 import { onMount } from "solid-js";
 
 const TERMINAL_PANEL_ID = "dev.paperboard.terminal";
@@ -29,40 +30,54 @@ export interface TerminalTab {
     label: string;
 }
 
+const bridge = createPanelBridge<{ tabs: TerminalTab[]; activeTabId: string }>({
+    panelId: TERMINAL_PANEL_ID,
+    defaultState: { tabs: [], activeTabId: "" },
+});
+
 export default function App() {
     const [activeTab, setActiveTab] = createSignal("");
-    const [tabs, setTabs] = createSignal<TerminalTab[]>([]);
     const [isRenameOpen, setIsRenameOpen] = createSignal(false);
     const [contextTabId, setContextTabId] = createSignal<string | null>(null);
     const [renameValue, setRenameValue] = createSignal("");
+    const [hydration, setHydration] = createSignal<"loading" | "ready" | "failed">("loading");
+    const [hydrationError, setHydrationError] = createSignal("");
 
-    onMount(async () => {
+    // the tab list is the service's: every window on every computer mirrors
+    // it, so a tab opened, renamed, moved or closed anywhere shows up here.
+    // Keyed by id, so a tab keeps its object (and its live terminal) across
+    // updates instead of remounting. Which tab is shown stays per window.
+    const [mirror, setMirror] = createStore<{ tabs: TerminalTab[] }>({ tabs: [] });
+    const tabs = () => mirror.tabs;
+    const applyTabs = (next: unknown) => {
+        if (Array.isArray(next)) setMirror("tabs", reconcile(next as TerminalTab[], { key: "id" }));
+    };
+    bridge.onStateChange((patch) => applyTabs(patch.tabs));
+
+    const hydrate = async () => {
+        setHydration("loading");
         try {
-            const listed = await actionsApi.call<TerminalTab[]>(
-                TERMINAL_PANEL_ID,
-                "list-tabs",
-            );
-            if (listed && listed.length > 0) {
-                setTabs(listed);
-                setActiveTab(listed[0].id);
-                return;
-            }
+            const state = await bridge.refreshState();
+            applyTabs(state.tabs);
+            if (!activeTab()) setActiveTab(state.activeTabId || tabs()[0]?.id || "");
+            setHydration("ready");
+            // opening the panel with every tab closed starts a shell
+            if (tabs().length === 0) await addTab();
         } catch (err) {
-            console.debug("[terminal] list-tabs failed:", String(err));
+            // unavailable is not empty: never open a fresh tab over a
+            // service that did not answer
+            setHydrationError(err instanceof Error ? err.message : String(err));
+            setHydration("failed");
         }
-        try {
-            const id = await actionsApi.call<string>(
-                TERMINAL_PANEL_ID,
-                "create-tab",
-                { label: "Tab 1" },
-            );
-            if (id) {
-                setTabs([{ id, label: "Tab 1" }]);
-                setActiveTab(id);
-            }
-        } catch (err) {
-            console.debug("[terminal] create-tab failed:", String(err));
-        }
+    };
+
+    onMount(() => void hydrate());
+
+    // a tab closed in another window takes this window to a remaining one
+    createEffect(() => {
+        if (hydration() !== "ready") return;
+        const list = tabs();
+        if (!list.some((t) => t.id === activeTab())) setActiveTab(list[0]?.id ?? "");
     });
 
     const handleCloseTab = (closedId: string) => {
@@ -78,9 +93,10 @@ export default function App() {
             }
         }
 
-        setTabs(current.filter((item) => item.id !== closedId));
+        // the tab leaves when the service says it closed; a failed close
+        // leaves it in place, where closing it again retries
         actionsApi.call(TERMINAL_PANEL_ID, "close-tab", { id: closedId }).catch((err) =>
-            console.debug("[terminal] close-tab failed:", String(err)),
+            console.error("[terminal] close-tab failed:", String(err)),
         );
     };
 
@@ -92,15 +108,9 @@ export default function App() {
                 {},
             );
             if (!id) return;
-            const listed = await actionsApi
-                .call<TerminalTab[]>(TERMINAL_PANEL_ID, "list-tabs")
-                .catch((err) => {
-                    console.debug("[terminal] list-tabs failed:", String(err));
-                    return [] as TerminalTab[];
-                });
-            const label =
-                listed.find((t) => t.id === id)?.label || `Tab ${tabs().length + 1}`;
-            setTabs((prev) => [...prev, { id, label }]);
+            // the state push travels beside this answer; pull it so the new
+            // tab is listed before it is shown
+            applyTabs((await bridge.refreshState()).tabs);
             setActiveTab(id);
         } catch (err) {
             console.warn("[terminal] create-tab failed:", String(err));
@@ -130,13 +140,11 @@ export default function App() {
         const tid = contextTabId();
         const newName = renameValue().trim();
         if (tid && newName) {
-            setTabs((prev) =>
-                prev.map((t) => (t.id === tid ? { ...t, label: newName } : t)),
-            );
+            // the new label arrives through the service's state
             actionsApi
                 .call(TERMINAL_PANEL_ID, "rename-tab", { id: tid, label: newName })
                 .catch((err) =>
-                    console.debug("[terminal] rename-tab failed:", String(err)),
+                    console.error("[terminal] rename-tab failed:", String(err)),
                 );
         }
         setIsRenameOpen(false);
@@ -166,18 +174,24 @@ export default function App() {
                         const reordered = newOrder
                             .map((id) => current.find((item) => item.id === id)!)
                             .filter(Boolean);
-                        setTabs(reordered);
-                        // persistence lives in the service — a silent local
-                        // reorder would reset on restart
+                        // shown at once; the service's order is the truth, so a
+                        // failed reorder pulls it back
+                        setMirror("tabs", reordered);
                         actionsApi
                             .call(
                                 TERMINAL_PANEL_ID,
                                 "reorder-tabs",
                                 { orderedIds: reordered.map((t) => t.id) },
                             )
-                            .catch((err) =>
-                                console.error("[Terminal] reorder persist failed:", err),
-                            );
+                            .catch((err) => {
+                                console.error("[Terminal] reorder persist failed:", err);
+                                void bridge
+                                    .refreshState()
+                                    .then((state) => applyTabs(state.tabs))
+                                    .catch((refreshErr) =>
+                                        console.error("[Terminal] tab list refresh failed:", refreshErr),
+                                    );
+                            });
                     }}
                 >
                     <For each={tabs()}>
@@ -217,7 +231,20 @@ export default function App() {
                         overflow: "hidden",
                     }}
                 >
-                    <Show when={tabs().length === 0}>
+                    <Show when={hydration() === "failed"}>
+                        <PaperFlex fullWidth fullHeight align="center" justify="center">
+                            <PaperEmptyState
+                                icon="cloud_off"
+                                title="The terminal service is not answering"
+                                description={hydrationError()}
+                            >
+                                <PaperButton variant="primary" onClick={() => void hydrate()}>
+                                    <PaperIcon>refresh</PaperIcon> Try again
+                                </PaperButton>
+                            </PaperEmptyState>
+                        </PaperFlex>
+                    </Show>
+                    <Show when={hydration() === "ready" && tabs().length === 0}>
                         <PaperFlex fullWidth fullHeight align="center" justify="center">
                             <PaperEmptyState
                                 icon="terminal"
