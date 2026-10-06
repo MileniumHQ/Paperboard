@@ -63,7 +63,9 @@ ${stripSsrArtifacts(page.html)}
         <script src="/js/all-in-one.js"></script>
         <script src="/js/flight.js"></script>
         <script src="/js/cta.js"></script>
-        <script type="module" src="/js/icon-play.js"></script>
+        <!-- The import map must precede every module script: Firefox ignores one
+             registered after module loading starts, which drops the bare "three"
+             specifiers and killed the stage there. -->
         <script type="importmap">
             {
                 "imports": {
@@ -72,6 +74,7 @@ ${stripSsrArtifacts(page.html)}
                 }
             }
         </script>
+        <script type="module" src="/js/icon-play.js"></script>
         <script type="module" src="/js/aio-stage.js"></script>`}
         <script src="/js/footer.js"></script>
     </body>

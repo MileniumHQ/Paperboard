@@ -412,6 +412,26 @@ try {
     const openingTicks = await page.evaluate(() => window.__flight.ticks);
     await page.waitForTimeout(300);
     assert.equal(await page.evaluate(() => window.__flight.ticks), openingTicks);
+    // The user owns the scroll: a wheel tick moves the page by its own delta,
+    // never snaps it to the next section.
+    await page.mouse.move(720, 450);
+    await page.mouse.wheel(0, 100);
+    await page.waitForTimeout(900);
+    assert.equal(await page.evaluate(() => scrollY), 100, 'A wheel tick must scroll natively, not snap');
+    // The showcase holds still past its arrival so its copy stays readable
+    // before the stage transition starts.
+    for (const fraction of [1, 1.2, 1.4]) {
+        await page.evaluate((f) => scrollTo(0, innerHeight * f), fraction);
+        await page.waitForTimeout(150);
+        const copy = await page.evaluate(() => {
+            const el = document.querySelector('.showcase-content');
+            const rect = el.getBoundingClientRect();
+            return { opacity: getComputedStyle(el).opacity, top: rect.top, bottom: rect.bottom, progress: window.__flight.progress() };
+        });
+        assert.equal(copy.progress, 1, `Choreography must wait out the hold at ${fraction}vh`);
+        assert.equal(copy.opacity, '1', `Showcase copy must stay visible at ${fraction}vh`);
+        assert.ok(copy.top >= 0 && copy.bottom <= 900, `Showcase copy must stay on screen at ${fraction}vh`);
+    }
     await page.evaluate(() => scrollTo(0, innerHeight * 2));
     await page.waitForFunction(() => window.__aioStage?.companions.length === 4);
     await page.waitForTimeout(800);

@@ -4,29 +4,22 @@
     const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
     const V = () => window.innerHeight || 1;
     const lerp = (a, b, t) => a + (b - a) * t;
-    // Section boundaries, read from layout because the later sections can be
-    // taller than the viewport. The hero/showcase pair is left to card-scroll.
-    const sectionTop = (selector, fallbackVh) => {
-        const el = document.querySelector(selector);
-        return el ? el.offsetTop : fallbackVh * V();
-    };
-    const ctaTop = () => sectionTop(".cta-section", 4);
-    const closingTop = () => sectionTop(".outro-section", 5);
-    const snapStops = () => [0, V(), 2 * V(), ctaTop(), closingTop()];
-    const stopIndex = () => {
-        const y = window.scrollY || 0;
-        const list = snapStops();
-        const tolerance = 0.07 * V();
-        for (let i = 0; i < list.length; i++) {
-            if (Math.abs(y - list[i]) < tolerance) return i;
-        }
-        return -1;
-    };
-
     const canvas = document.getElementById("aio-stage");
     const card = document.querySelector(".preview-card");
     const frame = document.querySelector(".card-image-frame");
     const showcaseEl = document.querySelector(".showcase-section");
+    const holdEl = document.querySelector(".showcase-hold");
+    // Scroll progress in viewports, with the showcase hold removed: past the
+    // showcase the choreography waits out the hold, so s = 1 lasts the whole
+    // pinned stretch and everything after it runs on its usual timeline.
+    function progress() {
+        const raw = (window.scrollY || 0) / V();
+        if (raw <= 1) return raw;
+        const hold = holdEl && showcaseEl
+            ? Math.max(0, holdEl.offsetHeight - showcaseEl.offsetHeight) / V()
+            : 0;
+        return Math.max(1, raw - hold);
+    }
     const mainEl = document.querySelector(".page-layout");
     // rest pose of the frame, measured while nothing is pinned.
     // layout values only, so instant scroll jumps can't poison them
@@ -68,107 +61,6 @@
     const stageCopy = document.querySelector(".stage-copy");
     const dashEl = document.querySelector(".stage-dash");
 
-    // snap between showcase and stage, scrub stays native
-    let snapping = false;
-    let upAcc = 0;
-    let upTimer = null;
-    let touchY = 0;
-
-    function smoothScrollTo(target, dur = 650) {
-        if (snapping) return;
-        snapping = true;
-        const y0 = window.scrollY || 0;
-        const dy = target - y0;
-        if (Math.abs(dy) < 2) {
-            window.scrollTo(0, target);
-            snapping = false;
-            return;
-        }
-        const t0 = performance.now();
-        function step(n) {
-            const p = Math.min(1, (n - t0) / dur);
-            window.scrollTo(0, y0 + dy * ease(p));
-            if (p < 1) {
-                requestAnimationFrame(step);
-            } else {
-                window.scrollTo(0, target);
-                setTimeout(() => {
-                    snapping = false;
-                    upAcc = 0;
-                }, 50);
-            }
-        }
-        requestAnimationFrame(step);
-    }
-
-    function onWheel(e) {
-        if (snapping) {
-            e.preventDefault();
-            return;
-        }
-        const index = stopIndex();
-        if (index === -1) return;
-        const stops = snapStops();
-        if (e.deltaY > 0 && index >= 1 && index < stops.length - 1) {
-            e.preventDefault();
-            smoothScrollTo(stops[index + 1], 1100);
-        } else if (e.deltaY < 0 && index >= 2) {
-            clearTimeout(upTimer);
-            upAcc += Math.abs(e.deltaY);
-            if (upAcc > 35) {
-                e.preventDefault();
-                smoothScrollTo(stops[index - 1], 1100);
-                upAcc = 0;
-            } else {
-                upTimer = setTimeout(() => {
-                    upAcc = 0;
-                }, 250);
-            }
-        }
-    }
-
-    function onTouchStart(e) {
-        if (e.touches && e.touches.length) touchY = e.touches[0].clientY;
-    }
-
-    function onTouchMove(e) {
-        if (snapping) {
-            e.preventDefault();
-            return;
-        }
-        if (!e.touches || !e.touches.length) return;
-        const index = stopIndex();
-        if (index === -1) return;
-        const stops = snapStops();
-        const diff = touchY - e.touches[0].clientY;
-        if (diff > 12 && index >= 1 && index < stops.length - 1) {
-            e.preventDefault();
-            smoothScrollTo(stops[index + 1], 1100);
-        } else if (diff < -40 && index >= 2) {
-            e.preventDefault();
-            smoothScrollTo(stops[index - 1], 1100);
-        }
-    }
-
-    function onKeyDown(e) {
-        const navDown = ["ArrowDown", "PageDown", " "].includes(e.key);
-        const navUp = ["ArrowUp", "PageUp"].includes(e.key);
-        if (snapping) {
-            if (navDown || navUp) e.preventDefault();
-            return;
-        }
-        const index = stopIndex();
-        if (index === -1) return;
-        const stops = snapStops();
-        if (navDown && index >= 1 && index < stops.length - 1) {
-            e.preventDefault();
-            smoothScrollTo(stops[index + 1], 1100);
-        } else if (navUp && index >= 2) {
-            e.preventDefault();
-            smoothScrollTo(stops[index - 1], 1100);
-        }
-    }
-
     let flightRaf = 0;
     let lastState = '';
     const nextFrame = () => {
@@ -184,7 +76,7 @@
         window.__flight.ticks++;
         const vh = V();
         const W = window.innerWidth || 1;
-        const s = (window.scrollY || 0) / vh;
+        const s = progress();
         const stage = window.__aioStage;
 
         // The 3D lives for the showcase and stage; it fades out again before
@@ -212,7 +104,7 @@
                 // shrank the card and pushed it down into the dots bar.
                 card.style.transform = "";
                 const r = card.getBoundingClientRect();
-                const top = r.top + (window.scrollY - window.innerHeight);
+                const top = r.top + (s - 1) * vh;
                 card.style.position = "fixed";
                 card.style.top = `${top.toFixed(1)}px`;
                 card.style.left = `${r.left.toFixed(1)}px`;
@@ -399,16 +291,12 @@
         stage?.invalidate();
     }
 
-    window.__flight = { ticks: 0, error: null };
+    window.__flight = { ticks: 0, error: null, progress };
     window.addEventListener("error", (e) => {
         if (e.filename && e.filename.includes("flight.js")) {
             window.__flight.error = e.message;
         }
     });
-    window.addEventListener("wheel", onWheel, { passive: false });
-    window.addEventListener("touchstart", onTouchStart, { passive: true });
-    window.addEventListener("touchmove", onTouchMove, { passive: false });
-    window.addEventListener("keydown", onKeyDown);
     if (canvas && card) nextFrame();
     window.addEventListener('scroll', nextFrame, { passive: true });
     window.addEventListener('resize', nextFrame, { passive: true });

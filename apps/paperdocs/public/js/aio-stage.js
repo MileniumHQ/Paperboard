@@ -253,7 +253,7 @@ function init() {
     }
 
     function onPointerMove(e) {
-        const s = window.scrollY / (window.innerHeight || 1);
+        const s = window.__flight.progress();
         if (s <= 1 || s >= 2.8) return;
         pointer.x = (e.clientX / (window.innerWidth || 1)) * 2 - 1;
         pointer.y = -(e.clientY / (window.innerHeight || 1)) * 2 + 1;
@@ -438,7 +438,7 @@ function init() {
         if (layoutDirty) { applyLayout(); layoutDirty = false; }
 
         // flight owns the group past the handoff, resting state only above it
-        const s = (window.scrollY || 0) / (window.innerHeight || 1);
+        const s = window.__flight.progress();
         if (s >= 2) api.applyHomePose();
         if (s < 0.9) {
             group.scale.setScalar(api.home.scale);

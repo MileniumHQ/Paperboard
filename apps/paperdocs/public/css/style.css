@@ -42,8 +42,6 @@ body,
 html {
     width: 100%;
     min-height: 100%;
-    overflow-x: hidden;
-    overflow-y: auto;
     font-family: "Nunito", sans-serif;
     background: linear-gradient(
         180deg,
@@ -52,6 +50,17 @@ html {
         color-mix(in srgb, var(--paper-site-accent) 65%, var(--paper-marketing-ink)) 100%
     );
     background-attachment: fixed;
+}
+
+html {
+    overflow-x: hidden;
+    overflow-y: auto;
+}
+
+/* clip, not hidden: a hidden body is a scroll container that never scrolls,
+   which would stop the sticky showcase from sticking. */
+body {
+    overflow-x: clip;
 }
 
 .page-layout {
@@ -448,8 +457,16 @@ html {
     z-index: 10;
 }
 
+/* Extra scroll the showcase stays pinned for. flight.js reads the hold back
+   from layout, so this is the one place it is set. */
+.showcase-hold {
+    width: 100%;
+    height: calc(100vh + 45vh);
+}
+
 .showcase-section {
-    position: relative;
+    position: sticky;
+    top: 0;
     width: 100vw;
     height: 100vh;
     display: flex;
@@ -1292,6 +1309,24 @@ html {
     justify-content: space-between;
     flex-wrap: wrap;
     gap: 12px;
+}
+
+.site-footer__legal {
+    max-width: 992px;
+    margin: 0 auto;
+    box-sizing: border-box;
+    padding: 0 24px 32px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 12px;
+    line-height: 1.5;
+    text-align: left;
+    color: var(--site-glass-ink-subtle);
+}
+
+.site-footer__legal p {
+    margin: 0;
 }
 
 .site-footer__copyright {
