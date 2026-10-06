@@ -61,13 +61,15 @@ export default function ChatView() {
         onCleanup(() => observer.disconnect());
     });
 
-    // the open conversation's title follows the saved summary, so the auto
-    // title from the first message shows up without re-opening the chat
+    // the open conversation's title and model follow the saved summary, so
+    // the auto title from the first message, and a rename or model switch
+    // made in another window, show up without re-opening the chat
     createEffect(() => {
         const c = openConversation();
         if (!c) return;
         const summary = state.conversations.find((s) => s.id === c.id);
         if (summary && summary.title !== c.title) renameOpen(summary.title);
+        if (summary && summary.model !== c.model) setOpenModel(summary.model);
     });
 
     createEffect(
