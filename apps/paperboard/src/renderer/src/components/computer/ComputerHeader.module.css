@@ -7,3 +7,17 @@
         transparent 100%
     ) !important;
 }
+
+.computerItem::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: color-mix(in srgb, var(--paper-contrast) 3%, transparent);
+    opacity: 0;
+    transition: opacity var(--paper-short-transition);
+}
+
+.computerItem:hover::after {
+    opacity: 1;
+}

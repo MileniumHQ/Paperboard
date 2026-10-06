@@ -54,6 +54,7 @@ try {
         }
     }
     provider.dataset.paperuiTheme = initialTheme;
+    row.style.removeProperty("transition");
     document.querySelector<HTMLLabelElement>('label[data-value="library"]')!.click();
     if (tab() !== "library") throw new Error("Library navigation must still work");
     result.textContent = "PASS: merged computer navigation, selection, CSS gradient, and library navigation";
@@ -61,3 +62,24 @@ try {
     result.textContent = `FAIL: ${String(error)}`;
     throw error;
 }
+
+// Move the browser pointer onto the computer row, then call this export.
+export function verifyHover(hovered = true) {
+    const row = document.querySelector<HTMLLabelElement>('label[data-value="settings"]')!;
+    const library = document.querySelector<HTMLLabelElement>('label[data-value="library"]')!;
+    // Hidden preview tabs pause their animation clock; finish the real transition.
+    row.getAnimations({ subtree: true }).forEach((animation) => animation.finish());
+    const overlay = getComputedStyle(row, "::after");
+    if (row.matches(":hover") !== hovered || overlay.opacity !== (hovered ? "1" : "0") || overlay.content === "none") {
+        throw new Error("Hover must show an overlay on the computer background");
+    }
+    const normal = getComputedStyle(library);
+    if (overlay.transitionProperty !== "opacity" || overlay.transitionDuration !== normal.transitionDuration.split(",")[0].trim() || overlay.transitionTimingFunction !== normal.transitionTimingFunction.split(",")[0].trim()) {
+        throw new Error("Hover overlay must use the normal PaperList transition timing");
+    }
+    if (overlay.pointerEvents !== "none" || !getComputedStyle(row).backgroundImage.includes("linear-gradient")) {
+        throw new Error("Hover overlay must preserve navigation and the OS gradient");
+    }
+    return "PASS: computer hover overlay and PaperList transition timing";
+}
+Object.assign(window, { verifyComputerHover: verifyHover });
