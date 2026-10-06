@@ -35,6 +35,7 @@ import { createDesktopTray, destroyDesktopTray, hasDesktopTray, refreshDesktopTr
 import { pollTrayCount } from "./trayCount";
 import icon from "../../resources/icon.png?asset";
 import { installScreenshotTool } from "./screenshotTool";
+import { installTextEditContextMenu } from "./contextMenu";
 
 const log = logger;
 
@@ -422,6 +423,17 @@ app.whenReady().then(async () => {
     }
     app.on("browser-window-created", (_, window) => {
         optimizer.watchWindowShortcuts(window);
+    });
+    // Electron ships no default context menu, so a right click on a text field
+    // is inert. Give editable fields the standard edit menu; a bare text
+    // selection gets copy/select-all. Non-text UI returns null so custom DOM
+    // menus keep owning their own right clicks.
+    app.on("web-contents-created", (_event, contents) => {
+        installTextEditContextMenu(contents, (template) => {
+            const window = BrowserWindow.fromWebContents(contents);
+            if (!window) return;
+            Menu.buildFromTemplate(template).popup({ window });
+        });
     });
     const controllerUrl = is.dev && process.env["ELECTRON_RENDERER_URL"]
         ? new URL("screenshot.html", process.env["ELECTRON_RENDERER_URL"]).href
