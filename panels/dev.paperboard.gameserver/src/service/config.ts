@@ -50,13 +50,8 @@ export async function updatePanelConfig(
     ctx: ServiceContext<GameServerState>,
     patch: Record<string, unknown>,
 ): Promise<void> {
-    let current: Record<string, unknown> = {};
-    try {
-        const saved = await config.get<Record<string, unknown>>(PANEL_ID);
-        if (saved && typeof saved === "object") current = saved;
-    } catch (err) {
-        console.debug("[Service:Config] no saved panel config yet:", String(err));
-    }
+    const saved = await config.get<Record<string, unknown>>(PANEL_ID);
+    const current = saved && typeof saved === "object" ? saved : {};
     await config.set({ ...current, ...patch }, PANEL_ID);
     await loadConfigAndProperties(ctx);
 }

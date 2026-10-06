@@ -109,12 +109,8 @@ export async function loadServerConfig() {
 loadServerConfig();
 
 export async function updatePanelConfig(patch: Record<string, unknown>) {
-    try {
-        await serverBridge.call(ACTION_IDS.updatePanelConfig, { patch });
-        await serverBridge.refreshState();
-    } catch (err) {
-        console.debug("[gameserver] service-side updatePanelConfig failed:", String(err));
-    }
+    await serverBridge.call(ACTION_IDS.updatePanelConfig, { patch });
+    await serverBridge.refreshState();
 }
 
 export async function initServerListeners() {

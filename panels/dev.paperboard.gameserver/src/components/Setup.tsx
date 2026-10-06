@@ -1,5 +1,5 @@
 import { PANEL_ID } from "../service/types";
-import { createSignal, createEffect, Show } from "solid-js";
+import { createSignal, createEffect, Show, onCleanup } from "solid-js";
 import {
     PaperFlex,
     PaperButton,
@@ -74,17 +74,42 @@ function InstallStep(props: InstallStepProps) {
     const [showEulaModal, setShowEulaModal] = createSignal(false);
     const [declineNotice, setDeclineNotice] = createSignal("");
 
+    const [error, setError] = createSignal("");
+    const [eulaError, setEulaError] = createSignal("");
+    const [busy, setBusy] = createSignal(false);
     let started = false;
+    let disposed = false;
+    onCleanup(() => { disposed = true; });
+
+    const reportFailure = (err: unknown) => {
+        if (disposed) return;
+        setError(err instanceof Error ? err.message : String(err));
+        setBusy(false);
+        wizard?.setOptionsShown(true);
+        wizard?.setCanProceed(false);
+    };
 
     const startInstallation = async () => {
+        if (busy() || disposed) return;
+        setBusy(true);
+        setError("");
+        setJavaDownloadPercent(0);
+        setJavaDownloadStatus("loading");
+        setJavaExtractPercent(0);
+        setJavaExtractStatus("waiting");
+        setSoftwarePercent(0);
+        setSoftwareStatus("waiting");
+        setSetupPercent(0);
+        setSetupStatus("waiting");
         wizard?.setOptionsShown(false);
         wizard?.setCanProceed(false);
 
         const javaPkg = getRequiredJavaVersion(props.version);
         if (!javaPkg) {
-            throw new Error(
+            reportFailure(new Error(
                 `Could not determine the Minecraft version (got ${JSON.stringify(props.version)}). Pick a version before installing.`,
-            );
+            ));
+            return;
         }
 
         try {
@@ -100,14 +125,16 @@ function InstallStep(props: InstallStepProps) {
                     setJavaExtractPercent(percent);
                 },
             });
+            if (disposed) return;
             setJavaDownloadStatus("success");
             setJavaDownloadPercent(100);
             setJavaExtractStatus("success");
             setJavaExtractPercent(100);
         } catch (err) {
             console.error("[InstallStep] Java installation error:", err);
-            setJavaExtractStatus("error");
-            wizard?.setOptionsShown(true);
+            if (javaDownloadStatus() === "success") setJavaExtractStatus("error");
+            else setJavaDownloadStatus("error");
+            reportFailure(err);
             return;
         }
 
@@ -133,17 +160,20 @@ function InstallStep(props: InstallStepProps) {
                 },
             });
 
+            if (disposed) return;
             setSoftwareStatus("success");
             setSoftwarePercent(100);
         } catch (err) {
             console.error("[InstallStep] Server software download error:", err);
             setSoftwareStatus("error");
-            wizard?.setOptionsShown(true);
+            reportFailure(err);
             return;
         }
 
         try {
-            const eulaContent = await fileApi.read("eula.txt", PANEL_ID).catch(() => "");
+            const eulaContent = await fileApi.read("eula.txt", PANEL_ID);
+            if (disposed) return;
+            setBusy(false);
             if (eulaContent && eulaContent.includes("eula=true")) {
                 setSetupPercent(100);
                 setSetupStatus("success");
@@ -158,24 +188,30 @@ function InstallStep(props: InstallStepProps) {
         } catch (err) {
             console.error("[InstallStep] Server setup error:", err);
             setSetupStatus("error");
-            wizard?.setOptionsShown(true);
+            reportFailure(err);
         }
     };
 
     const handleAgreeEula = async () => {
+        if (busy()) return;
+        setBusy(true);
+        setEulaError("");
         try {
             await fileApi.write(
                 "eula.txt",
                 "#By changing the setting below to TRUE you are indicating your agreement to our EULA (https://aka.ms/MinecraftEULA).\neula=true\n",
                 PANEL_ID,
             );
+            if (disposed) return;
             setShowEulaModal(false);
             setSetupPercent(100);
             setSetupStatus("success");
             wizard?.setOptionsShown(true);
             wizard?.setCanProceed(true);
         } catch (err) {
-            console.error("[InstallStep] Failed to write eula.txt:", err);
+            setEulaError(err instanceof Error ? err.message : String(err));
+        } finally {
+            setBusy(false);
         }
     };
 
@@ -224,6 +260,13 @@ function InstallStep(props: InstallStepProps) {
                         {declineNotice()}
                     </PaperQuote>
                 </Show>
+                <Show when={error()}>
+                    <PaperQuote variant="danger" title="Setup failed">{error()}</PaperQuote>
+                    <PaperFlex gap="half">
+                        <PaperButton onClick={() => void startInstallation()}>Retry setup</PaperButton>
+                        <PaperButton onClick={() => wizard?.setCurrentStep(1)}>Change software or version</PaperButton>
+                    </PaperFlex>
+                </Show>
                 <InstallLoaders
                     items={[
                         {
@@ -252,20 +295,23 @@ function InstallStep(props: InstallStepProps) {
             </PaperCenteredInterface>
             <PaperModal
                 open={showEulaModal()}
-                onClose={handleDeclineEula}
+                onClose={() => { if (!busy()) void handleDeclineEula(); }}
                 title="Minecraft End User License Agreement"
                 footer={
                     <PaperFlex direction="row" justify="flex-end" gap="half" fullWidth>
-                        <PaperButton onClick={handleDeclineEula} variant="text">
+                        <PaperButton disabled={busy()} onClick={handleDeclineEula} variant="text">
                             Decline
                         </PaperButton>
-                        <PaperButton onClick={handleAgreeEula}>
+                        <PaperButton disabled={busy()} onClick={handleAgreeEula}>
                             Agree & Continue
                         </PaperButton>
                     </PaperFlex>
                 }
             >
                 <PaperFlex direction="column" gap="half">
+                    <Show when={eulaError()}>
+                        <PaperQuote variant="danger" title="Could not save EULA agreement">{eulaError()}</PaperQuote>
+                    </Show>
                     <PaperText preset="body">
                         To run a Minecraft server, you must review and agree to Mojang's official End User License Agreement (EULA).
                     </PaperText>
@@ -291,7 +337,12 @@ export default function Setup(props: SetupProps) {
         createSignal<ServerSoftwareType>(props.initialSoftware || "paper");
     const [serverVersion, setServerVersion] = createSignal<string>(props.initialVersion || "");
 
+    const [saveError, setSaveError] = createSignal("");
+    const [saving, setSaving] = createSignal(false);
     const handleFinishSetup = async () => {
+        if (saving()) return;
+        setSaving(true);
+        setSaveError("");
         try {
             // through the service so panel state (and the sidebar's Mods/Plugins
             // label) is live, not just the config file
@@ -302,7 +353,9 @@ export default function Setup(props: SetupProps) {
             });
             props.onComplete?.();
         } catch (err) {
-            console.error("[Setup] Failed to save configuration:", err);
+            setSaveError(err instanceof Error ? err.message : String(err));
+        } finally {
+            setSaving(false);
         }
     };
 
@@ -310,7 +363,7 @@ export default function Setup(props: SetupProps) {
         <PaperWizard
             showProgress={false}
             hideBack={true}
-            finishLabel="Finish Setup"
+            finishLabel={saving() ? "Saving…" : "Finish Setup"}
             finishVariant="success"
             onComplete={handleFinishSetup}
         >
@@ -385,6 +438,9 @@ export default function Setup(props: SetupProps) {
             </PaperWizardStep>
 
             <PaperWizardStep index={3}>
+                <Show when={saveError()}>
+                    <PaperQuote variant="danger" title="Could not finish setup">{saveError()} Try Finish Setup again.</PaperQuote>
+                </Show>
                 <InstallStep software={serverSoftware()} version={serverVersion()} />
             </PaperWizardStep>
         </PaperWizard>
