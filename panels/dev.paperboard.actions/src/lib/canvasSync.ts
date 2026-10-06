@@ -76,3 +76,75 @@ export function createCanvasSync<T>(options: {
         },
     };
 }
+
+/**
+ * Follows canvas revisions saved by other windows. A change announces only
+ * its revision; the canvas is pulled once nothing local is waiting to save,
+ * so a remote canvas never replaces an edit this window has not saved yet.
+ * One pull at a time: changes that land during a pull fold into the next.
+ */
+export function createCanvasFollower<S extends { revision: number }>(options: {
+    clientId: string;
+    fetch: () => Promise<S>;
+    /** the revision this window's canvas was loaded from or last saved as */
+    revision: () => number;
+    /** true while local edits are pending or saving */
+    busy: () => boolean;
+    show: (snapshot: S) => void;
+    onError: (message: string) => void;
+}) {
+    let wanted = 0;
+    let force = false;
+    let pulling = false;
+    let again = false;
+    let disposed = false;
+
+    async function pull(): Promise<void> {
+        if (pulling) {
+            again = true;
+            return;
+        }
+        pulling = true;
+        try {
+            do {
+                again = false;
+                if (disposed || options.busy() || (!force && wanted <= options.revision())) return;
+                force = false;
+                try {
+                    const snapshot = await options.fetch();
+                    // re-checked after the wait: an edit made meanwhile wins,
+                    // and its save on the older revision is refused and reloads
+                    if (disposed || options.busy()) return;
+                    if (snapshot.revision > options.revision()) options.show(snapshot);
+                } catch (err) {
+                    if (!disposed) options.onError(`Changes from another window could not be loaded: ${err instanceof Error ? err.message : String(err)}`);
+                    return;
+                }
+            } while (again);
+        } finally {
+            pulling = false;
+        }
+    }
+
+    return {
+        /** A revision was saved somewhere. */
+        changed(change: { revision?: unknown; clientId?: unknown }): Promise<void> {
+            if (change?.clientId === options.clientId) return Promise.resolve();
+            if (typeof change?.revision !== "number") return Promise.resolve();
+            wanted = Math.max(wanted, change.revision);
+            return pull();
+        },
+        /** Local edits settled; catch up on anything announced meanwhile. */
+        idle(): Promise<void> {
+            return pull();
+        },
+        /** Pull the service's canvas now (after a refused save). */
+        reload(): Promise<void> {
+            force = true;
+            return pull();
+        },
+        dispose() {
+            disposed = true;
+        },
+    };
+}

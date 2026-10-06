@@ -18,6 +18,7 @@ import {
 } from "./lib/functions";
 import type { CanvasBlock } from "./lib/tree";
 import { validateFlowDefinitions } from "./lib/flowValidation";
+import { CANVAS_CHANGED_EVENT, createCanvasDocument, type CanvasDocument } from "./lib/canvasDoc";
 // canonical panel id (shared with the UI bundle); the explicit identity
 // every config/registry call below carries
 import { ACTIONS_PANEL_ID } from "./panelId";
@@ -332,6 +333,44 @@ export async function runTestFlow(
     return await executeFlowGated(ctx, triggerBlock, inputs?.payload || {});
 }
 
+function validFunctions(list: unknown[]): FunctionDef[] {
+    return list.filter(
+        (f: any) => f && typeof f.id === "string" && typeof f.name === "string",
+    ) as FunctionDef[];
+}
+
+/** Makes these definitions the running ones: one path for every source. */
+async function applyDefinitions(ctx: Ctx, nextFlows: CanvasBlock[], nextFunctions: FunctionDef[]): Promise<void> {
+    flows = nextFlows;
+    functions = nextFunctions;
+    rev += 1;
+    serviceCtx = ctx;
+    resubscribeTriggers();
+    await syncFunctionRegistry();
+    updateCounts(ctx);
+    console.log(
+        `[ActionsService] Synced rev ${rev}: ${flows.length} top-level blocks, ${functions.length} functions.`,
+    );
+}
+
+// the canvas document's one owner; windows save and load through it
+const canvasDoc = createCanvasDocument({
+    read: () => config.get<any>(ACTIONS_PANEL_ID, "canvas.json"),
+    write: (doc) => config.set(doc, ACTIONS_PANEL_ID, "canvas.json"),
+    validate: (canvas) => ({
+        flows: validateFlowDefinitions(Array.isArray(canvas?.flows) ? canvas.flows : []),
+        notes: Array.isArray(canvas?.notes) ? canvas.notes : [],
+        functions: validFunctions(Array.isArray(canvas?.functions) ? canvas.functions : []),
+    }),
+    apply: async (canvas) => {
+        if (!serviceCtx) throw new Error("The Actions service is not initialized");
+        await applyDefinitions(serviceCtx, canvas.flows, canvas.functions);
+    },
+    // only the revision travels; windows pull the canvas when they are idle,
+    // so a drag does not push the whole document to every window per frame
+    onChanged: (change) => serviceCtx?.emit(CANVAS_CHANGED_EVENT, change),
+});
+
 export const actions = [
     defineAction({
         id: "sync-flows",
@@ -357,23 +396,49 @@ export const actions = [
             // Registration precedes onInit. A sync accepted while the saved
             // canvas is loading would otherwise be overwritten by that read.
             await actionsService.ready;
-            if (Array.isArray(inputs?.flows)) {
-                flows = validateFlowDefinitions(inputs.flows);
-            }
-            if (Array.isArray(inputs?.functions)) {
-                functions = inputs.functions.filter(
-                    (f: any) => f && typeof f.id === "string" && typeof f.name === "string",
-                );
-            }
-            rev += 1;
-            serviceCtx = ctx;
-            resubscribeTriggers();
-            await syncFunctionRegistry();
-            updateCounts(ctx);
-            console.log(
-                `[ActionsService] Synced rev ${rev}: ${flows.length} top-level blocks, ${functions.length} functions.`,
+            await applyDefinitions(
+                ctx,
+                Array.isArray(inputs?.flows) ? validateFlowDefinitions(inputs.flows) : flows,
+                Array.isArray(inputs?.functions) ? validFunctions(inputs.functions) : functions,
             );
             return { flows: flows.length, functions: functions.length, rev };
+        },
+    }),
+
+    defineAction({
+        id: "get-canvas",
+        name: "Get Canvas",
+        internal: true,
+        description: "The canvas document and its revision, for the panel's windows",
+        template: "Get canvas",
+        inputs: {},
+        output: { type: "object", label: "Canvas" },
+        icon: "draw",
+        run: async () => {
+            await actionsService.ready;
+            return canvasDoc.get();
+        },
+    }),
+
+    defineAction({
+        id: "save-canvas",
+        name: "Save Canvas",
+        internal: true,
+        description: "Saves a window's canvas made on a revision, then applies its flows",
+        template: "Save canvas",
+        inputs: {
+            canvas: { type: "object", label: "Canvas" },
+            baseRevision: { type: "number", label: "Base revision" },
+            clientId: { type: "string", label: "Window" },
+        },
+        output: { type: "object", label: "Save Result" },
+        icon: "save",
+        run: async (_ctx: Ctx, inputs: { canvas?: CanvasDocument; baseRevision?: number; clientId?: string }) => {
+            await actionsService.ready;
+            if (!inputs?.canvas || typeof inputs.canvas !== "object") throw new Error("save-canvas needs a canvas");
+            if (!Number.isSafeInteger(inputs.baseRevision)) throw new Error("save-canvas needs the revision the edit was made on");
+            const clientId = typeof inputs.clientId === "string" ? inputs.clientId.slice(0, 64) : "";
+            return canvasDoc.save({ canvas: inputs.canvas, baseRevision: inputs.baseRevision!, clientId });
         },
     }),
 
@@ -421,16 +486,12 @@ export const actionsService = definePanelService({
         await initVariablesStore();
 
         try {
-            const saved = await config.get<any>(ACTIONS_PANEL_ID, "canvas.json");
-            if (saved?.flows && Array.isArray(saved.flows)) {
-                flows = saved.flows;
-            }
-            if (saved?.functions && Array.isArray(saved.functions)) {
-                functions = saved.functions.filter(
-                    (f: any) => f && typeof f.id === "string" && typeof f.name === "string",
-                );
-            }
+            const { canvas } = await canvasDoc.load();
+            flows = canvas.flows;
+            functions = canvas.functions;
         } catch (err) {
+            // the panel shows this and retries; saves stay refused until the
+            // stored canvas reads, so it is never overwritten as empty
             console.error("[ActionsService] Failed to load stored flows:", err);
         }
 

@@ -21,6 +21,7 @@ test("startup cannot overwrite an accepted flow sync; slash commands stay scoped
     await once(wss, "listening");
     let off: () => void = () => undefined;
     let offErrors: () => void = () => undefined;
+    let offCanvas: () => void = () => undefined;
     const originalGet = config.get;
     let releaseRead!: () => void;
     let readStarted!: () => void;
@@ -106,6 +107,28 @@ test("startup cannot overwrite an accepted flow sync; slash commands stay scoped
         expect(errors).toHaveLength(1);
         expect(errors[0].status).toBe("error");
         expect(errors[0].message).toContain('Failed at step "Reply to command"');
+
+        // Canvas edits travel through the service: a save on the current
+        // revision lands, is applied and is announced to every window; a save
+        // made on an older revision is refused instead of overwriting it.
+        const announced: any[] = [];
+        offCanvas = actionsApi.on("dev.paperboard.actions", "canvas-changed", (change: any) => announced.push(change));
+        await getTransport("local").call("system:info");
+        const base = await actionsApi.call<any>("dev.paperboard.actions", "get-canvas");
+        const windowOne = { flows, notes: [{ id: "n", pos: { x: 0, y: 0 }, text: "from window one" }], functions: [] };
+        const saved = await actionsApi.call<any>("dev.paperboard.actions", "save-canvas",
+            { canvas: windowOne, baseRevision: base.revision, clientId: "window-one" });
+        expect(saved).toEqual({ revision: base.revision + 1 });
+        await expect(actionsApi.call("dev.paperboard.actions", "save-canvas",
+            { canvas: { flows: [], notes: [], functions: [] }, baseRevision: base.revision, clientId: "window-two" }))
+            .rejects.toThrow("canvas-conflict");
+        expect((await config.get<any>("dev.paperboard.actions", "canvas.json")).notes[0].text).toBe("from window one");
+        expect((await actionsApi.call<any>("dev.paperboard.actions", "get-canvas")).revision).toBe(saved.revision);
+        const announceDeadline = Date.now() + 2000;
+        while (announced.length === 0 && Date.now() < announceDeadline) await Bun.sleep(5);
+        expect(announced).toEqual([{ revision: saved.revision, clientId: "window-one" }]);
+        // the saved flows replaced the broken ones and run
+        await emit("on-message", ["first", "second"]);
         bot.terminate();
         await actionsApi.call("dev.paperboard.actions", "sync-flows", { flows: [], functions: [] });
         await getTransport("local").call("system:info");
@@ -115,7 +138,7 @@ test("startup cannot overwrite an accepted flow sync; slash commands stay scoped
             await serviceReady;
             await getTransport("local").call("system:info");
         } finally {
-            offErrors(); off(); closeTransport("local");
+            offCanvas(); offErrors(); off(); closeTransport("local");
             for (const socket of wss.clients) socket.terminate();
             await new Promise<void>((resolve) => wss.close(() => resolve()));
             auth.dispose(); fs.rmSync(root, { recursive: true, force: true });

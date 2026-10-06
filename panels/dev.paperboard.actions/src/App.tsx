@@ -27,7 +27,14 @@ import {
     type ActionInfo,
 } from "@mileniumhq/paperapi";
 import { ACTIONS_PANEL_ID } from "./panelId";
-import { createCanvasSync, type CanvasSyncState } from "./lib/canvasSync";
+import { createCanvasFollower, createCanvasSync, type CanvasSyncState } from "./lib/canvasSync";
+import {
+    CANVAS_CHANGED_EVENT,
+    isCanvasConflict,
+    type CanvasDocument,
+    type CanvasSaveResult,
+    type CanvasSnapshot,
+} from "./lib/canvasDoc";
 import { variableFieldIcon } from "./lib/variableTypes";
 import { filterPickerItems } from "./lib/variablePicker";
 import { BUILTIN_SCHEMA_ENTRIES } from "./lib/builtins";
@@ -570,29 +577,108 @@ export default function App() {
     };
 
     const [syncState, setSyncState] = createSignal<CanvasSyncState>({ status: "applied" });
+    const [conflictNotice, setConflictNotice] = createSignal<string | null>(null);
     const [canvasLoaded, setCanvasLoaded] = createSignal(false);
     const [canvasLoadError, setCanvasLoadError] = createSignal<string | null>(null);
     let disposed = false;
-    const canvasSync = createCanvasSync<{
-        flows: CanvasBlock[];
-        notes: CanvasNote[];
-        functions: FunctionDef[];
-    }>({
-        save: (snapshot) => configApi.set(snapshot, ACTIONS_PANEL_ID, "canvas.json"),
-        apply: (snapshot) => actionsApi.call(ACTIONS_PANEL_ID, "sync-flows", {
-            flows: snapshot.flows,
-            functions: snapshot.functions,
-        }),
-        onState: setSyncState,
+
+    // The service owns the canvas document; this window saves through it
+    // with the revision its edits were made on, and follows revisions other
+    // windows (on any computer) save. Edits stay this window's until saved.
+    const clientId = crypto.randomUUID();
+    let canvasRevision = 0;
+    let lastSave: CanvasSaveResult | null = null;
+    // a refused save made only of a schema refresh loses nothing: the
+    // reload and the next refresh redo it, so it is not reported
+    let userEditUnsaved = false;
+    let conflicted = false;
+    const canvasSync = createCanvasSync<CanvasDocument>({
+        save: async (snapshot) => {
+            try {
+                lastSave = await actionsApi.call<CanvasSaveResult>(ACTIONS_PANEL_ID, "save-canvas", {
+                    canvas: snapshot,
+                    baseRevision: canvasRevision,
+                    clientId,
+                });
+                canvasRevision = lastSave.revision;
+            } catch (err) {
+                if (!isCanvasConflict(err)) throw err;
+                conflicted = true;
+                throw new Error("the canvas changed in another window first");
+            }
+        },
+        // the service applied the flows as it saved them; report what it said
+        apply: async () => {
+            if (lastSave?.applyError) throw new Error(lastSave.applyError);
+        },
+        onState: (state) => {
+            if (state.status === "applied") {
+                userEditUnsaved = false;
+                setSyncState(state);
+                void follower.idle();
+                return;
+            }
+            if (state.status === "error" && conflicted) {
+                conflicted = false;
+                if (userEditUnsaved) {
+                    setConflictNotice("This canvas was changed in another window at the same moment, so your last change was not saved. It now shows the latest version.");
+                }
+                userEditUnsaved = false;
+                setSyncState({ status: "applied" });
+                void follower.reload().then(() => refreshBlockSchemas());
+                return;
+            }
+            setSyncState(state);
+        },
     });
-    onCleanup(() => { disposed = true; canvasSync.dispose(); });
-    const saveFlows = (currentBlocks?: CanvasBlock[], currentNotes?: CanvasNote[]) => {
+    const showCanvas = (snapshot: CanvasSnapshot) => {
+        // stored flows are executable content: drop malformed blocks
+        // loudly instead of rendering them into the canvas
+        const clean = snapshot.canvas.flows.filter(isCanvasBlock);
+        if (clean.length !== snapshot.canvas.flows.length) {
+            throw new Error("Stored canvas contains malformed blocks; repair the document before applying flows");
+        }
+        setFunctions(snapshot.canvas.functions);
+        // keyed by id, so blocks and notes update in place instead of remounting
+        setBlocks(reconcile(clean, { key: "id" }));
+        setNotes(reconcile(snapshot.canvas.notes as CanvasNote[], { key: "id" }));
+        canvasRevision = snapshot.revision;
+    };
+    const fetchCanvas = () => actionsApi.call<CanvasSnapshot>(ACTIONS_PANEL_ID, "get-canvas");
+    const follower = createCanvasFollower<CanvasSnapshot>({
+        clientId,
+        fetch: fetchCanvas,
+        revision: () => canvasRevision,
+        busy: () => !canvasLoaded() || syncState().status === "pending" || syncState().status === "saving",
+        show: (snapshot) => {
+            try {
+                showCanvas(snapshot);
+            } catch (err) {
+                setSyncState({ status: "error", message: `Changes from another window could not be shown: ${err instanceof Error ? err.message : String(err)}` });
+            }
+        },
+        onError: (message) => setSyncState({ status: "error", message }),
+    });
+    onCleanup(() => { disposed = true; canvasSync.dispose(); follower.dispose(); });
+    onMount(() => {
+        const off = actionsApi.on(ACTIONS_PANEL_ID, CANVAS_CHANGED_EVENT, (change: any) => {
+            void follower.changed(change);
+        });
+        onCleanup(off);
+    });
+    const scheduleCanvas = (currentBlocks?: CanvasBlock[], currentNotes?: CanvasNote[]) => {
         if (!canvasLoaded() || disposed) return;
         try {
             canvasSync.schedule({ flows: currentBlocks ?? blocks, notes: currentNotes ?? notes, functions: functions() });
         } catch (err) {
             setSyncState({ status: "error", message: `Canvas could not be prepared for saving: ${String(err)}` });
         }
+    };
+    const saveFlows = (currentBlocks?: CanvasBlock[], currentNotes?: CanvasNote[]) => {
+        if (!canvasLoaded() || disposed) return;
+        userEditUnsaved = true;
+        setConflictNotice(null);
+        scheduleCanvas(currentBlocks, currentNotes);
     };
 
     const handleCreateFunction = (name: string, params: { name: string; type: string }[]) => {
@@ -667,27 +753,9 @@ export default function App() {
         loadingCanvas = true;
         setCanvasLoadError(null);
         try {
-            const saved = await configApi.get<any>(ACTIONS_PANEL_ID, "canvas.json");
+            const snapshot = await fetchCanvas();
             if (disposed) return;
-            if (saved?.functions && Array.isArray(saved.functions)) {
-                setFunctions(
-                    saved.functions.filter(
-                        (f: any) => f && typeof f.id === "string" && typeof f.name === "string",
-                    ),
-                );
-            }
-            if (saved?.flows && Array.isArray(saved.flows)) {
-                // stored flows are executable content: drop malformed
-                // blocks loudly instead of rendering them into the canvas
-                const clean = saved.flows.filter(isCanvasBlock);
-                if (clean.length !== saved.flows.length) {
-                    throw new Error("Stored canvas contains malformed blocks; repair the document before applying flows");
-                }
-                setBlocks(clean);
-            }
-            if (saved?.notes && Array.isArray(saved.notes)) {
-                setNotes(saved.notes);
-            }
+            showCanvas(snapshot);
             // Hydrate the entire document before any refresh can save it.
             setCanvasLoaded(true);
             await refreshBlockSchemas();
@@ -713,8 +781,12 @@ export default function App() {
                     // Merge into the current canvas after the request, so
                     // edits made while listing cannot be overwritten.
                     const merged = mergeActionSchemas(blocks, [...acts, ...BUILTIN_SCHEMA_ENTRIES]);
+                    // every window refreshes on a registry change; only a
+                    // refresh that changed something is saved, so windows do
+                    // not race each other to write the same canvas
+                    if (JSON.stringify(merged) === JSON.stringify(blocks)) continue;
                     setBlocks(reconcile(merged, { key: "id" }));
-                    saveFlows();
+                    scheduleCanvas();
                 } catch (err) {
                     if (!disposed) setSyncState({ status: "error", message: `Action schemas could not be refreshed: ${String(err)}` });
                     return;
@@ -1341,13 +1413,21 @@ export default function App() {
             />
 
             <div class="canvas-top-right-controls">
+                <Show when={conflictNotice()}>
+                    {(notice) => (
+                        <div role="status" class="canvas-sync-status">
+                            <PaperText size={1}>{notice()}</PaperText>
+                            <PaperButton size="tiny" onClick={() => setConflictNotice(null)}>Dismiss</PaperButton>
+                        </div>
+                    )}
+                </Show>
                 <Show when={syncState().status !== "applied"}>
                     <div role="status" class="canvas-sync-status">
                         <PaperText size={1}>{syncState().status === "error"
                             ? (syncState() as { message: string }).message
                             : "Applying changes…"}</PaperText>
                         <Show when={syncState().status === "error"}>
-                            <PaperButton size="tiny" onClick={() => { void refreshBlockSchemas(); }}>Retry applying flows</PaperButton>
+                            <PaperButton size="tiny" onClick={() => { userEditUnsaved = true; scheduleCanvas(); }}>Retry saving</PaperButton>
                         </Show>
                     </div>
                 </Show>
