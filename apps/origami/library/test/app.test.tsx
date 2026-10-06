@@ -303,6 +303,37 @@ describe("PanelLibraryApp", () => {
         bridge.dispose();
     });
 
+    test("a reload control re-fetches a registry that came back empty", async () => {
+        const fetchMock = vi
+            .fn()
+            .mockResolvedValueOnce(registryResponse({}))
+            .mockResolvedValueOnce(registryResponse(REGISTRY));
+        vi.stubGlobal("fetch", fetchMock);
+        const bridge = createLibraryBridge(null);
+        renderApp(bridge);
+
+        expect(await screen.findByText("No panels published yet")).toBeDefined();
+        expect(screen.queryByText("Alpha")).toBeNull();
+
+        fireEvent.click(
+            screen.getByRole("button", { name: "Reload the panel library" }),
+        );
+
+        expect(await screen.findByText("Alpha")).toBeDefined();
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+        bridge.dispose();
+    });
+
+    test("a registry index that is not an object is a failure, not an empty library", async () => {
+        vi.stubGlobal("fetch", vi.fn(async () => registryResponse(null)));
+        const bridge = createLibraryBridge(null);
+        renderApp(bridge);
+
+        expect(await screen.findByText("Couldn't load library")).toBeDefined();
+        expect(screen.queryByText("No panels published yet")).toBeNull();
+        bridge.dispose();
+    });
+
     test("a failed registry load shows recovery and retry repairs it", async () => {
         const fetchMock = vi
             .fn()

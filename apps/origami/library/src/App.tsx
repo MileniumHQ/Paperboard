@@ -12,6 +12,7 @@ import {
     PaperButton,
     PaperEmptyState,
     PaperFlex,
+    PaperIcon,
     PaperMediaCard,
     PaperMediaCardGroup,
     PaperText,
@@ -97,6 +98,7 @@ const PanelLibraryApp: Component<PanelLibraryAppProps> = (props) => {
         RegistryPanelRecord
     > | null>(null);
     const [loadFailed, setLoadFailed] = createSignal(false);
+    const [loading, setLoading] = createSignal(false);
     // Registry settled is distinct from succeeded: a failed load is still
     // "settled" for readiness, because the library has something to show.
     const [registrySettled, setRegistrySettled] = createSignal(false);
@@ -105,18 +107,30 @@ const PanelLibraryApp: Component<PanelLibraryAppProps> = (props) => {
     const [busyPanelId, setBusyPanelId] = createSignal<string | null>(null);
     const [installError, setInstallError] = createSignal<string | null>(null);
 
+    // A reload is a retry for a library that is open but wrong: a transient
+    // registry read that came back empty or malformed leaves the frame alive
+    // with nothing to click, so the user is stuck until the app restarts.
     const load = async () => {
+        if (loading()) return;
+        setLoading(true);
         setLoadFailed(false);
         try {
             // same-origin registry read: the library is a division of the
             // registry, so index.json is exactly the document it documents
-            setRegistry(await fetchRegistryJson("/panels/index.json"));
+            const data = await fetchRegistryJson("/panels/index.json");
+            // an index is a map of panel id to record; anything else is not
+            // an empty registry and must not be rendered as "nothing published"
+            if (!data || typeof data !== "object" || Array.isArray(data)) {
+                throw new Error("Panel registry index is not an object");
+            }
+            setRegistry(data);
         } catch (err) {
             // A failed reload keeps whatever was rendered; the shell never
             // sees an empty library it would mistake for "nothing published".
             console.error("[library] registry unavailable:", err);
             setLoadFailed(true);
         } finally {
+            setLoading(false);
             setRegistrySettled(true);
         }
     };
@@ -281,6 +295,7 @@ const PanelLibraryApp: Component<PanelLibraryAppProps> = (props) => {
                     >
                         <div
                             style={{
+                                position: "relative",
                                 width: "100%",
                                 "border-radius": getVarCss("border-radius"),
                                 overflow: "hidden",
@@ -296,6 +311,30 @@ const PanelLibraryApp: Component<PanelLibraryAppProps> = (props) => {
                                     display: "block",
                                 }}
                             />
+                            {/* The reload is always reachable: a live library
+                                that read an empty or malformed registry has no
+                                other way back without restarting the app. On a
+                                failed load the Retry below is the recovery. */}
+                            <Show when={!loadFailed()}>
+                                <div
+                                    style={{
+                                        position: "absolute",
+                                        top: getVarCss("uigap-half"),
+                                        right: getVarCss("uigap-half"),
+                                    }}
+                                >
+                                    <PaperButton
+                                        size="small"
+                                        icon
+                                        title="Reload the panel library"
+                                        aria-label="Reload the panel library"
+                                        disabled={loading()}
+                                        onClick={() => void load()}
+                                    >
+                                        <PaperIcon>refresh</PaperIcon>
+                                    </PaperButton>
+                                </div>
+                            </Show>
                         </div>
 
                         <Show when={loadFailed()}>
