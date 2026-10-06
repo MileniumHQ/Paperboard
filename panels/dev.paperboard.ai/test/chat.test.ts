@@ -176,12 +176,17 @@ describe("replies", () => {
     });
 
     it(`caps concurrent replies at ${MAX_ACTIVE_REPLIES}`, async () => {
-        fake.script = Array.from({ length: MAX_ACTIVE_REPLIES }, () => ({ content: "slow reply here", chunkDelayMs: 40 }));
+        // hold the replies open so the cap is exercised regardless of timing:
+        // with a fixed chunk delay a slow runner could finish one before the
+        // extra send runs and free the slot
+        fake.holdChats = true;
+        fake.script = Array.from({ length: MAX_ACTIVE_REPLIES }, () => ({ content: "slow reply here" }));
         const chat = engine();
         const running = [];
         for (let i = 0; i < MAX_ACTIVE_REPLIES; i++) running.push(await chat.send((await chat.create("tooly:latest")).id, "go"));
         const extra = await chat.create("tooly:latest");
         await expect(chat.send(extra.id, "go")).rejects.toThrow(/at once/);
+        fake.releaseChats();
         await Promise.all(running.map((r) => r.done));
     });
 });

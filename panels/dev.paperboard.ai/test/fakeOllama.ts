@@ -28,6 +28,9 @@ export interface FakeOllama {
     /** hold pulls open until released (to test cancel/caps) */
     holdPulls: boolean;
     releasePulls: () => void;
+    /** hold chat replies open until released (to test concurrent-reply caps) */
+    holdChats: boolean;
+    releaseChats: () => void;
     stop: () => Promise<void>;
 }
 
@@ -43,6 +46,10 @@ export function startFakeOllama(): FakeOllama {
         holdPulls: false,
         releasePulls: () => {
             state.holdPulls = false;
+        },
+        holdChats: false,
+        releaseChats: () => {
+            state.holdChats = false;
         },
     };
 
@@ -119,6 +126,7 @@ export function startFakeOllama(): FakeOllama {
                     const turn = state.script.shift() ?? { content: "(no script)" };
                     if (turn.error) return Response.json({ error: turn.error }, { status: 500 });
                     return stream(async (push) => {
+                        while (state.holdChats) await sleep(5);
                         for (const piece of (turn.thinking ?? "").match(/.{1,4}/gs) ?? []) {
                             push({ message: { role: "assistant", content: "", thinking: piece }, done: false });
                         }
@@ -171,7 +179,14 @@ export function startFakeOllama(): FakeOllama {
         set holdPulls(v) {
             state.holdPulls = v;
         },
+        get holdChats() {
+            return state.holdChats;
+        },
+        set holdChats(v) {
+            state.holdChats = v;
+        },
         releasePulls: () => state.releasePulls(),
+        releaseChats: () => state.releaseChats(),
         url: `http://127.0.0.1:${server.port}`,
         port: server.port!,
         stop: () => server.stop(true),
