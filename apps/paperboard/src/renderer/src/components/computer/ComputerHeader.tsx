@@ -2,10 +2,10 @@ import { type Component } from "solid-js";
 import {
     PaperList,
     PaperListItem,
-    PaperText,
     PaperFlex,
     getVarCss,
 } from "@mileniumhq/paperui";
+import styles from "./ComputerHeader.module.css";
 import libraryIcon from "../../assets/PanelLibrary.png";
 import type { ComputerItem } from "../../App";
 
@@ -139,40 +139,6 @@ const ComputerHeader: Component<ComputerHeaderProps> = (props) => {
                 "border-bottom": `${getVarCss("border-width")} solid ${getVarCss("border")}`,
             }}
         >
-            <PaperFlex
-                direction="column"
-                style={{
-                    padding: `${getVarCss("uigap-threefourths")} ${getVarCss("uigap-threefourths")} ${getVarCss("uigap-half")}`,
-                    gap: "2px",
-                    "min-width": 0,
-                    background: `linear-gradient(135deg, color-mix(in srgb, ${brandInfo().color} 22%, ${getVarCss("surface-inset")}) 0%, ${getVarCss("surface-inset")} 100%)`,
-                }}
-            >
-                <PaperText
-                    size={3}
-                    weight={700}
-                    style={{
-                        "white-space": "nowrap",
-                        overflow: "hidden",
-                        "text-overflow": "ellipsis",
-                    }}
-                >
-                    {props.computer?.name || "This Computer"}
-                </PaperText>
-                <PaperText
-                    size={1}
-                    weight={600}
-                    color="text-subtle"
-                    style={{
-                        "white-space": "nowrap",
-                        overflow: "hidden",
-                        "text-overflow": "ellipsis",
-                    }}
-                >
-                    {brandInfo().display}
-                </PaperText>
-            </PaperFlex>
-
             <PaperList
                 name="computer-system-selection"
                 value={props.selectedTab}
@@ -184,6 +150,15 @@ const ComputerHeader: Component<ComputerHeaderProps> = (props) => {
                     background: "transparent",
                 }}
             >
+                <PaperListItem
+                    value="settings"
+                    description={brandInfo().display}
+                    class={styles.computerItem}
+                    style={{ "--computer-os-color": brandInfo().color }}
+                >
+                    {props.computer?.name || "This Computer"}
+                </PaperListItem>
+
                 <PaperListItem
                     value="library"
                     icon={
@@ -201,10 +176,6 @@ const ComputerHeader: Component<ComputerHeaderProps> = (props) => {
                     }
                 >
                     Panel Library
-                </PaperListItem>
-
-                <PaperListItem value="settings" icon="info">
-                    Computer Info
                 </PaperListItem>
             </PaperList>
         </PaperFlex>

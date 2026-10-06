@@ -1,0 +1,8 @@
+.computerItem {
+    /* Keep the OS tint over PaperList's hover and selected backgrounds. */
+    background-image: linear-gradient(
+        135deg,
+        color-mix(in srgb, var(--computer-os-color) 22%, transparent) 0%,
+        transparent 100%
+    ) !important;
+}
