@@ -288,7 +288,18 @@ export async function runStoredFlow(
 ): Promise<ExecutionLog | null> {
     if (!ctx) return null;
     try {
-        return await executeFlowGated(ctx, triggerBlock, payload);
+        const log = await executeFlowGated(ctx, triggerBlock, payload);
+        // The runtime returns step failures as an ExecutionLog. They do
+        // not reach the catch below, and event runs have no RPC caller to
+        // display them (test runs return their log to the editor).
+        if (log.status === "error") {
+            ctx.emitTrigger("flow-log", {
+                time: log.timestamp,
+                message: `Flow "${triggerBlock.action?.name || triggerBlock.id}" failed: ${log.message}`,
+                status: "error",
+            });
+        }
+        return log;
     } catch (err) {
         if (err instanceof FlowRunRefused) {
             // the gate already logged the refusal; stored runs (their

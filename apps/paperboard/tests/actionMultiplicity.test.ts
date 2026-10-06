@@ -20,6 +20,7 @@ test("startup cannot overwrite an accepted flow sync; slash commands stay scoped
     setupWebSocketServer(wss, engine, auth);
     await once(wss, "listening");
     let off: () => void = () => undefined;
+    let offErrors: () => void = () => undefined;
     const originalGet = config.get;
     let releaseRead!: () => void;
     let readStarted!: () => void;
@@ -87,6 +88,20 @@ test("startup cannot overwrite an accepted flow sync; slash commands stay scoped
         sync.schedule({ flows, functions: [] });
         expect(await sync.flush()).toEqual({ ok: true });
         await emit("on-message", ["first", "second"]);
+
+        // A real action-dispatch failure must reach the editor's narrow
+        // flow-log channel, even though the runtime returns an error log.
+        const errors: any[] = [];
+        offErrors = actionsApi.onTrigger("dev.paperboard.actions", "flow-log", (data: any) => errors.push(data));
+        const broken = { ...commands[0], children: [{ id: "reply", panelId: "dev.paperboard.botcreator", pos: { x: 0, y: 0 },
+            isTrigger: false, action: { id: "missing-reply", name: "Reply to command" }, values: {} }] };
+        await actionsApi.call("dev.paperboard.actions", "sync-flows", { flows: [broken], functions: [] });
+        await emit(commands[0].action.id, ["first"]);
+        const errorDeadline = Date.now() + 2000;
+        while (errors.length === 0 && Date.now() < errorDeadline) await Bun.sleep(5);
+        expect(errors).toHaveLength(1);
+        expect(errors[0].status).toBe("error");
+        expect(errors[0].message).toContain('Failed at step "Reply to command"');
         bot.terminate();
         await actionsApi.call("dev.paperboard.actions", "sync-flows", { flows: [], functions: [] });
         await getTransport("local").call("system:info");
@@ -96,7 +111,7 @@ test("startup cannot overwrite an accepted flow sync; slash commands stay scoped
             await serviceReady;
             await getTransport("local").call("system:info");
         } finally {
-            off(); closeTransport("local");
+            offErrors(); off(); closeTransport("local");
             for (const socket of wss.clients) socket.terminate();
             await new Promise<void>((resolve) => wss.close(() => resolve()));
             auth.dispose(); fs.rmSync(root, { recursive: true, force: true });
