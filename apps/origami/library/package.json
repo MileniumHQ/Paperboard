@@ -1,7 +1,7 @@
 {
     "name": "paperboard-panel-library",
     "private": true,
-    "version": "0.1.0",
+    "version": "0.1.1",
     "type": "module",
     "description": "Origami-served panel library: the Paperboard panel store as a standalone web app and an embeddable iframe.",
     "scripts": {
