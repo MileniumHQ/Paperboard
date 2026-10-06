@@ -16,13 +16,14 @@ import type { AiState } from "../src/core/types";
 
 const filesDir = fs.mkdtempSync(path.join(os.tmpdir(), "pb-ai-app-"));
 const secrets = new Map<string, string>();
+let savedConfig: unknown = null;
 
 // mutable so the install test can control the package check and the download
 let packageInstalled = true;
 let downloadImpl: () => Promise<void> = async () => {};
 
 mock.module("@mileniumhq/paperapi", () => ({
-    config: { get: async () => null, set: async () => true },
+    config: { get: async () => savedConfig, set: async (value: unknown, _panelId: string) => { savedConfig = structuredClone(value); return true; } },
     secretsApi: {
         get: async (name: string) => ({ found: secrets.has(name), value: secrets.get(name) }),
         set: async (name: string, value: string) => {
@@ -95,8 +96,45 @@ function makeCtx() {
     };
 }
 
+describe("custom prompt settings", () => {
+    it("seeds the generated prompt, persists edits through reload, and bounds input", async () => {
+        savedConfig = null;
+        const app = new AiApp(new HangingHost(), { readyTimeoutMs: 100 });
+        const ctx = makeCtx();
+        await app.init(ctx as any);
+        try {
+            await Promise.all([app.updateSettings({ customPromptEnabled: true }), app.updateSettings({ promptStyle: "quirky" })]);
+            expect(ctx.state.settings.promptStyle).toBe("quirky");
+            expect(ctx.state.settings.customSystemPrompt).toContain("helpful expert friend");
+            await app.updateSettings({ customSystemPrompt: "Custom instructions" });
+            await app.updateSettings({ customPromptEnabled: false });
+            await app.updateSettings({ customPromptEnabled: true });
+            expect(ctx.state.settings.customSystemPrompt).toBe("Custom instructions");
+            await expect(app.updateSettings({ customSystemPrompt: "x".repeat(32769) })).rejects.toThrow("at most");
+            expect(ctx.state.settings.customSystemPrompt).toBe("Custom instructions");
+            const reloaded = new AiApp(new HangingHost(), { readyTimeoutMs: 100 });
+            const reloadedCtx = makeCtx();
+            try {
+                await reloaded.init(reloadedCtx as any);
+                expect(reloadedCtx.state.settings.customSystemPrompt).toBe("Custom instructions");
+                expect(reloadedCtx.state.settings.customPromptEnabled).toBe(true);
+                await reloaded.updateSettings({ customSystemPrompt: "" });
+                await reloaded.updateSettings({ customPromptEnabled: false });
+                await reloaded.updateSettings({ customPromptEnabled: true });
+                expect(reloadedCtx.state.settings.customSystemPrompt).toBe("");
+            } finally {
+                await reloaded.stopRuntime();
+            }
+        } finally {
+            await app.stopRuntime();
+            savedConfig = null;
+        }
+    });
+});
+
 describe("AiApp provider credentials", () => {
     async function withApp(run: (app: InstanceType<typeof AiApp>) => Promise<void>) {
+        savedConfig = null;
         const app = new AiApp(new HangingHost(), { readyTimeoutMs: 100 });
         const ctx = makeCtx();
         await app.init(ctx as any);
@@ -107,6 +145,7 @@ describe("AiApp provider credentials", () => {
             await run(app);
         } finally {
             globalThis.fetch = original;
+            savedConfig = null;
             await app.stopRuntime().catch((err) => console.debug("[ai] test teardown:", String(err)));
         }
     }

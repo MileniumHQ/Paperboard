@@ -16,7 +16,7 @@ import {
     type ServiceContext,
 } from "@mileniumhq/paperapi";
 import { EVENTS, OLLAMA_PACKAGE, OLLAMA_PROC_ID, PANEL_ID, TRIGGER_IDS } from "../contract";
-import { askSystemPrompt, isConversationId, isPromptStyle } from "../core/conversation";
+import { askSystemPrompt, isConversationId, isPromptStyle, MAX_CUSTOM_PROMPT_CHARS } from "../core/conversation";
 import {
     activeProviders,
     CUSTOM_PROVIDER,
@@ -78,6 +78,8 @@ export const processHost: ProcessHost = {
 
 function clampSettings(input: Partial<Settings> | undefined): Settings {
     const s = { ...DEFAULT_SETTINGS, ...(input ?? {}) };
+    if (typeof s.customSystemPrompt === "string" && s.customSystemPrompt.length > MAX_CUSTOM_PROMPT_CHARS)
+        throw new Error(`System prompt must be at most ${MAX_CUSTOM_PROMPT_CHARS} characters.`);
     return {
         defaultModel: typeof s.defaultModel === "string" ? s.defaultModel.slice(0, 200) : "",
         contextLength: Number.isInteger(s.contextLength) ? Math.min(131_072, Math.max(2048, s.contextLength)) : DEFAULT_SETTINGS.contextLength,
@@ -86,6 +88,8 @@ function clampSettings(input: Partial<Settings> | undefined): Settings {
         webSearch: typeof s.webSearch === "boolean" ? s.webSearch : DEFAULT_SETTINGS.webSearch,
         shellCommands: typeof s.shellCommands === "boolean" ? s.shellCommands : DEFAULT_SETTINGS.shellCommands,
         promptStyle: isPromptStyle(s.promptStyle) ? s.promptStyle : DEFAULT_SETTINGS.promptStyle,
+        customPromptEnabled: typeof s.customPromptEnabled === "boolean" ? s.customPromptEnabled : false,
+        customSystemPrompt: typeof s.customSystemPrompt === "string" ? s.customSystemPrompt : null,
     };
 }
 
@@ -319,11 +323,11 @@ export class AiApp {
         }
     }
 
-    private saveConfig(mutate: (c: StoredConfig) => void): Promise<void> {
+    private saveConfig(mutate: (c: StoredConfig) => void | Promise<void>): Promise<void> {
         const next = this.configQueue.then(async () => {
             if (!this.configLoaded) throw new Error("Settings could not be read, so changes are not saved. Restart the panel to retry.");
             const draft: StoredConfig = JSON.parse(JSON.stringify(this.stored));
-            mutate(draft);
+            await mutate(draft);
             await config.set(draft, PANEL_ID);
             this.stored = draft;
         });
@@ -332,8 +336,12 @@ export class AiApp {
     }
 
     async updateSettings(patch: Partial<Settings>): Promise<Settings> {
-        const settings = clampSettings({ ...this.ctx.state.settings, ...patch });
-        await this.saveConfig((c) => {
+        let settings!: Settings;
+        await this.saveConfig(async (c) => {
+            settings = clampSettings({ ...c.settings, ...patch });
+            if (settings.customPromptEnabled && settings.customSystemPrompt === null) {
+                settings.customSystemPrompt = (await this.chat.promptForModel(settings.defaultModel, settings)).prompt;
+            }
             c.settings = settings;
         });
         this.ctx.setState({ settings });

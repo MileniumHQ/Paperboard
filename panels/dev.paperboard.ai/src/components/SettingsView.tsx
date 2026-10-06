@@ -11,7 +11,7 @@ import {
     PaperToggle,
 } from "@mileniumhq/paperui";
 import { UI_ACTION_IDS } from "../contract";
-import { PROMPT_STYLE_DESCRIPTIONS, PROMPT_STYLE_LABELS, PROMPT_STYLES } from "../core/conversation";
+import PromptingSettings from "./PromptingSettings";
 import { call, errorText, state } from "../lib/state";
 import styles from "./SettingsView.module.css";
 
@@ -26,8 +26,10 @@ export default function SettingsView() {
         setError("");
         try {
             await call(UI_ACTION_IDS.updateSettings, patch);
+            return true;
         } catch (err) {
             setError(errorText(err));
+            return false;
         }
     };
 
@@ -57,29 +59,9 @@ export default function SettingsView() {
                 </PaperText>
             </Show>
 
+            <PromptingSettings settings={state.settings} save={save} />
+
             <PaperSettingList autoHeight>
-                <PaperSettingItem
-                    title="Personality"
-                    description="How the assistant talks, in every chat."
-                >
-                    <PaperSelectMenu
-                        name="promptStyle"
-                        aria-label="Personality"
-                        value={state.settings.promptStyle}
-                        onValueChange={(value) =>
-                            void save({ promptStyle: value })
-                        }
-                    >
-                        {PROMPT_STYLES.map((style) => (
-                            <PaperSelectMenuItem
-                                value={style}
-                                description={PROMPT_STYLE_DESCRIPTIONS[style]}
-                            >
-                                {PROMPT_STYLE_LABELS[style]}
-                            </PaperSelectMenuItem>
-                        ))}
-                    </PaperSelectMenu>
-                </PaperSettingItem>
                 <PaperSettingItem
                     title="Web search"
                     description="Lets the model search the web through DuckDuckGo when it needs something current. Searches run without asking, and each one shows in the chat."

@@ -7,7 +7,7 @@ import {
     SearchUnavailableError,
     shellArgv,
 } from "../src/core/builtins";
-import { systemPrompt } from "../src/core/conversation";
+import { systemPrompt, PROMPT_STYLES } from "../src/core/conversation";
 import fs from "node:fs";
 import path from "node:path";
 import rawCatalog from "../src/data/models.json";
@@ -394,6 +394,12 @@ describe("built-ins", () => {
             "dev.paperboard.ai",
         );
         expect(set.tools).toHaveLength(0);
+    });
+
+    it("keeps every built-in personality compact even with all tools enabled", () => {
+        for (const style of PROMPT_STYLES) {
+            expect(systemPrompt({ style, model: "qwen3:8b", webSearch: true, shellCommands: true, panelActions: true }).length).toBeLessThan(1300);
+        }
     });
 
     it("tells the model only about the tools it has", () => {

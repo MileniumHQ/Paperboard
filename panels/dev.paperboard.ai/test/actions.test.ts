@@ -111,3 +111,13 @@ describe("delete-all chats UI action", () => {
         expect(calls).toBe(1);
     });
 });
+
+describe("custom prompt UI action", () => {
+    it("forwards the toggle and prompt through the settings action", async () => {
+        let patch: unknown;
+        const app = { ready: Promise.resolve(), updateSettings: async (value: unknown) => { patch = value; } } as any;
+        const action = uiActions(app).find((a) => a.id === UI_ACTION_IDS.updateSettings)!;
+        await action.run!({}, { customPromptEnabled: true, customSystemPrompt: "My instructions" });
+        expect(patch).toEqual({ customPromptEnabled: true, customSystemPrompt: "My instructions" });
+    });
+});

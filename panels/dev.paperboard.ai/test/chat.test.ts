@@ -8,7 +8,7 @@ import { startFakeOllama, type FakeOllama } from "./fakeOllama";
 import { OllamaClient } from "../src/service/ollamaClient";
 import { ConversationStore } from "../src/service/store";
 import { ChatEngine, MAX_ACTIVE_REPLIES } from "../src/service/chat";
-import { MAX_TOOL_ROUNDS } from "../src/core/conversation";
+import { MAX_TOOL_ROUNDS, systemPrompt } from "../src/core/conversation";
 import type { AssistantMessage, ChatMessageEvent, ChatResetEvent, PendingApproval, Settings } from "../src/core/types";
 import type { RegistryAction } from "../src/core/tools";
 
@@ -97,7 +97,7 @@ beforeEach(async () => {
     capabilities = { "tooly:latest": ["completion", "tools"], "plain:latest": ["completion"] };
     actionResult = async () => ({ kicked: true });
     // panel actions on and built-ins off, unless a test says otherwise
-    settings = { defaultModel: "tooly:latest", contextLength: 4096, reasoning: "off", panelActions: true, webSearch: false, shellCommands: false, promptStyle: "quirky" };
+    settings = { defaultModel: "tooly:latest", contextLength: 4096, reasoning: "off", panelActions: true, webSearch: false, shellCommands: false, promptStyle: "quirky", customPromptEnabled: false, customSystemPrompt: null };
     searches = [];
     commands = [];
 });
@@ -110,6 +110,22 @@ afterEach(async () => {
 const assistants = async (id: string) => (await store.get(id)).messages.filter((m): m is AssistantMessage => m.role === "assistant");
 
 describe("replies", () => {
+    it("sends the exact custom prompt over HTTP and restores personality when disabled", async () => {
+        const chat = engine();
+        const c = await chat.create("tooly:latest");
+        settings.customPromptEnabled = true;
+        settings.customSystemPrompt = "Reply like a pirate.\nOnly one sentence.";
+        fake.script = [{ content: "Aye." }];
+        await (await chat.send(c.id, "hi")).done;
+        expect(fake.chatRequests[0].messages[0]).toEqual({ role: "system", content: settings.customSystemPrompt });
+        settings.customPromptEnabled = false;
+        await (await chat.send(c.id, "hello again")).done;
+        expect(fake.chatRequests[1].messages[0]).toEqual({ role: "system", content: systemPrompt({
+            style: "quirky", model: "tooly:latest", webSearch: false, shellCommands: false, panelActions: true,
+        }) });
+        expect(settings.customSystemPrompt).toBe("Reply like a pirate.\nOnly one sentence.");
+    });
+
     it("streams a plain answer, saves it, and fires reply-finished", async () => {
         fake.script = [{ content: "Hello there, friend." }];
         const chat = engine();

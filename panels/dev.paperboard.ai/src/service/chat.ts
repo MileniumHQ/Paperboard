@@ -272,6 +272,32 @@ export class ChatEngine {
         await Promise.all(pending);
     }
 
+    /** The same offered tools and prompt used by replies and the initial custom editor. */
+    async promptForModel(model: string, settings: Settings = this.deps.settings()): Promise<{ tools: ToolSet; prompt: string }> {
+        const capabilities = this.deps.capabilities(model) ?? [];
+        const canCall = capabilities.includes("tools");
+        const panels: ToolSet =
+            canCall && settings.panelActions
+                ? buildToolSet(await this.deps.listActions(), this.deps.ownPanelId, await this.deps.panelNames())
+                : { tools: [], targets: new Map() };
+        // built-ins first: they are the tools a model should reach for
+        const tools: ToolSet = {
+            tools: [...(canCall ? builtinTools(settings) : []), ...panels.tools],
+            targets: panels.targets,
+        };
+        const offered = new Set(tools.tools.map((t) => t.function.name));
+        const prompt = systemPrompt({
+            style: settings.promptStyle,
+            customPrompt: settings.customPromptEnabled ? settings.customSystemPrompt ?? undefined : undefined,
+            model,
+            webSearch: offered.has("web_search"),
+            shellCommands: offered.has("run_shell_command"),
+            panelActions: panels.tools.length > 0,
+        });
+
+        return { tools, prompt };
+    }
+
     private async reply(conversation: Conversation, signal: AbortSignal, think: boolean | string): Promise<void> {
         const { deps } = this;
         const save = async () => {
@@ -291,27 +317,9 @@ export class ChatEngine {
                 }
                 const capabilities = deps.capabilities(conversation.model) ?? [];
                 const settings = deps.settings();
-                const canCall = capabilities.includes("tools");
-                const panels: ToolSet =
-                    canCall && settings.panelActions
-                        ? buildToolSet(await deps.listActions(), deps.ownPanelId, await deps.panelNames())
-                        : { tools: [], targets: new Map() };
-                // built-ins first: they are the tools a model should reach for
-                const tools: ToolSet = {
-                    tools: [...(canCall ? builtinTools(settings) : []), ...panels.tools],
-                    targets: panels.targets,
-                };
+                const { tools, prompt } = await this.promptForModel(conversation.model, settings);
                 const offered = new Set(tools.tools.map((t) => t.function.name));
-                const history = toOllamaMessages(
-                    conversation.messages,
-                    systemPrompt({
-                        style: settings.promptStyle,
-                        model: conversation.model,
-                        webSearch: offered.has("web_search"),
-                        shellCommands: offered.has("run_shell_command"),
-                        panelActions: panels.tools.length > 0,
-                    }),
-                );
+                const history = toOllamaMessages(conversation.messages, prompt);
 
                 current = this.startAssistant(conversation);
                 const message = current;

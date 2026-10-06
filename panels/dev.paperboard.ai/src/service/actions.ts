@@ -252,6 +252,8 @@ export function uiActions(app: AiApp): ActionDefinition[] {
                     ...(typeof i.webSearch === "boolean" ? { webSearch: i.webSearch } : {}),
                     ...(typeof i.shellCommands === "boolean" ? { shellCommands: i.shellCommands } : {}),
                     ...(isPromptStyle(i.promptStyle) ? { promptStyle: i.promptStyle } : {}),
+                    ...(typeof i.customPromptEnabled === "boolean" ? { customPromptEnabled: i.customPromptEnabled } : {}),
+                    ...(typeof i.customSystemPrompt === "string" ? { customSystemPrompt: i.customSystemPrompt } : {}),
                 }),
             ),
         ),

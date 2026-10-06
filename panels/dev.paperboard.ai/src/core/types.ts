@@ -88,6 +88,9 @@ export interface Settings {
     shellCommands: boolean;
     /** which personality the system prompt gives the model */
     promptStyle: PromptStyle;
+    customPromptEnabled: boolean;
+    /** null until first enabled; an empty string is a deliberate empty prompt. */
+    customSystemPrompt: string | null;
 }
 
 export type ProviderChoice = "ollama" | "custom";
@@ -262,6 +265,8 @@ export const DEFAULT_SETTINGS: Settings = {
     webSearch: true,
     shellCommands: true,
     promptStyle: "standard",
+    customPromptEnabled: false,
+    customSystemPrompt: null,
 };
 
 export function initialState(): AiState {
