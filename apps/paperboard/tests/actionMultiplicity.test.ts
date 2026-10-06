@@ -30,7 +30,7 @@ test("startup cannot overwrite an accepted flow sync; slash commands stay scoped
     const sync = createCanvasSync<{ flows: any[]; functions: any[] }>({
         save: (snapshot) => config.set(snapshot, "dev.paperboard.actions", "canvas.json"),
         apply: (snapshot) => actionsApi.call("dev.paperboard.actions", "sync-flows", snapshot),
-        onState: () => {},
+        onState: () => undefined,
     });
     try {
         await initPaperApi({ port: (wss.address() as any).port, token, computerId: "local", panelId: "dev.paperboard.actions" });
@@ -60,6 +60,10 @@ test("startup cannot overwrite an accepted flow sync; slash commands stay scoped
         await actionsService.ready;
         await earlySync;
         config.get = originalGet;
+        expect(actionsService.getState().flowCount).toBe(1);
+        await expect(actionsApi.call("dev.paperboard.actions", "sync-flows", { flows: [{ ...commands[0],
+            action: { ...commands[0].action, match: { field: "commandName", input: "name" } }, values: {} }] }))
+            .rejects.toThrow("would never fire");
         expect(actionsService.getState().flowCount).toBe(1);
         const starts: string[] = [];
         off = actionsApi.onTrigger("dev.paperboard.actions", "flow-start", (data: any) => starts.push(data.triggerBlockId));

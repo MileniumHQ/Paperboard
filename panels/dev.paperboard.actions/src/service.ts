@@ -17,11 +17,7 @@ import {
     buildCallSchema,
 } from "./lib/functions";
 import type { CanvasBlock } from "./lib/tree";
-import {
-    isCanvasBlock,
-    isEventOnlyAction,
-    walkBlocks,
-} from "./lib/tree";
+import { validateFlowDefinitions } from "./lib/flowValidation";
 // canonical panel id (shared with the UI bundle); the explicit identity
 // every config/registry call below carries
 import { ACTIONS_PANEL_ID } from "./panelId";
@@ -362,41 +358,7 @@ export const actions = [
             // canvas is loading would otherwise be overwritten by that read.
             await actionsService.ready;
             if (Array.isArray(inputs?.flows)) {
-                // boundary: stored flows are executable content — malformed
-                // blocks are dropped loudly, never trusted into the runtime
-                const valid = inputs.flows.filter(isCanvasBlock);
-                if (valid.length !== inputs.flows.length) throw new Error("Flow sync refused: malformed blocks; repair them before applying");
-                for (const b of valid) {
-                    if (!b.panelId || b.panelId === "*") throw new Error(`Flow "${b.id}" needs an explicit source panel`);
-                    // a match input is either a literal (filters) or, when
-                    // the schema declares allowEmpty, unselected ("(any)"):
-                    // the trigger fires for every payload. A variable chip can
-                    // never be routing identity: refuse it loudly instead of
-                    // saving a dead listener.
-                    for (const rule of normalizeMatchRules((b.action as any)?.match)) {
-                        const def = (b.action as any)?.inputs?.[rule.input];
-                        const literal = b.values?.[rule.input];
-                        if (isBlankMatchInput(literal)) {
-                            if (def?.allowEmpty) continue;
-                            throw new Error(
-                                `Flow "${b.id}": "${b.action.name}" needs a value for "${rule.input}" — without it this trigger would never fire`,
-                            );
-                        }
-                        if (typeof literal === "string" && literal.includes("{{")) {
-                            throw new Error(
-                                `Flow "${b.id}": "${rule.input}" on "${b.action.name}" must be a literal value, not a variable`,
-                            );
-                        }
-                    }
-                    for (const nested of walkBlocks(b.children || [], (c) => c)) {
-                        if (isEventOnlyAction(nested.action)) {
-                            throw new Error(
-                                `Flow "${b.id}": "${nested.action.name}" fires as an event and starts flows; it cannot be nested`,
-                            );
-                        }
-                    }
-                }
-                flows = valid;
+                flows = validateFlowDefinitions(inputs.flows);
             }
             if (Array.isArray(inputs?.functions)) {
                 functions = inputs.functions.filter(

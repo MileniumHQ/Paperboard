@@ -5,11 +5,11 @@
 // a match that can never fire is refused at sync instead of saved dead.
 import { describe, it, expect, afterAll } from "bun:test";
 import {
-    actions as serviceActions,
     __actionsTestState,
     handleTriggerEventForTest,
 } from "../src/service";
 import { matchHolds, payloadFieldValue } from "../src/lib/runtime";
+import { validateFlowDefinitions } from "../src/lib/flowValidation";
 import type { CanvasBlock } from "../src/lib/tree";
 
 describe("generic match comparison", () => {
@@ -148,10 +148,9 @@ describe("parameterized event routing", () => {
     });
 });
 
-describe("sync-flows validation for event actions", () => {
-    const syncFlows = serviceActions.find((a: any) => a.id === "sync-flows") as any;
-    const ctx = { emitTrigger: () => {}, setState: () => {} } as any;
-
+// These are validation tests, not service-application tests. Sync now waits
+// for initialization; real acceptance is covered by actionMultiplicity.
+describe("flow definition validation for event actions", () => {
     const root = (overrides: Partial<CanvasBlock> = {}): CanvasBlock => ({
         id: "flow_sync",
         panelId: "dev.example",
@@ -182,7 +181,7 @@ describe("sync-flows validation for event actions", () => {
         });
         let caught: unknown = null;
         try {
-            await syncFlows.run(ctx, { flows: [bad] });
+            validateFlowDefinitions([bad]);
         } catch (err) {
             caught = err;
         }
@@ -192,7 +191,7 @@ describe("sync-flows validation for event actions", () => {
     it("refuses a parameterized trigger whose match input is empty and not clearable", async () => {
         let caught: unknown = null;
         try {
-            await syncFlows.run(ctx, { flows: [root({ values: {} })] });
+            validateFlowDefinitions([root({ values: {} })]);
         } catch (err) {
             caught = err;
         }
@@ -209,16 +208,14 @@ describe("sync-flows validation for event actions", () => {
             },
             values: {},
         });
-        const result = await syncFlows.run(ctx, { flows: [clearable] });
-        expect(result.flows).toBe(1);
+        const result = validateFlowDefinitions([clearable]);
+        expect(result).toHaveLength(1);
     });
 
     it("refuses a variable chip as a match value: routing must be a literal", async () => {
         let caught: unknown = null;
         try {
-            await syncFlows.run(ctx, {
-                flows: [root({ values: { itemId: "{{someVar:Var:bolt}}" } })],
-            });
+            validateFlowDefinitions([root({ values: { itemId: "{{someVar:Var:bolt}}" } })]);
         } catch (err) {
             caught = err;
         }
@@ -226,8 +223,8 @@ describe("sync-flows validation for event actions", () => {
     });
 
     it("accepts a well-formed parameterized root", async () => {
-        const result = await syncFlows.run(ctx, { flows: [root()] });
-        expect(result.flows).toBe(1);
+        const result = validateFlowDefinitions([root()]);
+        expect(result).toHaveLength(1);
     });
 
     afterAll(() => {
