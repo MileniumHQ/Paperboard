@@ -4,6 +4,7 @@ import {
     For,
     on,
     onMount,
+    onCleanup,
     Show,
     type JSX,
 } from "solid-js";
@@ -139,6 +140,7 @@ export default function Plugins(props: { updateRequest?: number }) {
 
     onMount(() => {
         void reloadInstalled();
+        void runSearch();
     });
 
     const runUpdateCheck = async () => {
@@ -237,18 +239,25 @@ export default function Plugins(props: { updateRequest?: number }) {
         }
     };
 
+    let searchController: AbortController | undefined;
+    onCleanup(() => searchController?.abort());
     const runSearch = async () => {
+        searchController?.abort();
+        const controller = new AbortController();
+        searchController = controller;
         setError("");
+        setResults([]);
         setSearching(true);
         setSearched(true);
         try {
-            setResults(await searchModrinth(query().trim()));
+            const hits = await searchModrinth(query().trim(), controller.signal);
+            if (!controller.signal.aborted) setResults(hits);
         } catch (err) {
+            if (controller.signal.aborted) return;
             console.error("[Plugins] Modrinth search failed:", err);
-            setResults([]);
-            setError("Modrinth search failed. Check the console for details.");
+            setError(err instanceof Error ? err.message : String(err));
         } finally {
-            setSearching(false);
+            if (searchController === controller) setSearching(false);
         }
     };
 
@@ -446,6 +455,9 @@ export default function Plugins(props: { updateRequest?: number }) {
                             <Show when={error()}>
                                 <PaperQuote variant="danger" icon="warning" title="Error">
                                     {error()}
+                                    <PaperButton onClick={() => void runSearch()} disabled={searching()}>
+                                        Retry search
+                                    </PaperButton>
                                 </PaperQuote>
                             </Show>
                             <Show when={listWarning()}>
@@ -540,7 +552,7 @@ export default function Plugins(props: { updateRequest?: number }) {
                         </PaperCard>
                     </Show>
 
-                    <Show when={!searching() && searched()}>
+                    <Show when={!searching() && searched() && !error()}>
                         <Show
                             when={results().length > 0}
                             fallback={

@@ -24,6 +24,12 @@ export { INSTALL_RECORDS_KEY, isInstallRecord, pluginDirName, validatePluginFile
 
 const MODRINTH_API = "https://api.modrinth.com/v2";
 const SEARCH_LIMIT = 24;
+// Environments with functionality on a dedicated server, per Modrinth.
+const SERVER_ENVIRONMENTS = [
+    "client_and_server", "server_only", "server_only_client_optional",
+    "dedicated_server_only", "client_only_server_optional",
+    "client_or_server", "client_or_server_prefers_both",
+];
 
 export async function getInstallRecords(): Promise<Record<string, InstalledRecord>> {
     try {
@@ -110,10 +116,10 @@ interface RawProject {
     description?: string;
     body?: string;
     downloads?: number;
-    follows?: number;
+    followers?: number;
     loaders?: string[];
     license?: { id?: string; name?: string; url?: string };
-    modified?: number;
+    updated?: string;
     icon_url?: string;
 }
 
@@ -125,6 +131,7 @@ export interface RawVersionDependency {
 }
 
 interface RawVersion {
+    environment?: string;
     id?: string;
     version_number?: string;
     name?: string;
@@ -146,11 +153,16 @@ interface RawVersion {
 async function modrinthFetch<T>(
     path: string,
     params?: Record<string, string>,
+    signal?: AbortSignal,
 ): Promise<T> {
     const query = params
         ? `?${new URLSearchParams(params).toString()}`
         : "";
-    const res = await apiFetch(`${MODRINTH_API}${path}${query}`);
+    const res = await apiFetch(`${MODRINTH_API}${path}${query}`, {
+        signal: signal
+            ? AbortSignal.any([signal, AbortSignal.timeout(15_000)])
+            : AbortSignal.timeout(15_000),
+    });
     const text = await res.text();
 
     let data: unknown;
@@ -193,23 +205,28 @@ export function getEcosystem(software: ServerSoftwareType): EcosystemInfo | null
     }
 }
 
-export async function searchModrinth(query: string): Promise<ModrinthHit[]> {
+export async function searchModrinth(query: string, signal?: AbortSignal): Promise<ModrinthHit[]> {
     const eco = getEcosystem(serverSoftware());
     if (!eco) return [];
+    const mcVersion = serverVersion();
+    if (!mcVersion) throw new Error("Choose a server version before browsing Modrinth.");
 
     const facets = JSON.stringify([
         [`project_type:${eco.projectType}`],
         [`categories:${eco.loaderCategory}`],
+        [`versions:${mcVersion}`],
+        SERVER_ENVIRONMENTS.map((environment) => `environment:${environment}`),
     ]);
 
     const data = await modrinthFetch<{ hits?: RawHit[] }>("/search", {
         query,
         limit: String(SEARCH_LIMIT),
         facets,
-    });
+        index: query ? "relevance" : "downloads",
+    }, signal);
 
     const hits: ModrinthHit[] = [];
-    for (const hit of data.hits ?? []) {
+    for (const hit of (data.hits ?? []).slice(0, SEARCH_LIMIT)) {
         if (!hit.project_id || !hit.slug || !hit.title) continue;
         hits.push({
             projectId: hit.project_id,
@@ -221,7 +238,40 @@ export async function searchModrinth(query: string): Promise<ModrinthHit[]> {
             iconUrl: hit.icon_url || undefined,
         });
     }
-    return hits;
+    // Project facets can match different releases (e.g. Fabric on 1.20,
+    // Forge on 1.21). Verify an actual server build for this loader/version.
+    // At most four requests at once, and at most one search page of projects.
+    const verificationController = new AbortController();
+    const verificationSignal = signal
+        ? AbortSignal.any([signal, verificationController.signal])
+        : verificationController.signal;
+    const compatible = new Array<boolean>(hits.length).fill(false);
+    let next = 0;
+    await Promise.all(Array.from({ length: Math.min(4, hits.length) }, async () => {
+        while (next < hits.length) {
+            const index = next++;
+            verificationSignal.throwIfAborted();
+            const versions = await modrinthFetch<RawVersion[]>(
+                `/project/${encodeURIComponent(hits[index].projectId)}/version`,
+                {
+                    loaders: JSON.stringify([eco.loaderCategory]),
+                    game_versions: JSON.stringify([mcVersion]),
+                    include_changelog: "false",
+                },
+                verificationSignal,
+            );
+            compatible[index] = versions.some((version) =>
+                version.loaders?.includes(eco.loaderCategory) &&
+                version.game_versions?.includes(mcVersion) &&
+                SERVER_ENVIRONMENTS.includes(version.environment ?? "") &&
+                version.files?.some((file) => file.url && file.filename?.endsWith(".jar")),
+            );
+        }
+    })).catch((error) => {
+        verificationController.abort();
+        throw error;
+    });
+    return hits.filter((_, index) => compatible[index]);
 }
 
 export async function getProject(projectIdOrSlug: string): Promise<ModrinthProject> {
@@ -243,12 +293,10 @@ export async function getProject(projectIdOrSlug: string): Promise<ModrinthProje
         description: data.description ?? "",
         body: data.body ?? "",
         downloads: typeof data.downloads === "number" ? data.downloads : 0,
-        follows: typeof data.follows === "number" ? data.follows : 0,
+        follows: typeof data.followers === "number" ? data.followers : 0,
         loaders: Array.isArray(data.loaders) ? data.loaders : [],
         license: licenseName,
-        dateModified: data.modified
-            ? new Date(data.modified).toISOString()
-            : "",
+        dateModified: data.updated ?? "",
         iconUrl: data.icon_url || undefined,
     };
 }
