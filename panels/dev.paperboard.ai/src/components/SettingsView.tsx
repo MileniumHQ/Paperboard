@@ -12,7 +12,9 @@ import {
 } from "@mileniumhq/paperui";
 import { UI_ACTION_IDS } from "../contract";
 import PromptingSettings from "./PromptingSettings";
-import { call, errorText, state } from "../lib/state";
+import { saveSettings } from "../core/saveSettings";
+import type { Settings } from "../core/types";
+import { bridge, call, errorText, state } from "../lib/state";
 import styles from "./SettingsView.module.css";
 
 const CONTEXTS = [4096, 8192, 16384, 32768, 65536, 131072];
@@ -22,10 +24,13 @@ export default function SettingsView() {
     const [confirmingDeleteAll, setConfirmingDeleteAll] = createSignal(false);
     const [deletingAll, setDeletingAll] = createSignal(false);
 
-    const save = async (patch: Record<string, unknown>) => {
+    const save = async (patch: Partial<Settings>) => {
         setError("");
         try {
-            await call(UI_ACTION_IDS.updateSettings, patch);
+            await saveSettings(patch, {
+                update: (patch) => call<Settings>(UI_ACTION_IDS.updateSettings, patch),
+                refresh: async () => { await bridge.refreshState(); },
+            });
             return true;
         } catch (err) {
             setError(errorText(err));

@@ -1,5 +1,5 @@
 import { createEffect, createSignal, Show } from "solid-js";
-import { PaperButton, PaperInput, PaperSelectMenu, PaperSelectMenuItem, PaperSettingItem, PaperSettingList, PaperText, PaperToggle } from "@mileniumhq/paperui";
+import { PaperButton, PaperInput, PaperSelectMenu, PaperSelectMenuItem, PaperSettingItem, PaperSettingList, PaperToggle } from "@mileniumhq/paperui";
 import { isPromptStyle, MAX_CUSTOM_PROMPT_CHARS, PROMPT_STYLE_DESCRIPTIONS, PROMPT_STYLE_LABELS, PROMPT_STYLES } from "../core/conversation";
 import type { Settings } from "../core/types";
 import styles from "./SettingsView.module.css";
@@ -14,7 +14,6 @@ export default function PromptingSettings(props: {
 
     return (
         <>
-            <PaperText as="h2" size={4} weight={600}>Prompting</PaperText>
             <PaperSettingList autoHeight>
                 <PaperSettingItem
                     title="Personality"
