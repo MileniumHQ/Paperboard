@@ -1,4 +1,5 @@
 .computerItem {
+    background-color: var(--paper-surface-inset) !important;
     /* Keep the OS tint over PaperList's hover and selected backgrounds. */
     background-image: linear-gradient(
         135deg,

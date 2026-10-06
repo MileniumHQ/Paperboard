@@ -44,6 +44,16 @@ try {
     if (!getComputedStyle(row).backgroundImage.includes("linear-gradient")) {
         throw new Error("The selected computer item must retain its CSS gradient");
     }
+    const provider = document.querySelector<HTMLElement>(".paperui-root")!;
+    const initialTheme = provider.dataset.paperuiTheme;
+    row.style.transition = "none";
+    for (const [theme, expected] of [["light", "rgb(236, 239, 243)"], ["dark", "rgb(15, 16, 17)"]]) {
+        provider.dataset.paperuiTheme = theme;
+        if (getComputedStyle(row).backgroundColor !== expected) {
+            throw new Error(`Computer item must retain the original inset ${theme} background token`);
+        }
+    }
+    provider.dataset.paperuiTheme = initialTheme;
     document.querySelector<HTMLLabelElement>('label[data-value="library"]')!.click();
     if (tab() !== "library") throw new Error("Library navigation must still work");
     result.textContent = "PASS: merged computer navigation, selection, CSS gradient, and library navigation";
