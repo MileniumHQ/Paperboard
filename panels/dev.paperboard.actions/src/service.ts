@@ -347,6 +347,9 @@ export const actions = [
         },
         icon: "sync",
         run: async (ctx: Ctx, inputs: { flows?: CanvasBlock[]; functions?: FunctionDef[] }) => {
+            // Registration precedes onInit. A sync accepted while the saved
+            // canvas is loading would otherwise be overwritten by that read.
+            await actionsService.ready;
             if (Array.isArray(inputs?.flows)) {
                 // boundary: stored flows are executable content — malformed
                 // blocks are dropped loudly, never trusted into the runtime
@@ -422,10 +425,12 @@ export const actions = [
             label: "Execution Log",
         },
         icon: "play_arrow",
-        run: async (ctx: Ctx, inputs: { triggerBlockId: string; payload?: any }) =>
+        run: async (ctx: Ctx, inputs: { triggerBlockId: string; payload?: any }) => {
+            await actionsService.ready;
             // gate is shared with stored runs (one invariant, one impl);
             // over the cap this throws FlowRunRefused, never silently runs
-            runTestFlow(ctx, inputs),
+            return runTestFlow(ctx, inputs);
+        },
     }),
 ];
 
