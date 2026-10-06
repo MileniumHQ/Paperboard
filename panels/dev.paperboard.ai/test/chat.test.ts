@@ -9,7 +9,7 @@ import { OllamaClient } from "../src/service/ollamaClient";
 import { ConversationStore } from "../src/service/store";
 import { ChatEngine, MAX_ACTIVE_REPLIES } from "../src/service/chat";
 import { MAX_TOOL_ROUNDS } from "../src/core/conversation";
-import type { AssistantMessage, PendingApproval, Settings } from "../src/core/types";
+import type { AssistantMessage, ChatMessageEvent, ChatResetEvent, PendingApproval, Settings } from "../src/core/types";
 import type { RegistryAction } from "../src/core/tools";
 
 const registry: RegistryAction[] = [
@@ -27,7 +27,9 @@ let store: ConversationStore;
 let calls: { panelId: string; action: string; args: Record<string, unknown> }[];
 let allowed: Set<string>;
 let approvals: PendingApproval[];
-let deltas: { content: string }[];
+let deltas: { seq: number; content: string }[];
+let events: ChatMessageEvent[];
+let resets: ChatResetEvent[];
 let finished: { text: string }[];
 let capabilities: Record<string, string[]>;
 let actionResult: () => Promise<unknown>;
@@ -62,7 +64,8 @@ function engine(): ChatEngine {
             return { stdout: "hello", stderr: "", exitCode: 0 };
         },
         onDelta: (p) => deltas.push(p),
-        onMessage: () => {},
+        onMessage: (p) => events.push(p),
+        onReset: (p) => resets.push(p),
         onSummaries: () => {},
         onGenerating: () => {},
         onApprovals: (list) => (approvals = list),
@@ -88,6 +91,8 @@ beforeEach(async () => {
     allowed = new Set();
     approvals = [];
     deltas = [];
+    events = [];
+    resets = [];
     finished = [];
     capabilities = { "tooly:latest": ["completion", "tools"], "plain:latest": ["completion"] };
     actionResult = async () => ({ kicked: true });
@@ -188,6 +193,40 @@ describe("replies", () => {
         await expect(chat.send(extra.id, "go")).rejects.toThrow(/at once/);
         fake.releaseChats();
         await Promise.all(running.map((r) => r.done));
+    });
+});
+
+describe("a reply in flight", () => {
+    it("is in the snapshot a reopened or reloaded chat loads, still streaming", async () => {
+        fake.script = [{ content: "a long answer that streams slowly", chunkDelayMs: 25 }];
+        const chat = engine();
+        const c = await chat.create("tooly:latest");
+        const { done } = await chat.send(c.id, "hi");
+        await until(() => deltas.some((d) => d.content.length > 0));
+        const { seq, conversation } = await chat.get(c.id);
+        const reply = conversation.messages[1] as AssistantMessage;
+        // the file has only the user's message until the round ends
+        expect(reply.status).toBe("streaming");
+        expect(reply.content.length).toBeGreaterThan(0);
+        expect("a long answer that streams slowly".startsWith(reply.content)).toBe(true);
+        // every later event is ordered after the snapshot
+        await done;
+        expect(deltas.at(-1)!.seq).toBeGreaterThan(seq);
+        expect(events.at(-1)!.seq).toBeGreaterThan(seq);
+        // the snapshot is a copy: the reply kept streaming into its own
+        expect((await chat.get(c.id)).conversation.messages[1]).toMatchObject({ status: "done", content: "a long answer that streams slowly" });
+        expect(reply.status).toBe("streaming");
+    });
+
+    it("keeps a rename made while it streams", async () => {
+        fake.script = [{ content: "streaming along", chunkDelayMs: 25 }];
+        const chat = engine();
+        const c = await chat.create("tooly:latest");
+        const { done } = await chat.send(c.id, "hi");
+        await until(() => deltas.length > 0);
+        await chat.rename(c.id, "Renamed mid-reply");
+        await done;
+        expect((await store.get(c.id)).title).toBe("Renamed mid-reply");
     });
 });
 
@@ -431,6 +470,8 @@ describe("stats and rewind", () => {
         const after = await chat.rewind(c.id, second.id);
         expect(after.messages.map((m) => m.content)).toEqual(["first", "one"]);
         expect((await store.get(c.id)).messages).toHaveLength(2);
+        // windows that have this chat open are told to reload it
+        expect(resets.map((r) => r.conversationId)).toEqual([c.id]);
     });
 
     it("stops a reply in flight before rewinding, so it cannot save over the rewind", async () => {

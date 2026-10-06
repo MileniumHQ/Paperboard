@@ -48,8 +48,10 @@ export const TRIGGER_IDS = {
 
 /** Service → UI events (besides state sync). */
 export const EVENTS = {
-    // incremental text for a streaming assistant message
+    // the text so far (whole, not a diff) of a streaming assistant message
     chatDelta: "chat-delta",
     // a message was created or changed shape (tool calls, status)
     chatMessage: "chat-message",
+    // a chat's messages were rewritten (rewind); open copies reload it
+    chatReset: "chat-reset",
 } as const;

@@ -191,6 +191,38 @@ export interface Conversation {
     messages: ChatMessage[];
 }
 
+// Live chat events. `seq` orders every event the service emits against the
+// snapshot an opening window loads: events at or below a snapshot's `seq`
+// are already in it, later ones are not.
+
+/** A message was created or changed shape (tool calls, status). */
+export interface ChatMessageEvent {
+    seq: number;
+    conversationId: string;
+    message: ChatMessage;
+}
+
+/** The streaming text so far (whole, not a diff) of an assistant message. */
+export interface ChatDeltaEvent {
+    seq: number;
+    conversationId: string;
+    messageId: string;
+    content: string;
+    thinking?: string;
+}
+
+/** A chat's messages were rewritten (rewind); open copies must reload. */
+export interface ChatResetEvent {
+    seq: number;
+    conversationId: string;
+}
+
+/** A conversation as it is right now, ordered against the live events. */
+export interface ConversationSnapshot {
+    seq: number;
+    conversation: Conversation;
+}
+
 export interface PendingApproval {
     id: string; // the tool call id
     conversationId: string;

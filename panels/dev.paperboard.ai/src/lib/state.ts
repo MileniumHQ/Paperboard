@@ -6,7 +6,17 @@ import { createSignal } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import { actionsApi, createPanelBridge } from "@mileniumhq/paperapi";
 import { EVENTS, PANEL_ID, UI_ACTION_IDS } from "../contract";
-import { initialState, type AiState, type ChatMessage, type Conversation } from "../core/types";
+import { OpenChatSync } from "../core/openChat";
+import {
+    initialState,
+    type AiState,
+    type ChatDeltaEvent,
+    type ChatMessage,
+    type ChatMessageEvent,
+    type ChatResetEvent,
+    type Conversation,
+    type ConversationSnapshot,
+} from "../core/types";
 
 export const bridge = createPanelBridge<AiState>({ panelId: PANEL_ID, defaultState: initialState() });
 
@@ -62,36 +72,6 @@ const [conversation, setConversation] = createStore<{ current: Conversation | nu
 export const openConversation = () => conversation.current;
 const [openError, setOpenError] = createSignal("");
 export { openError };
-let openToken = 0;
-
-export async function openChat(id: string | null): Promise<void> {
-    const token = ++openToken;
-    setOpenError("");
-    if (!id) {
-        setConversation("current", null);
-        return;
-    }
-    try {
-        const c = await call<Conversation>(UI_ACTION_IDS.getConversation, { id });
-        if (token === openToken) setConversation("current", c);
-    } catch (err) {
-        if (token === openToken) {
-            setConversation("current", null);
-            setOpenError(errorText(err));
-        }
-    }
-}
-
-/** Erases a user message and everything after it, then shows what remains. */
-export async function rewindOpen(messageId: string): Promise<void> {
-    const c = conversation.current;
-    if (!c) return;
-    const token = openToken;
-    const after = await call<Conversation>(UI_ACTION_IDS.rewindConversation, { id: c.id, messageId });
-    // the stopped reply may have sent its last events meanwhile; the
-    // service's result is the truth, applied only if this chat is still open
-    if (token === openToken) setConversation("current", "messages", reconcile(after.messages, { key: "id" }));
-}
 
 function upsertMessage(message: ChatMessage): void {
     const c = conversation.current;
@@ -101,28 +81,66 @@ function upsertMessage(message: ChatMessage): void {
     else setConversation("current", "messages", c.messages.length, message);
 }
 
+// the open chat follows the service's live events, ordered against the
+// snapshot it was opened from (core/openChat.ts), so a reply in flight shows
+// whether this window sent it, another window or computer did, or the panel
+// was reloaded mid-reply
+const sync = new OpenChatSync({
+    fetch: (id) => call<ConversationSnapshot>(UI_ACTION_IDS.getConversation, { id }),
+    shown: () => conversation.current?.id ?? null,
+    show: (c, same) => {
+        setOpenError("");
+        // a reload of the chat on screen updates in place, not remounts
+        if (c && same) setConversation("current", reconcile(c, { key: "id" }));
+        else setConversation("current", c);
+    },
+    message: (e) => {
+        if (e.message) upsertMessage(e.message);
+    },
+    delta: (e) => {
+        const c = conversation.current;
+        if (!c) return;
+        const i = c.messages.findIndex((m) => m.id === e.messageId);
+        if (i < 0) return;
+        if (c.messages[i]!.role !== "assistant") return;
+        // a partial object merges into the stored message, so it keeps
+        // its identity and its views update in place, not remount
+        setConversation("current", "messages", i, {
+            content: e.content,
+            ...(e.thinking !== undefined ? { thinking: e.thinking } : {}),
+        });
+    },
+    failed: (err) => {
+        setConversation("current", null);
+        setOpenError(errorText(err));
+    },
+});
+
+export function openChat(id: string | null): Promise<void> {
+    setOpenError("");
+    return sync.open(id);
+}
+
+/** Erases a user message and everything after it, then shows what remains. */
+export async function rewindOpen(messageId: string): Promise<void> {
+    const c = conversation.current;
+    if (!c) return;
+    const generation = sync.generation();
+    const after = await call<Conversation>(UI_ACTION_IDS.rewindConversation, { id: c.id, messageId });
+    // the stopped reply may have sent its last events meanwhile; the
+    // service's result is the truth, applied only if this chat is still open
+    if (generation === sync.generation()) setConversation("current", "messages", reconcile(after.messages, { key: "id" }));
+}
+
 // one subscription each for the panel's lifetime; the returned teardown is
 // kept so a remount can release them
 let subscribed: (() => void)[] = [];
 export function subscribeChatEvents(): () => void {
     if (subscribed.length === 0) {
         subscribed = [
-            actionsApi.on(PANEL_ID, EVENTS.chatMessage, (p: { conversationId: string; message: ChatMessage }) => {
-                if (p?.conversationId === conversation.current?.id && p.message) upsertMessage(p.message);
-            }),
-            actionsApi.on(PANEL_ID, EVENTS.chatDelta, (p: { conversationId: string; messageId: string; content: string; thinking?: string }) => {
-                const c = conversation.current;
-                if (!c || p?.conversationId !== c.id) return;
-                const i = c.messages.findIndex((m) => m.id === p.messageId);
-                if (i < 0) return;
-                if (c.messages[i]!.role !== "assistant") return;
-                // a partial object merges into the stored message, so it keeps
-                // its identity and its views update in place, not remount
-                setConversation("current", "messages", i, {
-                    content: p.content,
-                    ...(p.thinking !== undefined ? { thinking: p.thinking } : {}),
-                });
-            }),
+            actionsApi.on(PANEL_ID, EVENTS.chatMessage, (e: ChatMessageEvent) => sync.onMessage(e)),
+            actionsApi.on(PANEL_ID, EVENTS.chatDelta, (e: ChatDeltaEvent) => sync.onDelta(e)),
+            actionsApi.on(PANEL_ID, EVENTS.chatReset, (e: ChatResetEvent) => sync.onReset(e)),
         ];
     }
     return () => {

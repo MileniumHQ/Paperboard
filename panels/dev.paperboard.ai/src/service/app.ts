@@ -33,6 +33,7 @@ import {
     DEFAULT_SETTINGS,
     type AiState,
     type Conversation,
+    type ConversationSnapshot,
     type ModelSpeed,
     type PromptStyle,
     type ProviderChoice,
@@ -269,6 +270,7 @@ export class AiApp {
             runShell: (command, signal) => runShell(command, signal),
             onDelta: (payload) => this.ctx.emit(EVENTS.chatDelta, payload),
             onMessage: (payload) => this.ctx.emit(EVENTS.chatMessage, payload),
+            onReset: (payload) => this.ctx.emit(EVENTS.chatReset, payload),
             onSummaries: (conversations) => this.ctx.setState({ conversations }),
             onGenerating: (generating) => this.ctx.setState({ generating }),
             onApprovals: (approvals) => this.ctx.setState({ approvals }),
@@ -397,22 +399,23 @@ export class AiApp {
         return this.chat.create(chosen);
     }
 
-    getConversation(id: string): Promise<Conversation> {
+    /** What a window shows when it opens a chat, replies in flight included. */
+    getConversation(id: string): Promise<ConversationSnapshot> {
         if (!isConversationId(id)) throw new Error("Unknown chat.");
-        return this.store.get(id);
+        return this.chat.get(id);
     }
 
     async renameConversation(id: string, title: string): Promise<void> {
+        if (!isConversationId(id)) throw new Error("Unknown chat.");
         const clean = title.replace(/\s+/g, " ").trim().slice(0, 80);
         if (!clean) throw new Error("A chat needs a name.");
-        const c = await this.getConversation(id);
-        c.title = clean;
-        this.ctx.setState({ conversations: await this.store.save(c) });
+        await this.chat.rename(id, clean);
     }
 
     async setConversationModel(id: string, model: string): Promise<void> {
+        if (!isConversationId(id)) throw new Error("Unknown chat.");
         if (this.ctx.state.generating.includes(id)) throw new Error("Wait for the reply to finish before switching models.");
-        const c = await this.getConversation(id);
+        const c = await this.store.get(id);
         c.model = this.normalizeModelRef(model);
         this.ctx.setState({ conversations: await this.store.save(c) });
     }

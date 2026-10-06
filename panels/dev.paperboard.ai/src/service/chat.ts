@@ -36,8 +36,12 @@ import {
 import type {
     AssistantMessage,
     Attachment,
+    ChatDeltaEvent,
     ChatMessage,
+    ChatMessageEvent,
+    ChatResetEvent,
     Conversation,
+    ConversationSnapshot,
     ConversationSummary,
     PendingApproval,
     Settings,
@@ -72,8 +76,9 @@ export interface ChatDeps {
     webSearch: (query: string, signal: AbortSignal) => Promise<SearchResult[]>;
     runShell: (command: string, signal: AbortSignal) => Promise<{ stdout: string; stderr: string; exitCode: number }>;
     // outputs
-    onDelta: (payload: { conversationId: string; messageId: string; content: string; thinking?: string }) => void;
-    onMessage: (payload: { conversationId: string; message: ChatMessage }) => void;
+    onDelta: (payload: ChatDeltaEvent) => void;
+    onMessage: (payload: ChatMessageEvent) => void;
+    onReset: (payload: ChatResetEvent) => void;
     onSummaries: (list: ConversationSummary[]) => void;
     onGenerating: (ids: string[]) => void;
     onApprovals: (list: PendingApproval[]) => void;
@@ -84,6 +89,8 @@ export interface ChatDeps {
 interface Active {
     abort: AbortController;
     done: Promise<void>;
+    /** the reply's working copy: newer than the last save until it ends */
+    conversation: Conversation;
 }
 
 interface Waiting {
@@ -96,8 +103,14 @@ export class ChatEngine {
     /** chats being rewound; a send must not interleave with the rewrite */
     private rewinding = new Set<string>();
     private waiting = new Map<string, Waiting>();
+    /** orders every live event against the snapshots `get` hands out */
+    private seq = 0;
 
     constructor(private readonly deps: ChatDeps) {}
+
+    private emitMessage(conversationId: string, message: ChatMessage): void {
+        this.deps.onMessage({ seq: ++this.seq, conversationId, message });
+    }
 
     get generating(): string[] {
         return [...this.active.keys()];
@@ -113,6 +126,31 @@ export class ChatEngine {
 
     private publishApprovals(): void {
         this.deps.onApprovals(this.approvals);
+    }
+
+    /**
+     * A conversation as it is now. A replying chat's file lags its reply
+     * (the streaming message is saved when its round ends), so the reply's
+     * working copy is the truth; reading the file would drop the streaming
+     * message and, worse, mark a mid-reply save as interrupted.
+     */
+    async get(conversationId: string): Promise<ConversationSnapshot> {
+        // taken before the read: an event racing the read is replayed by
+        // the opener rather than lost (replaying a full message is idempotent)
+        const seq = this.seq;
+        const live = this.active.get(conversationId)?.conversation;
+        if (live) return { seq, conversation: structuredClone(live) };
+        return { seq, conversation: await this.deps.store.get(conversationId) };
+    }
+
+    /**
+     * Renames a chat. A replying chat is renamed on the reply's working copy,
+     * or the reply's next save would write the old title back.
+     */
+    async rename(conversationId: string, title: string): Promise<void> {
+        const conversation = this.active.get(conversationId)?.conversation ?? (await this.deps.store.get(conversationId));
+        conversation.title = title;
+        this.deps.onSummaries(await this.deps.store.save(conversation));
     }
 
     async create(model: string): Promise<Conversation> {
@@ -163,7 +201,7 @@ export class ChatEngine {
         conversation.messages.push(user);
         conversation.updatedAt = Date.now();
         this.deps.onSummaries(await this.deps.store.save(conversation));
-        this.deps.onMessage({ conversationId, message: user });
+        this.emitMessage(conversationId, user);
 
         const reasoning = opts.reasoning ?? this.deps.settings().reasoning;
         const abort = new AbortController();
@@ -171,7 +209,7 @@ export class ChatEngine {
             this.active.delete(conversationId);
             this.publishActive();
         });
-        this.active.set(conversationId, { abort, done });
+        this.active.set(conversationId, { abort, done, conversation });
         this.publishActive();
         return { messageId: user.id, done };
     }
@@ -191,6 +229,8 @@ export class ChatEngine {
             conversation.messages = conversation.messages.slice(0, i);
             conversation.updatedAt = Date.now();
             this.deps.onSummaries(await this.deps.store.save(conversation));
+            // other windows showing this chat still hold the erased messages
+            this.deps.onReset({ seq: ++this.seq, conversationId });
             return conversation;
         } finally {
             this.rewinding.delete(conversationId);
@@ -245,7 +285,7 @@ export class ChatEngine {
                     const notice = this.startAssistant(conversation);
                     notice.status = "error";
                     notice.error = `Stopped after ${MAX_TOOL_ROUNDS} rounds of actions in one reply.`;
-                    deps.onMessage({ conversationId: conversation.id, message: notice });
+                    this.emitMessage(conversation.id, notice);
                     await save();
                     return;
                 }
@@ -275,12 +315,12 @@ export class ChatEngine {
 
                 current = this.startAssistant(conversation);
                 const message = current;
-                deps.onMessage({ conversationId: conversation.id, message });
+                this.emitMessage(conversation.id, message);
                 const calls = await this.stream(conversation, message, history, tools, capabilities, think, signal);
 
                 if (calls.length === 0) {
                     message.status = "done";
-                    deps.onMessage({ conversationId: conversation.id, message });
+                    this.emitMessage(conversation.id, message);
                     await save();
                     deps.onReplyFinished({
                         conversationId: conversation.id,
@@ -292,16 +332,16 @@ export class ChatEngine {
                 }
 
                 message.toolCalls = calls.slice(0, MAX_CALLS_PER_ROUND).map((c) => this.planCall(c, tools, offered));
-                deps.onMessage({ conversationId: conversation.id, message });
+                this.emitMessage(conversation.id, message);
                 await save();
                 for (const call of message.toolCalls) {
                     if (signal.aborted) throw new DOMException("Stopped", "AbortError");
                     await this.runCall(conversation, message, call, tools, signal);
-                    deps.onMessage({ conversationId: conversation.id, message });
+                    this.emitMessage(conversation.id, message);
                     await save();
                 }
                 message.status = "done";
-                deps.onMessage({ conversationId: conversation.id, message });
+                this.emitMessage(conversation.id, message);
             }
         } catch (err) {
             if (current && current.status === "streaming") {
@@ -314,7 +354,7 @@ export class ChatEngine {
                         t.result = aborted ? "Stopped by the user before it ran." : "Not run: the reply failed.";
                     }
                 }
-                deps.onMessage({ conversationId: conversation.id, message: current });
+                this.emitMessage(conversation.id, current);
             }
             await save().catch((saveErr) => console.error("[ai] saving the failed reply failed:", String(saveErr)));
         }
@@ -348,6 +388,7 @@ export class ChatEngine {
         const flush = () => {
             timer = null;
             this.deps.onDelta({
+                seq: ++this.seq,
                 conversationId: conversation.id,
                 messageId: message.id,
                 content: message.content,
@@ -458,7 +499,7 @@ export class ChatEngine {
         } else if (!builtin && this.deps.isAllowed(key)) {
             decision = "remembered";
         } else {
-            this.deps.onMessage({ conversationId: conversation.id, message });
+            this.emitMessage(conversation.id, message);
             decision = await new Promise<ApprovalDecision | "cancelled">((resolve) => {
                 const approval: PendingApproval = {
                     id: call.id,
@@ -492,7 +533,7 @@ export class ChatEngine {
         if (decision === "always") await this.deps.rememberAllowed(key);
         if (decision !== "unasked") call.decision = decision;
         call.status = "running";
-        this.deps.onMessage({ conversationId: conversation.id, message });
+        this.emitMessage(conversation.id, message);
         try {
             if (builtin === "web_search") {
                 const query = call.arguments.query as string;
