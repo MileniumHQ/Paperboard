@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "bun run build && wrangler dev",
-    "build": "tsc -b && vite build -c vite.site.client.config.ts && vite build -c vite.site.config.ts && bun scripts/prerender-site.mjs && node scripts/check-learn-artifacts.mjs",
+    "build": "tsc -b && vite build -c vite.site.client.config.ts && vite build -c vite.site.config.ts && bun scripts/prerender-site.mjs && node scripts/check-marketing-artifacts.mjs",
     "test": "bun test",
     "deploy": "bun run build && wrangler deploy",
     "test:browser": "node scripts/check-learn-browser.mjs",

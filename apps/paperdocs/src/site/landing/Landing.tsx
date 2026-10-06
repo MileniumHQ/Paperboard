@@ -248,6 +248,17 @@ export function Footer() {
                     </a>
                 </div>
             </div>
+            <div class="site-footer__legal">
+                <p>
+                    Paperboard is an independent project. It is not affiliated with,
+                    endorsed by, or sponsored by Mojang Studios, Microsoft, or
+                    Minecraft.
+                </p>
+                <p>
+                    Paperboard is not affiliated with, endorsed by, or sponsored by
+                    Discord Inc.
+                </p>
+            </div>
         </footer>
     );
 }
@@ -273,68 +284,76 @@ export function Landing() {
 
             <main class="page-layout">
                 <section class="hero-section">
-                    <MarketingHeading level={1} text="Do more with your computer" size={90} />
+                    <MarketingHeading level={1} text="Do more with your computer." size={90} />
                     <p class="hero-sub">Paperboard is an all-in-one toolkit for self-hosting.</p>
                     <DownloadCta />
                 </section>
 
-                <section class="showcase-section">
-                    <div class="preview-card screenshot-card">
-                        <div class="card-image-frame">
-                            <div class="card-slides-track">
-                                <For each={SLIDES}>
-                                    {(slide) => (
-                                        <div
-                                            class="card-slide"
-                                            data-slide-title={slide.title}
-                                            data-slide-description={slide.description}
-                                        >
-                                            <Screenshot
-                                                src={slide.src}
-                                                alt={slide.alt}
-                                                class="card-slide-image"
-                                                eager
-                                            />
-                                        </div>
-                                    )}
-                                </For>
+                {/* The showcase holds still for a short scroll so its copy can be
+                    read before the stage transition takes over. */}
+                <div class="showcase-hold">
+                    <section class="showcase-section">
+                        <div class="preview-card screenshot-card">
+                            <div class="card-image-frame">
+                                <div class="card-slides-track">
+                                    <For each={SLIDES}>
+                                        {(slide) => (
+                                            <div
+                                                class="card-slide"
+                                                data-slide-title={slide.title}
+                                                data-slide-description={slide.description}
+                                            >
+                                                <Screenshot
+                                                    src={slide.src}
+                                                    alt={slide.alt}
+                                                    class="card-slide-image"
+                                                    eager
+                                                />
+                                            </div>
+                                        )}
+                                    </For>
+                                </div>
+                            </div>
+                            <div class="card-caption">
+                                <span class="caption-title">Game Server</span>
+                                <span class="caption-separator" aria-hidden="true">
+                                    ·
+                                </span>
+                                <span class="caption-desc">Host and manage your Minecraft server.</span>
                             </div>
                         </div>
-                        <div class="card-caption">
-                            <span class="caption-title">Game Server</span>
-                            <span class="caption-separator" aria-hidden="true">
-                                ·
-                            </span>
-                            <span class="caption-desc">Host and manage your Minecraft server.</span>
+
+                        <div class="dots-bar">
+                            <div class="card-texture-layer" innerHTML={CARD_NOISE_FILTER} />
+                            <For each={SLIDES}>
+                                {(_, index) => (
+                                    <button class="dot" aria-label={`Slide ${index() + 1}`}>
+                                        <div class="dot-progress" />
+                                    </button>
+                                )}
+                            </For>
                         </div>
-                    </div>
 
-                    <div class="dots-bar">
-                        <div class="card-texture-layer" innerHTML={CARD_NOISE_FILTER} />
-                        <For each={SLIDES}>
-                            {(_, index) => (
-                                <button class="dot" aria-label={`Slide ${index() + 1}`}>
-                                    <div class="dot-progress" />
-                                </button>
-                            )}
-                        </For>
-                    </div>
-
-                    <div class="showcase-content">
-                        <MarketingHeading level={2} text="Your tools, together" size={54} />
-                        <p>
-                            Run a Minecraft server, build a Discord bot, or chat with local AI. Each
-                            panel gives you a clear interface for one job.
-                        </p>
-                    </div>
-                </section>
+                        <div class="showcase-content">
+                            <MarketingHeading level={2} text="Your local-first tool for everything." size={54} />
+                            <p>
+                                Paperboard has various apps (called panels) that simplify a variety of
+                                local tasks into simple, clean interfaces that run entirely on your
+                                computer. You don't need any terminal knowledge or programming
+                                experience; Paperboard works instantaneously and can be set up faster
+                                than you can read this paragraph.
+                            </p>
+                        </div>
+                    </section>
+                </div>
 
                 <section class="stage-section">
                     <div class="stage-copy">
-                        <MarketingHeading level={2} text="Use your other computers" size={54} />
+                        <MarketingHeading level={2} text="Paperboard runs anywhere." size={54} />
                         <p>
-                            Pair another computer and manage its panels from your desktop. Put an
-                            old laptop, a home server, or a Raspberry Pi to work.
+                            Paperboard is 100% compatible with macOS, Windows, and Linux on both x86
+                            and ARM. You can run Paperboard on a VPS, an old laptop, or a Raspberry
+                            Pi and control it as if it were running locally on your primary desktop.
                         </p>
                     </div>
                 </section>
@@ -344,10 +363,11 @@ export function Landing() {
                 <section class="cta-section">
                     <div class="cta-shell">
                         <div class="cta-copy">
-                            <MarketingHeading level={2} text="Build your own panel" size={54} />
+                            <MarketingHeading level={2} text="Devs: We're Open!" size={54} />
                             <p>
-                                Use Solid components and the Paperboard API to build panels. Start
-                                with a template and follow the documentation.
+                                Paperboard's APIs are completely documented and MIT licensed, so
+                                developers can create their own panels with ease. Just run a command
+                                and get started with a panel template in seconds.
                             </p>
                             <div class="cta-actions">
                                 <div class="paper-button-host" innerHTML={docsButtonHtml} />
@@ -366,7 +386,7 @@ export function Landing() {
 
                 <section class="outro-section" data-play-field>
                     <div class="outro-copy">
-                        <MarketingHeading level={2} text="All this and more" size={72} />
+                        <MarketingHeading level={2} text="All this and more." size={72} />
                         <DownloadCta />
                     </div>
                     <For each={PLAY_ICONS}>
