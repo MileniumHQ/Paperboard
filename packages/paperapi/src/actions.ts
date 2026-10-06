@@ -31,6 +31,19 @@ export interface TriggerEventPayload<T = unknown> {
     output: T;
 }
 
+export interface ActionCallOptions {
+    /**
+     * How long the call may wait for the action to finish, in milliseconds.
+     * Defaults to 30_000; the daemon refuses a numeric value above 60_000.
+     * `null` opts out of the deadline and waits for completion — for actions
+     * that legitimately run long (installing a runtime, a large download).
+     * Such a call is still bounded by the transport's outstanding-call cap.
+     * Any other fields are forwarded to the handler as its second argument.
+     */
+    timeoutMs?: number | null;
+    [key: string]: unknown;
+}
+
 export const actionsApi = {
     defineAction,
 
@@ -42,20 +55,31 @@ export const actionsApi = {
 
     /**
      * Calls an action registered on a target panel (or the current panel).
+     *
+     * `options.timeoutMs` overrides the default 30 s deadline; pass `null`
+     * for an action that runs long and should be waited out (the daemon's
+     * outstanding-call cap still bounds how many such calls queue). The
+     * remaining option fields are forwarded to the handler unchanged.
      */
     call: async <T = unknown>(
         targetPanel: string,
         actionName: string,
         inputs?: any,
-        options?: any,
+        options?: ActionCallOptions,
     ): Promise<T> => {
         const transport = getTransport();
         await transport.ensureConnected();
-        const res = await transport.call("actions:call", {
-            panelId: targetPanel,
-            action: actionName,
-            args: [inputs, options],
-        });
+        const { timeoutMs = 30_000, ...handlerOptions } = options ?? {};
+        const res = await transport.call(
+            "actions:call",
+            {
+                panelId: targetPanel,
+                action: actionName,
+                args: [inputs, Object.keys(handlerOptions).length ? handlerOptions : undefined],
+                timeoutMs,
+            },
+            timeoutMs,
+        );
         return res?.result as T;
     },
 

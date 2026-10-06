@@ -8,9 +8,14 @@ import { assertPanelId, assertStr, assertOptStr, assertNum, InvalidParamsError, 
 // PaperAPI MAX_PENDING_CALLS = 1000)
 const ACTIONS_CALL_TIMEOUT_MAX_MS = 60_000;
 
-// a longer timeout than this is refused at the rpc boundary, not clamped
-// silently: typed INVALID_PARAMS below, the wire answers the caller.
-export function assertCallTimeout(value: unknown, name: string, fallback?: number): number {
+// A numeric timeout longer than this is refused at the rpc boundary, not
+// clamped silently: typed INVALID_PARAMS below, the wire answers the caller.
+// An explicit `null` opts the call out of the deadline entirely — long work
+// (installing a runtime) reports progress and completion through panel state
+// rather than holding a caller's socket open, but callers that must wait may
+// do so. The outstanding-call cap, not the timer, is the budget then.
+export function assertCallTimeout(value: unknown, name: string, fallback?: number): number | null {
+    if (value === null) return null;
     const n = assertNum(value, name, fallback);
     if (n > ACTIONS_CALL_TIMEOUT_MAX_MS) {
         throw new InvalidParamsError(

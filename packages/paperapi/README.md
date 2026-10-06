@@ -49,6 +49,8 @@ bridge.onStateChange((patch, full) => render(full));
 
 await bridge.call("increment"); // action call to this panel's service
 const out = await bridge.actions.increment(); // same thing via proxy
+// a long-running action: wait past the 30 s default instead of failing
+await bridge.call("install", undefined, { timeoutMs: null });
 
 // release the subscription and listeners when the component unmounts
 bridge.dispose();
@@ -169,10 +171,18 @@ const offT = actionsApi.onTrigger(
 | Call family | Timeout |
 | --- | --- |
 | most routing-table invokes (`terminal-*`, `file-*`, `config-*`, `secrets-*`, `system-*`, `package-*`, `panels-list`) | 30 s |
+| `actions:call` | 30 s by default; `options.timeoutMs` sets it, up to a 60 s cap, or `null` to wait for a long-running action |
 | `panel-uninstall` | none — the daemon may take longer than 30 s to finish shredding |
 | `panel-install`, `file-download`, `package-download` | none (long-running, progress events streamed) |
 | registry index fetch | 10 s, with a 1 MB stream-bound size cap |
-| outsanding call cap | 1000 queued calls transport-wide; past that new calls refuse |
+| outstanding call cap | 1000 queued calls transport-wide; past that new calls refuse |
+
+`actionsApi.call(targetPanel, action, inputs, options)` and `bridge.call` take
+an `options.timeoutMs`. A numeric value above 60 s is refused at the daemon
+boundary with a typed error; `null` removes the deadline for an action that
+legitimately runs long. The outstanding-call cap, not the timer, is the budget
+then — prefer acknowledging long work and reporting progress through state
+over holding a caller's socket open.
 
 ## Trust model
 

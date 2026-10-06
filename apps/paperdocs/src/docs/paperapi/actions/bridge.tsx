@@ -92,7 +92,7 @@ export function PanelView() {
                     <tr>
                         <td><PaperCode>call(action, ...args)</PaperCode></td>
                         <td><PaperCode>&lt;R&gt;(action: string, ...args: any[]) =&gt; Promise&lt;R&gt;</PaperCode></td>
-                        <td>Explicitly calls a named action on the service without using the proxy.</td>
+                        <td>Explicitly calls a named action on the service without using the proxy. The last argument may be <PaperCode>{"{ timeoutMs }"}</PaperCode> — numeric up to 60 s, or <PaperCode>null</PaperCode> to wait for long work.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>getStatus()</PaperCode></td>

@@ -27,7 +27,9 @@ export interface PendingActionCall {
     action: string;
     resolve: (result: unknown) => void;
     reject: (error: Error) => void;
-    timer: ReturnType<typeof setTimeout>;
+    // undefined when the caller opted out of a deadline (timeoutMs null):
+    // teardown then depends on the reply or the socket closing
+    timer: ReturnType<typeof setTimeout> | undefined;
     callerWs: WebSocket;
     // the socket the action is registered on: the only socket whose
     // action_reply may settle this call
@@ -192,7 +194,7 @@ export class ActionsRegistry {
         action: string,
         args: unknown[] = [],
         callerWs: WebSocket,
-        timeoutMs: number = 30_000,
+        timeoutMs: number | null = 30_000,
         callerPanelId: string | null = null,
     ): Promise<unknown> {
         const key = this.actionKey(panelId, action);
@@ -238,18 +240,25 @@ export class ActionsRegistry {
         }
 
         return new Promise((resolve, reject) => {
-            const timer = setTimeout(() => {
-                const held = this.socketPendingCalls.get(callerWs);
-                held?.delete(callId);
-                if (held && held.size === 0) this.socketPendingCalls.delete(callerWs);
-                this.pendingCalls.delete(callId);
-                reject(
-                    new Error(
-                        `Action call "${panelId}:${action}" timed out after ${timeoutMs}ms`,
-                    ),
-                );
-            }, timeoutMs);
-            timer.unref?.();
+            // null = no deadline: the caller asked to wait for completion,
+            // so no timer is armed. handleReply / handleSocketClose still
+            // settle and free the slot, and the pending-call caps bound how
+            // many such calls can be outstanding at once.
+            const timer =
+                timeoutMs === null
+                    ? undefined
+                    : setTimeout(() => {
+                          const held = this.socketPendingCalls.get(callerWs);
+                          held?.delete(callId);
+                          if (held && held.size === 0) this.socketPendingCalls.delete(callerWs);
+                          this.pendingCalls.delete(callId);
+                          reject(
+                              new Error(
+                                  `Action call "${panelId}:${action}" timed out after ${timeoutMs}ms`,
+                              ),
+                          );
+                      }, timeoutMs);
+            timer?.unref?.();
 
             this.pendingCalls.set(callId, {
                 callId,

@@ -48,7 +48,7 @@ const result = await actionsApi.call<string>(
                     <tr>
                         <td><PaperCode>call</PaperCode></td>
                         <td><PaperCode>call&lt;T&gt;(targetPanel, actionName, inputs?, options?): Promise&lt;T&gt;</PaperCode></td>
-                        <td>Calls an RPC action registered on a target panel and resolves its returned value.</td>
+                        <td>Calls an RPC action registered on a target panel and resolves its returned value. <PaperCode>options.timeoutMs</PaperCode> overrides the 30 s default (numeric up to 60 s, or <PaperCode>null</PaperCode> to wait for long work).</td>
                     </tr>
                     <tr>
                         <td><PaperCode>register</PaperCode></td>
@@ -99,6 +99,22 @@ const result = await actionsApi.call<string>(
                 Wildcard subscriptions using "*" are refused: subscribe to an explicit panel id and event name.
                 Every subscription returns a disposal function to guarantee bounded listener lifetimes.
             </PaperText>
+
+            <PaperText preset="subheader" id="timeouts">Timeouts</PaperText>
+            <PaperText preset="body">
+                An action call waits at most 30 seconds by default. Pass options.timeoutMs to change it:
+                a numeric value up to 60_000 is honored, a larger one is refused with a typed error, and
+                null waits for completion. Use null for an action that legitimately runs long — an install
+                or a large download — and prefer acknowledging the work and reporting progress through
+                panel state over holding the call open. Long calls still count against the transport's
+                1000-outstanding-call cap.
+            </PaperText>
+            <PaperCode block language="tsx">
+{`// wait for a slow install instead of failing at 30 s
+await actionsApi.call("dev.example.runtime", "install", { version: "1.2.0" }, {
+    timeoutMs: null,
+});`}
+            </PaperCode>
 
             <PaperText preset="subheader" id="recipes">Recipes</PaperText>
             <PaperText preset="body">

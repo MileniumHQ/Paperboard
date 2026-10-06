@@ -4,7 +4,7 @@
 // be refused BEFORE the call is queued.
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { ActionsRegistry, actionsRegistry, MAX_PENDING_CALLS, MAX_PENDING_CALLS_PER_SOCKET } from "../papercrane/actions";
-import { handleActions } from "../papercrane/rpc/actions";
+import { handleActions, assertCallTimeout } from "../papercrane/rpc/actions";
 
 function fakeWs(ok = true) {
     return {
@@ -183,5 +183,63 @@ describe("rpc timeout clamp", () => {
         reg.handleSocketClose((ctx as any).ws);
         await atCap;
         reg.unregister("clamp-target", "ping");
+    });
+});
+
+describe("explicit no-timeout action calls", () => {
+    it("assertCallTimeout: null opts out, undefined falls back, numeric is capped", () => {
+        expect(assertCallTimeout(null, "timeoutMs", 30_000)).toBeNull();
+        expect(assertCallTimeout(undefined, "timeoutMs", 30_000)).toBe(30_000);
+        expect(assertCallTimeout(45_000, "timeoutMs", 30_000)).toBe(45_000);
+        expect(() => assertCallTimeout(60_001, "timeoutMs", 30_000)).toThrow(/cap/);
+    });
+
+    it("a null-timeout call waits for the reply instead of timing out", async () => {
+        const reg = new ActionsRegistry();
+        const handlerWs = fakeWs();
+        reg.register("target", "slow", handlerWs);
+        const callerWs = fakeWs();
+        let settled: unknown = "pending";
+        const p = reg.call("target", "slow", [], callerWs, null).then(
+            (r) => {
+                settled = r;
+            },
+            (e) => {
+                settled = e;
+            },
+        );
+        // no timer is armed, so nothing settles the call on its own
+        await new Promise((r) => setTimeout(r, 20));
+        expect(settled).toBe("pending");
+        // the target's reply is what settles it
+        const callId = (JSON.parse(sendLogs[0]) as { callId: string }).callId;
+        reg.handleReply(callId, { done: true }, undefined, handlerWs);
+        await p;
+        expect(settled).toEqual({ done: true });
+    });
+
+    it("handleActions forwards an explicit null to the registry, not the 30s default", async () => {
+        const reg = actionsRegistry;
+        reg.register("null-target", "ping", fakeWs());
+        let seen: number | null | undefined;
+        // call the prototype method directly: an earlier test may have left
+        // its own spy on the shared singleton
+        const realCall = ActionsRegistry.prototype.call;
+        (reg as any).call = (...args: any[]) => {
+            seen = args[4];
+            return realCall.apply(reg, args);
+        };
+        const ctx = {
+            ws: fakeWs(),
+            callerPanelId: () => null,
+            reply: () => undefined,
+            broadcastEvent: () => undefined,
+        };
+        const call = handleActions("actions:call", 1, { panelId: "null-target", action: "ping", timeoutMs: null }, ctx as any).catch(() => undefined);
+        expect(seen).toBeNull();
+        reg.handleSocketClose((ctx as any).ws);
+        await call;
+        delete (reg as any).call;
+        reg.unregister("null-target", "ping");
     });
 });
