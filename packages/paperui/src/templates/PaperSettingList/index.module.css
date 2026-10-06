@@ -49,3 +49,14 @@
     pointer-events: none;
     opacity: 0.5;
 }
+
+/* Multiline fields need the whole row, including when added dynamically. */
+.PaperSettingItem:has(textarea) {
+    flex-direction: column;
+    align-items: stretch;
+}
+
+.PaperSettingItem:has(textarea) > :last-child {
+    width: 100%;
+    min-width: 0;
+}
