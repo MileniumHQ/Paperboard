@@ -24,6 +24,7 @@ export const SHELL_SEND_CHANNELS = [
     "app-settings-changed",
     "relaunch-for-update",
     "quit-and-install",
+    "quit-app",
     "renderer-log",
 ] as const;
 

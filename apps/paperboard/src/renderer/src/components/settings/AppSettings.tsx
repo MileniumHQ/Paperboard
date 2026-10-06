@@ -125,6 +125,20 @@ export default function AppSettings(props: {
                             </PaperButton>
                         </PaperEffect>
                     </PaperSettingItem>
+
+                    <PaperSettingItem
+                        title="Quit App"
+                        description="Fully exits Paperboard. Your panel services keep running on their computers; reopen Paperboard to connect again."
+                    >
+                        <PaperButton
+                            variant="danger"
+                            onClick={() => shellIpc().send("quit-app")}
+                            aria-label="Quit Paperboard"
+                        >
+                            <PaperIcon>close</PaperIcon>
+                            Quit App
+                        </PaperButton>
+                    </PaperSettingItem>
                 </Show>
             </PaperSettingList>
 

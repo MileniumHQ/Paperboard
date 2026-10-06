@@ -112,4 +112,13 @@ export default function registerShellIpc(ipcMain: IpcMain) {
         }
         app.quit();
     });
+
+    // full quit from the settings UI: the same path as the tray/menu Quit
+    ipcMain.on("quit-app", (event) => {
+        if (isRefusedFrame(event)) {
+            logger.warn('[Shell] PANEL_IPC_REFUSED: channel "quit-app" is shell-only');
+            return;
+        }
+        app.quit();
+    });
 }

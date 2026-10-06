@@ -83,4 +83,25 @@ describe("shell IPC panel-origin refusal", () => {
         }
         expect(Object.keys(listeners).length).toBeGreaterThan(0);
     });
+
+    it("quit-app quits the app for shell frames", async () => {
+        const electron = (await import("electron")) as any;
+        const { SHELL_ORIGIN } = await import("../src/main/shellAssets");
+        const { default: registerShellIpc } = await import(
+            "../src/main/communication/shelldata"
+        );
+        registerShellIpc(fakeIpcMain() as any);
+
+        let quitCalls = 0;
+        const realQuit = electron.app.quit;
+        electron.app.quit = () => {
+            quitCalls++;
+        };
+        try {
+            await listeners["quit-app"]({ senderFrame: { url: SHELL_ORIGIN } });
+        } finally {
+            electron.app.quit = realQuit;
+        }
+        expect(quitCalls).toBe(1);
+    });
 });
