@@ -9,6 +9,7 @@ import { PaperCraneAuth } from "../papercrane/auth";
 import { setupWebSocketServer } from "../papercrane/ws";
 import { initPaperApi, closeTransport, actionsApi, config, getTransport } from "@mileniumhq/paperapi";
 import { commandTriggerId } from "../../../panels/dev.paperboard.botcreator/src/types";
+import { createCanvasSync } from "../../../panels/dev.paperboard.actions/src/lib/canvasSync";
 
 test("startup cannot overwrite an accepted flow sync; slash commands stay scoped and shared events run once", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "flow-wire-"));
@@ -25,6 +26,11 @@ test("startup cannot overwrite an accepted flow sync; slash commands stay scoped
     const heldRead = new Promise<void>((resolve) => { releaseRead = resolve; });
     const reading = new Promise<void>((resolve) => { readStarted = resolve; });
     let serviceReady: Promise<void> | undefined;
+    const sync = createCanvasSync<{ flows: any[]; functions: any[] }>({
+        save: (snapshot) => config.set(snapshot, "dev.paperboard.actions", "canvas.json"),
+        apply: (snapshot) => actionsApi.call("dev.paperboard.actions", "sync-flows", snapshot),
+        onState: () => {},
+    });
     try {
         await initPaperApi({ port: (wss.address() as any).port, token, computerId: "local", panelId: "dev.paperboard.actions" });
         await config.set({ flows: [], functions: [] }, "dev.paperboard.actions", "canvas.json");
@@ -73,16 +79,19 @@ test("startup cannot overwrite an accepted flow sync; slash commands stay scoped
             expect(starts.sort()).toEqual(expected.sort());
         };
         await emit(commands[0].action.id, ["first"]);
-        await actionsApi.call("dev.paperboard.actions", "sync-flows", { flows: commands, functions: [] });
+        sync.schedule({ flows: commands, functions: [] });
+        expect(await sync.flush()).toEqual({ ok: true });
+        expect((await config.get<any>("dev.paperboard.actions", "canvas.json")).flows).toEqual(commands);
         await emit(commands[1].action.id, ["second"]);
         await emit(commands[0].action.id, ["first"]);
-        await actionsApi.call("dev.paperboard.actions", "sync-flows", { flows, functions: [] });
+        sync.schedule({ flows, functions: [] });
+        expect(await sync.flush()).toEqual({ ok: true });
         await emit("on-message", ["first", "second"]);
         bot.terminate();
         await actionsApi.call("dev.paperboard.actions", "sync-flows", { flows: [], functions: [] });
         await getTransport("local").call("system:info");
     } finally {
-        releaseRead(); config.get = originalGet;
+        sync.dispose(); releaseRead(); config.get = originalGet;
         try {
             await serviceReady;
             await getTransport("local").call("system:info");

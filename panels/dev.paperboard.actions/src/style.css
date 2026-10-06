@@ -1024,6 +1024,17 @@ body,
     pointer-events: auto;
 }
 
+.canvas-sync-status {
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap-half);
+    max-width: 360px;
+    padding: var(--paper-uigap);
+    color: var(--paper-text);
+    background: var(--paper-surface);
+    border-radius: var(--paper-border-radius);
+}
+
 .canvas-console-panel {
     width: 20rem;
     max-height: 15rem;

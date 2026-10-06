@@ -27,6 +27,7 @@ import {
     type ActionInfo,
 } from "@mileniumhq/paperapi";
 import { ACTIONS_PANEL_ID } from "./panelId";
+import { createCanvasSync, type CanvasSyncState } from "./lib/canvasSync";
 import { variableFieldIcon } from "./lib/variableTypes";
 import { filterPickerItems } from "./lib/variablePicker";
 import { BUILTIN_SCHEMA_ENTRIES } from "./lib/builtins";
@@ -523,6 +524,8 @@ export default function App() {
 
     const handleTestRunFlow = async (triggerBlock: CanvasBlock, payload: any) => {
         try {
+            const synced = await canvasSync.flush();
+            if (!synced.ok) throw new Error(synced.message);
             const log = await actionsApi.call<any>(
                 ACTIONS_PANEL_ID,
                 "test-run-flow",
@@ -566,45 +569,30 @@ export default function App() {
         }
     };
 
-    let saveTimer: ReturnType<typeof setTimeout> | undefined;
-    // a pending debounced save must never fire after unmount
-    onCleanup(() => clearTimeout(saveTimer));
-    // canvas payloads are plain shapes; blocks may be a Solid store proxy,
-    // which structuredClone rejects — fall back to the parse/stringify
-    // roundtrip that handles the proxy read-through
-    const deepClone = <T,>(value: T): T => {
-        if (typeof structuredClone === "function") {
-            try {
-                return structuredClone(value);
-            } catch (err) {
-                console.debug("[actions] structuredClone rejected (store proxy?), falling back to JSON clone");
-            }
-        }
-        try {
-            return JSON.parse(JSON.stringify(value)) as T;
-        } catch (err) {
-            console.error("[Actions] deep clone of canvas data failed; saving shared object:", err);
-            return value;
-        }
-    };
+    const [syncState, setSyncState] = createSignal<CanvasSyncState>({ status: "applied" });
+    const [canvasLoaded, setCanvasLoaded] = createSignal(false);
+    const [canvasLoadError, setCanvasLoadError] = createSignal<string | null>(null);
+    let disposed = false;
+    const canvasSync = createCanvasSync<{
+        flows: CanvasBlock[];
+        notes: CanvasNote[];
+        functions: FunctionDef[];
+    }>({
+        save: (snapshot) => configApi.set(snapshot, ACTIONS_PANEL_ID, "canvas.json"),
+        apply: (snapshot) => actionsApi.call(ACTIONS_PANEL_ID, "sync-flows", {
+            flows: snapshot.flows,
+            functions: snapshot.functions,
+        }),
+        onState: setSyncState,
+    });
+    onCleanup(() => { disposed = true; canvasSync.dispose(); });
     const saveFlows = (currentBlocks?: CanvasBlock[], currentNotes?: CanvasNote[]) => {
-        const dataToSave = currentBlocks || deepClone(blocks);
-        const notesToSave = currentNotes || deepClone(notes);
-        const functionsToSave = deepClone(functions());
-        clearTimeout(saveTimer);
-        saveTimer = setTimeout(() => {
-            configApi.set({ flows: dataToSave, notes: notesToSave, functions: functionsToSave }, ACTIONS_PANEL_ID, "canvas.json").catch((err) => {
-                console.error("[Actions] Failed to save flows:", err);
-            });
-            actionsApi
-                .call(ACTIONS_PANEL_ID, "sync-flows", {
-                    flows: dataToSave,
-                    functions: functionsToSave,
-                })
-                .catch((err) => {
-                    console.warn("[actions] flow sync to daemon failed:", String(err));
-                });
-        }, 80);
+        if (!canvasLoaded() || disposed) return;
+        try {
+            canvasSync.schedule({ flows: currentBlocks ?? blocks, notes: currentNotes ?? notes, functions: functions() });
+        } catch (err) {
+            setSyncState({ status: "error", message: `Canvas could not be prepared for saving: ${String(err)}` });
+        }
     };
 
     const handleCreateFunction = (name: string, params: { name: string; type: string }[]) => {
@@ -673,9 +661,14 @@ export default function App() {
 
 
 
-    onMount(async () => {
+    let loadingCanvas = false;
+    const loadCanvas = async () => {
+        if (loadingCanvas || disposed) return;
+        loadingCanvas = true;
+        setCanvasLoadError(null);
         try {
             const saved = await configApi.get<any>(ACTIONS_PANEL_ID, "canvas.json");
+            if (disposed) return;
             if (saved?.functions && Array.isArray(saved.functions)) {
                 setFunctions(
                     saved.functions.filter(
@@ -688,35 +681,47 @@ export default function App() {
                 // blocks loudly instead of rendering them into the canvas
                 const clean = saved.flows.filter(isCanvasBlock);
                 if (clean.length !== saved.flows.length) {
-                    console.warn(
-                        `[Actions] dropped ${saved.flows.length - clean.length} malformed stored block(s)`,
-                    );
+                    throw new Error("Stored canvas contains malformed blocks; repair the document before applying flows");
                 }
                 setBlocks(clean);
-                await refreshBlockSchemas(clean);
             }
             if (saved?.notes && Array.isArray(saved.notes)) {
                 setNotes(saved.notes);
             }
+            // Hydrate the entire document before any refresh can save it.
+            setCanvasLoaded(true);
+            await refreshBlockSchemas();
         } catch (err) {
-            console.error("[Actions] Failed to load persisted flows:", err);
+            if (!disposed) setCanvasLoadError(`Canvas could not be loaded: ${String(err)}`);
+        } finally {
+            loadingCanvas = false;
         }
-    });
+    };
+    onMount(() => { void loadCanvas(); });
 
-    const refreshBlockSchemas = async (current?: CanvasBlock[]) => {
-        try {
-            const acts = await actionsApi.list();
-            // builtins are served by this panel, not the daemon registry:
-            // merge their live schemas too so stored blocks pick up changes
-            const merged = mergeActionSchemas(current ?? blocks, [
-                ...acts,
-                ...BUILTIN_SCHEMA_ENTRIES,
-            ]);
-            setBlocks(merged);
-            saveFlows(merged);
-        } catch (err) {
-            console.error("[Actions] Failed to refresh block schemas:", err);
-        }
+    let refreshPending = false;
+    let refreshing: Promise<void> | undefined;
+    const refreshBlockSchemas = (): Promise<void> => {
+        if (!canvasLoaded() || disposed) return Promise.resolve();
+        refreshPending = true;
+        if (!refreshing) refreshing = (async () => {
+            while (refreshPending && !disposed) {
+                refreshPending = false;
+                try {
+                    const acts = await actionsApi.list();
+                    if (disposed) return;
+                    // Merge into the current canvas after the request, so
+                    // edits made while listing cannot be overwritten.
+                    const merged = mergeActionSchemas(blocks, [...acts, ...BUILTIN_SCHEMA_ENTRIES]);
+                    setBlocks(reconcile(merged, { key: "id" }));
+                    saveFlows();
+                } catch (err) {
+                    if (!disposed) setSyncState({ status: "error", message: `Action schemas could not be refreshed: ${String(err)}` });
+                    return;
+                }
+            }
+        })().finally(() => { refreshing = undefined; });
+        return refreshing;
     };
 
     onMount(() => {
@@ -1301,6 +1306,14 @@ export default function App() {
     };
 
     return (
+        <Show when={canvasLoaded()} fallback={
+            <div class="paperui-root canvas-sync-status" role="status">
+                <PaperText>{canvasLoadError() ?? "Loading canvas…"}</PaperText>
+                <Show when={canvasLoadError()}>
+                    <PaperButton onClick={() => { void loadCanvas(); }}>Retry loading canvas</PaperButton>
+                </Show>
+            </div>
+        }>
         <div
             ref={containerRef}
             class={`paperui-root unselectable canvas-viewport ${isPanning() ? "panning" : ""}`}
@@ -1328,6 +1341,16 @@ export default function App() {
             />
 
             <div class="canvas-top-right-controls">
+                <Show when={syncState().status !== "applied"}>
+                    <div role="status" class="canvas-sync-status">
+                        <PaperText size={1}>{syncState().status === "error"
+                            ? (syncState() as { message: string }).message
+                            : "Applying changes…"}</PaperText>
+                        <Show when={syncState().status === "error"}>
+                            <PaperButton size="tiny" onClick={() => { void refreshBlockSchemas(); }}>Retry applying flows</PaperButton>
+                        </Show>
+                    </div>
+                </Show>
                 <PaperEffect variant="success">
                     <PaperButton
                         variant="success"
@@ -1590,5 +1613,6 @@ export default function App() {
                 </PaperContextMenuItem>
             </PaperContextMenu>
         </div>
+        </Show>
     );
 }
