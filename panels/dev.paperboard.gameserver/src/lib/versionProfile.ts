@@ -377,6 +377,7 @@ export function mcAtLeast(
 export const MIN_SUPPORTED_MC_VERSION = "1.12.2";
 
 export function isSupportedMcVersion(version: string | null | undefined): boolean {
+    if (!version || classifyMcVersion(version).kind === "unknown") return false;
     return mcAtLeast(version, MIN_SUPPORTED_MC_VERSION);
 }
 

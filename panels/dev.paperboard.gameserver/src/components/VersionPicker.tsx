@@ -1,5 +1,6 @@
-import { createEffect, createSignal, For, Show } from "solid-js";
+import { createEffect, createSignal, For, Show, onCleanup, untrack } from "solid-js";
 import {
+    PaperButton,
     PaperCheckbox,
     PaperCard,
     PaperFlex,
@@ -29,32 +30,39 @@ export default function VersionPicker(props: {
     const [searchQuery, setSearchQuery] = createSignal("");
     const [allVersions, setAllVersions] = createSignal<VersionItem[]>([]);
     const [loading, setLoading] = createSignal(true);
+    const [error, setError] = createSignal("");
+    let generation = 0;
+    onCleanup(() => { generation++; });
 
     const [includeReleases, setIncludeReleases] = createSignal(true);
     const [includeSnapshots, setIncludeSnapshots] = createSignal(false);
 
-    const loadVersions = async () => {
+    const loadVersions = async (software = props.software) => {
+        const currentGeneration = ++generation;
+        const selected = untrack(() => props.selectedVersion);
         setLoading(true);
+        setError("");
+        setAllVersions([]);
+        props.onSelectVersion("");
         try {
-            const versions = await getDetailedVersionsForSoftware(props.software);
+            const versions = (await getDetailedVersionsForSoftware(software))
+                .filter((v) => v.installable && (v.type === "release" || v.type === "snapshot"));
+            if (currentGeneration !== generation) return;
             setAllVersions(versions);
-            if (versions.length > 0) {
-                const currentExists = versions.some((v) => v.id === props.selectedVersion);
-                if (!currentExists) {
-                    const firstRelease =
-                        versions.find((v) => v.type === "release") || versions[0];
-                    if (firstRelease) props.onSelectVersion(firstRelease.id);
-                }
-            }
+            const current = versions.find((v) => v.id === selected);
+            const first = current ?? versions.find((v) => v.type === "release") ?? versions[0];
+            if (first) props.onSelectVersion(first.id);
         } catch (err) {
-            console.error("[VersionPicker] Failed to load versions:", err);
+            if (currentGeneration !== generation) return;
+            setError(err instanceof Error ? err.message : String(err));
         } finally {
-            setLoading(false);
+            if (currentGeneration === generation) setLoading(false);
         }
     };
 
     createEffect(() => {
-        if (props.software) loadVersions();
+        const software = props.software;
+        untrack(() => void loadVersions(software));
     });
 
     const filteredVersions = () => {
@@ -102,6 +110,13 @@ export default function VersionPicker(props: {
                     Paperboard works best on the latest Minecraft version. Full
                     feature support for older versions may vary.
                 </PaperQuote>
+
+                <Show when={error()}>
+                    <PaperQuote variant="danger" title="Could not load versions">
+                        {error()}
+                        <PaperButton onClick={() => void loadVersions()}>Retry loading versions</PaperButton>
+                    </PaperQuote>
+                </Show>
 
                 <PaperCard grow minHeight={0} scrollable="y">
                     <Show
@@ -159,12 +174,14 @@ export default function VersionPicker(props: {
                             <PaperCheckbox
                                 checked={includeReleases()}
                                 onChange={setIncludeReleases}
+                                disabled={loading() || !allVersions().some((v) => v.type === "release")}
                                 label="Releases"
                                 description="Full releases"
                             />
                             <PaperCheckbox
                                 checked={includeSnapshots()}
                                 onChange={setIncludeSnapshots}
+                                disabled={loading() || !allVersions().some((v) => v.type === "snapshot")}
                                 label="Snapshots"
                             />
                         </PaperFlex>

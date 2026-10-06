@@ -378,6 +378,9 @@ describe("capabilities match the wiki boundary snapshots", () => {
 
 describe("minimum supported version", () => {
     test("versions below 1.12.2 are unsupported", () => {
+        expect(isSupportedMcVersion("rd-132211")).toBe(false);
+        expect(isSupportedMcVersion("b1.8.1")).toBe(false);
+        expect(isSupportedMcVersion("a1.2.6")).toBe(false);
         expect(isSupportedMcVersion("1.7.10")).toBe(false);
         expect(isSupportedMcVersion("1.12.1")).toBe(false);
         expect(isSupportedMcVersion("1.12.2")).toBe(true);
