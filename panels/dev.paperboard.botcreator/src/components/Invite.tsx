@@ -2,11 +2,10 @@ import { createSignal, onMount, For } from "solid-js";
 import {
     PaperFlex,
     PaperText,
-    PaperButton,
     PaperCard,
     PaperCheckbox,
+    PaperCopyButton,
     PaperGrid,
-    PaperIcon,
     PaperPageHeader,
     PaperSeparator,
 } from "@mileniumhq/paperui";
@@ -17,10 +16,8 @@ import {
 } from "../types";
 
 export default function Invite() {
-    const [copied, setCopied] = createSignal(false);
     const [inviteUrl, setInviteUrl] = createSignal("");
     const [userInstallUrl, setUserInstallUrl] = createSignal("");
-    const [userCopied, setUserCopied] = createSignal(false);
     const [selectedPermissions, setSelectedPermissions] = createSignal<string[]>(
         DEFAULT_SELECTED_PERMISSIONS,
     );
@@ -74,32 +71,6 @@ export default function Invite() {
         updateInviteUrl(updated);
     };
 
-    const handleCopyInvite = async () => {
-        const url = inviteUrl();
-        if (!url) return;
-        try {
-            await navigator.clipboard.writeText(url);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
-        } catch (err) {
-            // a failed copy must not falsely claim "Copied"
-            console.error("[Invite] clipboard copy failed:", err);
-        }
-    };
-
-    const handleCopyUserInstall = async () => {
-        const url = userInstallUrl();
-        if (!url) return;
-        try {
-            await navigator.clipboard.writeText(url);
-            setUserCopied(true);
-            setTimeout(() => setUserCopied(false), 2000);
-        } catch (err) {
-            // a failed copy must not falsely claim "Copied"
-            console.error("[Invite] clipboard copy failed:", err);
-        }
-    };
-
     const permissionGroup = (
         title: string,
         perms: typeof PERMISSION_DEFINITIONS,
@@ -134,27 +105,17 @@ export default function Invite() {
                     <PaperText
                         size={3}
                         weight={500}
-                        style={{
-                            flex: 1,
-                            "min-width": 0,
-                            // long invite URLs must stay readable: wrap
-                            // instead of ellipsizing behind one line
-                            "overflow-wrap": "anywhere",
-                            "white-space": "normal",
-                        }}
+                        truncate
+                        style={{ flex: 1, "min-width": 0 }}
                     >
                         {inviteUrl() || "Generating invite link..."}
                     </PaperText>
 
-                    <PaperButton
-                        variant="brand"
-                        onClick={handleCopyInvite}
-                        disabled={!inviteUrl()}>
-                        <PaperIcon>
-                            {copied() ? "check" : "content_copy"}
-                        </PaperIcon>
-                        {copied() ? "Copied" : "Copy"}
-                    </PaperButton>
+                    <PaperCopyButton
+                        label="Copy"
+                        text={inviteUrl()}
+                        disabled={!inviteUrl()}
+                    />
                 </PaperFlex>
             </PaperCard>
 
@@ -188,25 +149,17 @@ export default function Invite() {
                         <PaperText
                             size={3}
                             weight={500}
-                            style={{
-                                flex: 1,
-                                "min-width": 0,
-                                "overflow-wrap": "anywhere",
-                                "white-space": "normal",
-                            }}
+                            truncate
+                            style={{ flex: 1, "min-width": 0 }}
                         >
                             {userInstallUrl() || "Generating user install link..."}
                         </PaperText>
 
-                        <PaperButton
-                            variant="brand"
-                            onClick={handleCopyUserInstall}
-                            disabled={!userInstallUrl()}>
-                            <PaperIcon>
-                                {userCopied() ? "check" : "content_copy"}
-                            </PaperIcon>
-                            {userCopied() ? "Copied" : "Copy"}
-                        </PaperButton>
+                        <PaperCopyButton
+                            label="Copy"
+                            text={userInstallUrl()}
+                            disabled={!userInstallUrl()}
+                        />
                     </PaperFlex>
                 </PaperFlex>
             </PaperCard>
