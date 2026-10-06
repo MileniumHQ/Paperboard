@@ -1,5 +1,6 @@
 import { siteMetadata } from "./site-metadata.mjs";
 import { withDownloadWarningAssets } from './download-warning-assets.mjs';
+import { existsSync } from "node:fs";
 import { cp, mkdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -186,6 +187,12 @@ for (const path of paths) {
                 );
             }
         }
+    }
+    // A social card pointing at a missing file embeds as a broken image.
+    if (page.image?.src.startsWith("/") && !existsSync(join(dist, page.image.src))) {
+        throw new Error(
+            `paperdocs: ${path} social image ${page.image.src} is not in the build`,
+        );
     }
     const file = join(dist, path, "index.html");
     await mkdir(dirname(file), { recursive: true });

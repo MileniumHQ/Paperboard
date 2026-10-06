@@ -19,3 +19,13 @@ test("metadata escapes HTML without corrupting structured data", () => {
     const json = JSON.parse(html.match(/<script type="application\/ld\+json">(.+)<\/script>/)![1]);
     expect(json["@graph"][1].name).toContain('</script>');
 });
+
+test("a page with its own image shares it as a large social card", () => {
+    const html = siteMetadata({ title: "Beta 1", description: "Out now", image: { src: "/pictures/blog/beta-1/hero.png", alt: "Beta 1" } }, "/blog/beta-1/");
+    expect(html).toContain('property="og:image" content="https://paperboard.dev/pictures/blog/beta-1/hero.png"');
+    expect(html).toContain('name="twitter:image" content="https://paperboard.dev/pictures/blog/beta-1/hero.png"');
+    expect(html).toContain('name="twitter:card" content="summary_large_image"');
+    expect(html).toContain('property="og:type" content="article"');
+    expect(html).not.toContain('og:image:width');
+    expect(siteMetadata({ title: "x", description: "y" }, "/")).toContain('name="twitter:card" content="summary"');
+});

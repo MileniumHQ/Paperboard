@@ -9,6 +9,8 @@ export interface SiteRoute {
     path: string;
     title: string;
     description: string;
+    /** Social-card image; pages without one share the Paperboard logo. */
+    image?: { src: string; alt: string };
     component: Component;
 }
 
@@ -28,6 +30,7 @@ export const SITE_ROUTES: SiteRoute[] = [
             path: `/blog/${post.slug}/`,
             title: `${post.title} | Paperboard Blog`,
             description: post.summary,
+            image: { src: post.image, alt: post.title },
             component: () => <BlogPost post={post} />,
         }),
     ),

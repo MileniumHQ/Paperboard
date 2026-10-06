@@ -11,6 +11,8 @@ export interface RenderedPage {
     title: string;
     description: string;
     html: string;
+    /** Social-card image; absent pages share the Paperboard logo. */
+    image?: { src: string; alt: string };
     /** The main landing uses the shared marketing chrome with stage effects. */
     landing?: boolean;
     /** Learn pages share marketing chrome with ordinary document scrolling. */
@@ -66,6 +68,7 @@ export function render(path: string): RenderedPage {
     return {
         title: route.title,
         description: route.description,
+        image: route.image,
         html,
     };
 }
