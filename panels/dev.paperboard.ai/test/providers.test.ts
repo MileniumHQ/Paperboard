@@ -10,7 +10,7 @@ import {
     providerLabel,
 } from "../src/core/providers";
 import { REASONING_LEVELS, isReasoningLevel, reasoningToThink } from "../src/core/reasoning";
-import { compactCount, groupTurns, isRoundEmpty, isThinkingLive, turnStats } from "../src/core/chain";
+import { compactCount, groupTurns, isRoundEmpty, isThinkingLive, replyText, turnStats } from "../src/core/chain";
 import type { AssistantMessage } from "../src/core/types";
 
 describe("providers", () => {
@@ -112,6 +112,14 @@ describe("chain", () => {
         expect(turnStats([r1, r2])).toEqual({ tokens: 100, tokensPerSecond: 12.5, contextUsed: 970, contextLength: 8192 });
         expect(turnStats([r1, { ...r2, stats: undefined }])).toBeUndefined();
         expect(turnStats([{ ...r2, stats: { tokens: 5, tokensPerSecond: 1 } }])).toEqual({ tokens: 5, tokensPerSecond: 1 });
+    });
+
+    it("copies every round of a reply, dropping blank ones", () => {
+        const r1: AssistantMessage = { ...base, id: "r1", content: "first", status: "done" };
+        const r2: AssistantMessage = { ...base, id: "r2", content: "", status: "done", toolCalls: [action] };
+        const r3: AssistantMessage = { ...base, id: "r3", content: "second", status: "done" };
+        expect(replyText([r1, r2, r3])).toBe("first\n\nsecond");
+        expect(replyText([{ ...base, content: "" }])).toBe("");
     });
 
     it("prints counts compactly", () => {

@@ -11,6 +11,11 @@
     gap: var(--paper-uigap-onefourth);
 }
 
+.userActions {
+    display: inline-flex;
+    align-items: center;
+}
+
 .user {
     display: flex;
     flex-direction: column;
@@ -64,6 +69,12 @@
     flex-direction: column;
     gap: var(--paper-uigap-half);
     min-width: 0;
+}
+
+.turnFooter {
+    display: flex;
+    align-items: center;
+    gap: var(--paper-uigap-onefourth);
 }
 
 .attachments {

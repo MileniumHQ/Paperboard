@@ -3,6 +3,7 @@ import { createSignal, splitProps, Show, type JSX } from "solid-js";
 import { PaperButton } from "../PaperButton";
 import { PaperIcon } from "../PaperIcon";
 import { copyText } from "../../utils/clipboard";
+import type { PaperButtonVariant } from "../../types";
 
 export interface PaperCopyButtonProps
     extends Omit<JSX.ButtonHTMLAttributes<HTMLButtonElement>, "onClick"> {
@@ -10,6 +11,8 @@ export interface PaperCopyButtonProps
     /** label shown beside the icon; icon-only when omitted */
     label?: string;
     title?: string;
+    /** PaperButton variant; defaults to the plain button surface */
+    variant?: PaperButtonVariant;
 }
 
 /** Copy-to-clipboard button with the shared fallback and feedback. */

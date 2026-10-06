@@ -1,6 +1,6 @@
 import { createEffect, createSignal, For, Match, Show, Switch } from "solid-js";
-import { PaperButton, PaperIcon, PaperMarkdown, PaperModal, PaperText } from "@mileniumhq/paperui";
-import { compactCount, isRoundEmpty, turnStats } from "../core/chain";
+import { PaperButton, PaperCopyButton, PaperIcon, PaperMarkdown, PaperModal, PaperText } from "@mileniumhq/paperui";
+import { compactCount, isRoundEmpty, replyText, turnStats } from "../core/chain";
 import type { AssistantMessage, UserMessage as UserMessageData } from "../core/types";
 import { errorText, rewindOpen } from "../lib/state";
 import { ActionSteps, ThinkingStep } from "./ReasoningChain";
@@ -30,30 +30,38 @@ function Round(props: { round: AssistantMessage }) {
 export function AssistantTurn(props: { rounds: AssistantMessage[] }) {
     const last = () => props.rounds[props.rounds.length - 1]!;
     const stats = () => turnStats(props.rounds);
+    const text = () => replyText(props.rounds);
     return (
-        <article class={styles.assistant} aria-label="AI reply" aria-busy={last().status === "streaming"}>
+        <article class={styles.assistant} data-selectable="true" aria-label="AI reply" aria-busy={last().status === "streaming"}>
             <For each={props.rounds}>{(round) => <Round round={round} />}</For>
-            <Switch>
-                <Match when={last().status === "error"}>
-                    <PaperText size={2} color="danger" role="alert">
-                        <PaperIcon zeroHeight>error</PaperIcon> {last().error || "The reply failed."}
-                    </PaperText>
-                </Match>
-                <Match when={last().status === "stopped"}>
-                    <PaperText size={1} color="text-muted">{last().error === "Interrupted" ? "Interrupted" : "Stopped"}</PaperText>
-                </Match>
-                <Match when={last().status === "done" && stats()}>
-                    {(s) => (
-                        <PaperText size={1} color="text-faint">
-                            {last().model} · {s().tokensPerSecond} tokens/s · {compactCount(s().tokens)} tokens
-                            <Show when={s().contextLength}>
-                                {" "}· {compactCount(s().contextUsed!)} / {compactCount(s().contextLength!)} context (
-                                {Math.round((s().contextUsed! / s().contextLength!) * 100)}%)
-                            </Show>
-                        </PaperText>
-                    )}
-                </Match>
-            </Switch>
+            <Show when={text() || last().status !== "streaming"}>
+                <div class={styles.turnFooter}>
+                    <Show when={text()}>
+                        <PaperCopyButton text={text()} title="Copy reply" aria-label="Copy reply" />
+                    </Show>
+                    <Switch>
+                        <Match when={last().status === "error"}>
+                            <PaperText size={2} color="danger" role="alert">
+                                <PaperIcon zeroHeight>error</PaperIcon> {last().error || "The reply failed."}
+                            </PaperText>
+                        </Match>
+                        <Match when={last().status === "stopped"}>
+                            <PaperText size={1} color="text-muted">{last().error === "Interrupted" ? "Interrupted" : "Stopped"}</PaperText>
+                        </Match>
+                        <Match when={last().status === "done" && stats()}>
+                            {(s) => (
+                                <PaperText size={1} color="text-faint">
+                                    {last().model} · {s().tokensPerSecond} tokens/s · {compactCount(s().tokens)} tokens
+                                    <Show when={s().contextLength}>
+                                        {" "}· {compactCount(s().contextUsed!)} / {compactCount(s().contextLength!)} context (
+                                        {Math.round((s().contextUsed! / s().contextLength!) * 100)}%)
+                                    </Show>
+                                </PaperText>
+                            )}
+                        </Match>
+                    </Switch>
+                </div>
+            </Show>
         </article>
     );
 }
@@ -138,16 +146,24 @@ export function UserMessage(props: { message: UserMessageData }) {
                 <PaperText size={1} color="text-faint">
                     <time dateTime={new Date(props.message.createdAt).toISOString()}>{sentAt(props.message.createdAt)}</time>
                 </PaperText>
-                <PaperButton
-                    icon
-                    size="tiny"
-                    variant="text"
-                    aria-label="Undo to before this message"
-                    title="Undo to before this message"
-                    onClick={() => setConfirming(true)}
-                >
-                    undo
-                </PaperButton>
+                <span class={styles.userActions}>
+                    <PaperCopyButton
+                        variant="text"
+                        text={props.message.content}
+                        title="Copy message"
+                        aria-label="Copy message"
+                    />
+                    <PaperButton
+                        icon
+                        size="tiny"
+                        variant="text"
+                        aria-label="Undo to before this message"
+                        title="Undo to before this message"
+                        onClick={() => setConfirming(true)}
+                    >
+                        undo
+                    </PaperButton>
+                </span>
             </div>
             <PaperModal
                 open={confirming()}

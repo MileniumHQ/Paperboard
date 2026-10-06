@@ -58,6 +58,14 @@ export function turnStats(rounds: readonly AssistantMessage[]): TurnStats | unde
     };
 }
 
+/** The whole reply as plain text: every round's answer, blank rounds dropped. */
+export function replyText(rounds: readonly AssistantMessage[]): string {
+    return rounds
+        .map((round) => round.content)
+        .filter((content) => content !== "")
+        .join("\n\n");
+}
+
 /** 950 → "950", 12_345 → "12.3K" */
 export function compactCount(n: number): string {
     if (n < 1000) return String(n);
