@@ -11,7 +11,6 @@
 #     paperui        design system: build, tests, styling, silent-catches
 #     create-panel   panel scaffolder: build, tests, silent-catches
 #     paperboard     desktop app: typechecks, tests, lint, silent-catches
-#     paperconvert   converter app: typecheck, tests, silent-catches
 #     paperdocs      docs site: tests, build
 #     origami        registry worker: typecheck, tests, silent-catches
 #     origami-library  library UI: tests, build, silent-catches
@@ -52,7 +51,7 @@ run_in() {
 # Every selectable target. The *-build names are prerequisites, not
 # user-facing: they exist so a filtered run can pull in the shared library
 # artifact a consumer needs without running that library's whole suite.
-KNOWN_TARGETS="packages paperapi paperui create-panel paperapi-build paperui-build create-panel-build paperboard paperconvert paperdocs origami origami-library scripts actions ai botcreator gameserver terminal"
+KNOWN_TARGETS="packages paperapi paperui create-panel paperapi-build paperui-build create-panel-build paperboard paperdocs origami origami-library scripts actions ai botcreator gameserver terminal"
 
 # Prerequisites per target, expanded transitively. A panel (and any app that
 # bundles the SDK/design system) needs paperapi/paperui dist present; the
@@ -63,7 +62,7 @@ target_deps() {
         paperui) echo "paperui-build" ;;
         create-panel) echo "create-panel-build" ;;
         packages) echo "paperapi-build paperui-build create-panel-build" ;;
-        paperboard | paperconvert | paperdocs | origami-library) echo "paperapi-build paperui-build" ;;
+        paperboard | paperdocs | origami-library) echo "paperapi-build paperui-build" ;;
         actions | ai | botcreator | gameserver | terminal) echo "paperapi-build paperui-build" ;;
         *) echo "" ;;
     esac
@@ -142,11 +141,6 @@ gstep paperboard "paperboard silent-catches" run_in "$ROOT/apps/paperboard" bash
 # ── root dev scripts: publisher release-math proofs + silent-catch backstop ──
 gstep scripts "root scripts tests" run_in "$ROOT" bun test scripts
 gstep scripts "root scripts silent-catches" run_in "$ROOT" bash "$CATCH" scripts
-
-# ── paperconvert: workspace app with its own typecheck and silent-catch gate ─
-gstep paperconvert "paperconvert typecheck" run_in "$ROOT/apps/paperconvert" bun run typecheck
-gstep paperconvert "paperconvert tests" run_in "$ROOT/apps/paperconvert" bun run test
-gstep paperconvert "paperconvert silent-catches" run_in "$ROOT/apps/paperconvert" bash "$CATCH" src
 
 # ── paperdocs: tests plus the static site build (typecheck, site + docs
 # prerender, alias files, shared 404) ────────────────────────────────────────

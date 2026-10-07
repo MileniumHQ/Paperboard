@@ -15,7 +15,7 @@ Almost all code here is written in TypeScript, CSS and SolidJS. I'll explain eve
 - **PaperUI** (`packages/paperui`) provides a distinctive and unified design language for Paperboard UI. It's primarily components, with over 40 of them. It also includes tokens for spacing, fonts, and colors.
 - **Origami** (`apps/origami`) is a Cloudflare Worker with a few jobs, as the backend server for Paperboard downloads. It currently includes the CDN for distributing Paperboard packaged binaries, the CDN and registry for distributing panels, and the URL index for external packages like Java.
 - **PaperDocs** (`apps/paperdocs`) is a Cloudflare Worker that serves the landing pages for Paperboard as well as the official docs and blog (soon). It contains the entire documentation for PaperAPI and PaperUI.
-- **PaperConvert** (`apps/paperconvert`) is a side project that is primarily a promo for the app, but isn't receiving active updates as it is not currently in focus. Similar to other online converters, it's a basic file converter, except unlike online converters, it uses Web APIs to convert files without them entering the internet, which is far more private and efficient.
+- **PaperConvert** is a side project, now in its own repository, that is primarily a promo for the app, but isn't receiving active updates as it is not currently in focus. Similar to other online converters, it's a basic file converter, except unlike online converters, it uses Web APIs to convert files without them entering the internet, which is far more private and efficient.
 
 And of course, the panels:
 
@@ -43,7 +43,7 @@ More information about contributing is available in [CONTRIBUTING.md](CONTRIBUTI
 
 The overwhelming majority of this codebase is built with agents, therefore it's agent-first and has an (agent-generated) AGENTS.md containing a list of rules for agents (and contributors) to follow.
 
-The code license varies by project, but most code here is under PolyForm Noncommercial...with exceptions! PaperUI, PaperAPI, PaperConvert, and PaperDocs are all MIT licensed.
+The code license varies by project, but most code here is under PolyForm Noncommercial...with exceptions! PaperUI, PaperAPI, and PaperDocs are all MIT licensed.
 
 Thanks for taking a look. Let's build the future of Paperboard together!
 
