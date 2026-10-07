@@ -1,8 +1,9 @@
 import { onMount, onCleanup, createEffect, on } from "solid-js";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
-import { getVar, getVarCss } from "@mileniumhq/paperui";
+import { copyText, getVar, getVarCss, pasteText } from "@mileniumhq/paperui";
 import { terminalApi, actions as actionsApi } from "@mileniumhq/paperapi";
+import { terminalKeyAction } from "./keys";
 import "@xterm/xterm/css/xterm.css";
 
 const TERMINAL_PANEL_ID = "dev.paperboard.terminal";
@@ -11,25 +12,25 @@ export const activeTerminals = new Map<string, Terminal>();
 
 export async function copySelection(id: string) {
     const term = activeTerminals.get(id);
-    const selection = term?.getSelection() || window.getSelection()?.toString();
-    if (selection) {
-        try {
-            await navigator.clipboard.writeText(selection);
-        } catch (err) {
-            // a denied clipboard must not become an unhandled rejection
-            console.error(`[Terminal] copy failed for ${id}:`, err);
-        }
-    }
+    const selection = term?.getSelection() || window.getSelection()?.toString() || "";
+    if (!selection) return;
+    // copyText owns the async-clipboard-plus-fallback path, same as PaperCopyButton
+    const ok = await copyText(selection);
+    if (!ok) console.error(`[Terminal] copy failed for ${id}`);
 }
 
 export async function pasteClipboard(id: string) {
-    try {
-        const text = await navigator.clipboard.readText();
-        if (text) terminalApi.write(id, text);
-    } catch (err) {
-        // a denied clipboard must not become an unhandled rejection
-        console.error(`[Terminal] paste failed for ${id}:`, err);
+    // readText is denied unless the panel frame holds clipboard focus; the
+    // context-menu click can leave focus on the menu, so focus the terminal
+    // (and its helper textarea) before reading
+    activeTerminals.get(id)?.focus();
+    const text = await pasteText();
+    // null is unavailable, "" is an empty clipboard: neither writes to the shell
+    if (text === null) {
+        console.error(`[Terminal] paste unavailable for ${id}`);
+        return;
     }
+    if (text) terminalApi.write(id, text);
 }
 
 export interface TerminalComponentProps {
@@ -127,15 +128,10 @@ export function TerminalComponent(props: TerminalComponentProps) {
         safeFit();
 
         term.attachCustomKeyEventHandler((arg) => {
-            if (arg.ctrlKey && arg.shiftKey && arg.type === "keydown") {
-                if (arg.code === "KeyC") {
-                    copySelection(props.id);
-                    return false;
-                }
-                if (arg.code === "KeyV") {
-                    pasteClipboard(props.id);
-                    return false;
-                }
+            // paste is left to the native paste event (see keys.ts)
+            if (terminalKeyAction(arg) === "copy") {
+                void copySelection(props.id);
+                return false;
             }
             return true;
         });
@@ -151,6 +147,27 @@ export function TerminalComponent(props: TerminalComponentProps) {
             }
             terminalApi.write(props.id, data);
         });
+
+        // A native paste with focus outside xterm (for example the context
+        // menu item) never reaches xterm's own paste listener. Route it here,
+        // but let xterm own pastes inside its element so nothing is written
+        // twice.
+        const onPaste = (ev: ClipboardEvent) => {
+            // every tab stays mounted; only the visible terminal may answer a
+            // paste delivered outside xterm, or a hidden one would also write
+            if (containerRef.getClientRects().length === 0) return;
+            if (containerRef.contains(ev.target as Node | null)) return;
+            const text = ev.clipboardData?.getData("text/plain");
+            if (!text) return;
+            ev.preventDefault();
+            if (failedId !== null) {
+                connect(failedId);
+                return;
+            }
+            terminalApi.write(props.id, text);
+        };
+        document.addEventListener("paste", onPaste);
+
         const connect = (id: string) => {
             failedId = null;
             disconnectData?.();
@@ -192,6 +209,7 @@ export function TerminalComponent(props: TerminalComponentProps) {
         resizeObserver.observe(containerRef);
 
         onCleanup(() => {
+            document.removeEventListener("paste", onPaste);
             if (resizeObserver) resizeObserver.disconnect();
             disconnectData?.();
             activeTerminals.delete(props.id);
