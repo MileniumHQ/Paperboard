@@ -89,7 +89,7 @@ export interface Settings {
     /** which personality the system prompt gives the model */
     promptStyle: PromptStyle;
     customPromptEnabled: boolean;
-    /** null until first enabled; an empty string is a deliberate empty prompt. */
+    /** null until first enabled; empty while enabled is allowed, but enabling the toggle again refills it from the generated prompt. */
     customSystemPrompt: string | null;
 }
 

@@ -118,10 +118,13 @@ describe("custom prompt settings", () => {
                 await reloaded.init(reloadedCtx as any);
                 expect(reloadedCtx.state.settings.customSystemPrompt).toBe("Custom instructions");
                 expect(reloadedCtx.state.settings.customPromptEnabled).toBe(true);
+                // an empty editor is saved, but re-enabling the toggle with an
+                // empty box repopulates it from the generated prompt
                 await reloaded.updateSettings({ customSystemPrompt: "" });
+                expect(reloadedCtx.state.settings.customSystemPrompt).toBe("");
                 await reloaded.updateSettings({ customPromptEnabled: false });
                 await reloaded.updateSettings({ customPromptEnabled: true });
-                expect(reloadedCtx.state.settings.customSystemPrompt).toBe("");
+                expect(reloadedCtx.state.settings.customSystemPrompt).toContain("running in Paperboard");
             } finally {
                 await reloaded.stopRuntime();
             }

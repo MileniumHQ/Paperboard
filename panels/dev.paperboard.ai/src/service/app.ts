@@ -339,8 +339,17 @@ export class AiApp {
         let settings!: Settings;
         await this.saveConfig(async (c) => {
             settings = clampSettings({ ...c.settings, ...patch });
-            if (settings.customPromptEnabled && settings.customSystemPrompt === null) {
-                settings.customSystemPrompt = (await this.chat.promptForModel(settings.defaultModel, settings)).prompt;
+            // An explicit enable with an empty editor refills it: an empty box
+            // means "no prompt", not a deliberate blank one, so disable/enable
+            // gives the user a generated starting point again. The patch's
+            // flag (not the merged setting) distinguishes enabling from a
+            // while-enabled edit that cleared the field to "".
+            if (patch.customPromptEnabled === true && !settings.customSystemPrompt) {
+                // customPromptEnabled must be off for promptForModel, or the
+                // empty string is treated as a deliberate custom prompt and
+                // the generator returns it verbatim (also empty).
+                const generated = await this.chat.promptForModel(settings.defaultModel, { ...settings, customPromptEnabled: false });
+                settings.customSystemPrompt = generated.prompt;
             }
             c.settings = settings;
         });

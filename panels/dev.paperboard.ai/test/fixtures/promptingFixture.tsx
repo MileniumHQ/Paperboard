@@ -13,8 +13,12 @@ import { saveSettings } from "../../src/core/saveSettings";
 const [settings, setSettings] = createStore<Settings>({ ...DEFAULT_SETTINGS, defaultModel: "qwen3:8b" });
 let serviceSettings: Settings = { ...settings };
 const [error, setError] = createSignal("");
+const [persisted, setPersisted] = createSignal<Settings>({ ...settings });
 render(() => <PaperProvider><main style={{ padding: "var(--paper-uigap)", display: "flex", "flex-direction": "column", gap: "var(--paper-uigap)" }}>
     <Show when={error()}><PaperText role="alert">{error()}</PaperText></Show>
+    <PaperText role="status" data-persisted>
+        {`Persisted customSystemPrompt: ${persisted().customSystemPrompt === null ? "<null>" : JSON.stringify(persisted().customSystemPrompt)}`}
+    </PaperText>
     <PromptingSettings settings={settings} save={async (patch) => {
         setError("");
         try {
@@ -28,7 +32,7 @@ render(() => <PaperProvider><main style={{ padding: "var(--paper-uigap)", displa
                     return serviceSettings;
                 },
                 // Intentionally no state event: the same save path as SettingsView refreshes.
-                refresh: async () => { setSettings(serviceSettings); },
+                refresh: async () => { setSettings(serviceSettings); setPersisted({ ...serviceSettings }); },
             });
             return true;
         } catch (error) {
