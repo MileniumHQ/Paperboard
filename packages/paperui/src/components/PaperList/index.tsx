@@ -105,6 +105,10 @@ export function PaperList(props: ParentProps<PaperListProps>) {
     const isHorizontal = () =>
         local.direction === "horizontal" || Boolean(local.horizontal);
     const isReorderable = () => local.reorderable ?? false;
+    // Tabs scroll rather than compress: by default a list owns the overflow
+    // on its layout axis. Set scrollable={false} for the old shrink-to-fit
+    // behavior, or "x"/"y" to force an axis.
+    const isScrollable = () => local.scrollable ?? true;
 
     const [dragState, setDragState] = createSignal<DragState | null>(null);
     const [isDropping, setIsDropping] = createSignal(false);
@@ -301,7 +305,7 @@ export function PaperList(props: ParentProps<PaperListProps>) {
             local.borderless ? styles.borderless : "",
             local.fullWidth ? styles.fullWidth : "",
             local.fullHeight ? styles.fullHeight : "",
-            local.scrollable ? styles.scrollable : "",
+            isScrollable() ? styles.scrollable : "",
             local.class,
         ]
             .filter(Boolean)
@@ -321,8 +325,16 @@ export function PaperList(props: ParentProps<PaperListProps>) {
         }
         if (local.fullWidth) extra.width = "100%";
         if (local.fullHeight) extra.height = "100%";
-        if (local.scrollable) {
-            extra.overflow = typeof local.scrollable === "string" ? (local.scrollable === "x" ? "hidden auto" : "auto hidden") : "auto";
+        if (isScrollable()) {
+            const scrollable = local.scrollable;
+            extra.overflow =
+                scrollable === "x"
+                    ? "auto hidden"
+                    : scrollable === "y"
+                      ? "hidden auto"
+                      : isHorizontal()
+                        ? "auto hidden"
+                        : "hidden auto";
         }
         return {
             ...extra,

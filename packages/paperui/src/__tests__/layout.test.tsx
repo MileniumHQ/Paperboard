@@ -85,7 +85,54 @@ describe("PaperLayout and Components Layout Enhancements", () => {
         const el = getByTestId("paper-list");
         expect(el.style.width).toBe("100%");
         expect(el.style.height).toBe("100%");
-        expect(el.style.overflow).toBe("auto");
+        // A vertical list scrolls on its own axis and hides the cross axis.
+        expect(el.style.overflow).toBe("hidden auto");
+    });
+
+    it("scrolls PaperList tabs on the layout axis instead of compressing them", () => {
+        const { getByTestId } = render(() => (
+            <>
+                <PaperList name="vertical-list" data-testid="vertical-list">
+                    <PaperListItem value="item1">Item 1</PaperListItem>
+                </PaperList>
+                <PaperList
+                    name="horizontal-list"
+                    data-testid="horizontal-list"
+                    horizontal
+                >
+                    <PaperListItem value="item1">Item 1</PaperListItem>
+                </PaperList>
+            </>
+        ));
+
+        expect(getByTestId("vertical-list").style.overflow).toBe("hidden auto");
+        expect(getByTestId("horizontal-list").style.overflow).toBe(
+            "auto hidden",
+        );
+    });
+
+    it("forces a scroll axis when PaperList scrollable is a string", () => {
+        const { getByTestId } = render(() => (
+            <>
+                <PaperList
+                    name="x-list"
+                    data-testid="x-list"
+                    scrollable="x"
+                >
+                    <PaperListItem value="item1">Item 1</PaperListItem>
+                </PaperList>
+                <PaperList
+                    name="y-list"
+                    data-testid="y-list"
+                    scrollable="y"
+                >
+                    <PaperListItem value="item1">Item 1</PaperListItem>
+                </PaperList>
+            </>
+        ));
+
+        expect(getByTestId("x-list").style.overflow).toBe("auto hidden");
+        expect(getByTestId("y-list").style.overflow).toBe("hidden auto");
     });
 
     it("renders trailing actions from PaperListItem", () => {

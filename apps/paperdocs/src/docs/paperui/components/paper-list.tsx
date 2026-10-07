@@ -86,6 +86,12 @@ export function Example() {
                             <td>Layout orientation. Setting horizontal arranges items in a row.</td>
                         </tr>
                         <tr>
+                            <td><PaperCode>scrollable</PaperCode></td>
+                            <td><PaperCode>boolean | "x" | "y"</PaperCode></td>
+                            <td><PaperCode>true</PaperCode></td>
+                            <td>Overflow handling. Scrolls the list's layout axis so overflowing tabs never compress; set false to shrink instead, or "x"/"y" to force an axis.</td>
+                        </tr>
+                        <tr>
                             <td><PaperCode>reorderable</PaperCode></td>
                             <td><PaperCode>boolean</PaperCode></td>
                             <td><PaperCode>false</PaperCode></td>
@@ -150,6 +156,8 @@ export function Example() {
             <PaperText preset="body">
                 Items manage selection through hidden radio inputs to ensure accessible screen reader announcements.
                 When dragging items in a reorderable list, sibling items animate to preview drop placement.
+                A list scrolls on its layout axis by default, so too many tabs overflow and scroll
+                rather than shrinking to slivers.
             </PaperText>
 
             <PaperText preset="subheader" id="recipes">Recipes</PaperText>

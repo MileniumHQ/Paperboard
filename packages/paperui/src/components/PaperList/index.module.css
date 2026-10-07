@@ -23,10 +23,6 @@
     height: 100% !important;
 }
 
-.PaperList.scrollable {
-    overflow-y: auto;
-}
-
 .PaperList.horizontal {
     flex-direction: row;
     align-items: center;
@@ -37,14 +33,11 @@
     touch-action: pan-x;
 }
 
-.PaperList > :not(.PaperListItem) {
-    flex-shrink: 0;
-}
-
-/* A scrollable list must scroll, not crush its rows. Items are
-   overflow:hidden, which zeroes their auto min-size, so without this an
-   over-tall list shrinks every row instead of overflowing. */
-.PaperList.scrollable > .PaperListItem {
+/* A scrollable list owns the overflow on its own axis and scrolls; it must
+   not crush its rows. Items clip their own overflow, which zeroes their auto
+   min-size, so without flex-shrink: 0 an overfull list shrinks every row to a
+   sliver instead of overflowing. */
+.PaperList.scrollable > * {
     flex-shrink: 0;
 }
 
