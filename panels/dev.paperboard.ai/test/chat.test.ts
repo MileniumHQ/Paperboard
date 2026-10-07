@@ -7,7 +7,7 @@ import path from "node:path";
 import { startFakeOllama, type FakeOllama } from "./fakeOllama";
 import { OllamaClient } from "../src/service/ollamaClient";
 import { ConversationStore } from "../src/service/store";
-import { ChatEngine, MAX_ACTIVE_REPLIES } from "../src/service/chat";
+import { askOnce, ChatEngine, MAX_ACTIVE_REPLIES } from "../src/service/chat";
 import { MAX_TOOL_ROUNDS, systemPrompt } from "../src/core/conversation";
 import type { AssistantMessage, ChatMessageEvent, ChatResetEvent, PendingApproval, Settings } from "../src/core/types";
 import type { RegistryAction } from "../src/core/tools";
@@ -97,7 +97,7 @@ beforeEach(async () => {
     capabilities = { "tooly:latest": ["completion", "tools"], "plain:latest": ["completion"] };
     actionResult = async () => ({ kicked: true });
     // panel actions on and built-ins off, unless a test says otherwise
-    settings = { defaultModel: "tooly:latest", contextLength: 4096, reasoning: "off", panelActions: true, webSearch: false, shellCommands: false, promptStyle: "quirky", customPromptEnabled: false, customSystemPrompt: null };
+    settings = { defaultModel: "tooly:latest", contextLength: 4096, reasoning: "off", panelActions: true, webSearch: false, shellCommands: false, forceCpu: false, promptStyle: "quirky", customPromptEnabled: false, customSystemPrompt: null };
     searches = [];
     commands = [];
 });
@@ -154,6 +154,29 @@ describe("replies", () => {
         expect(reply).toMatchObject({ content: "visible answer", status: "done" });
         expect(reply!.thinking).toBeUndefined();
         expect(fake.chatRequests[0].think).toBe(false);
+    });
+
+    it("forces CPU inference only while the Force CPU setting is on", async () => {
+        fake.script = [{ content: "gpu answer" }, { content: "cpu answer" }];
+        const chat = engine();
+        const c = await chat.create("tooly:latest");
+        await (await chat.send(c.id, "gpu first")).done;
+        expect(fake.chatRequests[0].options).toMatchObject({ num_ctx: 4096 });
+        expect(fake.chatRequests[0].options.num_gpu).toBeUndefined();
+        settings.forceCpu = true;
+        await (await chat.send(c.id, "cpu now")).done;
+        expect(fake.chatRequests[1].options).toMatchObject({ num_ctx: 4096, num_gpu: 0 });
+    });
+
+    it("one-shot asks honor Force CPU", async () => {
+        fake.script = [{ content: "answer" }];
+        const text = await askOnce(
+            new OllamaClient(fake.url),
+            { model: "plain:latest", prompt: "hi", contextLength: 4096, forceCpu: true },
+            3000,
+        );
+        expect(text).toBe("answer");
+        expect(fake.chatRequests[0].options).toMatchObject({ num_ctx: 4096, num_gpu: 0 });
     });
 
     it("keeps reasoning when the Think toggle is on", async () => {

@@ -87,6 +87,7 @@ function clampSettings(input: Partial<Settings> | undefined): Settings {
         panelActions: typeof s.panelActions === "boolean" ? s.panelActions : DEFAULT_SETTINGS.panelActions,
         webSearch: typeof s.webSearch === "boolean" ? s.webSearch : DEFAULT_SETTINGS.webSearch,
         shellCommands: typeof s.shellCommands === "boolean" ? s.shellCommands : DEFAULT_SETTINGS.shellCommands,
+        forceCpu: typeof s.forceCpu === "boolean" ? s.forceCpu : DEFAULT_SETTINGS.forceCpu,
         promptStyle: isPromptStyle(s.promptStyle) ? s.promptStyle : DEFAULT_SETTINGS.promptStyle,
         customPromptEnabled: typeof s.customPromptEnabled === "boolean" ? s.customPromptEnabled : false,
         customSystemPrompt: typeof s.customSystemPrompt === "string" ? s.customSystemPrompt : null,
@@ -572,6 +573,7 @@ export class AiApp {
                 prompt,
                 system: askSystemPrompt(personality ?? "standard", chosen, system),
                 contextLength: this.ctx.state.settings.contextLength,
+                forceCpu: this.ctx.state.settings.forceCpu,
             },
             ASK_DEADLINE_MS,
         );

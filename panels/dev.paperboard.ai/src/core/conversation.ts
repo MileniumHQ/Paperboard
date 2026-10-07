@@ -23,6 +23,16 @@ export function isConversationId(value: unknown): value is string {
     return typeof value === "string" && ID_RE.test(value);
 }
 
+/**
+ * Ollama generation options shared by chat replies and one-shot asks.
+ * `num_gpu: 0` is Ollama's "keep every layer off the GPU" instruction, the
+ * only way a request can force processor inference; an endpoint provider
+ * ignores `options` entirely, so sending it is harmless there.
+ */
+export function inferenceOptions(contextLength: number, forceCpu: boolean): { num_ctx: number; num_gpu?: number } {
+    return forceCpu ? { num_ctx: contextLength, num_gpu: 0 } : { num_ctx: contextLength };
+}
+
 export function newId(): string {
     return crypto.randomUUID();
 }

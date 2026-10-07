@@ -58,7 +58,7 @@ export interface ChatRequest {
     tools?: OllamaTool[];
     /** false disables thinking; a level asks for that much */
     think?: boolean | string;
-    options?: { num_ctx?: number; num_predict?: number };
+    options?: { num_ctx?: number; num_predict?: number; num_gpu?: number };
 }
 
 /** Ollama takes raw base64 images; the internal history carries data URLs. */

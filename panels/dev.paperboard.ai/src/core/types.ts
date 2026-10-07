@@ -86,6 +86,8 @@ export interface Settings {
     webSearch: boolean;
     /** the built-in shell command tool, approved per run */
     shellCommands: boolean;
+    /** run inference on the processor even when a GPU could host the model */
+    forceCpu: boolean;
     /** which personality the system prompt gives the model */
     promptStyle: PromptStyle;
     customPromptEnabled: boolean;
@@ -264,6 +266,7 @@ export const DEFAULT_SETTINGS: Settings = {
     panelActions: false,
     webSearch: true,
     shellCommands: true,
+    forceCpu: false,
     promptStyle: "standard",
     customPromptEnabled: false,
     customSystemPrompt: null,

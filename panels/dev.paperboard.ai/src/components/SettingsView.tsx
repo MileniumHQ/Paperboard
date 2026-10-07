@@ -11,6 +11,7 @@ import {
     PaperToggle,
 } from "@mileniumhq/paperui";
 import { UI_ACTION_IDS } from "../contract";
+import { OLLAMA_PROVIDER_ID } from "../core/providers";
 import PromptingSettings from "./PromptingSettings";
 import { saveSettings } from "../core/saveSettings";
 import type { Settings } from "../core/types";
@@ -119,6 +120,19 @@ export default function SettingsView() {
                         ))}
                     </PaperSelectMenu>
                 </PaperSettingItem>
+                <Show when={state.provider.id === OLLAMA_PROVIDER_ID}>
+                    <PaperSettingItem
+                        title="Force CPU"
+                        description="Runs models on the processor instead of a graphics card. Replies are slower, but it avoids graphics memory problems."
+                    >
+                        <PaperToggle
+                            name="forceCpu"
+                            aria-label="Force CPU"
+                            checked={state.settings.forceCpu}
+                            onChange={(on) => void save({ forceCpu: on })}
+                        />
+                    </PaperSettingItem>
+                </Show>
                 <PaperSettingItem
                     title="Delete all chats"
                     description="Removes every chat and its messages from this computer. This cannot be undone."

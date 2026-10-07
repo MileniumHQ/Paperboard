@@ -6,6 +6,7 @@ import {
     MAX_MESSAGES,
     MAX_TOOL_ROUNDS,
     MAX_USER_MESSAGE_CHARS,
+    inferenceOptions,
     newId,
     titleFrom,
     toOllamaMessages,
@@ -413,7 +414,7 @@ export class ChatEngine {
                     messages: history,
                     ...(tools.tools.length ? { tools: tools.tools } : {}),
                     ...(capabilities.includes("thinking") ? { think } : {}),
-                    options: { num_ctx: this.deps.settings().contextLength },
+                    options: inferenceOptions(this.deps.settings().contextLength, this.deps.settings().forceCpu),
                 },
                 signal,
                 (chunk: ChatChunk) => {
@@ -566,7 +567,7 @@ export class ChatEngine {
  */
 export async function askOnce(
     api: ChatClient,
-    request: { model: string; prompt: string; system?: string; contextLength: number },
+    request: { model: string; prompt: string; system?: string; contextLength: number; forceCpu?: boolean },
     deadlineMs: number,
 ): Promise<string> {
     const abort = new AbortController();
@@ -580,7 +581,7 @@ export async function askOnce(
                     ...(request.system?.trim() ? [{ role: "system" as const, content: request.system }] : []),
                     { role: "user" as const, content: request.prompt },
                 ],
-                options: { num_ctx: request.contextLength },
+                options: inferenceOptions(request.contextLength, request.forceCpu ?? false),
             },
             abort.signal,
             (chunk) => {
