@@ -17,16 +17,71 @@ export const MIN_HEAD_SIZE = 8;
 export const MAX_HEAD_SIZE = 256;
 
 /**
- * The base head is sampled slightly smaller and centered under the hat
- * overlay, mirroring Minecraft's model where the overlay sits just outside
- * the head. Without it the two layers line up pixel-for-pixel and an opaque
- * hat reads as a flat sticker instead of hair/headwear over the face.
+ * Minecraft inflates the head's second layer (the hat) by 0.5 texels on every
+ * side, so the hat box is 9 units to the face's 8 — the same 1.125 factor a
+ * 3D skin viewer applies. Rendering the hat to fill the frame therefore draws
+ * the face at 8/9 of the frame, centered, and leaves the 0.5-texel overhang
+ * to the hat, which is how the head reads in game.
  */
-export const BASE_LAYER_SCALE = 0.92;
+export const HAT_LAYER_SCALE = 1;
+export const FACE_LAYER_SCALE = 8 / 9;
 
 export function clampHeadSize(size: unknown): number {
     const n = typeof size === "number" && Number.isFinite(size) ? Math.floor(size) : DEFAULT_HEAD_SIZE;
     return Math.min(MAX_HEAD_SIZE, Math.max(MIN_HEAD_SIZE, n));
+}
+
+interface Rgba {
+    r: number;
+    g: number;
+    b: number;
+    a: number;
+}
+
+/**
+ * Sample one 8×8 layer (face or hat) for an output pixel. `scale` is the
+ * layer's size relative to the frame: 1 fills the frame, 8/9 sits centered
+ * and smaller. Returns null when the pixel falls outside the layer.
+ */
+function sampleLayer(
+    skin: PNG,
+    originX: number,
+    originY: number,
+    scale: number,
+    x: number,
+    y: number,
+    size: number,
+): Rgba | null {
+    const fx = (x + 0.5) / size;
+    const fy = (y + 0.5) / size;
+    const lx = 0.5 + (fx - 0.5) / scale;
+    const ly = 0.5 + (fy - 0.5) / scale;
+    if (lx < 0 || lx >= 1 || ly < 0 || ly >= 1) return null;
+    const tx = Math.min(LAYER - 1, Math.floor(lx * LAYER));
+    const ty = Math.min(LAYER - 1, Math.floor(ly * LAYER));
+    const i = ((originY + ty) * skin.width + (originX + tx)) * 4;
+    return {
+        r: skin.data[i],
+        g: skin.data[i + 1],
+        b: skin.data[i + 2],
+        a: skin.data[i + 3],
+    };
+}
+
+/**
+ * Whether the hat region carries any visible pixel. A modern skin can have a
+ * fully transparent second layer (most default and "bald" skins do); with
+ * nothing to show, that layer has no visible extent, so the face fills the
+ * frame instead of reserving an invisible 0.5-texel border.
+ */
+function hatLayerHasAlpha(skin: PNG): boolean {
+    for (let y = 0; y < LAYER; y++) {
+        for (let x = 0; x < LAYER; x++) {
+            const i = ((HAT_Y + y) * skin.width + (HAT_X + x)) * 4;
+            if (skin.data[i + 3] > 0) return true;
+        }
+    }
+    return false;
 }
 
 /**
@@ -55,48 +110,41 @@ export function composeHeadFromSkin(
     // opaque black padding, and compositing it paints the face black. Only
     // modern (64×64) skins carry a hat layer.
     const hasOverlay = h >= 64;
+    const hasHat = hasOverlay && hatLayerHasAlpha(skin);
+    const faceScale = hasHat ? FACE_LAYER_SCALE : 1;
 
     const out = new PNG({ width: size, height: size });
     for (let y = 0; y < size; y++) {
-        const fy = (y + 0.5) / size;
-        // base layer: compressed toward the center, edge-clamped so it still
-        // reaches the frame (no transparent rim on hat-less skins)
-        const baseY = Math.min(
-            LAYER - 1,
-            Math.max(0, Math.floor((0.5 + (fy - 0.5) * BASE_LAYER_SCALE) * LAYER)),
-        );
-        // overlay: full size, exactly aligned to the frame
-        const hatY = Math.min(LAYER - 1, Math.floor(fy * LAYER));
         for (let x = 0; x < size; x++) {
-            const fx = (x + 0.5) / size;
-            const baseX = Math.min(
-                LAYER - 1,
-                Math.max(0, Math.floor((0.5 + (fx - 0.5) * BASE_LAYER_SCALE) * LAYER)),
-            );
-            const hatX = Math.min(LAYER - 1, Math.floor(fx * LAYER));
-
-            const fi = ((FACE_Y + baseY) * w + (FACE_X + baseX)) * 4;
-            const hi = ((HAT_Y + hatY) * w + (HAT_X + hatX)) * 4;
-            const oi = (y * size + x) * 4;
-
-            let r = skin.data[fi];
-            let g = skin.data[fi + 1];
-            let b = skin.data[fi + 2];
-            let a = skin.data[fi + 3];
-
-            const hatA = hasOverlay ? skin.data[hi + 3] : 0;
-            if (hatA > 0) {
-                const hatN = hatA / 255;
-                const faceN = a / 255;
-                const outA = hatN + faceN * (1 - hatN);
-                if (outA > 0) {
-                    r = (skin.data[hi] * hatN + r * faceN * (1 - hatN)) / outA;
-                    g = (skin.data[hi + 1] * hatN + g * faceN * (1 - hatN)) / outA;
-                    b = (skin.data[hi + 2] * hatN + b * faceN * (1 - hatN)) / outA;
-                }
-                a = Math.round(outA * 255);
+            const face = sampleLayer(skin, FACE_X, FACE_Y, faceScale, x, y, size);
+            let r = 0;
+            let g = 0;
+            let b = 0;
+            let a = 0;
+            if (face) {
+                r = face.r;
+                g = face.g;
+                b = face.b;
+                a = face.a;
             }
 
+            if (hasHat) {
+                const hat = sampleLayer(skin, HAT_X, HAT_Y, HAT_LAYER_SCALE, x, y, size);
+                if (hat && hat.a > 0) {
+                    // source-over: the hat sits in front of the face
+                    const hatN = hat.a / 255;
+                    const faceN = a / 255;
+                    const outA = hatN + faceN * (1 - hatN);
+                    if (outA > 0) {
+                        r = (hat.r * hatN + r * faceN * (1 - hatN)) / outA;
+                        g = (hat.g * hatN + g * faceN * (1 - hatN)) / outA;
+                        b = (hat.b * hatN + b * faceN * (1 - hatN)) / outA;
+                    }
+                    a = Math.round(outA * 255);
+                }
+            }
+
+            const oi = (y * size + x) * 4;
             out.data[oi] = Math.round(r);
             out.data[oi + 1] = Math.round(g);
             out.data[oi + 2] = Math.round(b);
