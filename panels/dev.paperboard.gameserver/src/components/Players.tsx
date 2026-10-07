@@ -121,6 +121,12 @@ export default function Players() {
     const [showOp, setShowOp] = createSignal(true);
     const [searchQuery, setSearchQuery] = createSignal("");
     const [openPlayerName, setOpenPlayerName] = createSignal<string | undefined>();
+    // PaperSplit presents the detail as a modal while collapsed. In that single
+    // pane layout the roster's radio selection is invisible behind the modal,
+    // so letting a row toggle it strands the selection and a second click on
+    // the same player fires no change event. Rows open the detail directly
+    // instead; side-by-side keeps its normal selection.
+    const [compact, setCompact] = createSignal(false);
 
     const [actionModal, setActionModal] = createSignal<"kick" | "ban" | null>(null);
     const [deleteConfirmOpen, setDeleteConfirmOpen] = createSignal(false);
@@ -466,6 +472,7 @@ export default function Players() {
                         detailActive={openPlayer() !== undefined}
                         onDetailClose={() => setOpenPlayerName(undefined)}
                         detailTitle={openPlayer()?.name}
+                        onCollapsedChange={setCompact}
                         side={
                         <PaperCard fullHeight>
                             <PaperFlex direction="column" gap="half" padding="full" shrink={false}>
@@ -538,6 +545,8 @@ export default function Players() {
                                                         player.name.toLowerCase(),
                                                     )}
                                                     statusText={`Playing · ${statText(player, "playtime")}`}
+                                                    compact={compact()}
+                                                    onOpen={setOpenPlayerName}
                                                 />
                                             )}
                                         </For>
@@ -554,6 +563,8 @@ export default function Players() {
                                                         player.name.toLowerCase(),
                                                     )}
                                                     statusText={`Played ${statText(player, "playtime")}`}
+                                                    compact={compact()}
+                                                    onOpen={setOpenPlayerName}
                                                 />
                                             )}
                                         </For>
@@ -681,11 +692,22 @@ function PlayerRow(props: {
     player: PlayerInfo;
     banned: boolean;
     statusText: string;
+    compact: boolean;
+    onOpen: (name: string) => void;
 }) {
     const online = () => onlinePlayerNames().has(props.player.name.toLowerCase());
     return (
         <PaperListItem
             value={props.player.name}
+            onClick={(e) => {
+                // compact: the roster sits behind the detail modal and its
+                // selection cannot be seen or re-triggered, so suppress the
+                // hidden radio — a re-click then opens instead of toggling a
+                // selection nobody can see. Opening directly keeps every click
+                // working either way.
+                if (props.compact) e.preventDefault();
+                props.onOpen(props.player.name);
+            }}
             icon={
                 <PlayerHead
                     name={props.player.name}

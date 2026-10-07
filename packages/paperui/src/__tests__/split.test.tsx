@@ -54,6 +54,24 @@ describe("PaperSplit", () => {
         expect(screen.queryByRole("dialog")).toBeNull();
     });
 
+    test("reports each collapse transition through onCollapsedChange", () => {
+        const onCollapsedChange = vi.fn();
+        render(() => (
+            <PaperSplit
+                side={<div>roster</div>}
+                onCollapsedChange={onCollapsedChange}
+            >
+                <div>inspector</div>
+            </PaperSplit>
+        ));
+        setWidth(900);
+        expect(onCollapsedChange).toHaveBeenLastCalledWith(false);
+        setWidth(400);
+        expect(onCollapsedChange).toHaveBeenLastCalledWith(true);
+        setWidth(900);
+        expect(onCollapsedChange).toHaveBeenLastCalledWith(false);
+    });
+
     test("presents the detail in a modal when collapsed and active, and closes it", async () => {
         const [active, setActive] = createSignal(true);
         const onClose = vi.fn(() => setActive(false));

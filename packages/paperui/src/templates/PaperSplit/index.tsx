@@ -1,5 +1,6 @@
 import styles from "./index.module.css";
 import {
+    createEffect,
     createSignal,
     onCleanup,
     onMount,
@@ -25,6 +26,14 @@ export interface PaperSplitProps {
     onDetailClose?: () => void;
     /** collapsed modal title */
     detailTitle?: JSX.Element | string;
+    /**
+     * Notified whenever the layout crosses between side-by-side and collapsed.
+     * The detail pane is a modal only while collapsed, so a consumer that
+     * needs to change its interaction for the single-pane layout (for example
+     * a list whose selection must not toggle) can track this instead of
+     * re-measuring the same width itself.
+     */
+    onCollapsedChange?: (collapsed: boolean) => void;
     class?: string;
     classList?: JSX.ClassList;
 }
@@ -56,6 +65,10 @@ export function PaperSplit(props: ParentProps<PaperSplitProps>) {
         return w !== undefined && w < (props.collapseWidth ?? DEFAULT_COLLAPSE_WIDTH);
     };
 
+    createEffect(() => {
+        props.onCollapsedChange?.(collapsed());
+    });
+
     const sideStyle = () => ({
         width:
             typeof props.sideWidth === "number"
@@ -71,6 +84,7 @@ export function PaperSplit(props: ParentProps<PaperSplitProps>) {
         "detailActive",
         "onDetailClose",
         "detailTitle",
+        "onCollapsedChange",
         "class",
         "classList",
     ]);
