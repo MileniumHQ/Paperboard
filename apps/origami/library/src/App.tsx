@@ -12,7 +12,6 @@ import {
     PaperButton,
     PaperEmptyState,
     PaperFlex,
-    PaperIcon,
     PaperMediaCard,
     PaperMediaCardGroup,
     PaperText,
@@ -311,30 +310,6 @@ const PanelLibraryApp: Component<PanelLibraryAppProps> = (props) => {
                                     display: "block",
                                 }}
                             />
-                            {/* The reload is always reachable: a live library
-                                that read an empty or malformed registry has no
-                                other way back without restarting the app. On a
-                                failed load the Retry below is the recovery. */}
-                            <Show when={!loadFailed()}>
-                                <div
-                                    style={{
-                                        position: "absolute",
-                                        top: getVarCss("uigap-half"),
-                                        right: getVarCss("uigap-half"),
-                                    }}
-                                >
-                                    <PaperButton
-                                        size="small"
-                                        icon
-                                        title="Reload the panel library"
-                                        aria-label="Reload the panel library"
-                                        disabled={loading()}
-                                        onClick={() => void load()}
-                                    >
-                                        <PaperIcon>refresh</PaperIcon>
-                                    </PaperButton>
-                                </div>
-                            </Show>
                         </div>
 
                         <Show when={loadFailed()}>

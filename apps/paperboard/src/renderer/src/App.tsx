@@ -26,6 +26,7 @@ import AppSettings from "./components/settings/AppSettings";
 import PanelView from "./components/panels/PanelView";
 import LibraryFrame from "./components/panels/LibraryFrame";
 import PanelContextMenu from "./components/panels/PanelContextMenu";
+import LibraryContextMenu from "./components/panels/LibraryContextMenu";
 import type { RestartState } from "./components/panels/PanelView";
 import UninstallPanelModal, {
     type UninstallTarget,
@@ -81,6 +82,10 @@ const App: Component = () => {
     } | null>(null);
     const computerContextMenu = useContextMenuState();
     const [contextMenuComputerId, setContextMenuComputerId] = createSignal<string | null>(null);
+    const libraryContextMenu = useContextMenuState();
+    const [libraryReloadToken, setLibraryReloadToken] = createSignal(0);
+    const reloadLibrary = () =>
+        setLibraryReloadToken((token) => token + 1);
     const [isForgetConfirmOpen, setIsForgetConfirmOpen] = createSignal(false);
     const [isForgetting, setIsForgetting] = createSignal(false);
     const [forgetError, setForgetError] = createSignal<string | null>(null);
@@ -533,6 +538,13 @@ const App: Component = () => {
                                                 onSelectTab={(tab) =>
                                                     setComputerTab(comp.id, tab)
                                                 }
+                                                onLibraryContextMenu={(
+                                                    e: MouseEvent,
+                                                ) =>
+                                                    libraryContextMenu.openAtMouse(
+                                                        e,
+                                                    )
+                                                }
                                             />
 
                                             <PaperList
@@ -684,6 +696,8 @@ const App: Component = () => {
                                     onInstall={handleLibraryInstall}
                                     onOpen={handleLibraryOpen}
                                     loadMedia={handleLibraryMedia}
+                                    reloadToken={libraryReloadToken()}
+                                    onReload={reloadLibrary}
                                 />
                             </PaperFlex>
 
@@ -818,6 +832,15 @@ const App: Component = () => {
             <ComputerContextMenu
                 menu={computerContextMenu}
                 onForget={handleForgetFromMenu}
+            />
+
+            <LibraryContextMenu
+                menu={libraryContextMenu}
+                onClose={() => libraryContextMenu.close()}
+                onReload={() => {
+                    libraryContextMenu.close();
+                    reloadLibrary();
+                }}
             />
 
             <PaperModal

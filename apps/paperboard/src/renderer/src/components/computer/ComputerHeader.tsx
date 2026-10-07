@@ -13,6 +13,8 @@ export interface ComputerHeaderProps {
     computer?: ComputerItem;
     selectedTab: string;
     onSelectTab: (tab: string) => void;
+    /** Opens the library's right-click menu (Reload), anchored at the event. */
+    onLibraryContextMenu?: (e: MouseEvent) => void;
 }
 
 export interface OsBrandInfo {
@@ -161,6 +163,11 @@ const ComputerHeader: Component<ComputerHeaderProps> = (props) => {
 
                 <PaperListItem
                     value="library"
+                    onContextMenu={(e: MouseEvent) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        props.onLibraryContextMenu?.(e);
+                    }}
                     icon={
                         <img
                             src={libraryIcon}

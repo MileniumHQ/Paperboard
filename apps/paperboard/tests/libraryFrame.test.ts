@@ -2,7 +2,11 @@
 // is security-relevant: sender window, origin, and panel identity are all
 // checked before a request can reach the daemon install path.
 import { describe, it, expect } from "bun:test";
-import { libraryFramePhase, parseLibraryMessage } from "../src/renderer/src/lib/libraryFrame";
+import {
+    libraryFramePhase,
+    libraryFrameSrc,
+    parseLibraryMessage,
+} from "../src/renderer/src/lib/libraryFrame";
 
 const ORIGIN = "https://origami.ariapis.com";
 const sourceWindow = {} as Window;
@@ -158,6 +162,19 @@ describe("library media requests", () => {
                 identity,
             ),
         ).toBeNull();
+    });
+});
+
+describe("library frame reload", () => {
+    it("a bumped reload token addresses a fresh library document", () => {
+        // the src must change, or the browser reuses the live document and a
+        // Reload Library click would appear to do nothing
+        expect(libraryFrameSrc("https://origami.example/library", 0)).toBe(
+            "https://origami.example/library/?r=0",
+        );
+        expect(libraryFrameSrc("https://origami.example/library/", 1)).toBe(
+            "https://origami.example/library/?r=1",
+        );
     });
 });
 

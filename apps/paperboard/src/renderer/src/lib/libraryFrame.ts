@@ -131,6 +131,17 @@ export const shellToLibrary: ShellToLibraryMessages = {
 export type LibraryFramePhase = "failed" | "loading" | "ready";
 
 /**
+ * The iframe document URL for a given reload token. The query string makes a
+ * bumped token a URL the browser treats as a new document; that is exactly
+ * what the sidebar's Reload Library action does, where re-fetching the
+ * registry would leave the already-rendered page (and its stale state) alive.
+ */
+export function libraryFrameSrc(url: string, reloadToken: number): string {
+    const base = url.endsWith("/") ? url : `${url}/`;
+    return `${base}?r=${reloadToken}`;
+}
+
+/**
  * The single gate for what the shell shows over the library frame. The
  * iframe is only revealed once the library has connected, and — when it
  * advertises the painted-before-reveal protocol — reported ready. A legacy

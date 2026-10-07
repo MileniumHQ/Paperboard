@@ -18,6 +18,7 @@ import {
 import { logToMain } from "../../lib/shell";
 import {
     libraryFramePhase,
+    libraryFrameSrc,
     parseLibraryMessage,
     shellToLibrary,
 } from "../../lib/libraryFrame";
@@ -42,6 +43,14 @@ export interface LibraryFrameProps {
     onOpen: (panelId: string) => void;
     /** Reads an installed panel's icon and store listing from its own files. */
     loadMedia: (panelId: string, full: boolean) => Promise<InstalledPanelMedia>;
+    /**
+     * Bumped by the shell (the sidebar's Reload Library action) to fetch a
+     * fresh library document. The iframe src carries it, so a bump reloads
+     * through Solid instead of a DOM mutation that bypasses the framework.
+     */
+    reloadToken?: number;
+    /** Requests a fresh reload; the failure overlay's retry uses this too. */
+    onReload?: () => void;
     /** Overridable for tests/dev; defaults to the registry origin's /library/. */
     libraryUrl?: string;
 }
@@ -52,7 +61,6 @@ const LibraryFrame: Component<LibraryFrameProps> = (props) => {
     const [ready, setReady] = createSignal(false);
     const [readyCapable, setReadyCapable] = createSignal(false);
     const [failure, setFailure] = createSignal(false);
-    const [reloadToken, setReloadToken] = createSignal(0);
     let frame: HTMLIFrameElement | undefined;
 
     const phase = () =>
@@ -151,6 +159,20 @@ const LibraryFrame: Component<LibraryFrameProps> = (props) => {
         if (props.active) setMounted(true);
     });
 
+    // A reload is a fresh document: drop the previous page's connection and
+    // readiness so the loader covers the frame until the new library reports
+    // in, instead of revealing a blank reloading page.
+    createEffect<number>((previous) => {
+        const token = props.reloadToken ?? 0;
+        if (token !== previous) {
+            setConnected(false);
+            setReady(false);
+            setReadyCapable(false);
+            setFailure(false);
+        }
+        return token;
+    }, props.reloadToken ?? 0);
+
     createEffect(() => {
         if (!mounted() || !props.active || connected() || failure()) return;
         const timer = setTimeout(
@@ -207,7 +229,7 @@ const LibraryFrame: Component<LibraryFrameProps> = (props) => {
                 <iframe
                     ref={frame}
                     title="Panel Library"
-                    src={`${libraryUrl()}?r=${reloadToken()}`}
+                    src={libraryFrameSrc(libraryUrl(), props.reloadToken ?? 0)}
                     sandbox="allow-scripts allow-same-origin allow-downloads"
                     style={{
                         width: "100%",
@@ -236,7 +258,7 @@ const LibraryFrame: Component<LibraryFrameProps> = (props) => {
                         setConnected(false);
                         setReady(false);
                         setReadyCapable(false);
-                        setReloadToken((token) => token + 1);
+                        props.onReload?.();
                     }}
                 />
             </Show>
