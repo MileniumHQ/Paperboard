@@ -1421,14 +1421,10 @@ export default function App() {
                         </div>
                     )}
                 </Show>
-                <Show when={syncState().status !== "applied"}>
+                <Show when={syncState().status === "error"}>
                     <div role="status" class="canvas-sync-status">
-                        <PaperText size={1}>{syncState().status === "error"
-                            ? (syncState() as { message: string }).message
-                            : "Applying changes…"}</PaperText>
-                        <Show when={syncState().status === "error"}>
-                            <PaperButton size="tiny" onClick={() => { userEditUnsaved = true; scheduleCanvas(); }}>Retry saving</PaperButton>
-                        </Show>
+                        <PaperText size={1}>{(syncState() as { message: string }).message}</PaperText>
+                        <PaperButton size="tiny" onClick={() => { userEditUnsaved = true; scheduleCanvas(); }}>Retry saving</PaperButton>
                     </div>
                 </Show>
                 <PaperEffect variant="success">
