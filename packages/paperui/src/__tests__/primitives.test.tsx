@@ -25,6 +25,20 @@ describe("PaperAvatar", () => {
         expect(container.querySelector("img")).toBeNull();
         expect(container.textContent).toContain("dns");
     });
+
+    test("draws an image avatar without the fallback surface chip", () => {
+        // the chip background belongs to the fallback glyph; an image (which
+        // may carry its own transparency) must not sit on a painted tile
+        const { container } = render(() => (
+            <PaperAvatar src="https://cdn.example/a.png" alt="Bot" />
+        ));
+        expect(container.firstElementChild!.className).not.toContain("chip");
+    });
+
+    test("paints the surface chip behind the fallback glyph", () => {
+        const { container } = render(() => <PaperAvatar fallbackIcon="dns" />);
+        expect(container.firstElementChild!.className).toContain("chip");
+    });
 });
 
 describe("PaperButton", () => {

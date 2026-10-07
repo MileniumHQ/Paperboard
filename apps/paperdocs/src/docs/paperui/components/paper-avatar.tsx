@@ -14,13 +14,14 @@ export default function PaperAvatarDoc() {
             <PaperText preset="body">
                 PaperAvatar renders an image avatar with an automatic icon fallback.
                 Reach for PaperAvatar when displaying user profiles, bot identities, or application icons.
-                The component switches to the fallback icon when the image source is missing or fails to load.
+                An image avatar is drawn on a transparent background; the surface chip is reserved for the fallback glyph.
             </PaperText>
 
             <PaperText preset="subheader" id="overview">Overview</PaperText>
             <PaperText preset="body">
                 Pass an image URL via the src prop.
-                When no image URL is provided, the component renders a fallback glyph inside an avatar tile.
+                When no image URL is provided, the component renders a fallback glyph on a surface chip.
+                The chip is not drawn behind an image, so transparent avatars such as player heads blend with the surface beneath them.
             </PaperText>
             <PaperCode block language="tsx">
 {`import { PaperAvatar, PaperCard, PaperFlex } from "@mileniumhq/paperui";
@@ -95,6 +96,7 @@ export function Example() {
             <PaperText preset="body">
                 PaperAvatar renders an HTML span containing either an img element or a PaperIcon component.
                 The square shape matches application launcher tiles and plugin icons.
+                The surface chip background is applied only when the fallback icon is shown, so an image with transparency does not sit on an opaque tile.
             </PaperText>
 
             <PaperText preset="subheader" id="recipes">Recipes</PaperText>

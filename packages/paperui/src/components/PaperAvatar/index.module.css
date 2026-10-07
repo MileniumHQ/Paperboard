@@ -5,6 +5,12 @@
     border-radius: 50%;
     overflow: hidden;
     flex-shrink: 0;
+}
+
+/* The surface chip is the fallback glyph's tile; an avatar backed by an image
+   renders on a transparent background so its own pixels (and any intentional
+   transparency) show through. */
+.PaperAvatar.chip {
     background: var(--paper-surface-element);
     color: var(--paper-text-subtle);
 }

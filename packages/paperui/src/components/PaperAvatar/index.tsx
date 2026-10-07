@@ -14,7 +14,11 @@ export interface PaperAvatarProps extends JSX.HTMLAttributes<HTMLSpanElement> {
     fallbackIcon?: string;
 }
 
-/** A square avatar: image when available, icon chip when not. */
+/**
+ * An avatar: image when available, icon on a surface chip when not. The chip
+ * background belongs to the fallback glyph only — an image avatar is drawn on
+ * a transparent background so its own pixels (and any transparency) show.
+ */
 export function PaperAvatar(props: PaperAvatarProps) {
     const [local, rest] = splitProps(props, [
         "src",
@@ -32,6 +36,7 @@ export function PaperAvatar(props: PaperAvatarProps) {
             styles.PaperAvatar,
             styles[local.size ?? "medium"],
             local.shape === "square" ? styles.square : "",
+            local.src ? "" : styles.chip,
             local.class,
         ]
             .filter(Boolean)
