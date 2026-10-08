@@ -12,6 +12,7 @@ import {
     validatePluginFilename,
 } from "../core/plugins";
 import { trashRemovePathsWith } from "./trash";
+import { SOFTWARE_IDS } from "../software/catalog";
 import { makeTrashRemoveDeps } from "./trashDeps";
 import type { GameServerState, InstalledPlugin, InstalledRecord } from "./types";
 import { PANEL_ID } from "./types";
@@ -85,9 +86,9 @@ export async function deletePlugin(
     }
 }
 
-// every plugin dir regardless of software: switching Paper<->Fabric changes
-// which folder is "active", so "uninstall everything" must clear both
-const ALL_PLUGIN_DIRS = ["plugins", "mods"];
+// every add-on dir regardless of software: switching software changes
+// which folder is "active", so "uninstall everything" must clear all of them
+const ALL_PLUGIN_DIRS = [...new Set(SOFTWARE_IDS.map((id) => pluginDirName(id)))];
 
 export async function uninstallAllPlugins(
     _ctx: ServiceContext<GameServerState>,

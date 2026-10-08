@@ -1,6 +1,6 @@
 import type { InstallProgress } from "../core/state";
 
-// Progress relay for the server-jar download inside installServerVersion.
+// Progress relay for the downloads inside installServerVersion.
 // The UI cannot subscribe mid-action (bridge calls are request/response),
 // so the service publishes throttled progress through service state, which
 // already syncs to the UI. Pure mapping + throttle live here for tests;

@@ -6,6 +6,7 @@ import {
 } from "@mileniumhq/paperapi";
 import { parseProperties, extractServerPort, cleanMotdValue } from "../core/properties";
 import type { GameServerState } from "./types";
+import { isServerSoftware } from "../software/catalog";
 import { PANEL_ID } from "./types";
 
 export { parseProperties };
@@ -16,7 +17,10 @@ export async function loadConfigAndProperties(
     try {
         const saved = await config.get<any>(PANEL_ID);
         const patch: Partial<GameServerState> = {};
-        if (saved?.software) patch.serverSoftware = saved.software;
+        if (isServerSoftware(saved?.software)) patch.serverSoftware = saved.software;
+        else if (saved?.software !== undefined) {
+            console.error("[Service:Config] unknown server software in config:", JSON.stringify(saved.software));
+        }
         if (saved?.version) patch.serverVersion = saved.version;
         if (typeof saved?.ramGB === "number") patch.ramAllocation = saved.ramGB;
 

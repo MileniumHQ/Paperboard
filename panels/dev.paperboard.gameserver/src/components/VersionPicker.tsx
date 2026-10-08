@@ -11,11 +11,9 @@ import {
     PaperText,
     getVarCss,
 } from "@mileniumhq/paperui";
-import {
-    getDetailedVersionsForSoftware,
-    type ServerSoftwareType,
-    type VersionItem,
-} from "../lib/software";
+import type { ServerSoftwareType, VersionItem } from "../lib/software";
+import { serverBridge } from "../lib/server";
+import { ACTION_IDS } from "../service/contract";
 
 // Shared Minecraft version picker: search, release-channel filters and the
 // version list. Used by onboarding (Setup) and the Versions tab so there is
@@ -45,7 +43,8 @@ export default function VersionPicker(props: {
         setAllVersions([]);
         props.onSelectVersion("");
         try {
-            const versions = (await getDetailedVersionsForSoftware(software))
+            // the service fetches upstream: some indexes refuse cross-origin reads
+            const versions = (await serverBridge.call<VersionItem[]>(ACTION_IDS.listSoftwareVersions, { software }))
                 .filter((v) => v.installable && (v.type === "release" || v.type === "snapshot"));
             if (currentGeneration !== generation) return;
             setAllVersions(versions);

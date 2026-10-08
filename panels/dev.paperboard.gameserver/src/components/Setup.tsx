@@ -1,5 +1,5 @@
 import { PANEL_ID } from "../service/types";
-import { createSignal, createEffect, Show, onCleanup } from "solid-js";
+import { createSignal, createEffect, For, Show, onCleanup } from "solid-js";
 import {
     PaperFlex,
     PaperButton,
@@ -18,13 +18,14 @@ import {
 } from "@mileniumhq/paperui";
 import InstallLoaders from "./InstallLoaders";
 import { fileApi } from "@mileniumhq/paperapi";
-import { ensureJavaRuntime } from "../lib/ensureJava";
+import { createInstallRun } from "../lib/installRun";
 import {
-    getSoftwareDownload,
-    getRequiredJavaVersion,
+    SOFTWARE,
+    SOFTWARE_IDS,
     SOFTWARE_NAMES,
     type ServerSoftwareType,
 } from "../lib/software";
+import SoftwareIcon from "./SoftwareIcon";
 import VersionPicker from "./VersionPicker";
 import { updatePanelConfig } from "../lib/server";
 
@@ -63,12 +64,7 @@ interface InstallStepProps {
 function InstallStep(props: InstallStepProps) {
     const wizard = useWizard();
 
-    const [javaDownloadPercent, setJavaDownloadPercent] = createSignal(0);
-    const [javaDownloadStatus, setJavaDownloadStatus] = createSignal<LoaderStatus>("loading");
-    const [javaExtractPercent, setJavaExtractPercent] = createSignal(0);
-    const [javaExtractStatus, setJavaExtractStatus] = createSignal<LoaderStatus>("waiting");
-    const [softwarePercent, setSoftwarePercent] = createSignal(0);
-    const [softwareStatus, setSoftwareStatus] = createSignal<LoaderStatus>("waiting");
+    const install = createInstallRun();
     const [setupPercent, setSetupPercent] = createSignal(0);
     const [setupStatus, setSetupStatus] = createSignal<LoaderStatus>("waiting");
     const [showEulaModal, setShowEulaModal] = createSignal(false);
@@ -93,79 +89,18 @@ function InstallStep(props: InstallStepProps) {
         if (busy() || disposed) return;
         setBusy(true);
         setError("");
-        setJavaDownloadPercent(0);
-        setJavaDownloadStatus("loading");
-        setJavaExtractPercent(0);
-        setJavaExtractStatus("waiting");
-        setSoftwarePercent(0);
-        setSoftwareStatus("waiting");
         setSetupPercent(0);
         setSetupStatus("waiting");
         wizard?.setOptionsShown(false);
         wizard?.setCanProceed(false);
 
-        const javaPkg = getRequiredJavaVersion(props.version);
-        if (!javaPkg) {
-            reportFailure(new Error(
-                `Could not determine the Minecraft version (got ${JSON.stringify(props.version)}). Pick a version before installing.`,
-            ));
-            return;
-        }
-
         try {
-            await ensureJavaRuntime(javaPkg, {
-                onDownload: (percent) => {
-                    setJavaDownloadStatus("loading");
-                    setJavaDownloadPercent(percent);
-                },
-                onExtract: (percent) => {
-                    setJavaDownloadStatus("success");
-                    setJavaDownloadPercent(100);
-                    setJavaExtractStatus("loading");
-                    setJavaExtractPercent(percent);
-                },
-            });
+            // the service downloads, installs and records the software;
+            // the rows follow its published progress
+            await install.run(props.software, props.version);
             if (disposed) return;
-            setJavaDownloadStatus("success");
-            setJavaDownloadPercent(100);
-            setJavaExtractStatus("success");
-            setJavaExtractPercent(100);
         } catch (err) {
-            console.error("[InstallStep] Java installation error:", err);
-            if (javaDownloadStatus() === "success") setJavaExtractStatus("error");
-            else setJavaDownloadStatus("error");
-            reportFailure(err);
-            return;
-        }
-
-        try {
-            setSoftwareStatus("loading");
-            setSoftwarePercent(0);
-
-            const downloadInfo = await getSoftwareDownload(props.software, props.version);
-            await fileApi.download({
-                url: downloadInfo.url,
-                targetPath: "server.jar",
-                appId: PANEL_ID,
-                sha1: downloadInfo.sha1,
-                sha256: downloadInfo.sha256,
-                onProgress: (p) => {
-                    if (p.stage === "downloading") {
-                        setSoftwareStatus("loading");
-                        setSoftwarePercent(p.percent);
-                    } else if (p.stage === "completed") {
-                        setSoftwareStatus("success");
-                        setSoftwarePercent(100);
-                    }
-                },
-            });
-
-            if (disposed) return;
-            setSoftwareStatus("success");
-            setSoftwarePercent(100);
-        } catch (err) {
-            console.error("[InstallStep] Server software download error:", err);
-            setSoftwareStatus("error");
+            console.error("[InstallStep] Server install error:", err);
             reportFailure(err);
             return;
         }
@@ -227,12 +162,6 @@ function InstallStep(props: InstallStepProps) {
             "EULA declined. The downloaded files stay in place. The server cannot start until the EULA is accepted; you can accept it any time by running setup again or agreeing when the server prompts.",
         );
 
-        setJavaDownloadPercent(0);
-        setJavaDownloadStatus("loading");
-        setJavaExtractPercent(0);
-        setJavaExtractStatus("waiting");
-        setSoftwarePercent(0);
-        setSoftwareStatus("waiting");
         setSetupPercent(0);
         setSetupStatus("waiting");
         started = false;
@@ -248,8 +177,6 @@ function InstallStep(props: InstallStepProps) {
             startInstallation();
         }
     });
-
-    const softwareName = () => SOFTWARE_NAMES[props.software] || "Server Software";
 
     return (
         <>
@@ -269,21 +196,7 @@ function InstallStep(props: InstallStepProps) {
                 </Show>
                 <InstallLoaders
                     items={[
-                        {
-                            label: "Downloading Java...",
-                            percent: javaDownloadPercent,
-                            status: javaDownloadStatus,
-                        },
-                        {
-                            label: "Installing Java...",
-                            percent: javaExtractPercent,
-                            status: javaExtractStatus,
-                        },
-                        {
-                            label: `Downloading ${softwareName()}...`,
-                            percent: softwarePercent,
-                            status: softwareStatus,
-                        },
+                        ...install.rows(props.software),
                         {
                             label: "Setting up server...",
                             percent: setupPercent,
@@ -344,13 +257,9 @@ export default function Setup(props: SetupProps) {
         setSaving(true);
         setSaveError("");
         try {
-            // through the service so panel state (and the sidebar's Mods/Plugins
-            // label) is live, not just the config file
-            await updatePanelConfig({
-                configured: true,
-                software: serverSoftware(),
-                version: serverVersion(),
-            });
+            // the install step already recorded software and version; this
+            // marks onboarding done, through the service so panel state is live
+            await updatePanelConfig({ configured: true });
             props.onComplete?.();
         } catch (err) {
             setSaveError(err instanceof Error ? err.message : String(err));
@@ -399,31 +308,25 @@ export default function Setup(props: SetupProps) {
                                 setServerVersion("");
                             }}
                         >
-                            <PaperSelectorItem
-                                value="vanilla"
-                                icon="deployed_code"
-                                description="Official Mojang release. Straight from the source, but suffers from performance issues and has no plugin or mod support."
-                            >
-                                Vanilla
-                            </PaperSelectorItem>
-                            <PaperSelectorItem
-                                value="paper"
-                                icon={<PaperIcon src="/assets/paper.png" />}
-                                description={
-                                    <>
-                                        <strong>Recommended.</strong> Vast plugin support and high performance, but makes opinionated changes to some game mechanics.
-                                    </>
-                                }
-                            >
-                                Paper
-                            </PaperSelectorItem>
-                            <PaperSelectorItem
-                                value="fabric"
-                                icon={<PaperIcon src="/assets/fabric.png" />}
-                                description="Limited traditional plugins support, but extensively supports lighter mods. Does not improve performance out of the box."
-                            >
-                                Fabric
-                            </PaperSelectorItem>
+                            <For each={SOFTWARE_IDS}>
+                                {(id) => (
+                                    <PaperSelectorItem
+                                        value={id}
+                                        icon={<SoftwareIcon software={id} />}
+                                        description={
+                                            SOFTWARE[id].recommended ? (
+                                                <>
+                                                    <strong>Recommended.</strong> {SOFTWARE[id].description}
+                                                </>
+                                            ) : (
+                                                SOFTWARE[id].description
+                                            )
+                                        }
+                                    >
+                                        {SOFTWARE[id].name}
+                                    </PaperSelectorItem>
+                                )}
+                            </For>
                         </PaperSelector>
                     </PaperFlex>
                 </PaperCenteredInterface>

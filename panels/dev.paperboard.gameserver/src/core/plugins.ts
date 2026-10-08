@@ -1,4 +1,4 @@
-import type { ServerSoftwareType } from "../lib/software";
+import { SOFTWARE, type ServerSoftwareType } from "../software/catalog";
 
 export interface InstalledRecord {
     projectId: string;
@@ -16,8 +16,9 @@ export interface InstalledPlugin {
 
 export const INSTALL_RECORDS_KEY = "pluginInstalls";
 
+// a software without add-ons keeps the plugins/ name it always had here
 export function pluginDirName(software: ServerSoftwareType): string {
-    return software === "fabric" ? "mods" : "plugins";
+    return SOFTWARE[software].addons?.dir ?? "plugins";
 }
 
 export function isInstallRecord(value: unknown): value is InstalledRecord {

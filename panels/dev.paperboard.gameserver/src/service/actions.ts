@@ -2,8 +2,6 @@ import {
     actionsApi,
     defineType,
     defineAction,
-    files as fileApi,
-    packages as packageApi,
     type ActionDefinition,
     type CustomTypeDefinition,
     type ServiceContext,
@@ -44,15 +42,15 @@ import { getHeadDataUrl } from "./skins";
 import { listLogFiles, readLogFile } from "./logs";
 import { queryGamerules, setGamerule } from "./gamerules";
 import { applyRuntimeProperties } from "./runtimeProperties";
-import {
-    toInstallProgress,
-    shouldRelayInstallProgress,
-    type InstallProgress,
-} from "./installProgress";
+import { installServerSoftware } from "./softwareInstall";
+import { liveInstallDeps } from "./softwareInstallDeps";
 import { assertPlayerName, assertSingleLine } from "../core/players";
 import type { GameServerState } from "./types";
 import { ACTION_IDS, TRIGGER_IDS, PANEL_ID } from "./contract";
-import { getRequiredJavaVersion, getSoftwareDownload, SOFTWARE_NAMES } from "../lib/software";
+import { SOFTWARE_NAMES } from "../lib/software";
+import { isServerSoftware, SOFTWARE_IDS } from "../software/catalog";
+import { INSTALL_OWNED_CONFIG_KEYS } from "../software/installRecord";
+import { providerFor } from "../software/providers";
 import { isSupportedMcVersion, mcAtLeast, MIN_SUPPORTED_MC_VERSION } from "../lib/versionProfile";
 import { GAMERULES } from "../generated/gamerules.generated";
 
@@ -770,7 +768,16 @@ export const panelActions: ActionDefinition[] = [
             ctx: ServiceContext<GameServerState>,
             inputs: { patch?: Record<string, unknown> },
         ) => {
-            await updatePanelConfig(ctx, inputs?.patch ?? {});
+            const patch = inputs?.patch ?? {};
+            // what is installed is written by install-server-version alone:
+            // a patch claiming another software or launch would make the
+            // panel launch and later delete files it never installed
+            for (const key of INSTALL_OWNED_CONFIG_KEYS) {
+                if (Object.prototype.hasOwnProperty.call(patch, key)) {
+                    throw new Error(`"${key}" is set by installing a server version, not by a config patch`);
+                }
+            }
+            await updatePanelConfig(ctx, patch);
             return true;
         },
     }),
@@ -809,14 +816,14 @@ export const panelActions: ActionDefinition[] = [
         id: ACTION_IDS.installServerVersion,
         name: "Install Server Version",
         category: "Server",
-        description: "Downloads and replaces server.jar for a software/version (offline only)",
+        description: "Installs a server software for a Minecraft version, replacing the current one (offline only)",
         template: "Install server {software} {version}",
         inputs: {
             software: {
                 type: "string",
                 label: "Software",
                 required: true,
-                options: (["vanilla", "paper", "fabric"] as const).map((value) => ({
+                options: SOFTWARE_IDS.map((value) => ({
                     label: SOFTWARE_NAMES[value],
                     value,
                 })),
@@ -830,8 +837,8 @@ export const panelActions: ActionDefinition[] = [
             ctx: ServiceContext<GameServerState>,
             inputs: { software: string; version: string },
         ) => {
-            const software = String(inputs?.software ?? "");
-            if (software !== "vanilla" && software !== "paper" && software !== "fabric") {
+            const software = inputs?.software;
+            if (!isServerSoftware(software)) {
                 throw new Error(`Unknown server software: ${JSON.stringify(inputs?.software)}`);
             }
             const version = assertSingleLine(inputs?.version, "version", 64);
@@ -844,39 +851,36 @@ export const panelActions: ActionDefinition[] = [
             if (ctx.state.serverStatus !== "offline") {
                 throw new Error("Stop the server before switching versions");
             }
-            const javaPkg = getRequiredJavaVersion(version);
-            if (!javaPkg) {
-                throw new Error(`Could not determine the Java runtime for ${version}`);
-            }
-            if (!(await packageApi.isInstalled(javaPkg))) {
-                await packageApi.download(javaPkg);
-            }
-            // throws when the upstream record has no checksum (never undefined)
-            const download = await getSoftwareDownload(software, version);
-            // the Versions modal reads the jar row through service state:
-            // bridge calls are request/response, so without this relay the
-            // row would sit static until the call resolves
-            ctx.setState({ installProgress: null });
-            let lastProgress: InstallProgress | null = null;
-            await fileApi.download({
-                url: download.url,
-                targetPath: "server.jar",
-                appId: PANEL_ID,
-                sha1: download.sha1,
-                sha256: download.sha256,
-                onProgress: (payload) => {
-                    const next = toInstallProgress(payload);
-                    if (!next) return;
-                    if (!shouldRelayInstallProgress(lastProgress, next)) return;
-                    lastProgress = next;
-                    ctx.setState({ installProgress: next });
-                },
-            });
-            await updatePanelConfig(ctx, { software, version });
+            const outcome = await installServerSoftware(ctx, software, version, liveInstallDeps(ctx));
             // the version decides which gamerules exist: refresh the rule
             // dropdown so the flow builder can't offer a rule this jar lacks
             await republishDynamicActions(ctx);
-            return { software, version };
+            return outcome;
+        },
+    }),
+
+    defineAction({
+        id: ACTION_IDS.listSoftwareVersions,
+        name: "List Software Versions",
+        category: "Server",
+        description: "Lists the Minecraft versions a server software can install",
+        internal: true,
+        template: "List versions for {software}",
+        inputs: {
+            software: { type: "string", label: "Software", required: true },
+        },
+        output: { type: "object", label: "Versions" },
+        quick: false,
+        icon: "deployed_code",
+        // fetched here, not in the panel page: upstream indexes such as
+        // files.minecraftforge.net send no CORS headers, and the service
+        // already owns every other call to these hosts
+        run: async (_ctx: ServiceContext<GameServerState>, inputs: { software?: string }) => {
+            const software = inputs?.software;
+            if (!isServerSoftware(software)) {
+                throw new Error(`Unknown server software: ${JSON.stringify(software)}`);
+            }
+            return providerFor(software).listVersions();
         },
     }),
 

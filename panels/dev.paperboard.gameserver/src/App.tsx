@@ -9,6 +9,7 @@ import {
 import { config } from "@mileniumhq/paperapi";
 import { PANEL_ID } from "./service/contract";
 import { serverSoftware } from "./lib/server";
+import { SOFTWARE } from "./software/catalog";
 import { hasKnownMcVersion, supports } from "./lib/capabilities";
 import Setup from "./components/Setup";
 import Overview from "./components/Overview";
@@ -31,9 +32,9 @@ export default function App() {
     // bumped when the Versions tab asks the Plugins tab to check for updates
     const [pluginUpdateRequest, setPluginUpdateRequest] = createSignal(0);
 
-    // Fabric calls them mods; Vanilla has no plugin system at all
-    const pluginKind = () => (serverSoftware() === "fabric" ? "Mods" : "Plugins");
-    const hasPluginTab = () => serverSoftware() !== "vanilla";
+    // mod loaders call them mods; Vanilla has no add-on system at all
+    const pluginKind = () => (SOFTWARE[serverSoftware()].addons?.kind === "mod" ? "Mods" : "Plugins");
+    const hasPluginTab = () => SOFTWARE[serverSoftware()].addons !== null;
 
     // whole-feature floors: hide the tab rather than show half its controls
     // doing nothing. Unknown version stays permissive so nothing flashes out

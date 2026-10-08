@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { validateActionDefinition } from "@mileniumhq/paperapi";
 import { ACTION_IDS, TRIGGER_IDS } from "../src/service/contract";
+import { SOFTWARE_IDS } from "../src/software/catalog";
 import {
     bindDynamicAction,
     deletePluginAction,
@@ -92,13 +93,18 @@ test("render-map-tile stays callable for the Map tab but hides from flows", () =
     expect(tile.internal).toBe(true);
 });
 
-test("install-server offers exactly the software the service accepts", () => {
+// The software list used to be pinned here as three literals; the catalog
+// now owns it, so the contract is "the dropdown is the catalog, and the
+// action refuses anything the catalog does not list".
+test("install-server offers exactly the software the service accepts", async () => {
     const install = panelActions.find((a) => a.id === ACTION_IDS.installServerVersion)!;
-    expect(install.inputs?.software?.options?.map((o: any) => o.value)).toEqual([
-        "vanilla",
-        "paper",
-        "fabric",
-    ]);
+    expect(install.inputs?.software?.options?.map((o: any) => o.value)).toEqual([...SOFTWARE_IDS]);
+    expect(SOFTWARE_IDS).toContain("neoforge");
+    expect(SOFTWARE_IDS).toContain("forge");
+    const ctx = { state: { serverStatus: "offline" }, setState: () => {} } as any;
+    await expect(
+        (install as any).run(ctx, { software: "quilt", version: "1.21.1" }),
+    ).rejects.toThrow("Unknown server software");
 });
 
 test("gamerule options are filtered to the installed version", () => {
@@ -153,4 +159,16 @@ test("republishing a callable action binds it to the live service context", asyn
     expect(bound.run).toBeDefined();
     await bound.run!(null, { a: 1 });
     expect(seen).toEqual([{ live: true }]);
+});
+
+test("a config patch cannot rewrite what is installed", async () => {
+    // the launch and owned-files record is the install action's alone: a
+    // patched record would launch, and later delete, files nobody installed
+    const update = panelActions.find((a) => a.id === ACTION_IDS.updatePanelConfig)!;
+    const ctx = { state: { serverStatus: "offline" }, setState: () => {} } as any;
+    for (const key of ["software", "version", "install"]) {
+        await expect((update as any).run(ctx, { patch: { [key]: "x" } })).rejects.toThrow(
+            "set by installing a server version",
+        );
+    }
 });

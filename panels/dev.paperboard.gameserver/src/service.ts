@@ -1,5 +1,7 @@
 import { definePanelService, processApi } from "@mileniumhq/paperapi";
-import { SERVER_PROC_ID, type GameServerState } from "./service/types";
+import { SERVER_PROC_ID, appendCapped, type GameServerState } from "./service/types";
+import { recoverInterruptedInstall } from "./service/softwareInstall";
+import { liveRecoveryDeps } from "./service/softwareInstallDeps";
 import { loadConfigAndProperties } from "./service/config";
 import { handleProcessData, handleProcessExit } from "./service/lifecycle";
 import {
@@ -50,6 +52,22 @@ export const gameServerService = definePanelService({
     actions: [...panelActions, ...panelEventActions],
     async onInit(ctx) {
         await loadConfigAndProperties(ctx);
+        // an install the previous service run never finished is settled
+        // before anything reads the server folder
+        try {
+            const recovered = await recoverInterruptedInstall(liveRecoveryDeps());
+            if (recovered.committed.length || recovered.rolledBack.length || recovered.discarded.length) {
+                console.log("[gameserver] settled interrupted install:", JSON.stringify(recovered));
+            }
+        } catch (err) {
+            console.error("[gameserver] interrupted install could not be settled:", String(err));
+            ctx.setState({
+                serverEntries: appendCapped(ctx.state.serverEntries, {
+                    type: "error",
+                    content: `[Server] An interrupted install could not be cleaned up: ${err instanceof Error ? err.message : String(err)}`,
+                }),
+            });
+        }
         // a newly seen player name must reach the join/leave triggers'
         // dropdowns without a restart
         setPlayerNamesChangedHandler(() => scheduleRepublishDynamicActions(ctx));

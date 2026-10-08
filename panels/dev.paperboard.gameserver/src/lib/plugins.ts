@@ -4,7 +4,7 @@ import { PANEL_ID } from "../service/types";
 import { serverSoftware, serverVersion, updatePanelConfig, serverBridge } from "./server";
 import { behaviorVersionOf } from "./versionProfile";
 import { ACTION_IDS } from "../service/contract";
-import type { ServerSoftwareType } from "./software";
+import { SOFTWARE, type ServerSoftwareType } from "./software";
 import { sanitizeFileName } from "./filesystem";
 import {
     INSTALL_RECORDS_KEY,
@@ -195,14 +195,18 @@ export interface EcosystemInfo {
 }
 
 export function getEcosystem(software: ServerSoftwareType): EcosystemInfo | null {
-    switch (software) {
-        case "paper":
-            return { projectType: "plugin", loaderCategory: "paper", kind: "plugin" };
-        case "fabric":
-            return { projectType: "mod", loaderCategory: "fabric", kind: "mod" };
-        default:
-            return null;
-    }
+    const addons = SOFTWARE[software].addons;
+    return addons
+        ? { projectType: addons.projectType, loaderCategory: addons.modrinthLoader, kind: addons.kind }
+        : null;
+}
+
+/** the Modrinth loader id of the installed software; it must have add-ons */
+function currentModrinthLoader(): string {
+    const software = serverSoftware();
+    const addons = SOFTWARE[software].addons;
+    if (!addons) throw new Error(`${SOFTWARE[software].name} has no plugin or mod system.`);
+    return addons.modrinthLoader;
 }
 
 export async function searchModrinth(query: string, signal?: AbortSignal): Promise<ModrinthHit[]> {
@@ -308,8 +312,7 @@ export async function getProject(projectIdOrSlug: string): Promise<ModrinthProje
 // The fallback pick is returned with exactMatch:false — callers must surface
 // the explicit confirm state, never install it silently.
 export async function resolveLatestFile(projectId: string): Promise<ResolvedDownload> {
-    const software = serverSoftware();
-    const loader = software === "fabric" ? "fabric" : "paper";
+    const loader = currentModrinthLoader();
     const mcVersion = serverVersion();
 
     const loaders = JSON.stringify([loader]);
@@ -429,8 +432,7 @@ export const MAX_VERSION_OPTIONS = 50;
 export async function listProjectVersions(
     projectId: string,
 ): Promise<ProjectVersionOption[]> {
-    const software = serverSoftware();
-    const loader = software === "fabric" ? "fabric" : "paper";
+    const loader = currentModrinthLoader();
     const mcVersion = serverVersion();
     const versions = await modrinthFetch<RawVersion[]>(
         `/project/${encodeURIComponent(projectId)}/version`,
@@ -555,8 +557,7 @@ async function resolveOneDependency(
         };
     }
 
-    const software = serverSoftware();
-    const loader = software === "fabric" ? "fabric" : "paper";
+    const loader = currentModrinthLoader();
     const mcVersion = serverVersion();
     const base = {
         key,
@@ -822,8 +823,7 @@ export async function previewInstall(
     versionId: string,
     includeOptionalKeys: string[] = [],
 ): Promise<InstallPreview> {
-    const software = serverSoftware();
-    const loader = software === "fabric" ? "fabric" : "paper";
+    const loader = currentModrinthLoader();
     const mcVersion = serverVersion();
     const record = await modrinthFetch<RawVersion>(
         `/version/${encodeURIComponent(versionId)}`,

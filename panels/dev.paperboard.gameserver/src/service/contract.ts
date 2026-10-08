@@ -34,6 +34,7 @@ export const ACTION_IDS = {
     listWorlds: "list-worlds",
     setActiveWorld: "set-active-world",
     installServerVersion: "install-server-version",
+    listSoftwareVersions: "list-software-versions",
     deleteWorld: "delete-world",
     listMapRegions: "list-map-regions",
     renderMapTile: "render-map-tile",

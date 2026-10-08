@@ -1,5 +1,5 @@
 import semver from "semver";
-import type { ServerSoftwareType } from "./software";
+import { SOFTWARE, type ServerSoftwareType, type WorldLayout } from "../software/catalog";
 
 // One place that answers "what does this (software, version) actually look
 // like?" for every version-sensitive feature in the panel. Modules consult a
@@ -17,7 +17,7 @@ import type { ServerSoftwareType } from "./software";
 //   26.1       world storage moves under dimensions/ + players/; Java 25
 
 export type GameruleNaming = "legacy" | "namespaced";
-export type WorldLayout = "dimensions" | "bukkit-split" | "vanilla-split";
+export type { WorldLayout };
 export type PlayerDataFolder = "players" | "legacy";
 export type MapPalette = "modern" | "legacy";
 
@@ -579,13 +579,6 @@ export const VERSION_OVERRIDES: readonly VersionOverride[] = [
     },
 ];
 
-// software baseline for fields the version table leaves open
-const SOFTWARE_WORLD_LAYOUT: Record<ServerSoftwareType, WorldLayout> = {
-    paper: "bukkit-split",
-    vanilla: "vanilla-split",
-    fabric: "vanilla-split",
-};
-
 // merges every override at or below `version`, ascending, over the
 // software baseline; a later row's named fields win, unnamed fields inherit
 export function resolveFactsWith(
@@ -595,7 +588,8 @@ export function resolveFactsWith(
 ): ResolvedFacts {
     const facts: ResolvedFacts = {
         ...BASELINE,
-        worldLayout: SOFTWARE_WORLD_LAYOUT[software] ?? BASELINE.worldLayout,
+        // software baseline (catalog) for fields the version table leaves open
+        worldLayout: SOFTWARE[software]?.worldLayout ?? BASELINE.worldLayout,
     };
     // sort defensively so nearest-earlier wins regardless of authoring order
     const ordered = [...overrides].sort((a, b) => {

@@ -18,11 +18,12 @@ export interface ChatMessage {
     content?: string;
 }
 
-// Live jar-download progress published by installServerVersion through
-// service state (bridge calls are request/response, so there is no other
-// channel). Null when no install is running.
+// Live install progress published by installServerVersion through service
+// state (bridge calls are request/response, so there is no other channel).
+// "installing" is a software installer running (Forge, NeoForge), which
+// reports no percentage. Null when no install is running.
 export interface InstallProgress {
-    stage: "downloading" | "verifying" | "completed" | "error";
+    stage: "downloading" | "verifying" | "installing" | "completed" | "error";
     percent: number;
 }
 

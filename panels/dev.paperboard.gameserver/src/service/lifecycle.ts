@@ -9,6 +9,10 @@ import {
 import stripAnsi from "strip-ansi";
 import { getRequiredJavaVersion, SOFTWARE_NAMES } from "../lib/software";
 import { isWindowsTarget } from "../lib/platform";
+import { currentInstall } from "../software/installRecord";
+import { javaLaunchArgs, launchEntryFile } from "../software/launch";
+import { isInstallRunning } from "./softwareInstall";
+import { javaBinaryPath } from "./java";
 import { parseChatMessage, parseLogLine } from "../lib/logs";
 import { parseGameruleValue } from "../core/gamerules";
 import { resolveVersionProfile } from "../lib/versionProfile";
@@ -65,13 +69,11 @@ export async function startServerInstance(
         ctx.setState({ activeIssue: null });
         await loadConfigAndProperties(ctx);
 
+        const saved = await config.get<Record<string, unknown>>(PANEL_ID);
         let version = ctx.state.serverVersion;
-        if (!version) {
-            const saved = await config.get<any>(PANEL_ID);
-            if (saved?.version) {
-                version = saved.version;
-                ctx.setState({ serverVersion: version });
-            }
+        if (!version && typeof saved?.version === "string" && saved.version) {
+            version = saved.version;
+            ctx.setState({ serverVersion: version });
         }
 
         if (version && !isSupportedMcVersion(version)) {
@@ -95,27 +97,39 @@ export async function startServerInstance(
 
         const javaPath = await packageApi.getPath(javaPkg);
         const serverDir = await fileApi.getPath("", PANEL_ID);
+        const targetOs = (await system.getInfo()).os;
+        const isWin = isWindowsTarget(serverDir, targetOs);
+        // launch what the last install recorded; a pre-record install is a
+        // plain server.jar
+        const { launch } = currentInstall(saved);
+        const entry = launchEntryFile(launch, isWin);
+        const softwareName = SOFTWARE_NAMES[ctx.state.serverSoftware];
         // fail here instead of a confusing "unable to access jarfile" exit
-        const hasJar = await fileApi.exists("server.jar", PANEL_ID).catch(() => false);
-        if (!hasJar) {
+        const hasEntry = await fileApi.exists(entry, PANEL_ID).catch(() => false);
+        if (!hasEntry) {
             throw new Error(
-                `server.jar is missing in the server folder — run Setup (it downloads the ${SOFTWARE_NAMES[ctx.state.serverSoftware]} ${version || "server"} jar) before starting.`,
+                `${entry} is missing in the server folder — reinstall ${softwareName} ${version || ""} from Versions (or run Setup) before starting.`,
             );
         }
         console.log(
-            `[Service:Lifecycle] starting in ${serverDir} (server.jar present) using ${javaPkg}...`,
+            `[Service:Lifecycle] starting in ${serverDir} (${entry} present) using ${javaPkg}...`,
         );
-        const targetOs = (await system.getInfo()).os;
-        const isWin = isWindowsTarget(serverDir, targetOs);
-        const javaBin = `${javaPath}/bin/${isWin ? "java.exe" : "java"}`;
+        const javaBin = javaBinaryPath(javaPath, isWin);
 
+        // an install owns the server folder until it activates or rolls
+        // back. Checked with no await before the status flips: the install
+        // action likewise checks "offline" and claims the folder in one
+        // synchronous step, so the two can never both proceed.
+        if (isInstallRunning()) {
+            throw new Error("A server install is running; start the server once it finishes.");
+        }
         ctx.setState({
             serverStatus: "starting",
             chatMessages: [],
             serverEntries: [
                 {
                     type: "info",
-                    content: `[Server] Starting ${SOFTWARE_NAMES[ctx.state.serverSoftware]} ${version || "server"} using ${javaPkg}...`,
+                    content: `[Server] Starting ${softwareName} ${version || "server"} using ${javaPkg}...`,
                 },
             ],
         });
@@ -123,13 +137,7 @@ export async function startServerInstance(
         await processApi.start({
             id: SERVER_PROC_ID,
             command: javaBin,
-            args: [
-                `-Xmx${ctx.state.ramAllocation}G`,
-                `-Xms${ctx.state.ramAllocation}G`,
-                "-jar",
-                "server.jar",
-                "nogui",
-            ],
+            args: javaLaunchArgs(launch, ctx.state.ramAllocation, isWin),
             cwd: serverDir,
             env: { JAVA_HOME: javaPath },
         });

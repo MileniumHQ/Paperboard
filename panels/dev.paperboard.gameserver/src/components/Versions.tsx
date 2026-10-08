@@ -1,4 +1,4 @@
-import { createEffect, createSignal, onMount, Show } from "solid-js";
+import { createSignal, For, onMount, Show } from "solid-js";
 import {
     PaperButton,
     PaperFlex,
@@ -9,30 +9,26 @@ import {
     PaperSelector,
     PaperSelectorItem,
     PaperText,
-    type LoaderStatus,
     PaperCard,
     getVarCss,
 } from "@mileniumhq/paperui";
 import { config } from "@mileniumhq/paperapi";
-import { ensureJavaRuntime } from "../lib/ensureJava";
 import InstallLoaders from "./InstallLoaders";
 import { PANEL_ID } from "../service/types";
-import { ACTION_IDS } from "../service/contract";
+import { serverStatus } from "../lib/server";
+import { createInstallRun } from "../lib/installRun";
 import {
-    serverBridge,
-    serverStatus,
-    installProgress,
-    setInstallProgress,
-} from "../lib/server";
-import {
+    SOFTWARE,
+    SOFTWARE_IDS,
     SOFTWARE_NAMES,
     getRequiredJavaVersion,
     type ServerSoftwareType,
 } from "../lib/software";
+import { isServerSoftware } from "../software/catalog";
 import { listInstalledPlugins, uninstallAllPlugins } from "../lib/plugins";
 import VersionPicker from "./VersionPicker";
 
-// Versions: swap the server jar for a different software/version. This is a
+// Versions: swap the server software for a different software/version. This is a
 // destructive boundary (world format and plugin compatibility can change),
 // so it is offline-only and always warns before switching.
 export default function Versions(props: { onRequestPluginUpdate?: () => void }) {
@@ -51,40 +47,15 @@ export default function Versions(props: { onRequestPluginUpdate?: () => void }) 
     // the switch runs. A footer Dismiss appears only on failure.
     const [installOpen, setInstallOpen] = createSignal(false);
     const [installFailed, setInstallFailed] = createSignal(false);
-    const [javaDownloadPercent, setJavaDownloadPercent] = createSignal(0);
-    const [javaDownloadStatus, setJavaDownloadStatus] =
-        createSignal<LoaderStatus>("waiting");
-    const [javaExtractPercent, setJavaExtractPercent] = createSignal(0);
-    const [javaExtractStatus, setJavaExtractStatus] =
-        createSignal<LoaderStatus>("waiting");
-    const [softwarePercent, setSoftwarePercent] = createSignal(0);
-    const [softwareStatus, setSoftwareStatus] = createSignal<LoaderStatus>("waiting");
+    const install = createInstallRun();
+    const [postSwitchWarning, setPostSwitchWarning] = createSignal("");
 
     const online = () => serverStatus() !== "offline";
-
-    // The jar download runs inside the service action, which publishes
-    // throttled progress through service state; map it onto the row while
-    // this modal owns the switch. Terminal states stay with the call below.
-    createEffect(() => {
-        if (!installOpen() || installFailed()) return;
-        const progress = installProgress();
-        if (!progress) return;
-        if (progress.stage === "completed") {
-            setSoftwarePercent(100);
-            setSoftwareStatus("success");
-        } else if (progress.stage === "error") {
-            setSoftwarePercent(0);
-            setSoftwareStatus("error");
-        } else {
-            setSoftwarePercent(progress.percent);
-            setSoftwareStatus("loading");
-        }
-    });
 
     onMount(async () => {
         try {
             const saved = await config.get<any>(PANEL_ID);
-            if (saved?.software) {
+            if (isServerSoftware(saved?.software)) {
                 setInstalledSoftware(saved.software);
                 setSoftware(saved.software);
             }
@@ -109,25 +80,11 @@ export default function Versions(props: { onRequestPluginUpdate?: () => void }) 
             setError("Stop the server before switching versions.");
             return;
         }
-        // The service installs Java as part of the switch, but the rows need
-        // a truthful starting state: an already-present runtime shows success
-        // immediately, a missing one shows loading. The service call emits no
-        // staged progress, so the loaders are coarse by design.
-        const javaPkg = getRequiredJavaVersion(selectedVersion());
-        if (!javaPkg) {
+        if (!getRequiredJavaVersion(selectedVersion())) {
             setError(`Could not determine the Java runtime for ${selectedVersion()}.`);
             return;
         }
-        setJavaDownloadPercent(0);
-        setJavaDownloadStatus("loading");
-        setJavaExtractPercent(0);
-        setJavaExtractStatus("waiting");
-        setSoftwarePercent(0);
-        setSoftwareStatus("waiting");
         setInstallFailed(false);
-        // clear any previous switch's terminal state before the modal reads
-        // the signal; the service resets it again when its download starts
-        setInstallProgress(null);
         setInstallOpen(true);
         setSwitching(true);
         try {
@@ -137,54 +94,18 @@ export default function Versions(props: { onRequestPluginUpdate?: () => void }) 
                 .then((r) => r.plugins.length)
                 .catch(() => 0);
 
-            // Java installs here with real staged progress, exactly like
-            // onboarding. The service call below re-checks and skips it, so
-            // there is no double download — it still owns the jar, the
-            // checksum, and the state sync.
-            await ensureJavaRuntime(javaPkg, {
-                onDownload: (percent) => {
-                    setJavaDownloadStatus("loading");
-                    setJavaDownloadPercent(percent);
-                },
-                onExtract: (percent) => {
-                    setJavaDownloadStatus("success");
-                    setJavaDownloadPercent(100);
-                    setJavaExtractStatus("loading");
-                    setJavaExtractPercent(percent);
-                },
-            });
-            setJavaDownloadPercent(100);
-            setJavaDownloadStatus("success");
-            setJavaExtractPercent(100);
-            setJavaExtractStatus("success");
+            const outcome = await install.run(software(), selectedVersion());
 
-            setSoftwareStatus("loading");
-            await serverBridge.call(ACTION_IDS.installServerVersion, {
-                software: software(),
-                version: selectedVersion(),
-            });
-
-            setSoftwarePercent(100);
-            setSoftwareStatus("success");
             setInstalledSoftware(software());
             setInstalledVersion(selectedVersion());
             setPostSwitchCount(previousCount);
+            setPostSwitchWarning(outcome.warning ?? "");
             setInstallOpen(false);
             setPostSwitchOpen(true);
         } catch (err) {
             const message = err instanceof Error ? err.message : String(err);
             console.error("[Versions] Failed to switch version:", err);
             setError(message);
-            if (softwareStatus() === "loading") {
-                setSoftwarePercent(0);
-                setSoftwareStatus("error");
-            } else if (javaExtractStatus() === "loading") {
-                setJavaExtractPercent(0);
-                setJavaExtractStatus("error");
-            } else {
-                setJavaDownloadPercent(0);
-                setJavaDownloadStatus("error");
-            }
             setInstallFailed(true);
         } finally {
             setSwitching(false);
@@ -230,15 +151,13 @@ export default function Versions(props: { onRequestPluginUpdate?: () => void }) 
                                     setSelectedVersion("");
                                 }}
                             >
-                                <PaperSelectorItem value="vanilla">
-                                    Vanilla
-                                </PaperSelectorItem>
-                                <PaperSelectorItem value="paper">
-                                    Paper
-                                </PaperSelectorItem>
-                                <PaperSelectorItem value="fabric">
-                                    Fabric
-                                </PaperSelectorItem>
+                                <For each={SOFTWARE_IDS}>
+                                    {(id) => (
+                                        <PaperSelectorItem value={id}>
+                                            {SOFTWARE[id].name}
+                                        </PaperSelectorItem>
+                                    )}
+                                </For>
                             </PaperSelector>
                         </PaperFlex>
                     </PaperCard>
@@ -304,8 +223,9 @@ export default function Versions(props: { onRequestPluginUpdate?: () => void }) 
             >
                 <PaperFlex direction="column" gap="half">
                     <PaperText preset="body">
-                        This replaces the server jar with{" "}
-                        {SOFTWARE_NAMES[software()]} {selectedVersion()}.
+                        This replaces the installed server software with{" "}
+                        {SOFTWARE_NAMES[software()]} {selectedVersion()}. If the
+                        install fails, the current server is kept as it was.
                     </PaperText>
                     <PaperQuote variant="warning" icon="warning" title="Heads up">
                         Worlds and plugins may not survive every update. Success
@@ -337,25 +257,7 @@ export default function Versions(props: { onRequestPluginUpdate?: () => void }) 
             >
                 <PaperFlex fullWidth center>
                     <PaperFlex fullWidth maxWidth={getVarCss("size-panel-small")}>
-                        <InstallLoaders
-                            items={[
-                                {
-                                    label: "Downloading Java...",
-                                    percent: javaDownloadPercent,
-                                    status: javaDownloadStatus,
-                                },
-                                {
-                                    label: "Installing Java...",
-                                    percent: javaExtractPercent,
-                                    status: javaExtractStatus,
-                                },
-                                {
-                                    label: `Downloading ${SOFTWARE_NAMES[software()]}...`,
-                                    percent: softwarePercent,
-                                    status: softwareStatus,
-                                },
-                            ]}
-                        />
+                        <InstallLoaders items={install.rows(software())} />
                         <Show when={installFailed() && error()}>
                             <PaperQuote variant="danger" icon="warning" title="Switch failed">
                                 {error()}
@@ -372,13 +274,13 @@ export default function Versions(props: { onRequestPluginUpdate?: () => void }) 
                 size="small"
                 footer={
                     <PaperFlex direction="row" justify="flex-end" gap="half" fullWidth>
-                        <Show when={software() !== "vanilla"}>
+                        <Show when={SOFTWARE[software()].addons}>
                             <PaperButton
                                 onClick={() => {
                                     setPostSwitchOpen(false);
                                     props.onRequestPluginUpdate?.();
                                 }}>
-                                Update plugins
+                                Update {SOFTWARE[software()].addons?.kind === "mod" ? "mods" : "plugins"}
                             </PaperButton>
                         </Show>
                         <Show when={postSwitchCount() > 0}>
@@ -397,10 +299,15 @@ export default function Versions(props: { onRequestPluginUpdate?: () => void }) 
             >
                 <PaperFlex direction="column" gap="half">
                     <PaperText preset="body">
-                        {software() === "vanilla"
-                            ? "Vanilla has no plugin system. Plugins don't exist until you switch back to Paper."
-                            : `${SOFTWARE_NAMES[software()]} ${selectedVersion()} is installed.`}
+                        {SOFTWARE[software()].addons
+                            ? `${SOFTWARE_NAMES[software()]} ${selectedVersion()} is installed.`
+                            : `${SOFTWARE_NAMES[software()]} has no plugin or mod system. Existing plugins and mods stay on disk unused.`}
                     </PaperText>
+                    <Show when={postSwitchWarning()}>
+                        <PaperQuote variant="warning" icon="warning" title="Cleanup incomplete">
+                            {postSwitchWarning()}
+                        </PaperQuote>
+                    </Show>
                     <Show when={postSwitchCount() > 0}>
                         <PaperQuote variant="warning" icon="warning" title="Existing jars">
                             {postSwitchCount()} plugin/mod jar
