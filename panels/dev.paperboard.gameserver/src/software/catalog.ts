@@ -82,7 +82,7 @@ export const SOFTWARE: Readonly<Record<ServerSoftwareType, SoftwareInfo>> = {
         id: "neoforge",
         name: "NeoForge",
         description:
-            "Mod loader for large content mods and most modern modpacks. Runs Minecraft 1.20.2 and newer.",
+            "Mod loader for large content mods and most modern modpacks.",
         icon: { symbol: "hardware" },
         addons: MODS("neoforge"),
         worldLayout: "vanilla-split",
