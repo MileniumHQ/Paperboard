@@ -20,6 +20,7 @@ import { handleSecrets } from "./rpc/secrets";
 import { PROTOCOL_VERSION, ErrorCode } from "./protocol";
 import { rpcErrorCode, assertPanelId, assertStr } from "./rpc/params";
 import { requireHost } from "./principal";
+import { isLoopbackHost } from "./discovery";
 
 // strict origin allowlist, exact hostname match
 export function isAllowedOrigin(origin: string): boolean {
@@ -75,7 +76,11 @@ const MAX_EVENT_SUBS = 512;
 const MAX_TUNNELS_PER_SOCKET = 32;
 export const MAX_WS_PAYLOAD = 20 * 1024 * 1024;
 const MAX_CONNECTIONS = 4096;
+// pre-auth slots: this machine's own callers (shell, panel services) get a
+// budget no network peer can spend, and one network address cannot hold
+// every remote slot
 const MAX_UNAUTHENTICATED = 128;
+const MAX_UNAUTHENTICATED_PER_ADDRESS = 16;
 const MAX_IN_FLIGHT_PER_SOCKET = 1024;
 const HANDSHAKE_TIMEOUT_MS = 10_000;
 const TUNNEL_HEARTBEAT_MS = 15_000;
@@ -90,7 +95,33 @@ export function setupWebSocketServer(
     const socketSubscriptions = new Map<WebSocket, Set<string>>();
     const byToken = new Map<string, Set<WebSocket>>();
     const byPanel = new Map<string, Set<WebSocket>>();
-    let unauthenticated = 0;
+    const preAuth = { loopback: 0, remote: 0, byAddress: new Map<string, number>() };
+    // a release function for an admitted pre-auth socket, or null when its
+    // budget is spent; release is idempotent
+    const admitPreAuth = (address: string): (() => void) | null => {
+        if (isLoopbackHost(address)) {
+            if (preAuth.loopback >= MAX_UNAUTHENTICATED) return null;
+            preAuth.loopback++;
+            let held = true;
+            return () => {
+                if (held) preAuth.loopback--;
+                held = false;
+            };
+        }
+        const fromAddress = preAuth.byAddress.get(address) ?? 0;
+        if (preAuth.remote >= MAX_UNAUTHENTICATED || fromAddress >= MAX_UNAUTHENTICATED_PER_ADDRESS) return null;
+        preAuth.remote++;
+        preAuth.byAddress.set(address, fromAddress + 1);
+        let held = true;
+        return () => {
+            if (!held) return;
+            held = false;
+            preAuth.remote--;
+            const left = (preAuth.byAddress.get(address) ?? 1) - 1;
+            if (left > 0) preAuth.byAddress.set(address, left);
+            else preAuth.byAddress.delete(address);
+        };
+    };
     let inFlightTotal = 0;
     wss.options.maxPayload = Math.min(wss.options.maxPayload ?? MAX_WS_PAYLOAD, MAX_WS_PAYLOAD);
     const revokeSockets = (sockets?: Set<WebSocket>) => {
@@ -117,7 +148,7 @@ export function setupWebSocketServer(
             logger.warn("[ws] connection refused/closed after socket error:", err.message);
             ws.terminate();
         });
-        if (wss.clients.size > MAX_CONNECTIONS || (!auth.noAuth && unauthenticated >= MAX_UNAUTHENTICATED)) {
+        if (wss.clients.size > MAX_CONNECTIONS) {
             ws.close(4429, "Connection limit reached");
             return;
         }
@@ -138,8 +169,14 @@ export function setupWebSocketServer(
         // computer and nothing else. Null = an ordinary principal.
         let authedRelayTo: string | null = null;
         let inFlight = 0;
-        let countedUnauthenticated = !auth.noAuth;
-        if (countedUnauthenticated) unauthenticated++;
+        let releasePreAuth: (() => void) | null = null;
+        if (!auth.noAuth) {
+            releasePreAuth = admitPreAuth(String(req?.socket?.remoteAddress ?? ""));
+            if (!releasePreAuth) {
+                ws.close(4429, "Connection limit reached");
+                return;
+            }
+        }
         const handshakeTimer = setTimeout(() => {
             if (!isAuthenticated) ws.close(4401, "Authentication timed out");
         }, HANDSHAKE_TIMEOUT_MS);
@@ -166,10 +203,7 @@ export function setupWebSocketServer(
             indexSocket(byToken, token);
             indexSocket(byPanel, panelId);
             clearTimeout(handshakeTimer);
-            if (countedUnauthenticated) {
-                unauthenticated--;
-                countedUnauthenticated = false;
-            }
+            releasePreAuth?.();
         };
 
         // tunnels to paired remotes, keyed by tunnel id
@@ -232,7 +266,7 @@ export function setupWebSocketServer(
 
         ws.on("close", () => {
             clearTimeout(handshakeTimer);
-            if (countedUnauthenticated) unauthenticated--;
+            releasePreAuth?.();
             unindex(byToken, authedToken);
             unindex(byPanel, authedPanelId);
             socketSubscriptions.delete(ws);
