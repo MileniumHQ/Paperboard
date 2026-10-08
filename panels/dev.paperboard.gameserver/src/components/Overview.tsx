@@ -1,4 +1,4 @@
-import { createSignal, onMount, Show } from "solid-js";
+import { createEffect, createSignal, on, onMount, Show } from "solid-js";
 import {
     PaperFlex,
     PaperText,
@@ -31,9 +31,45 @@ import {
 } from "../lib/server";
 import { SOFTWARE_NAMES } from "../lib/software";
 import ServerIssueModal from "./ServerIssueModal";
+import { fileApi } from "@mileniumhq/paperapi";
+import { PANEL_ID } from "../service/contract";
+import { parseProperties } from "../core/properties";
+import { whitelistDefault } from "../lib/properties";
+import { countJsonEntries, joinRestriction, type JoinRestriction } from "../core/whitelist";
 
-export default function Overview() {
+export default function Overview(props: {
+    /** true while this tab is shown: the whitelist check re-runs then */
+    active: boolean;
+    /** opens another tab of the panel */
+    onOpenTab: (tab: "players" | "advanced") => void;
+    /** whether this version has a Players tab */
+    hasPlayersTab: boolean;
+}) {
     const [copied, setCopied] = createSignal(false);
+    const [restriction, setRestriction] = createSignal<JoinRestriction>(null);
+
+    // the whitelist can lock everyone but operators out, and 26.3 turns it
+    // on for new servers; say so where people look when friends can't join
+    const checkWhitelist = async () => {
+        try {
+            const [properties, whitelist, ops] = await Promise.all([
+                fileApi.read("server.properties", PANEL_ID),
+                fileApi.read("whitelist.json", PANEL_ID),
+                fileApi.read("ops.json", PANEL_ID),
+            ]);
+            const on = (properties ? parseProperties(properties)["white-list"] : undefined) ?? whitelistDefault();
+            setRestriction(joinRestriction(on === "true", countJsonEntries(whitelist), countJsonEntries(ops)));
+        } catch (err) {
+            // unreadable files make no claim either way
+            console.debug("[overview] whitelist check failed:", String(err));
+            setRestriction(null);
+        }
+    };
+    createEffect(
+        on([() => props.active, serverStatus, serverVersion], ([active]) => {
+            if (active) void checkWhitelist();
+        }),
+    );
 
     onMount(() => {
         loadServerConfig();
@@ -136,6 +172,25 @@ export default function Overview() {
             <Show when={serverActionError()}>
                 <PaperQuote variant="danger" icon="warning" title="Server action failed">
                     {serverActionError()}
+                </PaperQuote>
+            </Show>
+
+            <Show when={restriction()}>
+                <PaperQuote variant="warning" icon="lock" title="Whitelist is on">
+                    <PaperFlex direction="column" gap="half">
+                        <span>
+                            {restriction() === "operators-only"
+                                ? "Nobody is on the whitelist, so only operators can join."
+                                : "Nobody is on the whitelist, so no one can join."}{" "}
+                            Add players to the whitelist, or turn it off in Advanced.
+                        </span>
+                        <PaperFlex direction="row" gap="half">
+                            <Show when={props.hasPlayersTab}>
+                                <PaperButton onClick={() => props.onOpenTab("players")}>Add players</PaperButton>
+                            </Show>
+                            <PaperButton onClick={() => props.onOpenTab("advanced")}>Open Advanced</PaperButton>
+                        </PaperFlex>
+                    </PaperFlex>
                 </PaperQuote>
             </Show>
 

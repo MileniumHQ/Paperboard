@@ -137,7 +137,11 @@ export default function App() {
 
                     <PaperInterfaceGroup value={activeTab()}>
                         <PaperInterfaceItem value="overview" variant="full">
-                            <Overview />
+                            <Overview
+                                active={activeTab() === "overview"}
+                                hasPlayersTab={showPlayers()}
+                                onOpenTab={setActiveTab}
+                            />
                         </PaperInterfaceItem>
                         <PaperInterfaceItem value="chat" variant="full">
                             <Chat />

@@ -114,9 +114,15 @@ export function visiblePropertyFields(): PropertyField[] {
 // whose *stored* representation is era-dependent get a version-aware
 // resolution here, so a missing key on an old server is never seeded with
 // a value that server cannot parse.
+/** white-list's default for the running version (26.3 turned it on) */
+export function whitelistDefault(): string {
+    return supports("whitelistOnByDefault") ? "true" : "false";
+}
+
 export function defaultValueFor(field: PropertyField): string {
     if (field.key === "difficulty" && !supports("namedGameSettings")) return "1";
     if (field.key === "gamemode" && !supports("namedGameSettings")) return "0";
+    if (field.key === "white-list") return whitelistDefault();
     return field.defaultValue;
 }
 

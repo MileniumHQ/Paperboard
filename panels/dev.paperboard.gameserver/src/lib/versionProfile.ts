@@ -15,6 +15,8 @@ import { SOFTWARE, type ServerSoftwareType, type WorldLayout } from "../software
 //   1.21.9     pvp/allow-nether/spawn-monsters/enable-command-block become gamerules
 //   1.21.11    gamerules renamed camelCase -> namespaced snake_case (some inverted)
 //   26.1       world storage moves under dimensions/ + players/; Java 25
+//   26.3       new servers default to white-list=true; command feedback is
+//              logged as "System chat: …" (gamerule readouts reworded)
 
 export type GameruleNaming = "legacy" | "namespaced";
 export type { WorldLayout };
@@ -84,6 +86,10 @@ export const CAPABILITIES = {
     // difficulty/gamemode are integers before 1.14 and names after; the
     // console commands have always accepted names
     namedGameSettings: { since: "1.14" }, // 18w48a
+
+    // 26.3 writes white-list=true into a new server.properties (26.2 wrote
+    // false); verified against both servers' generated files
+    whitelistOnByDefault: { since: "26.3" },
 } as const;
 
 export type CapabilityName = keyof typeof CAPABILITIES;
