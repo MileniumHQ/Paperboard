@@ -10,7 +10,7 @@ import type { AddressInfo } from "net";
 import { setupWebSocketServer } from "../papercrane/ws";
 import { PaperCraneEngine } from "../papercrane/engine";
 import { PaperCraneAuth } from "../papercrane/auth";
-import { actionsRegistry } from "../papercrane/actions";
+import { actionsRegistry, MAX_ACTIONS_PER_SOCKET, MAX_ACTION_SCHEMA_BYTES } from "../papercrane/actions";
 
 let tmp = "";
 let wss: WebSocketServer;
@@ -186,6 +186,38 @@ describe("registration namespace ownership", () => {
             expect(resp.result).toEqual({ success: true });
         } finally {
             b.ws.terminate();
+        }
+    });
+});
+describe("registry bounds", () => {
+    it("refuses an oversized schema, a batch past the per-socket cap, and non-string names", async () => {
+        const a = await connect();
+        try {
+            const schema = { blob: "x".repeat(MAX_ACTION_SCHEMA_BYTES) };
+            send(a, { id: 1, action: "actions:register", params: { panelId: "dev.bounds", action: "big", schema } });
+            const big = await waitFor(a, (f) => f.id === 1);
+            expect(big.code).toBe("INVALID_PARAMS");
+
+            const names = Array.from({ length: MAX_ACTIONS_PER_SOCKET + 1 }, (_, i) => `a${i}`);
+            send(a, { id: 2, action: "actions:register", params: { panelId: "dev.bounds", actions: names } });
+            const flood = await waitFor(a, (f) => f.id === 2);
+            expect(flood.code).toBe("INVALID_PARAMS");
+
+            send(a, { id: 3, action: "actions:register", params: { panelId: "dev.bounds", actions: [{ not: "a string" }] } });
+            expect((await waitFor(a, (f) => f.id === 3)).code).toBe("INVALID_PARAMS");
+
+            // nothing from the refused registrations was kept
+            expect(actionsRegistry.list("dev.bounds")).toHaveLength(0);
+
+            // a full socket can still re-register what it owns
+            send(a, { id: 4, action: "actions:register", params: { panelId: "dev.bounds", actions: names.slice(0, MAX_ACTIONS_PER_SOCKET) } });
+            expect((await waitFor(a, (f) => f.id === 4)).result).toEqual({ success: true });
+            send(a, { id: 5, action: "actions:register", params: { panelId: "dev.bounds", action: "a0" } });
+            expect((await waitFor(a, (f) => f.id === 5)).result).toEqual({ success: true });
+            send(a, { id: 6, action: "actions:register", params: { panelId: "dev.bounds", action: "one-more" } });
+            expect((await waitFor(a, (f) => f.id === 6)).code).toBe("INVALID_PARAMS");
+        } finally {
+            a.ws.terminate();
         }
     });
 });

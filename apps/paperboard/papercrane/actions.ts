@@ -3,12 +3,20 @@ import { randomUUID } from "crypto";
 import { logger } from "./logger";
 import { RpcError } from "./rpc/errors";
 import { ErrorCode } from "./protocol";
+import { LimitError } from "./storage";
 
 // outstanding action-call caps, mirroring the client surface
 // (PaperAPI CraneTransport.MAX_PENDING_CALLS): a caller runaway is refused
 // with a typed error naming the cap, never queued forever.
 export const MAX_PENDING_CALLS_PER_SOCKET = 1000;
 export const MAX_PENDING_CALLS = 4000;
+
+// registered-action caps: every entry lives for its socket's lifetime and
+// actions:list returns them all, so both the count (per socket and in
+// total, sized for a thousand panels) and each schema are bounded
+export const MAX_ACTIONS_PER_SOCKET = 1024;
+export const MAX_ACTIONS = 32_768;
+export const MAX_ACTION_SCHEMA_BYTES = 64 * 1024;
 
 export type PendingCallRefusal =
     | { cap: "global"; count: number }
@@ -59,6 +67,19 @@ export class ActionsRegistry {
         return `${panelId}:${action}`;
     }
 
+    // throws LimitError when adding these keys for ws would pass a cap;
+    // re-registering a key the socket already owns adds nothing
+    private assertRoom(ws: WebSocket, keys: string[]): void {
+        const owned = this.socketActions.get(ws);
+        const added = new Set(keys.filter((key) => !owned?.has(key) && !this.actions.has(key))).size;
+        if ((owned?.size ?? 0) + added > MAX_ACTIONS_PER_SOCKET) {
+            throw new LimitError(`A connection may register at most ${MAX_ACTIONS_PER_SOCKET} actions`);
+        }
+        if (this.actions.size + added > MAX_ACTIONS) {
+            throw new LimitError(`The action registry is full (${MAX_ACTIONS} actions)`);
+        }
+    }
+
     public register(
         panelId: string,
         actionName: string,
@@ -73,6 +94,10 @@ export class ActionsRegistry {
             );
             return { ok: false, code: "CONFLICT", owner: existing.ws };
         }
+        if (schema !== undefined && Buffer.byteLength(JSON.stringify(schema) ?? "", "utf8") > MAX_ACTION_SCHEMA_BYTES) {
+            throw new LimitError(`An action schema may be at most ${MAX_ACTION_SCHEMA_BYTES} bytes`);
+        }
+        this.assertRoom(ws, [key]);
 
         this.actions.set(key, { panelId, action: actionName, schema, ws });
 
@@ -103,6 +128,8 @@ export class ActionsRegistry {
                 return { ok: false, code: "CONFLICT", owner: existing.ws };
             }
         }
+        // the whole batch fits or none of it registers
+        this.assertRoom(ws, actionNames.map((name) => this.actionKey(panelId, name)));
         for (const actionName of actionNames) {
             this.register(panelId, actionName, ws);
         }

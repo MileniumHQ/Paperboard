@@ -46,6 +46,7 @@ export async function handleActions(action: string, id: unknown, params: any, ct
             const acts = params?.actions;
             const schema = params?.schema;
             if (Array.isArray(acts)) {
+                for (const name of acts) assertStr(name, "actions[]", 256);
                 const result = actionsRegistry.registerMultiple(panelId, acts, ws);
                 if (!result.ok) {
                     reply(
