@@ -1,12 +1,18 @@
 // Release signatures: the trust anchor that is not the registry.
 //
 // The registry hashes the bytes it hosts, but whoever controls the registry
-// (its publish key, the Cloudflare account) controls those hashes too. Every
-// release fact a client acts on — a panel archive, a runtime package, a
-// daemon binary, an app update — is therefore also signed offline with the
-// Paperboard release key (ed25519), and clients verify that signature against
-// the public key compiled in here before downloading or activating anything.
-// A registry compromise without the offline key installs nothing.
+// (its publish key, the Cloudflare account) controls those hashes too. Panel
+// archives, runtime packages and daemon binaries are therefore also signed
+// offline with the Paperboard release key (ed25519), and the daemon verifies
+// that signature against the public key compiled in here before downloading
+// or activating any of them. For those three, a registry compromise without
+// the offline key installs nothing.
+//
+// App updates are the exception. publish.ts signs releaseMessage.app into
+// the KV version record, but the shell installs app builds through
+// electron-updater, which trusts the sha512 in the latest*.yml feed served
+// from i.paperboard.dev and never checks this signature. App update
+// integrity rests on the Cloudflare account that serves that feed.
 //
 // The private key never touches the registry or this repository: publish.ts
 // and the origami package scripts read it from PAPERBOARD_RELEASE_KEY or
