@@ -179,6 +179,31 @@ describe("who may connect", () => {
         expect(received).toBe("");
     });
 
+    it("refuses a rebound browser page: wrong Host, or any Origin", async () => {
+        // the user's browser passes the owner check; only the address it
+        // used and its Origin header tell it apart from the file manager
+        const relay = await relayWith();
+        const send = (headers: Record<string, string>) =>
+            new Promise<{ status: number; body: string }>((resolve, reject) => {
+                const req = http.request(
+                    { host: "127.0.0.1", port: relay.port, path: "/dav/files/note.txt", method: "GET", headers },
+                    (res) => {
+                        let body = "";
+                        res.on("data", (c) => (body += c));
+                        res.on("end", () => resolve({ status: res.statusCode ?? 0, body }));
+                    },
+                );
+                req.on("error", reject);
+                req.end();
+            });
+        const rebound = await send({ Host: `evil.example:${relay.port}` });
+        expect(rebound.status).toBe(421);
+        expect(rebound.body).not.toContain("hello");
+        const withOrigin = await send({ Host: `127.0.0.1:${relay.port}`, Origin: `http://127.0.0.1:${relay.port}` });
+        expect(withOrigin.status).toBe(421);
+        expect((await send({ Host: `127.0.0.1:${relay.port}` })).body).toBe("hello");
+    });
+
     it("caps open connections", async () => {
         const gate = Promise.withResolvers<boolean>();
         const held = gate.promise;

@@ -11,6 +11,9 @@
 //   served when the kernel says its client socket belongs to this user
 //   (/proc/net/tcp owner uid); anything else is dropped before a byte of
 //   HTTP is parsed. Keeps the password out of argv and file-manager history.
+//   The user's browser is also this user, so peer mode serves only
+//   requests addressed to Host 127.0.0.1:<port> with no Origin (DNS
+//   rebinding).
 // - "basic" (macOS, Windows): the OS mounts with the session credential and
 //   the relay refuses any request that does not carry it.
 // No Electron imports: tests drive the real relay.
@@ -134,6 +137,16 @@ export function startDavRelay(opts: DavRelayOptions): Promise<DavRelay> {
 
     const httpServer = http.createServer((req, res) => {
         touch();
+        // peer mode adds the credential itself, and the user's own browser
+        // passes the socket owner check: a page that rebinds its hostname
+        // to 127.0.0.1 would ride that credential. File managers address
+        // the relay by the exact URL we hand them and send no Origin.
+        if (opts.clientAuth === "peer" && (req.headers.host !== `127.0.0.1:${port}` || req.headers.origin !== undefined)) {
+            res.writeHead(421, { "Content-Type": "text/plain" });
+            res.end("Misdirected Request");
+            req.resume();
+            return;
+        }
         if (opts.clientAuth === "basic" && !secretsMatch(req.headers.authorization ?? "", authorization)) {
             res.writeHead(401, { "WWW-Authenticate": 'Basic realm="Paperboard"', "Content-Type": "text/plain" });
             res.end("Unauthorized");
