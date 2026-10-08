@@ -39,6 +39,9 @@ interface CaretResults {
     stillFocused: boolean;
     rebuiltBlurred: number;
     appended: string;
+    injected: number;
+    hostileLabel: string;
+    iconsHidden: boolean;
     error: string;
 }
 
@@ -111,6 +114,22 @@ function fixtureHtml(bundle: string): string {
         });
         document.execCommand('insertText', false, 'z');
         out.appended = RichText.extractTextWithVariables(empty);
+
+        // a chip's label and icon are text, never markup
+        const hostile = document.createElement('span');
+        hostile.contentEditable = 'true';
+        document.body.appendChild(hostile);
+        RichText.appendVariableChip(hostile, {
+            varId: 'blk3',
+            label: '<img src=x id=injected>',
+            icon: '<b>bold</b>',
+        });
+        out.injected = hostile.querySelectorAll('img, b').length;
+        out.hostileLabel = hostile.querySelector('.chipLabel').textContent;
+
+        // the icon glyph is decorative on every chip, whichever path built it
+        const icons = [...document.querySelectorAll('.chipIcon'), ...off.querySelectorAll('.chipIcon')];
+        out.iconsHidden = icons.length >= 4 && icons.every((n) => n.getAttribute('aria-hidden') === 'true');
     } catch (err) {
         out.error = String(err);
     }
@@ -169,6 +188,9 @@ describe("variable chip caret", () => {
                 ).toBe("hello {{blk1:Username:person}}!");
                 expect(results.rebuiltBlurred).toBe(1);
                 expect(results.appended).toBe("{{blk2:Count:tag}}z");
+                expect(results.injected).toBe(0);
+                expect(results.hostileLabel).toBe("<img src=x id=injected>");
+                expect(results.iconsHidden).toBe(true);
             } finally {
                 rmSync(dir, { recursive: true, force: true });
             }

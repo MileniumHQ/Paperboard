@@ -28,7 +28,7 @@ export function renderHtmlWithChips(text: string): string {
         const label = escapeHtml(info.label);
         const icon = escapeHtml(info.icon);
         html += escapeHtml(text.slice(last, match.index));
-        html += `\u200B<span class="actionVariableChip" contenteditable="false" data-var-id="${varId}" data-label="${label}" data-icon="${icon}"><span class="chipIcon">${icon}</span><span class="chipLabel">${label}</span></span>\u200B`;
+        html += `\u200B<span class="actionVariableChip" contenteditable="false" data-var-id="${varId}" data-label="${label}" data-icon="${icon}"><span class="chipIcon" aria-hidden="true">${icon}</span><span class="chipLabel">${label}</span></span>\u200B`;
         last = match.index! + match[0].length;
     }
     return html + escapeHtml(text.slice(last));
@@ -71,7 +71,16 @@ function createVariableChip(chip: VariableChip): HTMLSpanElement {
     node.setAttribute("data-var-id", chip.varId);
     node.setAttribute("data-label", chip.label);
     node.setAttribute("data-icon", chip.icon);
-    node.innerHTML = `<span class="chipIcon">${chip.icon}</span><span class="chipLabel">${chip.label}</span>`;
+    // built as nodes, not markup: the label and icon are text. The icon is
+    // a ligature glyph, decorative next to the label (never its name).
+    const icon = document.createElement("span");
+    icon.className = "chipIcon";
+    icon.setAttribute("aria-hidden", "true");
+    icon.textContent = chip.icon;
+    const label = document.createElement("span");
+    label.className = "chipLabel";
+    label.textContent = chip.label;
+    node.append(icon, label);
     return node;
 }
 
