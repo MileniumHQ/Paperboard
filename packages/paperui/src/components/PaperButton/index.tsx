@@ -53,8 +53,9 @@ export function PaperButton(props: PaperButtonProps) {
             ? roleVars(local.variant)
             : {};
 
-    const ariaLabel = () =>
-        props["aria-label"] ?? (local.icon && typeof props.children === "string" ? props.children : undefined);
+    // an icon button's glyph is ligature text, never its name: the name is
+    // aria-label, or the title the button already shows on hover
+    const ariaLabel = () => props["aria-label"] ?? (local.icon ? props.title : undefined);
 
     return (
         <Dynamic

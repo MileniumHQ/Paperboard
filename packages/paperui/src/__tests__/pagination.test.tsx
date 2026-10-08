@@ -32,8 +32,13 @@ describe("PaperPagination", () => {
         expect(pageButton(20)).toBeDefined();
         expect(pageButton(4)).toBeDefined();
         expect(pageButton(6)).toBeDefined();
-        // pages 2-3 and 7-19 collapse into gaps
-        expect(container.querySelectorAll('[aria-hidden="true"]').length).toBe(2);
+        // pages 2-3 and 7-19 collapse into gaps. Counted by their "…" text:
+        // the prev/next arrow icons are aria-hidden as well now that icons
+        // are decorative, so aria-hidden alone no longer identifies a gap
+        const gaps = [...container.querySelectorAll('[aria-hidden="true"]')].filter(
+            (el) => el.textContent === "…",
+        );
+        expect(gaps.length).toBe(2);
         expect(screen.queryByRole("button", { name: "Page 10" })).toBeNull();
     });
 

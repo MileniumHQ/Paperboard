@@ -509,6 +509,7 @@ export function PaperListItem(props: ParentProps<PaperListItemProps>) {
                     <Show when={isCloseable()}>
                         <PaperButton size="tiny"
                             icon
+                            aria-label="Close"
                             onPointerDown={(e) => {
                                 e.stopPropagation();
                                 e.preventDefault();
