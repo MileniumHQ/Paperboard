@@ -29,8 +29,10 @@ export function parseChatMessage(rawLine: string): ChatMessage | null {
     const clean = stripAnsi(rawLine).replace(/^[^[]*\[/, "[").trim();
     if (!clean) return null;
 
+    // Forge and NeoForge add the logger after the thread/level bracket:
+    // "[12:00:00] [Server thread/INFO] [minecraft/MinecraftServer]: <Steve> hi"
     const logMatch = clean.match(
-        /^\[(\d{2}:\d{2}:\d{2})(?:\]|\s+INFO\]?|\]\s*\[[^\]]*INFO[^\]]*\]):\s*(?:\[Not Secure\]\s*)?(.*)$/i,
+        /^\[(\d{2}:\d{2}:\d{2})(?:\]|\s+INFO\]?|\]\s*\[[^\]]*INFO[^\]]*\](?:\s*\[[^\]]*\])?):\s*(?:\[Not Secure\]\s*)?(.*)$/i,
     );
     if (!logMatch) return null;
 
