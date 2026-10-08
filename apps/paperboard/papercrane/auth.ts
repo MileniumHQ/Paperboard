@@ -30,6 +30,10 @@ export interface AuthorizedToken {
 const BASE_LOCKOUT_MS = 5_000;
 const ESCALATED_LOCKOUT_MS = 30_000;
 const LOCKOUT_ESCALATION_THRESHOLD = 3;
+// wrong codes one pairing session tolerates before it ends: the lockout
+// slows guessing, this caps it, so a code that stays open for days cannot
+// be walked. Starting pairing again issues a new code.
+export const MAX_PAIRING_FAILURES = 10;
 
 // token vault cap: refusals for NEW pairing only, never automatic eviction
 // of already-trusted credentials
@@ -47,6 +51,7 @@ export class PaperCraneAuth extends EventEmitter {
     private pairingActive: boolean = false;
     private lockedUntil: number = 0;
     private failedAttempts: number = 0;
+    private sessionFailures: number = 0;
     private authorizedTokens: Map<string, AuthorizedToken> = new Map();
     // per-token lookup index keyed by the token's SHA-256 digest. Lookup
     // is O(1) without leaking per-token timing (the digest of the PRESENTED
@@ -185,15 +190,16 @@ export class PaperCraneAuth extends EventEmitter {
     public startPairing(): string {
         this.pairingCode = this.generatePairingCode();
         this.pairingActive = true;
+        this.sessionFailures = 0;
         // restarting pairing never resets the brute-force lockout
         this.emit("pairingStarted", this.pairingCode);
         return this.pairingCode;
     }
 
-    public cancelPairing(): void {
+    public cancelPairing(reason: "cancelled" | "too-many-failures" = "cancelled"): void {
         this.pairingActive = false;
         this.pairingCode = null;
-        this.emit("pairingCancelled");
+        this.emit("pairingCancelled", reason);
     }
 
     public isPairingActive(): boolean {
@@ -325,6 +331,14 @@ export class PaperCraneAuth extends EventEmitter {
         const cleanInput = String(code ?? "").replace(/\s+/g, "").trim();
         if (!secretsMatch(cleanInput, this.pairingCode)) {
             this.failedAttempts++;
+            this.sessionFailures++;
+            if (this.sessionFailures >= MAX_PAIRING_FAILURES) {
+                this.cancelPairing("too-many-failures");
+                return {
+                    success: false,
+                    error: "Too many wrong pairing codes. Pairing has ended; start pairing again on the server for a new code.",
+                };
+            }
             // short penalty first, long on clear brute-forcing
             const lockoutMs =
                 this.failedAttempts >= LOCKOUT_ESCALATION_THRESHOLD

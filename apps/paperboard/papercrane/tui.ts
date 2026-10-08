@@ -49,6 +49,12 @@ export class PaperCraneTui {
             }
         });
 
+        this.auth.on("pairingCancelled", (reason: string) => {
+            if (reason !== "too-many-failures") return;
+            this.render();
+            console.log("\n  [x] Pairing ended after too many wrong codes. Press [p] for a new code.\n");
+        });
+
         this.auth.on("revoked", (client: AuthorizedToken) => {
             this.render();
             if (client.clientName && client.clientName !== "host") {
