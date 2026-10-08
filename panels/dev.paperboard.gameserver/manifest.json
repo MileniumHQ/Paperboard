@@ -45,6 +45,14 @@
                 "detail": "Downloading the Fabric loader"
             },
             {
+                "name": "NeoForged",
+                "detail": "Downloading the NeoForge installer"
+            },
+            {
+                "name": "Minecraft Forge",
+                "detail": "Downloading the Forge installer"
+            },
+            {
                 "name": "Modrinth",
                 "detail": "Finding plugins and mods"
             }
