@@ -51,8 +51,8 @@ import { SOFTWARE_NAMES } from "../lib/software";
 import { isServerSoftware, SOFTWARE_IDS } from "../software/catalog";
 import { INSTALL_OWNED_CONFIG_KEYS } from "../software/installRecord";
 import { providerFor } from "../software/providers";
-import { isSupportedMcVersion, mcAtLeast, MIN_SUPPORTED_MC_VERSION } from "../lib/versionProfile";
-import { GAMERULES } from "../generated/gamerules.generated";
+import { isSupportedMcVersion, MIN_SUPPORTED_MC_VERSION } from "../lib/versionProfile";
+import { gamerulesFor } from "../core/gamerules";
 
 export const playerType = defineType({
     id: "player",
@@ -124,9 +124,7 @@ export async function republishDynamicActions(
         console.error("[Gameserver] plugin list unreadable for action options:", err);
     }
     const version = ctx.state.serverVersion;
-    const ruleNames = GAMERULES.filter(
-        (rule) => !rule.addedIn || mcAtLeast(version, rule.addedIn),
-    ).map((rule) => rule.name);
+    const ruleNames = gamerulesFor(version).map((rule) => rule.name);
 
     for (const def of [
         setActiveWorldAction(worlds),
@@ -173,9 +171,7 @@ export function bindDynamicAction(
 // option list for a gamerule's name input: every rule the server's version
 // knows, so a flow can never send a rule the server has never heard of
 export function gameruleNameOptions(version: string): { label: string; value: string }[] {
-    return GAMERULES.filter(
-        (rule) => !rule.addedIn || mcAtLeast(version, rule.addedIn),
-    ).map((rule) => ({ label: rule.name, value: rule.name }));
+    return gamerulesFor(version).map((rule) => ({ label: rule.name, value: rule.name }));
 }
 
 // Set Active World: the world name is a dropdown over the worlds on disk.

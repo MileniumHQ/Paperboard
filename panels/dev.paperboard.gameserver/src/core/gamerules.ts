@@ -1,5 +1,6 @@
-import { GAMERULES } from "../generated/gamerules.generated";
+import { GAMERULES, type GameruleEntry } from "../generated/gamerules.generated";
 import {
+    mcAtLeast,
     canonicalGameruleName,
     canonicalGameruleValue,
     type VersionProfile,
@@ -12,6 +13,18 @@ const GAMERULE_NAME_PATTERN = /^[a-z0-9_]{1,64}$/;
 const GAMERULE_VALUE_PATTERN = /^(?:true|false|-?\d{1,10})$/i;
 
 const REGISTRY_NAMES: ReadonlySet<string> = new Set(GAMERULES.map((r) => r.name));
+
+/**
+ * The rules a server of this version accepts: added at or before it, and
+ * not gated behind an experiment (the server answers "Incorrect argument"
+ * for those unless the world enabled the experiment). The one list the
+ * Game Rules tab, the set-gamerule action and its dropdown all use.
+ */
+export function gamerulesFor(version: string | null | undefined): GameruleEntry[] {
+    return GAMERULES.filter(
+        (rule) => !rule.experiment && (!rule.addedIn || mcAtLeast(version, rule.addedIn)),
+    );
+}
 
 export function isKnownGameruleName(name: unknown): boolean {
     const s = String(name ?? "");
@@ -35,9 +48,10 @@ export function assertGameruleValue(name: string, value: unknown): string {
 }
 
 // null when the line is not a gamerule readout. Both the query response
-// ("Gamerule X is currently set to: V") and the write confirmation
-// ("Gamerule X is now set to: V") are accepted — the write confirmation
-// is what makes an online edit converge on server truth. On pre-1.21.11
+// and the write confirmation are accepted (the write confirmation is what
+// makes an online edit converge on server truth), in both spellings:
+//   up to 26.2  "Gamerule X is currently set to: V" / "... is now set to: V"
+//   26.3+       "System chat: Game rule X is currently set to V" On pre-1.21.11
 // servers the name and value are translated to the canonical id first, so
 // readouts still land on the right rule. Names must be registry members so
 // the stored record stays bounded by the registry.
@@ -45,7 +59,7 @@ export function parseGameruleValue(
     clean: string,
     profile?: VersionProfile,
 ): { name: string; value: string } | null {
-    const match = clean.match(/Gamerule ([A-Za-z0-9_]+) is (?:currently|now) set to: (.+?)\s*$/i);
+    const match = clean.match(/Game ?rule ([A-Za-z0-9_]+) is (?:currently|now) set to:? (.+?)\s*$/i);
     if (!match) return null;
     const name = profile
         ? canonicalGameruleName(profile, match[1])

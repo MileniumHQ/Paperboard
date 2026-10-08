@@ -37,7 +37,12 @@ export function parseChatMessage(rawLine: string): ChatMessage | null {
     if (!logMatch) return null;
 
     const time = logMatch[1];
-    let text = logMatch[2].trim().replace(/^\[Not Secure\]\s*/, "").trim();
+    // 26.3 prefixes system messages in the console with "System chat: "
+    let text = logMatch[2]
+        .trim()
+        .replace(/^System chat:\s*/, "")
+        .replace(/^\[Not Secure\]\s*/, "")
+        .trim();
     if (!text) return null;
 
     const playerChatMatch = text.match(/^<([a-zA-Z0-9_]{1,16})>\s+(.+)$/);

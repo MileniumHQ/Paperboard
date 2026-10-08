@@ -10,17 +10,16 @@ import {
     PaperToggle,
     PaperCard,
 } from "@mileniumhq/paperui";
-import { serverStatus, serverBridge, gamerules } from "../lib/server";
+import { serverStatus, serverBridge, gamerules, serverVersion } from "../lib/server";
+import { gamerulesFor } from "../core/gamerules";
 import { ACTION_IDS } from "../service/contract";
-import { mcVersionAtLeast } from "../lib/capabilities";
 import { humanizeIdentifier } from "../core/format";
-import { GAMERULES } from "../generated/gamerules.generated";
 import { PaperPageHeader } from "@mileniumhq/paperui";
 
 const WIKI_URL = "https://minecraft.wiki/w/Game_rule";
 
 function availableGamerules() {
-    return GAMERULES.filter((rule) => !rule.addedIn || mcVersionAtLeast(rule.addedIn));
+    return gamerulesFor(serverVersion());
 }
 
 function RuleControl(props: {

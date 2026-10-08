@@ -1,5 +1,5 @@
 // GENERATED FILE — do not edit by hand.
-// Source: minecraft.wiki /w/Game_rule (scraped 2026-09-12)
+// Source: minecraft.wiki /w/Game_rule (scraped 2026-10-08)
 // Regenerate with: bun run Paperboard/scripts/scrape-gamerules.ts
 
 export interface GameruleEntry {
@@ -9,6 +9,8 @@ export interface GameruleEntry {
     defaultValue: string;
     valueType: "boolean" | "number" | "string";
     addedIn?: string;
+    /** experiment the rule needs; the server rejects it without one */
+    experiment?: string;
 }
 
 export const GAMERULES: GameruleEntry[] = [
@@ -149,6 +151,7 @@ export const GAMERULES: GameruleEntry[] = [
         description: "The maximum speed a minecart may reach.",
         defaultValue: "8",
         valueType: "number" as const,
+        experiment: "Minecart Improvements",
     },
     {
         name: "reduced_debug_info",
@@ -294,7 +297,7 @@ export const GAMERULES: GameruleEntry[] = [
         name: "locator_bar",
         category: "Player",
         description: "Whether the player's locator bar is enabled, indicating the location of players or entities. Can be set to everyone and off Bedrock Edition.",
-        defaultValue: "true everyone",
+        defaultValue: "true",
         valueType: "boolean" as const,
         addedIn: "1.21.80",
     },
@@ -444,7 +447,7 @@ export const GAMERULES: GameruleEntry[] = [
         name: "random_tick_speed",
         category: "World Updates",
         description: "How often a random tick occurs (such as plant growth, leaf decay, etc.) per chunk section per game tick. 0 and negative values disables random ticks, higher numbers increase random ticks. Setting to a high integer results in high speeds of decay and growth. Numbers over 4096 make plant growth or leaf decay instantaneous.",
-        defaultValue: "3 1",
+        defaultValue: "3",
         valueType: "number" as const,
         addedIn: "1.8",
     },

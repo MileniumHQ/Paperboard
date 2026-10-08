@@ -20,6 +20,8 @@ interface GameruleEntry {
     defaultValue: string;
     valueType: string;
     addedIn?: string;
+    /** experiment the rule needs; the server rejects it without one */
+    experiment?: string;
 }
 
 // ─── Wikitext fetching ──────────────────────────────────────────────────────
@@ -102,8 +104,18 @@ function parseRuleList(wikitext: string): GameruleEntry[] {
 
     const stripStylePrefix = (cell: string) => cell.replace(/^style\s*=\s*"[^"]*"\s*\|\s*/i, "");
 
+    // A cell can carry both editions: "{{cd|3}}{{only|je}}<br/>{{cd|1}}{{only|be}}".
+    // Keep the Java Edition part; stripping both merged them into "3 1".
+    const javaPart = (cell: string): string => {
+        const parts = cell.split(/<br\s*\/?>/i);
+        const je = parts.find((part) => /\{\{only\|je\b/i.test(part));
+        if (je) return je;
+        const notBedrock = parts.filter((part) => !/\{\{only\|be\b/i.test(part));
+        return notBedrock.length > 0 ? notBedrock.join(" ") : cell;
+    };
+
     for (const row of rows) {
-        const cells = row.lines.map(stripStylePrefix);
+        const cells = row.lines.map(stripStylePrefix).map((cell, index) => (index >= 2 ? javaPart(cell) : cell));
         const cleaned = cells.map(stripMarkup);
         if (cleaned.length < 4) continue;
 
@@ -115,6 +127,9 @@ function parseRuleList(wikitext: string): GameruleEntry[] {
         let name = vaMatches[0] ?? "";
         if (!name) continue;
         name = name.replace(/^minecraft:/, "");
+        // {{onlyExperimental|Minecart Improvements}}: registered, but the
+        // server refuses the rule unless that experiment is enabled
+        const experiment = jeSegment.match(/\{\{onlyExperimental\|([^}|]+)\}\}/i)?.[1]?.trim();
 
         entries.push({
             name,
@@ -122,6 +137,7 @@ function parseRuleList(wikitext: string): GameruleEntry[] {
             description: cleaned[1] ?? "",
             defaultValue: cleaned[2] ?? "",
             valueType: /^bool/i.test(cleaned[3] ?? "") ? "boolean" : /int/i.test(cleaned[3] ?? "") ? "number" : "string",
+            ...(experiment ? { experiment } : {}),
         });
     }
 
@@ -265,6 +281,8 @@ function generate(entries: GameruleEntry[]): string {
     lines.push("    defaultValue: string;");
     lines.push('    valueType: "boolean" | "number" | "string";');
     lines.push("    addedIn?: string;");
+    lines.push("    /** experiment the rule needs; the server rejects it without one */");
+    lines.push("    experiment?: string;");
     lines.push("}");
     lines.push("");
     lines.push("export const GAMERULES: GameruleEntry[] = [");
@@ -276,6 +294,7 @@ function generate(entries: GameruleEntry[]): string {
         lines.push(`        defaultValue: ${tsString(e.defaultValue)},`);
         lines.push(`        valueType: ${tsString(e.valueType)} as const,`);
         if (e.addedIn) lines.push(`        addedIn: ${tsString(e.addedIn)},`);
+        if (e.experiment) lines.push(`        experiment: ${tsString(e.experiment)},`);
         lines.push("    },");
     }
     lines.push("];");
