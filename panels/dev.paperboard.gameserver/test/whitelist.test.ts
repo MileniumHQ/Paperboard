@@ -11,7 +11,7 @@ mock.module("../src/lib/server", () => ({ serverVersion, setServerVersion }));
 mock.module("@mileniumhq/paperapi", () => ({ fileApi: {} }));
 
 const { countJsonEntries, joinRestriction } = await import("../src/core/whitelist");
-const { defaultValueFor, whitelistDefault } = await import("../src/lib/properties");
+const { defaultValueFor, whitelistDefault, SERVER_PROPERTY_FIELDS } = await import("../src/lib/properties");
 
 describe("whitelist default follows the version", () => {
     test("26.3 on, 26.2 off", () => {
@@ -19,10 +19,10 @@ describe("whitelist default follows the version", () => {
         expect(whitelistDefault()).toBe("false");
         setServerVersion("26.3");
         expect(whitelistDefault()).toBe("true");
-        // the Advanced and Options tabs take their fallback from here
-        expect(
-            defaultValueFor({ key: "white-list", title: "Whitelist", control: "toggle", defaultValue: "false" }),
-        ).toBe("true");
+        // the toggle lives on the Options tab, which takes its fallback from here
+        const field = SERVER_PROPERTY_FIELDS.find((f) => f.key === "white-list");
+        expect(field).toBeDefined();
+        expect(defaultValueFor(field!)).toBe("true");
     });
 });
 

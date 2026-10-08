@@ -41,7 +41,7 @@ export default function Overview(props: {
     /** true while this tab is shown: the whitelist check re-runs then */
     active: boolean;
     /** opens another tab of the panel */
-    onOpenTab: (tab: "players" | "advanced") => void;
+    onOpenTab: (tab: "players" | "options") => void;
     /** whether this version has a Players tab */
     hasPlayersTab: boolean;
 }) {
@@ -182,13 +182,13 @@ export default function Overview(props: {
                             {restriction() === "operators-only"
                                 ? "Nobody is on the whitelist, so only operators can join."
                                 : "Nobody is on the whitelist, so no one can join."}{" "}
-                            Add players to the whitelist, or turn it off in Advanced.
+                            Add players to the whitelist, or turn it off in Options.
                         </span>
                         <PaperFlex direction="row" gap="half">
                             <Show when={props.hasPlayersTab}>
                                 <PaperButton onClick={() => props.onOpenTab("players")}>Add players</PaperButton>
                             </Show>
-                            <PaperButton onClick={() => props.onOpenTab("advanced")}>Open Advanced</PaperButton>
+                            <PaperButton onClick={() => props.onOpenTab("options")}>Open Options</PaperButton>
                         </PaperFlex>
                     </PaperFlex>
                 </PaperQuote>

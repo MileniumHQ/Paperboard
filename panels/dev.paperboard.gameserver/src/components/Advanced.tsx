@@ -51,13 +51,6 @@ const ADVANCED_PROPERTY_FIELDS: PropertyField[] = [
         defaultValue: "true",
     },
     {
-        key: "white-list",
-        title: "Whitelist",
-        description: "Only whitelisted players may join (manage them in Players).",
-        control: "toggle",
-        defaultValue: "false",
-    },
-    {
         key: "enable-command-block",
         title: "Command Blocks",
         control: "toggle",

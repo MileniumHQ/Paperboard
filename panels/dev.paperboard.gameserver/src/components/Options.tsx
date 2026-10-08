@@ -112,7 +112,7 @@ export default function Options() {
                         <PaperSettingList autoHeight>
                             <PaperFlex padding="full" gap="half">
                                 <PaperQuote variant="warning" icon="warning" title="Note">
-                                    World generation and network settings apply after a restart. Difficulty and game mode apply immediately while the server is running.
+                                    World generation, network and whitelist settings apply after a restart. Difficulty and game mode apply immediately while the server is running.
                                 </PaperQuote>
                                 <Show when={saveError()}>
                                     <PaperQuote variant="danger" icon="warning" title="Error">

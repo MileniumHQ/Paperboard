@@ -99,6 +99,14 @@ export const SERVER_PROPERTY_FIELDS: PropertyField[] = [
         control: "toggle",
         defaultValue: "false",
     },
+    {
+        key: "white-list",
+        title: "Whitelist",
+        description: "Only whitelisted players and operators may join (manage them in Players).",
+        control: "toggle",
+        // the shown fallback is version-dependent: see whitelistDefault()
+        defaultValue: "false",
+    },
 ];
 
 // a field whose capability this Minecraft version lacks is hidden, not
