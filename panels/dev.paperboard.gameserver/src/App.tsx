@@ -23,6 +23,7 @@ import MapView from "./components/Map";
 import Advanced from "./components/Advanced";
 import Logs from "./components/Logs";
 import Versions from "./components/Versions";
+import Loader from "./components/Loader";
 import "@mileniumhq/paperui/style.css";
 import "@mileniumhq/paperui/panel.css";
 
@@ -35,6 +36,8 @@ export default function App() {
     // mod loaders call them mods; Vanilla has no add-on system at all
     const pluginKind = () => (SOFTWARE[serverSoftware()].addons?.kind === "mod" ? "Mods" : "Plugins");
     const hasPluginTab = () => SOFTWARE[serverSoftware()].addons !== null;
+    // Vanilla has no loader; its settings are on Options and Advanced
+    const hasLoaderTab = () => serverSoftware() !== "vanilla";
 
     // whole-feature floors: hide the tab rather than show half its controls
     // doing nothing. Unknown version stays permissive so nothing flashes out
@@ -109,6 +112,11 @@ export default function App() {
                         <PaperMenuItem value="versions" icon="deployed_code">
                             Versions
                         </PaperMenuItem>
+                        <Show when={hasLoaderTab()}>
+                            <PaperMenuItem value="loader" icon="settings_applications">
+                                Loader
+                            </PaperMenuItem>
+                        </Show>
                         <Show when={hasPluginTab()}>
                             <PaperMenuItem value="plugins" icon="extension">
                                 {pluginKind()}
@@ -158,6 +166,11 @@ export default function App() {
                                 }}
                             />
                         </PaperInterfaceItem>
+                        <Show when={hasLoaderTab()}>
+                            <PaperInterfaceItem value="loader">
+                                <Loader active={activeTab() === "loader"} />
+                            </PaperInterfaceItem>
+                        </Show>
                         <Show when={hasPluginTab()}>
                             <PaperInterfaceItem value="plugins">
                                 <Plugins updateRequest={pluginUpdateRequest()} />

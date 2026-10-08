@@ -18,7 +18,8 @@
         "prismarine-nbt": "^2.8.0",
         "semver": "^7.8.5",
         "solid-js": "^1.9.15",
-        "strip-ansi": "^7.2.0"
+        "strip-ansi": "^7.2.0",
+        "yaml": "^2.9.1"
     },
     "devDependencies": {
         "@types/pngjs": "^6.0.5",

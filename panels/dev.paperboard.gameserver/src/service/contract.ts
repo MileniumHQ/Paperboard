@@ -35,6 +35,8 @@ export const ACTION_IDS = {
     setActiveWorld: "set-active-world",
     installServerVersion: "install-server-version",
     listSoftwareVersions: "list-software-versions",
+    readLoaderSettings: "read-loader-settings",
+    writeLoaderSetting: "write-loader-setting",
     deleteWorld: "delete-world",
     listMapRegions: "list-map-regions",
     renderMapTile: "render-map-tile",

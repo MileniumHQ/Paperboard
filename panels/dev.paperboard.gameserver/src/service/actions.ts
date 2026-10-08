@@ -2,6 +2,7 @@ import {
     actionsApi,
     defineType,
     defineAction,
+    files as fileApi,
     type ActionDefinition,
     type CustomTypeDefinition,
     type ServiceContext,
@@ -42,7 +43,8 @@ import { getHeadDataUrl } from "./skins";
 import { listLogFiles, readLogFile } from "./logs";
 import { queryGamerules, setGamerule } from "./gamerules";
 import { applyRuntimeProperties } from "./runtimeProperties";
-import { installServerSoftware } from "./softwareInstall";
+import { installServerSoftware, isInstallRunning } from "./softwareInstall";
+import { readLoaderSettings, writeLoaderSetting } from "./loaderSettings";
 import { liveInstallDeps } from "./softwareInstallDeps";
 import { assertPlayerName, assertSingleLine } from "../core/players";
 import type { GameServerState } from "./types";
@@ -81,6 +83,8 @@ export const commandType = defineType({
     description: "Minecraft console command string",
     base: "string",
 });
+
+const loaderDeps = { serverDir: () => fileApi.getPath("", PANEL_ID) };
 
 export const customTypes: CustomTypeDefinition[] = [
     playerType,
@@ -877,6 +881,43 @@ export const panelActions: ActionDefinition[] = [
                 throw new Error(`Unknown server software: ${JSON.stringify(software)}`);
             }
             return providerFor(software).listVersions();
+        },
+    }),
+
+    defineAction({
+        id: ACTION_IDS.readLoaderSettings,
+        name: "Read Loader Settings",
+        category: "Server",
+        description: "Reads the installed server software's own settings files",
+        internal: true,
+        template: "Read loader settings",
+        inputs: {},
+        output: { type: "object", label: "Loader settings" },
+        quick: false,
+        icon: "settings_applications",
+        run: async (ctx: ServiceContext<GameServerState>) =>
+            readLoaderSettings(ctx.state.serverSoftware, loaderDeps),
+    }),
+
+    defineAction({
+        id: ACTION_IDS.writeLoaderSetting,
+        name: "Write Loader Setting",
+        category: "Server",
+        description: "Changes one of the installed server software's own settings",
+        internal: true,
+        template: "Set loader setting {id} to {value}",
+        inputs: {
+            id: { type: "string", label: "Setting", required: true },
+            value: { type: "string", label: "Value", required: true },
+        },
+        output: { type: "object", label: "Written" },
+        quick: false,
+        icon: "settings_applications",
+        run: async (ctx: ServiceContext<GameServerState>, inputs: { id?: string; value?: string }) => {
+            if (isInstallRunning()) {
+                throw new Error("A server install is running; change loader settings once it finishes.");
+            }
+            return writeLoaderSetting(ctx.state.serverSoftware, inputs?.id, inputs?.value, loaderDeps);
         },
     }),
 
