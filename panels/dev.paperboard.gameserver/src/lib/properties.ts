@@ -102,7 +102,6 @@ export const SERVER_PROPERTY_FIELDS: PropertyField[] = [
     {
         key: "white-list",
         title: "Whitelist",
-        description: "Only whitelisted players and operators may join (manage them in Players).",
         control: "toggle",
         // the shown fallback is version-dependent: see whitelistDefault()
         defaultValue: "false",
