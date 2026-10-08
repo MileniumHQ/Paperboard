@@ -38,6 +38,21 @@ describe("PaperMarkdown", () => {
         expect(container.textContent).toContain("bad");
     });
 
+    it("refuses a javascript: href hidden by characters the URL parser strips", () => {
+        // marked keeps tabs and C0 controls inside <...> destinations; the
+        // browser drops them before reading the scheme
+        const { container } = render(() => (
+            <PaperMarkdown
+                text={"[tab](<java\tscript:alert(1)>) [ctl](<\u0001javascript:alert(1)>) [nl](<java\nscript:alert(1)>) [ok](/docs)"}
+            />
+        ));
+
+        const anchors = [...container.querySelectorAll("a")];
+        expect(anchors.map((a) => a.textContent)).toEqual(["ok"]);
+        expect(container.textContent).toContain("tab");
+        expect(container.textContent).toContain("ctl");
+    });
+
     it("hides images unless the caller allows them", () => {
         const blocked = render(() => (
             <PaperMarkdown text={"![alt text](https://example.com/a.png)"} />

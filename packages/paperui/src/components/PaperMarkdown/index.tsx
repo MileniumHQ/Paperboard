@@ -39,9 +39,12 @@ const HEADING_PRESETS: PaperTextPreset[] = [
 ];
 
 // http(s), mailto, and relative targets only — a markdown document must not be
-// able to smuggle a javascript: or data: URL into an href.
+// able to smuggle a javascript: or data: URL into an href. The scheme is read
+// the way a browser's URL parser reads it: tab and newline removed anywhere,
+// C0 controls and spaces trimmed from both ends, so "java\tscript:" is
+// javascript: here too.
 function safeHref(raw: string | null | undefined): string | null {
-    const value = (raw ?? "").trim();
+    const value = (raw ?? "").replace(/[\t\n\r]/g, "").replace(/^[\x00-\x20]+|[\x00-\x20]+$/g, "");
     if (!value) return null;
     if (/^(https?:|mailto:)/i.test(value)) return value;
     if (/^[a-z][a-z0-9+.-]*:/i.test(value)) return null;
