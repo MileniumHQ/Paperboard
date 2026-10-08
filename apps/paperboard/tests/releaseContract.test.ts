@@ -7,6 +7,7 @@ import { isPanelId } from "../../../packages/paperapi/src/panelIdentity";
 import worker from "../../origami/src/index";
 import { publishPanel, type PanelStorage } from "../../origami/scripts/lib/panelPublish";
 import { PaperCraneEngine } from "../papercrane/engine";
+import { PaperCraneAuth } from "../papercrane/auth";
 import { releaseMessage } from "../papercrane/releaseSignature";
 import { fixtureSign, FIXTURE_RELEASE_PUBLIC_KEY } from "./registryFixture";
 
@@ -16,6 +17,21 @@ test("all real first-party IDs follow the shared pack/publish/install identity c
         expect(isPanelId(manifest.id)).toBe(true);
     }
     for (const id of ["library", "settings", "landing", "Upper.Case", "a..b", "../x", "x".repeat(129)]) expect(isPanelId(id)).toBe(false);
+});
+
+test("host-owned config names cannot be panel identities, so no panel token can own them", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "paperboard-reserved-"));
+    const auth = new PaperCraneAuth(false, tmp);
+    try {
+        for (const id of ["app-settings", "crane_version", "shell-layout"]) {
+            expect(isPanelId(id)).toBe(false);
+            expect(() => auth.issuePanelToken(id)).toThrow(/reserved/);
+        }
+        expect(auth.issuePanelToken("dev.paperboard.shell-ish")).toStartWith("pcp_");
+    } finally {
+        auth.dispose();
+        fs.rmSync(tmp, { recursive: true, force: true });
+    }
 });
 
 test("real dotted identity survives pack, publish, metadata lookup, download and install", async () => {
