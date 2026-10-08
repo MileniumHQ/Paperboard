@@ -115,6 +115,16 @@ describe("PaperCraneEngine package platform selection", () => {
         expect(engine.isPackageInstalled("ffmpeg", "7.1")).toBe(true);
         expect(engine.isPackageInstalled("ffmpeg", "6.0")).toBe(false);
     });
+
+    it("refuses package names that leave the packages dir", () => {
+        // tmp itself has a bin/ two levels up from packages/x: a traversal
+        // name would otherwise report it installed and return its path
+        fs.mkdirSync(path.join(tmp, "bin"), { recursive: true });
+        for (const name of ["../..", "..", "../panels", "/etc"]) {
+            expect(() => engine.isPackageInstalled(name)).toThrow(/Invalid package id/);
+            expect(() => engine.getPackagePath(name)).toThrow(/Invalid package id/);
+        }
+    });
 });
 
 describe("PaperCraneEngine app-global configs", () => {

@@ -656,6 +656,9 @@ export class PaperCraneEngine {
 
     // Runtime package management
     public isPackageInstalled(packageName: string, version?: string): boolean {
+        // validated like downloadPackage: a name is a directory under
+        // packages/, never a path that climbs out of it
+        packageName = this.sanitizeIdOrThrow(packageName, "package");
         const base = path.join(this.packagesDir, packageName);
         if (!fs.existsSync(base)) return false;
         if (this.findBinDir(base, 4) === null) return false;
@@ -689,7 +692,7 @@ export class PaperCraneEngine {
     }
 
     public getPackagePath(packageName: string): string {
-        const base = path.join(this.packagesDir, packageName);
+        const base = path.join(this.packagesDir, this.sanitizeIdOrThrow(packageName, "package"));
         const found = this.findBinDir(base, 4);
         return found || base;
     }
