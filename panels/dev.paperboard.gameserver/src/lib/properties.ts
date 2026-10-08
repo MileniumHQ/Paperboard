@@ -14,6 +14,8 @@ export interface PropertyField {
     defaultValue: string;
     min?: number;
     max?: number;
+    /** number inputs: "any" allows fractions (the browser's default step of 1 rejects them) */
+    step?: "any";
     options?: () => { value: string; label: string }[];
     capability?: CapabilityName;
     /** show this field only when another field holds the given value */

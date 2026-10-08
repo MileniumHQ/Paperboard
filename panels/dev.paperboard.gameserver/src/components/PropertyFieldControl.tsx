@@ -60,6 +60,7 @@ export function FieldControl(props: {
                     type="number"
                     min={field.min}
                     max={field.max}
+                    step={field.step}
                     value={shown()}
                     invalid={invalid()}
                     disabled={!hasKnownMcVersion()}

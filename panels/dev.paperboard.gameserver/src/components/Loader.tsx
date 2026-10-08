@@ -101,6 +101,7 @@ export default function Loader(props: { active: boolean }) {
         defaultValue: setting.value,
         min: setting.min,
         max: setting.max,
+        step: setting.decimal ? "any" : undefined,
         options: setting.options ? () => setting.options! : undefined,
     });
 
