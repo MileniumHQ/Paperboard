@@ -30,7 +30,7 @@ export interface SupervisorMetadata {
 }
 
 export { getPaperboardDir } from "./paths";
-import { ensureDir, getSocketsDir } from "./paths";
+import { ensurePrivateDir, getSocketsDir } from "./paths";
 
 // Endpoint names are one-to-one with ids. The old scheme replaced every
 // character outside [a-zA-Z0-9_-] with "_", so "a.b" and "a_b" shared one
@@ -57,7 +57,7 @@ export function supervisorSocketPathForName(name: string): string {
     if (process.platform === "win32") {
         return `\\\\.\\pipe\\papercrane-${name}`;
     }
-    const socketsDir = ensureDir(getSocketsDir());
+    const socketsDir = ensurePrivateDir(getSocketsDir());
     return path.join(socketsDir, `${name}.sock`);
 }
 
@@ -66,7 +66,7 @@ export function getSupervisorSocketPath(procId: string): string {
 }
 
 export function getSupervisorMetadataPath(procId: string): string {
-    const socketsDir = ensureDir(getSocketsDir());
+    const socketsDir = ensurePrivateDir(getSocketsDir());
     return path.join(socketsDir, `${supervisorEndpointName(procId)}.json`);
 }
 
@@ -514,7 +514,7 @@ export async function runSupervisor(procId: string): Promise<void> {
             config: { ...config, env: redactEnvValues(config.env) },
         };
         try {
-            fs.writeFileSync(metadataPath, JSON.stringify(meta, null, 2), "utf8");
+            fs.writeFileSync(metadataPath, JSON.stringify(meta, null, 2), { encoding: "utf8", mode: 0o600 });
         } catch (err) { logger.debug("[supervisor.ts] op failed:", err) }
     });
 

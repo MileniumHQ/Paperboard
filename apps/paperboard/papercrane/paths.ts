@@ -43,6 +43,21 @@ export function getSocketsDir(): string {
     return path.join(getPaperboardDir(), "sockets");
 }
 
+// sockets/ holds supervisor endpoints (a client may type into a running
+// terminal) and their metadata (args, env): owner-only, so another account
+// cannot list, read or connect whatever the umask was. Re-applied on every
+// use so a directory made by an older build is tightened too. Like local/,
+// a filesystem without modes (FAT) refuses the chmod; that is reported and
+// the directory is used as it is.
+export function ensurePrivateDir(dir: string): string {
+    fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+    if (process.platform !== "win32" && (fs.statSync(dir).mode & 0o077) !== 0) {
+        try { fs.chmodSync(dir, 0o700); }
+        catch (err) { console.warn(`[paths.ts] could not restrict ${dir} to its owner:`, err); }
+    }
+    return dir;
+}
+
 // ensure a directory exists, no-op on failure
 export function ensureDir(dir: string): string {
     try {
