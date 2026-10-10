@@ -26,7 +26,10 @@ export interface AddonEcosystem {
     modrinthLoader: string;
 }
 
-export type SoftwareIcon = { src: string } | { symbol: string };
+// src: a full-color logo (pixelated for pixel art that would blur when
+// scaled); mask: a single-color logo whose shape is drawn in the text color,
+// so it reads on light and dark themes; symbol: a Material Symbols name.
+export type SoftwareIcon = { src: string; pixelated?: boolean } | { mask: string } | { symbol: string };
 
 export interface SoftwareInfo {
     id: ServerSoftwareType;
@@ -83,7 +86,7 @@ export const SOFTWARE: Readonly<Record<ServerSoftwareType, SoftwareInfo>> = {
         name: "NeoForge",
         description:
             "Mod loader for large content mods and most modern modpacks.",
-        icon: { symbol: "hardware" },
+        icon: { src: "/assets/neoforge.png", pixelated: true },
         addons: MODS("neoforge"),
         worldLayout: "vanilla-split",
     },
@@ -92,7 +95,7 @@ export const SOFTWARE: Readonly<Record<ServerSoftwareType, SoftwareInfo>> = {
         name: "Forge",
         description:
             "The original mod loader. Needed for older modpacks and mods that never moved to NeoForge.",
-        icon: { symbol: "construction" },
+        icon: { mask: "/assets/forge.png" },
         addons: MODS("forge"),
         worldLayout: "vanilla-split",
     },
