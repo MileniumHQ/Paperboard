@@ -3,6 +3,7 @@ import { logger } from "./logger";
 import * as path from "path";
 import * as crypto from "crypto";
 import { requirePanelId } from "../../../packages/paperapi/src/panelIdentity";
+import { validateWidgetDeclarations } from "../../../packages/paperapi/src/widgetManifest";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { PAPERBOARD_USER_AGENT } from "./userAgent";
@@ -263,6 +264,15 @@ export function validatePanelManifest(
 
     if (typeof record.autostart === "boolean") {
         manifest.autostart = record.autostart;
+    }
+
+    // one rule shared with the packer; a broken declaration refuses the
+    // manifest rather than listing a panel with half its widgets
+    try {
+        const widgets = validateWidgetDeclarations(record.widgets);
+        if (widgets.length > 0) manifest.widgets = widgets;
+    } catch (err) {
+        throw new Error(`Invalid widgets in manifest for ${id}: ${err instanceof Error ? err.message : String(err)}`);
     }
 
     // NOTE: the `permissions` array and the `network` egress declaration

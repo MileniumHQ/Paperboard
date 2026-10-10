@@ -1,3 +1,4 @@
+import type { WidgetDeclaration } from "./widgetManifest";
 import { parseStoreListing, type StoreListing } from "./storeListing";
 
 // Panel library merge: the registry's newest release and the installed
@@ -31,6 +32,8 @@ export interface PanelItem {
     archiveBytes?: number;
     /** the registry's store listing for the newest release */
     store?: StoreListing;
+    /** widgets the installed manifest declares, already validated by the daemon */
+    widgets?: WidgetDeclaration[];
 }
 
 export interface RegistryPanelRecord {

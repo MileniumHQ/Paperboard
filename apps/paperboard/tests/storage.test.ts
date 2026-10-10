@@ -146,6 +146,20 @@ describe("validatePanelManifest", () => {
         expect(m.name).toBe("T");
     });
 
+    it("lists the widgets a manifest declares, so the shell's library can show them", () => {
+        const m = validatePanelManifest(
+            { name: "W", widgets: [{ id: "status", name: "Status", sizes: ["2x1"] }] },
+            "dev.paperboard.widgetdemo",
+        );
+        expect(m.widgets).toEqual([{ id: "status", name: "Status", sizes: ["2x1"] }]);
+    });
+
+    it("refuses a manifest whose widgets break the shared rule", () => {
+        expect(() =>
+            validatePanelManifest({ name: "W", widgets: [{ id: "status", name: "Status", sizes: ["8x1"] }] }, "id"),
+        ).toThrow(/widgets/);
+    });
+
     it("rejects absolute base paths", () => {
         expect(() =>
             validatePanelManifest({ base: "/etc/passwd" }, "id"),

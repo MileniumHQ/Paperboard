@@ -3,6 +3,7 @@ import { resolvePanelId } from "./identity";
 import { STATE_GET_ACTION } from "./channels";
 import { hydratePanelBridges } from "./panelHydration";
 import { waitForContentPainted } from "./paintReady";
+import { mountRequestedWidget, parseWidgetInitialize } from "./widget";
 
 // A document load is not readiness. The shell challenges this generation;
 // only a successful authenticated service hydration answers ready.
@@ -14,6 +15,13 @@ if (typeof window !== "undefined" && window.parent !== window) {
             const panelId = resolvePanelId();
             if (!panelId) throw new Error("Panel identity is missing");
             await actionsApi.call(panelId, STATE_GET_ACTION);
+            // A widget frame is the same challenge plus one more fact: the
+            // widget the shell asked for is mounted before hydration runs.
+            if (event.data.widget !== undefined) {
+                const widget = parseWidgetInitialize(event.data.widget);
+                if (!widget) throw new Error("The shell sent a malformed widget request");
+                await mountRequestedWidget(panelId, generation, widget);
+            }
             await hydratePanelBridges(panelId);
             // Hydration is not a settled UI: let fonts and images land so
             // the shell reveals a painted panel instead of a shifting one.

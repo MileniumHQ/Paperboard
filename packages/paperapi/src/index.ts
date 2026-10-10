@@ -20,6 +20,8 @@ export * from "./bridge";
 export * from "./channels";
 export * from "./protocol";
 export * from "./shell";
+export * from "./widgetManifest";
+export { defineWidgets, type WidgetContext, type WidgetMount } from "./widget";
 
 // terminal management
 export const terminalApi = {

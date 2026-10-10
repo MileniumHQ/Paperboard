@@ -64,3 +64,22 @@ describe("packPanel manifest.base packing", () => {
         expect(fs.existsSync(path.join(extractDir, "manifest.json"))).toBe(true);
     });
 });
+describe("packPanel widgets", () => {
+    const widgets = [{ id: "status", name: "Status", sizes: ["2x1"] }];
+
+    it("refuses widgets whose declaration the daemon would refuse", () => {
+        const dir = writeManifest({ version: "0.1.0", widgets: [{ id: "status", name: "Status", sizes: ["9x9"] }] });
+        expect(() => packPanel({ targetDir: dir, autoBuild: false })).toThrow(/size/);
+    });
+
+    it("refuses widgets without the dist/widget.html they load from", () => {
+        const dir = writeManifest({ version: "0.1.0", widgets });
+        expect(() => packPanel({ targetDir: dir, autoBuild: false })).toThrow(/widget\.html/);
+    });
+
+    it("packs widgets with their page", () => {
+        const dir = writeManifest({ version: "0.1.0", widgets });
+        fs.writeFileSync(path.join(dir, "dist", "widget.html"), "<html></html>");
+        expect(packPanel({ targetDir: dir, autoBuild: false }).version).toBe("0.1.0");
+    });
+});
