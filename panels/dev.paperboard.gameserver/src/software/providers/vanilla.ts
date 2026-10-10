@@ -31,7 +31,8 @@ export const vanillaProvider: SoftwareProvider = {
         }));
     },
 
-    async resolveBuild(mcVersion) {
+    async resolveBuild(mcVersion, pinned) {
+        if (pinned !== undefined) throw new Error("Vanilla has no builds to pin");
         const data = await getPistonManifest();
         const version = (data.versions || []).find((v) => v.id === mcVersion);
         if (!version) throw new Error(`Version ${mcVersion} not found`);

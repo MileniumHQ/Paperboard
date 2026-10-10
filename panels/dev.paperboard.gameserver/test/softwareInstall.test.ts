@@ -127,6 +127,28 @@ describe("installServerSoftware", () => {
         expect(progress.at(-1)).toEqual({ stage: "completed", percent: 100 });
     });
 
+    test("a pinned build is what the provider is asked for", async () => {
+        paperServer();
+        const asked: [string, string | undefined][] = [];
+        await installServerSoftware(
+            ctx,
+            "neoforge",
+            "1.21.1",
+            deps({
+                software: "neoforge",
+                provider: () => ({
+                    ...withBuild("neoforge", "21.1.256"),
+                    resolveBuild: async (mc: string, pinned?: string) => {
+                        asked.push([mc, pinned]);
+                        return { build: "21.1.256", artifact: { url: "https://example.invalid/n.jar", sha256: "a".repeat(64) } };
+                    },
+                }),
+            }),
+            { build: "21.1.256" },
+        );
+        expect(asked).toEqual([["1.21.1", "21.1.256"]]);
+    });
+
     test("NeoForge -> Paper removes every NeoForge file and launches server.jar", async () => {
         paperServer();
         await installServerSoftware(ctx, "neoforge", "1.21.1", deps({ software: "neoforge" }));

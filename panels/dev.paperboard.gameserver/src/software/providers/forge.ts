@@ -25,15 +25,19 @@ export function forgeMcVersions(metadata: ForgeMetadata): string[] {
  * The Forge build to install for a Minecraft version: the recommended
  * promotion, else the latest promotion, else the newest published build.
  * A promotion is only honoured when the Maven index lists that exact build;
- * the two records come from one publisher and must agree.
+ * the two records come from one publisher and must agree. A pinned build
+ * replaces the promotions and must be listed the same way.
  */
 export function pickForgeBuild(
     mcVersion: string,
     metadata: ForgeMetadata,
     promotions: ForgePromotions,
+    pinned?: string,
 ): string | null {
     const published = new Set(metadata[mcVersion] ?? []);
     const prefix = `${mcVersion}-`;
+    // a pin is honoured only as a build the Maven index lists for this version
+    if (pinned !== undefined) return published.has(prefix + pinned) ? pinned : null;
     for (const key of [`${mcVersion}-recommended`, `${mcVersion}-latest`]) {
         const build = promotions[key];
         if (typeof build === "string" && published.has(prefix + build)) return build;
@@ -59,13 +63,19 @@ export const forgeProvider: SoftwareProvider = {
         }));
     },
 
-    async resolveBuild(mcVersion) {
+    async resolveBuild(mcVersion, pinned) {
         const [metadata, promotions] = await Promise.all([
             fetchJson<ForgeMetadata>(FORGE_METADATA_URL),
             fetchJson<{ promos?: ForgePromotions }>(FORGE_PROMOTIONS_URL),
         ]);
-        const build = pickForgeBuild(mcVersion, metadata, promotions.promos ?? {});
-        if (!build) throw new Error(`Forge has no build for Minecraft ${mcVersion}`);
+        const build = pickForgeBuild(mcVersion, metadata, promotions.promos ?? {}, pinned);
+        if (!build) {
+            throw new Error(
+                pinned !== undefined
+                    ? `Forge ${pinned} is not a build for Minecraft ${mcVersion}`
+                    : `Forge has no build for Minecraft ${mcVersion}`,
+            );
+        }
         const url = forgeInstallerUrl(mcVersion, build);
         // same-host digest: transfer integrity, not a second authority (see neoforge.ts)
         const sha256 = await fetchSha256Sidecar(url);

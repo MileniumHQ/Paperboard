@@ -10,6 +10,7 @@ import {
     pickNeoForgeBuild,
 } from "../src/software/providers/neoforge";
 import { forgeInstallerUrl, forgeMcVersions, pickForgeBuild } from "../src/software/providers/forge";
+import { pickFabricLoader } from "../src/software/providers/fabric";
 import { SOFTWARE_PROVIDERS } from "../src/software/providers";
 import { SOFTWARE, SOFTWARE_IDS } from "../src/software/catalog";
 
@@ -61,6 +62,14 @@ describe("NeoForge versions", () => {
         expect(pickNeoForgeBuild([])).toBeNull();
     });
 
+    test("a pinned build installs exactly, or not at all", () => {
+        const groups = groupNeoForgeBuilds(LIVE_SAMPLE);
+        expect(pickNeoForgeBuild(groups.get("1.21.1")!, "21.1.10")?.build).toBe("21.1.10");
+        // another Minecraft version's build is not a substitute
+        expect(pickNeoForgeBuild(groups.get("1.21.1")!, "26.2.0.88")).toBeNull();
+        expect(pickNeoForgeBuild(groups.get("1.21.1")!, "21.1.999")).toBeNull();
+    });
+
     test("installer url is the Maven artifact path", () => {
         expect(neoForgeInstallerUrl("21.1.256")).toBe(
             "https://maven.neoforged.net/releases/net/neoforged/neoforge/21.1.256/neoforge-21.1.256-installer.jar",
@@ -95,6 +104,12 @@ describe("Forge versions", () => {
         expect(pickForgeBuild("1.20.4", METADATA, PROMOS)).toBeNull();
     });
 
+    test("a pinned build must be listed for that Minecraft version", () => {
+        expect(pickForgeBuild("1.21.1", METADATA, PROMOS, "52.0.0")).toBe("52.0.0");
+        expect(pickForgeBuild("1.21.1", METADATA, PROMOS, "60.1.15")).toBeNull();
+        expect(pickForgeBuild("1.21.1", METADATA, PROMOS, "52.9.9")).toBeNull();
+    });
+
     test("a promotion the Maven index does not list is not trusted", () => {
         const promos = { "1.21.1-recommended": "52.9.9" };
         expect(pickForgeBuild("1.21.1", METADATA, promos)).toBe("52.1.16");
@@ -105,6 +120,18 @@ describe("Forge versions", () => {
             "https://maven.minecraftforge.net/net/minecraftforge/forge/1.21.1-52.1.0/forge-1.21.1-52.1.0-installer.jar",
         );
     });
+});
+
+test("Fabric takes the newest loader, or exactly the pinned one", () => {
+    const loaders = ["0.16.10", "0.16.9", undefined, "0.15.11"];
+    expect(pickFabricLoader(loaders)).toBe("0.16.10");
+    expect(pickFabricLoader(loaders, "0.15.11")).toBe("0.15.11");
+    expect(pickFabricLoader(loaders, "0.14.0")).toBeNull();
+});
+
+test("softwares with one server per version refuse a pin", async () => {
+    await expect(SOFTWARE_PROVIDERS.vanilla.resolveBuild("1.21.1", "x")).rejects.toThrow("no builds to pin");
+    await expect(SOFTWARE_PROVIDERS.paper.resolveBuild("1.21.1", "130")).rejects.toThrow("no pinned build");
 });
 
 test("every catalog software has a provider, and installer softwares name their launch files", () => {

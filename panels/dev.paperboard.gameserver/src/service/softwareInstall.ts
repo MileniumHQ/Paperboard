@@ -68,11 +68,12 @@ export async function installServerSoftware(
     software: ServerSoftwareType,
     version: string,
     deps: InstallDeps,
+    opts: { build?: string } = {},
 ): Promise<InstallOutcome> {
     if (running) throw new Error("A server install is already running");
     running = true;
     try {
-        return await install(ctx, software, version, deps);
+        return await install(ctx, software, version, deps, opts.build);
     } finally {
         running = false;
     }
@@ -83,6 +84,7 @@ async function install(
     software: ServerSoftwareType,
     version: string,
     deps: InstallDeps,
+    pinnedBuild: string | undefined,
 ): Promise<InstallOutcome> {
     const fs = fsOf(deps);
     const provider = (deps.provider ?? providerFor)(software);
@@ -100,7 +102,7 @@ async function install(
     // install instead of leaving the old files unremovable
     const previous = currentInstall(await deps.readConfig());
     const java = await deps.javaBinary(version);
-    const resolved = await provider.resolveBuild(version);
+    const resolved = await provider.resolveBuild(version, pinnedBuild);
 
     const root = await deps.serverDir();
     const staging = newStagingName();

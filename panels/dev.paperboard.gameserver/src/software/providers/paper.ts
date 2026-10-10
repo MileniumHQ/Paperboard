@@ -21,7 +21,8 @@ export const paperProvider: SoftwareProvider = {
         }));
     },
 
-    async resolveBuild(mcVersion) {
+    async resolveBuild(mcVersion, pinned) {
+        if (pinned !== undefined) throw new Error("Paper installs take no pinned build");
         const builds = await fetchJson<{ builds?: number[] }>(
             `${PAPER_API_URL}/versions/${encodeURIComponent(mcVersion)}`,
         );

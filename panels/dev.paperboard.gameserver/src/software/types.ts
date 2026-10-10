@@ -48,7 +48,12 @@ export interface SoftwareProvider {
     id: ServerSoftwareType;
     /** Minecraft versions this software can run, newest first */
     listVersions(): Promise<VersionItem[]>;
-    /** the build to install for a Minecraft version; throws when there is none */
-    resolveBuild(mcVersion: string): Promise<ResolvedBuild>;
+    /**
+     * The build to install for a Minecraft version; throws when there is
+     * none. `pinned` names an exact loader build (a modpack's); it must be
+     * a published build for that Minecraft version, never a substitute.
+     * Softwares with one server per version refuse a pin.
+     */
+    resolveBuild(mcVersion: string, pinned?: string): Promise<ResolvedBuild>;
     install: InstallPlan;
 }

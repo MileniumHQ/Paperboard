@@ -69,8 +69,13 @@ export function groupNeoForgeBuilds(versions: readonly string[]): Map<string, Ne
     return groups;
 }
 
-/** Newest stable build, else newest beta: a beta-only line is still the only line. */
-export function pickNeoForgeBuild(builds: readonly NeoForgeBuild[]): NeoForgeBuild | null {
+/**
+ * The pinned build when it is one of this Minecraft version's builds;
+ * otherwise the newest stable build, else newest beta: a beta-only line is
+ * still the only line.
+ */
+export function pickNeoForgeBuild(builds: readonly NeoForgeBuild[], pinned?: string): NeoForgeBuild | null {
+    if (pinned !== undefined) return builds.find((b) => b.build === pinned) ?? null;
     return builds.find((b) => b.stable) ?? builds[0] ?? null;
 }
 
@@ -98,10 +103,16 @@ export const neoforgeProvider: SoftwareProvider = {
         }));
     },
 
-    async resolveBuild(mcVersion) {
+    async resolveBuild(mcVersion, pinned) {
         const groups = await fetchGroups();
-        const build = pickNeoForgeBuild(groups.get(mcVersion) ?? []);
-        if (!build) throw new Error(`NeoForge has no build for Minecraft ${mcVersion}`);
+        const build = pickNeoForgeBuild(groups.get(mcVersion) ?? [], pinned);
+        if (!build) {
+            throw new Error(
+                pinned !== undefined
+                    ? `NeoForge ${pinned} is not a build for Minecraft ${mcVersion}`
+                    : `NeoForge has no build for Minecraft ${mcVersion}`,
+            );
+        }
         const url = neoForgeInstallerUrl(build.build);
         // The digest comes from the same Maven host as the jar. It catches a
         // corrupted or truncated transfer; it is not a second authority. The
