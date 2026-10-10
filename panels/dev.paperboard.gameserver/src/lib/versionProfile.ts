@@ -82,6 +82,7 @@ export const CAPABILITIES = {
     mapRendering: { since: "1.18" }, // block_states palette + -64 heightmaps
     playerStats: { since: "1.13" }, // namespaced stats/<uuid>.json
     worldManager: { since: "1.9" }, // hardcore / bonus-chest world options
+    datapacks: { since: "1.13" }, // 17w43a: world/datapacks/
 
     // difficulty/gamemode are integers before 1.14 and names after; the
     // console commands have always accepted names

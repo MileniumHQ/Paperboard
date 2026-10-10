@@ -23,7 +23,7 @@ export type { InstalledPlugin, InstalledRecord };
 export { INSTALL_RECORDS_KEY, isInstallRecord, pluginDirName, validatePluginFilename };
 
 const MODRINTH_API = "https://api.modrinth.com/v2";
-const SEARCH_LIMIT = 24;
+export const SEARCH_LIMIT = 24;
 // Environments with functionality on a dedicated server, per Modrinth.
 const SERVER_ENVIRONMENTS = [
     "client_and_server", "server_only", "server_only_client_optional",
@@ -99,7 +99,7 @@ export interface ResolvedDownload {
     exactMatch: boolean;
 }
 
-interface RawHit {
+export interface RawHit {
     project_id?: string;
     slug?: string;
     title?: string;
@@ -150,7 +150,7 @@ interface RawVersion {
 }
 
 // text first so non-JSON answers fail with a clear message
-async function modrinthFetch<T>(
+export async function modrinthFetch<T>(
     path: string,
     params?: Record<string, string>,
     signal?: AbortSignal,
@@ -186,6 +186,24 @@ async function modrinthFetch<T>(
     }
 
     return data as T;
+}
+
+/** a Modrinth search page as cards; hits missing an id, slug or title are dropped */
+export function parseSearchHits(raw: RawHit[] | undefined): ModrinthHit[] {
+    const hits: ModrinthHit[] = [];
+    for (const hit of (raw ?? []).slice(0, SEARCH_LIMIT)) {
+        if (!hit.project_id || !hit.slug || !hit.title) continue;
+        hits.push({
+            projectId: hit.project_id,
+            slug: hit.slug,
+            title: hit.title,
+            description: hit.description ?? "",
+            downloads: typeof hit.downloads === "number" ? hit.downloads : 0,
+            follows: typeof hit.follows === "number" ? hit.follows : 0,
+            iconUrl: hit.icon_url || undefined,
+        });
+    }
+    return hits;
 }
 
 export interface EcosystemInfo {
@@ -229,19 +247,7 @@ export async function searchModrinth(query: string, signal?: AbortSignal): Promi
         index: query ? "relevance" : "downloads",
     }, signal);
 
-    const hits: ModrinthHit[] = [];
-    for (const hit of (data.hits ?? []).slice(0, SEARCH_LIMIT)) {
-        if (!hit.project_id || !hit.slug || !hit.title) continue;
-        hits.push({
-            projectId: hit.project_id,
-            slug: hit.slug,
-            title: hit.title,
-            description: hit.description ?? "",
-            downloads: typeof hit.downloads === "number" ? hit.downloads : 0,
-            follows: typeof hit.follows === "number" ? hit.follows : 0,
-            iconUrl: hit.icon_url || undefined,
-        });
-    }
+    const hits = parseSearchHits(data.hits);
     // Plugins browse across Minecraft versions; exact builds are required only for mods.
     if (eco.kind === "plugin") return hits;
 

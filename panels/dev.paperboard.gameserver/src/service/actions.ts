@@ -46,6 +46,8 @@ import { applyRuntimeProperties } from "./runtimeProperties";
 import { installServerSoftware, isInstallRunning } from "./softwareInstall";
 import { readLoaderSettings, writeLoaderSetting } from "./loaderSettings";
 import { liveInstallDeps } from "./softwareInstallDeps";
+import { installDatapack, listDatapacks, listDatapackVersions, removeDatapack } from "./datapacks";
+import { liveDatapackDeps } from "./datapackDeps";
 import { assertPlayerName, assertSingleLine } from "../core/players";
 import type { GameServerState } from "./types";
 import { ACTION_IDS, TRIGGER_IDS, PANEL_ID } from "./contract";
@@ -53,7 +55,7 @@ import { SOFTWARE_NAMES } from "../lib/software";
 import { isServerSoftware, SOFTWARE_IDS } from "../software/catalog";
 import { INSTALL_OWNED_CONFIG_KEYS } from "../software/installRecord";
 import { providerFor } from "../software/providers";
-import { isSupportedMcVersion, MIN_SUPPORTED_MC_VERSION } from "../lib/versionProfile";
+import { isSupportedMcVersion, MIN_SUPPORTED_MC_VERSION, versionSupports } from "../lib/versionProfile";
 import { gamerulesFor } from "../core/gamerules";
 
 export const playerType = defineType({
@@ -993,6 +995,82 @@ export const panelActions: ActionDefinition[] = [
         icon: "delete_sweep",
         run: async (ctx: ServiceContext<GameServerState>) => {
             return uninstallAllPlugins(ctx);
+        },
+    }),
+
+    defineAction({
+        id: ACTION_IDS.listDatapacks,
+        name: "List Datapacks",
+        category: "Worlds",
+        description: "Lists the datapacks in the active world",
+        internal: true,
+        template: "List datapacks",
+        inputs: {},
+        output: { type: "object", label: "Datapacks" },
+        quick: false,
+        icon: "dataset",
+        run: async (ctx: ServiceContext<GameServerState>) => listDatapacks(liveDatapackDeps(ctx)),
+    }),
+
+    defineAction({
+        id: ACTION_IDS.listDatapackVersions,
+        name: "List Datapack Versions",
+        category: "Worlds",
+        description: "Lists a Modrinth datapack's builds for the server's Minecraft version",
+        internal: true,
+        template: "List versions of datapack {projectId}",
+        inputs: {
+            projectId: { type: "string", label: "Project", required: true },
+        },
+        output: { type: "object", label: "Versions" },
+        quick: false,
+        icon: "dataset",
+        run: async (ctx: ServiceContext<GameServerState>, inputs: { projectId?: string }) =>
+            listDatapackVersions(inputs?.projectId, ctx.state.serverVersion, liveDatapackDeps(ctx)),
+    }),
+
+    defineAction({
+        id: ACTION_IDS.installDatapack,
+        name: "Install Datapack",
+        category: "Worlds",
+        description: "Installs a Modrinth datapack into the active world",
+        internal: true,
+        template: "Install datapack {projectId}",
+        inputs: {
+            projectId: { type: "string", label: "Project", required: true },
+            versionId: { type: "string", label: "Version" },
+        },
+        output: { type: "object", label: "Installed" },
+        quick: false,
+        icon: "dataset",
+        run: async (ctx: ServiceContext<GameServerState>, inputs: { projectId?: string; versionId?: string }) => {
+            if (!versionSupports(ctx.state.serverVersion, "datapacks")) {
+                throw new Error("Datapacks need Minecraft 1.13 or newer.");
+            }
+            return installDatapack(
+                { projectId: inputs?.projectId, versionId: inputs?.versionId },
+                ctx.state.serverVersion,
+                liveDatapackDeps(ctx),
+            );
+        },
+    }),
+
+    defineAction({
+        id: ACTION_IDS.removeDatapack,
+        name: "Remove Datapack",
+        category: "Worlds",
+        description: "Moves a datapack out of the active world into the trash",
+        internal: true,
+        template: "Remove datapack {name}",
+        inputs: {
+            name: { type: "string", label: "Datapack", required: true },
+        },
+        output: { type: "boolean", label: "Removed" },
+        quick: false,
+        icon: "delete",
+        run: async (ctx: ServiceContext<GameServerState>, inputs: { name?: string }) => {
+            await removeDatapack(inputs?.name, liveDatapackDeps(ctx));
+            return true;
         },
     }),
 

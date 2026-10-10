@@ -24,6 +24,7 @@ import Advanced from "./components/Advanced";
 import Logs from "./components/Logs";
 import Versions from "./components/Versions";
 import Loader from "./components/Loader";
+import Datapacks from "./components/Datapacks";
 import "@mileniumhq/paperui/style.css";
 import "@mileniumhq/paperui/panel.css";
 
@@ -43,17 +44,19 @@ export default function App() {
     // doing nothing. Unknown version stays permissive so nothing flashes out
     // before config loads; once known, unsupported features disappear.
     const featureReady = (
-        cap: "mapRendering" | "playerStats" | "worldManager",
+        cap: "mapRendering" | "playerStats" | "worldManager" | "datapacks",
     ) => !hasKnownMcVersion() || supports(cap);
     const showMap = () => featureReady("mapRendering");
     const showPlayers = () => featureReady("playerStats");
     const showWorlds = () => featureReady("worldManager");
+    const showDatapacks = () => featureReady("datapacks");
 
     createEffect(() => {
         if (!hasPluginTab() && activeTab() === "plugins") setActiveTab("overview");
         if (!showMap() && activeTab() === "map") setActiveTab("overview");
         if (!showPlayers() && activeTab() === "players") setActiveTab("overview");
         if (!showWorlds() && activeTab() === "worlds") setActiveTab("overview");
+        if (!showDatapacks() && activeTab() === "datapacks") setActiveTab("overview");
     });
 
     const checkConfig = async () => {
@@ -122,6 +125,11 @@ export default function App() {
                                 {pluginKind()}
                             </PaperMenuItem>
                         </Show>
+                        <Show when={showDatapacks()}>
+                            <PaperMenuItem value="datapacks" icon="dataset">
+                                Datapacks
+                            </PaperMenuItem>
+                        </Show>
                         <PaperMenuItem value="logs" icon="description">
                             Logs
                         </PaperMenuItem>
@@ -178,6 +186,11 @@ export default function App() {
                         <Show when={hasPluginTab()}>
                             <PaperInterfaceItem value="plugins">
                                 <Plugins updateRequest={pluginUpdateRequest()} />
+                            </PaperInterfaceItem>
+                        </Show>
+                        <Show when={showDatapacks()}>
+                            <PaperInterfaceItem value="datapacks">
+                                <Datapacks active={activeTab() === "datapacks"} />
                             </PaperInterfaceItem>
                         </Show>
                         <PaperInterfaceItem value="logs" variant="full">
