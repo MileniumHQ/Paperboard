@@ -42,4 +42,13 @@ describe("writeServerProperties", () => {
         await writeServerProperties({ motd: "first" });
         expect(parseProperties(writes[1])).toEqual({ motd: "first" });
     });
+
+    test("color codes and other non-ASCII text are written as \\u escapes", async () => {
+        readResult = async () => null;
+        await writeServerProperties({ motd: "§6Gold\n§bCafé ✨" });
+        // pure ASCII on disk, so a Latin-1 reader gets the same text back
+        expect(writes[0]).toMatch(/^[\x00-\x7f]*$/);
+        expect(writes[0]).toContain("\\u00A76Gold");
+        expect(parseProperties(writes[0]).motd).toBe("§6Gold\n§bCafé ✨");
+    });
 });

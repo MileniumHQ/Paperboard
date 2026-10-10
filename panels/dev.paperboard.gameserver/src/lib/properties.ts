@@ -149,14 +149,25 @@ export async function readServerProperties(): Promise<Record<string, string>> {
     }
 }
 
+// Java reads server.properties as Latin-1 on older versions, so a raw UTF-8
+// "§" arrives as "Â§". Escape every non-ASCII character as \uXXXX, like
+// Java's own Properties.store, which every version reads back correctly.
+function stringifyServerProperties(values: Record<string, string>): string {
+    const content = properties.stringify(values, {
+        keySep: "=",
+        lineWidth: null,
+        latin1: false,
+    });
+    return content.replace(
+        /[^\x00-\x7f]/g,
+        (ch) => `\\u${ch.charCodeAt(0).toString(16).toUpperCase().padStart(4, "0")}`,
+    );
+}
+
 export async function writeServerProperties(values: Record<string, string>) {
     try {
         const current = await readServerPropertiesStrict();
-        const content = properties.stringify({ ...current, ...values }, {
-            keySep: "=",
-            lineWidth: null,
-            latin1: false,
-        });
+        const content = stringifyServerProperties({ ...current, ...values });
         await fileApi.write("server.properties", content, PANEL_ID);
     } catch (err) {
         console.error("[Options] Failed to write server.properties:", err);
