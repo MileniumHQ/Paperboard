@@ -34,15 +34,9 @@ const RAM_CHOICES = Array.from(
     (_, i) => MIN_RAM_GB + i,
 );
 
-// server.properties entries not exposed in the Options, Worlds or Game Rules tabs
+// server.properties entries not exposed in the Options, Worlds or Game Rules
+// tabs, or by the Overview's MOTD editor
 const ADVANCED_PROPERTY_FIELDS: PropertyField[] = [
-    {
-        key: "motd",
-        title: "MOTD",
-        description: "Message shown in the server list. Color codes allowed.",
-        control: "text",
-        defaultValue: "A Minecraft Server",
-    },
     {
         key: "online-mode",
         title: "Online Mode",

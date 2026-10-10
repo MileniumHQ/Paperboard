@@ -3,6 +3,7 @@ import { SERVER_PROC_ID, appendCapped, type GameServerState } from "./service/ty
 import { recoverInterruptedInstall } from "./service/softwareInstall";
 import { liveRecoveryDeps } from "./service/softwareInstallDeps";
 import { loadConfigAndProperties } from "./service/config";
+import { DEFAULT_MOTD } from "./core/motd";
 import { handleProcessData, handleProcessExit } from "./service/lifecycle";
 import {
     panelActions,
@@ -22,7 +23,7 @@ const initialState: GameServerState = {
     chatMessages: [],
     localIp: "127.0.0.1",
     serverPort: "25565",
-    serverMotd: "A Minecraft Server",
+    serverMotd: DEFAULT_MOTD,
     serverSoftware: "paper",
     serverVersion: "",
     ramAllocation: 4,

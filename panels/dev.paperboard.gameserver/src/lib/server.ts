@@ -5,6 +5,7 @@ import type { PaperConsoleEntry, PaperBadgeVariant } from "@mileniumhq/paperui";
 import stripAnsi from "strip-ansi";
 import { SOFTWARE_NAMES, type ServerSoftwareType } from "./software";
 import type { InstallProgress } from "../core/state";
+import { DEFAULT_MOTD } from "../core/motd";
 import {
     forgetPlayerData,
     getPlayerPlaytimeSeconds,
@@ -44,7 +45,7 @@ export const [serverEntries, setServerEntries] = createSignal<PaperConsoleEntry[
 export const [chatMessages, setChatMessages] = createSignal<ChatMessage[]>([]);
 export const [localIp, setLocalIp] = createSignal("127.0.0.1");
 export const [serverPort, setServerPort] = createSignal("25565");
-export const [serverMotd, setServerMotd] = createSignal("A Minecraft Server");
+export const [serverMotd, setServerMotd] = createSignal(DEFAULT_MOTD);
 export const [serverSoftware, setServerSoftware] = createSignal<ServerSoftwareType>("paper");
 export const [serverVersion, setServerVersion] = createSignal("");
 export const [ramAllocation, setRamAllocation] = createSignal(4);

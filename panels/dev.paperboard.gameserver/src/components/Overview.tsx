@@ -31,6 +31,7 @@ import {
 } from "../lib/server";
 import { SOFTWARE_NAMES } from "../lib/software";
 import ServerIssueModal from "./ServerIssueModal";
+import { MotdEditor, MotdPreview } from "./Motd";
 import { fileApi } from "@mileniumhq/paperapi";
 import { PANEL_ID } from "../service/contract";
 import { parseProperties } from "../core/properties";
@@ -46,6 +47,7 @@ export default function Overview(props: {
     hasPlayersTab: boolean;
 }) {
     const [copied, setCopied] = createSignal(false);
+    const [motdOpen, setMotdOpen] = createSignal(false);
     const [restriction, setRestriction] = createSignal<JoinRestriction>(null);
 
     // the whitelist can lock everyone but operators out, and 26.3 turns it
@@ -119,9 +121,16 @@ export default function Overview(props: {
                                     {badge().label}
                                 </PaperBadge>
                             </PaperFlex>
-                            <PaperText weight={400} size={4} color="text-subtle">
-                                {serverMotd()}
-                            </PaperText>
+                            <PaperFlex direction="row" gap="half" align="center">
+                                <MotdPreview motd={serverMotd()} />
+                                <PaperButton size="tiny"
+                                    icon
+                                    onClick={() => setMotdOpen(true)}
+                                    title="Edit server list message"
+                                    aria-label="Edit server list message">
+                                    edit
+                                </PaperButton>
+                            </PaperFlex>
                         </PaperFlex>
                     </PaperFlex>
                 </PaperFlex>
@@ -205,6 +214,7 @@ export default function Overview(props: {
                 />
             </PaperCard>
 
+            <MotdEditor open={motdOpen()} onClose={() => setMotdOpen(false)} />
             <ServerIssueModal />
         </PaperPage>
     );
