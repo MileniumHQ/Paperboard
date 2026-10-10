@@ -2,11 +2,17 @@
 // "§" formatting: a color code resets the style, a format code adds to it,
 // and §r returns to the list's default gray. Every supported server reads
 // the same codes; none takes hex colors from server.properties.
+//
+// The editor works on a MotdDoc: one styled cell per character, with "\n"
+// cells between lines, so an offset into the doc is an offset into the text.
 
 export const DEFAULT_MOTD = "A Minecraft Server";
 
 /** the Multiplayer list shows two lines */
 export const MOTD_LINES = 2;
+
+/** characters kept, not counting § codes or line breaks */
+export const MAX_MOTD_CHARS = 256;
 
 export const MOTD_COLORS = [
     { code: "0", name: "Black", hex: "#000000" },
@@ -28,17 +34,17 @@ export const MOTD_COLORS = [
 ] as const;
 
 export const MOTD_FORMATS = [
-    { code: "l", name: "Bold" },
-    { code: "o", name: "Italic" },
-    { code: "n", name: "Underline" },
-    { code: "m", name: "Strikethrough" },
-    { code: "k", name: "Obfuscated" },
-    { code: "r", name: "Reset" },
+    { code: "l", key: "bold", name: "Bold" },
+    { code: "o", key: "italic", name: "Italic" },
+    { code: "n", key: "underline", name: "Underline" },
+    { code: "m", key: "strikethrough", name: "Strikethrough" },
+    { code: "k", key: "obfuscated", name: "Obfuscated" },
 ] as const;
 
-export interface MotdSegment {
-    text: string;
-    /** a MOTD_COLORS hex; undefined is the list's default gray */
+export const MOTD_COLOR_HEX = new Map<string, string>(MOTD_COLORS.map((c) => [c.code, c.hex]));
+
+export interface MotdStyle {
+    /** a MOTD_COLORS code; undefined is the list's default gray */
     color?: string;
     bold: boolean;
     italic: boolean;
@@ -47,11 +53,18 @@ export interface MotdSegment {
     obfuscated: boolean;
 }
 
-const COLOR_BY_CODE = new Map<string, string>(MOTD_COLORS.map((c) => [c.code, c.hex]));
+export interface MotdCell {
+    ch: string;
+    style: MotdStyle;
+}
 
-type Style = Omit<MotdSegment, "text">;
+export type MotdDoc = MotdCell[];
 
-const plainStyle = (color?: string): Style => ({
+export interface MotdSegment extends MotdStyle {
+    text: string;
+}
+
+export const plainStyle = (color?: string): MotdStyle => ({
     color,
     bold: false,
     italic: false,
@@ -60,96 +73,149 @@ const plainStyle = (color?: string): Style => ({
     obfuscated: false,
 });
 
-/** one array of styled runs per line; unknown codes are dropped like the game drops them */
-export function parseMotd(raw: string): MotdSegment[][] {
-    const lines: MotdSegment[][] = [[]];
-    let style = plainStyle();
-    let text = "";
-    const flush = () => {
-        if (text) lines[lines.length - 1].push({ ...style, text });
-        text = "";
-    };
+const FORMAT_BY_CODE = new Map<string, (typeof MOTD_FORMATS)[number]["key"]>(
+    MOTD_FORMATS.map((f) => [f.code, f.key]),
+);
+
+export const sameStyle = (a: MotdStyle, b: MotdStyle): boolean =>
+    a.color === b.color && MOTD_FORMATS.every((f) => a[f.key] === b[f.key]);
+
+/** the style after a code, the way the game reads it */
+function readCode(style: MotdStyle, code: string): MotdStyle {
+    if (MOTD_COLOR_HEX.has(code)) return plainStyle(code);
+    if (code === "r") return plainStyle();
+    const key = FORMAT_BY_CODE.get(code);
+    return key ? { ...style, [key]: true } : style;
+}
+
+/** one cell per character; unknown and dangling codes are dropped like the game drops them */
+export function docFromMotd(raw: string, start: MotdStyle = plainStyle()): MotdDoc {
+    const doc: MotdDoc = [];
+    let style = start;
     for (let i = 0; i < raw.length; i++) {
         const ch = raw[i];
-        if (ch === "\n") {
-            flush();
-            lines.push([]);
-            continue;
-        }
         if (ch !== "§") {
-            text += ch;
+            doc.push({ ch, style });
             continue;
         }
         const code = raw[i + 1]?.toLowerCase();
         if (code === undefined) break;
         i++;
-        flush();
-        const color = COLOR_BY_CODE.get(code);
-        if (color) style = plainStyle(color);
-        else if (code === "r") style = plainStyle();
-        else if (code === "l") style = { ...style, bold: true };
-        else if (code === "o") style = { ...style, italic: true };
-        else if (code === "n") style = { ...style, underline: true };
-        else if (code === "m") style = { ...style, strikethrough: true };
-        else if (code === "k") style = { ...style, obfuscated: true };
+        style = readCode(style, code);
     }
-    flush();
+    return doc;
+}
+
+/** the § string for a doc: the fewest codes that reproduce each cell's style */
+export function motdFromDoc(doc: MotdDoc): string {
+    let out = "";
+    let current = plainStyle();
+    for (const cell of doc) {
+        if (cell.ch !== "\n" && !sameStyle(cell.style, current)) {
+            const next = cell.style;
+            const keepsFormats = MOTD_FORMATS.every((f) => !current[f.key] || next[f.key]);
+            let base = current;
+            if (next.color !== current.color || !keepsFormats) {
+                out += next.color ? `§${next.color}` : "§r";
+                base = plainStyle(next.color);
+            }
+            for (const f of MOTD_FORMATS) if (next[f.key] && !base[f.key]) out += `§${f.code}`;
+            current = next;
+        }
+        out += cell.ch;
+    }
+    return out;
+}
+
+/** one array of styled runs per line */
+export function parseMotd(raw: string): MotdSegment[][] {
+    const lines: MotdSegment[][] = [[]];
+    for (const cell of docFromMotd(raw)) {
+        if (cell.ch === "\n") {
+            lines.push([]);
+            continue;
+        }
+        const line = lines[lines.length - 1];
+        const last = line[line.length - 1];
+        if (last && sameStyle(last, cell.style)) last.text += cell.ch;
+        else line.push({ ...cell.style, text: cell.ch });
+    }
     return lines;
 }
 
-/** the editor's lines, from a stored MOTD; extra lines stay on the last one */
-export function splitMotdLines(raw: string): string[] {
-    const lines = raw.split("\n");
-    const shown = lines.slice(0, MOTD_LINES - 1);
-    shown.push(lines.slice(MOTD_LINES - 1).join(" "));
-    return shown;
-}
-
-/** the stored MOTD, from the editor's lines; a blank last line is not kept */
-export function joinMotdLines(lines: string[]): string {
-    const kept = [...lines];
-    while (kept.length > 1 && kept[kept.length - 1] === "") kept.pop();
-    return kept.join("\n");
-}
-
-// the codes that restore the style in effect at `index`, or §r for none
-function styleCodesAt(value: string, index: number): string {
-    let color = "";
-    let formats = "";
-    for (let i = 0; i < index - 1; i++) {
-        if (value[i] !== "§") continue;
-        const code = value[i + 1].toLowerCase();
-        i++;
-        if (COLOR_BY_CODE.has(code)) {
-            color = `§${code}`;
-            formats = "";
-        } else if (code === "r") {
-            color = "";
-            formats = "";
-        } else if ("lonmk".includes(code) && !formats.includes(code)) {
-            formats += `§${code}`;
-        }
-    }
-    return color + formats || "§r";
+/** the style new text takes at a caret: the character before it, else the one after */
+export function styleAt(doc: MotdDoc, offset: number): MotdStyle {
+    const before = doc[offset - 1];
+    if (before && before.ch !== "\n") return before.style;
+    const after = doc[offset];
+    if (after && after.ch !== "\n") return after.style;
+    return plainStyle();
 }
 
 /**
- * Applies a § code at a selection: a selection is wrapped (the code, the
- * text, then the style that was in effect before it), otherwise the code
- * is inserted at the caret.
+ * Replaces [start, end) with `cells`. Line breaks past MOTD_LINES become
+ * spaces and characters past MAX_MOTD_CHARS are dropped.
  */
-export function applyMotdCode(
-    value: string,
+export function replaceRange(
+    doc: MotdDoc,
     start: number,
     end: number,
-    code: string,
-): { value: string; caret: number } {
-    const before = value.slice(0, start);
-    const after = value.slice(end);
-    if (start === end || code === "r") {
-        const inserted = `${before}§${code}`;
-        return { value: inserted + after, caret: inserted.length };
+    cells: MotdDoc,
+): { doc: MotdDoc; caret: number } {
+    const kept = [...doc.slice(0, start), ...doc.slice(end)];
+    let lines = kept.filter((c) => c.ch === "\n").length + 1;
+    let room = MAX_MOTD_CHARS - kept.filter((c) => c.ch !== "\n").length;
+    const inserted: MotdDoc = [];
+    for (const cell of cells) {
+        if (cell.ch === "\n" && lines >= MOTD_LINES) {
+            if (room <= 0) continue;
+            inserted.push({ ch: " ", style: cell.style });
+            room--;
+        } else if (cell.ch === "\n") {
+            inserted.push(cell);
+            lines++;
+        } else if (room > 0) {
+            inserted.push(cell);
+            room--;
+        }
     }
-    const wrapped = `${before}§${code}${value.slice(start, end)}${styleCodesAt(value, start)}`;
-    return { value: wrapped + after, caret: wrapped.length };
+    return {
+        doc: [...kept.slice(0, start), ...inserted, ...kept.slice(start)],
+        caret: start + inserted.length,
+    };
+}
+
+/** a code applied to a style: a color or §r replaces, a format toggles */
+export function styleWithCode(style: MotdStyle, code: string): MotdStyle {
+    if (MOTD_COLOR_HEX.has(code)) return { ...style, color: code };
+    if (code === "r") return plainStyle();
+    const key = FORMAT_BY_CODE.get(code);
+    return key ? { ...style, [key]: !style[key] } : style;
+}
+
+/**
+ * The style a selection shows: a format counts when every character has
+ * it, a color when every character shares it.
+ */
+export function selectionStyle(doc: MotdDoc, start: number, end: number): MotdStyle {
+    const cells = doc.slice(start, end).filter((c) => c.ch !== "\n");
+    if (cells.length === 0) return styleAt(doc, start);
+    const color = cells.every((c) => c.style.color === cells[0].style.color) ? cells[0].style.color : undefined;
+    const style = plainStyle(color);
+    for (const f of MOTD_FORMATS) style[f.key] = cells.every((c) => c.style[f.key]);
+    return style;
+}
+
+/**
+ * Applies a code to [start, end): a color or §r to every character, and a
+ * format toggles off when every character already has it, on otherwise.
+ */
+export function applyCode(doc: MotdDoc, start: number, end: number, code: string): MotdDoc {
+    const key = FORMAT_BY_CODE.get(code);
+    const turnOff = key !== undefined && selectionStyle(doc, start, end)[key];
+    return doc.map((cell, i) => {
+        if (i < start || i >= end || cell.ch === "\n") return cell;
+        if (key) return { ...cell, style: { ...cell.style, [key]: !turnOff } };
+        return { ...cell, style: styleWithCode(cell.style, code) };
+    });
 }

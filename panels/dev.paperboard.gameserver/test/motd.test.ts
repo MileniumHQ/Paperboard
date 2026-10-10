@@ -9,16 +9,20 @@ mock.module("@mileniumhq/paperapi", () => ({
     system: { getLocalIP: async () => "127.0.0.1" },
 }));
 
-const { applyMotdCode, joinMotdLines, parseMotd, splitMotdLines } = await import("../src/core/motd");
+const { applyCode, docFromMotd, MAX_MOTD_CHARS, motdFromDoc, parseMotd, replaceRange, styleAt } = await import(
+    "../src/core/motd"
+);
 const { loadConfigAndProperties } = await import("../src/service/config");
+
+const text = (doc: { ch: string }[]) => doc.map((c) => c.ch).join("");
 
 describe("parseMotd", () => {
     test("a color resets formatting, a format adds to it, §r returns to the default", () => {
         const [line] = parseMotd("§lA§6B§oC§rD");
         expect(line.map((s) => [s.text, s.color, s.bold, s.italic])).toEqual([
             ["A", undefined, true, false],
-            ["B", "#FFAA00", false, false],
-            ["C", "#FFAA00", false, true],
+            ["B", "6", false, false],
+            ["C", "6", false, true],
             ["D", undefined, false, false],
         ]);
     });
@@ -26,23 +30,44 @@ describe("parseMotd", () => {
     test("lines split on newlines; unknown and dangling codes are dropped", () => {
         const lines = parseMotd("§zone\n§Btwo§");
         expect(lines.map((line) => line.map((s) => s.text).join(""))).toEqual(["one", "two"]);
-        expect(lines[1][0].color).toBe("#55FFFF");
+        expect(lines[1][0].color).toBe("b");
     });
 });
 
-describe("editing", () => {
-    test("a code wraps a selection, or goes in at the caret", () => {
-        expect(applyMotdCode("Hello world", 6, 11, "a")).toEqual({ value: "Hello §aworld§r", caret: 15 });
-        // the text after the selection keeps the style it had
-        expect(applyMotdCode("§b§lJoin with friends", 14, 21, "c").value).toBe("§b§lJoin with §cfriends§b§l");
-        expect(applyMotdCode("Hello", 0, 0, "l")).toEqual({ value: "§lHello", caret: 2 });
+describe("the editor's doc", () => {
+    test("round-trips through the fewest codes", () => {
+        for (const raw of ["§6Gold §lbold\n§rplain", "§b§lJoin with §cfriends", "plain", ""]) {
+            expect(motdFromDoc(docFromMotd(raw))).toBe(raw);
+        }
+        // a redundant code is dropped, a style carries across the line break
+        expect(motdFromDoc(docFromMotd("§6§6a\nb"))).toBe("§6a\nb");
     });
 
-    test("two lines in the editor, one newline-joined value on disk", () => {
-        expect(splitMotdLines("only")).toEqual(["only", ""]);
-        expect(joinMotdLines(["only", ""])).toBe("only");
-        expect(joinMotdLines(splitMotdLines("a\nb"))).toBe("a\nb");
-        expect(joinMotdLines(["", ""])).toBe("");
+    test("a code applies to a selection without touching the text around it", () => {
+        const doc = docFromMotd("§bHello world");
+        expect(motdFromDoc(applyCode(doc, 6, 11, "c"))).toBe("§bHello §cworld");
+        const bold = applyCode(doc, 0, 5, "l");
+        expect(motdFromDoc(bold)).toBe("§b§lHello§b world");
+        // a format every character has toggles off
+        expect(motdFromDoc(applyCode(bold, 0, 5, "l"))).toBe("§bHello world");
+        expect(motdFromDoc(applyCode(doc, 0, 11, "r"))).toBe("Hello world");
+    });
+
+    test("typing takes the caret's style", () => {
+        const doc = docFromMotd("§aA\n§cB");
+        expect(styleAt(doc, 1).color).toBe("a");
+        expect(styleAt(doc, 2).color).toBe("c");
+        expect(styleAt([], 0).color).toBeUndefined();
+    });
+
+    test("keeps two lines and a bounded length", () => {
+        const doc = docFromMotd("a\nb");
+        const extra = replaceRange(doc, 3, 3, docFromMotd("\nc"));
+        expect(text(extra.doc)).toBe("a\nb c");
+        expect(extra.caret).toBe(5);
+        const long = replaceRange([], 0, 0, docFromMotd("x".repeat(MAX_MOTD_CHARS + 10)));
+        expect(long.doc.length).toBe(MAX_MOTD_CHARS);
+        expect(text(replaceRange(doc, 0, 2, []).doc)).toBe("b");
     });
 });
 
