@@ -133,11 +133,16 @@ export function defaultValueFor(field: PropertyField): string {
     return field.defaultValue;
 }
 
+// a missing file is empty; a failed read throws, so nothing treats an
+// unreadable file as empty and writes over it
+export async function readServerPropertiesStrict(): Promise<Record<string, string>> {
+    const content = await fileApi.read("server.properties", PANEL_ID);
+    return content ? parseProperties(content) : {};
+}
+
 export async function readServerProperties(): Promise<Record<string, string>> {
     try {
-        const content = await fileApi.read("server.properties", PANEL_ID);
-        if (!content) return {};
-        return parseProperties(content);
+        return await readServerPropertiesStrict();
     } catch (err) {
         console.error("[Options] Failed to read server.properties:", err);
         return {};
@@ -145,11 +150,9 @@ export async function readServerProperties(): Promise<Record<string, string>> {
 }
 
 export async function writeServerProperties(values: Record<string, string>) {
-    const current = await readServerProperties();
-    const merged = { ...current, ...values };
-
     try {
-        const content = properties.stringify(merged, {
+        const current = await readServerPropertiesStrict();
+        const content = properties.stringify({ ...current, ...values }, {
             keySep: "=",
             lineWidth: null,
             latin1: false,
