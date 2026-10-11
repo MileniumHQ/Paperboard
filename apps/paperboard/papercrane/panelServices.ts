@@ -162,6 +162,15 @@ export class PanelServicesManager {
         }
         return count;
     }
+    /** Each running service's process, by panel. */
+    public processRoots(): Array<{ panelId: string; pid: number }> {
+        const roots: Array<{ panelId: string; pid: number }> = [];
+        for (const [panelId, entry] of this.services) {
+            const pid = entry.process.pid;
+            if (pid !== undefined && entry.process.exitCode === null && entry.process.signalCode === null) roots.push({ panelId, pid });
+        }
+        return roots;
+    }
     public async stopService(id: string, graceMs = 3000): Promise<void> {
         const entry = this.services.get(requirePanelId(id));
         if (!entry) return;

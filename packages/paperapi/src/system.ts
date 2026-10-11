@@ -1,4 +1,4 @@
-import { invoke } from "./ipc";
+import { invoke, invokeIn } from "./ipc";
 
 // system info of whichever computer the transport is scoped to
 export interface SystemInfo {
@@ -35,6 +35,26 @@ export interface GpuReport {
     errors: string[];
 }
 
+/** One owner's share of a computer: Paperboard itself, or one panel. */
+export interface UsageGroup {
+    /** "paperboard", or a panel id */
+    id: string;
+    kind: "paperboard" | "panel";
+    memoryBytes: number;
+    /** share of the whole computer (every core), 0-100; null until measured */
+    cpuPercent: number | null;
+}
+
+/** How a computer's CPU and memory are being used, and by whom. */
+export interface UsageReport {
+    sampledAt: number;
+    /** otherBytes: in use by everything that isn't Paperboard or a panel */
+    memory: { totalBytes: number; availableBytes: number; otherBytes: number };
+    /** null when no CPU interval could be measured */
+    cpu: { cores: number; idlePercent: number; otherPercent: number } | null;
+    groups: UsageGroup[];
+}
+
 export const systemApi = {
     /** primary LAN IPv4 address */
     getLocalIP: (): Promise<string> => invoke<string>("system-get-ip"),
@@ -44,6 +64,12 @@ export const systemApi = {
 
     /** GPUs of the computer, with memory where the OS reports it */
     getGpus: (): Promise<GpuReport> => invoke<GpuReport>("system-gpus"),
+
+    /**
+     * CPU and memory use of a computer, split by panel. Host only: a panel's
+     * scoped token is refused.
+     */
+    getUsage: (computerId?: string): Promise<UsageReport> => invokeIn<UsageReport>(computerId, "system-usage"),
 
     /** OS notification with fallback */
     notify: (title: string, message: string): Promise<unknown> =>

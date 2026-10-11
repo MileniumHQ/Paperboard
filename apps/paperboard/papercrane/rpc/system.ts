@@ -9,6 +9,7 @@ import type { RpcContext } from "./context";
 import { rpcErrorCode } from "./params";
 import { forbidden } from "./errors";
 import { getGpuReport } from "../gpu";
+import { usageSampler, type UsageRoots } from "../usage";
 import { semverGt } from "../util";
 import { releaseMessage, verifyRelease } from "../releaseSignature";
 
@@ -31,6 +32,22 @@ function isSafeUpdateUrl(rawUrl: string): boolean {
         console.error("[system:update] refusing unparseable download URL:", err);
         return false;
     }
+}
+
+function usageRoots(ctx: RpcContext): UsageRoots {
+    const panels = new Map<string, number[]>();
+    const add = (owner: string, pid: number) => {
+        const list = panels.get(owner);
+        if (list) list.push(pid);
+        else panels.set(owner, [pid]);
+    };
+    for (const { panelId, pid } of ctx.engine.serviceRoots()) add(panelId, pid);
+    const paperboard = [process.pid];
+    for (const { owner, pid } of ctx.engine.workloadRoots()) {
+        if (owner) add(owner, pid);
+        else paperboard.push(pid);
+    }
+    return { paperboard, panels };
 }
 
 export async function handleSystem(action: string, id: unknown, params: any, ctx: RpcContext): Promise<boolean> {
@@ -59,6 +76,13 @@ export async function handleSystem(action: string, id: unknown, params: any, ctx
         }
         case "system:gpus": {
             reply(id, await getGpuReport());
+            return true;
+        }
+        case "system:usage": {
+            // who uses this computer, panel by panel: host equipment for
+            // Home, not something one panel's token reads about the others
+            if (ctx.callerPanelId()) throw forbidden("system:usage is host-only");
+            reply(id, await usageSampler.sample(() => usageRoots(ctx)));
             return true;
         }
         case "system:update": {

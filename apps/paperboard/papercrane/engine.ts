@@ -232,6 +232,20 @@ export class PaperCraneEngine {
         return this.clientOwners.get(id) ?? null;
     }
 
+    /** Each running panel service's process, by panel. */
+    public serviceRoots(): Array<{ panelId: string; pid: number }> {
+        return this.services.processRoots();
+    }
+
+    /** Each live workload's supervisor process and the panel that created it (null: the host). */
+    public workloadRoots(): Array<{ owner: string | null; pid: number }> {
+        const roots: Array<{ owner: string | null; pid: number }> = [];
+        for (const [id, client] of this.clients) {
+            if (client.pid > 0) roots.push({ owner: this.clientOwners.get(id) ?? null, pid: client.pid });
+        }
+        return roots;
+    }
+
     // lookup with reconnect, shared by attach/isRunning
     private async getOrConnectClient(
         id: string,
