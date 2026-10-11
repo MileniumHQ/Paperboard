@@ -89,6 +89,14 @@ Never compromise on: panels are first-party, not sandboxed; the registry is clos
 - `bun run gate` typechecks, tests, **and rebuilds** panels; the daemon runs the built `dist/service.js`, so the build is the artifact proof. `bun run build:panels` builds panels alone.
 - `bun run gate <target...>` runs only those targets (plus the shared-library builds they consume): `bun run gate terminal`, `bun run gate paperapi paperui`, `bun run gate gameserver`. Targets: `packages`, `paperapi`, `paperui`, `create-panel`, `paperboard`, `paperdocs`, `origami`, `origami-library`, `scripts`, and the panels `actions` `ai` `botcreator` `gameserver` `terminal`. Repo-wide checks (changelog, TODO expiry) run only in the full gate. Editing one panel or library should not force the whole gate.
 
+**Token budget**
+- Every turn re-reads the whole context, so context size times turn count is the cost. Keep both small.
+- Batch independent tool calls into one message; chain dependent commands in one Bash call (`a && b`).
+- Trim output before it lands: `2>&1 | tail -40`, `grep` for failures. Prefer targeted gates over the full gate while iterating.
+- Push noisy exploration (wide searches, log digging) to a subagent and keep only its summary.
+- Use browser snapshots and screenshots sparingly; each one stays in context for the rest of the session.
+- One task per session. Past ~200k context, compact or hand off to a fresh session with a short note.
+
 **Browser (web) mode**
 - The shell can run in a real browser instead of an Electron window. Dev launcher: `bun run dev:browser` (from `apps/paperboard`), or `bun scripts/launch.ts dev -- --browser --browser-port=<n>` to pin a port. It prints `Paperboard (browser, DEV TOOL) is running at http://paperboard.localhost:<n>`.
 - Agents may use this to view the real shell and panels — good for screenshots and end-to-end checks the Electron window can't easily give a headless session. `*.localhost` resolves to loopback, so `paperboard.localhost:<n>` and `<comp>.<panelId>.paperboard.localhost:<n>` both work.
