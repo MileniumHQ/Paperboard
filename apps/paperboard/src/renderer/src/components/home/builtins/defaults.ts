@@ -1,6 +1,6 @@
 import type { HomeItem } from "../../../lib/homeLayout";
 
-/** What a Home that was never arranged starts with: one column of this computer at a glance. */
+/** What a Home that was never arranged starts with: this computer at a glance. */
 export function defaultHomeItems(computerId: string): HomeItem[] {
     const item = (widgetId: string, size: string, x: number, y: number): HomeItem => ({
         id: crypto.randomUUID(),
@@ -8,7 +8,6 @@ export function defaultHomeItems(computerId: string): HomeItem[] {
         computerId,
         widgetId,
         size,
-        column: 0,
         x,
         y,
     });

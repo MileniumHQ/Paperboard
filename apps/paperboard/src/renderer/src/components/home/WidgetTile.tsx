@@ -20,11 +20,9 @@ export interface WidgetTileProps {
     style: JSX.CSSProperties;
     label: string;
     sizeLabel: string;
-    canResize: boolean;
     children: JSX.Element;
     ref: (el: HTMLDivElement) => void;
     onRemove: () => void;
-    onCycleSize: () => void;
     onPointerDown: (event: PointerEvent) => void;
     onKeyDown: (event: KeyboardEvent) => void;
     onFocus: () => void;
@@ -83,17 +81,6 @@ const WidgetTile: Component<WidgetTileProps> = (props) => {
                     >
                         remove
                     </PaperButton>
-                    <Show when={props.canResize}>
-                        <PaperButton
-                            size="tiny"
-                            class={styles.sizeBadge}
-                            aria-label={`Change size, now ${props.sizeLabel}`}
-                            onPointerDown={(e: PointerEvent) => e.stopPropagation()}
-                            onClick={props.onCycleSize}
-                        >
-                            {props.sizeLabel}
-                        </PaperButton>
-                    </Show>
                 </div>
             </Show>
         </div>

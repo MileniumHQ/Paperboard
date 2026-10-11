@@ -48,8 +48,8 @@
    the shape of what fits there */
 .dots {
     --dot: color-mix(in srgb, var(--paper-contrast) 22%, transparent);
-    --dot-r: 0.125rem;
-    background-image: radial-gradient(circle, var(--dot) var(--dot-r), transparent calc(var(--dot-r) + 0.5px));
+    --dot-r: var(--paper-thick-border-width);
+    background-image: radial-gradient(circle, var(--dot) var(--dot-r), transparent calc(var(--dot-r) + var(--paper-border-width) / 2));
     background-size: calc(var(--home-cell) / 2) calc(var(--home-cell) / 2);
 }
 
@@ -122,18 +122,16 @@
     cursor: grabbing;
 }
 
-/* the widget stays visible while arranging; its controls sit on its
-   corners, half outside, so they never cover what the widget shows */
-.editing .editOverlay .removeBadge,
-.editing .editOverlay .sizeBadge {
+/* the widget stays visible while arranging; its remove button sits on its
+   corner, half outside, so it never covers what the widget shows */
+.editing .editOverlay .removeBadge {
     position: absolute;
     background: var(--paper-surface-raised);
     color: var(--paper-text);
     box-shadow: var(--paper-element-shadow);
 }
 
-.editing .editOverlay .removeBadge:hover,
-.editing .editOverlay .sizeBadge:hover {
+.editing .editOverlay .removeBadge:hover {
     background: color-mix(in srgb, var(--paper-contrast) 8%, var(--paper-surface-raised));
 }
 
@@ -141,14 +139,6 @@
     top: calc(var(--paper-control-size-tiny) / -2.5);
     left: calc(var(--paper-control-size-tiny) / -2.5);
     border-radius: 50%;
-}
-
-.editing .editOverlay .sizeBadge {
-    bottom: calc(var(--paper-control-size-tiny) / -2.5);
-    left: 50%;
-    transform: translateX(-50%);
-    height: var(--paper-control-size-tiny);
-    border-radius: calc(var(--paper-control-size-tiny) / 2);
 }
 
 /* where the widget lands: a thick outline with a see-through fill */
@@ -182,26 +172,19 @@
     transform-origin: 0 0;
 }
 
+/* what Home says when it has nothing to show, over the dots */
 .centerState {
     position: absolute;
     inset: 0;
     display: flex;
-    flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: var(--paper-uigap);
-    text-align: center;
     padding: var(--paper-uigap-double);
     pointer-events: none;
 }
 
 .centerState > * {
     pointer-events: auto;
-}
-
-.actions {
-    display: flex;
-    gap: var(--paper-uigap-half);
 }
 
 .toolbar {
@@ -233,7 +216,7 @@
     right: var(--paper-uigap);
     bottom: var(--paper-uigap);
     z-index: 4;
-    width: min(22rem, calc(100% - var(--paper-uigap-double)));
+    width: min(var(--paper-size-split-side), calc(100% - var(--paper-uigap-double)));
     display: flex;
     flex-direction: column;
     box-sizing: border-box;
@@ -287,83 +270,26 @@
 
 .libraryComputer {
     text-transform: uppercase;
-    letter-spacing: 0.04em;
+    letter-spacing: var(--paper-text-tracking);
     margin-top: var(--paper-uigap-half);
 }
 
-.libraryItemText {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-}
-
-/* where widgets come from: Paperboard, then each panel */
-.sourceRow {
-    display: flex;
-    align-items: center;
-    gap: var(--paper-uigap);
-    width: 100%;
-    box-sizing: border-box;
-    padding: var(--paper-uigap-threefourths);
-    border-radius: var(--paper-border-radius);
-    border: var(--paper-border-width) solid var(--paper-border-subtle);
-    background: var(--paper-surface-raised);
-    color: var(--paper-text);
-    font: inherit;
-    text-align: left;
-    cursor: pointer;
-    transition: border-color var(--paper-short-transition) var(--paper-ease-symmetric);
-}
-
-.sourceRow:hover {
-    border-color: var(--paper-primary);
-}
-
-.sourceRow:focus-visible,
 .preview:focus-visible {
     outline: var(--paper-focus-ring);
     outline-offset: var(--paper-focus-offset);
 }
 
-.sourceIcon {
+/* where widgets come from: Paperboard, then each panel, as a list to the panel's edges */
+.librarySources {
+    flex: 1;
+    min-height: 0;
     display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    width: var(--paper-control-size-small);
-    height: var(--paper-control-size-small);
-    border-radius: var(--paper-border-radius-half);
-    background: color-mix(in srgb, var(--paper-primary) 14%, transparent);
-    color: var(--paper-primary);
+    border-top: var(--paper-border-width) solid var(--paper-border);
 }
 
-.sourceDetail {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.sourceChevron {
-    display: flex;
-    color: var(--paper-text-faint);
-}
-
-/* one widget: what it is, its live preview on a patch of Home, and its sizes */
-.widgetCard {
-    display: flex;
-    flex-direction: column;
-    gap: var(--paper-uigap-threefourths);
-    padding: var(--paper-uigap);
-    border-radius: var(--paper-border-radius);
-    background: var(--paper-surface-raised);
-    border: var(--paper-border-width) solid var(--paper-border-subtle);
-}
-
-.widgetCardText {
-    display: flex;
-    flex-direction: column;
-    gap: var(--paper-uigap-onefourth);
+.librarySources .libraryComputer,
+.librarySources .libraryNote {
+    margin: var(--paper-uigap-half) var(--paper-uigap);
 }
 
 .previewStage {
@@ -444,7 +370,7 @@
 /* the size, drawn as its shape */
 .sizeGlyph {
     display: inline-block;
-    border-radius: 0.125rem;
+    border-radius: var(--paper-thick-border-width);
     background: currentColor;
     opacity: 0.6;
 }

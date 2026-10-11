@@ -1,4 +1,4 @@
-import { PaperButton, PaperChip, PaperIcon, PaperText } from "@mileniumhq/paperui";
+import { PaperButton, PaperCard, PaperChip, PaperIcon, PaperList, PaperListItem, PaperText } from "@mileniumhq/paperui";
 import { type Component, createMemo, createSignal, For, type JSX, onCleanup, onMount, Show } from "solid-js";
 import { parseWidgetSize, type PanelItem, type WidgetDeclaration } from "@mileniumhq/paperapi";
 import { type ComputerInfo, panelUrl } from "../../lib/shell";
@@ -23,7 +23,7 @@ export function sizeLabel(size: string): string {
 // previews are the real widget, drawn at Home's cell size and scaled to this
 // previews fill the card's width, up to a cell this big
 const PREVIEW_CELL = 88;
-const PREVIEW_WIDTH = 288;
+const PREVIEW_WIDTH = 252;
 
 type Source =
     | { key: "paperboard"; kind: "builtin" }
@@ -87,7 +87,7 @@ const WidgetLibrary: Component<WidgetLibraryProps> = (props) => {
         const key = openKey();
         setOpenKey(null);
         // focus returns to the source that was opened
-        queueMicrotask(() => listTop?.querySelector<HTMLElement>(`[data-source="${CSS.escape(key ?? "")}"]`)?.focus());
+        queueMicrotask(() => listTop?.querySelector<HTMLElement>(`[data-value="${CSS.escape(key ?? "")}"] input`)?.focus());
     };
 
     onMount(() => {
@@ -125,45 +125,53 @@ const WidgetLibrary: Component<WidgetLibraryProps> = (props) => {
             <Show
                 when={open()}
                 fallback={
-                    <div ref={listTop} class={styles.libraryList}>
-                        <SourceRow
-                            key="paperboard"
-                            icon={<PaperIcon>widgets</PaperIcon>}
-                            name="Paperboard"
-                            detail={BUILTIN_WIDGETS.map((w) => w.declaration.name).join(", ")}
-                            onOpen={openSource}
-                        />
-                        <For each={props.computers}>
-                            {(computer) => (
-                                <>
-                                    <Show when={props.computers.length > 1 && (panelSources(computer).length > 0 || props.panelsLoadFailed[computer.id])}>
-                                        <PaperText size={1} weight={700} color="text-subtle" class={styles.libraryComputer}>
-                                            {computer.name}
-                                        </PaperText>
-                                    </Show>
-                                    <Show when={props.panelsLoadFailed[computer.id]}>
-                                        <div class={styles.libraryNote} role="alert">
-                                            <PaperText size={1} color="text-subtle">Couldn't load widgets from {computer.name}.</PaperText>
-                                            <PaperButton size="tiny" variant="text" onClick={() => props.onRetry(computer.id)}>Retry</PaperButton>
-                                        </div>
-                                    </Show>
-                                    <For each={panelSources(computer)}>
-                                        {(source) => {
-                                            const s = source as Extract<Source, { kind: "panel" }>;
-                                            return (
-                                                <SourceRow
-                                                    key={s.key}
-                                                    icon={<PanelIcon computerId={computer.id} panel={s.panel} />}
-                                                    name={s.panel.name}
-                                                    detail={(s.panel.widgets ?? []).map((w) => w.name).join(", ")}
-                                                    onOpen={openSource}
-                                                />
-                                            );
-                                        }}
-                                    </For>
-                                </>
-                            )}
-                        </For>
+                    <div ref={listTop} class={styles.librarySources}>
+                        {/* choosing a source opens it; none stays chosen once it is left */}
+                        <PaperList
+                            name="widget-source"
+                            value={openKey() ?? ""}
+                            onValueChange={(key) => openSource(String(key))}
+                            fullWidth
+                            borderless
+                            scrollable="y"
+                        >
+                            <SourceRow
+                                key="paperboard"
+                                icon={<PaperIcon>widgets</PaperIcon>}
+                                name="Paperboard"
+                                detail={BUILTIN_WIDGETS.map((w) => w.declaration.name).join(", ")}
+                            />
+                            <For each={props.computers}>
+                                {(computer) => (
+                                    <>
+                                        <Show when={props.computers.length > 1 && (panelSources(computer).length > 0 || props.panelsLoadFailed[computer.id])}>
+                                            <PaperText size={1} weight={700} color="text-subtle" class={styles.libraryComputer}>
+                                                {computer.name}
+                                            </PaperText>
+                                        </Show>
+                                        <Show when={props.panelsLoadFailed[computer.id]}>
+                                            <div class={styles.libraryNote} role="alert">
+                                                <PaperText size={1} color="text-subtle">Couldn't load widgets from {computer.name}.</PaperText>
+                                                <PaperButton size="tiny" variant="text" onClick={() => props.onRetry(computer.id)}>Retry</PaperButton>
+                                            </div>
+                                        </Show>
+                                        <For each={panelSources(computer)}>
+                                            {(source) => {
+                                                const s = source as Extract<Source, { kind: "panel" }>;
+                                                return (
+                                                    <SourceRow
+                                                        key={s.key}
+                                                        icon={<PanelIcon computerId={computer.id} panel={s.panel} />}
+                                                        name={s.panel.name}
+                                                        detail={(s.panel.widgets ?? []).map((w) => w.name).join(", ")}
+                                                    />
+                                                );
+                                            }}
+                                        </For>
+                                    </>
+                                )}
+                            </For>
+                        </PaperList>
                     </div>
                 }
             >
@@ -216,17 +224,15 @@ const WidgetLibrary: Component<WidgetLibraryProps> = (props) => {
     );
 };
 
-const SourceRow: Component<{ key: string; icon: JSX.Element; name: string; detail: string; onOpen: (key: string) => void }> = (props) => (
-    <button type="button" class={styles.sourceRow} data-source={props.key} onClick={() => props.onOpen(props.key)}>
-        <span class={styles.sourceIcon}>{props.icon}</span>
-        <span class={styles.libraryItemText}>
-            <PaperText size={2} weight={700}>{props.name}</PaperText>
-            <PaperText size={1} color="text-subtle" class={styles.sourceDetail}>{props.detail}</PaperText>
-        </span>
-        <span class={styles.sourceChevron} aria-hidden="true">
-            <PaperIcon>chevron_right</PaperIcon>
-        </span>
-    </button>
+const SourceRow: Component<{ key: string; icon: JSX.Element; name: string; detail: string }> = (props) => (
+    <PaperListItem
+        value={props.key}
+        icon={props.icon}
+        description={props.detail}
+        actions={<PaperIcon>chevron_right</PaperIcon>}
+    >
+        {props.name}
+    </PaperListItem>
 );
 
 const PanelIcon: Component<{ computerId: string; panel: PanelItem }> = (props) => {
@@ -253,11 +259,11 @@ const WidgetCard: Component<WidgetLibraryProps & { widget: WidgetDeclaration; en
     const computerName = () => props.computers.find((c) => c.id === entry().computerId)?.name ?? entry().computerId;
 
     return (
-        <section class={styles.widgetCard} aria-label={props.widget.name}>
-            <div class={styles.widgetCardText}>
-                <PaperText size={2} weight={700}>{props.widget.name}</PaperText>
+        <PaperCard role="group" aria-label={props.widget.name} surface="frontest" padding="full" gap="threefourths">
+            <div>
+                <PaperText size={2} weight={700} as="div">{props.widget.name}</PaperText>
                 <Show when={props.widget.description}>
-                    <PaperText size={1} color="text-subtle">{props.widget.description}</PaperText>
+                    <PaperText size={1} color="text-subtle" as="div">{props.widget.description}</PaperText>
                 </Show>
             </div>
             <div class={styles.previewStage}>
@@ -344,7 +350,10 @@ const WidgetCard: Component<WidgetLibraryProps & { widget: WidgetDeclaration; en
                                     icon={
                                         <span
                                             class={styles.sizeGlyph}
-                                            style={{ width: `${shape.w * 0.375}rem`, height: `${shape.h * 0.375}rem` }}
+                                            style={{
+                                                width: `calc(var(--paper-uigap-half) * ${shape.w})`,
+                                                height: `calc(var(--paper-uigap-half) * ${shape.h})`,
+                                            }}
                                             aria-hidden="true"
                                         />
                                     }
@@ -356,7 +365,7 @@ const WidgetCard: Component<WidgetLibraryProps & { widget: WidgetDeclaration; en
                     </For>
                 </div>
             </Show>
-        </section>
+        </PaperCard>
     );
 };
 

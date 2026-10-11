@@ -9,7 +9,7 @@
 
 /** The document every widget of a panel loads from, relative to the panel. */
 export const WIDGET_ENTRY = "widget.html";
-/** Home is cut into columns this many cells wide; a widget never spans two. */
+/** The widest a widget can be, in Home grid cells. */
 export const WIDGET_MAX_WIDTH = 4;
 export const WIDGET_MAX_HEIGHT = 4;
 export const MAX_WIDGETS_PER_PANEL = 8;

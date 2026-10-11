@@ -1,4 +1,4 @@
-import { PaperButton, PaperPresence, PaperText } from "@mileniumhq/paperui";
+import { PaperButton, PaperEmptyState, PaperPresence, PaperText } from "@mileniumhq/paperui";
 import {
     type Component,
     createEffect,
@@ -13,15 +13,13 @@ import {
 import { config, parseWidgetSize, type PanelItem, type WidgetSize } from "@mileniumhq/paperapi";
 import { logToMain, type ComputerInfo } from "../../lib/shell";
 import {
-    bandRows,
     canPlace,
-    columnOrigin,
-    COLUMN_CELLS,
     computeGeometry,
     findFreeSpot,
     fitCanvas,
     HOME_LAYOUT_COMPUTER,
     HOME_LAYOUT_ID,
+    isLegacyHomeLayout,
     MAX_HOME_ITEMS,
     parseHomeLayout,
     placementOf,
@@ -29,6 +27,7 @@ import {
     sizeOf,
     snapToGrid,
     stepPlacement,
+    usedRows,
     type HomeItem,
     type Placement,
 } from "../../lib/homeLayout";
@@ -53,8 +52,6 @@ const SAVE_DEBOUNCE_MS = 250;
 const DRAG_THRESHOLD_PX = 4;
 const AUTOSCROLL_EDGE_PX = 48;
 const AUTOSCROLL_STEP_PX = 16;
-// how long the canvas takes to shrink and grow; matches the gallery's slide
-const EDIT_EASE_MS = 300;
 
 type DragSource =
     | { kind: "new"; entry: LibraryEntry }
@@ -100,9 +97,11 @@ const HomeView: Component<HomeViewProps> = (props) => {
     let easeTimer: ReturnType<typeof setTimeout> | undefined;
     const setEditing = (next: boolean) => {
         if (next === editing()) return;
+        // for as long as the transition the stylesheet gives it, which is none under reduced motion
+        const seconds = scroller ? parseFloat(getComputedStyle(scroller).getPropertyValue("--paper-mid-transition")) : 0;
         setEasing(true);
         clearTimeout(easeTimer);
-        easeTimer = setTimeout(() => setEasing(false), EDIT_EASE_MS);
+        easeTimer = setTimeout(() => setEasing(false), (Number.isFinite(seconds) ? seconds : 0) * 1000);
         setEditingNow(next);
     };
     const [selectedId, setSelectedId] = createSignal<string | null>(null);
@@ -128,6 +127,11 @@ const HomeView: Component<HomeViewProps> = (props) => {
             // nothing is saved until it is changed
             setItems(raw === null || raw === undefined ? defaultHomeItems(HOME_LAYOUT_COMPUTER) : parseHomeLayout(raw));
             setLoadState("ready");
+            if (isLegacyHomeLayout(raw)) {
+                // TODO(remove after v0.2): rewrite a column-format layout once, as it was read
+                logToMain("warn", "Home layout was in the unreleased column format; saving it in the current one.");
+                commit(items());
+            }
         } catch (err) {
             logToMain("error", "Failed to load the Home layout:", err);
             setLoadState({ error: err instanceof Error ? err.message : String(err) });
@@ -174,32 +178,27 @@ const HomeView: Component<HomeViewProps> = (props) => {
     };
 
     // ── geometry ─────────────────────────────────────────────────────────
-    // the layout is always the full window's; the gallery only changes how
-    // big it is drawn
+    // the layout never changes to fit: when it is wider than the window, or
+    // the gallery takes room from it, it is drawn smaller
     const geometry = createMemo(() => computeGeometry(viewport().width, items()));
-    const gridWidth = () => geometry().fit * COLUMN_CELLS * geometry().cell;
+    const gridWidth = () => geometry().across * geometry().cell;
     const galleryOpen = () => editing() && loadState() === "ready";
     const fitted = createMemo(() => fitCanvas(gridWidth(), viewport().width - (galleryOpen() ? galleryWidth() : 0)));
     const scale = () => fitted().scale;
     const gridLeft = () => fitted().left;
-    const rows = createMemo(() => {
-        const g = geometry();
-        const r = bandRows(items(), g, editing() ? 1 : 0);
-        // the last band runs to the bottom of the window so the dots do too
-        const above = r.slice(0, -1).reduce((sum, n) => sum + n, 0);
-        const fill = Math.floor(viewport().height / (g.cell * scale())) - above;
-        r[r.length - 1] = Math.max(r[r.length - 1], fill);
-        return r;
-    });
-    const gridHeight = () => rows().reduce((sum, n) => sum + n, 0) * geometry().cell;
+    // a spare row to drop into while editing; never fewer than reach the
+    // bottom of the window, so the dots do too
+    const rows = createMemo(() =>
+        Math.max(usedRows(items(), editing() ? 1 : 0), Math.floor(viewport().height / (geometry().cell * scale()))),
+    );
+    const gridHeight = () => rows() * geometry().cell;
     const inset = () => Math.round(geometry().cell * 0.06);
 
     const rectOf = (p: Placement) => {
         const g = geometry();
-        const origin = columnOrigin(p.column, g, rows());
         return {
-            left: origin.left + p.x * g.cell + inset(),
-            top: origin.top + p.y * g.cell + inset(),
+            left: p.x * g.cell + inset(),
+            top: p.y * g.cell + inset(),
             width: p.w * g.cell - inset() * 2,
             height: p.h * g.cell - inset() * 2,
         };
@@ -390,7 +389,7 @@ const HomeView: Component<HomeViewProps> = (props) => {
     const addAt = (entry: LibraryEntry, p: Placement) => {
         if (items().length >= MAX_HOME_ITEMS || !canPlace(items(), p)) return;
         const id = crypto.randomUUID();
-        const base = { id, computerId: entry.computerId, widgetId: entry.widget.id, size: `${p.w}x${p.h}`, column: p.column, x: p.x, y: p.y };
+        const base = { id, computerId: entry.computerId, widgetId: entry.widget.id, size: `${p.w}x${p.h}`, x: p.x, y: p.y };
         commit([
             ...items(),
             entry.source === "builtin" ? { ...base, source: "builtin" } : { ...base, source: "panel", panelId: entry.panelId },
@@ -400,30 +399,18 @@ const HomeView: Component<HomeViewProps> = (props) => {
     const addToFirstFreeSpot = (entry: LibraryEntry) => {
         const size = parseWidgetSize(entry.size);
         if (!size) return;
-        const spot = findFreeSpot(items(), size, geometry().columns);
+        const spot = findFreeSpot(items(), size, geometry().across);
         if (spot) addAt(entry, spot);
     };
     const moveTo = (id: string, p: Placement) => {
         if (!canPlace(items(), p, id)) return false;
-        commit(items().map((item) => (item.id === id ? { ...item, column: p.column, x: p.x, y: p.y, size: `${p.w}x${p.h}` } : item)));
+        commit(items().map((item) => (item.id === id ? { ...item, x: p.x, y: p.y } : item)));
         return true;
     };
     const remove = (id: string) => {
         commit(items().filter((item) => item.id !== id));
         if (selectedId() === id) setSelectedId(null);
     };
-    // a size that doesn't fit where the widget is stays put; the next one is tried
-    const cycleSize = (item: HomeItem) => {
-        const sizes = declarationOf(item)?.sizes ?? [];
-        const start = sizes.indexOf(item.size);
-        for (let step = 1; step < sizes.length; step++) {
-            const next = parseWidgetSize(sizes[(start + step) % sizes.length]);
-            if (!next) continue;
-            const x = Math.min(item.x, COLUMN_CELLS - next.w);
-            if (moveTo(item.id, { column: item.column, x, y: item.y, ...next })) return;
-        }
-    };
-
     // ── dragging ─────────────────────────────────────────────────────────
     const target = createMemo(() => {
         const d = drag();
@@ -433,7 +420,7 @@ const HomeView: Component<HomeViewProps> = (props) => {
         // the grid may be drawn smaller than it is laid out
         const left = (d.pointer.x - rect.left) / scale() - d.grab.x * g.cell;
         const top = (d.pointer.y - rect.top) / scale() - d.grab.y * g.cell;
-        const p = snapToGrid(left, top, d.size, g, rows());
+        const p = snapToGrid(left, top, d.size, g);
         if (!p) return null;
         const ignore = d.source.kind === "move" ? d.source.itemId : undefined;
         const full = d.source.kind === "new" && items().length >= MAX_HOME_ITEMS;
@@ -662,9 +649,7 @@ const HomeView: Component<HomeViewProps> = (props) => {
                                             style={px(rectOf(placementOf(item())))}
                                             label={labelOf(item())}
                                             sizeLabel={sizeLabel(item().size)}
-                                            canResize={(declarationOf(item())?.sizes.length ?? 0) > 1}
                                             onRemove={() => remove(id)}
-                                            onCycleSize={() => cycleSize(item())}
                                             onPointerDown={(e) => startTileDrag(item(), e)}
                                             onKeyDown={(e) => onTileKey(item(), e)}
                                             onFocus={() => setSelectedId(id)}
@@ -692,27 +677,27 @@ const HomeView: Component<HomeViewProps> = (props) => {
 
                 <Show when={loadState() === "ready" && items().length === 0 && !editing()}>
                     <div class={styles.centerState}>
-                        <PaperText size={5} weight={800}>Welcome home</PaperText>
-                        <PaperText size={2} color="text-subtle">
-                            Widgets from your panels, on every computer, in one place.
-                        </PaperText>
-                        <PaperButton variant="primary" onClick={() => setEditing(true)}>Add widgets</PaperButton>
+                        <PaperEmptyState
+                            icon="widgets"
+                            title="Welcome home"
+                            description="Widgets from your panels, on every computer, in one place."
+                        >
+                            <PaperButton variant="primary" onClick={() => setEditing(true)}>Add widgets</PaperButton>
+                        </PaperEmptyState>
                     </div>
                 </Show>
                 <Show when={loadState() === "loading"}>
                     <div class={styles.centerState} role="status">
-                        <PaperText size={2} color="text-subtle">Loading Home…</PaperText>
+                        <PaperEmptyState description="Loading Home…" />
                     </div>
                 </Show>
                 <Show when={typeof loadState() === "object" ? (loadState() as { error: string }) : null}>
                     {(failed) => (
                         <div class={styles.centerState} role="alert">
-                            <PaperText size={5} weight={800}>Couldn't load Home</PaperText>
-                            <PaperText size={2} color="text-subtle">{failed().error}</PaperText>
-                            <div class={styles.actions}>
+                            <PaperEmptyState icon="error" title="Couldn't load Home" description={failed().error}>
                                 <PaperButton variant="primary" onClick={() => void load()}>Retry</PaperButton>
                                 <PaperButton variant="danger" onClick={() => void startOver()}>Start over with an empty Home</PaperButton>
-                            </div>
+                            </PaperEmptyState>
                         </div>
                     )}
                 </Show>
