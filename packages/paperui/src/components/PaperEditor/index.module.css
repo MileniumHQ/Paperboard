@@ -1,0 +1,131 @@
+.PaperEditor {
+    --paper-editor-line-height: 1.55;
+    position: relative;
+    display: flex;
+    min-width: 0;
+    min-height: 0;
+    width: 100%;
+    height: 100%;
+    box-sizing: border-box;
+    border: var(--paper-border-width) solid var(--paper-border);
+    border-radius: var(--paper-border-radius);
+    background: var(--paper-surface-sunken);
+    overflow: hidden;
+    transition: var(--paper-medium-transition) border-color;
+}
+
+.PaperEditor:focus-within {
+    border-color: var(--paper-border-emphasis);
+}
+
+.PaperEditor:has(.input:focus-visible) {
+    outline: var(--paper-focus-ring);
+    outline-offset: var(--paper-focus-offset);
+}
+
+.scroller {
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+    overflow: auto;
+    cursor: text;
+}
+
+.grid {
+    display: grid;
+    width: max-content;
+    min-width: 100%;
+    min-height: 100%;
+    box-sizing: border-box;
+    padding: var(--paper-uigap-half) 0 var(--paper-uigap-double);
+    font-family: var(--paper-font-family-code);
+    font-size: var(--paper-text-size-2);
+    font-weight: 500;
+    line-height: var(--paper-editor-line-height);
+    tab-size: 4;
+    color: var(--paper-text);
+}
+
+.wrap .grid {
+    width: 100%;
+}
+
+.number {
+    grid-column: 1;
+    box-sizing: border-box;
+    min-width: 4ch;
+    padding: 0 var(--paper-uigap-threefourths) 0 var(--paper-uigap);
+    text-align: right;
+    color: var(--paper-text-faint);
+    user-select: none;
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    background: var(--paper-surface-sunken);
+}
+
+/* the line rows and the textarea share every metric, so the textarea's text
+   lands exactly on the highlighted copy beneath it */
+.line,
+.input {
+    margin: 0;
+    border: 0;
+    padding: 0 var(--paper-uigap) 0 var(--paper-uigap-half);
+    font: inherit;
+    line-height: inherit;
+    letter-spacing: inherit;
+    tab-size: inherit;
+    white-space: pre;
+    overflow-wrap: normal;
+    box-sizing: border-box;
+}
+
+.wrap .line,
+.wrap .input {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.line {
+    /* an empty line is still one line tall */
+    min-height: 1lh;
+    pointer-events: none;
+    user-select: none;
+    /* plain mode: the rows only give each line its height */
+    color: transparent;
+}
+
+.highlighted .line {
+    color: var(--paper-text);
+}
+
+.input {
+    z-index: 1;
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    resize: none;
+    overflow: hidden;
+    outline: none;
+    background: transparent;
+    color: var(--paper-text);
+    caret-color: var(--paper-text);
+    -webkit-user-select: text;
+    user-select: text;
+}
+
+.highlighted .input {
+    color: transparent;
+}
+
+.input::selection {
+    background: color-mix(in srgb, var(--paper-primary) 28%, transparent);
+}
+
+.highlighted .input::selection {
+    color: transparent;
+}
+
+.readOnly .input {
+    cursor: default;
+}

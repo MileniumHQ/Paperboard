@@ -11,6 +11,7 @@ export * from "./components/PaperCopyButton";
 export * from "./components/PaperCode";
 export * from "./components/PaperConsole";
 export * from "./components/PaperContextMenu";
+export * from "./components/PaperEditor";
 export * from "./components/PaperEffect";
 export * from "./components/PaperEmptyState";
 export * from "./components/PaperGrid";
@@ -46,6 +47,7 @@ export * from "./components/PaperTextList";
 export * from "./components/PaperToggle";
 
 export * from "./templates/PaperCenteredInterface";
+export * from "./templates/PaperFileBrowser";
 export * from "./templates/PaperFlex";
 export * from "./templates/PaperInterfaceGroup";
 export * from "./templates/PaperPanel";

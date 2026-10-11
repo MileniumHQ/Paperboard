@@ -1,0 +1,72 @@
+/* Prism token colours, shared by PaperCode and PaperEditor so highlighted
+   code reads the same everywhere. Apply `.tokens` to the element that holds
+   the highlighted HTML. */
+
+.tokens :global(.token.keyword),
+.tokens :global(.token.atrule) {
+    color: var(--paper-primary);
+    font-weight: 700;
+}
+
+.tokens :global(.token.string),
+.tokens :global(.token.attr-value),
+.tokens :global(.token.url) {
+    color: var(--paper-success);
+}
+
+.tokens :global(.token.comment),
+.tokens :global(.token.prolog),
+.tokens :global(.token.doctype),
+.tokens :global(.token.cdata) {
+    color: var(--paper-text-faint);
+    font-style: italic;
+}
+
+.tokens :global(.token.number),
+.tokens :global(.token.boolean),
+.tokens :global(.token.constant),
+.tokens :global(.token.null),
+.tokens :global(.token.datetime),
+.tokens :global(.token.date) {
+    color: var(--paper-warning);
+}
+
+.tokens :global(.token.function),
+.tokens :global(.token.class-name),
+.tokens :global(.token.selector),
+.tokens :global(.token.section),
+.tokens :global(.token.title) {
+    color: var(--paper-primary);
+}
+
+.tokens :global(.token.tag) {
+    color: var(--paper-danger);
+    font-weight: 600;
+}
+
+.tokens :global(.token.attr-name) {
+    color: var(--paper-warning);
+}
+
+.tokens :global(.token.key),
+.tokens :global(.token.property) {
+    color: var(--paper-attention);
+}
+
+.tokens :global(.token.important),
+.tokens :global(.token.directive) {
+    color: var(--paper-extra-1);
+}
+
+.tokens :global(.token.operator),
+.tokens :global(.token.punctuation) {
+    color: var(--paper-text-subtle);
+}
+
+.tokens :global(.token.bold) {
+    font-weight: 700;
+}
+
+.tokens :global(.token.italic) {
+    font-style: italic;
+}

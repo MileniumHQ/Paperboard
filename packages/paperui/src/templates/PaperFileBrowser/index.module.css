@@ -1,0 +1,294 @@
+.PaperFileBrowser {
+    min-height: 0;
+}
+
+/* ─── tree ─────────────────────────────────────────────────────────── */
+
+.treePane {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    min-height: 0;
+    border: var(--paper-border-width) solid var(--paper-border);
+    border-radius: var(--paper-border-radius);
+    background: var(--paper-surface);
+    overflow: hidden;
+}
+
+.treeHeader {
+    display: flex;
+    align-items: center;
+    gap: var(--paper-uigap-half);
+    padding: var(--paper-uigap-half) var(--paper-uigap-half) var(--paper-uigap-half) var(--paper-uigap-threefourths);
+    border-bottom: var(--paper-border-width) solid var(--paper-border-subtle);
+}
+
+.treeTitle {
+    display: flex;
+    align-items: center;
+    gap: var(--paper-uigap-half);
+    flex: 1;
+    min-width: 0;
+    font-size: var(--paper-text-size-2);
+    font-weight: 700;
+    color: var(--paper-text-subtle);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.treeTitleIcon {
+    color: var(--paper-primary);
+    font-size: var(--paper-icon-size-small);
+}
+
+.tree {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    padding: var(--paper-uigap-onefourth) 0;
+}
+
+.row,
+.statusRow {
+    display: flex;
+    align-items: center;
+    gap: var(--paper-uigap-onefourth);
+    min-height: var(--paper-control-size-tiny);
+    padding: 0 var(--paper-uigap-half) 0
+        calc(var(--paper-uigap-half) + var(--paper-file-depth, 0) * var(--paper-uigap));
+    font-size: var(--paper-text-size-2);
+    box-sizing: border-box;
+}
+
+.row {
+    position: relative;
+    cursor: pointer;
+    color: var(--paper-text);
+    user-select: none;
+    outline: none;
+}
+
+.row:hover {
+    background: color-mix(in srgb, var(--paper-contrast) 4%, transparent);
+}
+
+.row.selected {
+    background: color-mix(in srgb, var(--paper-primary) 14%, transparent);
+}
+
+.row.selected::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: var(--paper-thick-border-width);
+    background: var(--paper-primary);
+}
+
+.row:focus-visible {
+    outline: var(--paper-focus-ring);
+    outline-offset: calc(var(--paper-thick-border-width) * -1);
+}
+
+.chevron {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    width: var(--paper-icon-size-small);
+    font-size: var(--paper-icon-size-small);
+    color: var(--paper-text-faint);
+    transition: transform var(--paper-short-transition);
+}
+
+.chevronOpen {
+    transform: rotate(90deg);
+}
+
+.folderIcon,
+.fileIcon {
+    flex: 0 0 auto;
+    font-size: var(--paper-icon-size-small);
+}
+
+.folderIcon {
+    color: var(--paper-primary);
+}
+
+.fileIcon {
+    color: var(--paper-text-muted);
+}
+
+.rowName {
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.statusRow {
+    color: var(--paper-text-faint);
+    font-style: italic;
+    padding-left: calc(
+        var(--paper-uigap-half) + var(--paper-file-depth, 0) * var(--paper-uigap) + var(--paper-icon-size-small)
+    );
+}
+
+.statusRow.statusError {
+    color: var(--paper-danger);
+    font-style: normal;
+}
+
+.statusText {
+    flex: 1;
+    min-width: 0;
+}
+
+.dirtyDot {
+    flex: 0 0 auto;
+    width: var(--paper-uigap-half);
+    height: var(--paper-uigap-half);
+    border-radius: var(--paper-border-radius-pill);
+    background: var(--paper-warning);
+}
+
+/* ─── viewer ───────────────────────────────────────────────────────── */
+
+.viewer {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    gap: var(--paper-uigap-half);
+}
+
+/* inside PaperSplit's modal the pane has no height of its own */
+.viewerInModal {
+    height: 70vh;
+}
+
+.toolbar {
+    display: flex;
+    align-items: center;
+    gap: var(--paper-uigap-half);
+    min-height: var(--paper-control-size-small);
+}
+
+.crumbs {
+    display: flex;
+    align-items: center;
+    gap: var(--paper-uigap-onefourth);
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    font-size: var(--paper-text-size-2);
+    color: var(--paper-text-subtle);
+}
+
+.crumb {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.crumb[aria-current] {
+    color: var(--paper-text);
+    font-weight: 700;
+}
+
+.crumbSeparator {
+    color: var(--paper-text-faint);
+}
+
+.notice {
+    display: flex;
+    align-items: center;
+    gap: var(--paper-uigap-half);
+    padding: var(--paper-uigap-half) var(--paper-uigap-threefourths);
+    border-radius: var(--paper-border-radius-half);
+    font-size: var(--paper-text-size-2);
+    color: var(--paper-success-deep);
+    background: color-mix(in srgb, var(--paper-success) 12%, transparent);
+}
+
+.noticeDanger {
+    color: var(--paper-danger-deep);
+    background: color-mix(in srgb, var(--paper-danger) 12%, transparent);
+}
+
+.noticeText {
+    flex: 1;
+    min-width: 0;
+}
+
+.body {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+}
+
+.body > * {
+    flex: 1;
+}
+
+.center {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.emptyIcon {
+    font-size: var(--paper-icon-size-xlarge);
+    color: var(--paper-text-faint);
+}
+
+.imagePreview {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 0;
+    overflow: auto;
+    padding: var(--paper-uigap);
+    border: var(--paper-border-width) solid var(--paper-border);
+    border-radius: var(--paper-border-radius);
+    background: var(--paper-surface-sunken);
+}
+
+.imagePreview img {
+    max-width: 100%;
+    max-height: 100%;
+}
+
+.statusBar {
+    display: flex;
+    align-items: center;
+    gap: var(--paper-uigap);
+    font-size: var(--paper-text-size-1);
+    color: var(--paper-text-subtle);
+}
+
+.statusItem {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--paper-uigap-onefourth);
+}
+
+.statusSpacer {
+    flex: 1;
+}
+
+.modalActions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--paper-uigap-half);
+}
+
+.modalText {
+    margin: 0;
+    color: var(--paper-text-subtle);
+}
