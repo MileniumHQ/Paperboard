@@ -5,6 +5,7 @@ export * from "./components/PaperAudio";
 export * from "./components/PaperAvatar";
 export * from "./components/PaperButton";
 export * from "./components/PaperCard";
+export * from "./components/PaperChart";
 export * from "./components/PaperCheckbox";
 export * from "./components/PaperChip";
 export * from "./components/PaperCopyButton";

@@ -1,0 +1,112 @@
+.PaperChart {
+    position: relative;
+    box-sizing: border-box;
+    flex-shrink: 0;
+}
+
+/* a donut is as wide as it is given and square; set a height and
+   `width: auto` on it to size it by height instead */
+.donut {
+    width: 100%;
+    aspect-ratio: 1;
+}
+
+.ring {
+    display: block;
+    width: 100%;
+    height: 100%;
+    /* slices start at twelve o'clock */
+    transform: rotate(-90deg);
+}
+
+.track,
+.slice {
+    fill: none;
+}
+
+.track {
+    stroke: var(--paper-surface-inset);
+}
+
+.slice {
+    transition:
+        stroke-dasharray var(--paper-mid-transition) var(--paper-ease-symmetric),
+        stroke-dashoffset var(--paper-mid-transition) var(--paper-ease-symmetric);
+}
+
+.center {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    line-height: 1.1;
+}
+
+.bar {
+    display: flex;
+    gap: var(--paper-thick-border-width);
+    width: 100%;
+    height: calc(var(--paper-thickest-border-width) * 2);
+    border-radius: var(--paper-thickest-border-width);
+    background: var(--paper-surface-inset);
+    overflow: hidden;
+}
+
+.barPart {
+    display: block;
+    height: 100%;
+    min-width: var(--paper-thick-border-width);
+    transition: width var(--paper-mid-transition) var(--paper-ease-symmetric);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .slice,
+    .barPart {
+        transition: none;
+    }
+}
+
+.legend {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap-onefourth);
+    font-size: var(--paper-text-size-1);
+    color: var(--paper-text);
+}
+
+.legendRow {
+    display: flex;
+    align-items: center;
+    gap: var(--paper-uigap-half);
+    min-width: 0;
+}
+
+.swatch {
+    flex-shrink: 0;
+    width: calc(var(--paper-uigap) * 2 / 3);
+    height: calc(var(--paper-uigap) * 2 / 3);
+    border-radius: 50%;
+    /* keeps a swatch the color of its surface from vanishing into it */
+    box-shadow: inset 0 0 0 var(--paper-border-width) color-mix(in srgb, var(--paper-contrast) 12%, transparent);
+}
+
+.legendLabel {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.legendDetail {
+    flex-shrink: 0;
+    color: var(--paper-text-subtle);
+    font-variant-numeric: tabular-nums;
+}

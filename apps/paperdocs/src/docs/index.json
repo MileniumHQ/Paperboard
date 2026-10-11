@@ -96,6 +96,10 @@
                         "name": "PaperCard",
                         "file": "paper-card"
                     },
+                    "paperchart": {
+                        "name": "PaperChart",
+                        "file": "paper-chart"
+                    },
                     "papercheckbox": {
                         "name": "PaperCheckbox",
                         "file": "paper-checkbox"
