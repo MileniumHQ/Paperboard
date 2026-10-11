@@ -181,6 +181,7 @@ export function Topbar(props: TopbarProps) {
                         icon
                         variant="text"
                         size="tiny"
+                        aria-label={props.theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
                         onClick={() => props.toggleTheme?.()}
                     >
                         {props.theme === "dark" ? "dark_mode" : "light_mode"}

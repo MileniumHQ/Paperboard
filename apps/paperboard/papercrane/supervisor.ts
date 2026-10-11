@@ -292,8 +292,31 @@ class CircularBuffer {
     }
 }
 
-// how long a supervisor whose workload failed to start waits for the
-// spawning daemon to connect and read why
+// output chunks with their stream, capped by bytes (oldest dropped first)
+class TaggedBuffer {
+    private frames: { stream: "stdout" | "stderr"; data: string }[] = [];
+    private size = 0;
+
+    constructor(private readonly maxSize: number) {}
+
+    public push(stream: "stdout" | "stderr", data: string) {
+        this.frames.push({ stream, data });
+        this.size += Buffer.byteLength(data, "utf8");
+        while (this.size > this.maxSize && this.frames.length > 0) {
+            this.size -= Buffer.byteLength(this.frames.shift()!.data, "utf8");
+        }
+    }
+
+    public drain(): { stream: "stdout" | "stderr"; data: string }[] {
+        const frames = this.frames;
+        this.frames = [];
+        this.size = 0;
+        return frames;
+    }
+}
+
+// how long a supervisor waits for the spawning daemon to connect and read
+// a failed start's reason, or the result of a workload that already exited
 const START_FAILURE_LINGER_MS = 10_000;
 
 // detached supervisor serving output over socket/pipe
@@ -329,6 +352,14 @@ export async function runSupervisor(procId: string): Promise<void> {
     }
 
     const ringBuffer = new CircularBuffer(64 * 1024);
+    // Output before the spawning daemon's first attach, kept with its
+    // stream. The ring buffer replays one untagged blob, which stdout- and
+    // stderr-only listeners (process:run) never see; the first attach gets
+    // these frames instead. Same byte cap; dropped once delivered.
+    let earlyFrames: TaggedBuffer | null = new TaggedBuffer(64 * 1024);
+    // the workload's exit code while it waits for that first attach
+    let pendingExit: number | null = null;
+    let firstAttachDone = false;
     const clients = new Set<net.Socket>();
     let childPid = 0;
     let isExited = false;
@@ -337,6 +368,27 @@ export async function runSupervisor(procId: string): Promise<void> {
     // why the workload never started; reported in the status frame so the
     // spawning daemon fails its create call with this reason
     let startError: string | null = null;
+
+    const emitOutput = (stream: "stdout" | "stderr", data: string) => {
+        ringBuffer.push(data);
+        earlyFrames?.push(stream, data);
+        broadcast({ type: "data", stream, data });
+    };
+
+    // A workload that exits before the spawning daemon has attached (a
+    // command that runs in milliseconds) must not take the endpoint with
+    // it: the daemon would find no socket and report a start failure, and
+    // the output and exit code would be lost. Hold the exit until the first
+    // attach has read them, bounded like a failed start.
+    const workloadExited = (code: number) => {
+        if (firstAttachDone) {
+            cleanupAndExit(code);
+            return;
+        }
+        pendingExit = code;
+        const giveUp = setTimeout(() => cleanupAndExit(code), START_FAILURE_LINGER_MS);
+        unrefTimer(giveUp);
+    };
 
     const broadcast = (msgObj: Record<string, any>) => {
         const payload = JSON.stringify(msgObj) + "\n";
@@ -381,7 +433,7 @@ export async function runSupervisor(procId: string): Promise<void> {
                 type: "status",
                 pid: process.pid,
                 childPid,
-                running: !isExited,
+                running: !isExited && pendingExit === null,
                 isPty: Boolean(config.isPty),
                 ...(startError ? { error: startError } : {}),
             }) + "\n",
@@ -400,8 +452,17 @@ export async function runSupervisor(procId: string): Promise<void> {
                 try {
                     const msg = JSON.parse(line);
                     if (msg.type === "attach") {
-                        const history = ringBuffer.getAll();
-                        if (history) socket.write(JSON.stringify({ type: "history", data: history }) + "\n");
+                        if (!firstAttachDone && earlyFrames) {
+                            for (const frame of earlyFrames.drain()) {
+                                socket.write(JSON.stringify({ type: "data", ...frame }) + "\n");
+                            }
+                        } else {
+                            const history = ringBuffer.getAll();
+                            if (history) socket.write(JSON.stringify({ type: "history", data: history }) + "\n");
+                        }
+                        firstAttachDone = true;
+                        earlyFrames = null;
+                        if (pendingExit !== null) cleanupAndExit(pendingExit);
                     } else if (msg.type === "stdin" && typeof msg.data === "string") {
                         if (ptyInstance) ptyInstance.write(msg.data);
                         else childProcess?.stdin?.write(msg.data);
@@ -467,11 +528,8 @@ export async function runSupervisor(procId: string): Promise<void> {
                 failStart(`Could not start a terminal: ${(err as Error).message}`);
                 return;
             }
-            ptyInstance.onData((data) => {
-                ringBuffer.push(data);
-                broadcast({ type: "data", stream: "stdout", data });
-            });
-            ptyInstance.onExit((code) => cleanupAndExit(code));
+            ptyInstance.onData((data) => emitOutput("stdout", data));
+            ptyInstance.onExit((code) => workloadExited(code));
         } else {
             const command = config.command || "sh";
             const args = config.args || [];
@@ -484,22 +542,12 @@ export async function runSupervisor(procId: string): Promise<void> {
             childProcess = cp.spawn(command, args, { cwd: finalCwd, env: mergedEnv, windowsHide: true });
             childPid = childProcess.pid || 0;
 
-            childProcess.stdout?.on("data", (chunk) => {
-                const str = chunk.toString("utf8");
-                ringBuffer.push(str);
-                broadcast({ type: "data", stream: "stdout", data: str });
-            });
-            childProcess.stderr?.on("data", (chunk) => {
-                const str = chunk.toString("utf8");
-                ringBuffer.push(str);
-                broadcast({ type: "data", stream: "stderr", data: str });
-            });
-            childProcess.on("close", (code) => cleanupAndExit(code ?? 0));
+            childProcess.stdout?.on("data", (chunk) => emitOutput("stdout", chunk.toString("utf8")));
+            childProcess.stderr?.on("data", (chunk) => emitOutput("stderr", chunk.toString("utf8")));
+            childProcess.on("close", (code) => workloadExited(code ?? 0));
             childProcess.on("error", (err) => {
-                const str = `\n[Process Error] ${err.message}\n`;
-                ringBuffer.push(str);
-                broadcast({ type: "data", stream: "stderr", data: str });
-                cleanupAndExit(1);
+                emitOutput("stderr", `\n[Process Error] ${err.message}\n`);
+                workloadExited(1);
             });
         }
 
@@ -518,6 +566,6 @@ export async function runSupervisor(procId: string): Promise<void> {
         } catch (err) { logger.debug("[supervisor.ts] op failed:", err) }
     });
 
-    process.on("SIGTERM", () => cleanupAndExit(0));
-    process.on("SIGINT", () => cleanupAndExit(0));
+    process.on("SIGTERM", () => cleanupAndExit(pendingExit ?? 0));
+    process.on("SIGINT", () => cleanupAndExit(pendingExit ?? 0));
 }
