@@ -25,6 +25,7 @@ export * from "./components/PaperMarkdown";
 export * from "./components/PaperMediaCard";
 export * from "./components/PaperMenu";
 export * from "./components/PaperModal";
+export * from "./components/PaperPresence";
 export * from "./components/PaperPageHeader";
 export * from "./components/PaperPagination";
 export * from "./components/PaperProgress";

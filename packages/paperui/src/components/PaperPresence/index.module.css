@@ -1,0 +1,92 @@
+/* PaperPresence presets. Each keyframe says only where the element comes
+   from; exit plays it in reverse, so arriving and leaving always match. */
+
+.enter,
+.exit {
+    animation-duration: var(--paper-presence-duration, var(--paper-mid-transition));
+    animation-timing-function: var(--paper-ease-emphasized);
+    animation-fill-mode: both;
+}
+
+.exit {
+    animation-duration: var(--paper-presence-duration, var(--paper-short-transition));
+    animation-direction: reverse;
+}
+
+.fade {
+    animation-name: PaperPresenceFade;
+}
+
+.pop {
+    animation-name: PaperPresencePop;
+}
+
+.slideUp {
+    animation-name: PaperPresenceSlideUp;
+}
+
+.slideDown {
+    animation-name: PaperPresenceSlideDown;
+}
+
+.slideStart,
+.slideEnd {
+    --paper-presence-dir: 1;
+}
+
+.slideStart:dir(rtl),
+.slideEnd:dir(rtl) {
+    --paper-presence-dir: -1;
+}
+
+.slideStart {
+    animation-name: PaperPresenceSlideStart;
+}
+
+.slideEnd {
+    animation-name: PaperPresenceSlideEnd;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .enter,
+    .exit {
+        animation-duration: 0.01ms !important;
+    }
+}
+
+@keyframes PaperPresenceFade {
+    from {
+        opacity: 0;
+    }
+}
+
+@keyframes PaperPresencePop {
+    from {
+        opacity: 0;
+        transform: translate3d(0, var(--paper-uigap-half), 0) scale(0.96);
+    }
+}
+
+@keyframes PaperPresenceSlideUp {
+    from {
+        transform: translate3d(0, 100%, 0);
+    }
+}
+
+@keyframes PaperPresenceSlideDown {
+    from {
+        transform: translate3d(0, -100%, 0);
+    }
+}
+
+@keyframes PaperPresenceSlideStart {
+    from {
+        transform: translate3d(calc(-100% * var(--paper-presence-dir)), 0, 0);
+    }
+}
+
+@keyframes PaperPresenceSlideEnd {
+    from {
+        transform: translate3d(calc(100% * var(--paper-presence-dir)), 0, 0);
+    }
+}

@@ -9,7 +9,7 @@ import {
     type ParentProps,
 } from "solid-js";
 import { Portal } from "solid-js/web";
-import { Transition } from "solid-transition-group";
+import { PaperPresence } from "../PaperPresence";
 import { PaperText } from "../PaperText";
 import { PaperIcon } from "../PaperIcon";
 import { PaperButton } from "../PaperButton";
@@ -30,20 +30,6 @@ export interface PaperModalProps extends Omit<JSX.HTMLAttributes<HTMLDivElement>
 export function PaperModal(props: ParentProps<PaperModalProps>) {
     let modalRef: HTMLDivElement | undefined;
     const titleId = `paper-modal-title-${createUniqueId()}`;
-    const transitionCleanups = new Set<() => void>();
-    onCleanup(() => { for (const cleanup of transitionCleanups) cleanup(); transitionCleanups.clear(); });
-
-    const transition = (el: Element, done: () => void, className: string) => {
-        el.classList.add(className);
-        let ended = false;
-        const cleanup = () => { clearTimeout(timer); el.removeEventListener("animationend", finish); transitionCleanups.delete(cleanup); };
-        const finish = () => { if (ended) return; ended = true; cleanup(); done(); };
-        const timer = setTimeout(finish, 300);
-        transitionCleanups.add(cleanup);
-        el.addEventListener("animationend", finish, { once: true });
-        if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches || document.documentElement.dataset.paperuiMotion === "reduced") queueMicrotask(finish);
-    };
-
     const [local, rest] = splitProps(props, [
         "open",
         "onClose",
@@ -135,85 +121,84 @@ export function PaperModal(props: ParentProps<PaperModalProps>) {
 
     return (
         <Portal>
-            <Transition
-                onEnter={(el, done) => transition(el, done, styles.backdropTransitionIn)}
-                onExit={(el, done) => transition(el, done, styles.backdropTransitionOut)}
+            <PaperPresence
+                when={local.open}
+                enterClass={styles.backdropTransitionIn}
+                exitClass={styles.backdropTransitionOut}
             >
-                <Show when={local.open}>
-                    <div class={styles.backdrop} onClick={handleBackdropClick}>
+                <div class={styles.backdrop} onClick={handleBackdropClick}>
+                    <div
+                        ref={modalRef}
+                        tabIndex={-1}
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby={local.title && !local.noHeader ? titleId : undefined}
+                        {...rest}
+                        class={[styles.modalBox, sizeClass(), local.class]
+                            .filter(Boolean)
+                            .join(" ")}
+                        classList={local.classList}
+                    >
+                        <Show
+                            when={
+                                !local.noHeader &&
+                                (local.title || local.onClose)
+                            }
+                        >
+                            <div class={styles.header}>
+                                <Show when={local.title}>
+                                    <span id={titleId}><PaperText size={4} weight={700}>
+                                        {local.title}
+                                    </PaperText></span>
+                                </Show>
+
+                                <Show when={local.onClose}>
+                                    <PaperButton size="tiny"
+                                        icon
+                                        type="button"
+                                        variant="text"
+                                        onClick={() => local.onClose?.()}
+                                        aria-label="Close modal"
+                                        class={styles.closeBtn}>
+                                        <PaperIcon aria-hidden="true" zeroHeight>
+                                            close
+                                        </PaperIcon>
+                                    </PaperButton>
+                                </Show>
+                            </div>
+                        </Show>
+
+                        <Show when={local.noHeader && local.onClose}>
+                            <PaperButton size="tiny"
+                                icon
+                                type="button"
+                                variant="text"
+                                onClick={() => local.onClose?.()}
+                                aria-label="Close modal"
+                                class={styles.floatingCloseBtn}>
+                                <PaperIcon aria-hidden="true" zeroHeight>
+                                    close
+                                </PaperIcon>
+                            </PaperButton>
+                        </Show>
+
                         <div
-                            ref={modalRef}
-                            tabIndex={-1}
-                            role="dialog"
-                            aria-modal="true"
-                            aria-labelledby={local.title && !local.noHeader ? titleId : undefined}
-                            {...rest}
-                            class={[styles.modalBox, sizeClass(), local.class]
+                            class={[
+                                styles.body,
+                                local.noPadding ? styles.noPadding : "",
+                            ]
                                 .filter(Boolean)
                                 .join(" ")}
-                            classList={local.classList}
                         >
-                            <Show
-                                when={
-                                    !local.noHeader &&
-                                    (local.title || local.onClose)
-                                }
-                            >
-                                <div class={styles.header}>
-                                    <Show when={local.title}>
-                                        <span id={titleId}><PaperText size={4} weight={700}>
-                                            {local.title}
-                                        </PaperText></span>
-                                    </Show>
-
-                                    <Show when={local.onClose}>
-                                        <PaperButton size="tiny"
-                                            icon
-                                            type="button"
-                                            variant="text"
-                                            onClick={() => local.onClose?.()}
-                                            aria-label="Close modal"
-                                            class={styles.closeBtn}>
-                                            <PaperIcon aria-hidden="true" zeroHeight>
-                                                close
-                                            </PaperIcon>
-                                        </PaperButton>
-                                    </Show>
-                                </div>
-                            </Show>
-
-                            <Show when={local.noHeader && local.onClose}>
-                                <PaperButton size="tiny"
-                                    icon
-                                    type="button"
-                                    variant="text"
-                                    onClick={() => local.onClose?.()}
-                                    aria-label="Close modal"
-                                    class={styles.floatingCloseBtn}>
-                                    <PaperIcon aria-hidden="true" zeroHeight>
-                                        close
-                                    </PaperIcon>
-                                </PaperButton>
-                            </Show>
-
-                            <div
-                                class={[
-                                    styles.body,
-                                    local.noPadding ? styles.noPadding : "",
-                                ]
-                                    .filter(Boolean)
-                                    .join(" ")}
-                            >
-                                {local.children}
-                            </div>
-
-                            <Show when={local.footer}>
-                                <div class={styles.footer}>{local.footer}</div>
-                            </Show>
+                            {local.children}
                         </div>
+
+                        <Show when={local.footer}>
+                            <div class={styles.footer}>{local.footer}</div>
+                        </Show>
                     </div>
-                </Show>
-            </Transition>
+                </div>
+            </PaperPresence>
         </Portal>
     );
 }
