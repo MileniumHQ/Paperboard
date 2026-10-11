@@ -4,7 +4,8 @@ import {
     system,
     type ServiceContext,
 } from "@mileniumhq/paperapi";
-import { parseProperties, extractServerPort, cleanMotdValue } from "../core/properties";
+import { parseProperties, extractServerPort } from "../core/properties";
+import { DEFAULT_MOTD } from "../core/motd";
 import type { GameServerState } from "./types";
 import { isServerSoftware } from "../software/catalog";
 import { PANEL_ID } from "./types";
@@ -41,8 +42,9 @@ export async function loadConfigAndProperties(
             const status = ctx.state.serverStatus;
             const serverLive = status !== undefined && status !== "offline";
             if (port && !serverLive) patch.serverPort = port;
-            const motd = cleanMotdValue(props["motd"]);
-            if (motd) patch.serverMotd = motd;
+            // kept raw: the panel renders its § codes. A missing key is the
+            // game's default; an empty one is an empty message.
+            patch.serverMotd = props["motd"] ?? DEFAULT_MOTD;
         }
         ctx.setState(patch);
     } catch (err) {

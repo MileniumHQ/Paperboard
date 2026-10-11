@@ -133,27 +133,41 @@ export function defaultValueFor(field: PropertyField): string {
     return field.defaultValue;
 }
 
+// a missing file is empty; a failed read throws, so nothing treats an
+// unreadable file as empty and writes over it
+export async function readServerPropertiesStrict(): Promise<Record<string, string>> {
+    const content = await fileApi.read("server.properties", PANEL_ID);
+    return content ? parseProperties(content) : {};
+}
+
 export async function readServerProperties(): Promise<Record<string, string>> {
     try {
-        const content = await fileApi.read("server.properties", PANEL_ID);
-        if (!content) return {};
-        return parseProperties(content);
+        return await readServerPropertiesStrict();
     } catch (err) {
         console.error("[Options] Failed to read server.properties:", err);
         return {};
     }
 }
 
-export async function writeServerProperties(values: Record<string, string>) {
-    const current = await readServerProperties();
-    const merged = { ...current, ...values };
+// Java reads server.properties as Latin-1 on older versions, so a raw UTF-8
+// "§" arrives as "Â§". Escape every non-ASCII character as \uXXXX, like
+// Java's own Properties.store, which every version reads back correctly.
+function stringifyServerProperties(values: Record<string, string>): string {
+    const content = properties.stringify(values, {
+        keySep: "=",
+        lineWidth: null,
+        latin1: false,
+    });
+    return content.replace(
+        /[^\x00-\x7f]/g,
+        (ch) => `\\u${ch.charCodeAt(0).toString(16).toUpperCase().padStart(4, "0")}`,
+    );
+}
 
+export async function writeServerProperties(values: Record<string, string>) {
     try {
-        const content = properties.stringify(merged, {
-            keySep: "=",
-            lineWidth: null,
-            latin1: false,
-        });
+        const current = await readServerPropertiesStrict();
+        const content = stringifyServerProperties({ ...current, ...values });
         await fileApi.write("server.properties", content, PANEL_ID);
     } catch (err) {
         console.error("[Options] Failed to write server.properties:", err);

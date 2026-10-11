@@ -5,6 +5,7 @@ import { liveRecoveryDeps } from "./service/softwareInstallDeps";
 import { recoverInterruptedModpack } from "./service/modpacks";
 import { liveModpackRecoveryDeps } from "./service/modpackDeps";
 import { loadConfigAndProperties } from "./service/config";
+import { DEFAULT_MOTD } from "./core/motd";
 import { handleProcessData, handleProcessExit } from "./service/lifecycle";
 import {
     panelActions,
@@ -24,7 +25,7 @@ const initialState: GameServerState = {
     chatMessages: [],
     localIp: "127.0.0.1",
     serverPort: "25565",
-    serverMotd: "A Minecraft Server",
+    serverMotd: DEFAULT_MOTD,
     serverSoftware: "paper",
     serverVersion: "",
     ramAllocation: 4,
