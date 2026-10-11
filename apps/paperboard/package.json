@@ -21,6 +21,7 @@
     "start": "bun scripts/launch.ts preview",
     "dev": "bun scripts/launch.ts dev",
     "dev:browser": "bun scripts/launch.ts dev -- --browser",
+    "widget-demo": "bun scripts/install-widget-demo.ts",
     "build": "bun run typecheck && electron-vite build",
     "build:unpack": "bun run build && electron-builder --dir",
     "build:win": "bun run build && electron-builder --win",

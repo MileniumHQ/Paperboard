@@ -1,0 +1,71 @@
+html, body {
+    margin: 0;
+    height: 100%;
+    background: var(--paper-surface-raised);
+    color: var(--paper-text);
+    font-family: var(--paper-font-family);
+}
+
+.demo-panel {
+    padding: var(--paper-uigap-double);
+}
+
+.demo-widget {
+    /* widgets come in several sizes: size text to the widget, not the page */
+    container-type: size;
+    box-sizing: border-box;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--paper-uigap);
+    padding: var(--paper-uigap);
+    text-align: center;
+}
+
+.big {
+    font-size: var(--paper-text-size-10);
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+}
+
+.sub {
+    color: var(--paper-text-subtle);
+    font-size: var(--paper-text-size-2);
+}
+
+.clock {
+    flex-direction: column;
+    gap: 0;
+}
+
+.clock .big {
+    font-size: min(22cqw, 45cqh);
+    line-height: 1.1;
+}
+
+.status {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+}
+
+.status .dot {
+    width: var(--paper-uigap);
+    height: var(--paper-uigap);
+    border-radius: 50%;
+    background: var(--paper-success);
+}
+
+.status .label {
+    font-weight: 700;
+}
+
+button {
+    font: inherit;
+    padding: var(--paper-uigap-half) var(--paper-uigap);
+    border-radius: var(--paper-border-radius-half);
+    border: var(--paper-border-width) solid var(--paper-border);
+    background: var(--paper-surface-element);
+    color: var(--paper-text);
+    cursor: pointer;
+}

@@ -1,0 +1,13 @@
+{
+    "name": "Widget Demo",
+    "id": "dev.paperboard.widgetdemo",
+    "version": "0.0.1",
+    "description": "A development fixture that exists to exercise Home widgets. Not released.",
+    "publisher": "Paperboard",
+    "service": "./dist/service.js",
+    "widgets": [
+        { "id": "clock", "name": "Clock", "description": "The time, ticking only while you can see it", "sizes": ["2x1", "2x2", "4x1"] },
+        { "id": "counter", "name": "Counter", "description": "A number the panel's service keeps", "sizes": ["1x1", "2x1"] },
+        { "id": "status", "name": "Service status", "description": "Uptime, with a button that opens the panel", "sizes": ["4x1", "2x2"] }
+    ]
+}
