@@ -25,6 +25,8 @@ import Logs from "./components/Logs";
 import Versions from "./components/Versions";
 import Loader from "./components/Loader";
 import Datapacks from "./components/Datapacks";
+import Modpacks from "./components/Modpacks";
+import { MODPACK_LOADER } from "./core/modpack";
 import "@mileniumhq/paperui/style.css";
 import "@mileniumhq/paperui/panel.css";
 
@@ -39,6 +41,8 @@ export default function App() {
     const hasPluginTab = () => SOFTWARE[serverSoftware()].addons !== null;
     // Vanilla has no loader; its settings are on Options and Advanced
     const hasLoaderTab = () => serverSoftware() !== "vanilla";
+    // modpacks are built for one loader: only the loaders that run them show the tab
+    const hasModpackTab = () => MODPACK_LOADER[serverSoftware()] !== undefined;
 
     // whole-feature floors: hide the tab rather than show half its controls
     // doing nothing. Unknown version stays permissive so nothing flashes out
@@ -53,6 +57,7 @@ export default function App() {
 
     createEffect(() => {
         if (!hasPluginTab() && activeTab() === "plugins") setActiveTab("overview");
+        if (!hasModpackTab() && activeTab() === "modpacks") setActiveTab("overview");
         if (!showMap() && activeTab() === "map") setActiveTab("overview");
         if (!showPlayers() && activeTab() === "players") setActiveTab("overview");
         if (!showWorlds() && activeTab() === "worlds") setActiveTab("overview");
@@ -125,6 +130,11 @@ export default function App() {
                                 {pluginKind()}
                             </PaperMenuItem>
                         </Show>
+                        <Show when={hasModpackTab()}>
+                            <PaperMenuItem value="modpacks" icon="package_2">
+                                Modpacks
+                            </PaperMenuItem>
+                        </Show>
                         <Show when={showDatapacks()}>
                             <PaperMenuItem value="datapacks" icon="dataset">
                                 Datapacks
@@ -186,6 +196,11 @@ export default function App() {
                         <Show when={hasPluginTab()}>
                             <PaperInterfaceItem value="plugins">
                                 <Plugins updateRequest={pluginUpdateRequest()} />
+                            </PaperInterfaceItem>
+                        </Show>
+                        <Show when={hasModpackTab()}>
+                            <PaperInterfaceItem value="modpacks">
+                                <Modpacks active={activeTab() === "modpacks"} />
                             </PaperInterfaceItem>
                         </Show>
                         <Show when={showDatapacks()}>

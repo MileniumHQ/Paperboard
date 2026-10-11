@@ -14,6 +14,7 @@
         "@mileniumhq/paperapi": "workspace:*",
         "@mileniumhq/paperui": "workspace:*",
         "dot-properties": "^1.1.2",
+        "fflate": "^0.8.3",
         "pngjs": "^7.0.0",
         "prismarine-nbt": "^2.8.0",
         "semver": "^7.8.5",

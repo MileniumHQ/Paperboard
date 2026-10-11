@@ -43,11 +43,13 @@ import { getHeadDataUrl } from "./skins";
 import { listLogFiles, readLogFile } from "./logs";
 import { queryGamerules, setGamerule } from "./gamerules";
 import { applyRuntimeProperties } from "./runtimeProperties";
-import { installServerSoftware, isInstallRunning } from "./softwareInstall";
+import { installServerSoftware, isInstallRunning, withInstallLock } from "./softwareInstall";
 import { readLoaderSettings, writeLoaderSetting } from "./loaderSettings";
 import { liveInstallDeps } from "./softwareInstallDeps";
 import { installDatapack, listDatapacks, listDatapackVersions, removeDatapack } from "./datapacks";
 import { liveDatapackDeps } from "./datapackDeps";
+import { installModpack, listModpackVersions, readModpack, removeModpack } from "./modpacks";
+import { liveModpackDeps } from "./modpackDeps";
 import { assertPlayerName, assertSingleLine } from "../core/players";
 import type { GameServerState } from "./types";
 import { ACTION_IDS, TRIGGER_IDS, PANEL_ID } from "./contract";
@@ -1071,6 +1073,87 @@ export const panelActions: ActionDefinition[] = [
         run: async (ctx: ServiceContext<GameServerState>, inputs: { name?: string }) => {
             await removeDatapack(inputs?.name, liveDatapackDeps(ctx));
             return true;
+        },
+    }),
+
+    defineAction({
+        id: ACTION_IDS.readModpack,
+        name: "Read Modpack",
+        category: "Server",
+        description: "Reads the installed modpack",
+        internal: true,
+        template: "Read modpack",
+        inputs: {},
+        output: { type: "object", label: "Modpack" },
+        quick: false,
+        icon: "package_2",
+        run: async (ctx: ServiceContext<GameServerState>) => ({ modpack: await readModpack(liveModpackDeps(ctx)) }),
+    }),
+
+    defineAction({
+        id: ACTION_IDS.listModpackVersions,
+        name: "List Modpack Versions",
+        category: "Server",
+        description: "Lists a Modrinth modpack's versions for the installed loader",
+        internal: true,
+        template: "List versions of modpack {projectId}",
+        inputs: {
+            projectId: { type: "string", label: "Project", required: true },
+        },
+        output: { type: "object", label: "Versions" },
+        quick: false,
+        icon: "package_2",
+        run: async (ctx: ServiceContext<GameServerState>, inputs: { projectId?: string }) =>
+            listModpackVersions(inputs?.projectId, ctx.state.serverSoftware, liveModpackDeps(ctx)),
+    }),
+
+    defineAction({
+        id: ACTION_IDS.installModpack,
+        name: "Install Modpack",
+        category: "Server",
+        description: "Installs a Modrinth modpack, replacing the server's mods (offline only)",
+        internal: true,
+        template: "Install modpack {projectId} {versionId}",
+        inputs: {
+            projectId: { type: "string", label: "Project", required: true },
+            versionId: { type: "string", label: "Version", required: true },
+        },
+        output: { type: "object", label: "Installed" },
+        quick: false,
+        icon: "package_2",
+        run: async (ctx: ServiceContext<GameServerState>, inputs: { projectId?: string; versionId?: string }) => {
+            // checked and claimed with no await between: a start cannot slip in
+            if (ctx.state.serverStatus !== "offline") {
+                throw new Error("Stop the server before installing a modpack");
+            }
+            const outcome = await withInstallLock(() =>
+                installModpack(
+                    { projectId: inputs?.projectId, versionId: inputs?.versionId },
+                    ctx.state.serverSoftware,
+                    liveModpackDeps(ctx),
+                ),
+            );
+            if (outcome.switchedServer) await republishDynamicActions(ctx);
+            return outcome;
+        },
+    }),
+
+    defineAction({
+        id: ACTION_IDS.removeModpack,
+        name: "Remove Modpack",
+        category: "Server",
+        description: "Moves the installed modpack's files to the trash, keeping the server software (offline only)",
+        internal: true,
+        template: "Remove modpack",
+        inputs: {},
+        output: { type: "object", label: "Removed" },
+        quick: false,
+        icon: "delete",
+        run: async (ctx: ServiceContext<GameServerState>) => {
+            if (ctx.state.serverStatus !== "offline") {
+                throw new Error("Stop the server before removing the modpack");
+            }
+            return withInstallLock(() => removeModpack(liveModpackDeps(ctx)));
         },
     }),
 

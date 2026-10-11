@@ -63,20 +63,42 @@ function fsOf(deps: InstallDeps): ActivationFs {
     return deps.fs ?? (nodeFs as unknown as ActivationFs);
 }
 
-export async function installServerSoftware(
+/**
+ * Runs `work` as the one thing that owns the server folder: a second
+ * install, a modpack change or a server start is refused until it ends.
+ * The claim is synchronous, so a caller that checks "offline" just before
+ * cannot race a start.
+ */
+export async function withInstallLock<T>(work: () => Promise<T>): Promise<T> {
+    if (running) throw new Error("A server install is already running");
+    running = true;
+    try {
+        return await work();
+    } finally {
+        running = false;
+    }
+}
+
+export function installServerSoftware(
     ctx: ServiceContext<GameServerState>,
     software: ServerSoftwareType,
     version: string,
     deps: InstallDeps,
     opts: { build?: string } = {},
 ): Promise<InstallOutcome> {
-    if (running) throw new Error("A server install is already running");
-    running = true;
-    try {
-        return await install(ctx, software, version, deps, opts.build);
-    } finally {
-        running = false;
-    }
+    return withInstallLock(() => install(ctx, software, version, deps, opts.build));
+}
+
+/** installServerSoftware for a caller already inside withInstallLock (a modpack install). */
+export async function installServerSoftwareLocked(
+    ctx: ServiceContext<GameServerState>,
+    software: ServerSoftwareType,
+    version: string,
+    deps: InstallDeps,
+    opts: { build?: string } = {},
+): Promise<InstallOutcome> {
+    if (!running) throw new Error("installServerSoftwareLocked called without the install lock");
+    return install(ctx, software, version, deps, opts.build);
 }
 
 async function install(

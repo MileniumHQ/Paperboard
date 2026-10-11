@@ -27,6 +27,15 @@ export interface InstallProgress {
     percent: number;
 }
 
+// Live progress of a modpack install, published the same way. "done" and
+// "total" count files while downloading; a loader switch inside the
+// install reports through installProgress.
+export interface ModpackProgress {
+    stage: "preparing" | "downloading" | "installing-server" | "placing" | "completed" | "error";
+    done: number;
+    total: number;
+}
+
 export interface StateSetters {
     setServerStatus: (v: ServerStatus) => void;
     setServerEntries: (v: PaperConsoleEntry[]) => void;
@@ -45,6 +54,7 @@ export interface StateSetters {
     setPlayerPlaytime: (v: Map<string, number>) => void;
     setGamerules: (v: Record<string, string>) => void;
     setInstallProgress: (v: InstallProgress | null) => void;
+    setModpackProgress: (v: ModpackProgress | null) => void;
 }
 
 // serverVersion applies only when truthy, rest when defined
@@ -113,6 +123,10 @@ export function applyStatePatch(
         {
             key: "installProgress",
             apply: (v) => setters.setInstallProgress(v as InstallProgress | null),
+        },
+        {
+            key: "modpackProgress",
+            apply: (v) => setters.setModpackProgress(v as ModpackProgress | null),
         },
     ];
 

@@ -69,7 +69,7 @@ function errorCode(err: unknown): string | undefined {
     return (err as { code?: string } | null)?.code;
 }
 
-async function exists(fs: ActivationFs, path: string): Promise<boolean> {
+export async function exists(fs: ActivationFs, path: string): Promise<boolean> {
     try {
         await fs.lstat(path);
         return true;
@@ -80,7 +80,7 @@ async function exists(fs: ActivationFs, path: string): Promise<boolean> {
 }
 
 // rename overwrites a file target on POSIX; a move here must never clobber
-async function moveNoClobber(fs: ActivationFs, from: string, to: string): Promise<void> {
+export async function moveNoClobber(fs: ActivationFs, from: string, to: string): Promise<void> {
     if (await exists(fs, to)) {
         throw new Error(`Refusing to overwrite ${nodePath.basename(to)} while moving install files`);
     }

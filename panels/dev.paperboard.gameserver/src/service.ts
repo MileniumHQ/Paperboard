@@ -2,6 +2,8 @@ import { definePanelService, processApi } from "@mileniumhq/paperapi";
 import { SERVER_PROC_ID, appendCapped, type GameServerState } from "./service/types";
 import { recoverInterruptedInstall } from "./service/softwareInstall";
 import { liveRecoveryDeps } from "./service/softwareInstallDeps";
+import { recoverInterruptedModpack } from "./service/modpacks";
+import { liveModpackRecoveryDeps } from "./service/modpackDeps";
 import { loadConfigAndProperties } from "./service/config";
 import { handleProcessData, handleProcessExit } from "./service/lifecycle";
 import {
@@ -33,6 +35,7 @@ const initialState: GameServerState = {
     playerPositions: {},
     gamerules: {},
     installProgress: null,
+    modpackProgress: null,
     activeIssue: null,
 };
 
@@ -65,6 +68,21 @@ export const gameServerService = definePanelService({
                 serverEntries: appendCapped(ctx.state.serverEntries, {
                     type: "error",
                     content: `[Server] An interrupted install could not be cleaned up: ${err instanceof Error ? err.message : String(err)}`,
+                }),
+            });
+        }
+        // then a modpack change, which may have been waiting on that install
+        try {
+            const recovered = await recoverInterruptedModpack(liveModpackRecoveryDeps());
+            if (recovered.committed.length || recovered.rolledBack.length || recovered.discarded.length) {
+                console.log("[gameserver] settled interrupted modpack change:", JSON.stringify(recovered));
+            }
+        } catch (err) {
+            console.error("[gameserver] interrupted modpack change could not be settled:", String(err));
+            ctx.setState({
+                serverEntries: appendCapped(ctx.state.serverEntries, {
+                    type: "error",
+                    content: `[Server] An interrupted modpack change could not be cleaned up: ${err instanceof Error ? err.message : String(err)}`,
                 }),
             });
         }

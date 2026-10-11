@@ -1,6 +1,6 @@
 import type { PaperConsoleEntry } from "@mileniumhq/paperui";
 import type { ServerSoftwareType } from "../lib/software";
-import type { ServerStatus as CoreServerStatus, ChatMessage as CoreChatMessage, InstallProgress } from "../core/state";
+import type { ServerStatus as CoreServerStatus, ChatMessage as CoreChatMessage, InstallProgress, ModpackProgress } from "../core/state";
 import {
     PLAYER_NAME_PATTERN as CORE_PLAYER_NAME_PATTERN,
     SERVER_PROC_ID as CORE_SERVER_PROC_ID,
@@ -47,6 +47,8 @@ export interface GameServerState {
     // live jar-download progress during installServerVersion; null when no
     // install is running. The Versions modal reads this for its row.
     installProgress: InstallProgress | null;
+    // live modpack install progress; null when none has run
+    modpackProgress: ModpackProgress | null;
     activeIssue: ServerIssue | null;
 }
 
