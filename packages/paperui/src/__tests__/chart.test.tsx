@@ -53,6 +53,36 @@ describe("PaperChart", () => {
         expect((rows[0].firstElementChild as HTMLElement).style.background).toBe("var(--paper-primary)");
     });
 
+    test("a line chart draws readings left to right, oldest first, between min and max", () => {
+        const { container } = render(() => (
+            <PaperChart type="line" label="CPU" min={0} max={100} series={[{ label: "In use", values: [0, 50, 100], detail: "100%" }]} />
+        ));
+        expect(container.querySelector("polyline")?.getAttribute("points")).toBe("0,100 50,50 100,0");
+        expect(screen.getByRole("img").getAttribute("aria-label")).toBe("CPU: In use 100%");
+    });
+
+    test("a series shorter than the span fills in from the right", () => {
+        const { container } = render(() => (
+            <PaperChart type="line" label="CPU" max={10} span={5} series={[{ label: "In use", values: [5, 10] }]} />
+        ));
+        expect(container.querySelector("polyline")?.getAttribute("points")).toBe("75,50 100,0");
+        expect(screen.getByRole("img").getAttribute("aria-label")).toBe("CPU: In use 10");
+    });
+
+    test("a line chart keeps readings inside its box and waits for a second one before drawing", () => {
+        const { container } = render(() => (
+            <PaperChart
+                type="line"
+                label="CPU"
+                max={10}
+                fill
+                series={[{ label: "Over", values: [-5, 20, Number.NaN] }, { label: "Once", values: [3] }]}
+            />
+        ));
+        expect([...container.querySelectorAll("polyline")].map((l) => l.getAttribute("points"))).toEqual(["0,100 100,0"]);
+        expect(container.querySelectorAll("path").length).toBe(1);
+    });
+
     test("a compact legend names the parts without their readings", () => {
         const { container } = render(() => <PaperChartLegend segments={segments} total={4} compact />);
         expect([...container.querySelectorAll("li")].map((r) => r.textContent)).toEqual(["Game Server", "Paperboard"]);

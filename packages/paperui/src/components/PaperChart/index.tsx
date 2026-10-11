@@ -12,19 +12,48 @@ export interface PaperChartSegment {
     detail?: string;
 }
 
-export interface PaperChartProps extends Omit<JSX.HTMLAttributes<HTMLDivElement>, "children"> {
-    /** a ring with room in the middle, or a flat bar */
+export interface PaperChartSeries {
+    label: string;
+    /** readings, oldest first */
+    values: number[];
+    /** role, token or CSS color; defaults to the chart palette, in order */
+    color?: PaperColor;
+    /** the latest reading as people say it ("58%"); defaults to the last value */
+    detail?: string;
+}
+
+interface PaperChartCommonProps extends Omit<JSX.HTMLAttributes<HTMLDivElement>, "children"> {
+    /** what the chart measures; with each part's reading it is the accessible name */
+    label: string;
+}
+
+export interface PaperChartPartsProps extends PaperChartCommonProps {
+    /** parts of a whole: a ring with room in the middle, or a flat bar */
     type?: "donut" | "bar";
     segments: PaperChartSegment[];
     /** the whole the segments are parts of; defaults to their sum. What's left over stays empty. */
     total?: number;
-    /** what the chart measures; with each segment's reading it is the accessible name */
-    label: string;
     /** ring thickness, in hundredths of the donut's width */
     thickness?: number;
     /** shown in the middle of a donut */
     children?: JSX.Element;
 }
+
+export interface PaperChartLineProps extends PaperChartCommonProps {
+    /** readings over time, one line per series */
+    type: "line";
+    series: PaperChartSeries[];
+    /** the bottom of the chart; defaults to 0 */
+    min?: number;
+    /** the top of the chart; defaults to the largest reading */
+    max?: number;
+    /** how many readings the chart is wide; a shorter series is drawn from the right, as it fills in */
+    span?: number;
+    /** tint the area under each line */
+    fill?: boolean;
+}
+
+export type PaperChartProps = PaperChartPartsProps | PaperChartLineProps;
 
 export interface PaperChartLegendProps extends JSX.HTMLAttributes<HTMLUListElement> {
     /** the same segments as the chart, so colors and readings agree */
@@ -70,11 +99,83 @@ function partsOf(segments: PaperChartSegment[], total: number | undefined): Part
     });
 }
 
+interface Line {
+    color: string;
+    /** "x,y x,y" in a 100×100 box, y down */
+    points: string;
+    /** the same line closed along the bottom, for the fill */
+    area: string;
+}
+
+function linesOf(props: PaperChartLineProps): Line[] {
+    const clean = props.series.map((s) => s.values.filter((v) => Number.isFinite(v)));
+    const min = props.min !== undefined && Number.isFinite(props.min) ? props.min : 0;
+    const top = props.max !== undefined && Number.isFinite(props.max) ? props.max : Math.max(min, ...clean.flat());
+    // a flat chart of nothing still needs a height to divide by
+    const range = top > min ? top - min : 1;
+    const span = Math.max(2, Math.floor(props.span ?? 0), ...clean.map((values) => values.length));
+    const round = (n: number) => Math.round(n * 100) / 100;
+    return props.series.map((series, index) => {
+        // the newest readings, ending at the right edge
+        const values = clean[index].slice(-span);
+        const first = span - values.length;
+        const at = values.map((value, i) => ({
+            x: round(((first + i) / (span - 1)) * 100),
+            y: round(100 - (Math.min(top, Math.max(min, value)) - min) / range * 100),
+        }));
+        const points = at.map((p) => `${p.x},${p.y}`).join(" ");
+        return {
+            color: resolveColor(series.color ?? PALETTE[index % PALETTE.length]) as string,
+            // one reading is not a line yet
+            points: at.length > 1 ? points : "",
+            area: at.length > 1 ? `M${at[0].x},100 L${points.replaceAll(" ", " L")} L${at[at.length - 1].x},100 Z` : "",
+        };
+    });
+}
+
 /**
- * Parts of a whole, as a donut or a bar. Pair it with PaperChartLegend,
- * given the same segments, when the parts need naming.
+ * A small chart: parts of a whole as a donut or a bar, or readings over
+ * time as a line. Pair a donut or bar with PaperChartLegend, given the same
+ * segments, when the parts need naming.
  */
 export function PaperChart(props: PaperChartProps) {
+    return (
+        <Show when={props.type === "line"} fallback={<PartsChart {...(props as PaperChartPartsProps)} />}>
+            <LineChart {...(props as PaperChartLineProps)} />
+        </Show>
+    );
+}
+
+function LineChart(props: PaperChartLineProps) {
+    const [local, rest] = splitProps(props, ["type", "series", "min", "max", "span", "fill", "label", "class"]);
+    const name = () => {
+        const readings = local.series
+            .map((s) => ({ label: s.label, detail: s.detail ?? s.values.filter((v) => Number.isFinite(v)).at(-1) }))
+            .filter((r) => r.detail !== undefined)
+            .map((r) => `${r.label} ${r.detail}`);
+        return readings.length > 0 ? `${local.label}: ${readings.join(", ")}` : local.label;
+    };
+    const className = () => [styles.PaperChart, styles.line, local.class].filter(Boolean).join(" ");
+    return (
+        <div {...rest} role="img" aria-label={name()} class={className()}>
+            {/* stretched to the box it is given; strokes keep their width */}
+            <svg class={styles.plot} viewBox="0 0 100 100" preserveAspectRatio="none">
+                <For each={linesOf(props)}>
+                    {(line) => (
+                        <Show when={line.points}>
+                            <Show when={local.fill}>
+                                <path class={styles.area} d={line.area} style={{ fill: line.color }} />
+                            </Show>
+                            <polyline class={styles.stroke} points={line.points} style={{ stroke: line.color }} />
+                        </Show>
+                    )}
+                </For>
+            </svg>
+        </div>
+    );
+}
+
+function PartsChart(props: PaperChartPartsProps) {
     const [local, rest] = splitProps(props, [
         "type",
         "segments",
