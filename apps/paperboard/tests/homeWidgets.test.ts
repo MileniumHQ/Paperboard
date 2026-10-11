@@ -42,6 +42,15 @@ describe("usage chart", () => {
         expect(chart?.segments.find((s) => s.key === "other")?.fraction).toBeCloseTo(0.2);
     });
 
+    it("names each owner's CPU beside its memory", () => {
+        const memory = usageChart(report([["a", 2, 10]]), "memory", name);
+        const cpuOf = (key: string) => memory?.segments.find((s) => s.key === key)?.cpu;
+        expect([cpuOf("a"), cpuOf("paperboard"), cpuOf("other")]).toEqual(["10%", "5%", "20%"]);
+        expect(memory?.free.cpu).toBeUndefined();
+        expect(usageChart(report([["a", 2, 10]]), "cpu", name)?.segments.some((s) => s.cpu)).toBe(false);
+        expect(usageChart(report([["a", 2, 10]], { cpu: null }), "memory", name)?.segments.some((s) => s.cpu)).toBe(false);
+    });
+
     it("has nothing to draw for CPU before it was measured", () => {
         expect(usageChart(report([], { cpu: null }), "cpu", name)).toBeNull();
         expect(usageChart(report([], { cpu: null }), "memory", name)).not.toBeNull();

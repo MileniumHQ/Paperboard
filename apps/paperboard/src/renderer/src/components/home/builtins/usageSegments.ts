@@ -12,6 +12,8 @@ export interface Segment {
     /** the reading as people say it: "1.2 GB", "14%" */
     detail: string;
     color: string;
+    /** on the Memory chart, the same owner's CPU share, when it was measured */
+    cpu?: string;
 }
 
 export interface UsageChart {
@@ -73,21 +75,26 @@ export function usageChart(report: UsageReport, metric: UsageMetric, panelName: 
     const amount = (group: { memoryBytes: number; cpuPercent: number | null }) =>
         metric === "memory" ? group.memoryBytes : (group.cpuPercent ?? 0);
     const detail = (value: number) => (metric === "memory" ? formatBytes(value) : formatPercent(value / 100));
+    const cpuOf = (percent: number | null | undefined) =>
+        metric === "memory" && cpu && percent != null ? { cpu: formatPercent(percent / 100) } : {};
+    const cpuSum = (groups: Array<{ cpuPercent: number | null }>) =>
+        groups.some((g) => g.cpuPercent !== null) ? groups.reduce((sum, g) => sum + (g.cpuPercent ?? 0), 0) : null;
 
     const panels = report.groups.filter((g) => g.kind === "panel");
     const colorOf = new Map([...panels].sort((a, b) => a.id.localeCompare(b.id)).map((g, i) => [g.id, PANEL_COLORS[i % PANEL_COLORS.length]]));
     const ranked = [...panels].sort((a, b) => amount(b) - amount(a));
     const raw: Array<Omit<Segment, "fraction"> & { value: number }> = ranked
         .slice(0, MAX_PANEL_SEGMENTS)
-        .map((g) => ({ key: g.id, label: panelName(g.id), value: amount(g), detail: detail(amount(g)), color: colorOf.get(g.id) as string }));
-    const more = ranked.slice(MAX_PANEL_SEGMENTS).reduce((sum, g) => sum + amount(g), 0);
-    if (more > 0) raw.push({ key: "more-panels", label: "Other panels", value: more, detail: detail(more), color: MORE_PANELS_COLOR });
+        .map((g) => ({ key: g.id, label: panelName(g.id), value: amount(g), detail: detail(amount(g)), color: colorOf.get(g.id) as string, ...cpuOf(g.cpuPercent) }));
+    const rest = ranked.slice(MAX_PANEL_SEGMENTS);
+    const more = rest.reduce((sum, g) => sum + amount(g), 0);
+    if (more > 0) raw.push({ key: "more-panels", label: "Other panels", value: more, detail: detail(more), color: MORE_PANELS_COLOR, ...cpuOf(cpuSum(rest)) });
     const paperboard = report.groups.find((g) => g.kind === "paperboard");
     if (paperboard) {
-        raw.push({ key: "paperboard", label: "Paperboard", value: amount(paperboard), detail: detail(amount(paperboard)), color: PAPERBOARD_COLOR });
+        raw.push({ key: "paperboard", label: "Paperboard", value: amount(paperboard), detail: detail(amount(paperboard)), color: PAPERBOARD_COLOR, ...cpuOf(paperboard.cpuPercent) });
     }
     const other = metric === "memory" ? report.memory.otherBytes : (cpu?.otherPercent ?? 0);
-    raw.push({ key: "other", label: "Other apps", value: other, detail: detail(other), color: OTHER_COLOR });
+    raw.push({ key: "other", label: "Other apps", value: other, detail: detail(other), color: OTHER_COLOR, ...cpuOf(cpu?.otherPercent) });
 
     const freeValue = metric === "memory" ? report.memory.availableBytes : (cpu?.idlePercent ?? 0);
     const freeFraction = Math.min(1, Math.max(0, freeValue / total));

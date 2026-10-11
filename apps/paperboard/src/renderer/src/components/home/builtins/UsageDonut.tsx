@@ -1,18 +1,15 @@
 import { PaperButton, PaperChart, PaperChartLegend, PaperText, type PaperChartSegment } from "@mileniumhq/paperui";
-import { type Component, createMemo, Show } from "solid-js";
+import { type Component, createMemo, createSignal, onCleanup, Show } from "solid-js";
 import type { BuiltinWidgetProps } from "./types";
 import { USAGE_HISTORY_SAMPLES, useUsage } from "./usageStore";
 import { formatBytes, formatPercent, type Segment, usageChart, usedFraction, type UsageMetric } from "./usageSegments";
 import styles from "./Builtins.module.css";
 
-// the largest users a legend names before "Free"; the rest are in the chart's name
-const LEGEND_ROWS = 2;
-
 const toChart = (segment: Segment): PaperChartSegment => ({
     label: segment.label,
     value: segment.fraction,
     color: segment.color,
-    detail: segment.detail,
+    detail: segment.cpu ? `${segment.detail} · ${segment.cpu} CPU` : segment.detail,
 });
 
 // How much of a computer's CPU or memory each panel, Paperboard, and
@@ -26,9 +23,20 @@ const UsageDonut: Component<BuiltinWidgetProps & { metric: UsageMetric }> = (pro
         return state.kind === "ready" ? usageChart(state.report, props.metric, props.panelName) : null;
     });
     const slices = () => (chart()?.segments ?? []).map(toChart);
+    // the legend names as many of the largest users as its box has rows
+    // for, then "Free"; the rest are in the ring and the chart's name
+    const [rows, setRows] = createSignal(3);
+    const fitLegend = (box: HTMLDivElement) => {
+        const observer = new ResizeObserver(() => {
+            const row = box.querySelector("li")?.getBoundingClientRect().height;
+            if (row) setRows(Math.max(2, Math.floor(box.clientHeight / row)));
+        });
+        observer.observe(box);
+        onCleanup(() => observer.disconnect());
+    };
     const legend = () => {
         const c = chart();
-        return c ? [...c.segments.slice(0, LEGEND_ROWS), c.free].map(toChart) : [];
+        return c ? [...c.segments.slice(0, rows() - 1), c.free].map(toChart) : [];
     };
     // how the share in use has moved while the widget was watched
     const trend = () =>
@@ -101,8 +109,9 @@ const UsageDonut: Component<BuiltinWidgetProps & { metric: UsageMetric }> = (pro
                             <Show when={!tall()}>
                                 <PaperText size={2} weight={800} truncate>{title()}</PaperText>
                             </Show>
-                            {/* a wide tile is one row high: the ring takes its height, which leaves room for names only */}
-                            <PaperChartLegend class={styles.legend} segments={legend()} total={1} compact={!tall()} />
+                            <div ref={fitLegend} class={styles.legendBox}>
+                                <PaperChartLegend class={styles.legend} segments={legend()} total={1} />
+                            </div>
                         </div>
                     </Show>
                 </div>
