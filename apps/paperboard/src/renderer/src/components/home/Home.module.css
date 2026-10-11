@@ -26,24 +26,31 @@
     box-sizing: border-box;
 }
 
-/* the dot grid: four dots in every cell, just inside where a widget's
-   corners land, so an empty spot shows the shape of what fits there */
-.grid {
-    --dot: color-mix(in srgb, var(--paper-contrast) 22%, transparent);
-    --dot-r: 0.15625rem;
-    --dot-in: calc(var(--home-inset) + 0.625rem);
+/* the canvas takes the room its drawn size needs, so it scrolls by what
+   is seen; the grid inside is laid out at full size and drawn smaller
+   while the gallery is open */
+.stage {
     position: relative;
-    margin: 0 auto;
-    background-image:
-        radial-gradient(circle at var(--dot-in) var(--dot-in), var(--dot) var(--dot-r), transparent calc(var(--dot-r) + 0.5px)),
-        radial-gradient(circle at calc(100% - var(--dot-in)) var(--dot-in), var(--dot) var(--dot-r), transparent calc(var(--dot-r) + 0.5px)),
-        radial-gradient(circle at var(--dot-in) calc(100% - var(--dot-in)), var(--dot) var(--dot-r), transparent calc(var(--dot-r) + 0.5px)),
-        radial-gradient(
-            circle at calc(100% - var(--dot-in)) calc(100% - var(--dot-in)),
-            var(--dot) var(--dot-r),
-            transparent calc(var(--dot-r) + 0.5px)
-        );
-    background-size: var(--home-cell) var(--home-cell);
+}
+
+.grid {
+    position: absolute;
+    top: 0;
+    left: 0;
+    transform-origin: 0 0;
+}
+
+.easing {
+    transition: transform var(--paper-mid-transition) var(--paper-ease-symmetric);
+}
+
+/* the dot grid: evenly spaced, four to a cell, so an empty spot shows
+   the shape of what fits there */
+.dots {
+    --dot: color-mix(in srgb, var(--paper-contrast) 22%, transparent);
+    --dot-r: 0.125rem;
+    background-image: radial-gradient(circle, var(--dot) var(--dot-r), transparent calc(var(--dot-r) + 0.5px));
+    background-size: calc(var(--home-cell) / 2) calc(var(--home-cell) / 2);
 }
 
 .tile {
@@ -172,6 +179,7 @@
     border: var(--paper-border-width) solid var(--paper-primary);
     box-shadow: var(--paper-heavy-element-shadow);
     pointer-events: none;
+    transform-origin: 0 0;
 }
 
 .centerState {
@@ -218,38 +226,42 @@
     box-shadow: var(--paper-element-shadow);
 }
 
+/* the widget gallery floats over the canvas's right edge while Home is edited */
 .library {
-    width: var(--paper-size-split-side);
-    flex-shrink: 0;
+    position: absolute;
+    top: var(--paper-uigap);
+    right: var(--paper-uigap);
+    bottom: var(--paper-uigap);
+    z-index: 4;
+    width: min(22rem, calc(100% - var(--paper-uigap-double)));
     display: flex;
     flex-direction: column;
-    background: var(--paper-surface-inset);
-    border-left: var(--paper-border-width) solid var(--paper-border);
-    min-height: 0;
+    box-sizing: border-box;
+    background: var(--paper-surface);
+    border: var(--paper-border-width) solid var(--paper-border);
+    border-radius: var(--paper-border-radius);
+    box-shadow: var(--paper-heavy-element-shadow);
+    overflow: hidden;
 }
 
 .libraryHeader {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    min-height: var(--paper-size-bar);
-    box-sizing: border-box;
-    padding: 0 var(--paper-uigap);
-    border-bottom: var(--paper-border-width) solid var(--paper-border);
+    gap: var(--paper-uigap-half);
+    padding: var(--paper-uigap) var(--paper-uigap) var(--paper-uigap-half);
 }
 
-.libraryList {
+.libraryTitle {
     flex: 1;
-    overflow-y: auto;
-    padding: var(--paper-uigap);
+    min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: var(--paper-uigap);
 }
 
-.libraryComputer {
-    text-transform: uppercase;
-    margin-top: var(--paper-uigap-half);
+.libraryTitle > * {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .libraryNote {
@@ -257,7 +269,26 @@
     flex-direction: column;
     align-items: flex-start;
     gap: var(--paper-uigap-onefourth);
+    margin: 0 var(--paper-uigap);
     padding: var(--paper-uigap-half) var(--paper-uigap);
+    border-radius: var(--paper-border-radius-half);
+    background: var(--paper-surface-inset);
+}
+
+.libraryList {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: var(--paper-uigap-half) var(--paper-uigap) var(--paper-uigap);
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap-half);
+}
+
+.libraryComputer {
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-top: var(--paper-uigap-half);
 }
 
 .libraryItemText {
@@ -273,14 +304,16 @@
     align-items: center;
     gap: var(--paper-uigap);
     width: 100%;
-    padding: var(--paper-uigap-half) var(--paper-uigap);
+    box-sizing: border-box;
+    padding: var(--paper-uigap-threefourths);
     border-radius: var(--paper-border-radius);
-    border: var(--paper-border-width) solid var(--paper-border);
+    border: var(--paper-border-width) solid var(--paper-border-subtle);
     background: var(--paper-surface-raised);
     color: var(--paper-text);
     font: inherit;
     text-align: left;
     cursor: pointer;
+    transition: border-color var(--paper-short-transition) var(--paper-ease-symmetric);
 }
 
 .sourceRow:hover {
@@ -288,15 +321,20 @@
 }
 
 .sourceRow:focus-visible,
-.preview:focus-visible,
-.chip:focus-visible {
+.preview:focus-visible {
     outline: var(--paper-focus-ring);
     outline-offset: var(--paper-focus-offset);
 }
 
 .sourceIcon {
     display: flex;
+    align-items: center;
+    justify-content: center;
     flex-shrink: 0;
+    width: var(--paper-control-size-small);
+    height: var(--paper-control-size-small);
+    border-radius: var(--paper-border-radius-half);
+    background: color-mix(in srgb, var(--paper-primary) 14%, transparent);
     color: var(--paper-primary);
 }
 
@@ -306,25 +344,38 @@
     white-space: nowrap;
 }
 
-.sourceTitle {
+.sourceChevron {
     display: flex;
-    align-items: center;
-    gap: var(--paper-uigap-half);
-    color: var(--paper-primary);
+    color: var(--paper-text-faint);
 }
 
-/* one widget: its live preview, what it is, and its sizes */
+/* one widget: what it is, its live preview on a patch of Home, and its sizes */
 .widgetCard {
     display: flex;
     flex-direction: column;
-    gap: var(--paper-uigap-half);
+    gap: var(--paper-uigap-threefourths);
     padding: var(--paper-uigap);
     border-radius: var(--paper-border-radius);
-    background: var(--paper-surface);
+    background: var(--paper-surface-raised);
     border: var(--paper-border-width) solid var(--paper-border-subtle);
 }
 
+.widgetCardText {
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap-onefourth);
+}
+
 .previewStage {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--paper-uigap-half);
+    border-radius: var(--paper-border-radius-half);
+    background: var(--paper-surface-sunken);
+}
+
+.previewPatch {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -338,7 +389,7 @@
     border-radius: var(--paper-border-radius);
     cursor: grab;
     touch-action: none;
-    transition: transform 0.15s ease;
+    transition: transform var(--paper-short-transition) var(--paper-ease-symmetric);
 }
 
 .preview:hover:not(:disabled) {
@@ -351,10 +402,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .preview {
-        transition: none;
-    }
-
     .preview:hover:not(:disabled) {
         transform: none;
     }
@@ -380,7 +427,7 @@
     box-shadow: var(--paper-element-shadow);
     font-size: var(--paper-text-size-2);
     opacity: 0;
-    transition: opacity 0.15s ease;
+    transition: opacity var(--paper-short-transition) var(--paper-ease-symmetric);
 }
 
 .preview:hover .addBadge,
@@ -388,37 +435,10 @@
     opacity: 1;
 }
 
-.widgetCardText {
-    display: flex;
-    flex-direction: column;
-    text-align: center;
-}
-
 .chipRow {
     display: flex;
     flex-wrap: wrap;
-    justify-content: center;
     gap: var(--paper-uigap-half);
-}
-
-.chip {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--paper-uigap-half);
-    padding: var(--paper-uigap-onefourth) var(--paper-uigap-half);
-    border-radius: var(--paper-border-radius-half);
-    border: var(--paper-border-width) solid var(--paper-border);
-    background: var(--paper-surface-raised);
-    color: var(--paper-text-subtle);
-    font: inherit;
-    font-size: var(--paper-text-size-1);
-    cursor: pointer;
-}
-
-.chip[aria-pressed="true"] {
-    border-color: var(--paper-primary);
-    color: var(--paper-primary-deep);
-    background: color-mix(in srgb, var(--paper-primary) 12%, var(--paper-surface-raised));
 }
 
 /* the size, drawn as its shape */

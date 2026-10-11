@@ -8,6 +8,7 @@ import {
     columnOrigin,
     computeGeometry,
     findFreeSpot,
+    fitCanvas,
     MAX_CELL,
     MIN_CELL,
     parseHomeLayout,
@@ -87,6 +88,27 @@ describe("geometry", () => {
 
     it("draws every column in use even when fewer fit", () => {
         expect(computeGeometry(4 * MIN_CELL, [item({ column: 2 })]).columns).toBe(3);
+    });
+});
+
+describe("fitCanvas", () => {
+    // editing Home opens the gallery over part of it: the canvas is drawn
+    // smaller in the room that's left, and its layout is not recomputed
+    it("draws the canvas at full size, centered, when it fits", () => {
+        expect(fitCanvas(800, 1000)).toEqual({ scale: 1, left: 100 });
+    });
+
+    it("draws it smaller, from the left edge, when the room is narrower", () => {
+        expect(fitCanvas(1200, 900)).toEqual({ scale: 0.75, left: 0 });
+    });
+
+    it("stops shrinking at a size that can still be read", () => {
+        expect(fitCanvas(1200, 120)).toEqual({ scale: 0.4, left: 0 });
+        expect(fitCanvas(1200, -50)).toEqual({ scale: 0.4, left: 0 });
+    });
+
+    it("has nothing to scale before Home is measured", () => {
+        expect(fitCanvas(0, 0)).toEqual({ scale: 1, left: 0 });
     });
 });
 

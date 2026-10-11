@@ -19,6 +19,7 @@ import {
     COLUMN_CELLS,
     computeGeometry,
     findFreeSpot,
+    fitCanvas,
     HOME_LAYOUT_COMPUTER,
     HOME_LAYOUT_ID,
     MAX_HOME_ITEMS,
@@ -52,6 +53,8 @@ const SAVE_DEBOUNCE_MS = 250;
 const DRAG_THRESHOLD_PX = 4;
 const AUTOSCROLL_EDGE_PX = 48;
 const AUTOSCROLL_STEP_PX = 16;
+// how long the canvas takes to shrink and grow; matches the gallery's slide
+const EDIT_EASE_MS = 300;
 
 type DragSource =
     | { kind: "new"; entry: LibraryEntry }
@@ -90,7 +93,18 @@ const HomeView: Component<HomeViewProps> = (props) => {
     );
     const [loadState, setLoadState] = createSignal<"loading" | "ready" | { error: string }>("loading");
     const [saveError, setSaveError] = createSignal<string | null>(null);
-    const [editing, setEditing] = createSignal(false);
+    const [editing, setEditingNow] = createSignal(false);
+    // the canvas eases only while it changes size for the gallery, so a
+    // window resize still tracks the window exactly
+    const [easing, setEasing] = createSignal(false);
+    let easeTimer: ReturnType<typeof setTimeout> | undefined;
+    const setEditing = (next: boolean) => {
+        if (next === editing()) return;
+        setEasing(true);
+        clearTimeout(easeTimer);
+        easeTimer = setTimeout(() => setEasing(false), EDIT_EASE_MS);
+        setEditingNow(next);
+    };
     const [selectedId, setSelectedId] = createSignal<string | null>(null);
     const [drag, setDrag] = createSignal<DragState | null>(null);
     const [viewport, setViewport] = createSignal({ width: 0, height: 0 });
@@ -98,6 +112,7 @@ const HomeView: Component<HomeViewProps> = (props) => {
     const [suspended, setSuspended] = createSignal(false);
     const queue = createLoadQueue(CONCURRENT_LOADS);
 
+    const [galleryWidth, setGalleryWidth] = createSignal(0);
     let scroller: HTMLDivElement | undefined;
     let grid: HTMLDivElement | undefined;
     const tileElements = new Map<string, HTMLDivElement>();
@@ -159,17 +174,23 @@ const HomeView: Component<HomeViewProps> = (props) => {
     };
 
     // ── geometry ─────────────────────────────────────────────────────────
+    // the layout is always the full window's; the gallery only changes how
+    // big it is drawn
     const geometry = createMemo(() => computeGeometry(viewport().width, items()));
+    const gridWidth = () => geometry().fit * COLUMN_CELLS * geometry().cell;
+    const galleryOpen = () => editing() && loadState() === "ready";
+    const fitted = createMemo(() => fitCanvas(gridWidth(), viewport().width - (galleryOpen() ? galleryWidth() : 0)));
+    const scale = () => fitted().scale;
+    const gridLeft = () => fitted().left;
     const rows = createMemo(() => {
         const g = geometry();
         const r = bandRows(items(), g, editing() ? 1 : 0);
         // the last band runs to the bottom of the window so the dots do too
         const above = r.slice(0, -1).reduce((sum, n) => sum + n, 0);
-        const fill = Math.floor(viewport().height / g.cell) - above;
+        const fill = Math.floor(viewport().height / (g.cell * scale())) - above;
         r[r.length - 1] = Math.max(r[r.length - 1], fill);
         return r;
     });
-    const gridWidth = () => geometry().fit * COLUMN_CELLS * geometry().cell;
     const gridHeight = () => rows().reduce((sum, n) => sum + n, 0) * geometry().cell;
     const inset = () => Math.round(geometry().cell * 0.06);
 
@@ -357,6 +378,7 @@ const HomeView: Component<HomeViewProps> = (props) => {
     onCleanup(() => {
         clearTimeout(saveTimer);
         clearTimeout(suspendTimer);
+        clearTimeout(easeTimer);
         for (const timer of offscreenTimers.values()) clearTimeout(timer);
         offscreenTimers.clear();
         tileElements.clear();
@@ -408,8 +430,9 @@ const HomeView: Component<HomeViewProps> = (props) => {
         if (!d?.started || !grid) return null;
         const g = geometry();
         const rect = grid.getBoundingClientRect();
-        const left = d.pointer.x - rect.left - d.grab.x * g.cell;
-        const top = d.pointer.y - rect.top - d.grab.y * g.cell;
+        // the grid may be drawn smaller than it is laid out
+        const left = (d.pointer.x - rect.left) / scale() - d.grab.x * g.cell;
+        const top = (d.pointer.y - rect.top) / scale() - d.grab.y * g.cell;
         const p = snapToGrid(left, top, d.size, g, rows());
         if (!p) return null;
         const ignore = d.source.kind === "move" ? d.source.itemId : undefined;
@@ -487,8 +510,8 @@ const HomeView: Component<HomeViewProps> = (props) => {
         const rect = el.getBoundingClientRect();
         const cell = geometry().cell;
         beginDrag(event, { kind: "move", itemId: item.id }, labelOf(item), sizeOf(item), {
-            x: (event.clientX - rect.left + inset()) / cell,
-            y: (event.clientY - rect.top + inset()) / cell,
+            x: ((event.clientX - rect.left) / scale() + inset()) / cell,
+            y: ((event.clientY - rect.top) / scale() + inset()) / cell,
         });
     };
 
@@ -544,11 +567,13 @@ const HomeView: Component<HomeViewProps> = (props) => {
         return {
             name: d.name,
             size: d.size,
+            // laid out at its real size and drawn at the canvas's, like the tiles
             style: {
-                left: `${d.pointer.x - d.grab.x * g.cell + inset()}px`,
-                top: `${d.pointer.y - d.grab.y * g.cell + inset()}px`,
+                left: `${d.pointer.x - (d.grab.x * g.cell - inset()) * scale()}px`,
+                top: `${d.pointer.y - (d.grab.y * g.cell - inset()) * scale()}px`,
                 width: `${d.size.w * g.cell - inset() * 2}px`,
                 height: `${d.size.h * g.cell - inset() * 2}px`,
+                transform: `scale(${scale()})`,
             },
         };
     };
@@ -598,14 +623,16 @@ const HomeView: Component<HomeViewProps> = (props) => {
                     class={styles.scroller}
                     classList={{ [styles.editing]: editing(), [styles.dragging]: !!drag()?.started }}
                 >
+                    <div class={styles.stage} style={{ height: `${gridHeight() * scale()}px` }}>
                     <div
                         ref={grid}
-                        class={styles.grid}
+                        class={`${styles.grid} ${styles.dots}`}
+                        classList={{ [styles.easing]: easing() }}
                         style={{
                             width: `${gridWidth()}px`,
                             height: `${gridHeight()}px`,
+                            transform: `translateX(${gridLeft()}px) scale(${scale()})`,
                             "--home-cell": `${geometry().cell}px`,
-                            "--home-inset": `${inset()}px`,
                         }}
                     >
                         <Show when={loadState() === "ready"}>
@@ -660,6 +687,7 @@ const HomeView: Component<HomeViewProps> = (props) => {
                             )}
                         </Show>
                     </div>
+                    </div>
                 </div>
 
                 <Show when={loadState() === "ready" && items().length === 0 && !editing()}>
@@ -702,8 +730,9 @@ const HomeView: Component<HomeViewProps> = (props) => {
                 </Show>
             </div>
 
-            <PaperPresence when={editing() && loadState() === "ready"} motion="slide-end">
+            <PaperPresence when={galleryOpen()} motion="slide-end">
                 <WidgetLibrary
+                    onWidth={setGalleryWidth}
                     computers={props.computers}
                     panelsByComputer={props.panelsByComputer}
                     panelsLoadFailed={props.panelsLoadFailed}

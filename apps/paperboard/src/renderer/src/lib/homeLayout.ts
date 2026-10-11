@@ -164,6 +164,18 @@ export function computeGeometry(width: number, items: HomeItem[]): HomeGeometry 
     return { fit, cell, columns: Math.min(MAX_COLUMNS, Math.max(fit, used)) };
 }
 
+/**
+ * How the canvas is drawn in `room` px of width: at full size when it fits,
+ * otherwise smaller, down to MIN_CANVAS_SCALE, and centered in what's left.
+ * Opening the gallery takes room from Home without rearranging it.
+ */
+export const MIN_CANVAS_SCALE = 0.4;
+export function fitCanvas(gridWidth: number, room: number): { scale: number; left: number } {
+    const space = Math.max(room, 0);
+    const scale = gridWidth > 0 ? Math.min(1, Math.max(MIN_CANVAS_SCALE, space / gridWidth)) : 1;
+    return { scale, left: Math.max(0, (space - gridWidth * scale) / 2) };
+}
+
 /** Rows each band of columns needs: its tallest column, plus `extra`. */
 export function bandRows(items: HomeItem[], geometry: HomeGeometry, extra: number): number[] {
     const bands = Math.ceil(geometry.columns / geometry.fit);

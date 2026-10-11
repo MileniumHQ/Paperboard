@@ -1,5 +1,5 @@
-import { PaperButton, PaperIcon, PaperText } from "@mileniumhq/paperui";
-import { type Component, createMemo, createSignal, For, type JSX, Show } from "solid-js";
+import { PaperButton, PaperChip, PaperIcon, PaperText } from "@mileniumhq/paperui";
+import { type Component, createMemo, createSignal, For, type JSX, onCleanup, onMount, Show } from "solid-js";
 import { parseWidgetSize, type PanelItem, type WidgetDeclaration } from "@mileniumhq/paperapi";
 import { type ComputerInfo, panelUrl } from "../../lib/shell";
 import type { LoadQueue } from "../../lib/loadQueue";
@@ -23,7 +23,7 @@ export function sizeLabel(size: string): string {
 // previews are the real widget, drawn at Home's cell size and scaled to this
 // previews fill the card's width, up to a cell this big
 const PREVIEW_CELL = 88;
-const PREVIEW_WIDTH = 256;
+const PREVIEW_WIDTH = 288;
 
 type Source =
     | { key: "paperboard"; kind: "builtin" }
@@ -43,12 +43,15 @@ export interface WidgetLibraryProps {
     onStartDrag: (entry: LibraryEntry, event: PointerEvent) => void;
     onAdd: (entry: LibraryEntry) => void;
     onDone: () => void;
+    /** the room the gallery takes from Home's right edge, in px */
+    onWidth: (px: number) => void;
 }
 
-// The widget gallery, on the right while Home is being edited: first
-// where widgets come from (Paperboard, then each panel), then that
+// The widget gallery, floating on the right while Home is being edited:
+// first where widgets come from (Paperboard, then each panel), then that
 // source's widgets as live previews. Pick a size, then drag a preview onto
-// Home or press it to drop it in the first free spot.
+// Home or press it to drop it in the first free spot. With one source
+// there is nothing to choose, so its widgets are shown straight away.
 const WidgetLibrary: Component<WidgetLibraryProps> = (props) => {
     const [openKey, setOpenKey] = createSignal<string | null>(null);
     const localId = () => props.computers.find((c) => c.isLocal)?.id ?? props.computers[0]?.id ?? "local";
@@ -63,16 +66,17 @@ const WidgetLibrary: Component<WidgetLibraryProps> = (props) => {
         (props.panelsByComputer[computer.id] ?? [])
             .filter((panel) => (panel.widgets?.length ?? 0) > 0)
             .map((panel) => ({ key: `${computer.id}::${panel.id}`, kind: "panel" as const, computer, panel }));
+    const sources = createMemo<Source[]>(() => [{ key: "paperboard", kind: "builtin" }, ...props.computers.flatMap(panelSources)]);
+    const choosing = () => sources().length > 1 || props.computers.some((c) => props.panelsLoadFailed[c.id]);
     const open = createMemo<Source | null>(() => {
-        const key = openKey();
-        if (!key) return null;
-        if (key === "paperboard") return { key: "paperboard", kind: "builtin" };
-        for (const computer of props.computers) {
-            const found = panelSources(computer).find((s) => s.key === key);
-            if (found) return found;
-        }
-        return null;
+        if (!choosing()) return sources()[0];
+        return sources().find((s) => s.key === openKey()) ?? null;
     });
+    const openName = () => {
+        const source = open();
+        return source?.kind === "panel" ? source.panel.name : "Paperboard";
+    };
+    let root: HTMLElement | undefined;
     let backButton: HTMLButtonElement | undefined;
     let listTop: HTMLDivElement | undefined;
     const openSource = (key: string) => {
@@ -86,23 +90,36 @@ const WidgetLibrary: Component<WidgetLibraryProps> = (props) => {
         queueMicrotask(() => listTop?.querySelector<HTMLElement>(`[data-source="${CSS.escape(key ?? "")}"]`)?.focus());
     };
 
+    onMount(() => {
+        if (!root) return;
+        const el = root;
+        const report = () => props.onWidth(el.offsetWidth + parseFloat(getComputedStyle(el).right));
+        const resize = new ResizeObserver(report);
+        resize.observe(el);
+        report();
+        onCleanup(() => resize.disconnect());
+    });
+
     return (
-        <aside class={styles.library} aria-label="Widget gallery">
+        <aside ref={root} class={styles.library} aria-label="Widget gallery">
             <div class={styles.libraryHeader}>
-                <Show
-                    when={open()}
-                    fallback={<PaperText size={3} weight={800}>Widgets</PaperText>}
-                >
-                    <PaperButton ref={backButton} size="small" variant="text" onClick={closeSource} aria-label="Back to all widgets">
-                        <PaperIcon>arrow_back</PaperIcon> Widgets
+                <Show when={choosing() && open()}>
+                    <PaperButton ref={backButton} size="small" variant="text" icon onClick={closeSource} aria-label="Back to all widgets">
+                        arrow_back
                     </PaperButton>
                 </Show>
+                <div class={styles.libraryTitle}>
+                    <PaperText size={3} weight={800}>{choosing() && open() ? openName() : "Add widgets"}</PaperText>
+                    <PaperText size={1} color="text-subtle">
+                        {open() ? "Drag onto Home, or click to add" : "Choose where a widget comes from"}
+                    </PaperText>
+                </div>
                 <PaperButton size="small" variant="primary" onClick={props.onDone}>Done</PaperButton>
             </div>
             <Show when={props.full}>
-                <PaperText size={1} color="text-subtle" class={styles.libraryNote}>
-                    Home is full. Remove a widget to add another.
-                </PaperText>
+                <div class={styles.libraryNote}>
+                    <PaperText size={1} color="text-subtle">Home is full. Remove a widget to add another.</PaperText>
+                </div>
             </Show>
 
             <Show
@@ -125,7 +142,7 @@ const WidgetLibrary: Component<WidgetLibraryProps> = (props) => {
                                         </PaperText>
                                     </Show>
                                     <Show when={props.panelsLoadFailed[computer.id]}>
-                                        <div class={styles.libraryNote}>
+                                        <div class={styles.libraryNote} role="alert">
                                             <PaperText size={1} color="text-subtle">Couldn't load widgets from {computer.name}.</PaperText>
                                             <PaperButton size="tiny" variant="text" onClick={() => props.onRetry(computer.id)}>Retry</PaperButton>
                                         </div>
@@ -152,30 +169,13 @@ const WidgetLibrary: Component<WidgetLibraryProps> = (props) => {
             >
                 {(source) => (
                     <div class={styles.libraryList}>
-                        <div class={styles.sourceTitle}>
-                            <Show
-                                when={source().kind === "panel" ? (source() as Extract<Source, { kind: "panel" }>) : null}
-                                fallback={<PaperIcon>widgets</PaperIcon>}
-                            >
-                                {(s) => <PanelIcon computerId={s().computer.id} panel={s().panel} />}
-                            </Show>
-                            <PaperText size={4} weight={800}>
-                                {source().kind === "panel" ? (source() as Extract<Source, { kind: "panel" }>).panel.name : "Paperboard"}
-                            </PaperText>
-                        </div>
-                        <PaperText size={1} color="text-subtle">Pick a size, then drag a widget onto Home or click it to add it.</PaperText>
                         <Show when={source().kind === "builtin" && props.computers.length > 1}>
                             <div class={styles.chipRow} role="group" aria-label="CPU and Memory show">
                                 <For each={props.computers}>
                                     {(computer) => (
-                                        <button
-                                            type="button"
-                                            class={styles.chip}
-                                            aria-pressed={builtinComputer() === computer.id}
-                                            onClick={() => setChosenComputer(computer.id)}
-                                        >
+                                        <PaperChip selected={builtinComputer() === computer.id} onClick={() => setChosenComputer(computer.id)}>
                                             {computer.name}
-                                        </button>
+                                        </PaperChip>
                                     )}
                                 </For>
                             </div>
@@ -223,7 +223,9 @@ const SourceRow: Component<{ key: string; icon: JSX.Element; name: string; detai
             <PaperText size={2} weight={700}>{props.name}</PaperText>
             <PaperText size={1} color="text-subtle" class={styles.sourceDetail}>{props.detail}</PaperText>
         </span>
-        <PaperIcon aria-hidden="true">chevron_right</PaperIcon>
+        <span class={styles.sourceChevron} aria-hidden="true">
+            <PaperIcon>chevron_right</PaperIcon>
+        </span>
     </button>
 );
 
@@ -241,8 +243,9 @@ const WidgetCard: Component<WidgetLibraryProps & { widget: WidgetDeclaration; en
     const [size, setSize] = createSignal(props.widget.sizes[0]);
     const parsed = () => parseWidgetSize(size()) ?? { w: 1, h: 1 };
     const tallest = () => Math.max(...props.widget.sizes.map((s) => parseWidgetSize(s)?.h ?? 1));
+    const widest = () => Math.max(...props.widget.sizes.map((s) => parseWidgetSize(s)?.w ?? 1));
     const entry = () => props.entryAt(size());
-    const previewCell = () => Math.min(PREVIEW_CELL, PREVIEW_WIDTH / Math.max(...props.widget.sizes.map((s) => parseWidgetSize(s)?.w ?? 1)));
+    const previewCell = () => Math.min(PREVIEW_CELL, PREVIEW_WIDTH / widest());
     const scale = () => previewCell() / props.cell;
     const real = () => ({ w: parsed().w * props.cell - props.inset * 2, h: parsed().h * props.cell - props.inset * 2 });
     const previewId = `preview-${crypto.randomUUID()}`;
@@ -251,7 +254,22 @@ const WidgetCard: Component<WidgetLibraryProps & { widget: WidgetDeclaration; en
 
     return (
         <section class={styles.widgetCard} aria-label={props.widget.name}>
-            <div class={styles.previewStage} style={{ height: `${tallest() * previewCell()}px` }}>
+            <div class={styles.widgetCardText}>
+                <PaperText size={2} weight={700}>{props.widget.name}</PaperText>
+                <Show when={props.widget.description}>
+                    <PaperText size={1} color="text-subtle">{props.widget.description}</PaperText>
+                </Show>
+            </div>
+            <div class={styles.previewStage}>
+                {/* a patch of Home as big as the widget's largest size, so sizes compare */}
+                <div
+                    class={`${styles.previewPatch} ${styles.dots}`}
+                    style={{
+                        width: `${widest() * previewCell()}px`,
+                        height: `${tallest() * previewCell()}px`,
+                        "--home-cell": `${previewCell()}px`,
+                    }}
+                >
                 <button
                     type="button"
                     class={styles.preview}
@@ -311,12 +329,7 @@ const WidgetCard: Component<WidgetLibraryProps & { widget: WidgetDeclaration; en
                         <PaperIcon>add</PaperIcon>
                     </span>
                 </button>
-            </div>
-            <div class={styles.widgetCardText}>
-                <PaperText size={2} weight={700}>{props.widget.name}</PaperText>
-                <Show when={props.widget.description}>
-                    <PaperText size={1} color="text-subtle">{props.widget.description}</PaperText>
-                </Show>
+                </div>
             </div>
             <Show when={props.widget.sizes.length > 1}>
                 <div class={styles.chipRow} role="group" aria-label={`${props.widget.name} size`}>
@@ -324,20 +337,20 @@ const WidgetCard: Component<WidgetLibraryProps & { widget: WidgetDeclaration; en
                         {(option) => {
                             const shape = parseWidgetSize(option) ?? { w: 1, h: 1 };
                             return (
-                                <button
-                                    type="button"
-                                    class={styles.chip}
-                                    aria-pressed={size() === option}
+                                <PaperChip
+                                    selected={size() === option}
                                     aria-label={sizeLabel(option)}
                                     onClick={() => setSize(option)}
+                                    icon={
+                                        <span
+                                            class={styles.sizeGlyph}
+                                            style={{ width: `${shape.w * 0.375}rem`, height: `${shape.h * 0.375}rem` }}
+                                            aria-hidden="true"
+                                        />
+                                    }
                                 >
-                                    <span
-                                        class={styles.sizeGlyph}
-                                        style={{ width: `${shape.w * 0.375}rem`, height: `${shape.h * 0.375}rem` }}
-                                        aria-hidden="true"
-                                    />
                                     {sizeLabel(option)}
-                                </button>
+                                </PaperChip>
                             );
                         }}
                     </For>
