@@ -1,0 +1,282 @@
+.home {
+    flex: 1;
+    min-width: 0;
+    height: 100%;
+    position: relative;
+    overflow: hidden;
+    background: var(--paper-surface-sunken);
+}
+
+.canvasArea {
+    flex: 1;
+    min-width: 0;
+    position: relative;
+    display: flex;
+}
+
+.scroller {
+    flex: 1;
+    overflow-x: hidden;
+    overflow-y: auto;
+    /* a scrollbar appearing must not shrink the grid and reflow it */
+    scrollbar-gutter: stable;
+    padding: var(--paper-uigap-double);
+    /* the grid starts below the toolbar so the Edit Home button never covers a widget */
+    padding-top: var(--paper-size-bar);
+    box-sizing: border-box;
+}
+
+/* the dot grid: Actions' dots, twice the size, one in the middle of every cell */
+.grid {
+    position: relative;
+    margin: 0 auto;
+    background-image: radial-gradient(
+        circle,
+        color-mix(in srgb, var(--paper-contrast) 22%, transparent) 0.1875rem,
+        transparent calc(0.1875rem + 0.5px)
+    );
+    background-size: var(--home-cell) var(--home-cell);
+}
+
+.tile {
+    position: absolute;
+    box-sizing: border-box;
+}
+
+.card {
+    position: absolute;
+    inset: 0;
+    border-radius: var(--paper-border-radius);
+    background: var(--paper-surface-raised);
+    border: var(--paper-border-width) solid var(--paper-border);
+    box-shadow: var(--paper-element-shadow);
+    overflow: hidden;
+}
+
+.frame {
+    width: 100%;
+    height: 100%;
+    border: none;
+    display: block;
+    background: transparent;
+}
+
+/* widget frames never take the pointer while Home is being arranged */
+.editing .frame,
+.dragging .frame {
+    pointer-events: none;
+}
+
+.lifted {
+    opacity: 0.35;
+}
+
+.selected .card {
+    outline: var(--paper-thick-border-width) solid var(--paper-primary);
+    outline-offset: var(--paper-focus-offset);
+}
+
+.tileStatus {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--paper-uigap-half);
+    padding: var(--paper-uigap);
+    text-align: center;
+    box-sizing: border-box;
+}
+
+.editOverlay {
+    position: absolute;
+    inset: 0;
+    border-radius: var(--paper-border-radius);
+    cursor: grab;
+    touch-action: none;
+    background: color-mix(in srgb, var(--paper-surface-raised) 85%, transparent);
+}
+
+.editOverlay:focus-visible {
+    outline: var(--paper-focus-ring);
+    outline-offset: var(--paper-focus-offset);
+}
+
+.dragging .editOverlay {
+    cursor: grabbing;
+}
+
+.editBar {
+    position: absolute;
+    top: var(--paper-uigap-half);
+    left: var(--paper-uigap-half);
+    right: var(--paper-uigap-half);
+    display: flex;
+    align-items: center;
+    gap: var(--paper-uigap-half);
+}
+
+.editName {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* where the widget lands: a thick outline with a see-through fill */
+.dropOutline {
+    position: absolute;
+    box-sizing: border-box;
+    border-radius: var(--paper-border-radius);
+    border: var(--paper-thickest-border-width) solid var(--paper-primary-deep);
+    background: color-mix(in srgb, var(--paper-primary) 40%, transparent);
+    pointer-events: none;
+    z-index: 2;
+}
+
+.dropInvalid {
+    border-color: var(--paper-danger-deep);
+    background: color-mix(in srgb, var(--paper-danger) 25%, transparent);
+}
+
+.ghost {
+    position: fixed;
+    z-index: 3000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    border-radius: var(--paper-border-radius);
+    background: var(--paper-surface-raised);
+    border: var(--paper-border-width) solid var(--paper-primary);
+    box-shadow: var(--paper-heavy-element-shadow);
+    pointer-events: none;
+}
+
+.centerState {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--paper-uigap);
+    text-align: center;
+    padding: var(--paper-uigap-double);
+    pointer-events: none;
+}
+
+.centerState > * {
+    pointer-events: auto;
+}
+
+.actions {
+    display: flex;
+    gap: var(--paper-uigap-half);
+}
+
+.toolbar {
+    position: absolute;
+    top: var(--paper-uigap);
+    right: var(--paper-uigap-double);
+    z-index: 3;
+}
+
+.banner {
+    position: absolute;
+    left: var(--paper-uigap);
+    bottom: var(--paper-uigap);
+    z-index: 3;
+    display: flex;
+    align-items: center;
+    gap: var(--paper-uigap-half);
+    padding: var(--paper-uigap-half) var(--paper-uigap);
+    border-radius: var(--paper-border-radius);
+    background: var(--paper-surface-raised);
+    border: var(--paper-border-width) solid var(--paper-danger);
+    box-shadow: var(--paper-element-shadow);
+}
+
+.library {
+    width: var(--paper-size-sidebar);
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--paper-surface-inset);
+    border-left: var(--paper-border-width) solid var(--paper-border);
+    min-height: 0;
+}
+
+.libraryHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--paper-uigap);
+    border-bottom: var(--paper-border-width) solid var(--paper-border);
+}
+
+.libraryList {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--paper-uigap);
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap);
+}
+
+.libraryComputer {
+    text-transform: uppercase;
+}
+
+.libraryPanel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap-half);
+}
+
+.libraryNote {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--paper-uigap-onefourth);
+    padding: var(--paper-uigap-half) var(--paper-uigap);
+}
+
+.libraryItem {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--paper-uigap-half);
+    width: 100%;
+    padding: var(--paper-uigap-half) var(--paper-uigap);
+    border-radius: var(--paper-border-radius-half);
+    border: var(--paper-border-width) solid var(--paper-border);
+    background: var(--paper-surface-raised);
+    color: var(--paper-text);
+    font: inherit;
+    text-align: left;
+    cursor: grab;
+    touch-action: none;
+}
+
+.libraryItem:hover:not(:disabled) {
+    border-color: var(--paper-primary);
+}
+
+.libraryItem:focus-visible {
+    outline: var(--paper-focus-ring);
+    outline-offset: var(--paper-focus-offset);
+}
+
+.libraryItem:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+.libraryItemText {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}

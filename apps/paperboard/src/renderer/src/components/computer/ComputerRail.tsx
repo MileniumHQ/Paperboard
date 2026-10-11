@@ -31,7 +31,7 @@ interface ComputerRailProps {
     onRetryLoad?: () => void;
 }
 
-// Left rail: computers, add-computer action, settings entry ("__settings")
+// Left rail: Home ("__home"), computers, add-computer action, settings entry ("__settings")
 const ComputerRail = (props: ComputerRailProps): JSX.Element => {
     return (
         <PaperRail
@@ -40,6 +40,15 @@ const ComputerRail = (props: ComputerRailProps): JSX.Element => {
             value={props.value}
             onValueChange={(val) => props.onSelect(String(val))}
         >
+            <PaperRailItem value="__home" icon="home" label="Home" />
+            <PaperSeparator
+                direction="vertical"
+                style={{
+                    height: "1px",
+                    width: "70%",
+                    margin: "4px auto",
+                }}
+            />
             <For each={props.computers}>
                 {(comp) => (
                     <PaperRailItem

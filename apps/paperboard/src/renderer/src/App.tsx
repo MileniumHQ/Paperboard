@@ -39,6 +39,7 @@ import ConnectionLostOverlay from "./components/computer/ConnectionLostOverlay";
 import OfflineComputerModal from "./components/computer/OfflineComputerModal";
 import ComputerRail from "./components/computer/ComputerRail";
 import ComputerContextMenu from "./components/computer/ComputerContextMenu";
+import HomeView from "./components/home/HomeView";
 import AppUpdateModal from "./components/layout/AppUpdateModal";
 import { useAppUpdate } from "./hooks/useAppUpdate";
 import TopBar from "./components/layout/TopBar";
@@ -101,15 +102,27 @@ const App: Component = () => {
     );
     const { appSettings, loadAppSettings, handleAppSettingsChange } =
         useAppSettings();
-    const [showAppSettings, setShowAppSettings] = createSignal<boolean>(false);
+    // what the main area shows: Home (where Paperboard opens), app
+    // settings, or the active computer's panels
+    const [railMode, setRailMode] = createSignal<"home" | "settings" | "computer">("home");
+    const showAppSettings = () => railMode() === "settings";
 
     const handleRailSelect = (val: string) => {
-        if (val === "__settings") {
-            setShowAppSettings(true);
+        if (val === "__home") {
+            setRailMode("home");
+        } else if (val === "__settings") {
+            setRailMode("settings");
         } else {
-            setShowAppSettings(false);
+            setRailMode("computer");
             handleComputerSelect(val);
         }
+    };
+
+    // a widget's "open panel": the panel's own computer, its own tab
+    const openPanelFromHome = (compId: string, panelId: string) => {
+        setRailMode("computer");
+        setComputerTab(compId, panelId);
+        void handleComputerSelect(compId);
     };
 
     // the ONLY reload path: PanelView builds the iframe src from this
@@ -225,9 +238,10 @@ const App: Component = () => {
         // Load application-wide settings before anything depends on them
         await loadAppSettings();
 
-        // Launch always lands on the splash, never on a panel: opening the
+        // Launch always lands on Home, never on a panel: opening the
         // last-used panel on boot made a misbehaving panel the first thing
-        // the user saw, with no deliberate action to blame.
+        // the user saw, with no deliberate action to blame. Home's widgets
+        // each fail inside their own tile.
 
         // R1: the unsubscribe is kept and torn down. shell.onChanged's
         // contract returns an unsubscribe; discarding it invites every
@@ -441,13 +455,15 @@ const App: Component = () => {
                 >
                     <ComputerRail
                         updateState={appUpdate.state()}
-                        showUpdate={!showAppSettings() && getSelectedTab(activeComputerId()) === "landing"}
+                        showUpdate={railMode() === "home" || (railMode() === "computer" && getSelectedTab(activeComputerId()) === "landing")}
                         onOpenUpdate={() => appUpdate.setOpen(true)}
                         computers={computers()}
                         value={
-                            showAppSettings()
-                                ? "__settings"
-                                : activeComputerId()
+                            railMode() === "home"
+                                ? "__home"
+                                : railMode() === "settings"
+                                  ? "__settings"
+                                  : activeComputerId()
                         }
                         onSelect={(val) => handleRailSelect(val)}
                         onAdd={() => setIsSetupOpen(true)}
@@ -482,6 +498,9 @@ const App: Component = () => {
                             flex: 1,
                             overflow: "hidden",
                             position: "relative",
+                            // hidden, not unmounted, while Home shows: open
+                            // panels keep their frames and come back as left
+                            display: railMode() === "computer" ? "flex" : "none",
                         }}
                     >
                         <Show
@@ -777,6 +796,15 @@ const App: Component = () => {
                         </PaperFlex>
                     </PaperFlex>
                     </Show>
+
+                    <HomeView
+                        visible={railMode() === "home"}
+                        computers={computers()}
+                        panelsByComputer={panelsByComputer()}
+                        panelsLoadFailed={panelsLoadFailed()}
+                        onRefreshPanels={(compId) => void refreshPanelsForComputer(compId)}
+                        onOpenPanel={openPanelFromHome}
+                    />
                 </PaperFlex>
             </PaperFlex>
 
