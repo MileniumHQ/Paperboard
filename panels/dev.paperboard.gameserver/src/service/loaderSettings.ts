@@ -18,6 +18,7 @@ import {
 } from "../core/configEdit";
 import { parseProperties } from "../core/properties";
 import { isListableDirArg } from "../core/dirs";
+import { serializedFileTask, writeFileAtomic } from "./fileWrites";
 
 // The Loader tab's owner: finds the config file each setting lives in,
 // reads current values, and writes one validated value at a time. Every
@@ -178,24 +179,6 @@ export async function readLoaderSettings(
     return { software, emptyMessage: null, groups, missing };
 }
 
-// one write at a time per file: two quick edits must not both read the
-// old text and the second overwrite the first
-const fileQueues = new Map<string, Promise<unknown>>();
-
-function serialized<T>(key: string, task: () => Promise<T>): Promise<T> {
-    const previous = fileQueues.get(key) ?? Promise.resolve();
-    const run = previous.then(task, task);
-    const settled = run.then(
-        () => undefined,
-        () => undefined,
-    );
-    fileQueues.set(key, settled);
-    void settled.then(() => {
-        if (fileQueues.get(key) === settled) fileQueues.delete(key);
-    });
-    return run;
-}
-
 export async function writeLoaderSetting(
     software: ServerSoftwareType,
     id: unknown,
@@ -213,22 +196,10 @@ export async function writeLoaderSetting(
     if (!relative) throw new Error(`${file.label} does not exist yet. Start the server once so it creates it.`);
     const absolute = nodePath.join(root, ...relative.split("/"));
 
-    return serialized(absolute, async () => {
+    return serializedFileTask(absolute, async () => {
         const text = await readCapped(fs, absolute);
-        const next = writeValue(file, text, setting, value);
         // written whole or not at all: the server reads this file at start
-        const temp = `${absolute}.paperboard-tmp`;
-        try {
-            await fs.writeFile(temp, next);
-            await fs.rename(temp, absolute);
-        } catch (err) {
-            // the write's failure is what the caller gets; a leftover temp
-            // file is only logged so it cannot replace that error
-            await fs.rm(temp, { force: true }).catch((cleanupErr) =>
-                console.error("[Service:Loader] could not remove", temp, String(cleanupErr)),
-            );
-            throw err;
-        }
+        await writeFileAtomic(fs, absolute, writeValue(file, text, setting, value));
         return { id: setting.id, value, path: relative };
     });
 }

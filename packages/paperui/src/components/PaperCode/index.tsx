@@ -11,15 +11,8 @@ import { PaperButton } from "../PaperButton";
 import { PaperIcon } from "../PaperIcon";
 import { copyText } from "../../utils/clipboard";
 
-import Prism from "prismjs";
-import "prismjs/components/prism-clike";
-import "prismjs/components/prism-javascript";
-import "prismjs/components/prism-typescript";
-import "prismjs/components/prism-jsx";
-import "prismjs/components/prism-tsx";
-import "prismjs/components/prism-css";
-import "prismjs/components/prism-json";
-import "prismjs/components/prism-bash";
+import { highlightCode } from "../../utils/highlight";
+import tokens from "../shared/codeTokens.module.css";
 
 export interface PaperCodeProps extends JSX.HTMLAttributes<HTMLElement> {
     block?: boolean;
@@ -27,26 +20,6 @@ export interface PaperCodeProps extends JSX.HTMLAttributes<HTMLElement> {
     lang?: string;
     copyable?: boolean;
     ref?: HTMLElement | ((el: HTMLElement) => void);
-}
-
-function getHighlightedHTML(code: string, lang?: string): string {
-    if (!code) return "";
-    const language = (lang ?? "tsx").toLowerCase();
-    const grammar =
-        Prism.languages[language] ||
-        Prism.languages.tsx ||
-        Prism.languages.typescript ||
-        Prism.languages.javascript ||
-        Prism.languages.clike;
-
-    if (!grammar) return code;
-    try {
-        return Prism.highlight(code, grammar, language);
-    } catch (err) {
-        // graceful degradation (renders unhighlighted), still traced
-        console.debug("[PaperCode] highlight failed, rendering plain:", err);
-        return code;
-    }
 }
 
 export function PaperCode(props: ParentProps<PaperCodeProps>) {
@@ -86,7 +59,7 @@ export function PaperCode(props: ParentProps<PaperCodeProps>) {
     const highlightedHTML = () => {
         const text = getCodeText();
         const effectiveLang = local.language || local.lang;
-        return getHighlightedHTML(text, effectiveLang);
+        return highlightCode(text, effectiveLang);
     };
 
     return (
@@ -96,7 +69,7 @@ export function PaperCode(props: ParentProps<PaperCodeProps>) {
                 <code
                     {...rest}
                     ref={local.ref}
-                    class={[styles.PaperCodeInline, local.class]
+                    class={[styles.PaperCodeInline, tokens.tokens, local.class]
                         .filter(Boolean)
                         .join(" ")}
                     classList={local.classList}
@@ -142,7 +115,7 @@ export function PaperCode(props: ParentProps<PaperCodeProps>) {
                 <pre
                     {...rest}
                     ref={local.ref as any}
-                    class={[styles.PaperCodeBlock, local.class]
+                    class={[styles.PaperCodeBlock, tokens.tokens, local.class]
                         .filter(Boolean)
                         .join(" ")}
                     classList={local.classList}

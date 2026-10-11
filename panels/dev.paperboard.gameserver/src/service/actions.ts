@@ -45,6 +45,8 @@ import { queryGamerules, setGamerule } from "./gamerules";
 import { applyRuntimeProperties } from "./runtimeProperties";
 import { installServerSoftware, isInstallRunning, withInstallLock } from "./softwareInstall";
 import { readLoaderSettings, writeLoaderSetting } from "./loaderSettings";
+import { listServerFiles, readServerFile, writeServerFile } from "./serverFiles";
+import { locateAddonConfig } from "./addonConfig";
 import { liveInstallDeps } from "./softwareInstallDeps";
 import { installDatapack, listDatapacks, listDatapackVersions, removeDatapack } from "./datapacks";
 import { liveDatapackDeps } from "./datapackDeps";
@@ -923,6 +925,84 @@ export const panelActions: ActionDefinition[] = [
             }
             return writeLoaderSetting(ctx.state.serverSoftware, inputs?.id, inputs?.value, loaderDeps);
         },
+    }),
+
+    defineAction({
+        id: ACTION_IDS.listServerFiles,
+        name: "List Server Files",
+        category: "Server",
+        description: "Lists one folder of the server's files for the Files tab",
+        internal: true,
+        template: "List server files in {path}",
+        inputs: {
+            path: { type: "string", label: "Folder", required: false },
+        },
+        output: { type: "object", label: "Listing" },
+        quick: false,
+        icon: "folder",
+        run: async (_ctx: ServiceContext<GameServerState>, inputs: { path?: string }) =>
+            listServerFiles(inputs?.path ?? "", loaderDeps),
+    }),
+
+    defineAction({
+        id: ACTION_IDS.readServerFile,
+        name: "Read Server File",
+        category: "Server",
+        description: "Reads one of the server's files for the Files tab",
+        internal: true,
+        template: "Read server file {path}",
+        inputs: {
+            path: { type: "string", label: "File", required: true },
+        },
+        output: { type: "object", label: "File" },
+        quick: false,
+        icon: "draft",
+        run: async (_ctx: ServiceContext<GameServerState>, inputs: { path?: string }) =>
+            readServerFile(inputs?.path, loaderDeps),
+    }),
+
+    defineAction({
+        id: ACTION_IDS.writeServerFile,
+        name: "Write Server File",
+        category: "Server",
+        description: "Saves one of the server's text files from the Files tab",
+        internal: true,
+        template: "Save server file {path}",
+        inputs: {
+            path: { type: "string", label: "File", required: true },
+            text: { type: "string", label: "Contents", required: true },
+            version: { type: "string", label: "Version read", required: true },
+        },
+        output: { type: "object", label: "Saved" },
+        quick: false,
+        icon: "save",
+        run: async (
+            ctx: ServiceContext<GameServerState>,
+            inputs: { path?: string; text?: string; version?: string },
+        ) => {
+            if (isInstallRunning()) {
+                throw new Error("A server install is running; save files once it finishes.");
+            }
+            const running = ctx.state.serverStatus !== "offline";
+            return writeServerFile(inputs?.path, inputs?.text, inputs?.version, running, loaderDeps);
+        },
+    }),
+
+    defineAction({
+        id: ACTION_IDS.locateAddonConfig,
+        name: "Locate Add-on Config",
+        category: "Server",
+        description: "Finds where an installed plugin or mod keeps its settings",
+        internal: true,
+        template: "Find the settings of {filename}",
+        inputs: {
+            filename: { type: "string", label: "Jar", required: true },
+        },
+        output: { type: "object", label: "Location" },
+        quick: false,
+        icon: "settings",
+        run: async (ctx: ServiceContext<GameServerState>, inputs: { filename?: string }) =>
+            locateAddonConfig(inputs?.filename, ctx.state.serverSoftware, loaderDeps),
     }),
 
     defineAction({

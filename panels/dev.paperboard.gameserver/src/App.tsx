@@ -27,6 +27,8 @@ import Loader from "./components/Loader";
 import Datapacks from "./components/Datapacks";
 import Modpacks from "./components/Modpacks";
 import { MODPACK_LOADER } from "./core/modpack";
+import Files from "./components/Files";
+import type { PaperFileReveal } from "@mileniumhq/paperui";
 import "@mileniumhq/paperui/style.css";
 import "@mileniumhq/paperui/panel.css";
 
@@ -35,6 +37,8 @@ export default function App() {
     const [activeTab, setActiveTab] = createSignal("overview");
     // bumped when the Versions tab asks the Plugins tab to check for updates
     const [pluginUpdateRequest, setPluginUpdateRequest] = createSignal(0);
+    // set when a plugin's Configure button asks the Files tab to open its settings
+    const [filesReveal, setFilesReveal] = createSignal<PaperFileReveal | null>(null);
 
     // mod loaders call them mods; Vanilla has no add-on system at all
     const pluginKind = () => (SOFTWARE[serverSoftware()].addons?.kind === "mod" ? "Mods" : "Plugins");
@@ -140,6 +144,9 @@ export default function App() {
                                 Datapacks
                             </PaperMenuItem>
                         </Show>
+                        <PaperMenuItem value="files" icon="folder">
+                            Files
+                        </PaperMenuItem>
                         <PaperMenuItem value="logs" icon="description">
                             Logs
                         </PaperMenuItem>
@@ -195,7 +202,14 @@ export default function App() {
                         </Show>
                         <Show when={hasPluginTab()}>
                             <PaperInterfaceItem value="plugins">
-                                <Plugins updateRequest={pluginUpdateRequest()} />
+                                <Plugins
+                                    updateRequest={pluginUpdateRequest()}
+                                    onConfigure={(reveal) => {
+                                        setActiveTab("files");
+                                        // a new object each time, so the same plugin can be revealed again
+                                        setFilesReveal({ ...reveal });
+                                    }}
+                                />
                             </PaperInterfaceItem>
                         </Show>
                         <Show when={hasModpackTab()}>
@@ -208,6 +222,9 @@ export default function App() {
                                 <Datapacks active={activeTab() === "datapacks"} />
                             </PaperInterfaceItem>
                         </Show>
+                        <PaperInterfaceItem value="files" variant="full">
+                            <Files reveal={filesReveal()} />
+                        </PaperInterfaceItem>
                         <PaperInterfaceItem value="logs" variant="full">
                             <Logs />
                         </PaperInterfaceItem>
