@@ -4,7 +4,7 @@ import { describe, expect, it } from "bun:test";
 import type { UsageReport } from "@mileniumhq/paperapi";
 import { canPlace, parseHomeLayout, placementOf, serializeHomeLayout } from "../src/renderer/src/lib/homeLayout";
 import { defaultHomeItems } from "../src/renderer/src/components/home/builtins/defaults";
-import { formatBytes, MAX_PANEL_SEGMENTS, usageChart } from "../src/renderer/src/components/home/builtins/usageSegments";
+import { formatBytes, MAX_PANEL_SEGMENTS, usageChart, usedFraction } from "../src/renderer/src/components/home/builtins/usageSegments";
 
 const GiB = 1024 ** 3;
 const name = (id: string) => `Panel ${id}`;
@@ -45,6 +45,12 @@ describe("usage chart", () => {
     it("has nothing to draw for CPU before it was measured", () => {
         expect(usageChart(report([], { cpu: null }), "cpu", name)).toBeNull();
         expect(usageChart(report([], { cpu: null }), "memory", name)).not.toBeNull();
+    });
+
+    it("reads the share in use for the trend line, the same as the ring shows", () => {
+        expect(usedFraction(report([]), "memory")).toBe(0.5);
+        expect(usedFraction(report([]), "cpu")).toBeCloseTo(0.4);
+        expect(usedFraction(report([], { cpu: null }), "cpu")).toBeNull();
     });
 
     it("folds panels past the limit into one segment", () => {

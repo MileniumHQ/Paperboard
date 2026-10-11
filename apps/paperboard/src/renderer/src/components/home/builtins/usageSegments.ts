@@ -56,6 +56,14 @@ export function formatPercent(fraction: number): string {
     return percent > 0 && percent < 1 ? "<1%" : `${Math.round(percent)}%`;
 }
 
+/** The share of a computer's CPU or memory in use, 0-1; null while CPU hasn't been measured. */
+export function usedFraction(report: UsageReport, metric: UsageMetric): number | null {
+    const total = metric === "memory" ? report.memory.totalBytes : 100;
+    if (total <= 0 || (metric === "cpu" && !report.cpu)) return null;
+    const free = metric === "memory" ? report.memory.availableBytes : (report.cpu?.idlePercent ?? 0);
+    return 1 - Math.min(1, Math.max(0, free / total));
+}
+
 /** null while CPU hasn't been measured yet */
 export function usageChart(report: UsageReport, metric: UsageMetric, panelName: (id: string) => string): UsageChart | null {
     const cpu = report.cpu;

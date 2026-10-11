@@ -8,6 +8,8 @@ import { logToMain } from "../../../lib/shell";
 const POLL_MS = 2_000;
 // a computer that failed is asked again this much later, not every poll
 const FAILED_POLL_MS = 15_000;
+/** Readings kept for the trend line: two minutes of them. */
+export const USAGE_HISTORY_SAMPLES = 60;
 
 export type UsageState =
     | { kind: "loading" }
@@ -18,6 +20,9 @@ interface Poller {
     watchers: number;
     state: Accessor<UsageState>;
     setState: Setter<UsageState>;
+    /** the newest USAGE_HISTORY_SAMPLES readings, oldest first */
+    history: Accessor<UsageReport[]>;
+    setHistory: Setter<UsageReport[]>;
     timer?: ReturnType<typeof setTimeout>;
     inFlight: boolean;
 }
@@ -36,7 +41,9 @@ async function poll(computerId: string, poller: Poller): Promise<void> {
     poller.inFlight = true;
     let next = POLL_MS;
     try {
-        poller.setState({ kind: "ready", report: await systemApi.getUsage(computerId) });
+        const report = await systemApi.getUsage(computerId);
+        poller.setState({ kind: "ready", report });
+        poller.setHistory((previous) => [...previous, report].slice(-USAGE_HISTORY_SAMPLES));
     } catch (err) {
         logToMain("warn", `Couldn't read usage from ${computerId}:`, err);
         poller.setState({ kind: "unavailable", message: describe(err) });
@@ -53,7 +60,8 @@ function watch(computerId: string): Poller {
     let poller = pollers.get(computerId);
     if (!poller) {
         const [state, setState] = createSignal<UsageState>({ kind: "loading" });
-        poller = { watchers: 0, state, setState, inFlight: false };
+        const [history, setHistory] = createSignal<UsageReport[]>([]);
+        poller = { watchers: 0, state, setState, history, setHistory, inFlight: false };
         pollers.set(computerId, poller);
     }
     poller.watchers++;
@@ -91,5 +99,7 @@ export function useUsage(computerId: Accessor<string>, active: Accessor<boolean>
         const id = computerId();
         if (poller && pollers.get(id) === poller) void poll(id, poller);
     };
-    return { state, retry };
+    // readings since something began watching this computer; they go with the poller
+    const history = () => current()?.history() ?? [];
+    return { state, history, retry };
 }
