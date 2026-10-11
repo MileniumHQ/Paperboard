@@ -20,10 +20,9 @@ const Clock: Component<BuiltinWidgetProps> = (props) => {
     });
 
     const time = () => now().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-    const date = (long: boolean) =>
-        now().toLocaleDateString([], long
-            ? { weekday: "long", month: "long", day: "numeric" }
-            : { weekday: "short", month: "short", day: "numeric" });
+    const weekday = () => now().toLocaleDateString([], { weekday: "long" });
+    const day = () => now().toLocaleDateString([], { month: "long", day: "numeric" });
+    const shortDate = () => now().toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
 
     return (
         <Show
@@ -31,11 +30,16 @@ const Clock: Component<BuiltinWidgetProps> = (props) => {
             fallback={
                 <div class={styles.clockDigital} classList={{ [styles.clockWide]: props.size.w > 2 }}>
                     <time class={styles.clockTime}>{time()}</time>
-                    <span class={styles.clockDate}>{date(props.size.w > 2)}</span>
+                    <Show when={props.size.w > 2} fallback={<span class={styles.clockDate}>{shortDate()}</span>}>
+                        <span class={styles.clockDay}>
+                            <span class={styles.clockWeekday}>{weekday()}</span>
+                            <span class={styles.clockDate}>{day()}</span>
+                        </span>
+                    </Show>
                 </div>
             }
         >
-            <ClockFace now={now()} label={`${time()}, ${date(true)}`} />
+            <ClockFace now={now()} label={`${time()}, ${weekday()}, ${day()}`} />
         </Show>
     );
 };

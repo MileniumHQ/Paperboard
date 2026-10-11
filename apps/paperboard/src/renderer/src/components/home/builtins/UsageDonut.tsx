@@ -1,28 +1,34 @@
-import { PaperButton } from "@mileniumhq/paperui";
-import { type Component, createMemo, For, Show } from "solid-js";
+import { PaperButton, PaperChart, PaperChartLegend, type PaperChartSegment } from "@mileniumhq/paperui";
+import { type Component, createMemo, Show } from "solid-js";
 import type { BuiltinWidgetProps } from "./types";
 import { useUsage } from "./usageStore";
 import { formatBytes, formatPercent, type Segment, usageChart, type UsageMetric } from "./usageSegments";
 import styles from "./Builtins.module.css";
 
-// a hairline between slices, in hundredths of the ring
-const LEGEND_ROWS = 3;
-const SLICE_GAP = 0.8;
-const RADIUS = 40;
+// the largest users a legend names before "Free"; the rest are in the chart's name
+const LEGEND_ROWS = 2;
+
+const toChart = (segment: Segment): PaperChartSegment => ({
+    label: segment.label,
+    value: segment.fraction,
+    color: segment.color,
+    detail: segment.detail,
+});
 
 // How much of a computer's CPU or memory each panel, Paperboard, and
 // everything else uses, as a ring around what's in use.
 const UsageDonut: Component<BuiltinWidgetProps & { metric: UsageMetric }> = (props) => {
     const usage = useUsage(() => props.computerId, () => props.visible);
     const title = () => (props.metric === "cpu" ? "CPU" : "Memory");
+    const tall = () => props.size.h > 1;
     const chart = createMemo(() => {
         const state = usage.state();
         return state.kind === "ready" ? usageChart(state.report, props.metric, props.panelName) : null;
     });
-    // the three largest and free; the rest are in the label
-    const rows = () => {
+    const slices = () => (chart()?.segments ?? []).map(toChart);
+    const legend = () => {
         const c = chart();
-        return c ? [...c.segments.slice(0, LEGEND_ROWS), c.free] : [];
+        return c ? [...c.segments.slice(0, LEGEND_ROWS), c.free].map(toChart) : [];
     };
     const summary = () => {
         const state = usage.state();
@@ -36,17 +42,16 @@ const UsageDonut: Component<BuiltinWidgetProps & { metric: UsageMetric }> = (pro
     };
     const label = () => {
         const c = chart();
-        if (!c) return `${title()} on ${props.computerName}`;
-        const parts = [...c.segments, c.free].map((s) => `${s.label} ${s.detail}`);
-        return `${title()} on ${props.computerName}: ${formatPercent(c.used)} in use. ${parts.join(", ")}.`;
+        const what = `${title()} on ${props.computerName}`;
+        return c ? `${what}, ${formatPercent(c.used)} in use, ${formatPercent(c.free.fraction)} free` : what;
     };
 
     return (
         <div
             class={styles.usage}
-            classList={{ [styles.usageSmall]: props.size.w === 1, [styles.usageTall]: props.size.h > 1 }}
+            classList={{ [styles.usageSmall]: props.size.w === 1, [styles.usageTall]: tall() }}
         >
-            <Show when={props.size.h > 1}>
+            <Show when={tall()}>
                 <div class={styles.usageHeader}>
                     <span class={styles.usageTitle}>
                         {title()}
@@ -67,63 +72,24 @@ const UsageDonut: Component<BuiltinWidgetProps & { metric: UsageMetric }> = (pro
                 }
             >
                 <div class={styles.usageBody}>
-                    <div class={styles.donut}>
-                        <svg viewBox="0 0 100 100" role="img" aria-label={label()}>
-                            <circle class={styles.donutTrack} cx="50" cy="50" r={RADIUS} pathLength="100" />
-                            <Show when={chart()}>{(c) => <Slices segments={c().segments} />}</Show>
-                        </svg>
-                        <div class={styles.donutCenter} aria-hidden="true">
-                            <span class={styles.donutValue}>{chart() ? formatPercent((chart() as { used: number }).used) : "…"}</span>
-                            <Show when={props.size.h === 1}>
-                                <span class={styles.usageSubtle}>{title()}</span>
-                            </Show>
-                        </div>
-                    </div>
+                    <PaperChart class={styles.donut} label={label()} segments={slices()} total={1} thickness={13}>
+                        <span class={styles.donutValue}>{chart() ? formatPercent((chart() as { used: number }).used) : "…"}</span>
+                        <Show when={props.size.w === 1}>
+                            <span class={styles.donutCaption}>{title()}</span>
+                        </Show>
+                    </PaperChart>
                     <Show when={props.size.w > 1}>
-                        <ul class={styles.legend} aria-hidden="true">
-                            <For each={rows()}>
-                                {(row) => (
-                                    <li class={styles.legendRow}>
-                                        <span class={styles.legendSwatch} style={{ background: row.color }} />
-                                        <span class={styles.legendLabel}>{row.label}</span>
-                                        <span class={styles.legendValue}>{row.detail}</span>
-                                    </li>
-                                )}
-                            </For>
-                        </ul>
+                        <div class={styles.usageSide} aria-hidden="true">
+                            <Show when={!tall()}>
+                                <span class={styles.usageTitle}>{title()}</span>
+                            </Show>
+                            {/* a wide tile is one row high: the ring takes its height, which leaves room for names only */}
+                            <PaperChartLegend class={styles.legend} segments={legend()} total={1} compact={!tall()} />
+                        </div>
                     </Show>
                 </div>
             </Show>
         </div>
-    );
-};
-
-const Slices: Component<{ segments: Segment[] }> = (props) => {
-    const placed = () => {
-        let start = 0;
-        return props.segments.map((segment) => {
-            const length = segment.fraction * 100;
-            const slice = { segment, start, length: length > SLICE_GAP * 2 ? length - SLICE_GAP : length };
-            start += length;
-            return slice;
-        });
-    };
-    return (
-        <For each={placed()}>
-            {(slice) => (
-                <circle
-                    class={styles.donutSlice}
-                    cx="50"
-                    cy="50"
-                    r={RADIUS}
-                    pathLength="100"
-                    // a style, not the attribute: presentation attributes don't read var()
-                    style={{ stroke: slice.segment.color }}
-                    stroke-dasharray={`${slice.length} ${100 - slice.length}`}
-                    stroke-dashoffset={-slice.start}
-                />
-            )}
-        </For>
     );
 };
 
