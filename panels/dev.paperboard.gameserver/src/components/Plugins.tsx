@@ -31,6 +31,8 @@ import {
     PaperCard,
 } from "@mileniumhq/paperui";
 import { serverSoftware, serverVersion } from "../lib/server";
+import { locateAddonConfig } from "../lib/files";
+import type { PaperFileReveal } from "@mileniumhq/paperui";
 import { PaperPageHeader } from "@mileniumhq/paperui";
 import {
     checkPluginUpdates,
@@ -80,6 +82,8 @@ function truncate(text: string, max: number): string {
 }
 
 interface DetailTarget {
+    /** set for a jar installed without a record, which only its filename identifies */
+    filename?: string;
     projectId: string;
     slug: string;
     title: string;
@@ -98,7 +102,11 @@ function ProjectIcon(props: { iconUrl?: string; glyph?: string }): JSX.Element {
     );
 }
 
-export default function Plugins(props: { updateRequest?: number }) {
+export default function Plugins(props: {
+    updateRequest?: number;
+    /** opens the Files tab at an add-on's settings */
+    onConfigure?: (reveal: PaperFileReveal) => void;
+}) {
     const [installed, setInstalled] = createSignal<InstalledPlugin[] | null>(null);
     const [listWarning, setListWarning] = createSignal("");
     const [query, setQuery] = createSignal("");
@@ -123,6 +131,8 @@ export default function Plugins(props: { updateRequest?: number }) {
     const [installOptional, setInstallOptional] = createSignal<string[]>([]);
     const [installModalError, setInstallModalError] = createSignal("");
     const [detail, setDetail] = createSignal<DetailTarget | null>(null);
+    const [configuring, setConfiguring] = createSignal(false);
+    const [configureError, setConfigureError] = createSignal("");
     const [project, setProject] = createSignal<ModrinthProject | null>(null);
     const [projectLoading, setProjectLoading] = createSignal(false);
     const [error, setError] = createSignal("");
@@ -262,12 +272,32 @@ export default function Plugins(props: { updateRequest?: number }) {
     };
 
     const findInstalled = (target: DetailTarget): InstalledPlugin | null =>
-        installed()?.find(
-            (entry) =>
-                entry.record &&
-                (entry.record.projectId === target.projectId ||
-                    entry.record.slug === target.slug),
+        installed()?.find((entry) =>
+            entry.record
+                ? entry.record.projectId === target.projectId || entry.record.slug === target.slug
+                : entry.filename === target.filename,
         ) ?? null;
+
+    // a message about one add-on must not show on the next one's details
+    createEffect(on(detail, () => setConfigureError("")));
+
+    const configure = async (entry: InstalledPlugin) => {
+        setConfigureError("");
+        setConfiguring(true);
+        try {
+            const location = await locateAddonConfig(entry.filename);
+            if (!location.reveal) {
+                setConfigureError(location.message ?? "Paperboard could not find where this keeps its settings.");
+                return;
+            }
+            setDetail(null);
+            props.onConfigure?.(location.reveal);
+        } catch (err) {
+            setConfigureError(err instanceof Error ? err.message : String(err));
+        } finally {
+            setConfiguring(false);
+        }
+    };
 
     const previewToken = () =>
         `${installTarget()?.projectId ?? ""}:${installSelectedVersionId()}:${[...installOptional()].sort().join(",")}`;
@@ -519,6 +549,7 @@ export default function Plugins(props: { updateRequest?: number }) {
                                                           iconUrl: entry.record.iconUrl,
                                                       })
                                                     : setDetail({
+                                                          filename: entry.filename,
                                                           projectId: entry.filename.replace(
                                                               /\.jar$/i,
                                                               "",
@@ -649,22 +680,37 @@ export default function Plugins(props: { updateRequest?: number }) {
                                     }
                                 >
                                     {(entry) => (
-                                        <PaperEffect variant="danger">
+                                        <PaperFlex direction="row" gap="half">
                                             <PaperButton
-                                                variant="danger"
-                                                disabled={busy()}
-                                                onClick={() => {
-                                                    setDeleteError("");
-                                                    setPendingDelete(entry);
-                                                }}
+                                                disabled={busy() || configuring()}
+                                                onClick={() => void configure(entry)}
                                             >
-                                                <PaperIcon>delete</PaperIcon>
-                                                Uninstall
+                                                <PaperIcon>{configuring() ? "hourglass_top" : "settings"}</PaperIcon>
+                                                Configure
                                             </PaperButton>
-                                        </PaperEffect>
+                                            <PaperEffect variant="danger">
+                                                <PaperButton
+                                                    variant="danger"
+                                                    disabled={busy()}
+                                                    onClick={() => {
+                                                        setDeleteError("");
+                                                        setPendingDelete(entry);
+                                                    }}
+                                                >
+                                                    <PaperIcon>delete</PaperIcon>
+                                                    Uninstall
+                                                </PaperButton>
+                                            </PaperEffect>
+                                        </PaperFlex>
                                     )}
                                 </Show>
                             </PaperFlex>
+
+                            <Show when={configureError()}>
+                                <PaperQuote variant="warning" icon="settings" title="Couldn't open its settings">
+                                    {configureError()}
+                                </PaperQuote>
+                            </Show>
 
                             <PaperFlex direction="column" gap="onefourth">
                                 <PaperText size={3} weight={700}>
@@ -739,7 +785,9 @@ export default function Plugins(props: { updateRequest?: number }) {
                                             <td>
                                                 {detailInstalled()?.record?.version
                                                     ? `v${detailInstalled()!.record!.version}`
-                                                    : "Not installed"}
+                                                    : detailInstalled()
+                                                      ? "Unknown (installed outside Paperboard)"
+                                                      : "Not installed"}
                                             </td>
                                         </tr>
                                     </tbody>
