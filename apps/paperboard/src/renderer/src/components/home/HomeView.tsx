@@ -1,4 +1,4 @@
-import { PaperButton, PaperText } from "@mileniumhq/paperui";
+import { PaperButton, PaperPresence, PaperText } from "@mileniumhq/paperui";
 import {
     type Component,
     createEffect,
@@ -702,7 +702,7 @@ const HomeView: Component<HomeViewProps> = (props) => {
                 </Show>
             </div>
 
-            <Show when={editing() && loadState() === "ready"}>
+            <PaperPresence when={editing() && loadState() === "ready"} motion="slide-end">
                 <WidgetLibrary
                     computers={props.computers}
                     panelsByComputer={props.panelsByComputer}
@@ -717,7 +717,7 @@ const HomeView: Component<HomeViewProps> = (props) => {
                     onAdd={addToFirstFreeSpot}
                     onDone={finishEditing}
                 />
-            </Show>
+            </PaperPresence>
 
             <Show when={ghost()}>
                 {(g) => (
