@@ -158,6 +158,7 @@ export function Example() {
                 When dragging items in a reorderable list, sibling items animate to preview drop placement.
                 A list scrolls on its layout axis by default, so too many tabs overflow and scroll
                 rather than shrinking to slivers.
+                The close button of a closeable item is named Close for assistive devices.
             </PaperText>
 
             <PaperText preset="subheader" id="recipes">Recipes</PaperText>

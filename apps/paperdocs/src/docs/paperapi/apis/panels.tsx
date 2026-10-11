@@ -71,6 +71,7 @@ const registryPanels = await panelsApi.registry();`}
             <PaperText preset="body">
                 Each returned PanelItem includes installSource provenance: "registry" for reviewed releases, "direct" for checksummed URLs, or "dev" for symlinks. For an installed panel, registry() reports the installed manifest's name, description, publisher and version; latestVersion carries the newest release the registry offers.
                 Installing from the registry will refuse to overwrite panels marked with dev provenance.
+                An installed panel's widgets field lists the widgets its manifest declares, already validated. See Widgets under General.
             </PaperText>
 
             <PaperText preset="subheader" id="recipes">Recipes</PaperText>

@@ -61,6 +61,11 @@ await systemApi.notify("Task completed", "Backup archive created successfully.")
                         <td>Lists the host's GPUs with their memory, when the OS reports it. See <PaperCode>GPU inventory</PaperCode> below.</td>
                     </tr>
                     <tr>
+                        <td><PaperCode>getUsage</PaperCode></td>
+                        <td><PaperCode>getUsage(computerId?): Promise&lt;UsageReport&gt;</PaperCode></td>
+                        <td>Reports a computer's CPU and memory use, split by panel. See <PaperCode>Usage</PaperCode> below.</td>
+                    </tr>
+                    <tr>
                         <td><PaperCode>notify</PaperCode></td>
                         <td><PaperCode>notify(title, message): Promise&lt;unknown&gt;</PaperCode></td>
                         <td>Dispatches a desktop notification through the host notification daemon.</td>
@@ -150,6 +155,54 @@ if (best) {
     console.log("No GPU reported; models will run on the CPU");
 }`}
             </PaperCode>
+
+            <PaperText preset="subheader" id="usage">Usage</PaperText>
+            <PaperText preset="body">
+                getUsage reports how a computer's CPU and memory are being used, and by whom: Paperboard itself, each panel, and everything else.
+                It is for the Paperboard app. A panel's scoped token is refused.
+                CPU is measured between two readings, so cpu is null, and each group's cpuPercent is null, until an interval has been measured.
+            </PaperText>
+            <PaperCode block language="tsx">
+{`interface UsageReport {
+    sampledAt: number;
+    memory: { totalBytes: number; availableBytes: number; otherBytes: number };
+    cpu: { cores: number; idlePercent: number; otherPercent: number } | null;
+    groups: UsageGroup[];
+}
+
+interface UsageGroup {
+    id: string;
+    kind: "paperboard" | "panel";
+    memoryBytes: number;
+    cpuPercent: number | null;
+}`}
+            </PaperCode>
+            <PaperTable>
+                <thead>
+                    <tr>
+                        <th>Field</th>
+                        <th>Description</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><PaperCode>memory.otherBytes</PaperCode></td>
+                        <td>Memory in use by everything that is not Paperboard or a panel.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>cpu.idlePercent</PaperCode>, <PaperCode>cpu.otherPercent</PaperCode></td>
+                        <td>Shares of the whole computer, every core together, from 0 to 100.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>groups[].id</PaperCode></td>
+                        <td>paperboard, or a panel id.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>groups[].cpuPercent</PaperCode></td>
+                        <td>Share of the whole computer from 0 to 100, or null until measured.</td>
+                    </tr>
+                </tbody>
+            </PaperTable>
 
             <PaperText preset="subheader" id="behavior">Behavior</PaperText>
             <PaperText preset="body">

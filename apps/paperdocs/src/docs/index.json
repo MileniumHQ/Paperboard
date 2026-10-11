@@ -124,6 +124,10 @@
                         "name": "PaperCopyButton",
                         "file": "paper-copy-button"
                     },
+                    "papereditor": {
+                        "name": "PaperEditor",
+                        "file": "paper-editor"
+                    },
                     "papereffect": {
                         "name": "PaperEffect",
                         "file": "paper-effect"
@@ -187,6 +191,10 @@
                     "paperpagination": {
                         "name": "PaperPagination",
                         "file": "paper-pagination"
+                    },
+                    "paperpresence": {
+                        "name": "PaperPresence",
+                        "file": "paper-presence"
                     },
                     "paperprogress": {
                         "name": "PaperProgress",
@@ -267,6 +275,10 @@
                         "name": "PaperCenteredInterface",
                         "file": "paper-centered-interface"
                     },
+                    "paperfilebrowser": {
+                        "name": "PaperFileBrowser",
+                        "file": "paper-file-browser"
+                    },
                     "paperflex": {
                         "name": "PaperFlex",
                         "file": "paper-flex"
@@ -314,6 +326,11 @@
                         "name": "Creating panels",
                         "file": "creating-panels",
                         "index": 1
+                    },
+                    "widgets": {
+                        "name": "Widgets",
+                        "file": "widgets",
+                        "index": 2
                     }
                 }
             },

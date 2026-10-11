@@ -75,7 +75,7 @@ export function Example() {
                             <td><PaperCode>language</PaperCode></td>
                             <td><PaperCode>string</PaperCode></td>
                             <td><PaperCode>"tsx"</PaperCode></td>
-                            <td>Syntax grammar name: tsx, typescript, javascript, bash, json, css.</td>
+                            <td>Syntax grammar name: tsx, jsx, typescript, javascript, css, json, json5, bash, yaml, toml, ini, properties, markdown. Any other name is shown without colors.</td>
                         </tr>
                         <tr>
                             <td><PaperCode>lang</PaperCode></td>

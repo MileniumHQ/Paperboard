@@ -83,6 +83,8 @@ export function ReleaseNotes() {
                 blocks are printed as source text, unsafe URL schemes such as
                 javascript: are refused, and data: image sources are refused
                 even when images are allowed.
+                A link's scheme is checked after tabs, line breaks and surrounding control characters are removed, so a scheme split by whitespace is refused too.
+                Links may use http, https, mailto, or a relative target.
             </PaperText>
         </PaperFlex>
     );

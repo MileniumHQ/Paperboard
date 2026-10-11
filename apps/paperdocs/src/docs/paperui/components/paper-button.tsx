@@ -141,7 +141,7 @@ export function EffectExample() {
             <PaperText preset="subheader" id="behavior">Behavior</PaperText>
             <PaperText preset="body">
                 When href is provided, the component renders an anchor tag and omits button-specific attributes.
-                Square icon buttons apply an accessible aria-label using string children if no aria-label prop is set.
+                A square icon button is named by its aria-label prop, or by its title prop when aria-label is absent. Its icon name is never used as the name, so give every icon button one of the two.
             </PaperText>
 
             <PaperText preset="subheader" id="recipes">Recipes</PaperText>

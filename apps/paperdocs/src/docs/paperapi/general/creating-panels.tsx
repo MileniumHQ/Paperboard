@@ -72,7 +72,7 @@ export default function CreatingPanelsDoc() {
                     <tr>
                         <td><PaperCode>id</PaperCode></td>
                         <td>string</td>
-                        <td>Reverse-DNS lowercase identifier, matching [a-z0-9][a-z0-9_-]*(?:\\.[a-z0-9][a-z0-9_-]*)*.</td>
+                        <td>Reverse-DNS lowercase identifier of at most 128 characters, matching [a-z0-9][a-z0-9_-]*(?:\\.[a-z0-9][a-z0-9_-]*)*. The ids library, settings, landing, app-settings and crane_version, and any id starting with shell-, are reserved for Paperboard and refused.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>name</PaperCode></td>
@@ -93,6 +93,11 @@ export default function CreatingPanelsDoc() {
                         <td><PaperCode>service</PaperCode></td>
                         <td>string</td>
                         <td>Relative path to the compiled background Node service script.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>widgets</PaperCode></td>
+                        <td>array</td>
+                        <td>Optional widgets the panel offers for Home. See the Widgets page.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>store</PaperCode></td>

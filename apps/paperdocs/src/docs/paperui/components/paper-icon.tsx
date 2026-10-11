@@ -86,11 +86,18 @@ export function Example() {
                             <td><PaperCode>""</PaperCode></td>
                             <td>Accessible image description when src is provided.</td>
                         </tr>
+                        <tr>
+                            <td><PaperCode>label</PaperCode></td>
+                            <td><PaperCode>string</PaperCode></td>
+                            <td><PaperCode>undefined</PaperCode></td>
+                            <td>What the icon means, for an icon that carries information no nearby text does. The icon is then exposed as an image with this name.</td>
+                        </tr>
                     </tbody>
                 </PaperTable>
 
             <PaperText preset="subheader" id="behavior">Behavior</PaperText>
             <PaperText preset="body">
+                An icon without a label is decorative and hidden from assistive devices. A symbol's ligature text, such as content_copy, is never read out and never becomes part of a control's accessible name.
                 Material Symbols fonts load through local woff2 files bundled in PaperUI.
                 Glyphs inherit current CSS font-size and color tokens from their parent container.
             </PaperText>
