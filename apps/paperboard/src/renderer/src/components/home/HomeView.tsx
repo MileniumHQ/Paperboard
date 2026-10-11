@@ -34,6 +34,8 @@ import {
 import { createLoadQueue } from "../../lib/loadQueue";
 import WidgetTile, { type TileStatus } from "./WidgetTile";
 import WidgetLibrary, { sizeLabel, type LibraryEntry } from "./WidgetLibrary";
+import PanelWidgetFrame from "./PanelWidgetFrame";
+import { BuiltinView, builtinWidget, defaultHomeItems } from "./builtins";
 import styles from "./Home.module.css";
 
 // Loading more than this many frames at once stalled the shell's own
@@ -54,6 +56,9 @@ const AUTOSCROLL_STEP_PX = 16;
 type DragSource =
     | { kind: "new"; entry: LibraryEntry }
     | { kind: "move"; itemId: string };
+
+/** What a widget is drawn from: a placed item, or a gallery entry being dragged. */
+type WidgetRef = Pick<LibraryEntry, "computerId" | "source"> & { widgetId: string; panelId?: string };
 
 interface DragState {
     source: DragSource;
@@ -103,7 +108,10 @@ const HomeView: Component<HomeViewProps> = (props) => {
     const load = async () => {
         setLoadState("loading");
         try {
-            setItems(parseHomeLayout(await config.get(HOME_LAYOUT_ID, undefined, HOME_LAYOUT_COMPUTER)));
+            const raw = await config.get(HOME_LAYOUT_ID, undefined, HOME_LAYOUT_COMPUTER);
+            // a Home never arranged starts with this computer at a glance;
+            // nothing is saved until it is changed
+            setItems(raw === null || raw === undefined ? defaultHomeItems(HOME_LAYOUT_COMPUTER) : parseHomeLayout(raw));
             setLoadState("ready");
         } catch (err) {
             logToMain("error", "Failed to load the Home layout:", err);
@@ -186,6 +194,17 @@ const HomeView: Component<HomeViewProps> = (props) => {
     const statusOf = (item: HomeItem): TileStatus => {
         const comp = props.computers.find((c) => c.id === item.computerId);
         if (!comp) return { kind: "unavailable", message: "This widget's computer was removed from Paperboard." };
+        if (item.source === "builtin") {
+            const builtin = builtinWidget(item.widgetId);
+            if (!builtin) return { kind: "unavailable", message: "This version of Paperboard doesn't have this widget." };
+            if (!builtin.declaration.sizes.includes(item.size)) {
+                return { kind: "unavailable", message: `${builtin.declaration.name} doesn't come in ${sizeLabel(item.size)}.` };
+            }
+            if (builtin.perComputer && !comp.isLocal && comp.status?.connected === false) {
+                return { kind: "unavailable", message: `${comp.name} is offline.` };
+            }
+            return { kind: "ok" };
+        }
         const retry = () => props.onRefreshPanels(item.computerId);
         if (!comp.isLocal && comp.status?.connected === false) {
             return { kind: "unavailable", message: `${comp.name} is offline.`, retry };
@@ -204,13 +223,20 @@ const HomeView: Component<HomeViewProps> = (props) => {
         if (!widget.sizes.includes(item.size)) {
             return { kind: "unavailable", message: `${panel.name} no longer offers this widget at ${sizeLabel(item.size)}.` };
         }
-        return { kind: "ok", panelName: panel.name, widgetName: widget.name };
+        return { kind: "ok" };
     };
+    const computerName = (id: string) => props.computers.find((c) => c.id === id)?.name ?? id;
+    const panelName = (computerId: string, panelId: string) =>
+        props.panelsByComputer[computerId]?.find((p) => p.id === panelId)?.name ?? panelId;
     const declarationOf = (item: HomeItem) =>
-        props.panelsByComputer[item.computerId]?.find((p) => p.id === item.panelId)?.widgets?.find((w) => w.id === item.widgetId);
+        item.source === "builtin"
+            ? builtinWidget(item.widgetId)?.declaration
+            : props.panelsByComputer[item.computerId]?.find((p) => p.id === item.panelId)?.widgets?.find((w) => w.id === item.widgetId);
     const labelOf = (item: HomeItem) => {
-        const status = statusOf(item);
-        return status.kind === "ok" ? `${status.widgetName} (${status.panelName})` : item.widgetId;
+        const name = declarationOf(item)?.name ?? item.widgetId;
+        if (item.source === "panel") return `${name} (${panelName(item.computerId, item.panelId)})`;
+        // a CPU or Memory widget says which computer it shows once there's a choice
+        return builtinWidget(item.widgetId)?.perComputer && props.computers.length > 1 ? `${name} (${computerName(item.computerId)})` : name;
     };
 
     // ── panel lists for every computer ───────────────────────────────────
@@ -342,23 +368,15 @@ const HomeView: Component<HomeViewProps> = (props) => {
     const addAt = (entry: LibraryEntry, p: Placement) => {
         if (items().length >= MAX_HOME_ITEMS || !canPlace(items(), p)) return;
         const id = crypto.randomUUID();
+        const base = { id, computerId: entry.computerId, widgetId: entry.widget.id, size: `${p.w}x${p.h}`, column: p.column, x: p.x, y: p.y };
         commit([
             ...items(),
-            {
-                id,
-                computerId: entry.computerId,
-                panelId: entry.panelId,
-                widgetId: entry.widget.id,
-                size: `${p.w}x${p.h}`,
-                column: p.column,
-                x: p.x,
-                y: p.y,
-            },
+            entry.source === "builtin" ? { ...base, source: "builtin" } : { ...base, source: "panel", panelId: entry.panelId },
         ]);
         setSelectedId(id);
     };
     const addToFirstFreeSpot = (entry: LibraryEntry) => {
-        const size = parseWidgetSize(entry.widget.sizes[0]);
+        const size = parseWidgetSize(entry.size);
         if (!size) return;
         const spot = findFreeSpot(items(), size, geometry().columns);
         if (spot) addAt(entry, spot);
@@ -458,7 +476,7 @@ const HomeView: Component<HomeViewProps> = (props) => {
         window.addEventListener("blur", endDrag);
     };
     const startLibraryDrag = (entry: LibraryEntry, event: PointerEvent) => {
-        const size = parseWidgetSize(entry.widget.sizes[0]);
+        const size = parseWidgetSize(entry.size);
         if (!size) return;
         // the ghost hangs from the pointer near its top, like picking up a card
         beginDrag(event, { kind: "new", entry }, entry.widget.name, size, { x: size.w / 2, y: 0.3 });
@@ -504,12 +522,28 @@ const HomeView: Component<HomeViewProps> = (props) => {
         queueMicrotask(() => editButton?.focus());
     };
 
+    // what the ghost draws; the same widget stays the same object while the
+    // pointer moves, so the ghost's content isn't rebuilt on every move
+    const ghostFrom = createMemo<WidgetRef | undefined>(
+        () => {
+            const d = drag();
+            if (!d?.started) return undefined;
+            if (d.source.kind === "new") return { ...d.source.entry, widgetId: d.source.entry.widget.id };
+            return itemsById().get(d.source.itemId);
+        },
+        undefined,
+        {
+            equals: (a, b) =>
+                a?.source === b?.source && a?.computerId === b?.computerId && a?.widgetId === b?.widgetId && a?.panelId === b?.panelId,
+        },
+    );
     const ghost = () => {
         const d = drag();
         if (!d?.started) return null;
         const g = geometry();
         return {
             name: d.name,
+            size: d.size,
             style: {
                 left: `${d.pointer.x - d.grab.x * g.cell + inset()}px`,
                 top: `${d.pointer.y - d.grab.y * g.cell + inset()}px`,
@@ -518,6 +552,39 @@ const HomeView: Component<HomeViewProps> = (props) => {
             },
         };
     };
+    // a built-in widget draws in place; a panel widget is the panel's frame
+    const content = (from: WidgetRef, size: () => WidgetSize, visible: () => boolean, instanceId: string, label: () => string) => {
+        const builtin = from.source === "builtin" ? builtinWidget(from.widgetId) : undefined;
+        if (builtin) {
+            return (
+                <BuiltinView
+                    widget={builtin}
+                    computerId={from.computerId}
+                    computerName={computerName(from.computerId)}
+                    showComputer={props.computers.length > 1}
+                    size={size()}
+                    visible={visible()}
+                    panelName={(panelId) => panelName(from.computerId, panelId)}
+                />
+            );
+        }
+        if (!from.panelId) return null;
+        const panelId = from.panelId;
+        return (
+            <PanelWidgetFrame
+                computerId={from.computerId}
+                panelId={panelId}
+                widgetId={from.widgetId}
+                instanceId={instanceId}
+                size={size()}
+                visible={visible()}
+                label={label()}
+                queue={queue}
+                onOpenPanel={() => props.onOpenPanel(from.computerId, panelId)}
+            />
+        );
+    };
+
     const lifted = (id: string) => {
         const d = drag();
         return !!d?.started && d.source.kind === "move" && d.source.itemId === id;
@@ -538,6 +605,7 @@ const HomeView: Component<HomeViewProps> = (props) => {
                             width: `${gridWidth()}px`,
                             height: `${gridHeight()}px`,
                             "--home-cell": `${geometry().cell}px`,
+                            "--home-inset": `${inset()}px`,
                         }}
                     >
                         <Show when={loadState() === "ready"}>
@@ -559,28 +627,24 @@ const HomeView: Component<HomeViewProps> = (props) => {
                                         <WidgetTile
                                             ref={(el) => observe(id, el)}
                                             instanceId={id}
-                                            computerId={item().computerId}
-                                            panelId={item().panelId}
-                                            widgetId={item().widgetId}
-                                            size={size()}
                                             status={status()}
                                             live={live()}
-                                            visible={visible()}
                                             editing={editing()}
                                             selected={selectedId() === id}
                                             lifted={lifted(id)}
-                                            queue={queue}
                                             style={px(rectOf(placementOf(item())))}
                                             label={labelOf(item())}
                                             sizeLabel={sizeLabel(item().size)}
                                             canResize={(declarationOf(item())?.sizes.length ?? 0) > 1}
-                                            onOpenPanel={() => props.onOpenPanel(item().computerId, item().panelId)}
                                             onRemove={() => remove(id)}
                                             onCycleSize={() => cycleSize(item())}
                                             onPointerDown={(e) => startTileDrag(item(), e)}
                                             onKeyDown={(e) => onTileKey(item(), e)}
                                             onFocus={() => setSelectedId(id)}
-                                        />
+                                        >
+                                            {/* an item never changes what it shows, only where and how big */}
+                                            {untrack(() => content(item(), size, visible, id, () => labelOf(item())))}
+                                        </WidgetTile>
                                     );
                                 }}
                             </For>
@@ -644,6 +708,10 @@ const HomeView: Component<HomeViewProps> = (props) => {
                     panelsByComputer={props.panelsByComputer}
                     panelsLoadFailed={props.panelsLoadFailed}
                     full={items().length >= MAX_HOME_ITEMS}
+                    cell={geometry().cell}
+                    inset={inset()}
+                    queue={queue}
+                    panelName={panelName}
                     onRetry={props.onRefreshPanels}
                     onStartDrag={startLibraryDrag}
                     onAdd={addToFirstFreeSpot}
@@ -654,7 +722,14 @@ const HomeView: Component<HomeViewProps> = (props) => {
             <Show when={ghost()}>
                 {(g) => (
                     <div class={styles.ghost} style={g().style} aria-hidden="true">
-                        <PaperText size={2}>{g().name}</PaperText>
+                        {/* a built-in widget is picked up as itself; a panel's frame can't be, so its name stands in */}
+                        <Show
+                            when={ghostFrom()?.source === "builtin" ? ghostFrom() : undefined}
+                            keyed
+                            fallback={<PaperText size={2}>{g().name}</PaperText>}
+                        >
+                            {(from) => content(from, () => g().size, () => true, "ghost", () => g().name)}
+                        </Show>
                     </div>
                 )}
             </Show>

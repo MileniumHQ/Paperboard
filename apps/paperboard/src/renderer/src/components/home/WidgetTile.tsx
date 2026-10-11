@@ -1,128 +1,34 @@
 import { PaperButton, PaperText } from "@mileniumhq/paperui";
-import { type Component, type JSX, createEffect, createSignal, onCleanup, onMount, Show } from "solid-js";
-import type { WidgetSize } from "@mileniumhq/paperapi";
-import { panelUrl } from "../../lib/shell";
-import type { LoadQueue } from "../../lib/loadQueue";
+import { type Component, type JSX, Show } from "solid-js";
 import styles from "./Home.module.css";
 
-// A widget that never answers the readiness challenge is a failure the
-// user can see and retry, the same budget a panel frame gets.
-const READY_TIMEOUT_MS = 25_000;
-
 export type TileStatus =
-    | { kind: "ok"; panelName: string; widgetName: string }
+    | { kind: "ok" }
     | { kind: "waiting"; message: string }
     | { kind: "unavailable"; message: string; retry?: () => void };
 
+// A placed widget's card: its content (a panel's frame or a built-in
+// widget), what it shows when it can't, and the edit-mode controls.
 export interface WidgetTileProps {
     instanceId: string;
-    computerId: string;
-    panelId: string;
-    widgetId: string;
-    size: WidgetSize;
     status: TileStatus;
-    /** a frame may exist: in view recently and Home not suspended */
+    /** the content may exist: in view recently and Home not suspended */
     live: boolean;
-    /** Home is showing and this tile is in view; the widget should animate */
-    visible: boolean;
     editing: boolean;
     selected: boolean;
     lifted: boolean;
-    queue: LoadQueue;
     style: JSX.CSSProperties;
     label: string;
     sizeLabel: string;
     canResize: boolean;
+    children: JSX.Element;
     ref: (el: HTMLDivElement) => void;
-    onOpenPanel: () => void;
     onRemove: () => void;
     onCycleSize: () => void;
     onPointerDown: (event: PointerEvent) => void;
     onKeyDown: (event: KeyboardEvent) => void;
     onFocus: () => void;
 }
-
-const WidgetFrame: Component<{
-    props: WidgetTileProps;
-}> = (outer) => {
-    const props = outer.props;
-    const [ready, setReady] = createSignal(false);
-    const [failure, setFailure] = createSignal("");
-    let frame: HTMLIFrameElement | undefined;
-    let generation = "";
-    let stop: (() => void) | null = null;
-
-    const post = (message: Record<string, unknown>) =>
-        frame?.contentWindow?.postMessage({ ...message, generation }, "*");
-
-    const start = () => {
-        stop?.();
-        setReady(false);
-        setFailure("");
-        generation = crypto.randomUUID();
-        const mine = generation;
-        const slot = props.queue.acquire();
-        let timer: ReturnType<typeof setTimeout> | undefined;
-        const settle = (error?: string) => {
-            clearTimeout(timer);
-            slot.release();
-            if (error) setFailure(error);
-            else setReady(true);
-        };
-        const receive = (event: MessageEvent) => {
-            if (event.source !== frame?.contentWindow || event.data?.generation !== mine) return;
-            if (event.data.type === "paperboard:ready" && event.data.panelId === props.panelId) settle();
-            else if (event.data.type === "paperboard:failed") settle(String(event.data.message || "The widget failed to start"));
-            else if (event.data.type === "paperboard:widget-open-panel") props.onOpenPanel();
-        };
-        window.addEventListener("message", receive);
-        void slot.granted.then(() => {
-            if (generation !== mine || !frame) return;
-            timer = setTimeout(() => settle("The widget did not finish connecting to its panel's service."), READY_TIMEOUT_MS);
-            frame.src = panelUrl(props.computerId, props.panelId, `widget.html?generation=${mine}`);
-        });
-        stop = () => {
-            clearTimeout(timer);
-            slot.release();
-            window.removeEventListener("message", receive);
-        };
-    };
-
-    onMount(start);
-    onCleanup(() => stop?.());
-
-    // the shell owns size and visibility; the widget follows
-    createEffect(() => {
-        const size = props.size;
-        const visible = props.visible;
-        if (ready()) post({ type: "paperboard:widget-update", size, visible });
-    });
-
-    return (
-        <>
-            <iframe
-                ref={frame}
-                class={styles.frame}
-                title={props.label}
-                sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-                style={{ opacity: ready() && !failure() ? "1" : "0" }}
-                onLoad={() => {
-                    if (!frame?.src) return;
-                    post({
-                        type: "paperboard:initialize",
-                        widget: { id: props.widgetId, instanceId: props.instanceId, size: props.size, visible: props.visible },
-                    });
-                }}
-            />
-            <Show when={failure()}>
-                <div class={styles.tileStatus} role="alert">
-                    <PaperText size={1} color="text-subtle">{failure()}</PaperText>
-                    <PaperButton size="tiny" variant="text" onClick={start}>Reload widget</PaperButton>
-                </div>
-            </Show>
-        </>
-    );
-};
 
 const WidgetTile: Component<WidgetTileProps> = (props) => {
     const status = () => props.status;
@@ -153,9 +59,7 @@ const WidgetTile: Component<WidgetTileProps> = (props) => {
                         </div>
                     }
                 >
-                    <Show when={props.live}>
-                        <WidgetFrame props={props} />
-                    </Show>
+                    <Show when={props.live}>{props.children}</Show>
                 </Show>
             </div>
             <Show when={props.editing}>
@@ -169,28 +73,27 @@ const WidgetTile: Component<WidgetTileProps> = (props) => {
                     onKeyDown={props.onKeyDown}
                     onFocus={props.onFocus}
                 >
-                    <div class={styles.editBar}>
-                        <PaperText size={1} weight={700} class={styles.editName}>{props.label}</PaperText>
-                        <Show when={props.canResize}>
-                            <PaperButton
-                                size="tiny"
-                                aria-label={`Change size, now ${props.sizeLabel}`}
-                                onPointerDown={(e: PointerEvent) => e.stopPropagation()}
-                                onClick={props.onCycleSize}
-                            >
-                                {props.sizeLabel}
-                            </PaperButton>
-                        </Show>
+                    <PaperButton
+                        size="tiny"
+                        icon
+                        class={styles.removeBadge}
+                        aria-label={`Remove ${props.label} from Home`}
+                        onPointerDown={(e: PointerEvent) => e.stopPropagation()}
+                        onClick={props.onRemove}
+                    >
+                        remove
+                    </PaperButton>
+                    <Show when={props.canResize}>
                         <PaperButton
                             size="tiny"
-                            icon
-                            aria-label={`Remove ${props.label} from Home`}
+                            class={styles.sizeBadge}
+                            aria-label={`Change size, now ${props.sizeLabel}`}
                             onPointerDown={(e: PointerEvent) => e.stopPropagation()}
-                            onClick={props.onRemove}
+                            onClick={props.onCycleSize}
                         >
-                            close
+                            {props.sizeLabel}
                         </PaperButton>
-                    </div>
+                    </Show>
                 </div>
             </Show>
         </div>

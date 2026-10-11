@@ -19,23 +19,27 @@ import {
 import { createLoadQueue } from "../src/renderer/src/lib/loadQueue";
 
 const item = (over: Partial<HomeItem>): HomeItem => ({
-    id: "a", computerId: "local", panelId: "dev.paperboard.widgetdemo", widgetId: "clock",
+    id: "a", computerId: "local", source: "panel", panelId: "dev.paperboard.widgetdemo", widgetId: "clock",
     size: "2x1", column: 0, x: 0, y: 0, ...over,
-});
+} as HomeItem);
 
 describe("parseHomeLayout", () => {
     it("reads a layout that was never saved as an empty Home", () => {
         expect(parseHomeLayout(null)).toEqual([]);
     });
 
-    it("round-trips what it saves", () => {
-        const items = [item({}), item({ id: "b", column: 1, x: 2, y: 3, size: "2x2" })];
+    it("round-trips what it saves, panel and built-in widgets alike", () => {
+        const builtin: HomeItem = { id: "c", computerId: "local", source: "builtin", widgetId: "memory", size: "2x2", column: 2, x: 0, y: 0 };
+        const items = [item({}), item({ id: "b", column: 1, x: 2, y: 3, size: "2x2" }), builtin];
         expect(parseHomeLayout(JSON.parse(JSON.stringify(serializeHomeLayout(items))))).toEqual(items);
     });
 
     it("throws on a damaged layout instead of returning an empty one to overwrite", () => {
         expect(() => parseHomeLayout({ version: 99, items: [] })).toThrow(/version/);
         expect(() => parseHomeLayout({ version: 1, items: [{ id: "a" }] })).toThrow(/malformed/);
+        // a panel widget names its panel; an unknown source is not guessed at
+        expect(() => parseHomeLayout({ version: 1, items: [{ ...item({}), panelId: undefined }] })).toThrow(/malformed/);
+        expect(() => parseHomeLayout({ version: 1, items: [{ ...item({}), source: "remote" }] })).toThrow(/malformed/);
         expect(() => parseHomeLayout({ version: 1, items: [item({ x: 3 })] })).toThrow(/off the grid/);
         expect(() => parseHomeLayout({ version: 1, items: [item({}), item({})] })).toThrow(/repeats/);
     });

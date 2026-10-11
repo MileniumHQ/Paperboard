@@ -26,15 +26,23 @@
     box-sizing: border-box;
 }
 
-/* the dot grid: Actions' dots, twice the size, one in the middle of every cell */
+/* the dot grid: four dots in every cell, just inside where a widget's
+   corners land, so an empty spot shows the shape of what fits there */
 .grid {
+    --dot: color-mix(in srgb, var(--paper-contrast) 22%, transparent);
+    --dot-r: 0.15625rem;
+    --dot-in: calc(var(--home-inset) + 0.625rem);
     position: relative;
     margin: 0 auto;
-    background-image: radial-gradient(
-        circle,
-        color-mix(in srgb, var(--paper-contrast) 22%, transparent) 0.1875rem,
-        transparent calc(0.1875rem + 0.5px)
-    );
+    background-image:
+        radial-gradient(circle at var(--dot-in) var(--dot-in), var(--dot) var(--dot-r), transparent calc(var(--dot-r) + 0.5px)),
+        radial-gradient(circle at calc(100% - var(--dot-in)) var(--dot-in), var(--dot) var(--dot-r), transparent calc(var(--dot-r) + 0.5px)),
+        radial-gradient(circle at var(--dot-in) calc(100% - var(--dot-in)), var(--dot) var(--dot-r), transparent calc(var(--dot-r) + 0.5px)),
+        radial-gradient(
+            circle at calc(100% - var(--dot-in)) calc(100% - var(--dot-in)),
+            var(--dot) var(--dot-r),
+            transparent calc(var(--dot-r) + 0.5px)
+        );
     background-size: var(--home-cell) var(--home-cell);
 }
 
@@ -95,7 +103,7 @@
     border-radius: var(--paper-border-radius);
     cursor: grab;
     touch-action: none;
-    background: color-mix(in srgb, var(--paper-surface-raised) 85%, transparent);
+    background: color-mix(in srgb, var(--paper-surface-raised) 15%, transparent);
 }
 
 .editOverlay:focus-visible {
@@ -107,22 +115,33 @@
     cursor: grabbing;
 }
 
-.editBar {
+/* the widget stays visible while arranging; its controls sit on its
+   corners, half outside, so they never cover what the widget shows */
+.editing .editOverlay .removeBadge,
+.editing .editOverlay .sizeBadge {
     position: absolute;
-    top: var(--paper-uigap-half);
-    left: var(--paper-uigap-half);
-    right: var(--paper-uigap-half);
-    display: flex;
-    align-items: center;
-    gap: var(--paper-uigap-half);
+    background: var(--paper-surface-raised);
+    color: var(--paper-text);
+    box-shadow: var(--paper-element-shadow);
 }
 
-.editName {
-    flex: 1;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+.editing .editOverlay .removeBadge:hover,
+.editing .editOverlay .sizeBadge:hover {
+    background: color-mix(in srgb, var(--paper-contrast) 8%, var(--paper-surface-raised));
+}
+
+.editing .editOverlay .removeBadge {
+    top: calc(var(--paper-control-size-tiny) / -2.5);
+    left: calc(var(--paper-control-size-tiny) / -2.5);
+    border-radius: 50%;
+}
+
+.editing .editOverlay .sizeBadge {
+    bottom: calc(var(--paper-control-size-tiny) / -2.5);
+    left: 50%;
+    transform: translateX(-50%);
+    height: var(--paper-control-size-tiny);
+    border-radius: calc(var(--paper-control-size-tiny) / 2);
 }
 
 /* where the widget lands: a thick outline with a see-through fill */
@@ -200,7 +219,7 @@
 }
 
 .library {
-    width: var(--paper-size-sidebar);
+    width: var(--paper-size-split-side);
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
@@ -213,7 +232,9 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: var(--paper-uigap);
+    min-height: var(--paper-size-bar);
+    box-sizing: border-box;
+    padding: 0 var(--paper-uigap);
     border-bottom: var(--paper-border-width) solid var(--paper-border);
 }
 
@@ -228,12 +249,7 @@
 
 .libraryComputer {
     text-transform: uppercase;
-}
-
-.libraryPanel {
-    display: flex;
-    flex-direction: column;
-    gap: var(--paper-uigap-half);
+    margin-top: var(--paper-uigap-half);
 }
 
 .libraryNote {
@@ -244,39 +260,171 @@
     padding: var(--paper-uigap-half) var(--paper-uigap);
 }
 
-.libraryItem {
+.libraryItemText {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+/* where widgets come from: Paperboard, then each panel */
+.sourceRow {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: var(--paper-uigap-half);
+    gap: var(--paper-uigap);
     width: 100%;
     padding: var(--paper-uigap-half) var(--paper-uigap);
-    border-radius: var(--paper-border-radius-half);
+    border-radius: var(--paper-border-radius);
     border: var(--paper-border-width) solid var(--paper-border);
     background: var(--paper-surface-raised);
     color: var(--paper-text);
     font: inherit;
     text-align: left;
-    cursor: grab;
-    touch-action: none;
+    cursor: pointer;
 }
 
-.libraryItem:hover:not(:disabled) {
+.sourceRow:hover {
     border-color: var(--paper-primary);
 }
 
-.libraryItem:focus-visible {
+.sourceRow:focus-visible,
+.preview:focus-visible,
+.chip:focus-visible {
     outline: var(--paper-focus-ring);
     outline-offset: var(--paper-focus-offset);
 }
 
-.libraryItem:disabled {
+.sourceIcon {
+    display: flex;
+    flex-shrink: 0;
+    color: var(--paper-primary);
+}
+
+.sourceDetail {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.sourceTitle {
+    display: flex;
+    align-items: center;
+    gap: var(--paper-uigap-half);
+    color: var(--paper-primary);
+}
+
+/* one widget: its live preview, what it is, and its sizes */
+.widgetCard {
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap-half);
+    padding: var(--paper-uigap);
+    border-radius: var(--paper-border-radius);
+    background: var(--paper-surface);
+    border: var(--paper-border-width) solid var(--paper-border-subtle);
+}
+
+.previewStage {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.preview {
+    position: relative;
+    padding: 0;
+    border: none;
+    background: none;
+    border-radius: var(--paper-border-radius);
+    cursor: grab;
+    touch-action: none;
+    transition: transform 0.15s ease;
+}
+
+.preview:hover:not(:disabled) {
+    transform: scale(1.03);
+}
+
+.preview:disabled {
     cursor: not-allowed;
     opacity: 0.5;
 }
 
-.libraryItemText {
+@media (prefers-reduced-motion: reduce) {
+    .preview {
+        transition: none;
+    }
+
+    .preview:hover:not(:disabled) {
+        transform: none;
+    }
+}
+
+/* the real widget, at Home's size, scaled down: nothing in it takes the pointer */
+.previewScaled {
+    position: absolute;
+    top: 0;
+    left: 0;
+    transform-origin: top left;
+    pointer-events: none;
+}
+
+.addBadge {
+    position: absolute;
+    top: calc(var(--paper-uigap-half) * -1);
+    left: calc(var(--paper-uigap-half) * -1);
+    display: flex;
+    border-radius: 50%;
+    background: var(--paper-primary);
+    color: var(--paper-on-color);
+    box-shadow: var(--paper-element-shadow);
+    font-size: var(--paper-text-size-2);
+    opacity: 0;
+    transition: opacity 0.15s ease;
+}
+
+.preview:hover .addBadge,
+.preview:focus-visible .addBadge {
+    opacity: 1;
+}
+
+.widgetCardText {
     display: flex;
     flex-direction: column;
-    min-width: 0;
+    text-align: center;
+}
+
+.chipRow {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: var(--paper-uigap-half);
+}
+
+.chip {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--paper-uigap-half);
+    padding: var(--paper-uigap-onefourth) var(--paper-uigap-half);
+    border-radius: var(--paper-border-radius-half);
+    border: var(--paper-border-width) solid var(--paper-border);
+    background: var(--paper-surface-raised);
+    color: var(--paper-text-subtle);
+    font: inherit;
+    font-size: var(--paper-text-size-1);
+    cursor: pointer;
+}
+
+.chip[aria-pressed="true"] {
+    border-color: var(--paper-primary);
+    color: var(--paper-primary-deep);
+    background: color-mix(in srgb, var(--paper-primary) 12%, var(--paper-surface-raised));
+}
+
+/* the size, drawn as its shape */
+.sizeGlyph {
+    display: inline-block;
+    border-radius: 0.125rem;
+    background: currentColor;
+    opacity: 0.6;
 }

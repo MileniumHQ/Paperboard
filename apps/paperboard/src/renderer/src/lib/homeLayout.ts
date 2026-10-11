@@ -19,17 +19,20 @@ export const MAX_CELL = 132;
 /** Below MIN_CELL a single column scales down rather than overflow, to this floor. */
 export const FLOOR_CELL = 48;
 
-export interface HomeItem {
+interface HomeItemBase {
     /** instance id: two copies of one widget are two items */
     id: string;
+    /** the computer the widget shows, or whose panel serves it */
     computerId: string;
-    panelId: string;
     widgetId: string;
     size: string;
     column: number;
     x: number;
     y: number;
 }
+
+/** A widget Paperboard draws itself, or one a panel serves. */
+export type HomeItem = HomeItemBase & ({ source: "builtin" } | { source: "panel"; panelId: string });
 
 export interface HomeLayoutDoc {
     version: typeof HOME_LAYOUT_VERSION;
@@ -78,21 +81,23 @@ export function parseHomeLayout(raw: unknown): HomeItem[] {
             item &&
             typeof item.id === "string" && INSTANCE_ID.test(item.id) &&
             typeof item.computerId === "string" && COMPUTER_ID.test(item.computerId) &&
-            typeof item.panelId === "string" && PANEL_ID.test(item.panelId) &&
+            (item.source === "builtin" || (item.source === "panel" && typeof item.panelId === "string" && PANEL_ID.test(item.panelId))) &&
             isWidgetId(item.widgetId) &&
             parseWidgetSize(item.size) !== null &&
             Number.isInteger(item.column) && Number.isInteger(item.x) && Number.isInteger(item.y);
         if (!ok) throw new Error(`Home layout item ${index} is malformed`);
-        return {
+        const base = {
             id: item.id as string,
             computerId: item.computerId as string,
-            panelId: item.panelId as string,
             widgetId: item.widgetId as string,
             size: item.size as string,
             column: item.column as number,
             x: item.x as number,
             y: item.y as number,
         };
+        return item.source === "builtin"
+            ? { ...base, source: "builtin" as const }
+            : { ...base, source: "panel" as const, panelId: item.panelId as string };
     });
     const ids = new Set(items.map((item) => item.id));
     if (ids.size !== items.length) throw new Error("Home layout repeats an item id");
