@@ -54,29 +54,26 @@ export function runtimeCommandsFor(values: Record<string, string>): string[] {
 // called after the Options tab writes server.properties. Online: apply the
 // runtime subset now. Offline: an existing world ignores server.properties
 // for difficulty/gamemode, so park the commands and replay them on boot.
-export function applyRuntimeProperties(
+export async function applyRuntimeProperties(
     ctx: ServiceContext<GameServerState>,
     values: Record<string, string>,
-): void {
+): Promise<void> {
     const commands = runtimeCommandsFor(values);
     if (commands.length === 0) return;
     if (ctx.state.serverStatus === "online") {
         for (const command of commands) {
-            processApi.write(SERVER_PROC_ID, `${command}\n`);
+            await processApi.write(SERVER_PROC_ID, `${command}\n`);
         }
     } else {
-        void persistPendingProperties(values);
+        await persistPendingProperties(values);
     }
 }
 
+// a missing config reads as null; a read that throws is unreadable state,
+// so the error propagates instead of overwriting the config with {}
 async function persistPendingProperties(values: Record<string, string>): Promise<void> {
-    let saved: Record<string, unknown> = {};
-    try {
-        const current = await config.get<Record<string, unknown>>(PANEL_ID);
-        if (current && typeof current === "object") saved = current;
-    } catch (err) {
-        console.debug("[Service:Properties] no saved panel config yet:", String(err));
-    }
+    const current = await config.get<Record<string, unknown> | null>(PANEL_ID);
+    const saved: Record<string, unknown> = current && typeof current === "object" ? current : {};
     const pending: Record<string, string> = {
         ...((saved.pendingProperties as Record<string, string> | undefined) ?? {}),
     };
@@ -89,10 +86,9 @@ async function persistPendingProperties(values: Record<string, string>): Promise
     }
     const entries = Object.entries(pending);
     if (entries.length > MAX_PENDING_PROPERTIES) {
-        console.error(
-            `[Service:Properties] refusing ${entries.length} pending edits (cap ${MAX_PENDING_PROPERTIES})`,
+        throw new Error(
+            `refusing ${entries.length} pending property edits (cap ${MAX_PENDING_PROPERTIES})`,
         );
-        return;
     }
     await config.set({ ...saved, pendingProperties: pending }, PANEL_ID);
 }

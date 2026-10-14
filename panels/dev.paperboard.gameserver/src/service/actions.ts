@@ -1477,7 +1477,7 @@ export const panelActions: ActionDefinition[] = [
             ctx: ServiceContext<GameServerState>,
             inputs: { values?: Record<string, string> },
         ) => {
-            applyRuntimeProperties(
+            await applyRuntimeProperties(
                 ctx,
                 inputs?.values && typeof inputs.values === "object" ? inputs.values : {},
             );
