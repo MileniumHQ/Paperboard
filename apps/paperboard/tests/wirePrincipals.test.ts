@@ -261,3 +261,19 @@ test("a remote-served panel's credential only relays to its computer and never l
         await local.close(); await remote.close();
     }
 });
+
+test("revoke-self reports revoked only after the revocation persists", async () => {
+    const f = await fixture();
+    f.auth.injectToken("test-forget", "host");
+    const tokenDir = path.dirname((f.auth as any).tokensFile);
+    const sdk = new CraneTransport({ port: f.port, token: "test-forget", computerId: "local" });
+    try {
+        fs.chmodSync(tokenDir, 0o500);
+        await expect(sdk.call("auth:revoke-self", {})).rejects.toThrow();
+        fs.chmodSync(tokenDir, 0o700);
+        expect(f.auth.matchToken("test-forget")).toBeTruthy();
+
+        expect(await sdk.call("auth:revoke-self", {})).toEqual({ revoked: true });
+        expect(f.auth.matchToken("test-forget")).toBeFalsy();
+    } finally { fs.chmodSync(tokenDir, 0o700); sdk.close(); await f.close(); }
+});

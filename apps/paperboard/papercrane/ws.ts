@@ -666,9 +666,20 @@ export function setupWebSocketServer(
                         return;
                     }
                     const token = authedToken;
-                    reply({ revoked: true });
-                    auth.revokeToken(token);
+                    // persist before replying: a failed vault write throws to
+                    // the error reply and the token stays live. This socket is
+                    // unindexed so the revocation broadcast cannot close it
+                    // before its own reply is sent.
+                    unindex(byToken, token);
+                    try {
+                        auth.revokeToken(token);
+                    } catch (err) {
+                        indexSocket(byToken, token);
+                        throw err;
+                    }
                     isAuthenticated = false;
+                    reply({ revoked: true });
+                    revokeSockets(new Set([ws]));
                     return;
                 }
 
