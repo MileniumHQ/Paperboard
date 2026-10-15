@@ -57,6 +57,10 @@ export async function handleBackups(action: string, id: unknown, params: any, ct
                 requireHost(ctx.callerPanelId(), action);
                 reply(id, await backups.addDestination(params?.destination));
                 return true;
+            case "backup:destination-reconnect":
+                requireHost(ctx.callerPanelId(), action);
+                reply(id, await backups.reconnectDestination(destinationId(params?.destinationId), params));
+                return true;
             case "backup:destination-remove":
                 requireHost(ctx.callerPanelId(), action);
                 await backups.removeDestination(destinationId(params?.destinationId));

@@ -275,6 +275,47 @@ export class BackupService {
         }
     }
 
+    /**
+     * Signs an existing Google Drive location in again (its sign-in expired
+     * or was revoked). The location keeps its id and its folder, so the
+     * backups already there stay listed: the new sign-in is proven against
+     * that folder before it replaces the saved one, and a different Google
+     * account that cannot see the folder is refused with the old sign-in
+     * left in place.
+     */
+    async reconnectDestination(destinationId: string, input: unknown): Promise<DestinationSummary> {
+        const config = this.config();
+        const dest = this.destination(destinationId, config);
+        if (dest.kind !== "gdrive") throw invalidParams("Only a Google Drive location can be signed in again");
+        const clientId = field(input, "clientId", 512);
+        const clientSecret = field(input, "clientSecret", 1024);
+        const refreshToken = field(input, "refreshToken", 2048);
+        // a stand-in id keeps the proof's access token out of the location's cache
+        const proofId = `${dest.id}.reconnect`;
+        try {
+            await new DriveBackupStore(proofId, { clientId, folderId: dest.drive.folderId }, { clientSecret, refreshToken }, this.driveEndpoints).check();
+        } finally {
+            forgetDriveToken(proofId);
+        }
+        const previous = (["client-secret", "refresh-token"] as const).map((name) => [name, this.engine.getSecret(`${dest.id}.${name}`, BACKUP_VAULT_OWNER)] as const);
+        this.engine.setSecret(`${dest.id}.client-secret`, clientSecret, BACKUP_VAULT_OWNER);
+        this.engine.setSecret(`${dest.id}.refresh-token`, refreshToken, BACKUP_VAULT_OWNER);
+        try {
+            await this.mutate((current) => {
+                const target = this.destination(destinationId, current);
+                if (target.kind === "gdrive") target.drive.clientId = clientId;
+            });
+        } catch (err) {
+            for (const [name, { found, value }] of previous) {
+                if (found && value) this.engine.setSecret(`${dest.id}.${name}`, value, BACKUP_VAULT_OWNER);
+            }
+            throw err;
+        } finally {
+            forgetDriveToken(dest.id);
+        }
+        return this.summary(this.destination(destinationId));
+    }
+
     private forgetSecrets(destinationId: string): void {
         for (const name of ["secret-key", "client-secret", "refresh-token"]) {
             this.engine.deleteSecret(`${destinationId}.${name}`, BACKUP_VAULT_OWNER);

@@ -1,6 +1,7 @@
 import { type Component, createSignal, For, onMount, Show } from "solid-js";
 import { PaperButton, PaperCard, PaperFlex, PaperModal, PaperSectionHeader, PaperText, getVarCss } from "@mileniumhq/paperui";
 import { backupLocationLabel, backupLocationsApi, type BackupLocation } from "@mileniumhq/paperapi";
+import { isBrowserShell, shellIpc } from "../../lib/shell";
 import { loadUsage, usageText, type UsageState } from "./locationUsage";
 import { LocationLogo } from "./providers";
 import AddLocationModal from "./AddLocationModal";
@@ -42,6 +43,22 @@ const BackupLocations: Component<{ computerId: string; computerName: string }> =
         }
     };
     onMount(() => void load());
+
+    // signing a Google Drive location in again keeps its folder and backups
+    const [reconnecting, setReconnecting] = createSignal<string | null>(null);
+    const [reconnectError, setReconnectError] = createSignal("");
+    const reconnect = async (location: BackupLocation) => {
+        setReconnecting(location.id);
+        setReconnectError("");
+        try {
+            await shellIpc().invoke("backup-gdrive-connect", { computerId: props.computerId, locationId: location.id });
+            await load();
+        } catch (err) {
+            setReconnectError(`${location.label} could not be reconnected: ${(err as Error)?.message ?? err}`);
+        } finally {
+            setReconnecting(null);
+        }
+    };
 
     const recover = async () => {
         setRecovering(true);
@@ -105,6 +122,9 @@ const BackupLocations: Component<{ computerId: string; computerName: string }> =
                 <Show when={!locations() && !loadError() && !problem()}>
                     <PaperText size={2} color="text-subtle">Loading locations…</PaperText>
                 </Show>
+                <Show when={reconnectError()}>
+                    <PaperText size={2} color="danger">{reconnectError()}</PaperText>
+                </Show>
                 <For each={locations() ?? []}>
                     {(location) => (
                         <PaperCard surface="front" padding="full">
@@ -126,6 +146,15 @@ const BackupLocations: Component<{ computerId: string; computerName: string }> =
                                         {usageText(usage()[location.id] ?? { kind: "loading" })}
                                     </PaperText>
                                 </PaperFlex>
+                                <Show when={location.kind === "gdrive"}>
+                                    <PaperButton
+                                        variant="text"
+                                        disabled={reconnecting() !== null || isBrowserShell()}
+                                        onClick={() => void reconnect(location)}
+                                    >
+                                        {reconnecting() === location.id ? "Waiting for Google..." : "Reconnect"}
+                                    </PaperButton>
+                                </Show>
                                 <Show when={location.removable}>
                                     <PaperButton variant="text" onClick={() => { setRemoveError(""); setRemoving(location); }}>Remove</PaperButton>
                                 </Show>

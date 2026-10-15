@@ -432,6 +432,7 @@ describe("backup scoping", () => {
             ["backup:destinations-recover", {}],
             ["backup:destination-usage", { destinationId: "local" }],
             ["backup:destination-add", { destination: { kind: "s3" } }],
+            ["backup:destination-reconnect", { destinationId: "d-000000000000" }],
             ["backup:destination-remove", { destinationId: "d-000000000000" }],
             ["backup:panel-destination-set", { panelId: ID, destinationId: "local" }],
         ] as const;
@@ -503,6 +504,40 @@ test("S3 store round-trips a backup through a signed bucket", async () => {
     expect(await store.list(ID)).toEqual([]);
 });
 
+test("reconnecting Google Drive keeps the location, its folder and its backups; another account is refused", async () => {
+    const f = panelFixture();
+    let folders = 0;
+    const accounts: Record<string, string> = { "r-old": "acc-old", "r-new": "acc-new", "r-other": "acc-other" };
+    const base = await serve((req, _body, res) => {
+        const url = new URL(req.url!, "http://x");
+        const json = (status: number, value: unknown) => res.writeHead(status, { "content-type": "application/json" }).end(JSON.stringify(value));
+        if (url.pathname === "/token") return json(200, { access_token: accounts[new URLSearchParams(_body.toString()).get("refresh_token") ?? ""], expires_in: 3600 });
+        if (url.pathname === "/api/files" && req.method === "POST") return json(200, { id: `folder${++folders}` });
+        // acc-other is a different Google account: the folder is not its file
+        if (url.pathname === "/api/files/folder1") return req.headers.authorization === "Bearer acc-other" ? json(404, {}) : json(200, { id: "folder1", trashed: false });
+        return json(404, {});
+    });
+    const endpoints = { tokenUrl: `${base}/token`, apiBase: `${base}/api`, uploadBase: `${base}/upload` };
+    const service = new BackupService(f.engine, endpoints);
+    const added = await service.addDestination({ kind: "gdrive", label: "Drive", clientId: "client", clientSecret: "s", refreshToken: "r-old" });
+    const file = path.join(f.root, "backups", "destinations.json");
+    const folderId = () => JSON.parse(fs.readFileSync(file, "utf8")).destinations[0].drive.folderId;
+    const secret = (name: string) => f.engine.getSecret(`${added.id}.${name}`, "shell-backups").value;
+    expect(folderId()).toBe("folder1");
+
+    await expect(service.reconnectDestination(added.id, { clientId: "client", clientSecret: "s", refreshToken: "r-other" })).rejects.toThrow();
+    expect(secret("refresh-token")).toBe("r-old");
+
+    const again = await service.reconnectDestination(added.id, { clientId: "client", clientSecret: "s2", refreshToken: "r-new" });
+    expect(again.id).toBe(added.id);
+    expect(folderId()).toBe("folder1");
+    expect(folders).toBe(1);
+    expect(secret("refresh-token")).toBe("r-new");
+    expect(secret("client-secret")).toBe("s2");
+    expect(service.listDestinations().filter((d) => d.kind === "gdrive")).toHaveLength(1);
+    await expect(service.reconnectDestination("local", {})).rejects.toThrow("Google Drive");
+});
+
 test("Google Drive store round-trips a backup in its folder", async () => {
     const files = new Map<string, { meta: any; body: Buffer }>();
     const sessions = new Map<string, any>();
@@ -568,5 +603,5 @@ test("Google Drive store round-trips a backup in its folder", async () => {
     expect(await store.list(ID)).toEqual([]);
 
     const refused = new DriveBackupStore("d-ba9876543210", settings, { clientSecret: "s", refreshToken: "revoked" }, endpoints);
-    await expect(refused.list(ID)).rejects.toThrow("connect Google Drive again");
+    await expect(refused.list(ID)).rejects.toThrow("Reconnect this backup location");
 });

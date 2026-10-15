@@ -99,9 +99,11 @@ export default function registerShellIpc(ipcMain: IpcMain) {
         return runPanelImport(args, nativeFileDialogs(event));
     });
 
-    // adds a Google Drive backup location to a computer: main runs the
-    // sign-in with Paperboard's Google client and hands the refresh token
-    // straight to that computer's daemon, which refreshes with the same client
+    // adds a Google Drive backup location to a computer, or with a
+    // locationId signs an existing one in again (it keeps its folder): main
+    // runs the sign-in with Paperboard's Google client and hands the refresh
+    // token straight to that computer's daemon, which refreshes with the
+    // same client
     ipcMain.handle("backup-gdrive-connect", async (event, args) => {
         assertShellFrame(event, "backup-gdrive-connect");
         const field = (name: string, max: number) => {
@@ -110,7 +112,8 @@ export default function registerShellIpc(ipcMain: IpcMain) {
             return value.trim();
         };
         const computerId = field("computerId", 128);
-        const label = field("label", 60);
+        const locationId = args?.locationId === undefined ? null : field("locationId", 64);
+        const label = locationId ? null : field("label", 60);
         const google = paperboardGoogleClient(import.meta.env);
         if (!google) throw new Error("This build of Paperboard has no Google sign-in. Use a release build to connect Google Drive.");
         const client = connectionPool.getClient(computerId);
@@ -121,7 +124,10 @@ export default function registerShellIpc(ipcMain: IpcMain) {
                 openExternal: (url) => shell.openExternal(url),
                 page: (outcome, reason) => googleSignInPage(outcome, nativeTheme.shouldUseDarkColors, reason),
             },
-            (refreshToken) => client.call("backup:destination-add", { destination: { kind: "gdrive", label, ...google, refreshToken } }, 120_000),
+            (refreshToken) =>
+                locationId
+                    ? client.call("backup:destination-reconnect", { destinationId: locationId, ...google, refreshToken }, 120_000)
+                    : client.call("backup:destination-add", { destination: { kind: "gdrive", label, ...google, refreshToken } }, 120_000),
         );
     });
 

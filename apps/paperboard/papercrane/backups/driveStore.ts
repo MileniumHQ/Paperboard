@@ -75,7 +75,7 @@ export class DriveBackupStore implements BackupStore {
             maxBytes: 64 * 1024,
         });
         if (res.status === 400 || res.status === 401) {
-            throw new Error("Google refused the saved sign-in. Remove this backup location and connect Google Drive again");
+            throw new Error("Google refused the saved sign-in. Reconnect this backup location from Computer Info > Backups");
         }
         const body = JSON.parse(expectOk(res, "Refreshing the Google sign-in").body.toString("utf8"));
         if (typeof body.access_token !== "string") throw new Error("Google sent no access token");
