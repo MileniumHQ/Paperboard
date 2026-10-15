@@ -35,6 +35,9 @@ export interface GameServerState {
     serverVersion: string;
     ramAllocation: number;
     onlinePlayers: string[];
+    // the running server's player cap, from its `list` answer; null while
+    // offline or until it has answered
+    maxPlayers: number | null;
     seenPlayers: string[];
     playerStats: Record<string, PlayerStatData>;
     playerPlaytime: Record<string, number>;

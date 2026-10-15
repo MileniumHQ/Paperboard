@@ -18,7 +18,7 @@ import { parseGameruleValue } from "../core/gamerules";
 import { resolveVersionProfile } from "../lib/versionProfile";
 import { isSupportedMcVersion, MIN_SUPPORTED_MC_VERSION } from "../lib/versionProfile";
 import { loadConfigAndProperties } from "./config";
-import { trackPlayerActivity, handleStatResponse, handlePositionResponse } from "./players";
+import { trackPlayerActivity, handleStatResponse, handlePositionResponse, queryOnlinePlayers } from "./players";
 import { assertSingleLine, extractStatValue, extractPosition, extractDimension, isPlayerListResponse } from "../core/players";
 import { checkLogForIssues } from "./diagnostics";
 import { onServerOnline } from "./gamerules";
@@ -319,6 +319,8 @@ export function handleProcessData(
             if (ctx.state.serverStatus !== "online") {
                 ctx.setState({ serverStatus: "online" });
                 ctx.emitTrigger(TRIGGER_IDS.serverStarted, true);
+                // one `list` so the player cap is known from the start
+                queryOnlinePlayers(ctx);
                 // boot-time truth: offline gamerule edits re-apply, then
                 // every rule is queried so the UI reads live values
                 onServerOnline(ctx).catch((err) =>
@@ -395,6 +397,7 @@ export function handleProcessExit(ctx: ServiceContext<GameServerState>): void {
         ctx.setState({
             serverStatus: "offline",
             onlinePlayers: [],
+            maxPlayers: null,
             serverEntries: appendCapped(ctx.state.serverEntries, {
                 type: "info",
                 content: "[Server] Restarting instance...",
@@ -405,6 +408,7 @@ export function handleProcessExit(ctx: ServiceContext<GameServerState>): void {
         ctx.setState({
             serverStatus: "offline",
             onlinePlayers: [],
+            maxPlayers: null,
             serverEntries: appendCapped(ctx.state.serverEntries, {
                 type: "warn",
                 content: "[Server] Process stopped.",
@@ -428,6 +432,7 @@ function watchForceKill(ctx: ServiceContext<GameServerState>): void {
                 isRestarting = false;
                 ctx.setState({
                     serverStatus: "offline",
+                    maxPlayers: null,
                     serverEntries: appendCapped(ctx.state.serverEntries, {
                         type: "warn",
                         content: "[Server] Process stopped.",

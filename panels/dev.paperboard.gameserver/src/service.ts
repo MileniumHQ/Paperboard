@@ -30,6 +30,7 @@ const initialState: GameServerState = {
     serverVersion: "",
     ramAllocation: 4,
     onlinePlayers: [],
+    maxPlayers: null,
     seenPlayers: [],
     playerStats: {},
     playerPlaytime: {},

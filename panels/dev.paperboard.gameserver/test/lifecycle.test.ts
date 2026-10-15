@@ -178,6 +178,33 @@ describe("start marker", () => {
     });
 });
 
+describe("player cap", () => {
+    it("the server's list answer sets maxPlayers, and an empty answer clears a stale roster", () => {
+        const ctx = makeCtx({ serverStatus: "online", onlinePlayers: ["steve"], maxPlayers: null });
+        handleProcessData(ctx, "[12:00:00] [Server thread/INFO]: There are 1 of a max of 20 players online: Steve\n");
+        expect(ctx.state.maxPlayers).toBe(20);
+        expect(ctx.state.onlinePlayers).toEqual(["steve"]);
+        handleProcessData(ctx, "[12:00:15] [Server thread/INFO]: There are 0 of a max of 20 players online:\n");
+        expect(ctx.state.onlinePlayers).toEqual([]);
+    });
+
+    it("a player chatting the header can't set the cap", () => {
+        const ctx = makeCtx({ serverStatus: "online", maxPlayers: 20 });
+        handleProcessData(ctx, "[12:00:00] [Server thread/INFO]: <Steve> There are 0 of a max of 999 players online:\n");
+        expect(ctx.state.maxPlayers).toBe(20);
+    });
+
+    it("going online asks for the list once, and the process exit forgets the cap", () => {
+        const ctx = makeCtx({ maxPlayers: null });
+        handleProcessData(ctx, '[12:00:00] [Server thread/INFO]: Done (2.312s)! For help, type "help"\n');
+        expect(writes.filter((w) => w === "list\n")).toHaveLength(1);
+        handleProcessData(ctx, "[12:00:01] [Server thread/INFO]: There are 0 of a max of 8 players online:\n");
+        expect(ctx.state.maxPlayers).toBe(8);
+        handleProcessExit(ctx);
+        expect(ctx.state.maxPlayers).toBeNull();
+    });
+});
+
 describe("player events", () => {
     it("a join updates presence, history, and emits player-joined", () => {
         const ctx = makeCtx({ serverStatus: "online" });

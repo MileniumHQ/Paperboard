@@ -15,6 +15,7 @@ import {
     extractJoinedName,
     extractLeftName,
     extractListedNames,
+    extractListCounts,
     extractPosition,
     extractStatValue,
     normalizePlayerKey,
@@ -148,6 +149,13 @@ export function trackPlayerActivity(
         });
         ctx.emitTrigger(TRIGGER_IDS.playerLeft, left);
         return;
+    }
+
+    // the running server's own player cap; an empty server also clears a
+    // roster that went stale while nobody was watching the joins
+    const counts = extractListCounts(clean);
+    if (counts) {
+        ctx.setState(counts.online === 0 ? { maxPlayers: counts.max, onlinePlayers: [] } : { maxPlayers: counts.max });
     }
 
     const names = extractListedNames(clean);

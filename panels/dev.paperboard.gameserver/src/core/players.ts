@@ -73,6 +73,15 @@ export function isPlayerListResponse(clean: string): boolean {
     return /there are \d+ of (?:a )?max of \d+ players online\s*:?/i.test(clean);
 }
 
+// the counts in the `list` header, read only from the server's own line
+// (start of line or right after the log prefix), so a player chatting
+// "There are 9 of a max of 99 players online" can't set them
+export function extractListCounts(clean: string): { online: number; max: number } | undefined {
+    const match = clean.match(/(?:^|\]:\s*)There are (\d{1,6}) of (?:a )?max of (\d{1,6}) players online/i);
+    if (!match) return undefined;
+    return { online: Number(match[1]), max: Number(match[2]) };
+}
+
 export function extractStatValue(clean: string): number | undefined {
     const match = clean.match(/has the following entity data:\s*(-?\d+(?:\.\d+)?)/i);
     if (!match) return undefined;
