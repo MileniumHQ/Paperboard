@@ -1,14 +1,14 @@
 import { type Component, createSignal, For, onMount, Show } from "solid-js";
-import { PaperButton, PaperCard, PaperFlex, PaperModal, PaperPage, PaperPageHeader, PaperText, getVarCss } from "@mileniumhq/paperui";
+import { PaperButton, PaperCard, PaperFlex, PaperModal, PaperSectionHeader, PaperText, getVarCss } from "@mileniumhq/paperui";
 import { backupLocationsApi, type BackupLocation } from "@mileniumhq/paperapi";
 import { loadUsage, usageText, type UsageState } from "./locationUsage";
 import { LocationLogo } from "./providers";
 import AddLocationModal from "./AddLocationModal";
 
-// A computer's Backups page: the locations its panels can keep backups in,
-// what each holds and has free, adding one, and removing one. Removing a
-// location keeps the backups already there.
-const BackupsPage: Component<{ computerId: string; computerName: string }> = (props) => {
+// The Backups section of a computer's Computer Info: the locations its
+// panels can keep backups in, what each holds and has free, adding one, and
+// removing one. Removing a location keeps the backups already there.
+const BackupLocations: Component<{ computerId: string }> = (props) => {
     const [locations, setLocations] = createSignal<BackupLocation[] | null>(null);
     const [usage, setUsage] = createSignal<Record<string, UsageState>>({});
     const [loadError, setLoadError] = createSignal("");
@@ -50,10 +50,10 @@ const BackupsPage: Component<{ computerId: string; computerName: string }> = (pr
     };
 
     return (
-        <PaperPage>
-            <PaperPageHeader icon="backup" title="Backups" subtitle={`Where ${props.computerName}'s panels keep their backups`}>
-                <PaperButton onClick={() => setAdding(true)}>Add Location</PaperButton>
-            </PaperPageHeader>
+        <PaperFlex direction="column" gap="half" fullWidth>
+            <PaperSectionHeader icon="backup" title="Backups">
+                <PaperButton size="small" onClick={() => setAdding(true)}>Add Location</PaperButton>
+            </PaperSectionHeader>
 
             <PaperFlex direction="column" gap="full" fullWidth>
                 <Show when={loadError()}>
@@ -123,8 +123,8 @@ const BackupsPage: Component<{ computerId: string; computerName: string }> = (pr
                     </Show>
                 </PaperFlex>
             </PaperModal>
-        </PaperPage>
+        </PaperFlex>
     );
 };
 
-export default BackupsPage;
+export default BackupLocations;

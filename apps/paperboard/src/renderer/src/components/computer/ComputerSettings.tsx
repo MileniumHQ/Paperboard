@@ -2,15 +2,14 @@ import { type Component, Show, createSignal } from "solid-js";
 import {
     PaperText,
     PaperButton,
-    PaperSettingList,
-    PaperSettingItem,
     PaperFlex,
     PaperModal,
     PaperPage,
     PaperPageHeader,
 } from "@mileniumhq/paperui";
 import type { ComputerItem } from "../../App";
-import { formatOsVersion } from "./ComputerHeader";
+import { computerIcon } from "./computerIcon";
+import BackupLocations from "../backups/BackupLocations";
 
 export interface ComputerSettingsProps {
     computer?: ComputerItem;
@@ -25,6 +24,10 @@ const ComputerSettings: Component<ComputerSettingsProps> = (props) => {
     const [removeError, setRemoveError] = createSignal<string | null>(null);
 
     const isLocal = () => Boolean(props.computer?.isLocal);
+    const address = () => {
+        const host = props.computer?.networkAddress || props.computer?.host || "127.0.0.1";
+        return isLocal() ? host : `${host}:${props.computer?.port || 45464}`;
+    };
 
     const handleConfirmRemove = async () => {
         if (!props.computer || props.computer.isLocal) return;
@@ -46,38 +49,18 @@ const ComputerSettings: Component<ComputerSettingsProps> = (props) => {
     return (
         <PaperPage>
             <PaperPageHeader
-                icon="info"
-                title="Computer Info"
-                subtitle={props.computer?.name || "This Computer"}
+                icon={computerIcon({ name: props.computer?.name, isLocal: isLocal() })}
+                title={props.computer?.name || "This Computer"}
+                subtitle={address()}
             />
 
-            <PaperSettingList autoHeight>
-                <PaperSettingItem title="Computer Name">
-                    <PaperText size={3} weight={600}>
-                        {props.computer?.name || "This Computer"}
-                    </PaperText>
-                </PaperSettingItem>
-
-                <PaperSettingItem title="Network Address">
-                    <PaperText size={3} weight={600} color="text-subtle">
-                        {props.computer?.networkAddress || props.computer?.host || "127.0.0.1"}
-                        <Show when={!isLocal()}>
-                            :{props.computer?.port || 45464}
-                        </Show>
-                    </PaperText>
-                </PaperSettingItem>
-
-                <PaperSettingItem title="Operating System">
-                    <PaperText size={3} weight={600}>
-                        {formatOsVersion(props.computer)}
-                    </PaperText>
-                </PaperSettingItem>
+            <PaperFlex direction="column" gap="double" fullWidth>
+                <Show when={props.computer}>
+                    {(computer) => <BackupLocations computerId={computer().id} />}
+                </Show>
 
                 <Show when={!isLocal()}>
-                    <PaperSettingItem
-                        title="Remove Computer"
-                        description="Forget this computer and disconnect all panels"
-                    >
+                    <PaperFlex direction="row" justify="flex-start">
                         <PaperButton
                             variant="danger"
                             disabled={isRemoving()}
@@ -85,9 +68,9 @@ const ComputerSettings: Component<ComputerSettingsProps> = (props) => {
                         >
                             {isRemoving() ? "Removing..." : "Forget Computer"}
                         </PaperButton>
-                    </PaperSettingItem>
+                    </PaperFlex>
                 </Show>
-            </PaperSettingList>
+            </PaperFlex>
 
             <PaperModal
                 open={isConfirmOpen()}

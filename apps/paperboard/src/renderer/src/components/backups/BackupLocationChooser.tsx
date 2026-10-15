@@ -85,7 +85,7 @@ const BackupLocationChooser: Component<{ computerId: string; panelId: string; on
                         </PaperSelector>
                     )}
                 </Show>
-                <PaperText size={2} color="text-subtle">Add Google Drive or a storage bucket on this computer's Backups page.</PaperText>
+                <PaperText size={2} color="text-subtle">Add Google Drive or an S3 bucket in this computer's Computer Info.</PaperText>
                 <Show when={error()}>
                     <PaperText size={2} color="danger">{error()}</PaperText>
                 </Show>

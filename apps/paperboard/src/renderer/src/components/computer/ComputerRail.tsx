@@ -5,10 +5,10 @@ import {
     PaperRailItem,
     PaperRailAction,
     PaperSeparator,
-    PaperIcon,
     getVarCss,
 } from "@mileniumhq/paperui";
 import styles from "./ComputerRail.module.css";
+import { computerIcon } from "./computerIcon";
 
 import type { AppUpdateState } from "../../../../shared/appUpdate";
 
@@ -54,18 +54,7 @@ const ComputerRail = (props: ComputerRailProps): JSX.Element => {
                 {(comp) => (
                     <PaperRailItem
                         value={comp.id}
-                        icon={
-                            comp.isLocal ? (
-                                "computer"
-                            ) : (
-                                <PaperIcon monogram>
-                                    {(comp.name || "C")
-                                        .trim()
-                                        .slice(0, 2)
-                                        .toUpperCase()}
-                                </PaperIcon>
-                            )
-                        }
+                        icon={computerIcon(comp)}
                         label={`${comp.name} (${comp.host})`}
                         onContextMenu={(e: MouseEvent) => {
                             if (!comp.isLocal) props.onComputerContextMenu?.(comp.id, e);

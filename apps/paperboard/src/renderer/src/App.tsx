@@ -35,8 +35,7 @@ import LandingView from "./components/computer/LandingView";
 import ComputerSetupWizard from "./components/wizard/ComputerSetupWizard";
 import ComputerHeader from "./components/computer/ComputerHeader";
 import ComputerSettings from "./components/computer/ComputerSettings";
-import BackupsPage from "./components/backups/BackupsPage";
-import { BACKUPS_TAB, isShellTab } from "./lib/shellTabs";
+import { isShellTab } from "./lib/shellTabs";
 import ConnectionLostOverlay from "./components/computer/ConnectionLostOverlay";
 import OfflineComputerModal from "./components/computer/OfflineComputerModal";
 import ComputerRail from "./components/computer/ComputerRail";
@@ -744,31 +743,6 @@ const App: Component = () => {
                                                 onRemove={handleRemoveComputer}
                                             />
                                         </PaperFlex>
-                                    );
-                                }}
-                            </For>
-
-                            <For each={computers()}>
-                                {(comp) => {
-                                    const isVisible = () =>
-                                        activeComputerId() === comp.id &&
-                                        getSelectedTab(comp.id) === BACKUPS_TAB;
-                                    return (
-                                        <Show when={isVisible()}>
-                                            <PaperFlex
-                                                direction="column"
-                                                fullHeight
-                                                style={{
-                                                    flex: 1,
-                                                    "overflow-y": "auto",
-                                                }}
-                                            >
-                                                <BackupsPage
-                                                    computerId={comp.id}
-                                                    computerName={comp.name || "This Computer"}
-                                                />
-                                            </PaperFlex>
-                                        </Show>
                                     );
                                 }}
                             </For>
