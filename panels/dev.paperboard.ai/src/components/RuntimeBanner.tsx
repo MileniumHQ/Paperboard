@@ -27,24 +27,24 @@ export default function RuntimeBanner() {
             <div class={styles.RuntimeBanner} data-status={state.runtime.status} role="status">
                 <Switch>
                     <Match when={state.runtime.status === "checking" || state.runtime.status === "starting"}>
-                        <PaperLoader loaderStatus="indeterminate" size="small" label={state.runtime.status === "checking" ? "Looking for Ollama" : "Starting Ollama"} />
+                        <PaperLoader loaderStatus="indeterminate" size="small" label={state.runtime.status === "checking" ? "Looking for Local AI" : "Starting Local AI"} />
                     </Match>
                     <Match when={state.runtime.status === "stopped"}>
                         <PaperIcon>pause_circle</PaperIcon>
-                        <PaperText weight={600} class={styles.grow}>Ollama is stopped. Chats and downloads need it running.</PaperText>
-                        <PaperButton variant="primary" size="small" disabled={busy()} onClick={start}>Start Ollama</PaperButton>
+                        <PaperText weight={600} class={styles.grow}>Local AI is stopped. Chats and downloads need it running.</PaperText>
+                        <PaperButton variant="primary" size="small" disabled={busy()} onClick={start}>Start Local AI</PaperButton>
                     </Match>
                     <Match when={state.runtime.status === "error"}>
                         <PaperIcon>error</PaperIcon>
                         <div class={styles.grow}>
-                            <PaperText weight={600}>{state.runtime.error || "Ollama stopped working."}</PaperText>
+                            <PaperText weight={600}>{state.runtime.error || "Local AI stopped working."}</PaperText>
                             <Show when={state.runtime.errorDetail}>
                                 <button type="button" class={styles.link} aria-expanded={details()} onClick={() => setDetails(!details())}>
-                                    {details() ? "Hide Ollama's output" : "Show Ollama's output"}
+                                    {details() ? "Hide Local AI's output" : "Show Local AI's output"}
                                 </button>
                             </Show>
                         </div>
-                        <PaperButton variant="primary" size="small" disabled={busy()} onClick={start}>Restart Ollama</PaperButton>
+                        <PaperButton variant="primary" size="small" disabled={busy()} onClick={start}>Restart Local AI</PaperButton>
                     </Match>
                 </Switch>
             </div>

@@ -13,11 +13,11 @@
     min-height: 0;
 }
 
+/* scrolls; PaperPage inside gives the settings the app's page column */
 .settingsView {
     flex: 1;
     min-height: 0;
     overflow-y: auto;
-    padding: var(--paper-uigap-double);
 }
 
 .approvalBanner {

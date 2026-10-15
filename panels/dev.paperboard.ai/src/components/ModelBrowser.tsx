@@ -132,7 +132,7 @@ export default function ModelBrowser(props: ModelBrowserProps) {
     const downloadByName = async () => {
         const ref = byName().trim();
         if (!isValidModelRef(ref)) {
-            setError(`"${ref}" is not a model name from the Ollama library, like qwen3:8b.`);
+            setError(`"${ref}" is not a model name from the model library, like qwen3:8b.`);
             return;
         }
         await download(ref);
@@ -391,7 +391,7 @@ export default function ModelBrowser(props: ModelBrowserProps) {
 
             <Show when={!isEndpoint()}>
             <div class={styles.byName}>
-                <PaperText size={1} color="text-muted">Not listed? Download any Ollama library model by name.</PaperText>
+                <PaperText size={1} color="text-muted">Not listed? Download any model from the library by name.</PaperText>
                 <div class={styles.byNameRow}>
                     <PaperInput
                         fullWidth

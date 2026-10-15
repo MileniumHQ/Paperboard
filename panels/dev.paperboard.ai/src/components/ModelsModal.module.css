@@ -1,15 +1,8 @@
-.layout {
-    display: grid;
-    grid-template-columns: minmax(180px, 220px) minmax(0, 1fr);
-    gap: var(--paper-uigap);
+/* The modal body is a flex column capped by the dialog's max height; the
+   panel takes up to this much of it, and PaperPanel lays out the rest. */
+.panel {
+    flex: 1 1 640px;
     min-height: 0;
-}
-
-.sidebar {
-    position: sticky;
-    top: 0;
-    align-self: start;
-    min-width: 0;
 }
 
 .pane {
@@ -38,14 +31,4 @@
     display: flex;
     gap: var(--paper-uigap-half);
     flex-shrink: 0;
-}
-
-@media (max-width: 640px) {
-    .layout {
-        grid-template-columns: minmax(0, 1fr);
-    }
-
-    .sidebar {
-        position: static;
-    }
 }

@@ -44,7 +44,7 @@ export async function unloadAndConfirm(client: LoadedClient, name: string, confi
     for (;;) {
         const now = await listLoaded(client);
         if (!now.some((m) => m.name === name)) return now;
-        if (Date.now() >= deadline) throw new Error(`Ollama accepted the unload, but ${name} is still in memory.`);
+        if (Date.now() >= deadline) throw new Error(`Local AI accepted the unload, but ${name} is still in memory.`);
         await new Promise((r) => setTimeout(r, UNLOAD_POLL_MS));
     }
 }

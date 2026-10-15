@@ -25,17 +25,17 @@ export function runtimeBlocker(status: RuntimeStatus, error?: string): Blocker |
         case "ready":
             return null;
         case "starting":
-            return { text: "Ollama is starting…", recovery: null };
+            return { text: "Local AI is starting…", recovery: null };
         case "checking":
-            return { text: "Checking Ollama…", recovery: null };
+            return { text: "Checking Local AI…", recovery: null };
         case "installing":
-            return { text: "Ollama is installing…", recovery: null };
+            return { text: "Local AI is installing…", recovery: null };
         case "missing":
-            return { text: "Ollama is not installed", recovery: "open" };
+            return { text: "Local AI is not installed", recovery: "open" };
         case "stopped":
-            return { text: "Ollama is not running", recovery: "start" };
+            return { text: "Local AI is not running", recovery: "start" };
         case "error":
-            return { text: "Ollama stopped", ...(error ? { detail: error } : {}), failed: true, recovery: "start" };
+            return { text: "Local AI stopped", ...(error ? { detail: error } : {}), failed: true, recovery: "start" };
     }
 }
 

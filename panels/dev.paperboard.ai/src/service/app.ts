@@ -134,6 +134,13 @@ function clampSettings(input: Partial<Settings> | undefined): Settings {
     };
 }
 
+/** A saved connection as the UI sees it. The local runtime's name is the panel's, not whatever an older version saved. */
+function shownConnection(c: StoredConnection, hasApiKey: (c: StoredConnection) => boolean): Connection {
+    if (c.kind === "openai-compatible") return { id: c.id, kind: c.kind, label: c.label, baseUrl: c.baseUrl ?? "", hasApiKey: hasApiKey(c) };
+    if (c.kind === "ollama") return { ...c, label: OLLAMA_PROVIDER.label };
+    return { ...c };
+}
+
 export class AiApp {
     private ctx!: Ctx;
     private filesDir = "";
@@ -250,17 +257,11 @@ export class AiApp {
     /** Saved connections plus which have a key in the vault. */
     private async connectionsFromStored(stored: readonly StoredConnection[]): Promise<Connection[]> {
         const keys = stored.some((c) => c.kind === "openai-compatible") ? new Set(await secretsApi.list(PANEL_ID)) : new Set<string>();
-        return stored.map((c) =>
-            c.kind === "openai-compatible"
-                ? { id: c.id, kind: c.kind, label: c.label, baseUrl: c.baseUrl ?? "", hasApiKey: keys.has(apiKeySecretName(c.id)) }
-                : { ...c },
-        );
+        return stored.map((c) => shownConnection(c, (e) => keys.has(apiKeySecretName(e.id))));
     }
 
     private publishConnections(stored: readonly StoredConnection[], keyed: ReadonlySet<string>): Connection[] {
-        const connections: Connection[] = stored.map((c) =>
-            c.kind === "openai-compatible" ? { ...c, baseUrl: c.baseUrl ?? "", hasApiKey: keyed.has(c.id) } : { ...c },
-        );
+        const connections: Connection[] = stored.map((c) => shownConnection(c, (e) => keyed.has(e.id)));
         this.ctx.setState({ connections });
         return connections;
     }
@@ -291,7 +292,7 @@ export class AiApp {
         if (stored.length >= MAX_CONNECTIONS) throw new Error(`At most ${MAX_CONNECTIONS} providers can be added.`);
         if (input.kind === "agent") return this.addAgent(input, stored);
         if (input.kind === "ollama") {
-            if (stored.some((c) => c.kind === "ollama")) throw new Error("Ollama is already added.");
+            if (stored.some((c) => c.kind === "ollama")) throw new Error("Local AI is already added.");
             const added: StoredConnection = { id: OLLAMA_PROVIDER_ID, kind: "ollama", label: OLLAMA_PROVIDER.label };
             await this.saveConfig((c) => {
                 c.connections = [...(c.connections ?? []), added];
@@ -899,7 +900,7 @@ export class AiApp {
 
     /** Frees a loaded model's memory; resolves once Ollama no longer lists it. */
     async unloadModel(name: string): Promise<LoadedModelsReport> {
-        if (!this.hasOllama()) throw new Error("Only Ollama's models can be unloaded from here.");
+        if (!this.hasOllama()) throw new Error("Only Local AI's models can be unloaded from here.");
         const api = this.runtime.requireApi();
         const replying = this.ctx.state.conversations.find(
             (c) => c.model === name && (c.provider ?? OLLAMA_PROVIDER_ID) === OLLAMA_PROVIDER_ID && this.ctx.state.generating.includes(c.id),
@@ -932,7 +933,7 @@ export class AiApp {
         try {
             installed = await packageApi.isInstalled(OLLAMA_PACKAGE);
         } catch (err) {
-            this.patchRuntime({ status: "error", error: `Could not check for Ollama: ${String(err)}` });
+            this.patchRuntime({ status: "error", error: `Could not check for Local AI: ${String(err)}` });
             return;
         }
         this.patchRuntime(installed ? { status: "stopped", packageInstalled: true } : { status: "missing", packageInstalled: false });
@@ -943,7 +944,7 @@ export class AiApp {
         try {
             installed = await packageApi.isInstalled(OLLAMA_PACKAGE);
         } catch (err) {
-            this.patchRuntime({ status: "error", error: `Could not check for Ollama: ${String(err)}` });
+            this.patchRuntime({ status: "error", error: `Could not check for Local AI: ${String(err)}` });
             return;
         }
         if (!installed) {
@@ -966,7 +967,7 @@ export class AiApp {
 
     async installRuntime(): Promise<void> {
         const status = this.ctx.state.runtime.status;
-        if (status === "installing") throw new Error("Ollama is already being installed.");
+        if (status === "installing") throw new Error("Local AI is already being installed.");
         this.patchRuntime({ status: "installing", error: undefined, errorDetail: undefined, install: { stage: "checking", percent: 0 } });
         // the download can outlive any caller's patience: acknowledge now,
         // and let progress/failure travel through state.runtime (the UI
@@ -983,7 +984,7 @@ export class AiApp {
             });
             this.patchRuntime({ install: undefined, packageInstalled: true });
         } catch (err) {
-            this.patchRuntime({ status: "error", error: `Installing Ollama failed: ${err instanceof Error ? err.message : String(err)}`, install: undefined });
+            this.patchRuntime({ status: "error", error: `Installing Local AI failed: ${err instanceof Error ? err.message : String(err)}`, install: undefined });
             return;
         }
         // start reports its own progress and failure through state too

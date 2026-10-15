@@ -177,8 +177,8 @@ export function uiActions(app: AiApp): ActionDefinition[] {
         return fn();
     };
     return [
-        ui(UI_ACTION_IDS.installRuntime, "Install Ollama", () => ready(() => app.installRuntime())),
-        ui(UI_ACTION_IDS.startRuntime, "Start Ollama", () =>
+        ui(UI_ACTION_IDS.installRuntime, "Install Local AI", () => ready(() => app.installRuntime())),
+        ui(UI_ACTION_IDS.startRuntime, "Start Local AI", () =>
             ready(() => {
                 // the boot can outlive a request/response deadline; readiness
                 // and failure travel through state.runtime, so acknowledge now

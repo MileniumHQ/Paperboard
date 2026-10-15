@@ -104,8 +104,8 @@ describe("Quick ask readiness", () => {
 
     it("offers to start a stopped or failed Ollama, and waits while it starts", () => {
         expect(quickAskBlocker(ready({ runtime: { status: "stopped", compute: [] } }))?.recovery).toBe("start");
-        expect(quickAskBlocker(ready({ runtime: { status: "error", error: "GPU crashed", compute: [] } }))).toEqual({ text: "Ollama stopped", detail: "GPU crashed", failed: true, recovery: "start" });
-        expect(quickAskBlocker(ready({ runtime: { status: "starting", compute: [] } }))).toEqual({ text: "Ollama is starting…", recovery: null });
+        expect(quickAskBlocker(ready({ runtime: { status: "error", error: "GPU crashed", compute: [] } }))).toEqual({ text: "Local AI stopped", detail: "GPU crashed", failed: true, recovery: "start" });
+        expect(quickAskBlocker(ready({ runtime: { status: "starting", compute: [] } }))).toEqual({ text: "Local AI is starting…", recovery: null });
     });
 
     it("does not wait on Ollama for an endpoint's model, even with Ollama added", () => {

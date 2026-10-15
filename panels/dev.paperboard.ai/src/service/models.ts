@@ -148,7 +148,7 @@ export class ModelManager {
         if (!client?.pull) throw new Error(`${provider.label} is not running.`);
         const model = canonicalRef(ref);
         if (!isValidModelRef(model)) {
-            throw new Error(`"${ref}" is not a model name from the Ollama library.`);
+            throw new Error(`"${ref}" is not a model name from the model library.`);
         }
         if (this.pulls.has(model)) throw new Error(`${model} is already downloading.`);
         if (this.pulls.size >= MAX_CONCURRENT_PULLS) throw new Error(`Only ${MAX_CONCURRENT_PULLS} downloads can run at once.`);

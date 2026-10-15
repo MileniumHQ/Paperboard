@@ -1,5 +1,5 @@
 import { createEffect, createMemo, createSignal, Index, Match, on, onCleanup, onMount, Show, Switch } from "solid-js";
-import { PaperButton, PaperEmptyState, PaperIcon, PaperText } from "@mileniumhq/paperui";
+import { PaperButton, PaperEmptyState, PaperIcon, PaperPage, PaperText } from "@mileniumhq/paperui";
 import { actionsApi } from "@mileniumhq/paperapi";
 import { UI_ACTION_IDS } from "../contract";
 import { connectionLabel, OLLAMA_PROVIDER, OLLAMA_PROVIDER_ID, unlistedModelReason } from "../core/providers";
@@ -259,7 +259,7 @@ export default function ChatView() {
                 onOpenSettings={() => setSettingsOpen(true)}
             />
             <section class={styles.main} aria-label={settingsOpen() ? "Settings" : "Conversation"}>
-                <Show when={!settingsOpen()} fallback={<div class={styles.settingsView}><SettingsTab onManageProviders={() => setModelsOpen(true)} /></div>}>
+                <Show when={!settingsOpen()} fallback={<div class={styles.settingsView}><PaperPage><SettingsTab onManageProviders={() => setModelsOpen(true)} /></PaperPage></div>}>
                 <Show when={waitingHere() > 0}>
                     <div class={styles.approvalBanner} role="status">
                         <PaperIcon>front_hand</PaperIcon>

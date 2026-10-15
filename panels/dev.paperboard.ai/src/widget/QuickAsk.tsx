@@ -67,12 +67,12 @@ export default function QuickAsk(props: { widget: WidgetContext }) {
         if (b) {
             const action: WidgetAction | undefined =
                 b.recovery === "start"
-                    ? { icon: "play_arrow", label: "Start Ollama", run: () => void start(), disabled: starting() }
+                    ? { icon: "play_arrow", label: "Start Local AI", run: () => void start(), disabled: starting() }
                     : b.recovery === "open"
                       ? { icon: "open_in_new", label: "Open AI", run: () => props.widget.openPanel() }
                       : undefined;
             return error()
-                ? { message: { title: "Could not start Ollama", description: error(), danger: true }, action }
+                ? { message: { title: "Could not start Local AI", description: error(), danger: true }, action }
                 : { message: { title: b.text, description: b.detail, danger: b.failed }, action };
         }
         if (error()) {

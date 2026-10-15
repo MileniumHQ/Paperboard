@@ -428,17 +428,19 @@ describe("AiApp widget actions", () => {
     it("reports memory as unsupported for a URL endpoint and refuses to unload there", async () => {
         await withApp(custom(), async (app) => {
             expect(await app.loadedModels()).toEqual({ status: "unsupported", provider: "Your providers" });
-            await expect(app.unloadModel("local:7b")).rejects.toThrow("Only Ollama's models can be unloaded");
+            await expect(app.unloadModel("local:7b")).rejects.toThrow("Only Local AI's models can be unloaded");
         });
     });
 
     it("reports a down Ollama as stopped, not as nothing loaded", async () => {
         packageInstalled = false;
         try {
-            await withApp({ version: 2, connections: [{ id: "ollama", kind: "ollama", label: "Ollama" }] }, async (app) => {
+            await withApp({ version: 2, connections: [{ id: "ollama", kind: "ollama", label: "Ollama" }] }, async (app, ctx) => {
+                // an older version saved the runtime's own name; the panel shows its own
+                expect(ctx.state.connections[0]!.label).toBe("Local AI");
                 const report = await app.loadedModels();
                 expect(report.status).toBe("stopped");
-                await expect(app.unloadModel("qwen3:8b")).rejects.toThrow("Ollama is not running");
+                await expect(app.unloadModel("qwen3:8b")).rejects.toThrow("Local AI is not running");
             });
         } finally {
             packageInstalled = true;

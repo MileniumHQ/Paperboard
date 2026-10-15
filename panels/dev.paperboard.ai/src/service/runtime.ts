@@ -58,7 +58,7 @@ export class OllamaRuntime {
     }
 
     requireApi(): OllamaClient {
-        if (!this.client) throw new Error("Ollama is not running. Start it from the AI panel first.");
+        if (!this.client) throw new Error("Local AI is not running. Start it from the AI panel first.");
         return this.client;
     }
 
@@ -135,7 +135,7 @@ export class OllamaRuntime {
                 env: ollamaEnv(layout),
             });
             const timeoutMs = this.deps.readyTimeoutMs ?? 60_000;
-            const port = await raceReady(listening, gen.exited, timeoutMs, "Ollama did not report its address");
+            const port = await raceReady(listening, gen.exited, timeoutMs, "Local AI did not report its address");
             const client = new OllamaClient(`http://127.0.0.1:${port}`);
             await waitForApi(client, gen.exited, timeoutMs);
             if (this.generation !== gen) return;
@@ -169,7 +169,7 @@ export class OllamaRuntime {
         } else {
             this.deps.onState({
                 status: "error",
-                error: `Ollama exited unexpectedly (code ${code ?? "unknown"})`,
+                error: `Local AI exited unexpectedly (code ${code ?? "unknown"})`,
                 errorDetail: gen.tail.join("\n"),
                 compute: [],
             });
@@ -186,7 +186,7 @@ export class OllamaRuntime {
                 await host.kill(procId, "SIGKILL");
                 const killed = await Promise.race([watch.exited.then(() => true), delay(timeoutMs).then(() => false)]);
                 if (!killed && (await host.exists(procId))) {
-                    throw new Error("Ollama did not exit after SIGKILL");
+                    throw new Error("Local AI did not exit after SIGKILL");
                 }
             }
         } finally {
@@ -244,7 +244,7 @@ async function raceReady<T>(ready: Promise<T>, exited: Promise<number | undefine
         return await Promise.race([
             ready,
             exited.then((code) => {
-                throw new Error(`Ollama exited during startup (code ${code ?? "unknown"})`);
+                throw new Error(`Local AI exited during startup (code ${code ?? "unknown"})`);
             }),
             new Promise<never>((_, reject) => {
                 timer = setTimeout(() => reject(new Error(`${what} within ${Math.round(timeoutMs / 1000)}s`)), timeoutMs);
@@ -261,7 +261,7 @@ async function waitForApi(client: OllamaClient, exited: Promise<number | undefin
     void exited.then(() => (dead = true));
     let last: unknown;
     while (Date.now() < deadline) {
-        if (dead) throw new Error("Ollama exited during startup");
+        if (dead) throw new Error("Local AI exited during startup");
         try {
             await client.version();
             return;
@@ -270,5 +270,5 @@ async function waitForApi(client: OllamaClient, exited: Promise<number | undefin
             await delay(250);
         }
     }
-    throw new Error(`Ollama's API did not answer within ${Math.round(timeoutMs / 1000)}s (${messageOf(last)})`);
+    throw new Error(`Local AI did not answer within ${Math.round(timeoutMs / 1000)}s (${messageOf(last)})`);
 }

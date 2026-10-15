@@ -31,7 +31,7 @@ export const MAX_CONNECTION_LABEL_CHARS = 60;
 
 export const OLLAMA_PROVIDER: ProviderDefinition = {
     id: OLLAMA_PROVIDER_ID,
-    label: "Ollama",
+    label: "Local AI",
     kind: "ollama",
     runtime: { packageId: "ollama" },
     canPull: true,

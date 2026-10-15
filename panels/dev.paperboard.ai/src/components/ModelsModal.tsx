@@ -1,25 +1,27 @@
 // The model picker: a sidebar of the providers the user added, with the
 // selected provider's own screen to its right, and Add provider at the end.
 
-import { createEffect, createSignal, For, Match, on, Show, Switch } from "solid-js";
+import { createEffect, createSignal, For, on, Show } from "solid-js";
 import {
     PaperButton,
     PaperIcon,
+    PaperInterfaceGroup,
+    PaperInterfaceItem,
     PaperMenu,
     PaperMenuItem,
     PaperModal,
+    PaperPanel,
     PaperQuote,
-    PaperSelector,
-    PaperSelectorItem,
     PaperText,
 } from "@mileniumhq/paperui";
 import { UI_ACTION_IDS } from "../contract";
-import type { Connection, ProviderKind } from "../core/providers";
+import type { Connection } from "../core/providers";
 import { call, errorText, state } from "../lib/state";
 import ModelBrowser from "./ModelBrowser";
 import OllamaRuntimeCard from "./OllamaRuntimeCard";
 import { EndpointForm } from "./ProviderForms";
-import { addAgents, agentChoiceReady, AgentChooser, agentSidebarStatus, AgentStatus, EditCustomAgent, emptyCustomAgent } from "./AgentForms";
+import ProviderWizard from "./ProviderWizard";
+import { agentSidebarStatus, AgentStatus, EditCustomAgent } from "./AgentForms";
 import styles from "./ModelsModal.module.css";
 
 /** The sidebar entry that adds a provider; never a connection id. */
@@ -33,7 +35,8 @@ export interface ModelsModalProps {
     initialPane?: string;
 }
 
-function connectionStatus(c: Connection): string {
+/** A provider's state in a few words, for the sidebar and settings. */
+export function connectionStatus(c: Connection): string {
     if (c.kind === "agent") return agentSidebarStatus(c);
     if (state.modelErrors[c.id]) return "Unavailable";
     if (c.kind === "ollama" && state.runtime.status !== "ready") {
@@ -60,31 +63,33 @@ export default function ModelsModal(props: ModelsModalProps) {
     });
 
     return (
-        <PaperModal open={props.open} onClose={props.onClose} title="Models" size="large">
-            <div class={styles.layout}>
-                <nav class={styles.sidebar} aria-label="Providers">
-                    <PaperMenu name="model-provider" value={pane()} onValueChange={(value) => setPane(String(value))}>
-                        <For each={state.connections}>
-                            {(c) => (
-                                <PaperMenuItem value={c.id} icon={c.kind === "ollama" ? "memory" : c.kind === "agent" ? "terminal" : "cloud"} description={connectionStatus(c)}>
-                                    {c.label}
-                                </PaperMenuItem>
-                            )}
-                        </For>
-                        <PaperMenuItem value={ADD_PROVIDER_PANE} icon="add">
-                            Add provider
-                        </PaperMenuItem>
-                    </PaperMenu>
-                </nav>
-                <Switch>
-                    <Match when={pane() === ADD_PROVIDER_PANE}>
-                        <AddProviderPane onAdded={setPane} />
-                    </Match>
-                    <Match when={current()}>
-                        {(c) => <ConnectionPane connection={c()} onPick={props.onPick} />}
-                    </Match>
-                </Switch>
-            </div>
+        <PaperModal open={props.open} onClose={props.onClose} title="Models" size="large" noPadding>
+            <PaperPanel class={styles.panel}>
+                <PaperMenu name="model-provider" spacing="half" role="navigation" aria-label="Providers" value={pane()} onValueChange={(value) => setPane(String(value))}>
+                    <For each={state.connections}>
+                        {(c) => (
+                            <PaperMenuItem value={c.id} icon={c.kind === "ollama" ? "memory" : c.kind === "agent" ? "terminal" : "cloud"} description={connectionStatus(c)}>
+                                {c.label}
+                            </PaperMenuItem>
+                        )}
+                    </For>
+                    <PaperMenuItem value={ADD_PROVIDER_PANE} icon="add">
+                        Add provider
+                    </PaperMenuItem>
+                </PaperMenu>
+                <PaperInterfaceGroup value={pane()}>
+                    <For each={state.connections}>
+                        {(c) => (
+                            <PaperInterfaceItem value={c.id}>
+                                <ConnectionPane connection={c} onPick={props.onPick} />
+                            </PaperInterfaceItem>
+                        )}
+                    </For>
+                    <PaperInterfaceItem value={ADD_PROVIDER_PANE} variant="full">
+                        <ProviderWizard finishLabel="Add provider" onDone={(id) => id && setPane(id)} />
+                    </PaperInterfaceItem>
+                </PaperInterfaceGroup>
+            </PaperPanel>
         </PaperModal>
     );
 }
@@ -206,7 +211,7 @@ function ConnectionPane(props: { connection: Connection; onPick: (ref: string, p
                         ? `${props.connection.label} stops and leaves the picker. It stays installed on this computer, and chats that used it stay.`
                         : isEndpoint()
                         ? `Its models leave the picker${props.connection.hasApiKey ? " and its stored API key is deleted" : ""}. Chats that used it stay.`
-                        : "Ollama stops and its models leave the picker. The downloaded models stay on this computer and come back if you add Ollama again."}
+                        : "Local AI stops and its models leave the picker. The downloaded models stay on this computer and come back if you add Local AI again."}
                 </PaperText>
             </PaperModal>
         </section>
@@ -258,85 +263,5 @@ function EditEndpoint(props: { connection: Connection; onDone: () => void }) {
                 </PaperButton>
             </div>
         </>
-    );
-}
-
-function AddProviderPane(props: { onAdded: (id: string) => void }) {
-    const hasOllama = () => state.connections.some((c) => c.kind === "ollama");
-    const [kind, setKind] = createSignal<ProviderKind>(hasOllama() ? "openai-compatible" : "ollama");
-    const [label, setLabel] = createSignal("");
-    const [baseUrl, setBaseUrl] = createSignal("");
-    const [apiKey, setApiKey] = createSignal("");
-    const [agents, setAgents] = createSignal<string[]>([]);
-    const [custom, setCustom] = createSignal(emptyCustomAgent());
-    const [adding, setAdding] = createSignal(false);
-    const [error, setError] = createSignal("");
-    const isEndpoint = () => kind() === "openai-compatible";
-    const isAgent = () => kind() === "agent";
-    const canAdd = () => !adding() && (isEndpoint() ? baseUrl().trim() !== "" : isAgent() ? agentChoiceReady(agents(), custom()) : true);
-
-    const add = async () => {
-        setAdding(true);
-        setError("");
-        try {
-            if (isAgent()) {
-                const last = await addAgents(agents(), custom());
-                setAgents([]);
-                setCustom(emptyCustomAgent());
-                if (last) props.onAdded(last);
-                return;
-            }
-            const added = await call<Connection>(UI_ACTION_IDS.addConnection, {
-                kind: kind(),
-                ...(isEndpoint() ? { label: label(), baseUrl: baseUrl(), apiKey: apiKey() } : {}),
-            });
-            props.onAdded(added.id);
-        } catch (err) {
-            setError(errorText(err));
-        } finally {
-            setAdding(false);
-        }
-    };
-
-    return (
-        <section class={styles.pane} aria-label="Add provider">
-            <PaperText preset="subtitle">Add provider</PaperText>
-            <PaperSelector name="add-provider-kind" value={kind()} onValueChange={(value) => setKind(value as ProviderKind)}>
-                <Show when={!hasOllama()}>
-                    <PaperSelectorItem value="ollama" icon="memory" description="Runs models locally on this computer. The panel installs and starts it for you.">
-                        Ollama
-                    </PaperSelectorItem>
-                </Show>
-                <PaperSelectorItem value="openai-compatible" icon="cloud" description="Point at any OpenAI-compatible endpoint by URL, with an optional API key.">
-                    Custom endpoint
-                </PaperSelectorItem>
-                <PaperSelectorItem value="agent" icon="terminal" description="A coding agent you installed, like Claude Agent, Codex or Gemini CLI. It works in a folder you choose.">
-                    Coding agent
-                </PaperSelectorItem>
-            </PaperSelector>
-            <Show when={isAgent()}>
-                <AgentChooser selected={agents()} onSelected={setAgents} custom={custom()} onCustom={setCustom} />
-            </Show>
-            <Show when={isEndpoint()}>
-                <EndpointForm
-                    label={label()}
-                    baseUrl={baseUrl()}
-                    apiKey={apiKey()}
-                    onLabel={setLabel}
-                    onBaseUrl={setBaseUrl}
-                    onApiKey={setApiKey}
-                />
-            </Show>
-            <Show when={error()}>
-                <PaperQuote variant="danger" icon="warning" title="Couldn't add the provider">
-                    {error()}
-                </PaperQuote>
-            </Show>
-            <div>
-                <PaperButton variant="primary" disabled={!canAdd()} onClick={() => void add()}>
-                    <PaperIcon>add</PaperIcon> {adding() ? "Adding..." : isAgent() && agents().length + (custom().on ? 1 : 0) > 1 ? "Add agents" : "Add provider"}
-                </PaperButton>
-            </div>
-        </section>
     );
 }

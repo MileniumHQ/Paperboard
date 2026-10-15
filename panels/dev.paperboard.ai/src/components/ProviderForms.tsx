@@ -86,20 +86,20 @@ export function OllamaSetup() {
                         loaderStatus={loaderStatus()}
                         label={
                             state.runtime.status === "ready"
-                                ? "Ollama is ready."
+                                ? "Local AI is ready."
                                 : state.runtime.status === "missing"
-                                  ? "Downloading Ollama..."
-                                  : "Starting Ollama..."
+                                  ? "Downloading Local AI..."
+                                  : "Starting Local AI..."
                         }
                     />
                 </PaperLoaderGroup>
                 <Show when={state.runtime.error && state.runtime.status === "error"}>
-                    <PaperQuote variant="danger" icon="warning" title="Ollama stopped">
+                    <PaperQuote variant="danger" icon="warning" title="Local AI stopped">
                         {state.runtime.error}
                     </PaperQuote>
                 </Show>
                 <Show when={error()}>
-                    <PaperQuote variant="danger" icon="warning" title="Couldn't set up Ollama">
+                    <PaperQuote variant="danger" icon="warning" title="Couldn't set up Local AI">
                         {error()}
                     </PaperQuote>
                 </Show>

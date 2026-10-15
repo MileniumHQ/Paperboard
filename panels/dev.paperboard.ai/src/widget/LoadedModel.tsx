@@ -110,11 +110,11 @@ export default function LoadedModel(props: { widget: WidgetContext }) {
             const b = blocker();
             const action: WidgetAction | undefined =
                 b?.recovery === "start"
-                    ? { icon: "play_arrow", label: "Start Ollama", run: () => void start(), disabled: starting() }
+                    ? { icon: "play_arrow", label: "Start Local AI", run: () => void start(), disabled: starting() }
                     : b?.recovery === "open"
                       ? openAi
                       : undefined;
-            return { message: { title: b?.text ?? "Ollama is not ready", description: b?.detail, danger: b?.failed }, action };
+            return { message: { title: b?.text ?? "Local AI is not ready", description: b?.detail, danger: b?.failed }, action };
         }
         const f = featured();
         if (f) {
