@@ -25,7 +25,8 @@ export interface TerminalServiceState {
     tabs: TerminalTab[];
     tabCount: number;
     activeTabId: string;
-    // saved commands and the last observed outcome of each
+    // saved commands (run from Home's "Pinned command" widget) and the last
+    // observed outcome of each
     savedCommands: SavedCommand[];
     commandRuns: Record<string, CommandRun>;
     savedCommandsError: string;
@@ -604,6 +605,12 @@ export const terminalService = definePanelService({
         savedCommands: [] as SavedCommand[],
         commandRuns: {} as Record<string, CommandRun>,
         savedCommandsError: "",
+    },
+    // Home's gallery: the "Command" dropdown of the Pinned command widget
+    widgetChoices: {
+        "pinned-command": {
+            command: () => savedCommands.choices(),
+        },
     },
     categories: [
         { name: "Sessions", icon: "terminal", order: 1 },

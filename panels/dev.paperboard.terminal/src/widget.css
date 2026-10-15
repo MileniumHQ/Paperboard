@@ -1,0 +1,9 @@
+/* The tile is PaperWidget's; this only gives it a positioned, painted page. */
+html,
+body {
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+    background: var(--paper-surface-raised);
+}
+

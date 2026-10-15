@@ -7,6 +7,15 @@
     "base": "./dist/index.html",
     "service": "./dist/service.js",
     "icon": "./branding/icon.png",
+    "widgets": [
+        {
+            "id": "pinned-command",
+            "name": "Pinned command",
+            "description": "Runs a saved command and shows how it last exited",
+            "sizes": ["2x1"],
+            "options": [{ "id": "command", "label": "Command" }]
+        }
+    ],
     "store": {
         "about": "./store/about.md",
         "screenshots": [
