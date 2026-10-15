@@ -7,6 +7,7 @@
 import { describe, it, expect, afterEach } from "bun:test";
 import { spawn, type ChildProcess } from "node:child_process";
 import * as path from "node:path";
+import { batchFileRefusal } from "../papercrane/batchFile";
 import { SupervisedProcessClient } from "../papercrane/supervisor";
 
 const MAIN = path.join(import.meta.dir, "..", "papercrane", "main.ts");
@@ -69,4 +70,18 @@ describe("supervisor start outcome", () => {
         await expect(client.awaitStarted()).resolves.toBeUndefined();
         client.kill();
     }, 15_000);
+
+    it("names a batch file instead of timing out when asked to start one (Windows)", async () => {
+        if (process.platform !== "win32") return;
+        const { client } = await superviseAndConnect("start-fail-batch", { command: "C:\\Windows\\System32\\nothing.cmd", args: [] });
+        await expect(client.awaitStarted()).rejects.toThrow(/batch files must be run via cmd\.exe \/c with static args/);
+    }, 15_000);
+
+    it("refuses .cmd/.bat commands on Windows only, however the name is dressed", () => {
+        for (const name of ["a.cmd", "C:\\x\\Tool.BAT", "run.cmd. ", "run.bat."]) {
+            expect(batchFileRefusal(name, "win32")).toMatch(/batch files must be run via cmd\.exe \/c with static args/);
+            expect(batchFileRefusal(name, "linux")).toBeNull();
+        }
+        for (const name of ["cmd.exe", "node.exe", "script.cmd.exe", "bat"]) expect(batchFileRefusal(name, "win32")).toBeNull();
+    });
 });

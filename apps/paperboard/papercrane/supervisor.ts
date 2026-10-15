@@ -8,6 +8,7 @@ import { spawnPty, getDefaultShell } from "./pty";
 import { IPtyProcess } from "./types";
 import { logger } from "./logger";
 import { workloadExitCode } from "./exitStatus";
+import { batchFileRefusal } from "./batchFile";
 import { killWorkload } from "./processTree";
 import { redactEnvValues, unrefTimer } from "./storage";
 
@@ -537,7 +538,18 @@ export async function runSupervisor(procId: string): Promise<void> {
                 mergedEnv.PATH = `${config.env.JAVA_HOME}/bin${delim}${mergedEnv.PATH || ""}`;
             }
 
-            childProcess = cp.spawn(command, args, { cwd: finalCwd, env: mergedEnv, windowsHide: true });
+            const refusal = batchFileRefusal(command);
+            if (refusal) {
+                failStart(refusal);
+                return;
+            }
+            try {
+                childProcess = cp.spawn(command, args, { cwd: finalCwd, env: mergedEnv, windowsHide: true });
+            } catch (err) {
+                // a synchronous spawn throw is a start failure the creator reads, not an uncaught crash
+                failStart(`Could not start ${command}: ${(err as Error).message}`);
+                return;
+            }
             childPid = childProcess.pid || 0;
 
             // decode per stream, not per chunk: a multibyte character split
