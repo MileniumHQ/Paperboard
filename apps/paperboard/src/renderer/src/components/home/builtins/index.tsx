@@ -66,7 +66,7 @@ export const BUILTIN_WIDGETS: BuiltinWidget[] = [
         component: Computers,
     },
     {
-        declaration: { id: "flag", name: "Flag", sizes: ["1x1", "1x2"], options: [{ id: "flag", label: "Flag" }] },
+        declaration: { id: "flag", name: "Flag", sizes: ["1x1", "1x2", "2x1", "2x2", "3x2", "4x2"], options: [{ id: "flag", label: "Flag" }] },
         perComputer: false,
         choices: { flag: FLAGS.map((flag) => ({ value: flag.id, label: flag.name })) },
         unlisted: true,
