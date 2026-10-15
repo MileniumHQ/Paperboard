@@ -5,13 +5,14 @@
 import { createSignal, For, onMount, Show } from "solid-js";
 import {
     PaperButton,
-    PaperCheckbox,
     PaperCode,
     PaperCopyButton,
     PaperFlex,
     PaperIcon,
     PaperInput,
     PaperQuote,
+    PaperSelector,
+    PaperSelectorItem,
     PaperText,
 } from "@mileniumhq/paperui";
 import { UI_ACTION_IDS } from "../contract";
@@ -19,6 +20,7 @@ import { AGENT_REGISTRY, CUSTOM_AGENT_ID, installHint, splitArgs, type RegistryA
 import type { Connection } from "../core/providers";
 import type { AgentState } from "../core/types";
 import { call, errorText, state } from "../lib/state";
+import AgentLogo from "./AgentLogo";
 import styles from "./AgentForms.module.css";
 
 export interface CustomAgentDraft {
@@ -87,7 +89,7 @@ export interface AgentChooserProps {
 }
 
 /**
- * Every agent found on this computer as a checkbox, a custom command, and
+ * Every agent found on this computer to choose from, a custom command, and
  * the rest of the ACP registry with how to install each.
  */
 export function AgentChooser(props: AgentChooserProps) {
@@ -109,8 +111,13 @@ export function AgentChooser(props: AgentChooserProps) {
     };
     onMount(() => void look());
 
-    const toggle = (id: string, on: boolean) =>
-        props.onSelected(on ? [...props.selected.filter((x) => x !== id), id] : props.selected.filter((x) => x !== id));
+    // the custom command is one more choice in the same list
+    const chosen = () => (props.custom.on ? [...props.selected, CUSTOM_AGENT_ID] : props.selected);
+    const choose = (values: (string | number)[]) => {
+        const ids = values.map(String);
+        props.onSelected(ids.filter((id) => id !== CUSTOM_AGENT_ID));
+        if (ids.includes(CUSTOM_AGENT_ID) !== props.custom.on) props.onCustom({ ...props.custom, on: !props.custom.on });
+    };
 
     return (
         <PaperFlex direction="column" gap="full" fullWidth>
@@ -127,24 +134,21 @@ export function AgentChooser(props: AgentChooserProps) {
             <Show when={installed() !== null || error()} fallback={<PaperText color="text-muted">Looking for agents on this computer...</PaperText>}>
                 <section class={styles.group} aria-label="Installed agents">
                     <PaperText preset="label">On this computer</PaperText>
-                    <Show when={found().length > 0} fallback={<PaperText size={2} color="text-muted">No agents from the list below are installed{added().size > 0 ? " that aren't added already" : ""}.</PaperText>}>
+                    <Show when={found().length === 0}>
+                        <PaperText size={2} color="text-muted">No agents from the list below are installed{added().size > 0 ? " that aren't added already" : ""}.</PaperText>
+                    </Show>
+                    <PaperSelector name="agents" multiple values={chosen()} onValuesChange={choose}>
                         <For each={found()}>
                             {(a) => (
-                                <PaperCheckbox
-                                    checked={props.selected.includes(a.id)}
-                                    onChange={(on) => toggle(a.id, on)}
-                                    label={a.name}
-                                    description={a.description}
-                                />
+                                <PaperSelectorItem value={a.id} icon={<AgentLogo agent={a.id} />} description={a.description}>
+                                    {a.name}
+                                </PaperSelectorItem>
                             )}
                         </For>
-                    </Show>
-                    <PaperCheckbox
-                        checked={props.custom.on}
-                        onChange={(on) => props.onCustom({ ...props.custom, on })}
-                        label="Another agent"
-                        description="Any program that speaks the Agent Client Protocol over stdio."
-                    />
+                        <PaperSelectorItem value={CUSTOM_AGENT_ID} icon="add" description="Any program that speaks the Agent Client Protocol over stdio.">
+                            Another agent
+                        </PaperSelectorItem>
+                    </PaperSelector>
                     <Show when={props.custom.on}>
                         <div class={styles.custom}>
                             <PaperInput

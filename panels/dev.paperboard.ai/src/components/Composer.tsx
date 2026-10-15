@@ -15,6 +15,7 @@ import type { AgentCommand, Attachment } from "../core/types";
 import { attachmentsFromFiles } from "../lib/attachments";
 import { makerOf } from "../lib/catalog";
 import { errorText } from "../lib/state";
+import AgentLogo from "./AgentLogo";
 import MakerLogo from "./MakerLogo";
 import MessageInput from "./MessageInput";
 import styles from "./Composer.module.css";
@@ -35,8 +36,10 @@ export interface ComposerProps {
     /** a coding agent's slash commands, suggested while typing one */
     commands?: AgentCommand[];
     placeholder?: string;
-    /** shown above the message box (a coding agent's folder and mode) */
+    /** shown above the message box (a coding agent's project and mode) */
     toolbar?: JSX.Element;
+    /** a coding agent chat: its agent, whose logo stands for the model */
+    agent?: string;
 }
 
 
@@ -191,7 +194,9 @@ export default function Composer(props: ComposerProps) {
                         aria-label={props.model ? `Model: ${props.model}` : "Select a model"}
                     >
                         <Show when={props.model} fallback={<PaperIcon class={styles.modelIcon}>add</PaperIcon>}>
-                            <MakerLogo icon={makerOf(props.model)?.icon} size="small" />
+                            <Show when={props.agent} fallback={<MakerLogo icon={makerOf(props.model)?.icon} size="small" />}>
+                                <span class={styles.agentLogo}><AgentLogo agent={props.agent} /></span>
+                            </Show>
                         </Show>
                         <span class={styles.modelName}>{props.model || "Select Model"}</span>
                     </button>

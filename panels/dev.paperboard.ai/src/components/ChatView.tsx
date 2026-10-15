@@ -368,6 +368,7 @@ export default function ChatView() {
                     generating={generating()}
                     canThink={Boolean(installed()?.capabilities.includes("thinking"))}
                     model={model()}
+                    agent={agentConnection()?.agent}
                     modelReady={Boolean(installed())}
                     reasoning={state.settings.reasoning}
                     onOpenModels={() => setModelsOpen(true)}

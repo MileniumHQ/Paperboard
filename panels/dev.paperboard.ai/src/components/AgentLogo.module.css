@@ -1,0 +1,8 @@
+.AgentLogo {
+    display: block;
+    width: 1em;
+    height: 1em;
+    flex-shrink: 0;
+    object-fit: contain;
+    border-radius: var(--paper-border-radius-half);
+}

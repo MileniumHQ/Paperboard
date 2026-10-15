@@ -17,6 +17,7 @@ import {
 import { UI_ACTION_IDS } from "../contract";
 import type { Connection } from "../core/providers";
 import { call, errorText, state } from "../lib/state";
+import AgentLogo from "./AgentLogo";
 import ModelBrowser from "./ModelBrowser";
 import OllamaRuntimeCard from "./OllamaRuntimeCard";
 import { EndpointForm } from "./ProviderForms";
@@ -68,7 +69,7 @@ export default function ModelsModal(props: ModelsModalProps) {
                 <PaperMenu name="model-provider" spacing="half" role="navigation" aria-label="Providers" value={pane()} onValueChange={(value) => setPane(String(value))}>
                     <For each={state.connections}>
                         {(c) => (
-                            <PaperMenuItem value={c.id} icon={c.kind === "ollama" ? "memory" : c.kind === "agent" ? "terminal" : "cloud"} description={connectionStatus(c)}>
+                            <PaperMenuItem value={c.id} icon={c.kind === "agent" ? <AgentLogo agent={c.agent} /> : c.kind === "ollama" ? "memory" : "cloud"} description={connectionStatus(c)}>
                                 {c.label}
                             </PaperMenuItem>
                         )}

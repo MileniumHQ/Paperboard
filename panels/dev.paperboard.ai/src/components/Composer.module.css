@@ -213,3 +213,8 @@
     text-overflow: ellipsis;
     white-space: nowrap;
 }
+
+.agentLogo {
+    display: inline-flex;
+    font-size: var(--paper-control-size-small);
+}
