@@ -55,10 +55,6 @@
             {
                 "name": "Ollama",
                 "detail": "Downloading models"
-            },
-            {
-                "name": "DuckDuckGo",
-                "detail": "Letting models search the web"
             }
         ],
         "credits": [

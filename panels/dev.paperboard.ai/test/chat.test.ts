@@ -10,6 +10,7 @@ import { ConversationStore } from "../src/service/store";
 import { askOnce, ChatEngine, MAX_ACTIVE_REPLIES } from "../src/service/chat";
 import { MAX_TOOL_ROUNDS, systemPrompt } from "../src/core/conversation";
 import type { AssistantMessage, ChatMessageEvent, ChatResetEvent, PendingApproval, Settings } from "../src/core/types";
+import { DEFAULT_SETTINGS } from "../src/core/types";
 import type { RegistryAction } from "../src/core/tools";
 
 const registry: RegistryAction[] = [
@@ -34,7 +35,6 @@ let finished: { text: string }[];
 let capabilities: Record<string, string[]>;
 let actionResult: () => Promise<unknown>;
 let settings: Settings;
-let searches: string[];
 let commands: string[];
 
 function engine(): ChatEngine {
@@ -54,10 +54,6 @@ function engine(): ChatEngine {
         isAllowed: (key) => allowed.has(key),
         rememberAllowed: async (key) => {
             allowed.add(key);
-        },
-        webSearch: async (query) => {
-            searches.push(query);
-            return [{ title: "Result", url: "https://example.com/", snippet: "an excerpt" }];
         },
         runShell: async (command) => {
             commands.push(command);
@@ -97,8 +93,7 @@ beforeEach(async () => {
     capabilities = { "tooly:latest": ["completion", "tools"], "plain:latest": ["completion"] };
     actionResult = async () => ({ kicked: true });
     // panel actions on and built-ins off, unless a test says otherwise
-    settings = { defaultModel: "tooly:latest", contextLength: 4096, reasoning: "off", panelActions: true, webSearch: false, shellCommands: false, forceCpu: false, promptStyle: "quirky", customPromptEnabled: false, customSystemPrompt: null };
-    searches = [];
+    settings = { defaultModel: "tooly:latest", contextLength: 4096, reasoning: "off", panelActions: true, shellCommands: false, forceCpu: false, promptStyle: "quirky", customPromptEnabled: false, customSystemPrompt: null };
     commands = [];
 });
 
@@ -121,7 +116,7 @@ describe("replies", () => {
         settings.customPromptEnabled = false;
         await (await chat.send(c.id, "hello again")).done;
         expect(fake.chatRequests[1].messages[0]).toEqual({ role: "system", content: systemPrompt({
-            style: "quirky", model: "tooly:latest", webSearch: false, shellCommands: false, panelActions: true,
+            style: "quirky", model: "tooly:latest", shellCommands: false, panelActions: true,
         }) });
         expect(settings.customSystemPrompt).toBe("Reply like a pirate.\nOnly one sentence.");
     });
@@ -425,41 +420,30 @@ describe("built-in tools", () => {
     const toolNames = (i: number) => (fake.chatRequests[i].tools ?? []).map((t: any) => t.function.name);
 
     it("offers built-ins first, and panel actions only when that setting is on", async () => {
-        settings = { ...settings, webSearch: true, shellCommands: true, panelActions: false };
+        settings = { ...settings, shellCommands: true, panelActions: false };
         fake.script = [{ content: "hi" }, { content: "hi again" }];
         const chat = engine();
         const c = await chat.create("tooly:latest");
         await (await chat.send(c.id, "hi")).done;
-        expect(toolNames(0)).toEqual(["web_search", "run_shell_command"]);
-        expect(fake.chatRequests[0].messages[0].content).toContain("web_search");
+        expect(toolNames(0)).toEqual(["run_shell_command"]);
+        expect(fake.chatRequests[0].messages[0].content).toContain("run_shell_command");
 
         settings = { ...settings, shellCommands: false, panelActions: true };
         await (await chat.send(c.id, "again")).done;
-        expect(toolNames(1)).toEqual(["web_search", "gameserver__kick-player", "gameserver__start-server"]);
+        expect(toolNames(1)).toEqual(["gameserver__kick-player", "gameserver__start-server"]);
         expect(fake.chatRequests[1].messages[0].content).not.toContain("run_shell_command");
     });
 
-    it("web search runs without asking and shows as its own step", async () => {
-        settings = { ...settings, webSearch: true };
-        fake.script = [{ toolCalls: [{ name: "web_search", arguments: { query: "paper cranes" } }] }, { content: "Found it." }];
-        const chat = engine();
-        const c = await chat.create("tooly:latest");
-        await (await chat.send(c.id, "look it up")).done;
-        expect(searches).toEqual(["paper cranes"]);
-        expect(approvals).toHaveLength(0);
-        const [round1] = await assistants(c.id);
-        expect(round1!.toolCalls![0]).toMatchObject({ builtin: "web_search", label: "Searched the web", status: "done", arguments: { query: "paper cranes" } });
-        expect(round1!.toolCalls![0]!.decision).toBeUndefined();
-        expect(fake.chatRequests[1].messages.at(-1).content).toContain("https://example.com/");
-    });
-
-    it("a disabled built-in is an unknown tool, never run", async () => {
+    it("web search is gone: never offered, and a model calling it gets an unknown tool", async () => {
+        // the defaults used to switch search on
+        settings = { ...DEFAULT_SETTINGS, defaultModel: "tooly:latest", panelActions: true };
         fake.script = [{ toolCalls: [{ name: "web_search", arguments: { query: "x" } }] }, { content: "ok" }];
         const chat = engine();
         const c = await chat.create("tooly:latest");
         await (await chat.send(c.id, "search")).done;
-        expect(searches).toHaveLength(0);
-        expect((await assistants(c.id))[0]!.toolCalls![0]).toMatchObject({ status: "error" });
+        expect(toolNames(0)).not.toContain("web_search");
+        expect(fake.chatRequests[0].messages[0].content).not.toContain("web_search");
+        expect((await assistants(c.id))[0]!.toolCalls![0]).toMatchObject({ status: "error", result: 'Error: there is no tool named "web_search".' });
     });
 
     it("a shell command asks every time and can never be allowed always", async () => {

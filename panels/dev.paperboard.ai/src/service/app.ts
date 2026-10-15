@@ -44,7 +44,7 @@ import {
     type Settings,
 } from "../core/types";
 import { republishPublicActions } from "./actions";
-import { runShell, webSearch } from "./builtins";
+import { runShell } from "./builtins";
 import { askOnce, ChatEngine, type ApprovalDecision } from "./chat";
 import { listLoaded, unloadAndConfirm } from "./loaded";
 import { canonicalRef, ModelManager } from "./models";
@@ -88,7 +88,6 @@ function clampSettings(input: Partial<Settings> | undefined): Settings {
         contextLength: Number.isInteger(s.contextLength) ? Math.min(131_072, Math.max(2048, s.contextLength)) : DEFAULT_SETTINGS.contextLength,
         reasoning: isReasoningLevel(s.reasoning) ? s.reasoning : DEFAULT_SETTINGS.reasoning,
         panelActions: typeof s.panelActions === "boolean" ? s.panelActions : DEFAULT_SETTINGS.panelActions,
-        webSearch: typeof s.webSearch === "boolean" ? s.webSearch : DEFAULT_SETTINGS.webSearch,
         shellCommands: typeof s.shellCommands === "boolean" ? s.shellCommands : DEFAULT_SETTINGS.shellCommands,
         forceCpu: typeof s.forceCpu === "boolean" ? s.forceCpu : DEFAULT_SETTINGS.forceCpu,
         promptStyle: isPromptStyle(s.promptStyle) ? s.promptStyle : DEFAULT_SETTINGS.promptStyle,
@@ -274,7 +273,6 @@ export class AiApp {
             callAction: (panelId, action, args) => actionsApi.call(panelId, action, args),
             isAllowed: (key) => this.ctx.state.alwaysAllowed.includes(key),
             rememberAllowed: (key) => this.allowAlways(key),
-            webSearch: (query, signal) => webSearch(query, signal),
             runShell: (command, signal) => runShell(command, signal),
             onDelta: (payload) => this.ctx.emit(EVENTS.chatDelta, payload),
             onMessage: (payload) => this.ctx.emit(EVENTS.chatMessage, payload),

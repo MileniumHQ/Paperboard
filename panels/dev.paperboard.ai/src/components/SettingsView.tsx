@@ -69,17 +69,6 @@ export default function SettingsView() {
 
             <PaperSettingList autoHeight>
                 <PaperSettingItem
-                    title="Web search"
-                    description="Lets the model search the web through DuckDuckGo when it needs something current. Searches run without asking, and each one shows in the chat."
-                >
-                    <PaperToggle
-                        name="webSearch"
-                        aria-label="Web search"
-                        checked={state.settings.webSearch}
-                        onChange={(on) => void save({ webSearch: on })}
-                    />
-                </PaperSettingItem>
-                <PaperSettingItem
                     title="Shell commands"
                     description="Lets the model run commands on this computer. You approve every command before it runs; there is no always-allow."
                 >

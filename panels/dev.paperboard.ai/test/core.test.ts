@@ -1,12 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import {
-    BuiltinArgumentError,
-    builtinArguments,
-    MAX_QUERY_CHARS,
-    parseDuckDuckGoResults,
-    SearchUnavailableError,
-    shellArgv,
-} from "../src/core/builtins";
+import { BuiltinArgumentError, builtinArguments, MAX_COMMAND_CHARS, shellArgv } from "../src/core/builtins";
 import { systemPrompt, PROMPT_STYLES } from "../src/core/conversation";
 import fs from "node:fs";
 import path from "node:path";
@@ -363,24 +356,10 @@ describe("conversations", () => {
 });
 
 describe("built-ins", () => {
-    it("parses DuckDuckGo's result page into titles, links and excerpts, skipping ads", () => {
-        const html = fs.readFileSync(path.join(import.meta.dir, "fixtures", "ddg-results.html"), "utf8");
-        const results = parseDuckDuckGoResults(html);
-        expect(results.length).toBe(3);
-        expect(results[0]).toMatchObject({ title: "Stores - SolidJS Documentation", url: "https://docs.solidjs.com/concepts/stores" });
-        expect(results[0]!.snippet).toBe("Manage complex nested state efficiently with stores that provide fine-grained reactivity for objects and arrays in Solid.");
-        expect(results[2]!.snippet).toContain("Solid's answer to nested reactivity");
-        expect(results.every((r) => !r.url.startsWith("https://duckduckgo.com/y.js"))).toBe(true);
-    });
-
-    it("a page with no readable results is a failure, not an empty answer", () => {
-        expect(() => parseDuckDuckGoResults("<html><title>Just a moment</title></html>")).toThrow(SearchUnavailableError);
-    });
-
     it("checks built-in arguments", () => {
-        expect(builtinArguments("web_search", '{"query":" cats "}')).toEqual({ query: "cats" });
+        expect(builtinArguments("run_shell_command", '{"command":" ls "}')).toEqual({ command: "ls" });
         expect(() => builtinArguments("run_shell_command", {})).toThrow(BuiltinArgumentError);
-        expect(() => builtinArguments("web_search", { query: "x".repeat(MAX_QUERY_CHARS + 1) })).toThrow(BuiltinArgumentError);
+        expect(() => builtinArguments("run_shell_command", { command: "x".repeat(MAX_COMMAND_CHARS + 1) })).toThrow(BuiltinArgumentError);
     });
 
     it("runs shell commands through the platform shell", () => {
@@ -398,17 +377,17 @@ describe("built-ins", () => {
 
     it("keeps every built-in personality compact even with all tools enabled", () => {
         for (const style of PROMPT_STYLES) {
-            expect(systemPrompt({ style, model: "qwen3:8b", webSearch: true, shellCommands: true, panelActions: true }).length).toBeLessThan(1300);
+            expect(systemPrompt({ style, model: "qwen3:8b", shellCommands: true, panelActions: true }).length).toBeLessThan(1300);
         }
     });
 
     it("tells the model only about the tools it has", () => {
-        const none = systemPrompt({ style: "quirky", model: "qwen3:8b", webSearch: false, shellCommands: false, panelActions: false });
+        const none = systemPrompt({ style: "quirky", model: "qwen3:8b", shellCommands: false, panelActions: false });
         expect(none).not.toContain("Crane");
         expect(none).toContain("qwen3:8b");
-        expect(none).not.toContain("web_search");
-        const search = systemPrompt({ style: "no-nonsense", model: "qwen3:8b", webSearch: true, shellCommands: false, panelActions: false });
-        expect(search).toContain("web_search");
-        expect(search).not.toContain("run_shell_command");
+        expect(none).not.toContain("run_shell_command");
+        const shell = systemPrompt({ style: "no-nonsense", model: "qwen3:8b", shellCommands: true, panelActions: false });
+        expect(shell).toContain("run_shell_command");
+        expect(shell).not.toContain("web_search");
     });
 });

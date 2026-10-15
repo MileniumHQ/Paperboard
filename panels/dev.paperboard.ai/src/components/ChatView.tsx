@@ -262,7 +262,7 @@ export default function ChatView() {
                                 title="Ask anything"
                                 description={
                                     usingOllama()
-                                        ? "Replies are generated on this computer. Web searches are the only thing sent out, and only when the model searches."
+                                        ? "Replies are generated on this computer."
                                         : "Replies come from the endpoint you configured."
                                 }
                             />

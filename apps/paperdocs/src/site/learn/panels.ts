@@ -171,6 +171,6 @@ export const LEARN_PANELS: LearnPanel[] = [
                 alt: "Discord command condition followed by local AI, a reply length limit and a reply to the original message",
             },
         ],
-        note: "Local models need disk space and RAM; a GPU is recommended. Optional web search sends search queries to DuckDuckGo.",
+        note: "Local models need disk space and RAM; a GPU is recommended.",
     },
 ];

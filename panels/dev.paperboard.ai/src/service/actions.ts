@@ -255,7 +255,6 @@ export function uiActions(app: AiApp): ActionDefinition[] {
                     ...(typeof i.contextLength === "number" ? { contextLength: i.contextLength } : {}),
                     ...(isReasoningLevel(i.reasoning) ? { reasoning: i.reasoning } : {}),
                     ...(typeof i.panelActions === "boolean" ? { panelActions: i.panelActions } : {}),
-                    ...(typeof i.webSearch === "boolean" ? { webSearch: i.webSearch } : {}),
                     ...(typeof i.shellCommands === "boolean" ? { shellCommands: i.shellCommands } : {}),
                     ...(typeof i.forceCpu === "boolean" ? { forceCpu: i.forceCpu } : {}),
                     ...(isPromptStyle(i.promptStyle) ? { promptStyle: i.promptStyle } : {}),

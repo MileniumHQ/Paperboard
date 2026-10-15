@@ -18,10 +18,8 @@ import {
     BuiltinArgumentError,
     builtinArguments,
     builtinTools,
-    formatSearchResults,
     formatShellResult,
     isBuiltinTool,
-    type SearchResult,
 } from "../core/builtins";
 import { validateAttachments } from "../core/attachments";
 import { reasoningToThink, type ReasoningLevel } from "../core/reasoning";
@@ -74,7 +72,6 @@ export interface ChatDeps {
     isAllowed: (key: string) => boolean;
     rememberAllowed: (key: string) => Promise<void>;
     /** the built-in tools' effects */
-    webSearch: (query: string, signal: AbortSignal) => Promise<SearchResult[]>;
     runShell: (command: string, signal: AbortSignal) => Promise<{ stdout: string; stderr: string; exitCode: number }>;
     // outputs
     onDelta: (payload: ChatDeltaEvent) => void;
@@ -291,7 +288,6 @@ export class ChatEngine {
             style: settings.promptStyle,
             customPrompt: settings.customPromptEnabled ? settings.customSystemPrompt ?? undefined : undefined,
             model,
-            webSearch: offered.has("web_search"),
             shellCommands: offered.has("run_shell_command"),
             panelActions: panels.tools.length > 0,
         });
@@ -501,6 +497,8 @@ export class ChatEngine {
     ): Promise<void> {
         if (call.status !== "awaiting-approval") return; // already failed in planning
         const builtin = call.builtin;
+        // planning only records offered built-ins; a retired kind never runs
+        if (builtin && !isBuiltinTool(builtin)) throw new Error(`${BUILTIN_LABELS[builtin]} is no longer available.`);
         const key = builtin ? "" : permissionKey(call.panelId, call.action);
         let decision: ApprovalDecision | "cancelled" | "remembered" | "unasked";
         if (builtin && !BUILTIN_APPROVAL[builtin].ask) {
@@ -544,10 +542,7 @@ export class ChatEngine {
         call.status = "running";
         this.emitMessage(conversation.id, message);
         try {
-            if (builtin === "web_search") {
-                const query = call.arguments.query as string;
-                call.result = formatToolResult(formatSearchResults(query, await this.deps.webSearch(query, signal)));
-            } else if (builtin === "run_shell_command") {
+            if (builtin === "run_shell_command") {
                 call.result = formatToolResult(formatShellResult(await this.deps.runShell(call.arguments.command as string, signal)));
             } else {
                 call.result = formatToolResult(await this.deps.callAction(call.panelId, call.action, call.arguments));

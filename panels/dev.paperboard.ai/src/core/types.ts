@@ -82,8 +82,6 @@ export interface Settings {
     reasoning: ReasoningLevel;
     /** describe other panels' actions to the model (experimental) */
     panelActions: boolean;
-    /** the built-in web search tool */
-    webSearch: boolean;
     /** the built-in shell command tool, approved per run */
     shellCommands: boolean;
     /** run inference on the processor even when a GPU could host the model */
@@ -136,7 +134,10 @@ export interface ConversationSummary {
 
 export type ToolCallStatus = "awaiting-approval" | "running" | "done" | "denied" | "error";
 
+/** every built-in kind a chat may have recorded; web_search is no longer offered */
 export type BuiltinTool = "web_search" | "run_shell_command";
+/** the built-ins a model can be offered */
+export type OfferedBuiltin = "run_shell_command";
 
 export interface ToolCallRecord {
     id: string;
@@ -237,7 +238,7 @@ export interface PendingApproval {
     label: string;
     arguments: Record<string, unknown>;
     /** a built-in tool; its approval rules are fixed (BUILTIN_APPROVAL) */
-    builtin?: BuiltinTool;
+    builtin?: OfferedBuiltin;
 }
 
 /** A model Ollama holds in memory right now (its /api/ps). */
@@ -289,7 +290,6 @@ export const DEFAULT_SETTINGS: Settings = {
     contextLength: 32768,
     reasoning: "off",
     panelActions: false,
-    webSearch: true,
     shellCommands: true,
     forceCpu: false,
     promptStyle: "standard",

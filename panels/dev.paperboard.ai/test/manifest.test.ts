@@ -17,7 +17,7 @@ describe("manifest", () => {
     });
 
     it("hardcoded remote hosts stay the known static ones (absence check)", () => {
-        const known = new Set(["registry.ollama.ai", "html.duckduckgo.com"]);
+        const known = new Set(["registry.ollama.ai"]);
         const root = path.join(import.meta.dir, "..", "src");
         const files: string[] = [];
         const walk = (dir: string) => {

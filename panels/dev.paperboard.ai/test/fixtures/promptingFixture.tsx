@@ -26,7 +26,7 @@ render(() => <PaperProvider><main style={{ padding: "var(--paper-uigap)", displa
                 update: async (patch) => {
                     if (new URLSearchParams(location.search).has("legacy")) return serviceSettings;
                     if (patch.customPromptEnabled && serviceSettings.customSystemPrompt === null) {
-                        patch.customSystemPrompt = systemPrompt({ style: serviceSettings.promptStyle, model: serviceSettings.defaultModel, webSearch: true, shellCommands: true, panelActions: false });
+                        patch.customSystemPrompt = systemPrompt({ style: serviceSettings.promptStyle, model: serviceSettings.defaultModel, shellCommands: true, panelActions: false });
                     }
                     serviceSettings = { ...serviceSettings, ...patch };
                     return serviceSettings;
