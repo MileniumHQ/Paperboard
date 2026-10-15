@@ -12,7 +12,13 @@
             "id": "quick-ask",
             "name": "Quick ask",
             "description": "Ask a question from Home; the answer opens in AI",
-            "sizes": ["4x1"]
+            "sizes": ["4x1"],
+            "options": [
+                {
+                    "id": "model",
+                    "label": "Model"
+                }
+            ]
         },
         {
             "id": "loaded-model",

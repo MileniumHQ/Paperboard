@@ -1,6 +1,7 @@
 // What the Home widgets show, decided from the mirrored service state.
 // Pure so every branch is testable without a browser.
 
+import { MAX_WIDGET_CHOICES, type WidgetChoice } from "@mileniumhq/paperapi";
 import { formatBytes } from "./fit";
 import { OLLAMA_PROVIDER_ID } from "./providers";
 import type { AiState, LoadedModel, RuntimeStatus } from "./types";
@@ -38,19 +39,35 @@ export function runtimeBlocker(status: RuntimeStatus, error?: string): Blocker |
     }
 }
 
-/** The model a Quick ask uses: the one a new chat in the panel would. */
-export function quickAskModel(state: Pick<AiState, "settings" | "models">): string {
+/** The Quick ask "Model" choice that follows AI's default model. */
+export const QUICK_ASK_DEFAULT_MODEL = "@default";
+
+/**
+ * The model a Quick ask uses: the one its "Model" option names, or for the
+ * default (and widgets placed before the option) the one a new chat in the
+ * panel would.
+ */
+export function quickAskModel(state: Pick<AiState, "settings" | "models">, chosen?: string): string {
+    if (chosen && chosen !== QUICK_ASK_DEFAULT_MODEL) return chosen;
     return state.settings.defaultModel || state.models[0]?.name || "";
 }
 
+/** What the "Model" option offers in Home's gallery: the default, then each downloaded model. */
+export function quickAskModelChoices(state: Pick<AiState, "models">): WidgetChoice[] {
+    return [
+        { value: QUICK_ASK_DEFAULT_MODEL, label: "Default model" },
+        ...state.models.slice(0, MAX_WIDGET_CHOICES - 1).map((m) => ({ value: m.name, label: m.name })),
+    ];
+}
+
 /** Why Quick ask cannot send now, or null when it can. */
-export function quickAskBlocker(state: Pick<AiState, "provider" | "runtime" | "settings" | "models">): Blocker | null {
+export function quickAskBlocker(state: Pick<AiState, "provider" | "runtime" | "settings" | "models">, chosen?: string): Blocker | null {
     if (!state.provider.configured) return { text: "Set up AI to ask from here", recovery: "open" };
     if (state.provider.id === OLLAMA_PROVIDER_ID) {
         const runtime = runtimeBlocker(state.runtime.status, state.runtime.error);
         if (runtime) return runtime;
     }
-    const model = quickAskModel(state);
+    const model = quickAskModel(state, chosen);
     if (!model) return { text: "Download a model in AI first", recovery: "open" };
     if (!state.models.some((m) => m.name === model)) return { text: `${model} is not downloaded`, recovery: "open" };
     return null;

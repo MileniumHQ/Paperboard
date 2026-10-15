@@ -13,6 +13,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import type { ProcessHost } from "../src/service/runtime";
 import type { AiState } from "../src/core/types";
+import { QUICK_ASK_DEFAULT_MODEL } from "../src/core/widgets";
 
 const filesDir = fs.mkdtempSync(path.join(os.tmpdir(), "pb-ai-app-"));
 const secrets = new Map<string, string>();
@@ -256,7 +257,7 @@ describe("AiApp widget actions", () => {
         port: 0,
         async fetch(req) {
             const url = new URL(req.url);
-            if (url.pathname === "/v1/models") return Response.json({ data: [{ id: "local:7b" }] });
+            if (url.pathname === "/v1/models") return Response.json({ data: [{ id: "local:7b" }, { id: "local:9b" }] });
             if (url.pathname === "/v1/chat/completions") {
                 const wait = holdReplies ? new Promise<void>((r) => held.push(r)) : Promise.resolve();
                 return new Response(
@@ -312,6 +313,19 @@ describe("AiApp widget actions", () => {
             // taken once: a second window (or a reload) does not jump to it
             expect(app.takeOpenRequest()).toBeNull();
             expect(ctx.state.openRequest).toBeNull();
+        });
+    });
+
+    it("asks the model the widget's Model option names, or the default", async () => {
+        await withApp(custom(), async (app, ctx) => {
+            await modelsListed(ctx);
+            const chosen = await app.quickAsk("hi", "local:9b");
+            expect((await app.getConversation(chosen.conversationId)).conversation.model).toBe("local:9b");
+            const followed = await app.quickAsk("hi", QUICK_ASK_DEFAULT_MODEL);
+            expect((await app.getConversation(followed.conversationId)).conversation.model).toBe("local:7b");
+            const before = ctx.state.conversations.length;
+            await expect(app.quickAsk("hi", "gone:1b")).rejects.toThrow("gone:1b is not downloaded.");
+            expect(ctx.state.conversations).toHaveLength(before);
         });
     });
 

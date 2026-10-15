@@ -20,8 +20,10 @@ export default function QuickAsk(props: { widget: WidgetContext }) {
     const [starting, setStarting] = createSignal(false);
 
     const ready = () => service.hydration() === "ready";
-    const blocker = () => (ready() ? quickAskBlocker(service.state) : null);
-    const model = () => quickAskModel(service.state);
+    // the model the widget was placed with; the default when it names none
+    const chosen = () => props.widget.options.model;
+    const blocker = () => (ready() ? quickAskBlocker(service.state, chosen()) : null);
+    const model = () => quickAskModel(service.state, chosen());
     const canSend = () => ready() && !blocker() && !busy() && text().trim().length > 0;
 
     const submit = async (event: SubmitEvent) => {
@@ -31,7 +33,7 @@ export default function QuickAsk(props: { widget: WidgetContext }) {
         setError("");
         setSent(false);
         try {
-            await service.call(WIDGET_ACTION_IDS.quickAsk, { text: text() });
+            await service.call(WIDGET_ACTION_IDS.quickAsk, { text: text(), ...(chosen() ? { model: chosen() } : {}) });
             setText("");
             setSent(true);
             props.widget.openPanel();

@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { startFakeOllama, type FakeOllama } from "./fakeOllama";
 import { OllamaClient } from "../src/service/ollamaClient";
 import { listLoaded, MAX_LOADED_MODELS, unloadAndConfirm } from "../src/service/loaded";
-import { featuredLoaded, loadedDetail, quickAskBlocker, quickAskModel } from "../src/core/widgets";
+import { featuredLoaded, loadedDetail, QUICK_ASK_DEFAULT_MODEL, quickAskBlocker, quickAskModel, quickAskModelChoices } from "../src/core/widgets";
 import { initialState, type AiState, type InstalledModel } from "../src/core/types";
 
 const GB = 1024 ** 3;
@@ -71,6 +71,17 @@ function ready(patch: Partial<AiState> = {}): AiState {
         ...patch,
     };
 }
+
+describe("Quick ask's Model option", () => {
+    it("offers the default first, then each downloaded model, and asks the one chosen", () => {
+        const s = ready();
+        expect(quickAskModelChoices(s)[0]).toEqual({ value: QUICK_ASK_DEFAULT_MODEL, label: "Default model" });
+        expect(quickAskModelChoices(s).slice(1).map((c) => c.value)).toEqual(s.models.map((m) => m.name));
+        expect(quickAskModel(s, QUICK_ASK_DEFAULT_MODEL)).toBe(quickAskModel(s));
+        expect(quickAskModel(s, "other:1b")).toBe("other:1b");
+        expect(quickAskBlocker(s, "gone:1b")).toEqual({ text: "gone:1b is not downloaded", recovery: "open" });
+    });
+});
 
 describe("Quick ask readiness", () => {
     it("can ask once set up, running and with a model", () => {

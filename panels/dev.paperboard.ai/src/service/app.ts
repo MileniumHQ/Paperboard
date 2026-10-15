@@ -28,6 +28,7 @@ import {
     providerFor,
 } from "../core/providers";
 import { isReasoningLevel } from "../core/reasoning";
+import { quickAskModel } from "../core/widgets";
 import type { RegistryAction } from "../core/tools";
 import {
     DEFAULT_SETTINGS,
@@ -465,22 +466,18 @@ export class AiApp {
         }));
     }
 
-    /** The model a chat started outside the panel uses: the one a new chat in the panel would. */
-    private quickAskModel(): string {
-        return this.ctx.state.settings.defaultModel || this.ctx.state.models[0]?.name || "";
-    }
-
     /**
-     * Starts a chat with `text` (the Quick ask widget) and asks a panel
+     * Starts a chat with `text` (the Quick ask widget), on the model its
+     * "Model" option names or else the default, and asks a panel
      * window to open it. Resolves once the message is accepted and the reply
      * has started; a chat whose message was refused is removed again.
      */
-    async quickAsk(text: string): Promise<{ conversationId: string }> {
+    async quickAsk(text: string, chosenModel?: string): Promise<{ conversationId: string }> {
         const content = text.trim();
         if (!content) throw new Error("Type a question first.");
         if (content.length > MAX_USER_MESSAGE_CHARS) throw new Error(`Questions are limited to ${MAX_USER_MESSAGE_CHARS} characters.`);
         if (!this.ctx.state.provider.configured) throw new Error("Set up AI first.");
-        const model = this.quickAskModel();
+        const model = quickAskModel(this.ctx.state, chosenModel);
         if (!model) throw new Error("No model is downloaded yet. Pick one in AI.");
         if (!this.models.capabilities(model)) throw new Error(`${model} is not downloaded. Pick a model in AI.`);
         // throws when the provider is not reachable, before a chat exists
