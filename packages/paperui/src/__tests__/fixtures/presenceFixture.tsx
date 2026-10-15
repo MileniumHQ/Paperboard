@@ -44,6 +44,21 @@ async function run(): Promise<void> {
     await wait(600);
     out.checks.goneAfterLeaving = !panel();
 
+    // Interrupt an enter without giving Chrome a rendering opportunity
+    // between class removal and reapplication of the same keyframes. Exit
+    // must own a fresh timeline, not inherit enter's elapsed time/end event.
+    setShown(true);
+    await Promise.resolve();
+    const interruptedEnter = panel()?.getAnimations()[0];
+    if (!interruptedEnter) throw new Error("interrupted enter had no CSS animation");
+    interruptedEnter.currentTime = 150;
+    setShown(false);
+    const interruptedExit = panel()?.getAnimations()[0];
+    out.checks.freshExitAnimation = !!interruptedExit && interruptedExit !== interruptedEnter;
+    out.checks.exitStartsAtBeginning = interruptedExit?.currentTime === 0;
+    await wait(600);
+    out.checks.goneAfterInterruptedEnter = !panel();
+
     document.documentElement.dataset.paperuiMotion = "reduced";
     setShown(true);
     await nextFrame();

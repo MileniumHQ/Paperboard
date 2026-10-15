@@ -25,6 +25,9 @@ describe("PaperPresence in a real browser", () => {
             expect(checks.mountedWhileLeaving, "the element left before animating out").toBe(true);
             expect(checks.exitDirection, "exit does not replay the preset in reverse").toBe("reverse");
             expect(checks.goneAfterLeaving, "the element stayed after its exit animation").toBe(true);
+            expect(checks.freshExitAnimation, "exit reused the enter animation's timeline").toBe(true);
+            expect(checks.exitStartsAtBeginning, "exit inherited elapsed time from enter").toBe(true);
+            expect(checks.goneAfterInterruptedEnter, "an interrupted enter prevented exit").toBe(true);
             expect(checks.reducedGoneAtOnce, "reduced motion still waited on an animation").toBe(true);
         },
         60_000,

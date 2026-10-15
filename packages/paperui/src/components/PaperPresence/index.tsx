@@ -60,6 +60,10 @@ export function PaperPresence(props: PaperPresenceProps) {
 
     const play = (el: Element, classes: string, done: () => void) => {
         running.get(el)?.();
+        // Resolve the previous classes' removal before reusing a preset's
+        // animation-name. Without a rendering frame between enter and exit,
+        // CSS otherwise reuses enter's timeline and can end exit immediately.
+        void getComputedStyle(el).animationName;
         const tokens = classes.split(" ").filter(Boolean);
         el.classList.add(...tokens);
         let timer: ReturnType<typeof setTimeout> | undefined;
