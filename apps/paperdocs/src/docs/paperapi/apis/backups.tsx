@@ -55,7 +55,7 @@ async function restoreNewest() {
                     <tr>
                         <td><PaperCode>status</PaperCode></td>
                         <td><PaperCode>status(appId): Promise&lt;BackupStatus&gt;</PaperCode></td>
-                        <td>The panel's backup location, or null when none is chosen, and the backup job running for the panel, if any.</td>
+                        <td>The panel's backup location, or null when none is chosen, the backup job running for the panel, if any, and its routine backup schedule, or null.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>chooseLocation</PaperCode></td>
@@ -81,6 +81,11 @@ async function restoreNewest() {
                         <td><PaperCode>delete</PaperCode></td>
                         <td><PaperCode>delete(appId, backupId): Promise&lt;void&gt;</PaperCode></td>
                         <td>Deletes the backup from the panel's location.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>setSchedule</PaperCode></td>
+                        <td><PaperCode>setSchedule(appId, schedule | null): Promise&lt;BackupStatus&gt;</PaperCode></td>
+                        <td>Turns routine backups on or changes them with <PaperCode>{"{ everyHours, keep }"}</PaperCode>, or turns them off with null. See Routine backups.</td>
                     </tr>
                 </tbody>
             </PaperTable>
@@ -123,7 +128,7 @@ async function restoreNewest() {
                     <tr>
                         <td><PaperCode>label</PaperCode></td>
                         <td><PaperCode>string | null</PaperCode></td>
-                        <td>The label passed to create, or null.</td>
+                        <td>The label passed to create, or null. Routine backups carry <PaperCode>ROUTINE_BACKUP_LABEL</PaperCode> ("Routine backup"), which create refuses.</td>
                     </tr>
                 </tbody>
             </PaperTable>
@@ -134,6 +139,16 @@ async function restoreNewest() {
                 A panel cannot set its location itself. Call chooseLocation from a click handler in the panel page; a widget gets a BackupLocationError with code <PaperCode>unavailable</PaperCode>.
                 The user adds S3 buckets and Google Drive on the computer's Computer Info page. Google Drive is connected by signing in to Google from the Paperboard app, and Paperboard sees only the "Paperboard Backups" folder it creates.
                 Changing a panel's location does not move its existing backups. list shows the backups at the current location.
+            </PaperText>
+
+            <PaperText preset="subheader" id="routine-backups">Routine backups</PaperText>
+            <PaperText preset="body">
+                The computer's Paperboard Server makes routine backups on a schedule, whether the Paperboard app is open or not. A panel turns them on with setSchedule once it has a backup location.
+                <PaperCode>everyHours</PaperCode> is one of <PaperCode>ROUTINE_BACKUP_HOURS</PaperCode> (1, 3, 6, 12, 24, 48 or 168). <PaperCode>keep</PaperCode> is 1 to 100.
+                The first routine backup runs one interval after the schedule is set. Changing only keep leaves the next one when it was.
+                After each routine backup, the routine backups beyond the newest <PaperCode>keep</PaperCode> are deleted. Backups made with create are never deleted by a schedule.
+                The schedule's <PaperCode>last</PaperCode> says when the last routine backup finished, whether it worked, and why not. One that failed is tried again 15 minutes later.
+                Routine backups run one panel at a time. Uninstalling a panel and deleting its data removes its schedule; uninstalling it and keeping its data keeps the schedule for a reinstall.
             </PaperText>
 
             <PaperText preset="subheader" id="errors">Errors</PaperText>
@@ -161,6 +176,10 @@ async function restoreNewest() {
                         <td>The appId names another panel than the caller's.</td>
                     </tr>
                     <tr>
+                        <td><PaperCode>INVALID_PARAMS</PaperCode></td>
+                        <td>A label or schedule is not one create or setSchedule accepts.</td>
+                    </tr>
+                    <tr>
                         <td><PaperCode>INTERNAL</PaperCode></td>
                         <td>The location refused or could not be reached, the downloaded bytes do not match the record, or the panel did not become ready on the restored data. The message says which.</td>
                     </tr>
@@ -172,6 +191,7 @@ async function restoreNewest() {
                 create stops the panel's service while it copies the data, so the copy is not taken mid-write. The service starts again and create waits for it to be ready before it uploads.
                 restore refuses a backup that holds anything other than this panel's file storage and config document, and refuses links.
                 restore stops the service and the processes the panel started, then swaps the data in. When the service does not become ready on the restored data, the previous data goes back in place and the service restarts on it.
+                A service defined with a <PaperCode>beforeBackup</PaperCode> hook (see definePanelService) is asked first, while it still runs, so it can write out what it holds and stop processes it runs from writing. When the hook throws, create fails with CONFLICT and the service is still stopped and started again.
                 A service that was stopped before a backup or restore stays stopped.
                 create and restore have no call timeout. They take as long as the bytes take to copy.
             </PaperText>

@@ -192,6 +192,7 @@ export const RPC_ROUTES: Record<string, WsRoute> = {
     "backup-list": { action: "backup:list", unwrap: (r) => r.backups ?? [] },
     "backup-restore": { action: "backup:restore", timeoutMs: null },
     "backup-delete": { action: "backup:delete", unwrap: () => undefined },
+    "backup-schedule-set": { action: "backup:schedule-set" },
     "backup-locations": { action: "backup:destinations", unwrap: (r) => r.destinations ?? [] },
     "backup-location-usage": { action: "backup:destination-usage" },
     // adding checks the location is reachable with its credentials

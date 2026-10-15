@@ -7,6 +7,9 @@
 // size and sha256 the record names, refuses entries that are not this
 // panel's data and backups from a newer panel version, then swaps the data
 // in transactionally (engine.replacePanelData).
+//
+// Routine backups (schedules.ts) run from one timer here, one panel at a
+// time, and prune only the routine backups beyond the newest few kept.
 import * as crypto from "crypto";
 import * as fs from "fs";
 import * as path from "path";
@@ -29,6 +32,22 @@ import { DriveBackupStore, forgetDriveToken, GOOGLE_ENDPOINTS, type DriveEndpoin
 import { LocalBackupStore } from "./localStore";
 import { normalizeS3Prefix, S3BackupStore } from "./s3Store";
 import { BACKUP_ID_RE, BACKUP_LABEL_MAX, newBackupId, type BackupRecord, type BackupStore, type BackupUsage } from "./types";
+import {
+    BUSY_RETRY_MS,
+    MAX_SCHEDULES,
+    MAX_SLEEP_MS,
+    SCHEDULED_LABEL,
+    backupsToPrune,
+    duePanels,
+    hours,
+    readSchedules,
+    scheduleInput,
+    sleepFor,
+    writeSchedules,
+    type BackupSchedule,
+    type ScheduleFile,
+    type ScheduleResult,
+} from "./schedules";
 
 /** create and restore run at most this many at once, one per panel */
 export const MAX_RUNNING_BACKUP_JOBS = 2;
@@ -95,15 +114,30 @@ export class BackupService {
     private readonly workDir: string;
     private readonly running = new Map<string, "create" | "restore">();
     private configWrites: Promise<unknown> = Promise.resolve();
+    private readonly schedulesFile: string;
+    private scheduleWrites: Promise<unknown> = Promise.resolve();
+    private readonly now: () => number;
+    private timer: ReturnType<typeof setTimeout> | null = null;
+    private scheduling = false;
+    private disposed = false;
+    private ticking: Promise<void> | null = null;
+    /** after a result could not be written, the timer waits this long */
+    private backoffUntil = 0;
+    private readonly unsubscribe: () => void;
 
     constructor(
         private readonly engine: PaperCraneEngine,
         private readonly driveEndpoints: DriveEndpoints = GOOGLE_ENDPOINTS,
+        options: { now?: () => number } = {},
     ) {
         this.root = path.join(engine.getAppDataDir(), "backups");
         this.configFile = path.join(this.root, "destinations.json");
+        this.schedulesFile = path.join(this.root, "schedules.json");
         // beside the data, so staged restores move in with a rename
         this.workDir = path.join(this.root, ".work");
+        this.now = options.now ?? Date.now;
+        // a panel whose data is deleted takes its routine backups with it
+        this.unsubscribe = engine.onPanelDataDeleted((panelId) => this.forgetSchedule(panelId));
     }
 
     // ─── Locations ──────────────────────────────────────────────────────
@@ -247,12 +281,13 @@ export class BackupService {
 
     // ─── A panel's backups ──────────────────────────────────────────────
 
-    status(panelId: string): { destination: DestinationSummary | null; running: "create" | "restore" | null } {
+    status(panelId: string): { destination: DestinationSummary | null; running: "create" | "restore" | null; schedule: BackupSchedule | null } {
         const config = this.config();
         const destId = config.panels[panelId];
         return {
             destination: destId ? this.summary(this.destination(destId, config)) : null,
             running: this.running.get(panelId) ?? null,
+            schedule: readSchedules(this.schedulesFile).panels[panelId] ?? null,
         };
     }
 
@@ -280,6 +315,14 @@ export class BackupService {
         if (label !== null && (typeof label !== "string" || label.length > BACKUP_LABEL_MAX)) {
             throw invalidParams(`label must be at most ${BACKUP_LABEL_MAX} characters`);
         }
+        // routine backups are told apart by their label, and only they are pruned
+        if (label?.trim().toLowerCase() === SCHEDULED_LABEL.toLowerCase()) {
+            throw invalidParams(`"${SCHEDULED_LABEL}" is kept for routine backups`);
+        }
+        return this.makeBackup(panelId, label);
+    }
+
+    private async makeBackup(panelId: string, label: string | null): Promise<BackupRecord> {
         const store = this.panelStore(panelId);
         return this.job(panelId, "create", async () => {
             const id = newBackupId();
@@ -364,5 +407,177 @@ export class BackupService {
     async remove(panelId: string, backupId: string): Promise<void> {
         const store = this.panelStore(panelId);
         await store.remove(await this.find(store, panelId, backupId));
+    }
+
+    // ─── Routine backups ────────────────────────────────────────────────
+
+    /** read-modify-write of the schedules file, one at a time */
+    private mutateSchedules<T>(fn: (schedules: ScheduleFile) => T): Promise<T> {
+        const next = this.scheduleWrites.then(async () => {
+            const schedules = readSchedules(this.schedulesFile);
+            const result = fn(schedules);
+            fs.mkdirSync(this.root, { recursive: true });
+            await writeSchedules(this.schedulesFile, schedules);
+            return result;
+        });
+        this.scheduleWrites = next.catch((err) => logger.debug("[backups] a schedule change failed:", err));
+        return next;
+    }
+
+    /** sets or (with null) removes the panel's routine backups */
+    async setSchedule(panelId: string, input: unknown): Promise<BackupSchedule | null> {
+        this.engine.installedPanelVersion(panelId); // refuses a panel that is not installed
+        if (input === null) {
+            await this.mutateSchedules((schedules) => {
+                delete schedules.panels[panelId];
+            });
+            this.arm();
+            return null;
+        }
+        const { everyHours, keep } = scheduleInput(input);
+        if (!this.config().panels[panelId]) throw conflict("Choose where this panel's backups are kept first");
+        const schedule = await this.mutateSchedules((schedules) => {
+            const current = schedules.panels[panelId];
+            if (!current && Object.keys(schedules.panels).length >= MAX_SCHEDULES) {
+                throw conflict(`Paperboard runs routine backups for at most ${MAX_SCHEDULES} panels`);
+            }
+            const next: BackupSchedule = {
+                everyHours,
+                keep,
+                // the first routine backup is one interval away; changing
+                // only how many are kept leaves the next one where it was
+                nextRunAt: current && current.everyHours === everyHours
+                    ? current.nextRunAt
+                    : new Date(this.now() + hours(everyHours)).toISOString(),
+                last: current?.last ?? null,
+            };
+            schedules.panels[panelId] = next;
+            return next;
+        });
+        this.arm();
+        return schedule;
+    }
+
+    private async forgetSchedule(panelId: string): Promise<void> {
+        await this.mutateSchedules((schedules) => {
+            delete schedules.panels[panelId];
+        });
+        this.arm();
+    }
+
+    /** starts the timer that runs routine backups; the daemon calls this once */
+    startScheduler(): void {
+        if (this.disposed || this.scheduling) return;
+        this.scheduling = true;
+        this.arm();
+    }
+
+    /** stops the timer and the uninstall hook; a routine backup already
+     * running finishes, but no other starts */
+    dispose(): void {
+        this.disposed = true;
+        this.scheduling = false;
+        if (this.timer) clearTimeout(this.timer);
+        this.timer = null;
+        this.unsubscribe();
+    }
+
+    private arm(): void {
+        if (!this.scheduling || this.disposed || this.ticking) return;
+        if (this.timer) clearTimeout(this.timer);
+        let delay: number;
+        try {
+            delay = sleepFor(readSchedules(this.schedulesFile), this.now());
+        } catch (err) {
+            // the file is left as it is for the user; the timer looks again later
+            logger.error("[backups] routine backups cannot run:", err instanceof Error ? err.message : err);
+            delay = MAX_SLEEP_MS;
+        }
+        delay = Math.min(MAX_SLEEP_MS, Math.max(delay, this.backoffUntil - this.now()));
+        this.timer = setTimeout(() => {
+            this.timer = null;
+            void this.runDue().finally(() => this.arm());
+        }, delay);
+        this.timer.unref?.();
+    }
+
+    /** runs every routine backup that is due, one after another */
+    runDue(): Promise<void> {
+        if (this.ticking) return this.ticking;
+        this.ticking = (async () => {
+            let due: string[];
+            try {
+                due = duePanels(readSchedules(this.schedulesFile), this.now());
+            } catch (err) {
+                logger.error("[backups] routine backups cannot run:", err instanceof Error ? err.message : err);
+                return;
+            }
+            for (const panelId of due) {
+                if (this.disposed) return;
+                await this.runRoutine(panelId);
+            }
+        })().finally(() => {
+            this.ticking = null;
+        });
+        return this.ticking;
+    }
+
+    private async runRoutine(panelId: string): Promise<void> {
+        const schedule = readSchedules(this.schedulesFile).panels[panelId];
+        if (!schedule) return;
+        let result: ScheduleResult;
+        let retrySoon = false;
+        try {
+            this.engine.installedPanelVersion(panelId);
+        } catch (err) {
+            // an uninstalled panel's data is kept for a reinstall, and so is
+            // its schedule; it is looked at again after a full interval
+            result = { at: new Date(this.now()).toISOString(), ok: false, message: err instanceof Error ? err.message : String(err) };
+            return this.recordRoutine(panelId, schedule.nextRunAt, result, false);
+        }
+        try {
+            await this.makeBackup(panelId, SCHEDULED_LABEL);
+            const pruned = await this.prune(panelId, schedule.keep);
+            result = { at: new Date(this.now()).toISOString(), ok: pruned.failed === null, message: pruned.failed };
+        } catch (err) {
+            retrySoon = true;
+            result = {
+                at: new Date(this.now()).toISOString(),
+                ok: false,
+                message: (err instanceof Error ? err.message : String(err)).slice(0, 500),
+            };
+        }
+        await this.recordRoutine(panelId, schedule.nextRunAt, result, retrySoon);
+    }
+
+    private async recordRoutine(panelId: string, dueAt: string, result: ScheduleResult, retrySoon: boolean): Promise<void> {
+        try {
+            await this.mutateSchedules((schedules) => {
+                const current = schedules.panels[panelId];
+                if (!current) return;
+                current.last = result;
+                // a schedule changed meanwhile keeps the time it was given
+                if (current.nextRunAt === dueAt) {
+                    const wait = retrySoon ? Math.min(BUSY_RETRY_MS, hours(current.everyHours)) : hours(current.everyHours);
+                    current.nextRunAt = new Date(this.now() + wait).toISOString();
+                }
+            });
+        } catch (err) {
+            // the backup stays due on disk; waiting keeps it from running again at once
+            this.backoffUntil = this.now() + BUSY_RETRY_MS;
+            logger.error(`[backups] the routine backup result for ${panelId} was not saved:`, err instanceof Error ? err.message : err);
+        }
+    }
+
+    /** removes routine backups beyond the newest `keep`; other backups stay */
+    private async prune(panelId: string, keep: number): Promise<{ failed: string | null }> {
+        try {
+            const store = this.panelStore(panelId);
+            const extra = backupsToPrune(await store.list(panelId), keep);
+            for (const record of extra) await store.remove(record);
+            return { failed: null };
+        } catch (err) {
+            return { failed: `Backed up, but older routine backups were not removed: ${(err instanceof Error ? err.message : String(err)).slice(0, 400)}` };
+        }
     }
 }

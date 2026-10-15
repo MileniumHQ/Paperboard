@@ -39,6 +39,7 @@ describe("backup routes", () => {
             "backup-list": "backup:list",
             "backup-restore": "backup:restore",
             "backup-delete": "backup:delete",
+            "backup-schedule-set": "backup:schedule-set",
             "backup-locations": "backup:destinations",
             "backup-location-usage": "backup:destination-usage",
             "backup-location-add": "backup:destination-add",

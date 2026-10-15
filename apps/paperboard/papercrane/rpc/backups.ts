@@ -81,6 +81,12 @@ export async function handleBackups(action: string, id: unknown, params: any, ct
                 reply(id, await backups.restore(panelId, assertStr(params?.backupId, "backupId", 64)));
                 return true;
             }
+            case "backup:schedule-set": {
+                const panelId = panelFor(params, action, ctx);
+                await backups.setSchedule(panelId, params?.schedule ?? null);
+                reply(id, backups.status(panelId));
+                return true;
+            }
             case "backup:delete": {
                 const panelId = panelFor(params, action, ctx);
                 await backups.remove(panelId, assertStr(params?.backupId, "backupId", 64));

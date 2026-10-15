@@ -23,6 +23,7 @@ import { getLocalDir, getPaperboardDir } from "./paths";
 import { loadOrCreateTlsIdentity, type TlsIdentity } from "./tlsIdentity";
 import { logger } from "./logger";
 import { PanelServicesManager } from "./panelServices";
+import { backupServiceFor } from "./rpc/backups";
 
 export * from "./types";
 export * from "./engine";
@@ -393,6 +394,9 @@ export function startPaperCraneServer(
                     auth.dispose();
                 } catch (err) { logger.debug("[index.ts] op failed:", err) }
                 try {
+                    backupServiceFor(engine).dispose();
+                } catch (err) { logger.debug("[index.ts] op failed:", err) }
+                try {
                     panelServices.stopAll();
                 } catch (err) { logger.debug("[index.ts] op failed:", err) }
                 try {
@@ -525,6 +529,9 @@ export function startPaperCraneServer(
                 } catch (err: any) {
                     logger.warn("[Paperboard Server] Failed to initialize panel services:", err?.message || err);
                 }
+
+                // routine backups run while the daemon does, app open or not
+                backupServiceFor(engine).startScheduler();
 
                 // this instance owns the port now: safe to sweep interrupted
                 // artifacts (never before — see sweepStartupOrphans)

@@ -33,11 +33,39 @@ export interface BackupLocation {
     removable: boolean;
 }
 
+/** how often routine backups may run, in hours */
+export const ROUTINE_BACKUP_HOURS = [1, 3, 6, 12, 24, 48, 168] as const;
+/** the most routine backups a schedule keeps */
+export const MAX_ROUTINE_BACKUPS_KEPT = 100;
+/** the label routine backups carry; a backup someone makes cannot use it */
+export const ROUTINE_BACKUP_LABEL = "Routine backup";
+
+export interface BackupScheduleResult {
+    /** ISO time the last routine backup finished */
+    at: string;
+    ok: boolean;
+    /** why it failed; null when it worked */
+    message: string | null;
+}
+
+/** Routine backups the computer's Paperboard Server makes, app open or not */
+export interface BackupSchedule {
+    everyHours: (typeof ROUTINE_BACKUP_HOURS)[number];
+    /** routine backups beyond the newest this many are deleted; other
+     * backups are never deleted by a schedule */
+    keep: number;
+    /** ISO time the next one is due */
+    nextRunAt: string;
+    last: BackupScheduleResult | null;
+}
+
 export interface BackupStatus {
     /** null until the user chooses where this panel's backups go */
     location: BackupLocation | null;
     /** a backup being made or restored for this panel right now */
     running: "create" | "restore" | null;
+    /** null when the panel has no routine backups */
+    schedule: BackupSchedule | null;
 }
 
 export interface BackupLocationUsage {
@@ -59,7 +87,7 @@ export class BackupLocationError extends Error {
     }
 }
 
-const status = (r: any): BackupStatus => ({ location: r?.destination ?? null, running: r?.running ?? null });
+const status = (r: any): BackupStatus => ({ location: r?.destination ?? null, running: r?.running ?? null, schedule: r?.schedule ?? null });
 
 export const backupApi = {
     /** where this panel's backups go, and whether one is running */
@@ -81,6 +109,12 @@ export const backupApi = {
 
     delete: (appId: string, backupId: string, scope?: string): Promise<void> =>
         invokeIn<void>(scope, "backup-delete", { panelId: requirePanelId(appId), backupId }),
+
+    /** turns routine backups on, changes them, or (with null) turns them
+     * off. The first runs one interval from now; a backup location must be
+     * chosen first. Changing only `keep` leaves the next one when it was. */
+    setSchedule: async (appId: string, schedule: { everyHours: BackupSchedule["everyHours"]; keep: number } | null, scope?: string): Promise<BackupStatus> =>
+        status(await invokeIn(scope, "backup-schedule-set", { panelId: requirePanelId(appId), schedule })),
 
     /** shows Paperboard's backup location window for this panel. Call it
      * from the panel page, not a widget. */

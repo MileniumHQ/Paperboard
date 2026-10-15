@@ -1178,6 +1178,15 @@ export class PaperCraneEngine {
         }
     }
 
+    private readonly dataDeletedListeners = new Set<(panelId: string) => void | Promise<void>>();
+
+    /** runs `listener` when an uninstall deletes a panel's data; returns the
+     * unsubscribe, which the subscriber calls when it is disposed */
+    public onPanelDataDeleted(listener: (panelId: string) => void | Promise<void>): () => void {
+        this.dataDeletedListeners.add(listener);
+        return () => this.dataDeletedListeners.delete(listener);
+    }
+
     /** asks the panel's running service to get ready for a backup of its
      * data, when it takes part; see PanelServicesManager.prepareForBackup */
     public prepareServiceForBackup(panelId: string): Promise<boolean> {
@@ -1291,6 +1300,11 @@ export class PaperCraneEngine {
             await fs.promises.rm(this.configFileFor(cleanId), { force: true });
             await fs.promises.rm(path.join(this.filesDir, panelFilesDirName(cleanId)), { recursive: true, force: true });
             this.credentialsStore.purge(cleanId);
+            // what other owners keep about the panel (its routine backups)
+            // goes with its data; their failure is the uninstall's failure
+            for (const listener of [...this.dataDeletedListeners]) {
+                await listener(cleanId);
+            }
         }
 
         return true;

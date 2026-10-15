@@ -13,7 +13,9 @@ import { handleBackups } from "../papercrane/rpc/backups";
 import { extractPanelArchive } from "../papercrane/backups/archive";
 import { S3BackupStore, signS3Request } from "../papercrane/backups/s3Store";
 import { DriveBackupStore } from "../papercrane/backups/driveStore";
-import { isNewerVersion } from "../papercrane/backups/service";
+import { BackupService, isNewerVersion } from "../papercrane/backups/service";
+import { MAX_KEEP, SCHEDULE_HOURS, SCHEDULED_LABEL } from "../papercrane/backups/schedules";
+import { MAX_ROUTINE_BACKUPS_KEPT, ROUTINE_BACKUP_HOURS, ROUTINE_BACKUP_LABEL } from "../../../packages/paperapi/src/backups";
 import { newBackupId, type BackupRecord } from "../papercrane/backups/types";
 import { createPanelArchive } from "../papercrane/backups/archive";
 
@@ -226,6 +228,122 @@ describe("a service that takes part in backups", () => {
         // the restart undoes whatever the half-done preparation left
         expect(f.seen()).toEqual(["first", "prepare:fail", "first"]);
         expect((await f.call("backup:list", { panelId: ID }, ID)).result.backups).toEqual([]);
+    });
+});
+
+describe("routine backups", () => {
+    const HOUR = 60 * 60 * 1000;
+    function scheduled() {
+        const f = panelFixture();
+        f.writeData("first", { n: 1 });
+        let clock = Date.parse("2026-10-14T12:00:00Z");
+        const backups = new BackupService(f.engine, undefined, { now: () => clock });
+        cleanups.push(() => backups.dispose());
+        const schedulesFile = path.join(f.root, "backups", "schedules.json");
+        return { ...f, backups, schedulesFile, advance: (ms: number) => (clock += ms) };
+    }
+
+    test("offer panels the same choices the daemon accepts", () => {
+        expect([...ROUTINE_BACKUP_HOURS]).toEqual([...SCHEDULE_HOURS]);
+        expect(MAX_ROUTINE_BACKUPS_KEPT).toBe(MAX_KEEP);
+        expect(ROUTINE_BACKUP_LABEL).toBe(SCHEDULED_LABEL);
+    });
+
+    test("need a backup location first", async () => {
+        const f = scheduled();
+        await expect(f.backups.setSchedule(ID, { everyHours: 24, keep: 3 })).rejects.toThrow("Choose where");
+        expect(fs.existsSync(f.schedulesFile)).toBe(false);
+    });
+
+    test("run when due and keep only the newest routine backups", async () => {
+        const f = scheduled();
+        await f.backups.setPanelDestination(ID, "local");
+        const manual = await f.backups.create(ID, "before the update");
+        await f.backups.setSchedule(ID, { everyHours: 6, keep: 2 });
+        expect(f.backups.status(ID).schedule).toMatchObject({ everyHours: 6, keep: 2, nextRunAt: "2026-10-14T18:00:00.000Z", last: null });
+
+        await f.backups.runDue();
+        expect(await f.backups.list(ID)).toHaveLength(1); // not due yet
+
+        for (let i = 0; i < 3; i++) {
+            f.advance(6 * HOUR);
+            await f.backups.runDue();
+        }
+        const list = await f.backups.list(ID);
+        expect(list.filter((b) => b.label === SCHEDULED_LABEL)).toHaveLength(2);
+        // a backup someone made is never pruned
+        expect(list.map((b) => b.id)).toContain(manual.id);
+        const schedule = f.backups.status(ID).schedule!;
+        expect(schedule.last).toMatchObject({ ok: true, message: null });
+        expect(schedule.nextRunAt).toBe("2026-10-15T12:00:00.000Z");
+    });
+
+    test("that fail record why and try again sooner", async () => {
+        const f = scheduled();
+        await f.backups.setPanelDestination(ID, "local");
+        await f.backups.setSchedule(ID, { everyHours: 24, keep: 3 });
+        await f.backups.setPanelDestination(ID, null);
+        f.advance(24 * HOUR);
+        await f.backups.runDue();
+        const schedule = f.backups.status(ID).schedule!;
+        expect(schedule.last).toMatchObject({ ok: false, message: "No backup location chosen for this panel" });
+        expect(schedule.nextRunAt).toBe("2026-10-15T12:15:00.000Z");
+    });
+
+    test("a label someone gives cannot pass for a routine backup", async () => {
+        const f = scheduled();
+        await f.backups.setPanelDestination(ID, "local");
+        await expect(f.backups.create(ID, " routine backup ")).rejects.toThrow("kept for routine backups");
+    });
+
+    test("an unreadable schedules file is refused, never overwritten", async () => {
+        const f = scheduled();
+        await f.backups.setPanelDestination(ID, "local");
+        fs.mkdirSync(path.dirname(f.schedulesFile), { recursive: true });
+        fs.writeFileSync(f.schedulesFile, "{ not json");
+        await expect(f.backups.setSchedule(ID, { everyHours: 24, keep: 3 })).rejects.toThrow("not readable JSON");
+        expect(fs.readFileSync(f.schedulesFile, "utf8")).toBe("{ not json");
+        expect(() => f.backups.status(ID)).toThrow("not readable JSON");
+    });
+
+    test("go with the panel's data, and stay when only its code is removed", async () => {
+        const f = scheduled();
+        await f.backups.setPanelDestination(ID, "local");
+        await f.backups.setSchedule(ID, { everyHours: 24, keep: 3 });
+        const manifest = fs.readFileSync(path.join(f.dir, "manifest.json"));
+        const service = fs.readFileSync(path.join(f.dir, "service.mjs"));
+        await f.engine.uninstallPanel(ID);
+        expect(f.backups.status(ID).schedule).not.toBeNull();
+
+        fs.mkdirSync(f.dir, { recursive: true });
+        fs.writeFileSync(path.join(f.dir, "manifest.json"), manifest);
+        fs.writeFileSync(path.join(f.dir, "service.mjs"), service);
+        await f.engine.uninstallPanel(ID, { deleteData: true });
+        expect(f.backups.status(ID).schedule).toBeNull();
+    });
+
+    test("the daemon's timer runs a due backup on its own", async () => {
+        const f = scheduled();
+        await f.backups.setPanelDestination(ID, "local");
+        await f.backups.setSchedule(ID, { everyHours: 1, keep: 3 });
+        f.advance(HOUR);
+        f.backups.startScheduler();
+        const deadline = Date.now() + 10_000;
+        while ((await f.backups.list(ID)).length === 0 && Date.now() < deadline) await new Promise((r) => setTimeout(r, 100));
+        expect((await f.backups.list(ID)).map((b) => b.label)).toEqual([SCHEDULED_LABEL]);
+    });
+
+    test("can be set and read through the panel's own RPC only", async () => {
+        const f = panelFixture();
+        await f.call("backup:panel-destination-set", { panelId: ID, destinationId: "local" });
+        const other = await f.call("backup:schedule-set", { panelId: ID, schedule: { everyHours: 24, keep: 3 } }, "dev.test.other");
+        expect(other.code).toBe("FORBIDDEN");
+        const bad = await f.call("backup:schedule-set", { panelId: ID, schedule: { everyHours: 5, keep: 3 } }, ID);
+        expect(bad.code).toBe("INVALID_PARAMS");
+        const set = await f.call("backup:schedule-set", { panelId: ID, schedule: { everyHours: 24, keep: 3 } }, ID);
+        expect(set.result.schedule).toMatchObject({ everyHours: 24, keep: 3 });
+        const off = await f.call("backup:schedule-set", { panelId: ID, schedule: null }, ID);
+        expect(off.result.schedule).toBeNull();
     });
 });
 
