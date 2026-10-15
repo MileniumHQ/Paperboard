@@ -122,6 +122,17 @@ describe("Codex bridge", () => {
         expect(host.starts).toHaveLength(1);
     });
 
+    it("concurrent callers wait for initialization before using the app server", async () => {
+        fs.writeFileSync(path.join(dir, "delay-init"), "");
+        const first = open("c1");
+        await until(() => requests("initialize").length === 1);
+        const second = open("c2");
+        await Promise.all([first, second]);
+        const methods = logged("requests.log").map((r: { method: string }) => r.method);
+        expect(methods.indexOf("initialized")).toBeLessThan(methods.indexOf("thread/start"));
+        expect(host.starts).toHaveLength(1);
+    });
+
     it("asks the chat before a file change, and keeps the edit's diff with its result", async () => {
         const opened = await open("c1");
         const asked: unknown[] = [];

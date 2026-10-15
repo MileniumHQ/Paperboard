@@ -144,7 +144,7 @@ function onRequest(m) {
     log("requests.log", { method: m.method, params: p });
     switch (m.method) {
         case "initialize":
-            return reply(m.id, { userAgent: "paperboard/9.9.9 (Fake OS; x86_64)", codexHome: dir, platformFamily: "unix", platformOs: "linux" });
+            return setTimeout(() => reply(m.id, { userAgent: "paperboard/9.9.9 (Fake OS; x86_64)", codexHome: dir, platformFamily: "unix", platformOs: "linux" }), fs.existsSync(path.join(dir, "delay-init")) ? 150 : 0);
         case "account/read":
             return reply(m.id, fs.existsSync(path.join(dir, "signed-out")) ? { account: null, requiresOpenaiAuth: true } : { account: { type: "apiKey" }, requiresOpenaiAuth: true });
         case "model/list":

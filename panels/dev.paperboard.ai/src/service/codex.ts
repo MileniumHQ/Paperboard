@@ -141,6 +141,7 @@ export class CodexAgent implements AgentRunner {
 
     /** Starts the app server and runs initialize, once; concurrent callers share it. */
     private ensureStarted(): Promise<void> {
+        if (this.starting) return this.starting;
         if (this.running) return Promise.resolve();
         this.starting ??= this.start().finally(() => {
             this.starting = null;
