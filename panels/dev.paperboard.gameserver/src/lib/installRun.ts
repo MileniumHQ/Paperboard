@@ -110,10 +110,13 @@ export function createInstallRun() {
 
             download.setStatus("loading");
             try {
-                const outcome = await serverBridge.call<InstallOutcome>(ACTION_IDS.installServerVersion, {
-                    software,
-                    version,
-                });
+                // a jar download plus a Forge or NeoForge installer outlasts the
+                // bridge's 30 s default; the service's progress shows it is alive
+                const outcome = await serverBridge.call<InstallOutcome>(
+                    ACTION_IDS.installServerVersion,
+                    { software, version },
+                    { timeoutMs: null },
+                );
                 download.setStatus("success");
                 download.setPercent(100);
                 installer.setStatus("success");

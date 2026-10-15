@@ -36,8 +36,10 @@ export const readModpack = () => serverBridge.call<{ modpack: ModpackRecord | nu
 export const listModpackVersions = (projectId: string) =>
     serverBridge.call<ModrinthVersion[]>(ACTION_IDS.listModpackVersions, { projectId });
 
+// downloading and placing a pack runs for minutes: the call is waited out,
+// not cut off at the bridge's 30 s default (progress arrives through state)
 export const installModpack = (projectId: string, versionId: string) =>
-    serverBridge.call<ModpackInstallOutcome>(ACTION_IDS.installModpack, { projectId, versionId });
+    serverBridge.call<ModpackInstallOutcome>(ACTION_IDS.installModpack, { projectId, versionId }, { timeoutMs: null });
 
 export const removeModpack = () =>
-    serverBridge.call<{ removed: number; forgotten?: true }>(ACTION_IDS.removeModpack);
+    serverBridge.call<{ removed: number; forgotten?: true }>(ACTION_IDS.removeModpack, {}, { timeoutMs: null });
