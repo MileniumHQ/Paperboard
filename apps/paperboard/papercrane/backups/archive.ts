@@ -6,6 +6,7 @@ import * as crypto from "crypto";
 import * as fs from "fs";
 import * as path from "path";
 import * as tar from "tar";
+import { logger } from "../logger";
 import { LimitError, makeSafeTarFilter, scanTarMembers, TAR_BUDGET } from "../storage";
 
 export interface PanelDataEntries {
@@ -38,6 +39,35 @@ export async function sha256File(file: string): Promise<string> {
     return hash.digest("hex");
 }
 
+/**
+ * Streams a tar pack into outFile and closes every handle on failure. Not tar's
+ * own `file` option and not stream.pipeline: the first leaves the output open,
+ * the second destroys the pack mid-member, and an open handle makes every later
+ * rename of that path fail with EPERM on Windows. On failure the walk stops, and a
+ * member still being read is drained so its file closes by itself.
+ */
+async function writePack(pack: tar.Pack, outFile: string, stop: () => void): Promise<void> {
+    const out = fs.createWriteStream(outFile);
+    const closed = new Promise<void>((resolve) => out.once("close", () => resolve()));
+    const failed = new Promise<never>((_, reject) => {
+        pack.on("error", reject);
+        out.on("error", reject);
+    });
+    // a rejection nobody awaits yet (the write finished first) is not unhandled
+    failed.catch((err) => logger.debug("[backups] archive stream ended with an error after settling:", err));
+    pack.pipe(out);
+    try {
+        await Promise.race([closed, failed]);
+    } catch (err) {
+        stop();
+        pack.unpipe(out);
+        pack.resume();
+        out.destroy();
+        await closed;
+        throw err;
+    }
+}
+
 /** writes the archive to outFile; resolves with its size and sha256 */
 export async function createPanelArchive(
     dataDir: string,
@@ -52,17 +82,21 @@ export async function createPanelArchive(
     }
     if (fs.existsSync(path.join(dataDir, entries.config))) include.push(entries.config);
     if (include.length === 0) throw new Error("The panel has no files or settings to back up");
-    await tar.c(
+    let stopped = false;
+    const pack = tar.c(
         {
             gzip: true,
-            file: outFile,
             cwd: dataDir,
             portable: true,
+            // one member at a time: tar parks the other members it already
+            // opened behind a failed one, and they hold their files open
+            jobs: 1,
             // creating reads the disk, so entries are fs.Stats; no links
-            filter: (_p: string, stat: fs.Stats | tar.ReadEntry) => "isFile" in stat && (stat.isFile() || stat.isDirectory()),
+            filter: (_p: string, stat: fs.Stats | tar.ReadEntry) => !stopped && "isFile" in stat && (stat.isFile() || stat.isDirectory()),
         },
         include,
     );
+    await writePack(pack, outFile, () => { stopped = true; });
     return { size: fs.statSync(outFile).size, sha256: await sha256File(outFile) };
 }
 

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -466,6 +467,51 @@ async function sampleArchive(): Promise<{ record: BackupRecord; archive: string 
     const record: BackupRecord = { format: 1, id: newBackupId(), panelId: ID, createdAt: new Date().toISOString(), size, sha256, panelVersion: "0.2.0", label: null };
     return { record, archive };
 }
+
+// A failed archive must leave no file open: not its output, and not a
+// member tar had already opened (on Windows an open handle makes every
+// later rename of that folder EPERM until the daemon restarts).
+const leakCheckable = fs.existsSync("/proc/self/fd");
+function openHandlesUnder(dir: string): string[] {
+    return fs.readdirSync("/proc/self/fd").flatMap((fd) => {
+        try {
+            return [fs.readlinkSync(`/proc/self/fd/${fd}`)];
+        } catch (err) {
+            // the directory listing's own descriptor is closed by now
+            if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
+            throw err;
+        }
+    }).filter((target) => target.startsWith(dir));
+}
+function bigPanelData(): { data: string; filesDir: string; entries: { files: string; config: string } } {
+    const data = tmp("leak-data-");
+    const filesDir = path.join(data, "files", panelFilesDirName(ID));
+    fs.mkdirSync(filesDir, { recursive: true });
+    const chunk = crypto.randomBytes(1024 * 1024);
+    for (const name of ["a1", "a2", "z1", "z2", "z3"]) {
+        const fd = fs.openSync(path.join(filesDir, `${name}.bin`), "w");
+        for (let i = 0; i < 8; i++) fs.writeSync(fd, chunk);
+        fs.closeSync(fd);
+    }
+    return { data, filesDir, entries: { files: `files/${panelFilesDirName(ID)}`, config: `configs/${ID}.json` } };
+}
+
+test.skipIf(!leakCheckable || process.getuid?.() === 0)("an archive that fails on an unreadable file leaves no file open", async () => {
+    const { data, filesDir, entries } = bigPanelData();
+    fs.writeFileSync(path.join(filesDir, "m-locked.bin"), "no");
+    fs.chmodSync(path.join(filesDir, "m-locked.bin"), 0);
+    const outDir = tmp("leak-out-");
+    await expect(createPanelArchive(data, entries, path.join(outDir, "a.pbbackup"))).rejects.toThrow(/EACCES/);
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    expect([...openHandlesUnder(data), ...openHandlesUnder(outDir)]).toEqual([]);
+});
+
+test.skipIf(!leakCheckable || !fs.existsSync("/dev/full"))("an archive whose output cannot be written leaves no member open", async () => {
+    const { data, entries } = bigPanelData();
+    await expect(createPanelArchive(data, entries, "/dev/full")).rejects.toThrow(/ENOSPC/);
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    expect(openHandlesUnder(data)).toEqual([]);
+});
 
 test("the computer's own folder refuses to list when a backup record cannot be read", async () => {
     const root = tmp("local-store-");
