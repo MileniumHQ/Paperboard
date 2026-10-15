@@ -203,6 +203,8 @@ async function install(
             launch = detected;
         }
 
+        // From this point the journal owns cleanup, including a failed rollback.
+        keepStaging = true;
         activation = await activateStagedInstall({
             root,
             staging,

@@ -260,3 +260,18 @@ describe("installServerSoftware", () => {
         expect(isInstallRunning()).toBe(false);
     });
 });
+
+test("activation and rollback failure preserve parked originals for recovery", async () => {
+    paperServer();
+    const faultyFs = { ...fs.promises, rename: async (from: string, to: string) => {
+        if (to === path.join(root, "server.jar") && from.includes(".install-")) throw new Error("rename blocked");
+        await fs.promises.rename(from, to);
+    } };
+    await expect(installServerSoftware(ctx, "paper", "1.21.2", deps({ software: "paper", fs: faultyFs }))).rejects.toThrow("restoring the previous files also failed");
+    const staging = stagingLeft()[0]!;
+    expect(read(`${staging}/previous/server.jar`)).toBe("paper");
+    const { recoverStagedInstalls } = await import("../src/service/activation");
+    await recoverStagedInstalls(root, null);
+    expect(read("server.jar")).toBe("paper");
+    expect(stagingLeft()).toEqual([]);
+});

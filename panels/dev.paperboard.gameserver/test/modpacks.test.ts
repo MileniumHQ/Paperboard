@@ -359,3 +359,19 @@ describe("removing and recovery", () => {
         expect(h.trashed("mods/a.jar")).toBe(true);
     });
 });
+
+test("pack activation and rollback failure preserve parked originals for recovery", async () => {
+    const h = harness();
+    h.write("mods/old.jar", "old");
+    h.publishPack("v1", mrpack(index([]), { "overrides/mods/new.jar": "new" }));
+    h.deps.fs = { ...fs.promises, rename: async (from: string, to: string) => {
+        if (to === path.join(h.root, "mods/new.jar") || (to === path.join(h.root, "mods/old.jar") && from.includes("previous"))) throw new Error("rename blocked");
+        await fs.promises.rename(from, to);
+    } };
+    await expect(install(h, "v1")).rejects.toThrow();
+    const staging = h.leftovers()[0]!;
+    expect(h.read(`${staging}/previous/mods/old.jar`)).toBe("old");
+    await recoverStagedPacks(h.root, null);
+    expect(h.read("mods/old.jar")).toBe("old");
+    expect(h.leftovers()).toEqual([]);
+});

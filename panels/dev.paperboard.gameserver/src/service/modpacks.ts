@@ -271,8 +271,9 @@ export async function installModpack(
         );
 
         publish({ stage: "placing", done: 0, total: staged.length });
-        const activation = await activatePack({ root, staging, staged, replace, fs });
+        // Activation can throw after parking originals; recovery owns them.
         activated = true;
+        const activation = await activatePack({ root, staging, staged, replace, fs });
 
         // until the record is written, any failure puts the old files back
         let switchServer = false;
