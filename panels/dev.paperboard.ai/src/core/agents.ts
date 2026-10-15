@@ -9,7 +9,7 @@
 import snapshot from "../data/acp-agents.json";
 import { CLAUDE_CODE_ID } from "./claudeCode";
 import type { Connection } from "./providers";
-import type { AgentCommand } from "./types";
+import type { AgentCommand, AgentMode, AgentSessionInfo } from "./types";
 
 export interface RegistryAgent {
     id: string;
@@ -136,6 +136,17 @@ export function commandSuggestions(text: string, commands: readonly AgentCommand
     const typed = /^\/([\w:.-]*)$/.exec(text);
     if (!typed) return [];
     return commands.filter((c) => c.name.startsWith(typed[1]!)).slice(0, MAX_SUGGESTIONS);
+}
+
+/** The composer's mode picker in an agent chat: absent until the live
+ *  session lists modes; the session's mode wins over the one saved with the chat. */
+export function modePicker(
+    session: AgentSessionInfo | undefined,
+    saved: string | undefined,
+): { modes: AgentMode[]; current: AgentMode | undefined } | undefined {
+    if (!session || session.modes.length === 0) return undefined;
+    const id = session.mode ?? saved;
+    return { modes: session.modes, current: session.modes.find((m) => m.id === id) };
 }
 
 /** Arguments as typed in the custom agent form: separated by spaces, nothing unquoted. */

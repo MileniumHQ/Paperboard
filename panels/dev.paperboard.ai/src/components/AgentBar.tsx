@@ -1,5 +1,6 @@
 // The strip above the composer in a coding agent's chat: the project it
-// works in, its mode, and what to do when it can't start or needs a sign-in.
+// works in, and what to do when it can't start or needs a sign-in. Its mode
+// is picked in the composer, next to the reasoning level.
 
 import { createSignal, For, Show } from "solid-js";
 import {
@@ -8,8 +9,6 @@ import {
     PaperIcon,
     PaperInput,
     PaperModal,
-    PaperSelectMenu,
-    PaperSelectMenuItem,
     PaperSelector,
     PaperSelectorItem,
     PaperText,
@@ -24,7 +23,6 @@ export interface AgentBarProps {
     /** unset while the chat is a draft: the project is kept here until the first message creates it */
     conversationId?: string;
     project?: string;
-    mode?: string;
     generating: boolean;
     onDraftProject: (project: string) => void;
     onError: (text: string) => void;
@@ -34,8 +32,6 @@ export default function AgentBar(props: AgentBarProps) {
     const [choosing, setChoosing] = createSignal(false);
     const [busy, setBusy] = createSignal(false);
     const agent = () => state.agents[props.connection.id];
-    const session = () => (props.conversationId ? state.agentSessions[props.conversationId] : undefined);
-    const mode = () => session()?.mode ?? props.mode;
 
     const act = async (action: () => Promise<unknown>) => {
         setBusy(true);
@@ -48,9 +44,6 @@ export default function AgentBar(props: AgentBarProps) {
             setBusy(false);
         }
     };
-
-    const setMode = (modeId: string) =>
-        act(() => call(UI_ACTION_IDS.setAgentMode, { id: props.conversationId, mode: modeId }));
 
     return (
         <div class={styles.bar}>
@@ -86,25 +79,6 @@ export default function AgentBar(props: AgentBarProps) {
                 >
                     <PaperIcon>folder</PaperIcon> {props.project ?? "Choose a project"}
                 </PaperButton>
-                <Show when={(session()?.modes.length ?? 0) > 0}>
-                    <div class={styles.mode}>
-                        <PaperSelectMenu
-                            name="agent-mode"
-                            aria-label="Agent mode"
-                            value={mode()}
-                            disabled={busy() || !props.conversationId}
-                            onValueChange={(v) => void setMode(String(v))}
-                        >
-                            <For each={session()?.modes}>
-                                {(m) => (
-                                    <PaperSelectMenuItem value={m.id} description={m.description}>
-                                        {m.name}
-                                    </PaperSelectMenuItem>
-                                )}
-                            </For>
-                        </PaperSelectMenu>
-                    </div>
-                </Show>
             </div>
             <ProjectModal
                 open={choosing()}
