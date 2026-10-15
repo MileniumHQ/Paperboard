@@ -32,11 +32,13 @@ interface HomeItemBase {
     y: number;
 }
 
-/** A widget Paperboard draws itself, or one a panel serves. */
-export type HomeItem = HomeItemBase & (
+/**
+ * A widget Paperboard draws itself, or one a panel serves. `options` is what
+ * was chosen in the gallery, when the widget declares options.
+ */
+export type HomeItem = HomeItemBase & { options?: WidgetOptionValues } & (
     | { source: "builtin" }
-    /** `options` is what was chosen in the gallery, when the widget declares options */
-    | { source: "panel"; panelId: string; options?: WidgetOptionValues }
+    | { source: "panel"; panelId: string }
 );
 
 export interface HomeLayoutDoc {
@@ -89,8 +91,8 @@ export function parseHomeLayout(raw: unknown): HomeItem[] {
             isWidgetId(item.widgetId) &&
             parseWidgetSize(item.size) !== null &&
             Number.isInteger(item.x) && Number.isInteger(item.y);
-        const options = item?.source === "panel" ? parseWidgetOptionValues(item.options) : {};
-        if (!ok || !options || (item.source === "builtin" && item.options !== undefined)) {
+        const options = item ? parseWidgetOptionValues(item.options) : null;
+        if (!ok || !options) {
             throw new Error(`Home layout item ${index} is malformed`);
         }
         const base = {
@@ -100,15 +102,11 @@ export function parseHomeLayout(raw: unknown): HomeItem[] {
             size: item.size as string,
             x: item.x as number,
             y: item.y as number,
+            ...(Object.keys(options).length > 0 ? { options } : {}),
         };
         return item.source === "builtin"
             ? { ...base, source: "builtin" as const }
-            : {
-                  ...base,
-                  source: "panel" as const,
-                  panelId: item.panelId as string,
-                  ...(Object.keys(options).length > 0 ? { options } : {}),
-              };
+            : { ...base, source: "panel" as const, panelId: item.panelId as string };
     });
     const ids = new Set(items.map((item) => item.id));
     if (ids.size !== items.length) throw new Error("Home layout repeats an item id");

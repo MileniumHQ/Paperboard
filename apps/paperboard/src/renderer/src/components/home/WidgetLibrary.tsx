@@ -31,11 +31,9 @@ export type LibraryEntry = {
     size: string;
     /** where it comes from, as people know it: "Paperboard" or the panel's name */
     sourceName: string;
-} & (
-    | { source: "builtin" }
-    /** `options` is what the gallery's dropdowns say, when the widget declares options */
-    | { source: "panel"; panelId: string; options?: WidgetOptionValues }
-);
+    /** what the gallery's dropdowns say, when the widget declares options */
+    options?: WidgetOptionValues;
+} & ({ source: "builtin" } | { source: "panel"; panelId: string });
 
 export function sizeLabel(size: string): string {
     return size.replace("x", "×");
@@ -163,7 +161,7 @@ const WidgetLibrary: Component<WidgetLibraryProps> = (props) => {
                                 key="paperboard"
                                 icon={<PaperIcon>widgets</PaperIcon>}
                                 name="Paperboard"
-                                detail={BUILTIN_WIDGETS.map((w) => w.declaration.name).join(", ")}
+                                detail={BUILTIN_WIDGETS.filter((w) => !w.unlisted).map((w) => w.declaration.name).join(", ")}
                             />
                             <For each={props.computers}>
                                 {(computer) => (
@@ -274,8 +272,9 @@ const WidgetCard: Component<WidgetLibraryProps & { widget: WidgetDeclaration; en
     const parsed = () => parseWidgetSize(size()) ?? { w: 1, h: 1 };
     const tallest = () => Math.max(...props.widget.sizes.map((s) => parseWidgetSize(s)?.h ?? 1));
     const widest = () => Math.max(...props.widget.sizes.map((s) => parseWidgetSize(s)?.w ?? 1));
-    // what the widget's options offer comes from the panel's service, asked
-    // when the card appears; until every option has a value there is nothing to add
+    // what a panel widget's options offer comes from the panel's service, asked
+    // when the card appears; a built-in's are its own. Until every option has
+    // a value there is nothing to add
     const declared = () => props.widget.options ?? [];
     const [choices, setChoices] = createSignal<
         { kind: "loading" } | { kind: "ready"; lists: Record<string, WidgetChoice[]> } | { kind: "failed"; message: string }
@@ -284,13 +283,16 @@ const WidgetCard: Component<WidgetLibraryProps & { widget: WidgetDeclaration; en
     let request = 0;
     const loadChoices = async () => {
         const from = props.entryAt(size());
-        if (from.source !== "panel" || declared().length === 0) return;
+        if (declared().length === 0) return;
         const mine = ++request;
         setChoices({ kind: "loading" });
         try {
-            const offered = await Promise.all(
-                declared().map((option) => getWidgetChoices(from.computerId, from.panelId, props.widget.id, option.id)),
-            );
+            const offered =
+                from.source === "builtin"
+                    ? declared().map((option) => builtinWidget(props.widget.id)?.choices?.[option.id] ?? [])
+                    : await Promise.all(
+                          declared().map((option) => getWidgetChoices(from.computerId, from.panelId, props.widget.id, option.id)),
+                      );
             if (mine !== request) return;
             const lists: Record<string, WidgetChoice[]> = {};
             const next: WidgetOptionValues = {};
@@ -324,7 +326,7 @@ const WidgetCard: Component<WidgetLibraryProps & { widget: WidgetDeclaration; en
     const entry = (): LibraryEntry => {
         const at = props.entryAt(size());
         const values = options();
-        return at.source === "panel" && values && Object.keys(values).length > 0 ? { ...at, options: values } : at;
+        return values && Object.keys(values).length > 0 ? { ...at, options: values } : at;
     };
     const previewCell = () => Math.min(PREVIEW_CELL, PREVIEW_WIDTH / widest());
     const scale = () => previewCell() / props.cell;
@@ -407,6 +409,7 @@ const WidgetCard: Component<WidgetLibraryProps & { widget: WidgetDeclaration; en
                                         computerName={computerName()}
                                         showComputer={props.computers.length > 1}
                                         size={parsed()}
+                                        options={entry().options ?? {}}
                                         visible={props.visible}
                                         panelName={(panelId) => props.panelName(entry().computerId, panelId)}
                                         computers={props.computers}

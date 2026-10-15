@@ -35,12 +35,14 @@ describe("parseHomeLayout", () => {
         expect(parseHomeLayout(JSON.parse(JSON.stringify(serializeHomeLayout(items))))).toEqual(items);
     });
 
-    it("keeps what was chosen for a panel widget, and only for one", () => {
+    // built-in widgets now declare options too (the flag picks its flag), so
+    // a built-in's choice is kept the same way a panel widget's is
+    it("keeps what was chosen for a panel or built-in widget", () => {
         const chosen = item({ widgetId: "counter", size: "1x1", options: { step: "5" } } as Partial<HomeItem>);
-        expect(parseHomeLayout(JSON.parse(JSON.stringify(serializeHomeLayout([chosen]))))).toEqual([chosen]);
+        const flag: HomeItem = { id: "c", computerId: "local", source: "builtin", widgetId: "flag", size: "1x1", x: 3, y: 0, options: { flag: "trans" } };
+        expect(parseHomeLayout(JSON.parse(JSON.stringify(serializeHomeLayout([chosen, flag]))))).toEqual([chosen, flag]);
         expect(() => parseHomeLayout({ version: 2, items: [{ ...item({}), options: { step: 5 } }] })).toThrow(/malformed/);
-        const builtin = { id: "c", computerId: "local", source: "builtin", widgetId: "memory", size: "2x2", x: 0, y: 0 };
-        expect(() => parseHomeLayout({ version: 2, items: [{ ...builtin, options: { step: "5" } }] })).toThrow(/malformed/);
+        expect(() => parseHomeLayout({ version: 2, items: [{ ...flag, options: { flag: 5 } }] })).toThrow(/malformed/);
     });
 
     it("throws on a damaged layout instead of returning an empty one to overwrite", () => {

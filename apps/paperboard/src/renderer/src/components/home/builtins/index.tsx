@@ -7,6 +7,8 @@ import type { BuiltinWidget, BuiltinWidgetProps } from "./types";
 import UsageDonut from "./UsageDonut";
 import { Disk, Network, Uptime } from "./SystemWidgets";
 import { Computers, Panels } from "./ListWidgets";
+import Flag from "./Flag";
+import { FLAGS } from "./flags";
 import styles from "./Builtins.module.css";
 
 export type { BuiltinWidget, BuiltinWidgetProps } from "./types";
@@ -62,6 +64,13 @@ export const BUILTIN_WIDGETS: BuiltinWidget[] = [
         declaration: { id: "computers", name: "Computers", description: "Each paired computer, online or not", sizes: ["2x1", "2x2"] },
         perComputer: false,
         component: Computers,
+    },
+    {
+        declaration: { id: "flag", name: "Flag", sizes: ["1x1", "1x2"], options: [{ id: "flag", label: "Flag" }] },
+        perComputer: false,
+        choices: { flag: FLAGS.map((flag) => ({ value: flag.id, label: flag.name })) },
+        unlisted: true,
+        component: Flag,
     },
 ];
 

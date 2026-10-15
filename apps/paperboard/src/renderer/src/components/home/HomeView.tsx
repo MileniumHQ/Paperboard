@@ -218,6 +218,10 @@ const HomeView: Component<HomeViewProps> = (props) => {
             if (!builtin.declaration.sizes.includes(item.size)) {
                 return { kind: "unavailable", message: `${builtin.declaration.name} doesn't come in ${sizeLabel(item.size)}.` };
             }
+            const offered = (builtin.declaration.options ?? []).every((option) =>
+                builtin.choices?.[option.id]?.some((choice) => choice.value === item.options?.[option.id]),
+            );
+            if (!offered) return { kind: "unavailable", message: `This version of Paperboard doesn't have this ${builtin.declaration.name.toLowerCase()}.` };
             if (builtin.perComputer && !comp.isLocal && comp.status?.connected === false) {
                 return { kind: "unavailable", message: `${comp.name} is offline.` };
             }
@@ -397,18 +401,16 @@ const HomeView: Component<HomeViewProps> = (props) => {
     const addAt = (entry: LibraryEntry, p: Placement) => {
         if (items().length >= MAX_HOME_ITEMS || !canPlace(items(), p)) return;
         const id = crypto.randomUUID();
-        const base = { id, computerId: entry.computerId, widgetId: entry.widget.id, size: `${p.w}x${p.h}`, x: p.x, y: p.y };
-        commit([
-            ...items(),
-            entry.source === "builtin"
-                ? { ...base, source: "builtin" }
-                : {
-                      ...base,
-                      source: "panel",
-                      panelId: entry.panelId,
-                      ...(entry.options && Object.keys(entry.options).length > 0 ? { options: entry.options } : {}),
-                  },
-        ]);
+        const base = {
+            id,
+            computerId: entry.computerId,
+            widgetId: entry.widget.id,
+            size: `${p.w}x${p.h}`,
+            x: p.x,
+            y: p.y,
+            ...(entry.options && Object.keys(entry.options).length > 0 ? { options: entry.options } : {}),
+        };
+        commit([...items(), entry.source === "builtin" ? { ...base, source: "builtin" } : { ...base, source: "panel", panelId: entry.panelId }]);
         setSelectedId(id);
     };
     const addToFirstFreeSpot = (entry: LibraryEntry) => {
@@ -559,7 +561,11 @@ const HomeView: Component<HomeViewProps> = (props) => {
         undefined,
         {
             equals: (a, b) =>
-                a?.source === b?.source && a?.computerId === b?.computerId && a?.widgetId === b?.widgetId && a?.panelId === b?.panelId,
+                a?.source === b?.source &&
+                a?.computerId === b?.computerId &&
+                a?.widgetId === b?.widgetId &&
+                a?.panelId === b?.panelId &&
+                JSON.stringify(a?.options) === JSON.stringify(b?.options),
         },
     );
     const ghost = () => {
@@ -592,6 +598,7 @@ const HomeView: Component<HomeViewProps> = (props) => {
                     computerName={computerName(from.computerId)}
                     showComputer={props.computers.length > 1}
                     size={size()}
+                    options={from.options ?? {}}
                     visible={visible()}
                     panelName={(panelId) => panelName(from.computerId, panelId)}
                     computers={props.computers}

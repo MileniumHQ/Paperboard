@@ -1,5 +1,5 @@
 import type { Component } from "solid-js";
-import type { PanelItem, WidgetDeclaration, WidgetSize } from "@mileniumhq/paperapi";
+import type { PanelItem, WidgetChoice, WidgetDeclaration, WidgetOptionValues, WidgetSize } from "@mileniumhq/paperapi";
 import type { ComputerInfo } from "../../../lib/shell";
 
 export interface BuiltinWidgetProps {
@@ -9,6 +9,8 @@ export interface BuiltinWidgetProps {
     /** more than one computer is paired, so say which one this is */
     showComputer: boolean;
     size: WidgetSize;
+    /** what was chosen in the gallery, by option id; every declared option has a value */
+    options: WidgetOptionValues;
     /** on screen: animate and poll; off screen: stay still */
     visible: boolean;
     /** a panel's display name on this widget's computer */
@@ -30,5 +32,9 @@ export interface BuiltinWidget {
     declaration: WidgetDeclaration;
     /** shows one computer (chosen when added), rather than this one */
     perComputer: boolean;
+    /** what each declared option offers, by option id; a built-in's choices never change */
+    choices?: Record<string, WidgetChoice[]>;
+    /** left out of the gallery's summary of Paperboard's widgets, to be found */
+    unlisted?: boolean;
     component: Component<BuiltinWidgetProps>;
 }

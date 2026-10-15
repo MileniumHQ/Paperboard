@@ -218,3 +218,15 @@
     width: 100%;
     height: auto;
 }
+
+/* ── Flag ─────────────────────────────────────────────────────────────── */
+
+.flag {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.flag > * {
+    flex: 1;
+}

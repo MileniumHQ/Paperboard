@@ -6,6 +6,7 @@ import { canPlace, parseHomeLayout, placementOf, serializeHomeLayout } from "../
 import { defaultHomeItems } from "../src/renderer/src/components/home/builtins/defaults";
 import { figureOf, formatRate, formatUptime, panelRunState } from "../src/renderer/src/components/home/builtins/systemFigures";
 import { nextShownUsage, type ShownUsage } from "../src/renderer/src/components/home/builtins/usageStore";
+import { FLAGS, stripeColor } from "../src/renderer/src/components/home/builtins/flags";
 import { formatBytes, MAX_PANEL_SEGMENTS, usageChart, usedFraction } from "../src/renderer/src/components/home/builtins/usageSegments";
 
 const GiB = 1024 ** 3;
@@ -149,5 +150,19 @@ describe("panel run state", () => {
         expect(panelRunState(true, live, "dev.paperboard.ai")).toBe("stopped");
         expect(panelRunState(false, live, "dev.paperboard.ai")).toBe("no-service");
         expect(panelRunState(true, null, "dev.paperboard.ai")).toBe("unknown");
+    });
+});
+
+describe("flags", () => {
+    it("draws Pride in PaperUI tokens and every other flag in its own colours, Apple last", () => {
+
+        for (const flag of FLAGS) {
+            const tokens = flag.id === "pride";
+            for (const stripe of flag.stripes) expect(stripe).toMatch(tokens ? /^--paper-[a-z0-9-]+$/ : /^#[0-9a-f]{6}$/);
+        }
+        expect(FLAGS.at(-1)?.id).toBe("apple");
+        expect(new Set(FLAGS.map((f) => f.id)).size).toBe(FLAGS.length);
+        expect(stripeColor("--paper-danger")).toBe("var(--paper-danger)");
+        expect(stripeColor("#5bcefa")).toBe("#5bcefa");
     });
 });
