@@ -36,6 +36,7 @@ let capabilities: Record<string, string[]>;
 let actionResult: () => Promise<unknown>;
 let settings: Settings;
 let commands: string[];
+let shellCwds: (string | undefined)[];
 
 function engine(): ChatEngine {
     return new ChatEngine({
@@ -55,8 +56,15 @@ function engine(): ChatEngine {
         rememberAllowed: async (key) => {
             allowed.add(key);
         },
-        runShell: async (command) => {
+        // projects live under the test's own temp dir
+        projectPath: async (project) => {
+            const p = path.join(dir, "projects", project);
+            if (!fs.existsSync(p)) throw new Error(`The project "${project}" no longer exists.`);
+            return p;
+        },
+        runShell: async (command, _signal, cwd) => {
             commands.push(command);
+            shellCwds.push(cwd);
             return { stdout: "hello", stderr: "", exitCode: 0 };
         },
         onDelta: (p) => deltas.push(p),
@@ -105,6 +113,7 @@ beforeEach(async () => {
     // panel actions on and built-ins off, unless a test says otherwise
     settings = { defaultModel: "tooly:latest", contextLength: 4096, reasoning: "off", panelActions: true, shellCommands: false, forceCpu: false, promptStyle: "quirky", customPromptEnabled: false, customSystemPrompt: null };
     commands = [];
+    shellCwds = [];
 });
 
 afterEach(async () => {
@@ -529,5 +538,147 @@ describe("stats and rewind", () => {
         const reply = (await store.get(c.id)).messages[1]!;
         await expect(chat.rewind(c.id, reply.id)).rejects.toThrow(/not in this chat/);
         await expect(chat.rewind(c.id, "nope")).rejects.toThrow(/not in this chat/);
+    });
+});
+
+describe("Local AI in a project", () => {
+    const toolNames = (i: number) => (fake.chatRequests[i].tools ?? []).map((t: any) => t.function.name);
+    let project: string;
+    const inProject = (rel: string) => path.join(project, rel);
+
+    beforeEach(() => {
+        project = path.join(dir, "projects", "app");
+        fs.mkdirSync(project, { recursive: true });
+        settings = { ...settings, shellCommands: true, panelActions: false };
+    });
+
+    it("offers file tools only in a project, and runs commands in the project folder", async () => {
+        fake.script = [{ content: "plain" }, { toolCalls: [{ name: "run_shell_command", arguments: { command: "ls" } }] }, { content: "listed" }];
+        const chat = engine();
+        const plain = await chat.create("tooly:latest");
+        await (await chat.send(plain.id, "hi")).done;
+        expect(toolNames(0)).toEqual(["run_shell_command"]);
+
+        const c = await chat.create("tooly:latest", undefined, "app");
+        const { done } = await chat.send(c.id, "list it");
+        await until(() => approvals.length === 1);
+        expect(toolNames(1)).toEqual(["read_file", "list_directory", "search_files", "write_file", "edit_file", "run_shell_command"]);
+        expect(fake.chatRequests[1].messages[0].content).toContain("project folder");
+        chat.resolveApproval(approvals[0]!.id, "once");
+        await done;
+        expect(shellCwds).toEqual([fs.realpathSync(project)]);
+    });
+
+    it("a model without tools in a project chat is a plain chat", async () => {
+        fake.script = [{ content: "ok" }];
+        const chat = engine();
+        const c = await chat.create("plain:latest", undefined, "app");
+        await (await chat.send(c.id, "hi")).done;
+        expect(fake.chatRequests[0].tools).toBeUndefined();
+    });
+
+    it("refuses to send when the chat's project is gone", async () => {
+        const chat = engine();
+        const c = await chat.create("tooly:latest", undefined, "missing");
+        await expect(chat.send(c.id, "hi")).rejects.toThrow('The project "missing" no longer exists.');
+        expect((await store.get(c.id)).messages).toHaveLength(0);
+    });
+
+    it("reads without asking, and a path outside the project goes back to the model as an error", async () => {
+        fs.writeFileSync(inProject("notes.txt"), "remember the milk");
+        fs.writeFileSync(path.join(dir, "secret.txt"), "top secret");
+        fake.script = [
+            {
+                toolCalls: [
+                    { name: "read_file", arguments: { path: "notes.txt" } },
+                    { name: "read_file", arguments: { path: "../../secret.txt" } },
+                    { name: "write_file", arguments: { path: "../../secret.txt", content: "pwned" } },
+                ],
+            },
+            { content: "done" },
+        ];
+        const chat = engine();
+        const c = await chat.create("tooly:latest", undefined, "app");
+        // nothing is approved here: a call that asked would hang the reply
+        await (await chat.send(c.id, "read")).done;
+        const [round] = await assistants(c.id);
+        expect(round!.toolCalls!.map((t) => t.status)).toEqual(["done", "error", "error"]);
+        expect(round!.toolCalls![0]!.result).toContain("remember the milk");
+        expect(round!.toolCalls![1]!.result).toContain("outside the project");
+        expect(round!.toolCalls![2]!.result).toContain("outside the project");
+        expect(fs.readFileSync(path.join(dir, "secret.txt"), "utf8")).toBe("top secret");
+    });
+
+    it("Ask: a file change waits for approval with its diff, and can't be allowed always", async () => {
+        fs.writeFileSync(inProject("a.txt"), "hello world");
+        fake.script = [{ toolCalls: [{ name: "edit_file", arguments: { path: "a.txt", old_text: "world", new_text: "there" } }] }, { content: "edited" }];
+        const chat = engine();
+        const c = await chat.create("tooly:latest", undefined, "app");
+        const { done } = await chat.send(c.id, "edit");
+        await until(() => approvals.length === 1);
+        expect(approvals[0]).toMatchObject({ builtin: "edit_file", arguments: { path: "a.txt", old_text: "world", new_text: "there" } });
+        const waiting = (await chat.get(c.id)).conversation.messages.at(-1) as AssistantMessage;
+        expect(waiting.toolCalls![0]!.agent).toEqual({ kind: "edit", locations: ["a.txt"], diffs: [{ path: "a.txt", oldText: "hello world", newText: "hello there" }] });
+        expect(fs.readFileSync(inProject("a.txt"), "utf8")).toBe("hello world");
+        expect(() => chat.resolveApproval(approvals[0]!.id, "always")).toThrow(/asks every time/);
+        chat.resolveApproval(approvals[0]!.id, "once");
+        await done;
+        expect(fs.readFileSync(inProject("a.txt"), "utf8")).toBe("hello there");
+        expect(fake.chatRequests[1].messages.at(-1).content).toBe("Edited a.txt: replaced 1 occurrence.");
+    });
+
+    it("Ask: a denied write writes nothing", async () => {
+        fake.script = [{ toolCalls: [{ name: "write_file", arguments: { path: "new.txt", content: "x" } }] }, { content: "ok" }];
+        const chat = engine();
+        const c = await chat.create("tooly:latest", undefined, "app");
+        const { done } = await chat.send(c.id, "write");
+        await until(() => approvals.length === 1);
+        chat.resolveApproval(approvals[0]!.id, "deny");
+        await done;
+        expect(fs.existsSync(inProject("new.txt"))).toBe(false);
+    });
+
+    it("Accept edits: file changes apply without asking; commands still ask", async () => {
+        fake.script = [
+            {
+                toolCalls: [
+                    { name: "write_file", arguments: { path: "src/new.txt", content: "one two" } },
+                    { name: "edit_file", arguments: { path: "src/new.txt", old_text: "two", new_text: "three" } },
+                    { name: "run_shell_command", arguments: { command: "cat src/new.txt" } },
+                ],
+            },
+            { content: "done" },
+        ];
+        const chat = engine();
+        const c = await chat.create("tooly:latest", undefined, "app");
+        await chat.setMode(c.id, "accept-edits");
+        const { done } = await chat.send(c.id, "go");
+        await until(() => approvals.length === 1);
+        expect(approvals[0]).toMatchObject({ builtin: "run_shell_command" });
+        expect(fs.readFileSync(inProject("src/new.txt"), "utf8")).toBe("one three");
+        expect(commands).toHaveLength(0);
+        chat.resolveApproval(approvals[0]!.id, "once");
+        await done;
+        expect(commands).toEqual(["cat src/new.txt"]);
+        const [round] = await assistants(c.id);
+        expect(round!.toolCalls!.map((t) => [t.status, t.decision])).toEqual([["done", undefined], ["done", undefined], ["done", "once"]]);
+    });
+
+    it("a mode switched mid-reply applies from the next call, and the reply's save keeps it", async () => {
+        fake.script = [
+            { toolCalls: [{ name: "write_file", arguments: { path: "a.txt", content: "a" } }] },
+            { toolCalls: [{ name: "write_file", arguments: { path: "b.txt", content: "b" } }] },
+            { content: "done" },
+        ];
+        const chat = engine();
+        const c = await chat.create("tooly:latest", undefined, "app");
+        const { done } = await chat.send(c.id, "go");
+        await until(() => approvals.length === 1);
+        await chat.setMode(c.id, "accept-edits");
+        chat.resolveApproval(approvals[0]!.id, "once");
+        // the second write did not ask: the reply finishes without another approval
+        await done;
+        expect(fs.readFileSync(inProject("b.txt"), "utf8")).toBe("b");
+        expect((await store.get(c.id)).mode).toBe("accept-edits");
     });
 });

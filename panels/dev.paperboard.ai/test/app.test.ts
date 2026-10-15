@@ -579,6 +579,35 @@ describe("coding agent connections", () => {
             fs.rmSync(path.join(filesDir, "agent"), { recursive: true, force: true });
         }
     });
+
+    it("a Local AI chat may work in a project and leave it, and takes only Local AI's modes", async () => {
+        try {
+            await withApp(async (app) => {
+                const agent = await app.addConnection({ kind: "agent", agent: "qwen-code" });
+                const local = await app.newConversation("qwen3:8b");
+                // a Local AI chat starts as a plain chat
+                expect(local.project).toBeUndefined();
+                await app.createProject("site");
+                expect(await app.setConversationProject(local.id, "site")).toBe("site");
+                expect((await app.getConversation(local.id)).conversation.project).toBe("site");
+                expect(await app.setConversationProject(local.id, null)).toBeNull();
+                expect((await app.getConversation(local.id)).conversation.project).toBeUndefined();
+
+                await app.setAgentMode(local.id, "accept-edits");
+                expect((await app.getConversation(local.id)).conversation.mode).toBe("accept-edits");
+                await expect(app.setAgentMode(local.id, "bypassPermissions")).rejects.toThrow("Local AI does not offer that mode.");
+                expect((await app.getConversation(local.id)).conversation.mode).toBe("accept-edits");
+
+                // an agent can't leave its project
+                const agentChat = await app.newConversation("Qwen Code", agent.id);
+                await app.setConversationProject(agentChat.id, "site");
+                await expect(app.setConversationProject(agentChat.id, null)).rejects.toThrow("Qwen Code needs a project to work in.");
+                expect((await app.getConversation(agentChat.id)).conversation.project).toBe("site");
+            });
+        } finally {
+            fs.rmSync(path.join(filesDir, "agent"), { recursive: true, force: true });
+        }
+    });
 });
 
 // Ask AI for flows: memory keys carry a conversation between calls, on disk.

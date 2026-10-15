@@ -5,12 +5,13 @@ import os from "node:os";
 import { processApi } from "@mileniumhq/paperapi";
 import { SHELL_OUTPUT_CAP_BYTES, SHELL_TIMEOUT_MS, shellArgv } from "../core/builtins";
 
-export async function runShell(command: string, signal: AbortSignal): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+/** `cwd`: a project folder the service resolved, else the home folder */
+export async function runShell(command: string, signal: AbortSignal, cwd?: string): Promise<{ stdout: string; stderr: string; exitCode: number }> {
     if (signal.aborted) throw new DOMException("Stopped", "AbortError");
     const argv = shellArgv(command, process.platform);
     // bounded by timeout and output cap; the daemon owns and kills the child
     return processApi.exec(argv.command, argv.args, {
-        cwd: os.homedir(),
+        cwd: cwd ?? os.homedir(),
         timeoutMs: SHELL_TIMEOUT_MS,
         execBufferCapBytes: SHELL_OUTPUT_CAP_BYTES,
     });

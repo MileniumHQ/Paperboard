@@ -1,52 +1,81 @@
-// The panel's own tool: shell commands. It is offered ahead of other panels'
-// actions, renders as its own step in the thread, and asks every time: it
-// can never be allowed always. `web_search` is no longer offered; it stays a
-// recorded kind so chats that searched still render their steps.
+// The panel's own tools: shell commands and, in a project, file tools. They
+// are offered ahead of other panels' actions and render as their own steps
+// in the thread. A shell command asks every time and can never be allowed
+// always; file changes ask unless the chat's mode accepts edits; reads
+// never ask. `web_search` is no longer offered; it stays a recorded kind so
+// chats that searched still render their steps.
 
+import {
+    isProjectTool,
+    PROJECT_TOOL_DEFINITIONS,
+    PROJECT_TOOL_LABELS,
+    PROJECT_TOOLS,
+    ProjectArgumentError,
+    projectToolArguments,
+    projectToolAsks,
+} from "./projectTools";
 import type { OllamaTool } from "./tools";
 import type { BuiltinTool, OfferedBuiltin } from "./types";
 
 export const BUILTIN_LABELS: Record<BuiltinTool, string> = {
     web_search: "Searched the web",
     run_shell_command: "Ran shell command",
+    ...PROJECT_TOOL_LABELS,
 };
 
-/** Whether a built-in call waits for the user, and whether it may be remembered. */
-export const BUILTIN_APPROVAL: Record<OfferedBuiltin, { ask: boolean; remember: boolean }> = {
-    run_shell_command: { ask: true, remember: false },
-};
+/** Whether a built-in call waits for the user, in a chat's mode. None can be allowed always. */
+export function builtinAsks(tool: OfferedBuiltin, mode: string | undefined): boolean {
+    return isProjectTool(tool) ? projectToolAsks(tool, mode) : true;
+}
 
 export const MAX_COMMAND_CHARS = 4000;
 
-const DEFINITIONS: Record<OfferedBuiltin, OllamaTool> = {
-    run_shell_command: {
-        type: "function",
-        function: {
-            name: "run_shell_command",
-            description:
-                "Run a shell command on the user's computer and read its output. The user approves every command before it runs. Keep commands short, non-interactive, and quick to finish.",
-            parameters: {
-                type: "object",
-                properties: { command: { type: "string", description: "The exact command line to run" } },
-                required: ["command"],
-            },
+const SHELL: OllamaTool = {
+    type: "function",
+    function: {
+        name: "run_shell_command",
+        description:
+            "Run a shell command on the user's computer and read its output. The user approves every command before it runs. Keep commands short, non-interactive, and quick to finish.",
+        parameters: {
+            type: "object",
+            properties: { command: { type: "string", description: "The exact command line to run" } },
+            required: ["command"],
         },
     },
 };
 
+const PROJECT_SHELL: OllamaTool = {
+    type: "function",
+    function: {
+        ...SHELL.function,
+        description:
+            "Run a shell command in the project folder and read its output. The user approves every command before it runs. Keep commands short, non-interactive, and quick to finish.",
+    },
+};
+
 export function isBuiltinTool(name: string): name is OfferedBuiltin {
-    return Object.hasOwn(DEFINITIONS, name);
+    return name === "run_shell_command" || isProjectTool(name);
 }
 
-/** Enabled built-ins, in priority order. */
-export function builtinTools(enabled: { shellCommands: boolean }): OllamaTool[] {
-    return enabled.shellCommands ? [DEFINITIONS.run_shell_command] : [];
+/** Enabled built-ins, in priority order; file tools only for a chat working in a project. */
+export function builtinTools(enabled: { shellCommands: boolean }, project = false): OllamaTool[] {
+    const tools = project ? PROJECT_TOOLS.map((t) => PROJECT_TOOL_DEFINITIONS[t]) : [];
+    if (enabled.shellCommands) tools.push(project ? PROJECT_SHELL : SHELL);
+    return tools;
 }
 
 export class BuiltinArgumentError extends Error {}
 
-/** The single string argument a built-in takes, checked. */
-export function builtinArguments(_tool: OfferedBuiltin, raw: unknown): Record<string, string> {
+/** A built-in's arguments, checked. */
+export function builtinArguments(tool: OfferedBuiltin, raw: unknown): Record<string, unknown> {
+    if (isProjectTool(tool)) {
+        try {
+            return projectToolArguments(tool, raw);
+        } catch (err) {
+            if (err instanceof ProjectArgumentError) throw new BuiltinArgumentError(err.message);
+            throw err;
+        }
+    }
     let args = raw;
     if (typeof args === "string") {
         try {

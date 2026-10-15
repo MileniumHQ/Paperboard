@@ -5,6 +5,7 @@
 import type { MemoryMessage } from "../core/askMemory";
 import {
     MAX_MESSAGES,
+    MAX_PROJECT_TOOL_ROUNDS,
     MAX_TOOL_ROUNDS,
     MAX_USER_MESSAGE_CHARS,
     inferenceOptions,
@@ -14,16 +15,17 @@ import {
     systemPrompt,
 } from "../core/conversation";
 import {
-    BUILTIN_APPROVAL,
     BUILTIN_LABELS,
     BuiltinArgumentError,
     builtinArguments,
+    builtinAsks,
     builtinTools,
     formatShellResult,
     isBuiltinTool,
 } from "../core/builtins";
 import { applyToolUpdate, contentText, planFrom, promptBlocks, toolRecordFrom } from "../core/acp";
 import { replyText } from "../core/chain";
+import { isProjectTool } from "../core/projectTools";
 import { validateAttachments } from "../core/attachments";
 import { reasoningToThink, type ReasoningLevel } from "../core/reasoning";
 import {
@@ -55,6 +57,7 @@ import type { Connection } from "../core/providers";
 import type { AgentHub, StopReason } from "./agents";
 import type { ChatChunk } from "./ollamaClient";
 import type { ChatClient } from "./provider";
+import { ProjectFiles, type PreparedChange } from "./projectFiles";
 import type { ConversationStore } from "./store";
 
 export const MAX_ACTIVE_REPLIES = 3;
@@ -86,8 +89,8 @@ export interface ChatDeps {
     /** the folder an agent works in for a project; throws when it is gone */
     projectPath: (project: string) => Promise<string>;
     agents: Pick<AgentHub, "openSession" | "prompt" | "forget">;
-    /** the built-in tools' effects */
-    runShell: (command: string, signal: AbortSignal) => Promise<{ stdout: string; stderr: string; exitCode: number }>;
+    /** the built-in tools' effects; `cwd` is the chat's project folder, when it works in one */
+    runShell: (command: string, signal: AbortSignal, cwd?: string) => Promise<{ stdout: string; stderr: string; exitCode: number }>;
     // outputs
     onDelta: (payload: ChatDeltaEvent) => void;
     onMessage: (payload: ChatMessageEvent) => void;
@@ -168,6 +171,17 @@ export class ChatEngine {
         this.deps.onSummaries(await this.deps.store.save(conversation));
     }
 
+    /**
+     * Sets a Local AI chat's mode. A replying chat changes on the reply's
+     * working copy: its next tool call asks by the new mode, and its next
+     * save keeps it.
+     */
+    async setMode(conversationId: string, mode: string): Promise<void> {
+        const conversation = this.active.get(conversationId)?.conversation ?? (await this.deps.store.get(conversationId));
+        conversation.mode = mode;
+        this.deps.onSummaries(await this.deps.store.save(conversation));
+    }
+
     async create(model: string, provider?: string, project?: string): Promise<Conversation> {
         const now = Date.now();
         const conversation: Conversation = {
@@ -222,6 +236,8 @@ export class ChatEngine {
             if (!provider || !capabilities) throw new Error(`${model} is not available. Pick a model from Models.`);
             validateAttachments(attachments, { vision: capabilities.includes("vision") });
             this.deps.clientFor(provider); // throws when the provider is not reachable
+            // a project that is gone is said now, not after the message is saved
+            if (conversation.project && capabilities.includes("tools")) await this.deps.projectPath(conversation.project);
         }
 
         const user: UserMessage = {
@@ -313,7 +329,7 @@ export class ChatEngine {
         }
         if (!["once", "always", "deny"].includes(decision)) throw new Error(`Unknown decision ${JSON.stringify(decision)}`);
         const builtin = w.approval.builtin;
-        if (decision === "always" && builtin && !BUILTIN_APPROVAL[builtin].remember) {
+        if (decision === "always" && builtin) {
             throw new Error(`${BUILTIN_LABELS[builtin]} asks every time; it cannot be allowed always.`);
         }
         w.resolve(decision);
@@ -326,11 +342,16 @@ export class ChatEngine {
         await Promise.all(pending);
     }
 
-    /** The same offered tools and prompt used by replies and the initial custom editor. */
+    /**
+     * The same offered tools and prompt used by replies and the initial
+     * custom editor. `project`: the chat works in a project, so a model that
+     * can call tools is offered the file tools.
+     */
     async promptForModel(
         model: string,
         settings: Settings = this.deps.settings(),
         provider?: string,
+        project = false,
     ): Promise<{ tools: ToolSet; prompt: string }> {
         const capabilities = this.deps.capabilities(model, provider) ?? [];
         const canCall = capabilities.includes("tools");
@@ -340,7 +361,7 @@ export class ChatEngine {
                 : { tools: [], targets: new Map() };
         // built-ins first: they are the tools a model should reach for
         const tools: ToolSet = {
-            tools: [...(canCall ? builtinTools(settings) : []), ...panels.tools],
+            tools: [...(canCall ? builtinTools(settings, project) : []), ...panels.tools],
             targets: panels.targets,
         };
         const offered = new Set(tools.tools.map((t) => t.function.name));
@@ -350,6 +371,7 @@ export class ChatEngine {
             model,
             shellCommands: offered.has("run_shell_command"),
             panelActions: panels.tools.length > 0,
+            projectTools: offered.has("read_file"),
         });
 
         return { tools, prompt };
@@ -362,19 +384,23 @@ export class ChatEngine {
             deps.onSummaries(await deps.store.save(conversation));
         };
         let current: AssistantMessage | null = null;
+        // the project is fixed while a reply runs (setConversationProject waits for it)
+        const maxRounds = conversation.project ? MAX_PROJECT_TOOL_ROUNDS : MAX_TOOL_ROUNDS;
         try {
             for (let round = 0; ; round++) {
-                if (round >= MAX_TOOL_ROUNDS) {
+                if (round >= maxRounds) {
                     const notice = this.startAssistant(conversation);
                     notice.status = "error";
-                    notice.error = `Stopped after ${MAX_TOOL_ROUNDS} rounds of actions in one reply.`;
+                    notice.error = `Stopped after ${maxRounds} rounds of actions in one reply.`;
                     this.emitMessage(conversation.id, notice);
                     await save();
                     return;
                 }
                 const capabilities = deps.capabilities(conversation.model, conversation.provider) ?? [];
                 const settings = deps.settings();
-                const { tools, prompt } = await this.promptForModel(conversation.model, settings, conversation.provider);
+                const inProject = Boolean(conversation.project) && capabilities.includes("tools");
+                const files = inProject ? await ProjectFiles.open(await deps.projectPath(conversation.project!)) : undefined;
+                const { tools, prompt } = await this.promptForModel(conversation.model, settings, conversation.provider, inProject);
                 const offered = new Set(tools.tools.map((t) => t.function.name));
                 const history = toOllamaMessages(conversation.messages, prompt);
 
@@ -401,7 +427,7 @@ export class ChatEngine {
                 await save();
                 for (const call of message.toolCalls) {
                     if (signal.aborted) throw new DOMException("Stopped", "AbortError");
-                    await this.runCall(conversation, message, call, tools, signal);
+                    await this.runCall(conversation, message, call, files, signal);
                     this.emitMessage(conversation.id, message);
                     await save();
                 }
@@ -804,16 +830,35 @@ export class ChatEngine {
         conversation: Conversation,
         message: AssistantMessage,
         call: ToolCallRecord,
-        _tools: ToolSet,
+        files: ProjectFiles | undefined,
         signal: AbortSignal,
     ): Promise<void> {
         if (call.status !== "awaiting-approval") return; // already failed in planning
         const builtin = call.builtin;
         // planning only records offered built-ins; a retired kind never runs
         if (builtin && !isBuiltinTool(builtin)) throw new Error(`${BUILTIN_LABELS[builtin]} is no longer available.`);
+        // file tools are only offered in a project
+        if (builtin && isProjectTool(builtin) && !files) throw new Error(`${BUILTIN_LABELS[builtin]} needs a project.`);
+        // a file change is worked out before anyone is asked: the card shows
+        // the exact diff, and a change that can't apply fails without asking
+        let change: PreparedChange | undefined;
+        if (builtin === "write_file" || builtin === "edit_file") {
+            try {
+                change = await files!.prepareChange(builtin, call.arguments);
+            } catch (err) {
+                // handed back to the model as the failed call it is, like any tool error
+                call.status = "error";
+                call.result = `Error: ${err instanceof Error ? err.message : String(err)}`;
+                return;
+            }
+            call.agent = change.details;
+        } else if (builtin && isProjectTool(builtin)) {
+            call.agent = { kind: builtin === "search_files" ? "search" : "read", locations: [String(call.arguments.path)], diffs: [] };
+        }
         const key = builtin ? "" : permissionKey(call.panelId, call.action);
         let decision: ApprovalDecision | "cancelled" | "remembered" | "unasked";
-        if (builtin && !BUILTIN_APPROVAL[builtin].ask) {
+        // the mode is read now, not when the reply started: a switch applies to the next call
+        if (builtin && !builtinAsks(builtin, conversation.mode)) {
             decision = "unasked";
         } else if (!builtin && this.deps.isAllowed(key)) {
             decision = "remembered";
@@ -855,7 +900,16 @@ export class ChatEngine {
         this.emitMessage(conversation.id, message);
         try {
             if (builtin === "run_shell_command") {
-                call.result = formatToolResult(formatShellResult(await this.deps.runShell(call.arguments.command as string, signal)));
+                call.result = formatToolResult(formatShellResult(await this.deps.runShell(call.arguments.command as string, signal, files?.root)));
+            } else if (change) {
+                call.result = formatToolResult(await change.apply());
+            } else if (builtin === "read_file") {
+                call.result = formatToolResult(await files!.readFile(call.arguments.path as string, (call.arguments.start_line as number | undefined) ?? 1));
+            } else if (builtin === "list_directory") {
+                call.result = formatToolResult(await files!.listDirectory(call.arguments.path as string));
+            } else if (builtin === "search_files") {
+                const { pattern, text } = call.arguments as { pattern?: string; text?: string };
+                call.result = formatToolResult(await files!.search(call.arguments.path as string, { pattern, text }, signal));
             } else {
                 call.result = formatToolResult(await this.deps.callAction(call.panelId, call.action, call.arguments));
             }

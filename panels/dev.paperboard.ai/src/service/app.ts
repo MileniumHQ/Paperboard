@@ -5,6 +5,7 @@ import { memoryKey } from "../core/askMemory";
 import { AskMemory } from "./askMemory";
 import { Projects } from "./projects";
 import { projectName } from "../core/projects";
+import { isLocalMode } from "../core/projectTools";
 import { createHash, randomBytes } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
@@ -572,7 +573,7 @@ export class AiApp {
             callAction: (panelId, action, args) => actionsApi.call(panelId, action, args),
             isAllowed: (key) => this.ctx.state.alwaysAllowed.includes(key),
             rememberAllowed: (key) => this.allowAlways(key),
-            runShell: (command, signal) => runShell(command, signal),
+            runShell: (command, signal, cwd) => runShell(command, signal, cwd),
             onDelta: (payload) => this.ctx.emit(EVENTS.chatDelta, payload),
             onMessage: (payload) => this.ctx.emit(EVENTS.chatMessage, payload),
             onReset: (payload) => this.ctx.emit(EVENTS.chatReset, payload),
@@ -757,12 +758,31 @@ export class AiApp {
         return created;
     }
 
+    /** The connection a chat runs on, when it is a coding agent. */
+    private agentOf(c: Conversation): Connection | undefined {
+        const via = c.provider ?? this.models.providerOf(c.model);
+        return via ? this.connections.find((x) => x.id === via && x.kind === "agent") : undefined;
+    }
+
     /**
-     * The project an agent chat works in. A different project means a new
-     * session: the old one's files are elsewhere.
+     * The project a chat works in: an agent's folder, or the folder Local
+     * AI's file tools are confined to. A different project means a new
+     * agent session: the old one's files are elsewhere. `null` takes a Local
+     * AI chat out of its project (an agent can't work without one).
      */
-    async setConversationProject(id: string, project: unknown): Promise<string> {
+    async setConversationProject(id: string, project: unknown): Promise<string | null> {
         if (!isConversationId(id)) throw new Error("Unknown chat.");
+        if (project === null) {
+            if (this.ctx.state.generating.includes(id)) throw new Error("Wait for the reply to finish before changing the project.");
+            const c = await this.store.get(id);
+            const agent = this.agentOf(c);
+            if (agent) throw new Error(`${agent.label} needs a project to work in.`);
+            if (c.project !== undefined) {
+                delete c.project;
+                this.ctx.setState({ conversations: await this.store.save(c) });
+            }
+            return null;
+        }
         const name = projectName(project);
         // refuses a name that isn't a project folder
         await this.projects.path(name);
@@ -783,13 +803,21 @@ export class AiApp {
         return name;
     }
 
-    /** An agent chat's mode; applied now when its session is live, else when it opens. */
+    /**
+     * A chat's mode. An agent's is applied now when its session is live,
+     * else when it opens; Local AI's (LOCAL_MODES) decides which of its
+     * project tools ask first, from the next tool call on.
+     */
     async setAgentMode(id: string, modeId: unknown): Promise<void> {
         if (!isConversationId(id)) throw new Error("Unknown chat.");
         if (typeof modeId !== "string" || !modeId) throw new Error("Choose a mode.");
         const c = await this.store.get(id);
-        const connection = c.provider ? this.connections.find((x) => x.id === c.provider && x.kind === "agent") : undefined;
-        if (!connection) throw new Error("Only agent chats have modes.");
+        const connection = this.agentOf(c);
+        if (!connection) {
+            if (!isLocalMode(modeId)) throw new Error("Local AI does not offer that mode.");
+            await this.chat.setMode(id, modeId);
+            return;
+        }
         const live = this.ctx.state.agentSessions[id];
         if (live) {
             if (!live.modes.some((m) => m.id === modeId)) throw new Error("The agent does not offer that mode.");
@@ -842,10 +870,13 @@ export class AiApp {
         const via = this.knownProvider(provider);
         const c = await this.store.get(id);
         c.model = this.normalizeModelRef(model, via);
-        if (via !== c.provider && c.sessionId) {
-            delete c.sessionId;
+        if (via !== c.provider) {
+            // a mode id belongs to the connection that offered it (an agent's, or Local AI's)
             delete c.mode;
-            this.agents.forget(id);
+            if (c.sessionId) {
+                delete c.sessionId;
+                this.agents.forget(id);
+            }
         }
         if (via) c.provider = via;
         else delete c.provider;
