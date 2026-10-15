@@ -154,6 +154,12 @@ export class PanelServicesManager {
         const entry = this.services.get(id);
         if (entry) await entry.ready;
     }
+    /** true while the service is meant to run (started and not stopped),
+     * including while it waits to restart after a crash */
+    public isActive(id: string): boolean {
+        const entry = this.services.get(requirePanelId(id));
+        return !!entry && !entry.stopped;
+    }
     /** Live service children, including those whose stop has not finished. */
     public runningCount(): number {
         let count = 0;

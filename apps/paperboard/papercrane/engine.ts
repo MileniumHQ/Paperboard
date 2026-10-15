@@ -29,6 +29,8 @@ import { getDefaultShell } from "./pty";
 import { extractArchive, extractPackageArchive, findBinDir, packageArchiveSuffix, parsePackageLayout } from "./engineArchives";
 import { panelServices, PanelServicesManager } from "./panelServices";
 import { CredentialStore } from "./credentials";
+import { RpcError } from "./rpc/errors";
+import { ErrorCode } from "./protocol";
 import { resolveRegistryUrl } from "./util";
 import { requirePanelId } from "../../../packages/paperapi/src/panelIdentity";
 import { fetchRegistryRecord } from "./registryRecord";
@@ -1139,6 +1141,114 @@ export class PaperCraneEngine {
             await this.services.waitUntilReady(cleanId);
             return true;
         } finally { this.operations.delete(key); }
+    }
+
+    // ─── Panel data, for backups ─────────────────────────────────────────
+
+    /** a panel's backed-up data, relative to the data dir: its file storage
+     * and its config document. Vault secrets are not panel data here. */
+    public panelDataEntries(panelId: string): { files: string; config: string } {
+        const cleanId = requirePanelId(panelId);
+        return {
+            files: path.posix.join("files", panelFilesDirName(cleanId)),
+            config: path.posix.join("configs", this.configFileName(cleanId)),
+        };
+    }
+
+    /** the installed panel's manifest version, null when it declares none */
+    public installedPanelVersion(panelId: string): string | null {
+        const cleanId = requirePanelId(panelId);
+        const manifestFile = this.findManifestFile(path.join(this.panelsDir, cleanId));
+        if (!manifestFile) throw new Error(`Panel ${cleanId} is not installed`);
+        const version = JSON.parse(fs.readFileSync(manifestFile, "utf-8"))?.version;
+        return typeof version === "string" ? version : null;
+    }
+
+    /** runs fn holding the panel's operation lock (install, restart,
+     * uninstall, backup and restore exclude each other) */
+    public async withPanelOperation<T>(panelId: string, fn: () => Promise<T>): Promise<T> {
+        const cleanId = requirePanelId(panelId);
+        const key = `panel:${cleanId}`;
+        if (this.operations.has(key)) throw new RpcError(ErrorCode.CONFLICT, `An operation on ${cleanId} is already running`);
+        this.operations.add(key);
+        try {
+            return await fn();
+        } finally {
+            this.operations.delete(key);
+        }
+    }
+
+    /** runs fn (a backup copying the panel's data) with the panel's service
+     * stopped, so the copy is not taken mid-write, then starts the service
+     * again if it was running and waits for it to be ready. A service that
+     * does not come back fails the call. Call inside withPanelOperation. */
+    public async withServicePaused<T>(panelId: string, fn: () => Promise<T>): Promise<T> {
+        const cleanId = requirePanelId(panelId);
+        const wasActive = this.services.isActive(cleanId);
+        if (wasActive) await this.services.stopService(cleanId);
+        let result: T;
+        try {
+            result = await fn();
+        } finally {
+            if (wasActive && this.services.startService(cleanId)) await this.services.waitUntilReady(cleanId);
+        }
+        return result;
+    }
+
+    /**
+     * Replaces a panel's file storage and config document with staged
+     * copies (a restore). The service and the processes the panel owns are
+     * stopped and observed exiting first. The live data is parked only
+     * until the panel is ready on the new data (a service that was not
+     * running stays stopped): a failure puts the parked
+     * data back in place and restarts the panel on it. Call inside
+     * withPanelOperation.
+     */
+    public async replacePanelData(panelId: string, staged: { filesDir: string; configFile: string | null }): Promise<void> {
+        const cleanId = requirePanelId(panelId);
+        if (!fs.existsSync(path.join(this.panelsDir, cleanId))) throw new Error(`Panel ${cleanId} is not installed`);
+        const entries = this.panelDataEntries(cleanId);
+        const liveFiles = path.join(this.appDataDir, entries.files);
+        const liveConfig = path.join(this.appDataDir, entries.config);
+        const stamp = `${Date.now()}`;
+        const parkedFiles = path.join(this.filesDir, `.restore-parked-${stamp}-${path.basename(liveFiles)}`);
+        const parkedConfig = path.join(this.configsDir, `.restore-parked-${stamp}-${path.basename(liveConfig)}`);
+
+        const wasActive = this.services.isActive(cleanId);
+        await this.services.stopService(cleanId);
+        for (const [id, client] of [...this.clients]) {
+            if (this.clientOwners.get(id) === cleanId) await this.stopOwnedClient(id, client);
+        }
+
+        const hadFiles = fs.existsSync(liveFiles);
+        const hadConfig = fs.existsSync(liveConfig);
+        if (hadFiles) await fs.promises.rename(liveFiles, parkedFiles);
+        if (hadConfig) await fs.promises.rename(liveConfig, parkedConfig);
+        try {
+            await moveFileSafe(staged.filesDir, liveFiles);
+            if (staged.configFile) await moveFileSafe(staged.configFile, liveConfig);
+            if (wasActive && this.services.startService(cleanId)) await this.services.waitUntilReady(cleanId);
+        } catch (err) {
+            await this.services.stopService(cleanId);
+            await fs.promises.rm(liveFiles, { recursive: true, force: true });
+            await fs.promises.rm(liveConfig, { force: true });
+            if (hadFiles) await fs.promises.rename(parkedFiles, liveFiles);
+            if (hadConfig) await fs.promises.rename(parkedConfig, liveConfig);
+            // the restore's failure is the answer; a panel that also fails
+            // to come back on its own data is logged, not swallowed
+            try {
+                if (wasActive && this.services.startService(cleanId)) await this.services.waitUntilReady(cleanId);
+            } catch (restartErr) {
+                logger.error(`[engine] ${cleanId} did not restart on its previous data after a failed restore:`, restartErr);
+            }
+            throw err;
+        }
+        await fs.promises
+            .rm(parkedFiles, { recursive: true, force: true })
+            .catch((err) => logger.warn("[engine] parked panel files could not be removed:", err));
+        await fs.promises
+            .rm(parkedConfig, { force: true })
+            .catch((err) => logger.warn("[engine] parked panel config could not be removed:", err));
     }
 
     public async uninstallPanel(panelId: string, options?: { deleteData?: boolean }): Promise<boolean> {
