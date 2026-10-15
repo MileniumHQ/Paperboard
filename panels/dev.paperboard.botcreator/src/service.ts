@@ -1706,9 +1706,9 @@ export const actions = [
                 required: true,
             },
             options: {
-                type: "string",
+                type: "list<string>",
                 label: "Options",
-                placeholder: "Options, comma separated",
+                placeholder: "Option",
             },
             menu: {
                 type: "string",

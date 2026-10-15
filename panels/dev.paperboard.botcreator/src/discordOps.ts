@@ -175,8 +175,9 @@ export function buildButtonComponent(
     return { ...inputs, kind: "button", label, style, customId };
 }
 
-// Text options arrive either as a list value or as typed text separated by
-// commas ("Red, Green, Blue"); each option's label is also its value.
+// Text options arrive as a list (the Options field is edited item by item)
+// or, from a flow that passes plain text, separated by commas
+// ("Red, Green, Blue"); each option's label is also its value.
 export function parseSelectOptions(input: unknown): string[] {
     const raw = Array.isArray(input)
         ? input.map((item) => String(item ?? ""))
