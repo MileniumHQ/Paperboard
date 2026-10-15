@@ -14,6 +14,7 @@ import {
     useContextMenuState,
     PaperContextMenu,
     PaperContextMenuItem,
+    PaperContextMenuHeader,
 } from "@mileniumhq/paperui";
 import "@mileniumhq/paperui/style.css";
 import "@mileniumhq/paperui/panel.css";
@@ -24,6 +25,7 @@ import { actions as actionsApi, createPanelBridge } from "@mileniumhq/paperapi";
 import { onMount } from "solid-js";
 import SavedCommandsModal from "./SavedCommands";
 import type { CommandRun, SavedCommand } from "./lib/savedCommands";
+import { describeRun } from "./lib/runStatus";
 
 const TERMINAL_PANEL_ID = "dev.paperboard.terminal";
 
@@ -68,6 +70,9 @@ export default function App() {
         savedCommandsError: "",
     });
     const [isSavedOpen, setIsSavedOpen] = createSignal(false);
+    // a run started from the dropdown that the service refused: shown in the
+    // saved commands modal, since the dropdown has closed by then
+    const [savedRunError, setSavedRunError] = createSignal("");
     const applySaved = (full: TerminalBridgeState) => {
         setSaved("savedCommands", reconcile(full.savedCommands ?? [], { key: "id" }));
         setSaved("commandRuns", reconcile(full.commandRuns ?? {}));
@@ -150,6 +155,17 @@ export default function App() {
 
     const terminalMenu = useContextMenuState();
     const tabMenu = useContextMenuState();
+    const savedMenu = useContextMenuState();
+
+    const runSaved = async (id: string) => {
+        setSavedRunError("");
+        try {
+            await actionsApi.call(TERMINAL_PANEL_ID, "run-saved-command", { id });
+        } catch (err) {
+            setSavedRunError(err instanceof Error ? err.message : String(err));
+            setIsSavedOpen(true);
+        }
+    };
 
     const openRenameModal = () => {
         const tid = contextTabId();
@@ -246,9 +262,11 @@ export default function App() {
                     </PaperButton>
                     <PaperButton size="tiny"
                         icon
-                        onClick={() => setIsSavedOpen(true)}
+                        onClick={(e) => savedMenu.openBelow(e)}
                         title="Saved commands"
                         aria-label="Saved commands"
+                        aria-haspopup="menu"
+                        aria-expanded={savedMenu.isOpen()}
                         style={{
                             "margin-left": getVarCss("uigap-half"),
                         }}>
@@ -347,9 +365,57 @@ export default function App() {
                 </PaperContextMenuItem>
             </PaperContextMenu>
 
+            <PaperContextMenu
+                open={savedMenu.isOpen()}
+                target={savedMenu.target()}
+                placement={savedMenu.placement()}
+                onClose={savedMenu.close}
+            >
+                <PaperContextMenuHeader>Saved commands</PaperContextMenuHeader>
+                <Show when={saved.savedCommandsError}>
+                    <PaperContextMenuItem icon="error" disabled description={saved.savedCommandsError}>
+                        Saved commands could not be read
+                    </PaperContextMenuItem>
+                </Show>
+                <Show when={!saved.savedCommandsError && saved.savedCommands.length === 0}>
+                    <PaperContextMenuItem icon="bookmarks" disabled>
+                        No saved commands
+                    </PaperContextMenuItem>
+                </Show>
+                <For each={saved.savedCommands}>
+                    {(cmd) => (
+                        <PaperContextMenuItem
+                            value={cmd.id}
+                            icon="play_arrow"
+                            description={cmd.command}
+                            keybind={describeRun(saved.commandRuns[cmd.id], Date.now()).value}
+                            title={describeRun(saved.commandRuns[cmd.id], Date.now()).detail}
+                            disabled={saved.commandRuns[cmd.id]?.state === "running"}
+                            onClick={() => void runSaved(cmd.id)}
+                        >
+                            {cmd.label}
+                        </PaperContextMenuItem>
+                    )}
+                </For>
+                <PaperContextMenuItem
+                    value="manage-saved-commands"
+                    icon="edit"
+                    onClick={() => {
+                        setSavedRunError("");
+                        setIsSavedOpen(true);
+                    }}
+                >
+                    Manage saved commands…
+                </PaperContextMenuItem>
+            </PaperContextMenu>
+
             <SavedCommandsModal
                 open={isSavedOpen()}
-                onClose={() => setIsSavedOpen(false)}
+                runError={savedRunError()}
+                onClose={() => {
+                    setIsSavedOpen(false);
+                    setSavedRunError("");
+                }}
                 commands={saved.savedCommands}
                 runs={saved.commandRuns}
                 loadError={saved.savedCommandsError}

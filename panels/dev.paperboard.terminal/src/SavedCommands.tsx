@@ -27,6 +27,8 @@ export default function SavedCommandsModal(props: {
     commands: SavedCommand[];
     runs: Record<string, CommandRun>;
     loadError: string;
+    /** A run started from the toolbar dropdown that failed. */
+    runError?: string;
 }) {
     const [label, setLabel] = createSignal("");
     const [command, setCommand] = createSignal("");
@@ -142,8 +144,8 @@ export default function SavedCommandsModal(props: {
                         </PaperButton>
                     </PaperFlex>
                 </PaperFlex>
-                <Show when={error()}>
-                    <PaperText color="danger" role="alert">{error()}</PaperText>
+                <Show when={error() || props.runError}>
+                    <PaperText color="danger" role="alert">{error() || props.runError}</PaperText>
                 </Show>
             </PaperFlex>
         </PaperModal>
