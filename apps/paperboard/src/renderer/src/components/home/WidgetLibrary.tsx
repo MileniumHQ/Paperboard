@@ -418,9 +418,6 @@ const WidgetCard: Component<WidgetLibraryProps & { widget: WidgetDeclaration; en
                             </Show>
                         </div>
                     </div>
-                    <span class={styles.addBadge} aria-hidden="true">
-                        <PaperIcon>add</PaperIcon>
-                    </span>
                 </button>
                 </div>
             </div>

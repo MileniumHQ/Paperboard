@@ -230,7 +230,6 @@
     background: var(--paper-surface);
     border: var(--paper-border-width) solid var(--paper-border);
     border-radius: var(--paper-border-radius);
-    box-shadow: var(--paper-heavy-element-shadow);
     overflow: hidden;
 }
 
@@ -262,7 +261,7 @@
     align-items: flex-start;
     gap: var(--paper-uigap-onefourth);
     margin: var(--paper-uigap-half) var(--paper-uigap) 0;
-    padding: var(--paper-uigap-half) var(--paper-uigap);
+    padding: var(--paper-uigap);
     border-radius: var(--paper-border-radius-half);
     background: var(--paper-surface-inset);
 }
@@ -330,6 +329,11 @@
     transform: scale(var(--paper-scale-hover));
 }
 
+/* the picker is flat: its previews sit on the page without a shadow */
+.preview .card {
+    box-shadow: none;
+}
+
 .preview:disabled {
     cursor: not-allowed;
     opacity: var(--paper-opacity-dim);
@@ -350,25 +354,6 @@
     pointer-events: none;
 }
 
-.addBadge {
-    position: absolute;
-    top: calc(var(--paper-uigap-half) * -1);
-    left: calc(var(--paper-uigap-half) * -1);
-    display: flex;
-    border-radius: 50%;
-    background: var(--paper-primary);
-    color: var(--paper-on-color);
-    box-shadow: var(--paper-element-shadow);
-    font-size: var(--paper-text-size-2);
-    opacity: 0;
-    transition: opacity var(--paper-short-transition) var(--paper-ease-symmetric);
-}
-
-.preview:hover .addBadge,
-.preview:focus-visible .addBadge {
-    opacity: 1;
-}
-
 .chipRow {
     display: flex;
     flex-wrap: wrap;
@@ -387,7 +372,7 @@
     flex-direction: column;
     align-items: flex-start;
     gap: var(--paper-uigap-onefourth);
-    padding: var(--paper-uigap-half) var(--paper-uigap);
+    padding: var(--paper-uigap);
     border-radius: var(--paper-border-radius-half);
     background: var(--paper-surface-inset);
 }
