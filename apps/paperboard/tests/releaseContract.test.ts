@@ -23,7 +23,7 @@ test("host-owned config names cannot be panel identities, so no panel token can 
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "paperboard-reserved-"));
     const auth = new PaperCraneAuth(false, tmp);
     try {
-        for (const id of ["app-settings", "crane_version", "shell-layout"]) {
+        for (const id of ["app-settings", "crane_version", "default", "shell-layout"]) {
             expect(isPanelId(id)).toBe(false);
             expect(() => auth.issuePanelToken(id)).toThrow(/reserved/);
         }

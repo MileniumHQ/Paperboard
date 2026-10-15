@@ -188,7 +188,7 @@ describe("/panel-files on the daemon", () => {
     });
 
     it("refuses reserved and malformed panel ids", async () => {
-        for (const id of ["settings", "Bad.Id", "shell-x"]) {
+        for (const id of ["settings", "default", "Bad.Id", "shell-x"]) {
             expect((await fetch(url(`${id}/a.txt`), { headers: auth })).status).toBe(400);
         }
     });
