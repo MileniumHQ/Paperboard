@@ -402,41 +402,55 @@ export function makeSafeTarFilter(destDir: string, strip = 0): (entryPath: strin
 }
 
 // Pre-extract scan of a tar archive: every member is classified against
-// its planned destination. Any escape member refuses the whole archive
-// (the installed bytes must be the verified bytes), and the same budget
-// applies. The classify/throw loop runs AFTER tar.t resolves, never
-// inside the tar stream, so a refusal is a real rejection.
+// its planned destination as the archive streams past. The first escape
+// member, `refuse` verdict, or budget excess rejects at once and stops
+// reading (the installed bytes must be the verified bytes, and a limit
+// never trips only after the excess was skipped). Nothing is retained per
+// member. The rejection is raised outside the tar stream, so it is a real
+// rejection rather than an unhandled stream error.
 export async function scanTarMembers(
     archivePath: string,
     destDir: string,
     strip = 0,
+    refuse?: (member: { path: string; type: string }) => string | null,
 ): Promise<void> {
-    const members: Array<{ path?: string; size?: number; linkpath?: string; type?: string }> = [];
-    await tar.t({
-        file: archivePath,
-        onReadEntry: (entry: any) => {
-            if (members.length < TAR_BUDGET.maxEntries) {
-                members.push({
-                    path: entry.path,
-                    size: entry.size,
-                    linkpath: entry.linkpath,
-                    type: entry.type,
-                });
-            }
-            return false;
-        },
+    const source = fs.createReadStream(archivePath);
+    await new Promise<void>((resolve, reject) => {
+        let total = 0;
+        let count = 0;
+        let settled = false;
+        const settle = (err?: Error) => {
+            if (settled) return;
+            settled = true;
+            source.unpipe();
+            source.destroy();
+            if (err) reject(err);
+            else resolve();
+        };
+        const parser = new tar.Parser({
+            onReadEntry: (entry) => {
+                entry.resume();
+                if (settled) return;
+                total += entry.size ?? 0;
+                if (++count > TAR_BUDGET.maxEntries || total > TAR_BUDGET.maxBytes) {
+                    settle(new LimitError("Archive exceeds extraction budget"));
+                    return;
+                }
+                const refusal = refuse?.({ path: String(entry.path), type: String(entry.type) });
+                if (refusal) {
+                    settle(new Error(refusal));
+                    return;
+                }
+                if (classifyTarMember(destDir, entry.path, strip, entry) === "escape") {
+                    settle(new Error(`Archive entry escapes destination: ${entry.path}`));
+                }
+            },
+        });
+        parser.on("error", (err: Error) => settle(err));
+        parser.on("end", () => settle());
+        source.on("error", (err) => settle(err));
+        source.pipe(parser);
     });
-    let total = 0;
-    let count = 0;
-    for (const member of members) {
-        total += member.size ?? 0;
-        if (++count > TAR_BUDGET.maxEntries || total > TAR_BUDGET.maxBytes) {
-            throw new LimitError("Archive exceeds extraction budget");
-        }
-        if (classifyTarMember(destDir, member.path, strip, member) === "escape") {
-            throw new Error(`Archive entry escapes destination: ${member.path}`);
-        }
-    }
 }
 
 // ─── Downloads ───────────────────────────────────────────────────────────────

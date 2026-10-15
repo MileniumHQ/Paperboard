@@ -73,8 +73,9 @@ export function isPanelDataMember(member: string, entries: PanelDataEntries): bo
 }
 
 /**
- * Extracts into stagingDir after refusing any member outside the panel's
- * entries, any link, and anything over the tar budget. Returns the staged
+ * Extracts into stagingDir after refusing (at the first offending member)
+ * any member outside the panel's entries, any link, and anything over the
+ * tar budget. Returns the staged
  * files dir (created empty when the backup had none) and config file.
  */
 export async function extractPanelArchive(
@@ -82,18 +83,11 @@ export async function extractPanelArchive(
     entries: PanelDataEntries,
     stagingDir: string,
 ): Promise<{ filesDir: string; configFile: string | null }> {
-    const strangers: string[] = [];
-    await tar.t({
-        file: archive,
-        onReadEntry: (entry: any) => {
-            const type = entry.type;
-            if ((type !== "File" && type !== "Directory") || !isPanelDataMember(String(entry.path), entries)) {
-                if (strangers.length < 5) strangers.push(`${type} ${entry.path}`);
-            }
-        },
-    });
-    if (strangers.length) throw new Error(`The backup holds entries that are not this panel's data: ${strangers.join(", ")}`);
-    await scanTarMembers(archive, stagingDir);
+    await scanTarMembers(archive, stagingDir, 0, ({ path: member, type }) =>
+        (type !== "File" && type !== "Directory") || !isPanelDataMember(member, entries)
+            ? `The backup holds entries that are not this panel's data: ${type} ${member}`
+            : null,
+    );
     await tar.x({ file: archive, cwd: stagingDir, filter: makeSafeTarFilter(stagingDir) });
     const filesDir = path.join(stagingDir, entries.files);
     fs.mkdirSync(filesDir, { recursive: true });

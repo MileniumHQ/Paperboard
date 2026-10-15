@@ -8,7 +8,7 @@ import * as tar from "tar";
 import { PaperCraneEngine } from "../papercrane/engine";
 import { PaperCraneAuth } from "../papercrane/auth";
 import { PanelServicesManager } from "../papercrane/panelServices";
-import { panelFilesDirName } from "../papercrane/storage";
+import { panelFilesDirName, TAR_BUDGET } from "../papercrane/storage";
 import { computerHostname } from "../papercrane/hostname";
 import { handleBackups } from "../papercrane/rpc/backups";
 import { extractPanelArchive } from "../papercrane/backups/archive";
@@ -135,6 +135,23 @@ describe("archive extraction", () => {
         const archive = path.join(tmp("archive-out-"), "a.tgz");
         await tar.c({ gzip: true, file: archive, cwd: src }, [entries.files]);
         await expect(extractPanelArchive(archive, entries, tmp("archive-stage-"))).rejects.toThrow("SymbolicLink");
+    });
+
+    test("refuses an archive with more entries than the budget instead of dropping the extras", async () => {
+        const src = tmp("archive-src-");
+        fs.mkdirSync(path.join(src, entries.files), { recursive: true });
+        for (const name of ["a", "b", "c", "d"]) fs.writeFileSync(path.join(src, entries.files, name), name);
+        const archive = path.join(tmp("archive-out-"), "a.tgz");
+        await tar.c({ gzip: true, file: archive, cwd: src }, [entries.files]);
+        const staging = tmp("archive-stage-");
+        const limit = TAR_BUDGET.maxEntries;
+        TAR_BUDGET.maxEntries = 3;
+        try {
+            await expect(extractPanelArchive(archive, entries, staging)).rejects.toThrow("extraction budget");
+        } finally {
+            TAR_BUDGET.maxEntries = limit;
+        }
+        expect(fs.readdirSync(staging)).toEqual([]);
     });
 });
 
