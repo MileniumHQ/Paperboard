@@ -4,7 +4,7 @@ import { parseWidgetSize, type PanelItem, type WidgetDeclaration } from "@mileni
 import { type ComputerInfo, panelUrl } from "../../lib/shell";
 import type { LoadQueue } from "../../lib/loadQueue";
 import { BUILTIN_WIDGETS, BuiltinView, builtinWidget } from "./builtins";
-import PanelWidgetFrame from "./PanelWidgetFrame";
+import PanelWidgetFrame, { type FrameFacts } from "./PanelWidgetFrame";
 import styles from "./Home.module.css";
 
 /** One widget, at one size, ready to place. */
@@ -41,6 +41,7 @@ export interface WidgetLibraryProps {
     inset: number;
     queue: LoadQueue;
     panelName: (computerId: string, panelId: string) => string;
+    frameFacts: (computerId: string, panelId: string) => FrameFacts;
     onRetry: (computerId: string) => void;
     onStartDrag: (entry: LibraryEntry, event: PointerEvent) => void;
     onAdd: (entry: LibraryEntry) => void;
@@ -310,6 +311,8 @@ const WidgetCard: Component<WidgetLibraryProps & { widget: WidgetDeclaration; en
                                                 panelId={panelEntry().panelId}
                                                 widgetId={props.widget.id}
                                                 instanceId={previewId}
+                                                service={props.frameFacts(panelEntry().computerId, panelEntry().panelId).service}
+                                                revision={props.frameFacts(panelEntry().computerId, panelEntry().panelId).revision}
                                                 size={parsed()}
                                                 visible={props.visible}
                                                 label={`${props.widget.name} preview`}

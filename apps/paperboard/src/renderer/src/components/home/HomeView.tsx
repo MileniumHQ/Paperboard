@@ -34,7 +34,7 @@ import {
 import { createLoadQueue } from "../../lib/loadQueue";
 import WidgetTile, { type TileStatus } from "./WidgetTile";
 import WidgetLibrary, { sizeLabel, type LibraryEntry } from "./WidgetLibrary";
-import PanelWidgetFrame from "./PanelWidgetFrame";
+import PanelWidgetFrame, { type FrameFacts } from "./PanelWidgetFrame";
 import { BuiltinView, builtinWidget, defaultHomeItems } from "./builtins";
 import styles from "./Home.module.css";
 
@@ -79,6 +79,8 @@ export interface HomeViewProps {
     onRefreshPanels: (computerId: string) => void;
     onOpenPanel: (computerId: string, panelId: string) => void;
     onOpenComputer: (computerId: string) => void;
+    /** bumped when a panel is restarted, by `computerId::panelId` */
+    reloadTokens: Record<string, number>;
 }
 
 const HomeView: Component<HomeViewProps> = (props) => {
@@ -250,6 +252,15 @@ const HomeView: Component<HomeViewProps> = (props) => {
     const computerName = (id: string) => props.computers.find((c) => c.id === id)?.name ?? id;
     const panelName = (computerId: string, panelId: string) =>
         props.panelsByComputer[computerId]?.find((p) => p.id === panelId)?.name ?? panelId;
+    // what a panel's widget frames load against: whether it runs a service,
+    // and a revision that changes when it is updated or restarted
+    const frameFacts = (computerId: string, panelId: string): FrameFacts => {
+        const panel = props.panelsByComputer[computerId]?.find((p) => p.id === panelId);
+        return {
+            service: !!panel?.service,
+            revision: `${panel?.version ?? ""}|${panel?.updatedAt ?? ""}|${props.reloadTokens[`${computerId}::${panelId}`] ?? 0}`,
+        };
+    };
     const declarationOf = (item: HomeItem) =>
         item.source === "builtin"
             ? builtinWidget(item.widgetId)?.declaration
@@ -599,6 +610,8 @@ const HomeView: Component<HomeViewProps> = (props) => {
                 widgetId={from.widgetId}
                 instanceId={instanceId}
                 size={size()}
+                service={frameFacts(from.computerId, panelId).service}
+                revision={frameFacts(from.computerId, panelId).revision}
                 visible={visible()}
                 label={label()}
                 queue={queue}
@@ -737,6 +750,7 @@ const HomeView: Component<HomeViewProps> = (props) => {
                     inset={inset()}
                     queue={queue}
                     panelName={panelName}
+                    frameFacts={frameFacts}
                     onRetry={props.onRefreshPanels}
                     onStartDrag={startLibraryDrag}
                     onAdd={addToFirstFreeSpot}

@@ -805,6 +805,7 @@ const App: Component = () => {
                         onRefreshPanels={(compId) => void refreshPanelsForComputer(compId)}
                         onOpenPanel={openPanelFromHome}
                         onOpenComputer={(compId) => handleRailSelect(compId)}
+                        reloadTokens={reloadTokens()}
                     />
                 </PaperFlex>
             </PaperFlex>

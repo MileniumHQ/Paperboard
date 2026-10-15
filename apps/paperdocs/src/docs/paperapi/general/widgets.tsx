@@ -234,6 +234,8 @@ defineWidgets({
             <PaperText preset="subheader" id="behavior">Behavior</PaperText>
             <PaperText preset="body">
                 One frame shows one widget instance, on the panel's own origin. Paperboard tells the page which widget to mount, and reports the widget as loaded once its mount function has run.
+                Before that, the frame proves it is connected: through the panel's service when the manifest declares one, or with an authenticated connection to the computer when it does not, so a panel without a service can still offer widgets.
+                When the panel is updated or restarted, its widgets load again, so they never keep running the old code.
                 Home loads a few widget frames at a time and releases frames that stay out of view, so a mount function may run again later for the same placement.
                 defineWidgets throws when it is called twice, when a key is not a valid widget id, or when a value is not a function.
                 Each of onResize and onVisibilityChange holds at most 64 listeners. Subscribing past that throws, so unsubscribe listeners that are no longer needed.
