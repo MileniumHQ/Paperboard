@@ -179,8 +179,13 @@ describe("agent commands", () => {
 
 describe("Local AI mode picker", () => {
     it("offers Local AI's modes, with an unknown saved mode falling back to Ask", () => {
-        expect(localModePicker(undefined).modes.map((m) => m.id)).toEqual(LOCAL_MODES.map((m) => m.id));
-        expect(localModePicker("nonsense").current?.id).toBe("ask");
-        expect(localModePicker("accept-edits").current?.id).toBe("accept-edits");
+        expect(localModePicker(undefined, true).modes.map((m) => m.id)).toEqual(LOCAL_MODES.map((m) => m.id));
+        expect(localModePicker("nonsense", true).current?.id).toBe("ask");
+        expect(localModePicker("accept-edits", true).current?.id).toBe("accept-edits");
+    });
+
+    it("offers Accept edits only in a project, where there are files to edit", () => {
+        expect(localModePicker(undefined, false).modes.map((m) => m.id)).toEqual(["ask", "no-sandbox"]);
+        expect(localModePicker("accept-edits", false).current?.id).toBe("ask");
     });
 });

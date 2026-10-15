@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import path from "node:path";
 import { AgentAuthError, AgentHub, type TurnHandlers } from "../src/service/agents";
 import type { Connection } from "../src/core/providers";
+import { NO_SANDBOX_MODE } from "../src/core/permissionMode";
 import type { AgentSessionInfo, AgentState } from "../src/core/types";
 import { ChildHost } from "./childHost";
 
@@ -89,7 +90,8 @@ describe("agent hub", () => {
         expect(turn.text()).toBe("Hi there");
         // modes from session/new and commands from the agent's notification
         await until(() => (infos.c1?.commands.length ?? 0) > 0);
-        expect(infos.c1).toEqual({ modes: [{ id: "ask", name: "Ask" }, { id: "code", name: "Code", description: "Edits files" }], mode: "ask", commands: [{ name: "review", description: "Review changes" }] });
+        // the panel's No sandbox follows the agent's own modes
+        expect(infos.c1).toEqual({ modes: [{ id: "ask", name: "Ask" }, { id: "code", name: "Code", description: "Edits files" }, NO_SANDBOX_MODE], mode: "ask", commands: [{ name: "review", description: "Review changes" }] });
     });
 
     it("sends a message larger than one process write, whole", async () => {
@@ -183,6 +185,18 @@ describe("agent hub", () => {
         const c = connection();
         await hub.openSession({ conversationId: "c1", connection: c, cwd: "/w", mode: "code" });
         expect(infos.c1?.mode).toBe("code");
+    });
+
+    it("offers No sandbox after the agent's modes, and keeps the agent's own mode under it", async () => {
+        const c = connection();
+        await hub.openSession({ conversationId: "c1", connection: c, cwd: "/w", mode: "no-sandbox" });
+        expect(infos.c1?.modes.map((m) => m.id)).toEqual(["ask", "code", "no-sandbox"]);
+        // the fake agent refuses a mode it does not offer: the panel's own is never sent
+        expect(infos.c1?.mode).toBe("no-sandbox");
+        await hub.setMode(c, "c1", "code");
+        expect(infos.c1?.mode).toBe("code");
+        await hub.setMode(c, "c1", "no-sandbox");
+        expect(infos.c1?.mode).toBe("no-sandbox");
     });
 
     it("stops an idle agent and observes the exit", async () => {

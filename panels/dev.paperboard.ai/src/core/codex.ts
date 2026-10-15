@@ -4,6 +4,7 @@
 // every other agent sends, so a chat reads the same whichever agent replies.
 // Nothing here runs a process: service/codex.ts does.
 
+import { NO_SANDBOX_MODE, NO_SANDBOX_MODE_ID } from "./permissionMode";
 import { MAX_AGENT_MODELS, type AcpContentBlock } from "./acp";
 import type { AgentMode, AgentModel, AgentPermissionOption, AgentToolKind } from "./types";
 
@@ -47,6 +48,7 @@ export const CODEX_MODES: readonly AgentMode[] = [
     { id: "default", name: "Ask", description: "Asks before editing files and before running commands it can't tell are safe." },
     { id: "acceptEdits", name: "Accept edits", description: "Edits files in the project without asking; still asks before running commands." },
     { id: "plan", name: "Plan", description: "Reads and plans without changing anything." },
+    NO_SANDBOX_MODE,
 ];
 
 export function isCodexMode(v: unknown): v is string {
@@ -56,13 +58,15 @@ export function isCodexMode(v: unknown): v is string {
 export interface CodexPolicy {
     approvalPolicy: "untrusted" | "never";
     /** for thread/start and thread/resume (Codex's config fills in the details) */
-    sandbox: "workspace-write" | "read-only";
+    sandbox: "workspace-write" | "read-only" | "danger-full-access";
     /** for turn/start, when the chat switched modes mid-thread */
     sandboxPolicy: Json;
 }
 
 export function codexPolicy(mode: string | undefined): CodexPolicy {
     if (mode === "plan") return { approvalPolicy: "never", sandbox: "read-only", sandboxPolicy: { type: "readOnly" } };
+    // Codex's own --dangerously-bypass-approvals-and-sandbox: nothing asks, nothing is fenced
+    if (mode === NO_SANDBOX_MODE_ID) return { approvalPolicy: "never", sandbox: "danger-full-access", sandboxPolicy: { type: "dangerFullAccess" } };
     return { approvalPolicy: "untrusted", sandbox: "workspace-write", sandboxPolicy: { type: "workspaceWrite" } };
 }
 

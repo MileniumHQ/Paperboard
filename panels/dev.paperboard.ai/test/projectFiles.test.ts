@@ -168,6 +168,7 @@ describe("tool shapes", () => {
         expect(projectToolAsks("edit_file", undefined)).toBe(true);
         expect(projectToolAsks("write_file", "accept-edits")).toBe(false);
         expect(projectToolAsks("edit_file", "accept-edits")).toBe(false);
+        expect(projectToolAsks("write_file", "no-sandbox")).toBe(false);
         expect(projectToolAsks("read_file", "ask")).toBe(false);
         // an agent's mode id left on a chat is not Local AI's: it asks
         expect(localMode("bypassPermissions")).toBe("ask");

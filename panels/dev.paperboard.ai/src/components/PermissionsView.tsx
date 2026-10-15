@@ -30,7 +30,7 @@ export default function PermissionsView() {
             <div class={styles.intro}>
                 <PaperText preset="subtitle">Always allowed actions</PaperText>
                 <PaperText size={2} color="text-muted">
-                    The AI asks before every action. When you choose Always allow, that action runs without asking in every chat until you revoke it here.
+                    The AI asks before every action, unless its chat is in No sandbox mode. When you choose Always allow, that action runs without asking in every chat until you revoke it here.
                 </PaperText>
             </div>
             <Show when={error()}>
@@ -39,7 +39,7 @@ export default function PermissionsView() {
             <PaperCard padding="full" gap="half" shrink={false}>
                 <Show
                     when={state.alwaysAllowed.length > 0}
-                    fallback={<PaperEmptyState icon="verified_user" title="Nothing is always allowed" description="Every action the AI wants to run will ask you first." />}
+                    fallback={<PaperEmptyState icon="verified_user" title="Nothing is always allowed" description="Every action the AI wants to run asks you first, unless its chat is in No sandbox mode." />}
                 >
                     <ul class={styles.list}>
                         <For each={state.alwaysAllowed}>

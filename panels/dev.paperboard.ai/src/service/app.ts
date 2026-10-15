@@ -148,6 +148,7 @@ function clampSettings(input: Partial<Settings> | undefined): Settings {
         promptStyle: isPromptStyle(s.promptStyle) ? s.promptStyle : DEFAULT_SETTINGS.promptStyle,
         customPromptEnabled: typeof s.customPromptEnabled === "boolean" ? s.customPromptEnabled : false,
         customSystemPrompt: typeof s.customSystemPrompt === "string" ? s.customSystemPrompt : null,
+        noSandboxWarning: typeof s.noSandboxWarning === "boolean" ? s.noSandboxWarning : DEFAULT_SETTINGS.noSandboxWarning,
     };
 }
 
@@ -581,6 +582,7 @@ export class AiApp {
             agentConnection: (providerId) => this.connections.find((c) => c.id === providerId && c.kind === "agent"),
             projectPath: (project) => this.projects.path(project),
             agents: this.agents,
+            agentMode: (conversationId) => this.ctx.state.agentSessions[conversationId]?.mode,
             providerOf: (model) => this.models.providerOf(model),
             store: this.store,
             settings: () => this.ctx.state.settings,
@@ -894,7 +896,7 @@ export class AiApp {
      */
     async setAgentMode(id: string, modeId: unknown): Promise<void> {
         if (!isConversationId(id)) throw new Error("Unknown chat.");
-        if (typeof modeId !== "string" || !modeId) throw new Error("Choose a mode.");
+        if (typeof modeId !== "string" || !modeId || modeId.length > 200) throw new Error("Choose a mode.");
         const c = await this.store.get(id);
         const connection = this.agentOf(c);
         if (!connection) {
@@ -907,8 +909,7 @@ export class AiApp {
             if (!live.modes.some((m) => m.id === modeId)) throw new Error("The agent does not offer that mode.");
             await this.agents.setMode(connection, id, modeId);
         }
-        c.mode = modeId;
-        this.ctx.setState({ conversations: await this.store.save(c) });
+        await this.chat.setMode(id, modeId);
     }
 
     async authenticateAgent(connectionId: unknown, methodId: unknown): Promise<void> {
@@ -955,7 +956,7 @@ export class AiApp {
         const c = await this.store.get(id);
         c.model = this.normalizeModelRef(model, via);
         if (via !== c.provider) {
-            // a mode id belongs to the connection that offered it (an agent's, or Local AI's)
+            // modes are the provider's own: No sandbox granted to one is not granted to the next
             delete c.mode;
             if (c.sessionId) {
                 delete c.sessionId;

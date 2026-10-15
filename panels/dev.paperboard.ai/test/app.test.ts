@@ -161,6 +161,37 @@ describe("custom prompt settings", () => {
     });
 });
 
+describe("No sandbox", () => {
+    it("keeps 'Do not show again' through a reload, and gives a local chat only its own modes", async () => {
+        savedConfig = null;
+        const app = new AiApp(new HangingHost(), { readyTimeoutMs: 100 });
+        const ctx = makeCtx();
+        await app.init(ctx as any);
+        try {
+            expect(ctx.state.settings.noSandboxWarning).toBe(true);
+            await app.updateSettings({ noSandboxWarning: "no" as unknown as boolean });
+            expect(ctx.state.settings.noSandboxWarning).toBe(true);
+            await app.updateSettings({ noSandboxWarning: false });
+            const reloaded = new AiApp(new HangingHost(), { readyTimeoutMs: 100 });
+            const reloadedCtx = makeCtx();
+            try {
+                await reloaded.init(reloadedCtx as any);
+                expect(reloadedCtx.state.settings.noSandboxWarning).toBe(false);
+            } finally {
+                await reloaded.stopRuntime();
+            }
+
+            const chat = await app.chat.create("tooly:latest", "ollama");
+            await expect(app.setAgentMode(chat.id, "bypassPermissions")).rejects.toThrow("Local AI does not offer that mode");
+            await app.setAgentMode(chat.id, "no-sandbox");
+            expect((await app.store.get(chat.id)).mode).toBe("no-sandbox");
+        } finally {
+            await app.stopRuntime();
+            savedConfig = null;
+        }
+    });
+});
+
 describe("AiApp connections", () => {
     async function withApp(run: (app: InstanceType<typeof AiApp>, ctx: ReturnType<typeof makeCtx>) => Promise<void>, stored: unknown = null) {
         savedConfig = stored;

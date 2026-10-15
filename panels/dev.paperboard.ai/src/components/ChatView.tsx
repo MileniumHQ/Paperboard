@@ -19,6 +19,7 @@ import {
     subscribeChatEvents,
 } from "../lib/state";
 import { loadPanelInfo } from "../lib/panels";
+import { createStickToBottom } from "../lib/stickToBottom";
 import Composer from "./Composer";
 import ConversationList from "./ConversationList";
 import { groupTurns, type Turn } from "../core/chain";
@@ -26,6 +27,8 @@ import { createChatSelection } from "../lib/selection";
 import { AssistantTurn, UserMessage } from "./MessageView";
 import ModelsModal from "./ModelsModal";
 import AgentBar from "./AgentBar";
+import NoSandboxDialog from "./NoSandboxDialog";
+import { isNoSandboxMode } from "../core/permissionMode";
 import SettingsTab from "./SettingsTab";
 import styles from "./ChatView.module.css";
 
@@ -42,9 +45,7 @@ export default function ChatView() {
     const [modeBusy, setModeBusy] = createSignal(false);
     // a draft agent chat's project, applied when the first message creates the chat
     const [draftProject, setDraftProject] = createSignal<string>();
-    let scroller: HTMLDivElement | undefined;
-    let thread: HTMLDivElement | undefined;
-    let stickToBottom = true;
+    const scroll = createStickToBottom();
 
     onMount(() => {
         const off = subscribeChatEvents();
@@ -54,17 +55,6 @@ export default function ChatView() {
             off();
             offRegistry();
         });
-    });
-
-    // the reader stays pinned to the newest message; any upward scroll lets go
-    onMount(() => {
-        const pin = () => {
-            if (stickToBottom && scroller) scroller.scrollTop = scroller.scrollHeight;
-        };
-        const observer = new ResizeObserver(pin);
-        if (scroller) observer.observe(scroller);
-        if (thread) observer.observe(thread);
-        onCleanup(() => observer.disconnect());
     });
 
     // the open conversation's title and model follow the saved summary, so
@@ -80,11 +70,9 @@ export default function ChatView() {
 
     createEffect(
         on(selected, (id) => {
-            stickToBottom = true;
+            scroll.stick();
             void openChat(id).then(() => {
-                requestAnimationFrame(() => {
-                    if (stickToBottom && scroller) scroller.scrollTop = scroller.scrollHeight;
-                });
+                requestAnimationFrame(scroll.pin);
             });
         }),
     );
@@ -149,11 +137,18 @@ export default function ChatView() {
         const c = conversation();
         if (!c) return undefined;
         if (agentConnection()) return modePicker(state.agentSessions[c.id], c.mode);
-        return localConnection() && project() ? localModePicker(c.mode) : undefined;
+        // a local chat has a mode once its model can change something
+        const acts = Boolean(project()) || state.settings.shellCommands || state.settings.panelActions;
+        return localConnection() && acts ? localModePicker(c.mode, Boolean(project())) : undefined;
     };
+    const [confirmingNoSandbox, setConfirmingNoSandbox] = createSignal<string>();
     const changeMode = async (mode: string) => {
         const id = conversation()?.id;
         if (!id) return;
+        if (isNoSandboxMode(mode) && state.settings.noSandboxWarning) {
+            setConfirmingNoSandbox(mode);
+            return;
+        }
         setModeBusy(true);
         setError("");
         try {
@@ -163,6 +158,17 @@ export default function ChatView() {
         } finally {
             setModeBusy(false);
         }
+    };
+    const turnOnNoSandbox = async () => {
+        const id = conversation()?.id;
+        const mode = confirmingNoSandbox();
+        if (!id || !mode) throw new Error("This chat is gone.");
+        await call(UI_ACTION_IDS.setAgentMode, { id, mode });
+    };
+    // the menu item that opened the dialog is gone once it closes: focus goes back to the picker
+    const closeNoSandbox = () => {
+        setConfirmingNoSandbox(undefined);
+        requestAnimationFrame(() => document.querySelector<HTMLElement>("[data-mode-picker]")?.focus());
     };
     const waitingHere = () => state.approvals.filter((a) => a.conversationId === conversation()?.id).length;
     const hasOllama = () => state.connections.some((c) => c.kind === "ollama");
@@ -244,7 +250,7 @@ export default function ChatView() {
                 setDraftProject(undefined);
                 if ((agentConnection() || localConnection()) && chosen && chosen !== c.project) await call(UI_ACTION_IDS.setConversationProject, { id, project: chosen });
             }
-            stickToBottom = true;
+            scroll.stick();
             await call(UI_ACTION_IDS.sendMessage, { id, text, reasoning, attachments });
             return true;
         } catch (err) {
@@ -310,11 +316,7 @@ export default function ChatView() {
 
                 <div
                     class={styles.messages}
-                    ref={scroller}
-                    onScroll={(e) => {
-                        const el = e.currentTarget;
-                        stickToBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 48;
-                    }}
+                    ref={scroll.scrollerRef}
                 >
                     <Show when={openError()}>
                         <div class={styles.welcome}>
@@ -346,7 +348,7 @@ export default function ChatView() {
                             </Show>
                         </div>
                     </Show>
-                    <div class={styles.thread} ref={thread}>
+                    <div class={styles.thread} ref={scroll.contentRef}>
                         {/* by position: turns only append, so a streaming reply updates in place */}
                         <Index each={turns()}>
                             {(turn) => (
@@ -383,6 +385,12 @@ export default function ChatView() {
                         </div>
                     )}
                 </Show>
+                <NoSandboxDialog
+                    open={confirmingNoSandbox() !== undefined}
+                    actor={agentConnection()?.label ?? "The AI"}
+                    onTurnOn={turnOnNoSandbox}
+                    onClose={closeNoSandbox}
+                />
                 <Composer
                     toolbar={
                         <Show when={agentConnection() ?? localConnection()}>

@@ -146,6 +146,7 @@ function handle(message) {
             update(params.sessionId, { sessionUpdate: "user_message_chunk", content: { type: "text", text: "replayed" } });
             return reply(id, { modes: MODES, ...modelFields(params.sessionId) });
         case "session/set_mode":
+            if (!MODES.availableModes.some((m) => m.id === params.modeId)) return fail(id, -32602, `no mode ${params.modeId}`);
             reply(id, {});
             return update(params.sessionId, { sessionUpdate: "current_mode_update", currentModeId: params.modeId });
         case "session/set_config_option":

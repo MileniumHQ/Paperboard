@@ -196,6 +196,16 @@ describe("Codex bridge", () => {
         await expect(hub.setMode(c, "c1", "yolo")).rejects.toThrow('no mode "yolo"');
     });
 
+    it("runs No sandbox with nothing asked and nothing fenced", async () => {
+        const opened = await open("c1", { mode: "no-sandbox" });
+        expect(requests("thread/start")[0].params).toMatchObject({ approvalPolicy: "never", sandbox: "danger-full-access" });
+        await hub.setMode(c, "c1", "default");
+        await hub.setMode(c, "c1", "no-sandbox");
+        const turn = collect();
+        await send(opened.sessionId, "policy", turn);
+        expect(JSON.parse(turn.text())).toEqual({ approvalPolicy: "never", sandbox: { type: "dangerFullAccess" } });
+    });
+
     it("shows Codex's plan", async () => {
         const opened = await open("c1");
         const turn = collect();

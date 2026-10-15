@@ -99,7 +99,13 @@ readline.createInterface({ input: process.stdin }).on("line", (line) => {
         if (m.request.subtype === "initialize") {
             return ok({ commands: [{ name: "review", description: "Review a PR", argumentHint: "<pr>" }], models: MODELS, current_permission_mode: flag("--permission-mode") ?? "default", claude_code_version: "9.9.9" });
         }
-        if (m.request.subtype === "set_permission_mode") return ok({ mode: m.request.mode });
+        if (m.request.subtype === "set_permission_mode") {
+            // as the real one: bypassPermissions needs a process launched to allow it
+            if (m.request.mode === "bypassPermissions" && !flags.includes("--allow-dangerously-skip-permissions") && !flags.includes("--dangerously-skip-permissions")) {
+                return send({ type: "control_response", response: { subtype: "error", request_id: m.request_id, error: "Cannot set permission mode to bypassPermissions because the session was not launched with --dangerously-skip-permissions" } });
+            }
+            return ok({ mode: m.request.mode });
+        }
         if (m.request.subtype === "set_model") {
             if (!MODELS.some((x) => x.value === m.request.model)) return send({ type: "control_response", response: { subtype: "error", request_id: m.request_id, error: `Model '${m.request.model}' not found` } });
             model = m.request.model;

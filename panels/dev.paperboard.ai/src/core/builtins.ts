@@ -6,6 +6,7 @@
 // descriptions) never ask. `web_search` is no longer offered; it stays a
 // recorded kind so chats that searched still render their steps.
 
+import { isNoSandboxMode } from "./permissionMode";
 import { FIND_APP_ACTIONS, MAX_ACTION_QUERY_CHARS } from "./appActions";
 import {
     isProjectTool,
@@ -28,7 +29,7 @@ export const BUILTIN_LABELS: Record<BuiltinTool, string> = {
 
 /** Whether a built-in call waits for the user, in a chat's mode. None can be allowed always. */
 export function builtinAsks(tool: OfferedBuiltin, mode: string | undefined): boolean {
-    if (tool === FIND_APP_ACTIONS) return false;
+    if (tool === FIND_APP_ACTIONS || isNoSandboxMode(mode)) return false;
     return isProjectTool(tool) ? projectToolAsks(tool, mode) : true;
 }
 

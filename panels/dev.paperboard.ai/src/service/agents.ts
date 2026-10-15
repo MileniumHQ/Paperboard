@@ -17,6 +17,7 @@ import {
 } from "../core/acp";
 import { CLAUDE_CODE_ID } from "../core/claudeCode";
 import { CODEX_ID } from "../core/codex";
+import { NO_SANDBOX_MODE_ID, withNoSandbox } from "../core/permissionMode";
 import type { Connection } from "../core/providers";
 import type { AgentModel, AgentPermissionOption, AgentSessionInfo, AgentState } from "../core/types";
 import type { Launch } from "./executable";
@@ -399,7 +400,9 @@ class AgentProcess implements AgentRunner {
             this.track(request.conversationId, sessionId);
         }
         if (this.state.status === "auth-required") this.publish({ status: "ready" });
-        const { modes, current } = modesFrom(isObject(result) ? result.modes : undefined);
+        const offered = modesFrom(isObject(result) ? result.modes : undefined);
+        const { current } = offered;
+        const modes = withNoSandbox(offered.modes);
         this.patchInfo(request.conversationId, { modes, ...(current ? { mode: current } : {}) });
         if (request.mode && request.mode !== current && modes.some((m) => m.id === request.mode)) {
             await this.setMode(request.conversationId, request.mode);
@@ -475,7 +478,8 @@ class AgentProcess implements AgentRunner {
     async setMode(conversationId: string, modeId: string): Promise<void> {
         const sessionId = this.sessions.get(conversationId);
         if (!sessionId || !this.peer) throw new Error(`${this.connection.label} has no session for this chat yet. Send a message first.`);
-        await this.peer.request("session/set_mode", { sessionId, modeId });
+        // No sandbox is the panel's: the agent keeps its own mode and the chat answers its permission requests
+        if (modeId !== NO_SANDBOX_MODE_ID) await this.peer.request("session/set_mode", { sessionId, modeId });
         this.patchInfo(conversationId, { mode: modeId });
     }
 

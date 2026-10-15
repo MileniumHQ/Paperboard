@@ -3,6 +3,7 @@
 // and the checks on what a model sends. Where a path may lead is the
 // service's decision (service/projectFiles.ts); this module only shapes it.
 
+import { NO_SANDBOX_MODE } from "./permissionMode";
 import type { OllamaTool } from "./tools";
 import type { AgentMode, ProjectToolName } from "./types";
 
@@ -33,8 +34,9 @@ export const LOCAL_MODE_ASK = "ask";
 export const LOCAL_MODE_ACCEPT_EDITS = "accept-edits";
 
 export const LOCAL_MODES: readonly AgentMode[] = [
-    { id: LOCAL_MODE_ASK, name: "Ask", description: "Approve every file change and command" },
-    { id: LOCAL_MODE_ACCEPT_EDITS, name: "Accept edits", description: "File changes apply without asking; commands still ask" },
+    { id: LOCAL_MODE_ASK, name: "Ask", description: "Approve every file change, command and action" },
+    { id: LOCAL_MODE_ACCEPT_EDITS, name: "Accept edits", description: "File changes apply without asking; commands and actions still ask" },
+    NO_SANDBOX_MODE,
 ];
 
 export function isLocalMode(value: unknown): value is string {
@@ -52,7 +54,7 @@ export function isProjectTool(name: string): name is ProjectTool {
 
 /** Whether a project tool waits for the user in a mode. Reads never change anything, so never ask. */
 export function projectToolAsks(tool: ProjectTool, mode: string | undefined): boolean {
-    if (tool === "write_file" || tool === "edit_file") return localMode(mode) !== LOCAL_MODE_ACCEPT_EDITS;
+    if (tool === "write_file" || tool === "edit_file") return localMode(mode) === LOCAL_MODE_ASK;
     return false;
 }
 
@@ -265,7 +267,9 @@ export function replaceExact(text: string, oldText: string, newText: string, rep
 }
 
 /** The composer's mode choice for a Local AI chat in a project. */
-export function localModePicker(saved: string | undefined): { modes: AgentMode[]; current: AgentMode | undefined } {
+export function localModePicker(saved: string | undefined, project: boolean): { modes: AgentMode[]; current: AgentMode | undefined } {
+    // Accept edits only means something where there are files to edit
+    const modes = LOCAL_MODES.filter((m) => project || m.id !== LOCAL_MODE_ACCEPT_EDITS);
     const id = localMode(saved);
-    return { modes: [...LOCAL_MODES], current: LOCAL_MODES.find((m) => m.id === id) };
+    return { modes, current: modes.find((m) => m.id === id) ?? modes[0] };
 }

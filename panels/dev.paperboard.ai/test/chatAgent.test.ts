@@ -8,7 +8,7 @@ import { ChatEngine } from "../src/service/chat";
 import { ConversationStore } from "../src/service/store";
 import { AgentHub } from "../src/service/agents";
 import type { Connection } from "../src/core/providers";
-import type { AssistantMessage, PendingApproval, Settings } from "../src/core/types";
+import type { AgentSessionInfo, AssistantMessage, PendingApproval, Settings } from "../src/core/types";
 import { DEFAULT_SETTINGS } from "../src/core/types";
 import { ChildHost } from "./childHost";
 
@@ -21,6 +21,7 @@ let host: ChildHost;
 let hub: AgentHub;
 let approvals: PendingApproval[];
 let finished: { text: string }[];
+let infos: Record<string, AgentSessionInfo | null>;
 const settings: Settings = { ...DEFAULT_SETTINGS };
 
 function engine(): ChatEngine {
@@ -50,6 +51,7 @@ function engine(): ChatEngine {
         agentConnection: (id) => (id === AGENT_CONNECTION.id ? AGENT_CONNECTION : undefined),
         projectPath: async (project) => (project === "work" ? dir : Promise.reject(new Error(`The project "${project}" no longer exists.`))),
         agents: hub,
+        agentMode: (id) => infos[id]?.mode,
     });
 }
 
@@ -75,11 +77,12 @@ beforeEach(async () => {
         workDir: dir,
         clientVersion: "0.0.0-test",
         onState: () => {},
-        onSessionInfo: () => {},
+        onSessionInfo: (id, info) => (infos[id] = info),
         stopTimeoutMs: 2_000,
     });
     approvals = [];
     finished = [];
+    infos = {};
 });
 
 afterEach(async () => {
@@ -132,6 +135,32 @@ describe("agent chats", () => {
             agent: { kind: "edit", diffs: [{ path: "/w/a.txt", oldText: "one\ntwo", newText: "one\n2" }] },
         });
         expect(rounds[1]).toMatchObject({ content: "Edited", status: "done" });
+    });
+
+    it("a No sandbox chat allows the agent's request without asking", async () => {
+        const chat = engine();
+        const c = await chat.create("Fake", AGENT_CONNECTION.id, "work");
+        await chat.setMode(c.id, "no-sandbox");
+        const { done } = await chat.send(c.id, "edit");
+        await done;
+        expect(approvals).toEqual([]);
+        const rounds = await assistants(c.id);
+        expect(rounds[0]!.toolCalls![0]).toMatchObject({ label: "Edit a.txt", status: "done" });
+        expect(rounds[1]).toMatchObject({ content: "Edited", status: "done" });
+    });
+
+    it("turning No sandbox on answers a request already waiting", async () => {
+        const chat = engine();
+        const c = await chat.create("Fake", AGENT_CONNECTION.id, "work");
+        const { done } = await chat.send(c.id, "edit");
+        await until(() => approvals.length === 1);
+        await hub.setMode(AGENT_CONNECTION, c.id, "no-sandbox");
+        await chat.setMode(c.id, "no-sandbox");
+        await done;
+        expect(approvals).toEqual([]);
+        expect((await assistants(c.id))[1]!.content).toBe("Edited");
+        // saved on the reply's working copy: the reply's last save keeps it
+        expect((await store.get(c.id)).mode).toBe("no-sandbox");
     });
 
     it("records a rejected request as denied", async () => {

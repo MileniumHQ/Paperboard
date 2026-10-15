@@ -227,13 +227,14 @@ export default function Composer(props: ComposerProps) {
                         {(picker) => (
                             <button
                                 ref={modeButton}
+                                data-mode-picker
                                 type="button"
                                 class={styles.picker}
                                 disabled={props.modeDisabled}
                                 title={picker().current?.description}
                                 aria-haspopup="menu"
                                 aria-expanded={modeMenu.isOpen()}
-                                aria-label={`Agent mode: ${picker().current?.name ?? "not set"}`}
+                                aria-label={`Mode: ${picker().current?.name ?? "not set"}`}
                                 onClick={() => modeMenu.openBelow(modeButton!)}
                             >
                                 <span>{picker().current?.name ?? "Mode"}</span>

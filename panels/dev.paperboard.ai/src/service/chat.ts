@@ -28,6 +28,7 @@ import { replyText } from "../core/chain";
 import { isProjectTool } from "../core/projectTools";
 import { validateAttachments } from "../core/attachments";
 import { reasoningToThink, type ReasoningLevel } from "../core/reasoning";
+import { autoAllowOption, isNoSandboxMode } from "../core/permissionMode";
 import {
     APP_ACTION_TOOLS,
     buildActionIndex,
@@ -97,6 +98,8 @@ export interface ChatDeps {
     /** the folder an agent works in for a project; throws when it is gone */
     projectPath: (project: string) => Promise<string>;
     agents: Pick<AgentHub, "openSession" | "prompt" | "forget">;
+    /** an agent chat's live mode, as its session reports it */
+    agentMode: (conversationId: string) => string | undefined;
     /** the built-in tools' effects; `cwd` is the chat's project folder, when it works in one */
     runShell: (command: string, signal: AbortSignal, cwd?: string) => Promise<{ stdout: string; stderr: string; exitCode: number }>;
     // outputs
@@ -180,14 +183,23 @@ export class ChatEngine {
     }
 
     /**
-     * Sets a Local AI chat's mode. A replying chat changes on the reply's
-     * working copy: its next tool call asks by the new mode, and its next
-     * save keeps it.
+     * Saves a chat's mode, on the reply's working copy when it is replying
+     * (its next save would write the old mode back). Entering No sandbox
+     * answers the chat's open requests the way it answers later ones.
      */
     async setMode(conversationId: string, mode: string): Promise<void> {
         const conversation = this.active.get(conversationId)?.conversation ?? (await this.deps.store.get(conversationId));
         conversation.mode = mode;
         this.deps.onSummaries(await this.deps.store.save(conversation));
+        if (!isNoSandboxMode(mode)) return;
+        for (const w of [...this.waiting.values()]) {
+            if (w.approval.conversationId !== conversationId) continue;
+            if (!w.choose) w.resolve("once");
+            else if (isNoSandboxMode(this.deps.agentMode(conversationId))) {
+                const allow = autoAllowOption(w.approval.options ?? []);
+                if (allow) w.choose(allow);
+            }
+        }
     }
 
     async create(model: string, provider?: string, project?: string): Promise<Conversation> {
@@ -596,6 +608,14 @@ export class ChatEngine {
             const entry = trackCall(toolCall, true);
             if (!entry) return null;
             const { record } = entry;
+            // No sandbox: the service answers for the user, with the agent's own allow option
+            const allow = isNoSandboxMode(deps.agentMode(conversation.id)) ? autoAllowOption(options) : null;
+            if (allow) {
+                record.status = "running";
+                flushDelta();
+                changed(entry.round, true);
+                return allow;
+            }
             record.status = "awaiting-approval";
             flushDelta();
             changed(entry.round, true);
@@ -876,7 +896,7 @@ export class ChatEngine {
         const key = builtin ? "" : permissionKey(call.panelId, call.action);
         let decision: ApprovalDecision | "cancelled" | "remembered" | "unasked";
         // the mode is read now, not when the reply started: a switch applies to the next call
-        if (builtin && !builtinAsks(builtin, conversation.mode)) {
+        if (builtin ? !builtinAsks(builtin, conversation.mode) : isNoSandboxMode(conversation.mode)) {
             decision = "unasked";
         } else if (!builtin && this.deps.isAllowed(key)) {
             decision = "remembered";
