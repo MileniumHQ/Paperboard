@@ -1,0 +1,8 @@
+{
+    "name": "API Demo",
+    "id": "dev.paperboard.apidemo",
+    "version": "0.0.1",
+    "description": "A development fixture that exercises exporting and importing files and backups. Not released.",
+    "publisher": "Paperboard",
+    "service": "./dist/service.js"
+}
