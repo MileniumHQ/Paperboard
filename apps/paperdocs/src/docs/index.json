@@ -362,6 +362,10 @@
                 "icon": "code",
                 "sort": "alphabetical",
                 "pages": {
+                    "backups": {
+                        "name": "Backups API",
+                        "file": "backups"
+                    },
                     "config": {
                         "name": "Config API",
                         "file": "config"
