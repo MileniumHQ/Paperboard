@@ -21,11 +21,11 @@
 .clockDigital {
     height: 100%;
     box-sizing: border-box;
-    padding: var(--pad);
+    /* the time is big; a wider margin keeps it off the tile's sides */
+    padding: var(--pad) var(--paper-uigap-double);
     display: flex;
     flex-direction: column;
-    /* on the same left edge as every other widget's text */
-    align-items: flex-start;
+    align-items: center;
     justify-content: center;
     gap: var(--paper-uigap-onefourth);
     font-variant-numeric: tabular-nums;
@@ -33,6 +33,7 @@
 }
 
 .clockTime {
+    font-family: var(--paper-font-family-rounded);
     font-size: min(40cqh, 20cqw);
     font-weight: var(--paper-weight-bold);
     line-height: var(--paper-leading-none);
