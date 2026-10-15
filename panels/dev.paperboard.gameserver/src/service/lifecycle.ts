@@ -246,6 +246,9 @@ export async function sendServerCommand(
                 content: "Cannot execute command: server is offline.",
             }),
         });
+        // the console line above is for the player; the caller (an action,
+        // a flow) must still see that nothing ran
+        throw new Error("Cannot execute command: server is offline.");
     }
 }
 
@@ -271,6 +274,7 @@ export async function sendChatMessage(
                 timestamp: timeStr,
             }),
         });
+        throw new Error("Cannot send message: server is offline.");
     }
 }
 

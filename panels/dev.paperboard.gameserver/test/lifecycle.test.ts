@@ -72,7 +72,7 @@ mock.module("@mileniumhq/paperapi", () => ({
 }));
 
 const { handleProcessData, handleProcessExit, __lifecycleTest } = await import("../src/service/lifecycle");
-const { restartServerInstance } = await import("../src/service/lifecycle");
+const { restartServerInstance, sendServerCommand, sendChatMessage } = await import("../src/service/lifecycle");
 const { queryGamerules, setGamerule } = await import("../src/service/gamerules");
 const {
     assertGameruleName,
@@ -175,6 +175,18 @@ describe("start marker", () => {
         // boot never clobbers in-game changes with a stale saved value
         expect(writes).toContain("gamerule keep_inventory true\n");
         expect(configSets[0]?.pendingGamerules).toEqual({});
+    });
+});
+
+describe("console writes while the server is offline", () => {
+    it("fail instead of reporting a command that never ran", async () => {
+        const before = writes.length;
+        const ctx = makeCtx({ serverStatus: "offline" });
+        await expect(sendServerCommand(ctx as any, "list")).rejects.toThrow(/offline/);
+        await expect(sendChatMessage(ctx as any, "hi")).rejects.toThrow(/offline/);
+        expect(writes.length).toBe(before);
+        // the player still sees why in the console
+        expect(ctx.state.serverEntries.at(-1).content).toMatch(/offline/);
     });
 });
 
