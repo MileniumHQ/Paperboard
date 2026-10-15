@@ -36,6 +36,8 @@ let capabilities: Record<string, string[]>;
 let actionResult: () => Promise<unknown>;
 let settings: Settings;
 let commands: string[];
+let actionRegistry: RegistryAction[];
+let listed: number;
 
 function engine(): ChatEngine {
     return new ChatEngine({
@@ -45,7 +47,10 @@ function engine(): ChatEngine {
         store,
         settings: () => settings,
         capabilities: (m) => capabilities[m],
-        listActions: async () => registry,
+        listActions: async () => {
+            listed++;
+            return actionRegistry;
+        },
         panelNames: async () => ({ "dev.paperboard.gameserver": "Game Server" }),
         callAction: async (panelId, action, args) => {
             calls.push({ panelId, action, args });
@@ -105,6 +110,8 @@ beforeEach(async () => {
     // panel actions on and built-ins off, unless a test says otherwise
     settings = { defaultModel: "tooly:latest", contextLength: 4096, reasoning: "off", panelActions: true, shellCommands: false, forceCpu: false, promptStyle: "quirky", customPromptEnabled: false, customSystemPrompt: null };
     commands = [];
+    actionRegistry = registry;
+    listed = 0;
 });
 
 afterEach(async () => {
@@ -143,8 +150,8 @@ describe("replies", () => {
         expect(deltas.at(-1)!.content).toBe("Hello there, friend.");
         expect(finished[0]!.text).toBe("Hello there, friend.");
         expect((await store.get(c.id)).title).toBe("hi");
-        // the tool-capable model was offered the other panels' actions
-        expect(fake.chatRequests[0].tools.map((t: any) => t.function.name)).toEqual(["gameserver__kick-player", "gameserver__start-server"]);
+        // the tool-capable model was offered the fixed app-action tools
+        expect(fake.chatRequests[0].tools.map((t: any) => t.function.name)).toEqual(["find_app_actions", "call_app_action"]);
     });
 
     it("drops reasoning the model emits while the Think toggle is off", async () => {
@@ -277,7 +284,7 @@ describe("a reply in flight", () => {
 describe("tool calls ask first", () => {
     it("waits for approval, then runs the action once with checked arguments", async () => {
         fake.script = [
-            { toolCalls: [{ name: "gameserver__kick-player", arguments: { player: "Steve", ignored: 1 } }] },
+            { toolCalls: [{ name: "call_app_action", arguments: { id: "dev.paperboard.gameserver:kick-player", arguments: { player: "Steve", ignored: 1 } } }] },
             { content: "Kicked Steve." },
         ];
         const chat = engine();
@@ -294,15 +301,19 @@ describe("tool calls ask first", () => {
 
         // the result went back to the model as a tool message
         const second = fake.chatRequests[1].messages;
-        expect(second.at(-2).tool_calls[0].function.name).toBe("gameserver__kick-player");
-        expect(second.at(-1)).toMatchObject({ role: "tool", tool_name: "gameserver__kick-player", content: '{\n  "kicked": true\n}' });
+        // replayed as it was asked: the exact id and the checked arguments
+        expect(second.at(-2).tool_calls[0].function).toEqual({
+            name: "call_app_action",
+            arguments: { id: "dev.paperboard.gameserver:kick-player", arguments: { player: "Steve" } },
+        });
+        expect(second.at(-1)).toMatchObject({ role: "tool", tool_name: "call_app_action", content: '{\n  "kicked": true\n}' });
         const [round1, round2] = await assistants(c.id);
         expect(round1!.toolCalls![0]).toMatchObject({ status: "done", decision: "once" });
         expect(round2!.content).toBe("Kicked Steve.");
     });
 
     it("deny: the action never runs and the model is told why", async () => {
-        fake.script = [{ toolCalls: [{ name: "gameserver__start-server", arguments: {} }] }, { content: "Okay, I won't." }];
+        fake.script = [{ toolCalls: [{ name: "call_app_action", arguments: { id: "dev.paperboard.gameserver:start-server", arguments: {} } }] }, { content: "Okay, I won't." }];
         const chat = engine();
         const c = await chat.create("tooly:latest");
         const { done } = await chat.send(c.id, "start it");
@@ -316,9 +327,9 @@ describe("tool calls ask first", () => {
 
     it("always: remembered per panel and action, later calls skip the prompt", async () => {
         fake.script = [
-            { toolCalls: [{ name: "gameserver__start-server", arguments: {} }] },
+            { toolCalls: [{ name: "call_app_action", arguments: { id: "dev.paperboard.gameserver:start-server", arguments: {} } }] },
             { content: "Started." },
-            { toolCalls: [{ name: "gameserver__start-server", arguments: {} }] },
+            { toolCalls: [{ name: "call_app_action", arguments: { id: "dev.paperboard.gameserver:start-server", arguments: {} } }] },
             { content: "Started again." },
         ];
         const chat = engine();
@@ -341,7 +352,7 @@ describe("tool calls ask first", () => {
             throw new Error("Server is already running");
         };
         allowed.add("dev.paperboard.gameserver:start-server");
-        fake.script = [{ toolCalls: [{ name: "gameserver__start-server", arguments: {} }] }, { content: "It was already up." }];
+        fake.script = [{ toolCalls: [{ name: "call_app_action", arguments: { id: "dev.paperboard.gameserver:start-server", arguments: {} } }] }, { content: "It was already up." }];
         const chat = engine();
         const c = await chat.create("tooly:latest");
         await (await chat.send(c.id, "start")).done;
@@ -354,7 +365,7 @@ describe("tool calls ask first", () => {
             {
                 toolCalls: [
                     { name: "nope__nothing", arguments: {} },
-                    { name: "gameserver__kick-player", arguments: {} },
+                    { name: "call_app_action", arguments: { id: "dev.paperboard.gameserver:kick-player", arguments: {} } },
                 ],
             },
             { content: "Sorry." },
@@ -369,8 +380,28 @@ describe("tool calls ask first", () => {
         expect(results[1]).toMatch(/missing required argument "player"/);
     });
 
+    it("an app action id that is not exact is refused before any approval", async () => {
+        fake.script = [
+            {
+                toolCalls: [
+                    { name: "call_app_action", arguments: { id: "kick-player", arguments: { player: "Steve" } } },
+                    { name: "call_app_action", arguments: { id: "dev.paperboard.gameserver:get-state" } },
+                ],
+            },
+            { content: "Sorry." },
+        ];
+        const chat = engine();
+        const c = await chat.create("tooly:latest");
+        await (await chat.send(c.id, "kick steve")).done;
+        expect(approvals).toHaveLength(0);
+        expect(calls).toHaveLength(0);
+        const results = fake.chatRequests[1].messages.filter((m: any) => m.role === "tool").map((m: any) => m.content);
+        expect(results[0]).toMatch(/no app action with the id "kick-player"/);
+        expect(results[1]).toMatch(/no app action with the id "dev.paperboard.gameserver:get-state"/);
+    });
+
     it("stop while waiting: the call is cancelled, nothing runs, the reply is stopped", async () => {
-        fake.script = [{ toolCalls: [{ name: "gameserver__start-server", arguments: {} }] }];
+        fake.script = [{ toolCalls: [{ name: "call_app_action", arguments: { id: "dev.paperboard.gameserver:start-server", arguments: {} } }] }];
         const chat = engine();
         const c = await chat.create("tooly:latest");
         const { done } = await chat.send(c.id, "start");
@@ -387,7 +418,7 @@ describe("tool calls ask first", () => {
 
     it(`a model that keeps calling tools is stopped after ${MAX_TOOL_ROUNDS} rounds`, async () => {
         allowed.add("dev.paperboard.gameserver:start-server");
-        fake.script = Array.from({ length: MAX_TOOL_ROUNDS + 2 }, () => ({ toolCalls: [{ name: "gameserver__start-server", arguments: {} }] }));
+        fake.script = Array.from({ length: MAX_TOOL_ROUNDS + 2 }, () => ({ toolCalls: [{ name: "call_app_action", arguments: { id: "dev.paperboard.gameserver:start-server", arguments: {} } }] }));
         const chat = engine();
         const c = await chat.create("tooly:latest");
         await (await chat.send(c.id, "loop")).done;
@@ -426,6 +457,67 @@ describe("attachments", () => {
     });
 });
 
+describe("app action search", () => {
+    const toolNames = (i: number) => (fake.chatRequests[i].tools ?? []).map((t: any) => t.function.name);
+
+    it("finds an action without asking, then calls it by its id with approval", async () => {
+        fake.script = [
+            { toolCalls: [{ name: "find_app_actions", arguments: { query: "kick a player" } }] },
+            { toolCalls: [{ name: "call_app_action", arguments: { id: "dev.paperboard.gameserver:kick-player", arguments: { player: "Steve" } } }] },
+            { content: "Kicked Steve." },
+        ];
+        const chat = engine();
+        const c = await chat.create("tooly:latest");
+        const { done } = await chat.send(c.id, "kick steve");
+        await until(() => approvals.length === 1);
+        // the search ran unasked and handed back the exact id
+        const [found] = await assistants(c.id);
+        expect(found!.toolCalls![0]).toMatchObject({ builtin: "find_app_actions", label: "Looked up app actions", status: "done", arguments: { query: "kick a player" } });
+        expect(fake.chatRequests[1].messages.at(-1).content).toContain("id: dev.paperboard.gameserver:kick-player");
+        expect(approvals[0]).toMatchObject({ panelId: "dev.paperboard.gameserver", action: "kick-player", label: "Kick Player", arguments: { player: "Steve" } });
+        expect(calls).toHaveLength(0);
+        chat.resolveApproval(approvals[0]!.id, "once");
+        await done;
+        expect(calls).toEqual([{ panelId: "dev.paperboard.gameserver", action: "kick-player", args: { player: "Steve" } }]);
+    });
+
+    it("1000 installed actions: the request carries the same two tools, and the registry is read only when asked", async () => {
+        actionRegistry = Array.from({ length: 1000 }, (_, i) => ({
+            panelId: `com.example.panel${i}`,
+            action: "refresh",
+            schema: { name: `Refresh ${i}`, description: "x".repeat(2000), inputs: { target: { type: "string", required: true, description: "y".repeat(2000) } } },
+        }));
+        fake.script = [
+            { content: "hi" },
+            { toolCalls: [{ name: "find_app_actions", arguments: { query: "refresh" } }] },
+            { content: "There are many." },
+        ];
+        const chat = engine();
+        const c = await chat.create("tooly:latest");
+        await (await chat.send(c.id, "hi")).done;
+        expect(listed).toBe(0);
+        await (await chat.send(c.id, "what can you refresh?")).done;
+        expect(listed).toBe(1);
+        for (const request of fake.chatRequests) {
+            expect(request.tools.map((t: any) => t.function.name)).toEqual(["find_app_actions", "call_app_action"]);
+            expect(JSON.stringify(request.tools).length).toBeLessThan(1500);
+        }
+        expect(fake.chatRequests[2].messages.at(-1).content.length).toBeLessThan(8000);
+        expect(fake.chatRequests[2].messages.at(-1).content).toContain("1000 app actions match");
+    });
+
+    it("offers nothing about other apps when the setting is off", async () => {
+        settings = { ...settings, panelActions: false };
+        fake.script = [{ toolCalls: [{ name: "find_app_actions", arguments: { query: "kick" } }] }, { content: "ok" }];
+        const chat = engine();
+        const c = await chat.create("tooly:latest");
+        await (await chat.send(c.id, "kick")).done;
+        expect(toolNames(0)).toEqual([]);
+        expect(listed).toBe(0);
+        expect((await assistants(c.id))[0]!.toolCalls![0]).toMatchObject({ status: "error", result: 'Error: there is no tool named "find_app_actions".' });
+    });
+});
+
 describe("built-in tools", () => {
     const toolNames = (i: number) => (fake.chatRequests[i].tools ?? []).map((t: any) => t.function.name);
 
@@ -440,7 +532,7 @@ describe("built-in tools", () => {
 
         settings = { ...settings, shellCommands: false, panelActions: true };
         await (await chat.send(c.id, "again")).done;
-        expect(toolNames(1)).toEqual(["gameserver__kick-player", "gameserver__start-server"]);
+        expect(toolNames(1)).toEqual(["find_app_actions", "call_app_action"]);
         expect(fake.chatRequests[1].messages[0].content).not.toContain("run_shell_command");
     });
 

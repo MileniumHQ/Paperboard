@@ -27,7 +27,15 @@ import { replyText } from "../core/chain";
 import { validateAttachments } from "../core/attachments";
 import { reasoningToThink, type ReasoningLevel } from "../core/reasoning";
 import {
-    buildToolSet,
+    APP_ACTION_TOOLS,
+    buildActionIndex,
+    CALL_APP_ACTION,
+    FIND_APP_ACTIONS,
+    formatFoundActions,
+    resolveActionCall,
+    type ActionIndex,
+} from "../core/appActions";
+import {
     formatToolResult,
     permissionKey,
     prepareArguments,
@@ -334,14 +342,11 @@ export class ChatEngine {
     ): Promise<{ tools: ToolSet; prompt: string }> {
         const capabilities = this.deps.capabilities(model, provider) ?? [];
         const canCall = capabilities.includes("tools");
-        const panels: ToolSet =
-            canCall && settings.panelActions
-                ? buildToolSet(await this.deps.listActions(), this.deps.ownPanelId, await this.deps.panelNames())
-                : { tools: [], targets: new Map() };
-        // built-ins first: they are the tools a model should reach for
+        // Other panels' actions are never listed here: the model searches
+        // them with find_app_actions, so the offered tools stay the same
+        // size however many panels are installed.
         const tools: ToolSet = {
-            tools: [...(canCall ? builtinTools(settings) : []), ...panels.tools],
-            targets: panels.targets,
+            tools: canCall ? [...builtinTools(settings), ...(settings.panelActions ? APP_ACTION_TOOLS : [])] : [],
         };
         const offered = new Set(tools.tools.map((t) => t.function.name));
         const prompt = systemPrompt({
@@ -349,7 +354,7 @@ export class ChatEngine {
             customPrompt: settings.customPromptEnabled ? settings.customSystemPrompt ?? undefined : undefined,
             model,
             shellCommands: offered.has("run_shell_command"),
-            panelActions: panels.tools.length > 0,
+            panelActions: offered.has(CALL_APP_ACTION),
         });
 
         return { tools, prompt };
@@ -396,12 +401,17 @@ export class ChatEngine {
                     return;
                 }
 
-                message.toolCalls = calls.slice(0, MAX_CALLS_PER_ROUND).map((c) => this.planCall(c, tools, offered));
+                const planned = calls.slice(0, MAX_CALLS_PER_ROUND);
+                // the registry is read only when the model asks about it
+                const index = planned.some((c) => (c.name === FIND_APP_ACTIONS || c.name === CALL_APP_ACTION) && offered.has(c.name))
+                    ? buildActionIndex(await deps.listActions(), deps.ownPanelId, await deps.panelNames())
+                    : null;
+                message.toolCalls = planned.map((c) => this.planCall(c, index, offered));
                 this.emitMessage(conversation.id, message);
                 await save();
                 for (const call of message.toolCalls) {
                     if (signal.aborted) throw new DOMException("Stopped", "AbortError");
-                    await this.runCall(conversation, message, call, tools, signal);
+                    await this.runCall(conversation, message, call, index, signal);
                     this.emitMessage(conversation.id, message);
                     await save();
                 }
@@ -759,7 +769,7 @@ export class ChatEngine {
         return calls;
     }
 
-    private planCall(call: { name: string; arguments: unknown }, tools: ToolSet, offered: Set<string>): ToolCallRecord {
+    private planCall(call: { name: string; arguments: unknown }, index: ActionIndex | null, offered: Set<string>): ToolCallRecord {
         const base = { id: newId(), tool: call.name };
         if (isBuiltinTool(call.name) && offered.has(call.name)) {
             const builtin = call.name;
@@ -771,8 +781,7 @@ export class ChatEngine {
                 return { ...record, arguments: {}, status: "error", result: `Error: invalid arguments, ${err.message}.` };
             }
         }
-        const target = tools.targets.get(call.name);
-        if (!target) {
+        if (call.name !== CALL_APP_ACTION || !offered.has(call.name) || !index) {
             return {
                 ...base,
                 panelId: "",
@@ -783,8 +792,16 @@ export class ChatEngine {
                 result: `Error: there is no tool named "${call.name}".`,
             };
         }
+        let resolved: ReturnType<typeof resolveActionCall>;
         try {
-            const args = prepareArguments(target, call.arguments);
+            resolved = resolveActionCall(index, call.arguments);
+        } catch (err) {
+            if (!(err instanceof ToolArgumentError)) throw err;
+            return { ...base, panelId: "", action: "", label: "Unknown app action", arguments: {}, status: "error", result: `Error: ${err.message}.` };
+        }
+        const { target } = resolved;
+        try {
+            const args = prepareArguments(target, resolved.rawArguments);
             return { ...base, panelId: target.panelId, action: target.action, label: target.label, arguments: args, status: "awaiting-approval" };
         } catch (err) {
             if (!(err instanceof ToolArgumentError)) throw err;
@@ -804,7 +821,7 @@ export class ChatEngine {
         conversation: Conversation,
         message: AssistantMessage,
         call: ToolCallRecord,
-        _tools: ToolSet,
+        index: ActionIndex | null,
         signal: AbortSignal,
     ): Promise<void> {
         if (call.status !== "awaiting-approval") return; // already failed in planning
@@ -854,7 +871,10 @@ export class ChatEngine {
         call.status = "running";
         this.emitMessage(conversation.id, message);
         try {
-            if (builtin === "run_shell_command") {
+            if (builtin === "find_app_actions") {
+                if (!index) throw new Error("The app actions were not read for this round.");
+                call.result = formatToolResult(formatFoundActions(index, call.arguments.query as string));
+            } else if (builtin === "run_shell_command") {
                 call.result = formatToolResult(formatShellResult(await this.deps.runShell(call.arguments.command as string, signal)));
             } else {
                 call.result = formatToolResult(await this.deps.callAction(call.panelId, call.action, call.arguments));

@@ -13,14 +13,22 @@ import {
 } from "../src/core/catalog";
 import { architectureFromModelInfo, estimateFit, gpuBudget, kvCacheBytes } from "../src/core/fit";
 import {
-    buildToolSet,
     formatToolResult,
     MAX_TOOL_RESULT_CHARS,
     prepareArguments,
     ToolArgumentError,
-    toolName,
     type RegistryAction,
 } from "../src/core/tools";
+import {
+    APP_ACTION_TOOLS,
+    buildActionIndex,
+    formatFoundActions,
+    MAX_FIND_RESULT_CHARS,
+    MAX_FOUND_ACTIONS,
+    MAX_INDEXED_ACTIONS,
+    resolveActionCall,
+    searchActions,
+} from "../src/core/appActions";
 import {
     appendTail,
     LineSplitter,
@@ -176,41 +184,101 @@ const registry: RegistryAction[] = [
     { panelId: "dev.paperboard.terminal", action: "bare-handler" },
 ];
 
-describe("action registry → tools", () => {
-    const set = buildToolSet(registry, "dev.paperboard.ai", { "dev.paperboard.gameserver": "Game Server" });
+/** n panels with ten actions each, every field as large as a panel could make it */
+function bigRegistry(panels: number): RegistryAction[] {
+    // one shared inputs object: the size is in what a panel declares, not in test memory
+    const inputs = Object.fromEntries(
+        Array.from({ length: 40 }, (_, i) => [
+            `input${i}`.repeat(10),
+            {
+                type: "string",
+                label: "L".repeat(500),
+                description: "D".repeat(5000),
+                required: i % 2 === 0,
+                options: Array.from({ length: 50 }, (_, o) => ({ label: `${o}`, value: `value-${o}`.repeat(20) })),
+            },
+        ]),
+    );
+    const filler = "filler words ".repeat(400);
+    const out: RegistryAction[] = [];
+    for (let p = 0; p < panels; p++) {
+        for (let a = 0; a < 10; a++) {
+            out.push({
+                panelId: `com.example.panel${p}`,
+                action: `do-thing-${a}`,
+                schema: {
+                    name: `Thing ${a} of panel ${p}`,
+                    description: `Does thing ${a}. ${filler}`,
+                    inputs,
+                },
+            });
+        }
+    }
+    return out;
+}
 
-    it("exposes only callable actions of other panels", () => {
-        const names = set.tools.map((t) => t.function.name);
-        expect(names).toContain("gameserver__start-server");
-        expect(names).toContain("gameserver__kick-player");
-        expect(names.some((n) => n.includes("get-state"))).toBe(false); // internal
-        expect(names.some((n) => n.includes("player-joined"))).toBe(false); // event-only
-        expect(names.some((n) => n.includes("ask"))).toBe(false); // self
-        expect(names.some((n) => n.includes("bare-handler"))).toBe(false); // no schema
+describe("app actions: searched, never all listed", () => {
+    const index = buildActionIndex(registry, "dev.paperboard.ai", { "dev.paperboard.gameserver": "Game Server" });
+
+    it("indexes only callable actions of other panels, by their exact panelId:action id", () => {
+        expect([...index.byId.keys()].sort()).toEqual([
+            "com.other.gameserver:start-server",
+            "dev.paperboard.gameserver:kick-player",
+            "dev.paperboard.gameserver:start-server",
+        ]);
     });
 
-    it("keeps same-named actions of different panels apart", () => {
-        const starts = [...set.targets.entries()].filter(([, t]) => t.action === "start-server");
-        expect(starts).toHaveLength(2);
-        expect(new Set(starts.map(([name]) => name)).size).toBe(2);
-        expect(new Set(starts.map(([, t]) => t.panelId))).toEqual(new Set(["com.other.gameserver", "dev.paperboard.gameserver"]));
+    it("finds the action a query describes, best match first", () => {
+        expect(searchActions(index, "kick a player").matches[0]!.id).toBe("dev.paperboard.gameserver:kick-player");
+        expect(searchActions(index, "minecraft").matches.map((m) => m.id)).toEqual(["dev.paperboard.gameserver:start-server"]);
+        expect(searchActions(index, "start the minecraft server").matches.slice(0, 2).map((m) => m.id)).toEqual(["dev.paperboard.gameserver:start-server", "com.other.gameserver:start-server"]);
+        expect(searchActions(index, "teleport").matches).toHaveLength(0);
+        // the result names the exact id and the arguments a call needs
+        const text = formatFoundActions(index, "kick");
+        expect(text).toContain("id: dev.paperboard.gameserver:kick-player");
+        expect(text).toContain("player (string, required)");
+        expect(text).toContain('one of "soft", "hard"');
     });
 
-    it("describes inputs as JSON schema", () => {
-        const kick = set.tools.find((t) => t.function.name === "gameserver__kick-player")!;
-        expect(kick.function.description).toStartWith("Game Server: Kick Player.");
-        expect(kick.function.parameters.required).toEqual(["player"]);
-        expect(kick.function.parameters.properties.count!.type).toBe("number");
-        expect(kick.function.parameters.properties.mode!.enum).toEqual(["soft", "hard"]);
+    it("resolves a call only by an exact id, never a guessed one", () => {
+        const { target, rawArguments } = resolveActionCall(index, { id: "dev.paperboard.gameserver:kick-player", arguments: { player: "Steve" } });
+        expect(target).toMatchObject({ panelId: "dev.paperboard.gameserver", action: "kick-player" });
+        expect(prepareArguments(target, rawArguments)).toEqual({ player: "Steve" });
+        // arguments sent beside the id are read too
+        expect(resolveActionCall(index, '{"id":"dev.paperboard.gameserver:kick-player","player":"Alex"}').rawArguments).toEqual({ player: "Alex" });
+        expect(() => resolveActionCall(index, { id: "kick-player" })).toThrow(/no app action with the id "kick-player"/);
+        expect(() => resolveActionCall(index, { id: "dev.paperboard.gameserver:get-state" })).toThrow(ToolArgumentError); // internal
+        expect(() => resolveActionCall(index, { id: "dev.paperboard.ai:ask" })).toThrow(ToolArgumentError); // self
+        expect(() => resolveActionCall(index, {})).toThrow(/missing required argument "id"/);
+        expect(() => resolveActionCall(index, { id: "dev.paperboard.gameserver:kick-player", arguments: [1] })).toThrow(/JSON object/);
     });
 
-    it("tool names fit Ollama's function-name rules", () => {
-        expect(toolName("a.b.c", "x".repeat(100))).toHaveLength(64);
-        for (const t of set.tools) expect(t.function.name).toMatch(/^[a-zA-Z0-9_-]{1,64}$/);
+    it("1000 panels: the offered tools stay fixed and a search stays under its cap", () => {
+        const big = buildActionIndex(bigRegistry(1000), "dev.paperboard.ai");
+        expect(big.entries).toHaveLength(10_000);
+        // what the model is offered does not depend on the registry at all
+        expect(JSON.stringify(APP_ACTION_TOOLS).length).toBeLessThan(1500);
+        for (const query of ["thing 7 of panel 999", "filler", "", "nothing matches zzz"]) {
+            const text = formatFoundActions(big, query);
+            expect(text.length).toBeLessThanOrEqual(MAX_FIND_RESULT_CHARS);
+            expect(MAX_FIND_RESULT_CHARS).toBeLessThan(MAX_TOOL_RESULT_CHARS); // never cut by the result cap
+            expect(formatToolResult(text)).toBe(text);
+        }
+        expect(searchActions(big, "filler").matches).toHaveLength(MAX_FOUND_ACTIONS);
+        expect(searchActions(big, "filler").total).toBe(10_000);
+        expect(searchActions(big, "com.example.panel999:do-thing-7").matches[0]!.id).toBe("com.example.panel999:do-thing-7");
+        expect(() => resolveActionCall(big, { id: "com.example.panel1000:do-thing-0" })).toThrow(/no app action/);
+    });
+
+    it("says how many actions it left out past the index cap", () => {
+        const over = buildActionIndex(bigRegistry(MAX_INDEXED_ACTIONS / 10 + 1), "dev.paperboard.ai");
+        expect(over.entries).toHaveLength(MAX_INDEXED_ACTIONS);
+        expect(over.omitted).toBe(10);
+        expect(formatFoundActions(over, "thing")).toContain("10 actions were not searched");
     });
 
     it("prepares arguments: coerces scalars, drops unknowns, refuses bad input", () => {
-        const kick = set.targets.get("gameserver__kick-player")!;
+        const kick = index.byId.get("dev.paperboard.gameserver:kick-player")!;
         expect(prepareArguments(kick, { player: "Steve", count: "3", extra: 1 })).toEqual({ player: "Steve", count: 3 });
         expect(prepareArguments(kick, '{"player":"Alex","mode":"hard"}')).toEqual({ player: "Alex", mode: "hard" });
         expect(() => prepareArguments(kick, {})).toThrow(ToolArgumentError);
@@ -358,6 +426,8 @@ describe("conversations", () => {
 describe("built-ins", () => {
     it("checks built-in arguments", () => {
         expect(builtinArguments("run_shell_command", '{"command":" ls "}')).toEqual({ command: "ls" });
+        expect(builtinArguments("find_app_actions", { query: " kick " })).toEqual({ query: "kick" });
+        expect(() => builtinArguments("find_app_actions", { query: "x".repeat(201) })).toThrow(BuiltinArgumentError);
         expect(() => builtinArguments("run_shell_command", {})).toThrow(BuiltinArgumentError);
         expect(() => builtinArguments("run_shell_command", { command: "x".repeat(MAX_COMMAND_CHARS + 1) })).toThrow(BuiltinArgumentError);
     });
@@ -368,11 +438,12 @@ describe("built-ins", () => {
     });
 
     it("never offers the terminal panel's actions", () => {
-        const set = buildToolSet(
+        const index = buildActionIndex(
             [{ panelId: "dev.paperboard.terminal", action: "run", schema: { name: "Run" } }],
             "dev.paperboard.ai",
         );
-        expect(set.tools).toHaveLength(0);
+        expect(index.entries).toHaveLength(0);
+        expect(formatFoundActions(index, "run")).toBe("No other app offers actions right now.");
     });
 
     it("keeps every built-in personality compact even with all tools enabled", () => {

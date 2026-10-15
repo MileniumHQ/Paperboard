@@ -86,7 +86,7 @@ export interface Settings {
     contextLength: number;
     /** reasoning level used for models that can think */
     reasoning: ReasoningLevel;
-    /** describe other panels' actions to the model (experimental) */
+    /** let the model search other panels' actions and ask to run them */
     panelActions: boolean;
     /** the built-in shell command tool, approved per run */
     shellCommands: boolean;
@@ -127,9 +127,9 @@ export interface ConversationSummary {
 export type ToolCallStatus = "awaiting-approval" | "running" | "done" | "denied" | "error";
 
 /** every built-in kind a chat may have recorded; web_search is no longer offered */
-export type BuiltinTool = "web_search" | "run_shell_command";
+export type BuiltinTool = "web_search" | "run_shell_command" | "find_app_actions";
 /** the built-ins a model can be offered */
-export type OfferedBuiltin = "run_shell_command";
+export type OfferedBuiltin = "run_shell_command" | "find_app_actions";
 
 /** What an agent says a tool call does (ACP ToolKind); picks its icon. */
 export type AgentToolKind = "read" | "edit" | "delete" | "move" | "search" | "execute" | "think" | "fetch" | "switch_mode" | "other";

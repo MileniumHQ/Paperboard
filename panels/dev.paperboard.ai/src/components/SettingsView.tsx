@@ -80,7 +80,7 @@ export default function SettingsView() {
                 </PaperSettingItem>
                 <PaperSettingItem
                     title="App actions"
-                    description="Tells the model about your other panels' actions so it can ask to use them. Each use still needs your approval. Experimental."
+                    description="Lets the model look up your other panels' actions and ask to run them. Each action asks for your approval unless you chose Always allow for it."
                 >
                     <PaperToggle
                         name="panelActions"

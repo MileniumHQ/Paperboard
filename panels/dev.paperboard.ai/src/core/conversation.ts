@@ -1,5 +1,6 @@
 // Conversation shaping: titles, caps, and the message list sent to Ollama.
 
+import { replayedArguments } from "./appActions";
 import type {
     AssistantMessage,
     ChatMessage,
@@ -182,7 +183,7 @@ export function toOllamaMessages(
                 ? {
                       tool_calls: calls.map((t) => ({
                           id: t.id,
-                          function: { name: t.tool, arguments: t.arguments },
+                          function: { name: t.tool, arguments: replayedArguments(t) },
                       })),
                   }
                 : {}),
@@ -271,7 +272,7 @@ export function systemPrompt(o: PromptOptions): string {
     if (o.shellCommands)
         lines.push("run_shell_command: runs locally with user approval. Prefer read-only commands; explain destructive ones. Run only what was approved.");
     if (o.panelActions)
-        lines.push("App tools: use for requested changes or live app information, with user approval.");
+        lines.push("find_app_actions then call_app_action: for requested changes or live info from the user's other apps. Call with the exact id found; each run needs user approval.");
     if (o.shellCommands || o.panelActions)
         lines.push("Respect denied tools. On failure, correct bad arguments or report the error; never invent results.");
     else

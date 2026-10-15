@@ -82,11 +82,11 @@ function ActionStatus(props: { call: ToolCallRecord }) {
 }
 
 /** A decided action is a chain row; one still waiting is the approval card. */
-const BUILTIN_ICONS: Record<BuiltinTool, string> = { web_search: "travel_explore", run_shell_command: "terminal" };
+const BUILTIN_ICONS: Record<BuiltinTool, string> = { web_search: "travel_explore", run_shell_command: "terminal", find_app_actions: "manage_search" };
 
 /** What a built-in step shows after its label: the query or the command. */
 function builtinSubject(call: ToolCallRecord): string {
-    const value = call.builtin === "web_search" ? call.arguments.query : call.arguments.command;
+    const value = call.builtin === "run_shell_command" ? call.arguments.command : call.arguments.query;
     return typeof value === "string" ? value : "";
 }
 

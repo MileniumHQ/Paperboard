@@ -1,19 +1,22 @@
-// The panel's own tool: shell commands. It is offered ahead of other panels'
-// actions, renders as its own step in the thread, and asks every time: it
-// can never be allowed always. `web_search` is no longer offered; it stays a
+// The panel's own tools: shell commands, which ask every time and can never
+// be allowed always, and the app-action search, which only reads action
+// descriptions and runs without asking. Each renders as its own step. `web_search` is no longer offered; it stays a
 // recorded kind so chats that searched still render their steps.
 
+import { APP_ACTION_TOOLS, FIND_APP_ACTIONS, MAX_ACTION_QUERY_CHARS } from "./appActions";
 import type { OllamaTool } from "./tools";
 import type { BuiltinTool, OfferedBuiltin } from "./types";
 
 export const BUILTIN_LABELS: Record<BuiltinTool, string> = {
     web_search: "Searched the web",
     run_shell_command: "Ran shell command",
+    find_app_actions: "Looked up app actions",
 };
 
 /** Whether a built-in call waits for the user, and whether it may be remembered. */
 export const BUILTIN_APPROVAL: Record<OfferedBuiltin, { ask: boolean; remember: boolean }> = {
     run_shell_command: { ask: true, remember: false },
+    find_app_actions: { ask: false, remember: false },
 };
 
 export const MAX_COMMAND_CHARS = 4000;
@@ -32,6 +35,7 @@ const DEFINITIONS: Record<OfferedBuiltin, OllamaTool> = {
             },
         },
     },
+    find_app_actions: APP_ACTION_TOOLS[0]!,
 };
 
 export function isBuiltinTool(name: string): name is OfferedBuiltin {
@@ -46,7 +50,7 @@ export function builtinTools(enabled: { shellCommands: boolean }): OllamaTool[] 
 export class BuiltinArgumentError extends Error {}
 
 /** The single string argument a built-in takes, checked. */
-export function builtinArguments(_tool: OfferedBuiltin, raw: unknown): Record<string, string> {
+export function builtinArguments(tool: OfferedBuiltin, raw: unknown): Record<string, string> {
     let args = raw;
     if (typeof args === "string") {
         try {
@@ -54,6 +58,13 @@ export function builtinArguments(_tool: OfferedBuiltin, raw: unknown): Record<st
         } catch {
             throw new BuiltinArgumentError("arguments must be a JSON object");
         }
+    }
+    if (tool === FIND_APP_ACTIONS) {
+        // an empty query is allowed: it lists actions in id order
+        const query = args && typeof args === "object" ? (args as Record<string, unknown>).query : undefined;
+        if (typeof query !== "string") throw new BuiltinArgumentError('missing required argument "query"');
+        if (query.length > MAX_ACTION_QUERY_CHARS) throw new BuiltinArgumentError(`"query" is limited to ${MAX_ACTION_QUERY_CHARS} characters`);
+        return { query: query.trim() };
     }
     const value = args && typeof args === "object" ? (args as Record<string, unknown>).command : undefined;
     if (typeof value !== "string" || !value.trim()) throw new BuiltinArgumentError('missing required argument "command"');
