@@ -8,6 +8,7 @@ import { spawnPty, getDefaultShell } from "./pty";
 import { IPtyProcess } from "./types";
 import { logger } from "./logger";
 import { workloadExitCode } from "./exitStatus";
+import { killWorkload } from "./processTree";
 import { redactEnvValues, unrefTimer } from "./storage";
 
 export interface SupervisorSpawnConfig {
@@ -404,7 +405,7 @@ export async function runSupervisor(procId: string): Promise<void> {
         // exits on SIGTERM with its child still running orphans the child
         try {
             if (ptyInstance) ptyInstance.kill();
-            else childProcess?.kill("SIGTERM");
+            else if (childProcess) killWorkload(childProcess, "SIGTERM");
         } catch (err) { logger.debug("[supervisor.ts] could not stop workload on teardown:", err) }
 
         for (const client of clients) {
@@ -467,7 +468,7 @@ export async function runSupervisor(procId: string): Promise<void> {
                         ptyInstance.resize(msg.cols, msg.rows);
                     } else if (msg.type === "kill") {
                         if (ptyInstance) ptyInstance.kill();
-                        else childProcess?.kill(msg.signal || "SIGTERM");
+                        else if (childProcess) killWorkload(childProcess, msg.signal || "SIGTERM");
                     }
                 } catch (err) { logger.debug("[supervisor.ts] op failed:", err) }
             }
