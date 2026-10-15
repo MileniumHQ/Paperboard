@@ -1664,7 +1664,7 @@ export default function App() {
             >
                 <PaperInput
                     fullWidth
-                    placeholder="Variable name"
+                    label="Variable name"
                     value={renameDraft()}
                     onInput={(e) => setRenameDraft(e.currentTarget.value)}
                     onKeyDown={(e) => {

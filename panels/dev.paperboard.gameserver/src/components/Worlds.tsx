@@ -394,7 +394,7 @@ export default function Worlds() {
                     <PaperFlex direction="column" gap="half">
                         <PaperInput
                             fullWidth
-                            placeholder="World name"
+                            label="World name"
                             value={newName()}
                             invalid={
                                 (newName().trim() !== "" && !nameValid()) ||

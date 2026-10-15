@@ -117,17 +117,16 @@ export default function SavedCommandsModal(props: {
                 <PaperFlex direction="column" gap="half" fullWidth>
                     <PaperInput
                         fullWidth
-                        placeholder="Name (optional)"
-                        aria-label="Name"
+                        label="Name (optional)"
                         maxLength={MAX_LABEL_LENGTH}
                         value={label()}
                         onInput={(e) => setLabel(e.currentTarget.value)}
                     />
-                    <PaperFlex direction="row" gap="half" fullWidth>
+                    <PaperFlex direction="row" gap="half" align="end" fullWidth>
                         <PaperInput
                             fullWidth
-                            placeholder="Command, e.g. git pull"
-                            aria-label="Command"
+                            label="Command"
+                            placeholder="git pull"
                             value={command()}
                             onInput={(e) => setCommand(e.currentTarget.value)}
                             onKeyDown={(e) => {

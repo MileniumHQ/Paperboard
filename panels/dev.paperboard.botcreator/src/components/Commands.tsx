@@ -384,7 +384,8 @@ export default function Commands() {
                     <PaperFlex direction="column" gap="half">
                         <PaperInput
                             fullWidth
-                            placeholder="Command"
+                            label="Command"
+                            placeholder="ping"
                             // one extra char so the optional leading slash fits
                             maxLength={33}
                             value={name()}
@@ -396,7 +397,7 @@ export default function Commands() {
                         />
                         <PaperInput
                             fullWidth
-                            placeholder="Command Description"
+                            label="Description"
                             maxLength={COMMAND_DESCRIPTION_MAX_LENGTH}
                             value={description()}
                             invalid={!isCommandDescriptionValid(description())}
@@ -475,7 +476,7 @@ export default function Commands() {
                                     !isOptionOrderValid(options(), index);
                                 return (
                                     <PaperCard padding="full" gap="half">
-                                            <PaperFlex direction="row" gap="half" align="center" wrap>
+                                            <PaperFlex direction="row" gap="half" align="end" wrap>
                                                 <div style={{ width: `${getVarCss("size-field")}` }}>
                                                     <PaperSelectMenu
                                                         name={`optionType-${option().id}`}
@@ -503,7 +504,7 @@ export default function Commands() {
                                                 >
                                                     <PaperInput
                                                         fullWidth
-                                                        placeholder="Parameter"
+                                                        label="Parameter name"
                                                         value={option().name}
                                                         invalid={optionNameInvalid(index)}
                                                         onInput={(e) =>
@@ -540,7 +541,7 @@ export default function Commands() {
 
                                             <PaperInput
                                                 fullWidth
-                                                placeholder="Parameter description"
+                                                label="Parameter description"
                                                 value={option().description}
                                                 invalid={optionDescriptionInvalid(index)}
                                                 onInput={(e) =>

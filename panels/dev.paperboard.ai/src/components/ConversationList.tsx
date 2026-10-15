@@ -189,7 +189,7 @@ export default function ConversationList(props: ConversationListProps) {
             >
                 <PaperInput
                     fullWidth
-                    aria-label="Chat name"
+                    label="Chat name"
                     value={renameName()}
                     ref={(el) => queueMicrotask(() => el.focus())}
                     onInput={(e) => setRenameName(e.currentTarget.value)}

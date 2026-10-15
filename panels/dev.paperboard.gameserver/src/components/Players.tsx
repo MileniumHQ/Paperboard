@@ -662,7 +662,7 @@ export default function Players() {
                     <PaperInput
                         fullWidth
                         icon="person_add"
-                        placeholder="Player name"
+                        label="Player name"
                         value={whitelistName()}
                         onInput={(e) => {
                             setWhitelistName(e.currentTarget.value);
@@ -1048,7 +1048,7 @@ function ReasonActionModal(props: {
         >
             <PaperInput
                 fullWidth
-                placeholder="Reason (optional)"
+                label="Reason (optional)"
                 value={reason()}
                 onInput={(e) => setReason(e.currentTarget.value)}
             />

@@ -148,7 +148,7 @@ function CustomStep(props: CustomStepProps) {
                 <PaperFlex direction="column" gap="half" fullWidth>
                     <PaperInput
                         fullWidth
-                        aria-label="Endpoint URL"
+                        label="Endpoint URL"
                         icon="language"
                         placeholder="http://127.0.0.1:1234"
                         value={props.baseUrl}
@@ -156,9 +156,8 @@ function CustomStep(props: CustomStepProps) {
                     />
                     <PaperInput
                         fullWidth
-                        aria-label="API key"
+                        label="API key (optional)"
                         icon="lock"
-                        placeholder="API key (optional)"
                         value={props.apiKey}
                         onInput={(e) => props.onApiKey(e.currentTarget.value)}
                     />

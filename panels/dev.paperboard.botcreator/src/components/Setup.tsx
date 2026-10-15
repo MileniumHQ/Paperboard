@@ -115,7 +115,7 @@ export default function Setup(props: SetupProps) {
                         <PaperInput
                             fullWidth
                             type="password"
-                            placeholder="Paste bot token..."
+                            label="Bot token"
                             value={token()}
                             onInput={(e) => setToken(e.currentTarget.value)}
                         />

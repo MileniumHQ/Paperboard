@@ -383,7 +383,7 @@ export default function App() {
                     <PaperFlex direction="column" gap="half">
                         <PaperInput
                             fullWidth
-                            placeholder="Tab Name"
+                            label="Tab name"
                             value={renameValue()}
                             onInput={(e) => setRenameValue(e.currentTarget.value)}
                             onKeyDown={(e) => {
