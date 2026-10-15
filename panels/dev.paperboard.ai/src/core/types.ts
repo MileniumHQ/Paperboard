@@ -1,6 +1,7 @@
 // Types shared by the service and the UI. Pure data: no SDK imports.
 
 import type { ReasoningLevel } from "./reasoning";
+import type { Connection } from "./providers";
 
 export type RuntimeStatus =
     | "checking" // service booting, not yet looked
@@ -48,7 +49,7 @@ export interface HardwareState {
 
 export interface InstalledModel {
     name: string; // "qwen3:8b"
-    /** the provider that serves it: "ollama" today, more later */
+    /** the connection that serves it ("ollama" or an endpoint id) */
     provider: string;
     sizeBytes: number;
     family?: string;
@@ -77,6 +78,8 @@ export interface ModelSpeed {
 
 export interface Settings {
     defaultModel: string;
+    /** the connection serving defaultModel; empty means the first that lists it */
+    defaultProvider: string;
     contextLength: number;
     /** reasoning level used for models that can think */
     reasoning: ReasoningLevel;
@@ -91,22 +94,6 @@ export interface Settings {
     customPromptEnabled: boolean;
     /** null until first enabled; empty while enabled is allowed, but enabling the toggle again refills it from the generated prompt. */
     customSystemPrompt: string | null;
-}
-
-export type ProviderChoice = "ollama" | "custom";
-
-/**
- * Which provider the panel talks to. The API key never travels here: only
- * whether one is stored in the vault (the key itself stays a vault secret).
- */
-export interface ProviderConfig {
-    id: ProviderChoice;
-    /** the custom endpoint URL, empty for Ollama */
-    baseUrl: string;
-    /** an API key is stored in the vault for the custom endpoint */
-    hasApiKey: boolean;
-    /** the user has completed provider setup */
-    configured: boolean;
 }
 
 export type PromptStyle = "no-nonsense" | "standard" | "quirky" | "over-the-top";
@@ -128,6 +115,7 @@ export interface ConversationSummary {
     id: string;
     title: string;
     model: string;
+    provider?: string;
     updatedAt: number;
     messageCount: number;
 }
@@ -192,6 +180,8 @@ export interface Conversation {
     id: string;
     title: string;
     model: string;
+    /** the connection the chat runs on; set at the first message when absent */
+    provider?: string;
     createdAt: number;
     updatedAt: number;
     messages: ChatMessage[];
@@ -263,10 +253,12 @@ export type LoadedModelsReport =
 
 export interface AiState {
     runtime: RuntimeState;
-    /** the active provider and how the panel reaches it */
-    provider: ProviderConfig;
+    /** the providers the user added; none means setup has not run */
+    connections: Connection[];
     hardware: HardwareState;
     models: InstalledModel[];
+    /** connection id → why its models could not be listed */
+    modelErrors: Record<string, string>;
     pulls: PullProgress[];
     speeds: Record<string, ModelSpeed>;
     conversations: ConversationSummary[];
@@ -287,6 +279,7 @@ export interface AiState {
 
 export const DEFAULT_SETTINGS: Settings = {
     defaultModel: "",
+    defaultProvider: "",
     contextLength: 32768,
     reasoning: "off",
     panelActions: false,
@@ -300,9 +293,10 @@ export const DEFAULT_SETTINGS: Settings = {
 export function initialState(): AiState {
     return {
         runtime: { status: "checking", compute: [] },
-        provider: { id: "ollama", baseUrl: "", hasApiKey: false, configured: false },
+        connections: [],
         hardware: { gpus: [], ramBytes: 0, errors: [], loaded: false },
         models: [],
+        modelErrors: {},
         pulls: [],
         speeds: {},
         conversations: [],

@@ -61,11 +61,11 @@ export interface ChatDeps {
     ownPanelId: string;
     /** the transport for a conversation's provider */
     clientFor: (providerId: string) => ChatClient;
-    /** which provider serves a model name */
-    providerOf: (model: string) => string;
+    /** which connection lists a model name, when the chat names none */
+    providerOf: (model: string) => string | undefined;
     store: ConversationStore;
     settings: () => Settings;
-    capabilities: (model: string) => string[] | undefined;
+    capabilities: (model: string, provider?: string) => string[] | undefined;
     listActions: () => Promise<RegistryAction[]>;
     panelNames: () => Promise<Record<string, string>>;
     callAction: (panelId: string, action: string, args: Record<string, unknown>) => Promise<unknown>;
@@ -151,9 +151,17 @@ export class ChatEngine {
         this.deps.onSummaries(await this.deps.store.save(conversation));
     }
 
-    async create(model: string): Promise<Conversation> {
+    async create(model: string, provider?: string): Promise<Conversation> {
         const now = Date.now();
-        const conversation: Conversation = { id: newId(), title: "New chat", model, createdAt: now, updatedAt: now, messages: [] };
+        const conversation: Conversation = {
+            id: newId(),
+            title: "New chat",
+            model,
+            ...(provider ? { provider } : {}),
+            createdAt: now,
+            updatedAt: now,
+            messages: [],
+        };
         this.deps.onSummaries(await this.deps.store.save(conversation));
         return conversation;
     }
@@ -177,12 +185,18 @@ export class ChatEngine {
 
         const conversation = await this.deps.store.get(conversationId);
         if (conversation.messages.length >= MAX_MESSAGES) throw new Error("This chat is full. Start a new one.");
-        const model = conversation.model || this.deps.settings().defaultModel;
+        const settings = this.deps.settings();
+        const model = conversation.model || settings.defaultModel;
         if (!model) throw new Error("Choose a model for this chat first.");
-        const capabilities = this.deps.capabilities(model);
-        if (!capabilities) throw new Error(`${model} is not installed. Download it from Models.`);
+        // a chat keeps the connection it was given; one without (older chats,
+        // flow-picked names) takes the connection that lists the name
+        const provider =
+            conversation.provider ??
+            (!conversation.model && settings.defaultProvider ? settings.defaultProvider : this.deps.providerOf(model));
+        const capabilities = provider ? this.deps.capabilities(model, provider) : undefined;
+        if (!provider || !capabilities) throw new Error(`${model} is not available. Pick a model from Models.`);
         validateAttachments(attachments, { vision: capabilities.includes("vision") });
-        this.deps.clientFor(this.deps.providerOf(model)); // throws when the provider is not reachable
+        this.deps.clientFor(provider); // throws when the provider is not reachable
 
         const user: ChatMessage = {
             id: newId(),
@@ -192,6 +206,7 @@ export class ChatEngine {
             createdAt: Date.now(),
         };
         conversation.model = model;
+        conversation.provider = provider;
         if (conversation.messages.length === 0) {
             const named = attachments.map((a) => a.name).join(", ");
             conversation.title = titleFrom(content || named);
@@ -271,8 +286,12 @@ export class ChatEngine {
     }
 
     /** The same offered tools and prompt used by replies and the initial custom editor. */
-    async promptForModel(model: string, settings: Settings = this.deps.settings()): Promise<{ tools: ToolSet; prompt: string }> {
-        const capabilities = this.deps.capabilities(model) ?? [];
+    async promptForModel(
+        model: string,
+        settings: Settings = this.deps.settings(),
+        provider?: string,
+    ): Promise<{ tools: ToolSet; prompt: string }> {
+        const capabilities = this.deps.capabilities(model, provider) ?? [];
         const canCall = capabilities.includes("tools");
         const panels: ToolSet =
             canCall && settings.panelActions
@@ -312,9 +331,9 @@ export class ChatEngine {
                     await save();
                     return;
                 }
-                const capabilities = deps.capabilities(conversation.model) ?? [];
+                const capabilities = deps.capabilities(conversation.model, conversation.provider) ?? [];
                 const settings = deps.settings();
-                const { tools, prompt } = await this.promptForModel(conversation.model, settings);
+                const { tools, prompt } = await this.promptForModel(conversation.model, settings, conversation.provider);
                 const offered = new Set(tools.tools.map((t) => t.function.name));
                 const history = toOllamaMessages(conversation.messages, prompt);
 
@@ -404,7 +423,8 @@ export class ChatEngine {
             if (!timer) timer = setTimeout(flush, DELTA_INTERVAL_MS);
         };
         try {
-            await this.deps.clientFor(this.deps.providerOf(conversation.model)).chat(
+            // send() stamped the connection before any reply runs
+            await this.deps.clientFor(conversation.provider ?? "").chat(
                 {
                     model: conversation.model,
                     messages: history,

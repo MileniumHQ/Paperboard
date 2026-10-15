@@ -1,14 +1,14 @@
 // Canonical names shared by the service and the UI. A name the UI uses
 // that is missing here is a compile error, not a silent no-op at runtime.
 
-import { OLLAMA_PROVIDER_ID, providerById } from "./core/providers";
+import { OLLAMA_PROVIDER } from "./core/providers";
 
 export const PANEL_ID = "dev.paperboard.ai";
 
 // supervised process ids share one daemon-wide namespace
 export const OLLAMA_PROC_ID = `${PANEL_ID}.ollama`;
 // the package id is the provider's own fact (core/providers.ts)
-export const OLLAMA_PACKAGE = providerById(OLLAMA_PROVIDER_ID)!.runtime!.packageId;
+export const OLLAMA_PACKAGE = OLLAMA_PROVIDER.runtime!.packageId;
 
 /** Public actions: flow blocks other panels can call. */
 export const ACTION_IDS = {
@@ -22,8 +22,11 @@ export const ACTION_IDS = {
 export const UI_ACTION_IDS = {
     installRuntime: "ui-install-runtime",
     startRuntime: "ui-start-runtime",
-    setProvider: "ui-set-provider",
-    testProvider: "ui-test-provider",
+    addConnection: "ui-add-connection",
+    updateConnection: "ui-update-connection",
+    removeConnection: "ui-remove-connection",
+    testConnection: "ui-test-connection",
+    refreshModels: "ui-refresh-models",
     pullModel: "ui-pull-model",
     cancelPull: "ui-cancel-pull",
     deleteModel: "ui-delete-model",

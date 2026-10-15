@@ -61,15 +61,18 @@ export function quickAskModelChoices(state: Pick<AiState, "models">): WidgetChoi
 }
 
 /** Why Quick ask cannot send now, or null when it can. */
-export function quickAskBlocker(state: Pick<AiState, "provider" | "runtime" | "settings" | "models">, chosen?: string): Blocker | null {
-    if (!state.provider.configured) return { text: "Set up AI to ask from here", recovery: "open" };
-    if (state.provider.id === OLLAMA_PROVIDER_ID) {
+export function quickAskBlocker(state: Pick<AiState, "connections" | "runtime" | "settings" | "models">, chosen?: string): Blocker | null {
+    if (state.connections.length === 0) return { text: "Set up AI to ask from here", recovery: "open" };
+    const model = quickAskModel(state, chosen);
+    const listed = model ? state.models.find((m) => m.name === model) : undefined;
+    // an endpoint's model needs no local runtime; anything else waits on Ollama
+    if (listed && listed.provider !== OLLAMA_PROVIDER_ID) return null;
+    if (state.connections.some((c) => c.kind === "ollama")) {
         const runtime = runtimeBlocker(state.runtime.status, state.runtime.error);
         if (runtime) return runtime;
     }
-    const model = quickAskModel(state, chosen);
     if (!model) return { text: "Download a model in AI first", recovery: "open" };
-    if (!state.models.some((m) => m.name === model)) return { text: `${model} is not downloaded`, recovery: "open" };
+    if (!listed) return { text: `${model} is not downloaded`, recovery: "open" };
     return null;
 }
 

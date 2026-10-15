@@ -2,7 +2,7 @@ import { createEffect, createMemo, createSignal, Index, Match, on, onCleanup, on
 import { PaperButton, PaperEmptyState, PaperIcon, PaperText } from "@mileniumhq/paperui";
 import { actionsApi } from "@mileniumhq/paperapi";
 import { UI_ACTION_IDS } from "../contract";
-import { OLLAMA_PROVIDER_ID, providerLabel } from "../core/providers";
+import { connectionLabel, OLLAMA_PROVIDER, OLLAMA_PROVIDER_ID, unlistedModelReason } from "../core/providers";
 import type { ReasoningLevel } from "../core/reasoning";
 import type { Attachment, Conversation } from "../core/types";
 import {
@@ -103,23 +103,38 @@ export default function ChatView() {
     const conversation = () => openConversation();
     const turns = createMemo(() => groupTurns(conversation()?.messages ?? []));
     const model = () => conversation()?.model || state.settings.defaultModel || state.models[0]?.name || "";
-    const installed = createMemo(() => state.models.find((m) => m.name === model()));
+    // the chat's connection; a chat without one runs on the default's, else the first that lists the name
+    const chatProvider = () => {
+        const c = conversation();
+        if (c?.provider) return c.provider;
+        return !c?.model && state.settings.defaultProvider ? state.settings.defaultProvider : undefined;
+    };
+    const installed = createMemo(() => {
+        const via = chatProvider();
+        return state.models.find((m) => m.name === model() && (!via || m.provider === via));
+    });
     const generating = () => Boolean(conversation() && state.generating.includes(conversation()!.id));
     const waitingHere = () => state.approvals.filter((a) => a.conversationId === conversation()?.id).length;
-    const usingOllama = () => state.provider.id === OLLAMA_PROVIDER_ID;
+    const hasOllama = () => state.connections.some((c) => c.kind === "ollama");
+    // Ollama's runtime matters when this chat's model is Ollama's, or when
+    // nothing is listed yet and Ollama is what would list it
+    const usingOllama = () => {
+        const via = installed()?.provider ?? chatProvider();
+        return via ? via === OLLAMA_PROVIDER_ID : hasOllama();
+    };
 
     const disabledReason = (): string | undefined => {
         // a URL endpoint has no local runtime to wait for; if it is down the
         // send fails with the endpoint's own error
-        if (usingOllama() && state.runtime.status !== "ready") return `${providerLabel(state.provider.id)} is not running.`;
+        if (usingOllama() && state.runtime.status !== "ready") return `${OLLAMA_PROVIDER.label} is not running.`;
         if (!model()) return "Choose a model for this chat.";
-        if (!installed()) return `${model()} is not downloaded. Pick one from Models.`;
+        if (!installed()) return unlistedModelReason(state.connections, model(), chatProvider());
         return undefined;
     };
 
     const runtimeNotice = (): { text: string; action?: boolean } | null => {
         if (!usingOllama()) return null;
-        const label = providerLabel(state.provider.id);
+        const label = OLLAMA_PROVIDER.label;
         switch (state.runtime.status) {
             case "ready":
                 return null;
@@ -182,15 +197,15 @@ export default function ChatView() {
         }
     };
 
-    const changeModel = async (next: string) => {
+    const changeModel = async (next: string, provider: string) => {
         setError("");
         try {
             const c = conversation();
             if (c) {
-                await call(UI_ACTION_IDS.setConversationModel, { id: c.id, model: next });
-                setOpenModel(next);
+                await call(UI_ACTION_IDS.setConversationModel, { id: c.id, model: next, provider });
+                setOpenModel(next, provider);
             } else {
-                await call(UI_ACTION_IDS.updateSettings, { defaultModel: next });
+                await call(UI_ACTION_IDS.updateSettings, { defaultModel: next, defaultProvider: provider });
             }
         } catch (err) {
             setError(errorText(err));
@@ -227,7 +242,7 @@ export default function ChatView() {
                 onOpenSettings={() => setSettingsOpen(true)}
             />
             <section class={styles.main} aria-label={settingsOpen() ? "Settings" : "Conversation"}>
-                <Show when={!settingsOpen()} fallback={<div class={styles.settingsView}><SettingsTab /></div>}>
+                <Show when={!settingsOpen()} fallback={<div class={styles.settingsView}><SettingsTab onManageProviders={() => setModelsOpen(true)} /></div>}>
                 <Show when={waitingHere() > 0}>
                     <div class={styles.approvalBanner} role="status">
                         <PaperIcon>front_hand</PaperIcon>
@@ -263,7 +278,7 @@ export default function ChatView() {
                                 description={
                                     usingOllama()
                                         ? "Replies are generated on this computer."
-                                        : "Replies come from the endpoint you configured."
+                                        : `Replies come from ${connectionLabel(state.connections, installed()?.provider ?? chatProvider())}.`
                                 }
                             />
                             <Show when={state.models.length === 0}>
@@ -304,7 +319,7 @@ export default function ChatView() {
                             <PaperText size={2} color="text-muted">{notice().text}</PaperText>
                             <Show when={notice().action}>
                                 <PaperButton size="small" disabled={starting()} onClick={() => void startRuntime()}>
-                                    <PaperIcon>play_arrow</PaperIcon> Start {providerLabel(state.provider.id)}
+                                    <PaperIcon>play_arrow</PaperIcon> Start {OLLAMA_PROVIDER.label}
                                 </PaperButton>
                             </Show>
                         </div>
@@ -331,9 +346,11 @@ export default function ChatView() {
             <ModelsModal
                 open={modelsOpen()}
                 onClose={() => setModelsOpen(false)}
-                onPick={(ref) => {
+                // the picker opens on the provider this chat runs on
+                initialPane={installed()?.provider ?? chatProvider()}
+                onPick={(ref, provider) => {
                     setModelsOpen(false);
-                    void changeModel(ref);
+                    void changeModel(ref, provider);
                 }}
             />
         </div>

@@ -1,9 +1,8 @@
-// Providers: how the panel reaches a model. A provider is either a local
-// binary the panel installs and starts (Ollama), or an OpenAI-compatible
-// endpoint it is simply pointed at. The transport differs, everything above
-// it does not: models always carry their provider id, so installs and stops
-// can be labelled truthfully and more providers can be added by declaring one
-// here plus an adapter (see service/provider.ts).
+// Providers: how the panel reaches a model. The user adds connections: the
+// local Ollama runtime the panel installs and starts, and any number of
+// OpenAI-compatible endpoints it is simply pointed at. The transport
+// differs, everything above it does not: models carry their connection id,
+// so a chat, an install or a stop is routed and labelled truthfully.
 
 export type ProviderKind = "ollama" | "openai-compatible";
 
@@ -25,9 +24,11 @@ export interface ProviderDefinition {
 }
 
 export const OLLAMA_PROVIDER_ID = "ollama";
-export const CUSTOM_PROVIDER_ID = "custom";
+/** at most this many providers can be added */
+export const MAX_CONNECTIONS = 16;
+export const MAX_CONNECTION_LABEL_CHARS = 60;
 
-const OLLAMA_PROVIDER: ProviderDefinition = {
+export const OLLAMA_PROVIDER: ProviderDefinition = {
     id: OLLAMA_PROVIDER_ID,
     label: "Ollama",
     kind: "ollama",
@@ -36,36 +37,69 @@ const OLLAMA_PROVIDER: ProviderDefinition = {
 };
 
 /**
- * The user-supplied OpenAI-compatible endpoint. Its baseUrl is empty until
- * configured; `activeProviders` substitutes the stored URL at runtime so the
- * static definition (label, kind, capabilities) resolves in both processes.
+ * A provider the user added. Ollama is at most one connection with the
+ * fixed id "ollama"; each OpenAI-compatible endpoint is its own connection
+ * with a generated id, and its API key is a vault secret named for that id.
  */
-export const CUSTOM_PROVIDER: ProviderDefinition = {
-    id: CUSTOM_PROVIDER_ID,
-    label: "OpenAI-compatible endpoint",
-    kind: "openai-compatible",
-    canPull: false,
-    defaultCapabilities: ["completion", "tools"],
-};
-
-export const PROVIDERS: readonly ProviderDefinition[] = [
-    OLLAMA_PROVIDER,
-    CUSTOM_PROVIDER,
-];
-
-export const DEFAULT_PROVIDER_ID = OLLAMA_PROVIDER_ID;
-
-export function providerById(id: string | undefined): ProviderDefinition | undefined {
-    return PROVIDERS.find((p) => p.id === id);
+export interface Connection {
+    id: string;
+    kind: ProviderKind;
+    label: string;
+    /** openai-compatible: the endpoint URL */
+    baseUrl?: string;
+    /** openai-compatible: an API key is stored in the vault */
+    hasApiKey?: boolean;
 }
 
-/** The provider a model belongs to; unknown ids fall back to the default. */
-export function providerFor(id: string | undefined): ProviderDefinition {
-    return providerById(id) ?? providerById(DEFAULT_PROVIDER_ID)!;
+const API_ID = /^api-[0-9a-f]{8}$/;
+
+export function isApiConnectionId(id: string): boolean {
+    return API_ID.test(id);
 }
 
-export function providerLabel(id: string | undefined): string {
-    return providerFor(id).label;
+/** The vault secret holding an endpoint connection's API key. */
+export function apiKeySecretName(connectionId: string): string {
+    if (!isApiConnectionId(connectionId)) throw new Error(`"${connectionId}" is not an endpoint connection.`);
+    return `api-key-${connectionId}`;
+}
+
+/** How the service reaches a connection. */
+export function definitionOf(connection: Connection): ProviderDefinition {
+    if (connection.kind === "ollama") return OLLAMA_PROVIDER;
+    return {
+        id: connection.id,
+        label: connection.label,
+        kind: "openai-compatible",
+        baseUrl: connection.baseUrl ?? "",
+        canPull: false,
+        defaultCapabilities: ["completion", "tools"],
+    };
+}
+
+/** A connection's display name, or the id when it was removed. */
+export function connectionLabel(connections: readonly Connection[], id: string | undefined): string {
+    return connections.find((c) => c.id === id)?.label ?? id ?? "Unknown provider";
+}
+
+/** A short default name for an endpoint: its host. */
+/**
+ * Why a chat's model can't be used: its provider was removed, the endpoint
+ * no longer lists it, or (Ollama) it isn't downloaded.
+ */
+export function unlistedModelReason(connections: readonly Connection[], model: string, provider: string | undefined): string {
+    const owner = provider === undefined ? undefined : connections.find((c) => c.id === provider);
+    if (provider !== undefined && !owner) return `The provider ${model} ran on was removed. Pick a model from Models.`;
+    if (owner && owner.kind !== "ollama") return `${owner.label} doesn't list ${model}. Pick a model from Models.`;
+    return `${model} is not downloaded. Pick one from Models.`;
+}
+
+export function endpointLabel(baseUrl: string): string {
+    try {
+        return new URL(baseUrl).host || baseUrl;
+    } catch (err) {
+        console.debug("[ai] endpoint URL could not be parsed for a label:", String(err));
+        return baseUrl;
+    }
 }
 
 // A custom endpoint must be a real http(s) URL; a typo is refused here, at
@@ -102,14 +136,4 @@ export function credentialsAllowed(baseUrl: string): boolean {
     if (url.protocol !== "http:") return false;
     const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, "");
     return host === "localhost" || host === "127.0.0.1" || host === "::1";
-}
-
-/**
- * The providers reachable right now. The custom endpoint only joins when it
- * has a configured URL, so an unconfigured panel never dials an empty base.
- */
-export function activeProviders(customBaseUrl?: string | null): ProviderDefinition[] {
-    const base = (customBaseUrl ?? "").trim().replace(/\/+$/, "");
-    if (!base) return [OLLAMA_PROVIDER];
-    return [OLLAMA_PROVIDER, { ...CUSTOM_PROVIDER, baseUrl: base }];
 }

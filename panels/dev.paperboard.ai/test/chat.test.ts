@@ -206,7 +206,7 @@ describe("replies", () => {
     it("refuses models that are not installed and a second reply in one chat", async () => {
         const chat = engine();
         const missing = await chat.create("ghost:latest");
-        await expect(chat.send(missing.id, "hi")).rejects.toThrow(/not installed/);
+        await expect(chat.send(missing.id, "hi")).rejects.toThrow(/not available/);
         fake.script = [{ content: "slow reply here", chunkDelayMs: 30 }];
         const c = await chat.create("tooly:latest");
         const first = await chat.send(c.id, "one");

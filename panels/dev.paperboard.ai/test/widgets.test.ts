@@ -65,7 +65,7 @@ function ready(patch: Partial<AiState> = {}): AiState {
     const s = initialState();
     return {
         ...s,
-        provider: { ...s.provider, configured: true },
+        connections: [{ id: "ollama", kind: "ollama", label: "Ollama" }],
         runtime: { status: "ready", compute: [] },
         models: [model("qwen3:8b")],
         ...patch,
@@ -91,7 +91,7 @@ describe("Quick ask readiness", () => {
     });
 
     it("sends unconfigured setup and missing models to the panel", () => {
-        expect(quickAskBlocker({ ...ready(), provider: initialState().provider })).toEqual({ text: "Set up AI to ask from here", recovery: "open" });
+        expect(quickAskBlocker({ ...ready(), connections: [] })).toEqual({ text: "Set up AI to ask from here", recovery: "open" });
         expect(quickAskBlocker(ready({ models: [] }))).toEqual({ text: "Download a model in AI first", recovery: "open" });
         const s = ready();
         expect(quickAskBlocker({ ...s, settings: { ...s.settings, defaultModel: "gone:1b" } })).toEqual({ text: "gone:1b is not downloaded", recovery: "open" });
@@ -103,9 +103,11 @@ describe("Quick ask readiness", () => {
         expect(quickAskBlocker(ready({ runtime: { status: "starting", compute: [] } }))).toEqual({ text: "Ollama is starting…", recovery: null });
     });
 
-    it("does not wait on Ollama for a URL endpoint", () => {
-        const s = ready({ runtime: { status: "stopped", compute: [] } });
-        expect(quickAskBlocker({ ...s, provider: { id: "custom", baseUrl: "http://127.0.0.1:1", hasApiKey: false, configured: true } })).toBeNull();
+    it("does not wait on Ollama for an endpoint's model, even with Ollama added", () => {
+        const endpoint = { id: "api-0000000a", kind: "openai-compatible" as const, label: "Local", baseUrl: "http://127.0.0.1:1" };
+        const s = ready({ runtime: { status: "stopped", compute: [] }, models: [{ ...model("local:7b"), provider: endpoint.id }] });
+        expect(quickAskBlocker({ ...s, connections: [endpoint] })).toBeNull();
+        expect(quickAskBlocker({ ...s, connections: [...s.connections, endpoint] })).toBeNull();
     });
 });
 

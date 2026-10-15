@@ -16,7 +16,7 @@ import { modelRef, type CatalogModel } from "../core/catalog";
 import { FIT_LABELS, formatBytes } from "../core/fit";
 import { CAPABILITY_LABELS, knownCapabilities } from "../lib/capabilities";
 import { fitFor, makerOf } from "../lib/catalog";
-import { ensureProviderReady } from "../lib/provisioning";
+import { ensureOllamaReady } from "../lib/provisioning";
 import { call, errorText, state } from "../lib/state";
 import FitMeter from "./FitMeter";
 import MakerLogo from "./MakerLogo";
@@ -56,7 +56,7 @@ export default function ModelDetailModal(props: ModelDetailModalProps) {
     const download = async () => {
         setError("");
         try {
-            await ensureProviderReady();
+            await ensureOllamaReady();
             await call(UI_ACTION_IDS.pullModel, { model: ref() });
         } catch (err) {
             setError(errorText(err));

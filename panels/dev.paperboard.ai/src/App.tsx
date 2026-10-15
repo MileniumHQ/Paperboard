@@ -8,7 +8,7 @@ import {
 import "@mileniumhq/paperui/style.css";
 import "@mileniumhq/paperui/panel.css";
 import "./style.css";
-import { hydrate, hydration, hydrationError, setupRequested, state } from "./lib/state";
+import { hydrate, hydration, hydrationError, state } from "./lib/state";
 import ChatView from "./components/ChatView";
 import Setup from "./components/Setup";
 
@@ -28,7 +28,7 @@ export default function App() {
                     <PaperButton variant="primary" onClick={() => void hydrate()}>Try again</PaperButton>
                 </PaperCenteredInterface>
             </Match>
-            <Match when={!state.provider.configured || setupRequested()}>
+            <Match when={state.connections.length === 0}>
                 <Setup />
             </Match>
             <Match when={true}>

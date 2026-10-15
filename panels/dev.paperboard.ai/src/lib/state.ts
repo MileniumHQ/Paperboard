@@ -55,17 +55,6 @@ export function errorText(err: unknown): string {
     return text.replace(/^Error:\s*/, "");
 }
 
-// The provider setup wizard shows on first run (not configured) and can be
-// reopened from Settings to switch providers.
-const [setupRequested, setSetupRequested] = createSignal(false);
-export { setupRequested };
-export function openProviderSetup(): void {
-    setSetupRequested(true);
-}
-export function closeProviderSetup(): void {
-    setSetupRequested(false);
-}
-
 // ─── open conversation ──────────────────────────────────────────────────────
 
 const [conversation, setConversation] = createStore<{ current: Conversation | null }>({ current: null });
@@ -153,6 +142,8 @@ export function renameOpen(title: string): void {
     if (conversation.current) setConversation("current", "title", title);
 }
 
-export function setOpenModel(model: string): void {
-    if (conversation.current) setConversation("current", "model", model);
+export function setOpenModel(model: string, provider?: string): void {
+    if (!conversation.current) return;
+    setConversation("current", "model", model);
+    setConversation("current", "provider", provider);
 }

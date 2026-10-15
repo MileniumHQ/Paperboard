@@ -11,7 +11,6 @@ import {
     PaperToggle,
 } from "@mileniumhq/paperui";
 import { UI_ACTION_IDS } from "../contract";
-import { OLLAMA_PROVIDER_ID } from "../core/providers";
 import PromptingSettings from "./PromptingSettings";
 import { saveSettings } from "../core/saveSettings";
 import type { Settings } from "../core/types";
@@ -109,7 +108,7 @@ export default function SettingsView() {
                         ))}
                     </PaperSelectMenu>
                 </PaperSettingItem>
-                <Show when={state.provider.id === OLLAMA_PROVIDER_ID}>
+                <Show when={state.connections.some((c) => c.kind === "ollama")}>
                     <PaperSettingItem
                         title="Force CPU"
                         description="Runs models on the processor instead of a graphics card. Replies are slower, but it avoids graphics memory problems."

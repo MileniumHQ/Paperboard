@@ -1,42 +1,47 @@
 import { describe, expect, it } from "bun:test";
-import {
-    activeProviders,
-    credentialsAllowed,
-    CUSTOM_PROVIDER_ID,
-    DEFAULT_PROVIDER_ID,
-    normalizeBaseUrl,
-    PROVIDERS,
-    providerFor,
-    providerLabel,
-} from "../src/core/providers";
+import { apiKeySecretName, connectionLabel, credentialsAllowed, definitionOf, endpointLabel, normalizeBaseUrl, unlistedModelReason } from "../src/core/providers";
+import { providerClients } from "../src/service/provider";
 import { REASONING_LEVELS, isReasoningLevel, reasoningToThink } from "../src/core/reasoning";
 import { compactCount, groupTurns, isRoundEmpty, isThinkingLive, replyText, turnStats } from "../src/core/chain";
 import type { AssistantMessage } from "../src/core/types";
 
 describe("providers", () => {
-    it("ships Ollama as the default local provider", () => {
-        expect(DEFAULT_PROVIDER_ID).toBe("ollama");
-        expect(providerFor(undefined).id).toBe("ollama");
-        expect(providerLabel("ollama")).toBe("Ollama");
-        expect(PROVIDERS.find((p) => p.id === "ollama")?.runtime?.packageId).toBe("ollama");
+    it("says why a chat's model is unusable: a removed provider and an endpoint that dropped it are not a missing download", () => {
+        const connections = [
+            { id: "ollama", kind: "ollama" as const, label: "Ollama" },
+            { id: "api-0000000a", kind: "openai-compatible" as const, label: "Box", baseUrl: "http://127.0.0.1:1" },
+        ];
+        expect(unlistedModelReason(connections, "beta", "api-0000000b")).toBe("The provider beta ran on was removed. Pick a model from Models.");
+        expect(unlistedModelReason(connections, "beta", "api-0000000a")).toBe("Box doesn't list beta. Pick a model from Models.");
+        expect(unlistedModelReason(connections, "qwen3:8b", "ollama")).toBe("qwen3:8b is not downloaded. Pick one from Models.");
+        expect(unlistedModelReason(connections, "qwen3:8b", undefined)).toBe("qwen3:8b is not downloaded. Pick one from Models.");
     });
 
-    it("falls back to the default for an unknown provider id", () => {
-        expect(providerFor("apple-foundation").id).toBe("ollama");
-        expect(providerLabel(undefined)).toBe("Ollama");
+    it("routes Ollama to its runtime and each endpoint to its own URL", () => {
+        expect(definitionOf({ id: "ollama", kind: "ollama", label: "Ollama" }).runtime?.packageId).toBe("ollama");
+        const endpoint = definitionOf({ id: "api-0000000a", kind: "openai-compatible", label: "Local", baseUrl: "http://127.0.0.1:1234" });
+        expect(endpoint).toMatchObject({ id: "api-0000000a", label: "Local", baseUrl: "http://127.0.0.1:1234", canPull: false });
     });
 
-    it("only dials the custom endpoint once it has a URL", () => {
-        expect(activeProviders().map((p) => p.id)).toEqual([DEFAULT_PROVIDER_ID]);
-        expect(activeProviders("  ").map((p) => p.id)).toEqual([DEFAULT_PROVIDER_ID]);
-        const withCustom = activeProviders("http://127.0.0.1:1234/");
-        expect(withCustom.map((p) => p.id)).toEqual([DEFAULT_PROVIDER_ID, CUSTOM_PROVIDER_ID]);
-        expect(withCustom.find((p) => p.id === CUSTOM_PROVIDER_ID)?.baseUrl).toBe("http://127.0.0.1:1234");
+    it("builds a client per reachable connection: Ollama only once running, an endpoint only with a URL", () => {
+        const connections = [
+            { id: "ollama", kind: "ollama" as const, label: "Ollama" },
+            { id: "api-0000000a", kind: "openai-compatible" as const, label: "A", baseUrl: "http://127.0.0.1:1" },
+            { id: "api-0000000b", kind: "openai-compatible" as const, label: "B", baseUrl: "" },
+        ];
+        expect([...providerClients({ ollama: null }, connections).keys()]).toEqual(["api-0000000a"]);
     });
 
-    it("resolves the custom provider's label in the UI", () => {
-        expect(providerLabel(CUSTOM_PROVIDER_ID)).toBe("OpenAI-compatible endpoint");
-        expect(PROVIDERS.some((p) => p.id === CUSTOM_PROVIDER_ID)).toBe(true);
+    it("names an endpoint's vault secret for its connection, and nothing else", () => {
+        expect(apiKeySecretName("api-0000000a")).toBe("api-key-api-0000000a");
+        expect(() => apiKeySecretName("ollama")).toThrow();
+        expect(() => apiKeySecretName("api-../x")).toThrow();
+    });
+
+    it("labels connections by name, an endpoint by its host by default", () => {
+        expect(endpointLabel("https://api.example.com/v1")).toBe("api.example.com");
+        expect(connectionLabel([{ id: "ollama", kind: "ollama", label: "Ollama" }], "ollama")).toBe("Ollama");
+        expect(connectionLabel([], "api-0000000a")).toBe("api-0000000a");
     });
 
     it("refuses a non-http endpoint URL", () => {

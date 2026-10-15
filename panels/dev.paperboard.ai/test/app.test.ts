@@ -33,6 +33,7 @@ mock.module("@mileniumhq/paperapi", () => ({
         delete: async (name: string) => {
             secrets.delete(name);
         },
+        list: async () => [...secrets.keys()],
     },
     fileApi: { getPath: async () => filesDir },
     packageApi: {
@@ -137,17 +138,17 @@ describe("custom prompt settings", () => {
     });
 });
 
-describe("AiApp provider credentials", () => {
-    async function withApp(run: (app: InstanceType<typeof AiApp>) => Promise<void>) {
-        savedConfig = null;
+describe("AiApp connections", () => {
+    async function withApp(run: (app: InstanceType<typeof AiApp>, ctx: ReturnType<typeof makeCtx>) => Promise<void>, stored: unknown = null) {
+        savedConfig = stored;
         const app = new AiApp(new HangingHost(), { readyTimeoutMs: 100 });
         const ctx = makeCtx();
-        await app.init(ctx as any);
         const original = globalThis.fetch;
-        // model listing dials the endpoint; tests are about the key, not it
+        // model listing dials the endpoint; these tests are about the key, not it
         globalThis.fetch = (async () => new Response(JSON.stringify({ data: [] }), { status: 200 })) as any;
         try {
-            await run(app);
+            await app.init(ctx as any);
+            await run(app, ctx);
         } finally {
             globalThis.fetch = original;
             savedConfig = null;
@@ -155,33 +156,83 @@ describe("AiApp provider credentials", () => {
         }
     }
 
-    it("clears the stored key when the endpoint changes", async () => {
+    it("keeps each endpoint's key under its own vault name, and drops it when the URL changes", async () => {
         secrets.clear();
-        await withApp(async (app) => {
-            await app.setProvider({ id: "custom", baseUrl: "https://api.example.com/v1", apiKey: "k1" });
-            expect(secrets.get("openai-api-key")).toBe("k1");
+        await withApp(async (app, ctx) => {
+            const a = await app.addConnection({ kind: "openai-compatible", baseUrl: "https://api.example.com/v1", apiKey: "k1" });
+            const b = await app.addConnection({ kind: "openai-compatible", baseUrl: "https://other.example.com/v1", apiKey: "k2", label: "Other" });
+            expect(secrets.get(`api-key-${a.id}`)).toBe("k1");
+            expect(secrets.get(`api-key-${b.id}`)).toBe("k2");
+            expect(ctx.state.connections.map((c) => [c.label, c.hasApiKey])).toEqual([["api.example.com", true], ["Other", true]]);
             // a key belongs to the endpoint it was entered for
-            await app.setProvider({ id: "custom", baseUrl: "https://other.example.com/v1" });
-            expect(secrets.has("openai-api-key")).toBe(false);
+            await app.updateConnection({ id: a.id, baseUrl: "https://moved.example.com/v1" });
+            expect(secrets.has(`api-key-${a.id}`)).toBe(false);
+            expect(secrets.get(`api-key-${b.id}`)).toBe("k2");
+            await app.removeConnection(b.id);
+            expect(secrets.size).toBe(0);
+            expect(ctx.state.connections.map((c) => c.id)).toEqual([a.id]);
+            expect((savedConfig as any).connections.map((c: any) => c.id)).toEqual([a.id]);
         });
     });
 
     it("refuses to store a key for a plaintext non-loopback endpoint", async () => {
         secrets.clear();
-        await withApp(async (app) => {
-            await expect(
-                app.setProvider({ id: "custom", baseUrl: "http://10.0.0.5:1234", apiKey: "k1" }),
-            ).rejects.toThrow(/plaintext/);
+        await withApp(async (app, ctx) => {
+            await expect(app.addConnection({ kind: "openai-compatible", baseUrl: "http://10.0.0.5:1234", apiKey: "k1" })).rejects.toThrow(/plaintext/);
             expect(secrets.size).toBe(0);
+            expect(ctx.state.connections).toEqual([]);
         });
     });
 
-    it("refuses to test with a stored key over plaintext", async () => {
+    it("tests with a stored key only against the URL it was saved for, never over plaintext", async () => {
         secrets.clear();
         await withApp(async (app) => {
-            await app.setProvider({ id: "custom", baseUrl: "https://api.example.com/v1", apiKey: "k1" });
-            await expect(app.testProvider({ baseUrl: "http://10.0.0.5:1234" })).rejects.toThrow(/plaintext/);
+            const a = await app.addConnection({ kind: "openai-compatible", baseUrl: "https://api.example.com/v1", apiKey: "k1" });
+            await expect(app.testConnection({ id: a.id, baseUrl: "http://10.0.0.5:1234", apiKey: "k1" })).rejects.toThrow(/plaintext/);
+            // without a typed key, a different URL is tested with no key at all
+            expect(await app.testConnection({ id: a.id, baseUrl: "http://10.0.0.5:1234" })).toEqual({ models: 0 });
         });
+    });
+
+    it("adds Ollama once", async () => {
+        await withApp(async (app, ctx) => {
+            await app.addConnection({ kind: "ollama" });
+            await expect(app.addConnection({ kind: "ollama" })).rejects.toThrow("already added");
+            expect(ctx.state.connections.map((c) => c.id)).toEqual(["ollama"]);
+        });
+    });
+
+    // TODO(remove after v0.3): with migrateSingleProvider
+    it("migrates a 0.2 custom endpoint once, moving its key to the connection's own secret", async () => {
+        secrets.clear();
+        secrets.set("openai-api-key", "legacy");
+        const legacy = { settings: { defaultModel: "local:7b" }, provider: { id: "custom", baseUrl: "https://api.example.com/v1" } };
+        let id = "";
+        await withApp(async (_app, ctx) => {
+            expect(ctx.state.connections).toHaveLength(1);
+            const [c] = ctx.state.connections;
+            id = c!.id;
+            expect(c).toMatchObject({ kind: "openai-compatible", baseUrl: "https://api.example.com/v1", hasApiKey: true });
+            expect(secrets.get(`api-key-${id}`)).toBe("legacy");
+            expect(secrets.has("openai-api-key")).toBe(false);
+            expect(savedConfig).toMatchObject({ version: 2, settings: { defaultModel: "local:7b" } });
+            expect((savedConfig as any).provider).toBeUndefined();
+            // a second start reads the migrated document as it is
+            const migrated = structuredClone(savedConfig);
+            await withApp(async (_again, again) => {
+                expect(again.state.connections.map((x) => x.id)).toEqual([id]);
+            }, migrated);
+        }, legacy);
+    });
+
+    // TODO(remove after v0.3): with migrateSingleProvider
+    it("migrates a 0.2 Ollama choice, and an unfinished setup to no providers", async () => {
+        await withApp(async (_app, ctx) => {
+            expect(ctx.state.connections.map((c) => c.id)).toEqual(["ollama"]);
+        }, { provider: { id: "ollama" } });
+        await withApp(async (_app, ctx) => {
+            expect(ctx.state.connections).toEqual([]);
+        }, { settings: { reasoning: "off" } });
     });
 });
 
@@ -292,7 +343,10 @@ describe("AiApp widget actions", () => {
             await app.deleteAllConversations();
         }
     }
-    const custom = () => ({ provider: { id: "custom", baseUrl: `http://127.0.0.1:${endpoint.port}` } });
+    const custom = () => ({
+        version: 2,
+        connections: [{ id: "api-0000000a", kind: "openai-compatible", label: "Local", baseUrl: `http://127.0.0.1:${endpoint.port}` }],
+    });
     async function modelsListed(ctx: ReturnType<typeof makeCtx>) {
         const start = Date.now();
         while (ctx.state.models.length === 0) {
@@ -358,15 +412,15 @@ describe("AiApp widget actions", () => {
 
     it("reports memory as unsupported for a URL endpoint and refuses to unload there", async () => {
         await withApp(custom(), async (app) => {
-            expect(await app.loadedModels()).toEqual({ status: "unsupported", provider: "OpenAI-compatible endpoint" });
-            await expect(app.unloadModel("local:7b")).rejects.toThrow("cannot unload");
+            expect(await app.loadedModels()).toEqual({ status: "unsupported", provider: "Your providers" });
+            await expect(app.unloadModel("local:7b")).rejects.toThrow("Only Ollama's models can be unloaded");
         });
     });
 
     it("reports a down Ollama as stopped, not as nothing loaded", async () => {
         packageInstalled = false;
         try {
-            await withApp({ provider: { id: "ollama" } }, async (app) => {
+            await withApp({ version: 2, connections: [{ id: "ollama", kind: "ollama", label: "Ollama" }] }, async (app) => {
                 const report = await app.loadedModels();
                 expect(report.status).toBe("stopped");
                 await expect(app.unloadModel("qwen3:8b")).rejects.toThrow("Ollama is not running");

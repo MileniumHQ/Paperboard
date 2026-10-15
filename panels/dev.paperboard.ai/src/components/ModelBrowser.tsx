@@ -18,10 +18,10 @@ import {
 import { UI_ACTION_IDS } from "../contract";
 import { isValidModelRef, modelRef, searchCatalog, type CatalogModel, type CatalogSort } from "../core/catalog";
 import { formatBytes } from "../core/fit";
-import { OLLAMA_PROVIDER_ID, providerFor, providerLabel } from "../core/providers";
+import { OLLAMA_PROVIDER, OLLAMA_PROVIDER_ID } from "../core/providers";
 import type { InstalledModel } from "../core/types";
 import { catalog, catalogEntry, fitFor, makerOf } from "../lib/catalog";
-import { ensureProviderReady } from "../lib/provisioning";
+import { ensureOllamaReady } from "../lib/provisioning";
 import { call, errorText, state } from "../lib/state";
 import FitMeter from "./FitMeter";
 import MakerLogo from "./MakerLogo";
@@ -40,10 +40,12 @@ function defaultTag(model: CatalogModel): string {
 }
 
 export interface ModelBrowserProps {
+    /** the connection whose models are shown */
+    provider: string;
     /** "pick" chooses installed models and opens catalog details; "choose" selects any card. */
     mode?: "pick" | "choose";
-    /** pick mode: an installed model was chosen for the current chat. */
-    onPick?: (ref: string) => void;
+    /** pick mode: a model of this connection was chosen for the current chat. */
+    onPick?: (ref: string, provider: string) => void;
     /** choose mode: the card's default size was selected. */
     onChoose?: (ref: string) => void;
     /** choose mode: the currently selected model ref. */
@@ -71,7 +73,9 @@ export default function ModelBrowser(props: ModelBrowserProps) {
     let root: HTMLDivElement | undefined;
 
     const mode = () => props.mode ?? "pick";
-    const isEndpoint = () => state.provider.id !== OLLAMA_PROVIDER_ID;
+    const isEndpoint = () => props.provider !== OLLAMA_PROVIDER_ID;
+    // names can repeat across connections; this view is one connection's
+    const listed = createMemo(() => state.models.filter((m) => m.provider === props.provider));
     const results = createMemo(() => searchCatalog(catalog, { text: query(), sort: sort() }));
     const pageCount = () => Math.max(1, Math.ceil(results().length / PAGE_SIZE));
     const visible = createMemo(() => results().slice((page() - 1) * PAGE_SIZE, page() * PAGE_SIZE));
@@ -79,7 +83,7 @@ export default function ModelBrowser(props: ModelBrowserProps) {
     // must cover them instead of a library that does not exist
     const endpointResults = createMemo(() => {
         const q = query().trim().toLowerCase();
-        return q ? state.models.filter((m) => m.name.toLowerCase().includes(q)) : state.models;
+        return q ? listed().filter((m) => m.name.toLowerCase().includes(q)) : listed();
     });
     const endpointPageCount = () => Math.max(1, Math.ceil(endpointResults().length / PAGE_SIZE));
     const endpointVisible = createMemo(() =>
@@ -91,7 +95,7 @@ export default function ModelBrowser(props: ModelBrowserProps) {
 
     const choose = (ref: string) => {
         if (mode() === "choose") props.onChoose?.(ref);
-        else props.onPick?.(ref);
+        else props.onPick?.(ref, props.provider);
     };
 
     const goToPage = (next: number) => {
@@ -118,7 +122,7 @@ export default function ModelBrowser(props: ModelBrowserProps) {
         try {
             // installing/starting the provider happens first, with its own
             // progress row, so a fresh computer is one click, not a wizard
-            await ensureProviderReady();
+            await ensureOllamaReady();
             await call(UI_ACTION_IDS.pullModel, { model: ref });
         } catch (err) {
             setError(errorText(err));
@@ -153,7 +157,7 @@ export default function ModelBrowser(props: ModelBrowserProps) {
     const makeDefault = async (model: string) => {
         setError("");
         try {
-            await call(UI_ACTION_IDS.updateSettings, { defaultModel: model });
+            await call(UI_ACTION_IDS.updateSettings, { defaultModel: model, defaultProvider: props.provider });
         } catch (err) {
             setError(errorText(err));
         }
@@ -162,7 +166,9 @@ export default function ModelBrowser(props: ModelBrowserProps) {
     function InstalledCard(cardProps: { model: InstalledModel; endpoint?: boolean }) {
         const entry = () => catalogEntry(cardProps.model.name);
         const maker = () => makerOf(cardProps.model.name);
-        const isDefault = () => state.settings.defaultModel === cardProps.model.name;
+        const isDefault = () =>
+            state.settings.defaultModel === cardProps.model.name &&
+            (state.settings.defaultProvider || cardProps.model.provider) === cardProps.model.provider;
         const chosen = () => isSelected(cardProps.model.name);
         const endpoint = () => Boolean(cardProps.endpoint);
         return (
@@ -221,7 +227,7 @@ export default function ModelBrowser(props: ModelBrowserProps) {
         const selected = () => cardProps.model.tags.find((t) => t.tag === tagOf(cardProps.model)) ?? cardProps.model.tags[0]!;
         const ref = () => refOf(cardProps.model);
         const maker = () => catalog.makers[cardProps.model.maker];
-        const installed = () => state.models.some((m) => m.name === ref());
+        const installed = () => listed().some((m) => m.name === ref());
         const pulling = () => state.pulls.some((p) => p.model === ref());
         const chosen = () => isSelected(ref());
         return (
@@ -289,14 +295,14 @@ export default function ModelBrowser(props: ModelBrowserProps) {
                 </div>
             </Show>
 
-            <Show when={state.provider.id === OLLAMA_PROVIDER_ID && (state.runtime.status === "installing" || state.runtime.status === "starting")}>
+            <Show when={!isEndpoint() && (state.runtime.status === "installing" || state.runtime.status === "starting")}>
                 <div class={styles.pulls} aria-label="Preparing the model provider">
                     <div class={styles.pull}>
                         <div class={styles.pullHead}>
                             <PaperText size={2} weight={600} truncate>
                                 {state.runtime.status === "installing"
-                                    ? `Installing ${providerFor(OLLAMA_PROVIDER_ID).label}...`
-                                    : `Starting ${providerFor(OLLAMA_PROVIDER_ID).label}...`}
+                                    ? `Installing ${OLLAMA_PROVIDER.label}...`
+                                    : `Starting ${OLLAMA_PROVIDER.label}...`}
                             </PaperText>
                             <PaperText size={1} color="text-muted">
                                 {state.runtime.status === "installing" ? `${state.runtime.install?.percent ?? 0}%` : ""}
@@ -306,14 +312,14 @@ export default function ModelBrowser(props: ModelBrowserProps) {
                             <PaperProgress
                                 value={state.runtime.install?.percent ?? 0}
                                 max={100}
-                                aria-label={`Installing ${providerFor(OLLAMA_PROVIDER_ID).label}`}
+                                aria-label={`Installing ${OLLAMA_PROVIDER.label}`}
                             />
                         </Show>
                     </div>
                 </div>
             </Show>
 
-            <Show when={state.pulls.length > 0}>
+            <Show when={!isEndpoint() && state.pulls.length > 0}>
                 <div class={styles.pulls} aria-label="Downloads in progress">
                     <For each={state.pulls}>
                         {(p) => (
@@ -321,7 +327,7 @@ export default function ModelBrowser(props: ModelBrowserProps) {
                                 <div class={styles.pullHead}>
                                     <PaperText size={2} weight={600} truncate>{p.model}</PaperText>
                                     <PaperText size={1} color="text-muted">
-                                        {p.totalBytes > 0 ? `${Math.round((p.completedBytes / p.totalBytes) * 100)}% · ${formatBytes(p.completedBytes)} of ${formatBytes(p.totalBytes)}` : `${providerLabel(p.provider)} · ${p.status}`}
+                                        {p.totalBytes > 0 ? `${Math.round((p.completedBytes / p.totalBytes) * 100)}% · ${formatBytes(p.completedBytes)} of ${formatBytes(p.totalBytes)}` : p.status}
                                     </PaperText>
                                     <PaperButton size="tiny" onClick={() => void call(UI_ACTION_IDS.cancelPull, { model: p.model }).catch((err) => setError(errorText(err)))}>
                                         Cancel
@@ -356,10 +362,10 @@ export default function ModelBrowser(props: ModelBrowserProps) {
             </Show>
 
             <Show when={!isEndpoint()}>
-            <Show when={state.models.length > 0}>
+            <Show when={listed().length > 0}>
                 <PaperText preset="section">On this computer</PaperText>
                 <PaperMediaCardGroup>
-                    <For each={state.models}>{(m) => <InstalledCard model={m} />}</For>
+                    <For each={listed()}>{(m) => <InstalledCard model={m} />}</For>
                 </PaperMediaCardGroup>
             </Show>
 
@@ -383,7 +389,7 @@ export default function ModelBrowser(props: ModelBrowserProps) {
             </Show>
             </Show>
 
-            <Show when={state.provider.id === OLLAMA_PROVIDER_ID}>
+            <Show when={!isEndpoint()}>
             <div class={styles.byName}>
                 <PaperText size={1} color="text-muted">Not listed? Download any Ollama library model by name.</PaperText>
                 <div class={styles.byNameRow}>
@@ -413,7 +419,7 @@ export default function ModelBrowser(props: ModelBrowserProps) {
                     if (model) setTags(model.name, tag);
                 }}
                 onClose={() => setDetail(null)}
-                onPick={mode() === "pick" ? props.onPick : undefined}
+                onPick={mode() === "pick" && props.onPick ? (ref) => props.onPick!(ref, props.provider) : undefined}
             />
 
             <PaperModal

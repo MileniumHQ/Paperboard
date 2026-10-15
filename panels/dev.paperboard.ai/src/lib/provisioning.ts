@@ -3,7 +3,7 @@
 // or "Starting Ollama..." rows; this only drives the sequence.
 
 import { UI_ACTION_IDS } from "../contract";
-import { DEFAULT_PROVIDER_ID, providerFor } from "../core/providers";
+import { OLLAMA_PROVIDER } from "../core/providers";
 import { call, state } from "./state";
 
 const STEP_MS = 300;
@@ -30,11 +30,10 @@ async function waitFor(predicate: () => boolean, timeoutMs: number): Promise<boo
  * running, and resolves only once the provider is ready. The install/start
  * actions acknowledge immediately — progress and failure travel through
  * state.runtime — so this waits on state rather than on an RPC deadline.
- * A provider that is a plain URL needs nothing.
+ * Only Ollama has a runtime; endpoints need nothing.
  */
-export async function ensureProviderReady(providerId: string = DEFAULT_PROVIDER_ID): Promise<void> {
-    const provider = providerFor(providerId);
-    if (!provider.runtime) return;
+export async function ensureOllamaReady(): Promise<void> {
+    const provider = OLLAMA_PROVIDER;
     const ready = () => state.runtime.status === "ready";
     const failed = () => state.runtime.status === "error" || state.runtime.status === "missing";
     if (ready()) return;

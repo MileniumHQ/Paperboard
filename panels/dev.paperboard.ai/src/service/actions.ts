@@ -197,11 +197,18 @@ export function uiActions(app: AiApp): ActionDefinition[] {
                 return { started: true };
             }),
         ),
-        ui(UI_ACTION_IDS.setProvider, "Set provider", (i) =>
-            ready(() => app.setProvider({ id: i.id, baseUrl: i.baseUrl, apiKey: i.apiKey, clearApiKey: i.clearApiKey })),
+        ui(UI_ACTION_IDS.addConnection, "Add provider", (i) =>
+            ready(() => app.addConnection({ kind: i.kind, label: i.label, baseUrl: i.baseUrl, apiKey: i.apiKey })),
         ),
-        ui(UI_ACTION_IDS.testProvider, "Test provider", (i) =>
-            ready(() => app.testProvider({ baseUrl: i.baseUrl, apiKey: i.apiKey })),
+        ui(UI_ACTION_IDS.updateConnection, "Change provider", (i) =>
+            ready(() =>
+                app.updateConnection({ id: i.id, label: i.label, baseUrl: i.baseUrl, apiKey: i.apiKey, clearApiKey: i.clearApiKey }),
+            ),
+        ),
+        ui(UI_ACTION_IDS.removeConnection, "Remove provider", (i) => ready(() => app.removeConnection(str(i.id, "id", 64)))),
+        ui(UI_ACTION_IDS.refreshModels, "Refresh models", () => ready(async () => void (await app.models.refresh()))),
+        ui(UI_ACTION_IDS.testConnection, "Test provider", (i) =>
+            ready(() => app.testConnection({ id: i.id, baseUrl: i.baseUrl, apiKey: i.apiKey })),
         ),
         ui(UI_ACTION_IDS.pullModel, "Download model", (i) =>
             ready(() => {
@@ -214,7 +221,7 @@ export function uiActions(app: AiApp): ActionDefinition[] {
         ),
         ui(UI_ACTION_IDS.cancelPull, "Cancel download", (i) => ready(() => app.models.cancel(str(i.model, "model")))),
         ui(UI_ACTION_IDS.deleteModel, "Delete model", (i) => ready(() => app.models.delete(str(i.model, "model")))),
-        ui(UI_ACTION_IDS.newConversation, "New chat", (i) => ready(() => app.newConversation(optStr(i.model, "model")))),
+        ui(UI_ACTION_IDS.newConversation, "New chat", (i) => ready(() => app.newConversation(optStr(i.model, "model"), optStr(i.provider, "provider", 64)))),
         ui(UI_ACTION_IDS.getConversation, "Open chat", (i) => ready(() => app.getConversation(str(i.id, "id", 64)))),
         ui(UI_ACTION_IDS.renameConversation, "Rename chat", (i) =>
             ready(() => app.renameConversation(str(i.id, "id", 64), str(i.title, "title", 200))),
@@ -225,7 +232,7 @@ export function uiActions(app: AiApp): ActionDefinition[] {
         ui(UI_ACTION_IDS.deleteConversation, "Delete chat", (i) => ready(() => app.deleteConversation(str(i.id, "id", 64)))),
         ui(UI_ACTION_IDS.deleteAllConversations, "Delete all chats", () => ready(() => app.deleteAllConversations())),
         ui(UI_ACTION_IDS.setConversationModel, "Set chat model", (i) =>
-            ready(() => app.setConversationModel(str(i.id, "id", 64), str(i.model, "model"))),
+            ready(() => app.setConversationModel(str(i.id, "id", 64), str(i.model, "model"), optStr(i.provider, "provider", 64))),
         ),
         ui(UI_ACTION_IDS.sendMessage, "Send message", (i) =>
             ready(async () => {
@@ -252,6 +259,7 @@ export function uiActions(app: AiApp): ActionDefinition[] {
             ready(() =>
                 app.updateSettings({
                     ...(typeof i.defaultModel === "string" ? { defaultModel: i.defaultModel } : {}),
+                    ...(typeof i.defaultProvider === "string" ? { defaultProvider: i.defaultProvider } : {}),
                     ...(typeof i.contextLength === "number" ? { contextLength: i.contextLength } : {}),
                     ...(isReasoningLevel(i.reasoning) ? { reasoning: i.reasoning } : {}),
                     ...(typeof i.panelActions === "boolean" ? { panelActions: i.panelActions } : {}),

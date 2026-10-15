@@ -4,7 +4,7 @@
 // provider that owns it (only providers with a pull surface can download).
 
 import { isValidModelRef } from "../core/catalog";
-import { DEFAULT_PROVIDER_ID, providerFor } from "../core/providers";
+import { OLLAMA_PROVIDER, OLLAMA_PROVIDER_ID } from "../core/providers";
 import { architectureFromModelInfo, type ModelArchitecture } from "../core/fit";
 import type { InstalledModel, PullProgress } from "../core/types";
 import type { ProviderClients } from "./provider";
@@ -15,7 +15,8 @@ const PROGRESS_INTERVAL_MS = 250;
 export interface ModelDeps {
     /** clients for the providers that are reachable right now */
     clients: () => ProviderClients;
-    onModels: (models: InstalledModel[]) => void;
+    /** every listing, plus why a connection could not be listed (unavailable, not empty) */
+    onModels: (models: InstalledModel[], errors: Record<string, string>) => void;
     onPulls: (pulls: PullProgress[]) => void;
     onDownloaded: (model: string) => void;
 }
@@ -30,6 +31,7 @@ export class ModelManager {
     private models: InstalledModel[] = [];
     private pulls = new Map<string, { progress: PullProgress; abort: AbortController }>();
     private refreshing: Promise<InstalledModel[]> | null = null;
+    private queued: Promise<InstalledModel[]> | null = null;
 
     constructor(private readonly deps: ModelDeps) {}
 
@@ -37,34 +39,65 @@ export class ModelManager {
         return this.models;
     }
 
-    /** The provider that serves a model name, as last listed. */
-    providerOf(model: string): string {
-        const found = this.models.find((m) => m.name === model || m.name === canonicalRef(model));
-        return found?.provider ?? DEFAULT_PROVIDER_ID;
+    /**
+     * A listed model. Names can repeat across connections, so a chat names
+     * its connection; without one, the first connection listing the name
+     * serves it (flow blocks pick models by name).
+     */
+    find(model: string, provider?: string): InstalledModel | undefined {
+        const matches = (m: InstalledModel) => m.name === model || m.name === canonicalRef(model);
+        return this.models.find((m) => (provider === undefined || m.provider === provider) && matches(m));
     }
 
-    capabilities(model: string): string[] | undefined {
-        return this.models.find((m) => m.name === canonicalRef(model) || m.name === model)?.capabilities;
+    /** The connection that serves a model name, or undefined when none lists it. */
+    providerOf(model: string): string | undefined {
+        return this.find(model)?.provider;
     }
 
-    architecture(model: string): ModelArchitecture | null {
-        return this.models.find((m) => m.name === canonicalRef(model) || m.name === model)?.architecture ?? null;
+    capabilities(model: string, provider?: string): string[] | undefined {
+        return this.find(model, provider)?.capabilities;
     }
 
-    /** Re-reads every reachable provider's list; one refresh in flight at a time. */
+    architecture(model: string, provider?: string): ModelArchitecture | null {
+        return this.find(model, provider)?.architecture ?? null;
+    }
+
+    /**
+     * Re-reads every reachable provider's list; one refresh in flight at a
+     * time. A refresh asked for meanwhile may follow a connection change the
+     * running one never saw, so it runs once more after it (at most one waits).
+     */
     refresh(): Promise<InstalledModel[]> {
         if (!this.refreshing) {
             this.refreshing = this.load().finally(() => {
                 this.refreshing = null;
             });
+            return this.refreshing;
         }
-        return this.refreshing;
+        this.queued ??= this.refreshing
+            .then(
+                () => undefined,
+                (err) => console.debug("[ai] the earlier model refresh failed:", String(err)),
+            )
+            .then(() => {
+                this.queued = null;
+                return this.refresh();
+            });
+        return this.queued;
     }
 
     private async load(): Promise<InstalledModel[]> {
         const next: InstalledModel[] = [];
+        const errors: Record<string, string> = {};
         for (const [providerId, client] of this.deps.clients()) {
-            const tags = (await client.tags()).filter((t) => !t.remote_host);
+            let tags;
+            try {
+                tags = (await client.tags()).filter((t) => !t.remote_host);
+            } catch (err) {
+                // one unreachable endpoint must not hide every other provider's models
+                errors[providerId] = err instanceof Error ? err.message : String(err);
+                continue;
+            }
             for (const tag of tags) {
                 // capabilities decide whether a model gets tools, so a model we
                 // cannot inspect is listed without any rather than guessed
@@ -97,7 +130,7 @@ export class ModelManager {
         }
         next.sort((a, b) => a.name.localeCompare(b.name) || a.provider.localeCompare(b.provider));
         this.models = next;
-        this.deps.onModels(next);
+        this.deps.onModels(next, errors);
         return next;
     }
 
@@ -109,16 +142,13 @@ export class ModelManager {
      * Starts a download and resolves when it finishes. Refuses a second pull
      * of the same model and more than MAX_CONCURRENT_PULLS at once.
      */
-    async pull(ref: string, providerId: string = DEFAULT_PROVIDER_ID): Promise<void> {
-        const provider = providerFor(providerId);
+    /** Downloads come from Ollama's library; endpoints list models rather than download them. */
+    async pull(ref: string): Promise<void> {
+        const provider = OLLAMA_PROVIDER;
         const client = this.deps.clients().get(provider.id);
-        if (!client) throw new Error(`${provider.label} is not running.`);
-        if (!provider.canPull || !client.pull) {
-            throw new Error(`${provider.label} lists models rather than downloading them.`);
-        }
-        const model = provider.id === "ollama" ? canonicalRef(ref) : ref.trim();
-        if (!model) throw new Error("A model name is required.");
-        if (provider.id === "ollama" && !isValidModelRef(model)) {
+        if (!client?.pull) throw new Error(`${provider.label} is not running.`);
+        const model = canonicalRef(ref);
+        if (!isValidModelRef(model)) {
             throw new Error(`"${ref}" is not a model name from the Ollama library.`);
         }
         if (this.pulls.has(model)) throw new Error(`${model} is already downloading.`);
@@ -173,12 +203,12 @@ export class ModelManager {
         for (const entry of this.pulls.values()) entry.abort.abort();
     }
 
-    async delete(ref: string, providerId: string = DEFAULT_PROVIDER_ID): Promise<void> {
+    /** Only Ollama's models live on this computer to delete. */
+    async delete(ref: string): Promise<void> {
         const model = canonicalRef(ref);
-        if (!this.models.some((m) => m.name === model || m.name === ref.trim())) throw new Error(`${model} is not installed.`);
-        const provider = providerFor(providerId);
-        const client = this.deps.clients().get(provider.id);
-        if (!client?.delete) throw new Error(`${provider.label} cannot delete models.`);
+        if (!this.find(model, OLLAMA_PROVIDER_ID)) throw new Error(`${model} is not installed.`);
+        const client = this.deps.clients().get(OLLAMA_PROVIDER_ID);
+        if (!client?.delete) throw new Error(`${OLLAMA_PROVIDER.label} is not running.`);
         await client.delete(model);
         await this.refresh();
     }

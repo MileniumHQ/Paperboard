@@ -47,7 +47,7 @@ export default function LoadedModel(props: { widget: WidgetContext }) {
     let timer: ReturnType<typeof setInterval> | undefined;
     createEffect(
         on(
-            () => [visible(), service.hydration(), service.state.runtime.status, service.state.provider.id, service.state.generating.length] as const,
+            () => [visible(), service.hydration(), service.state.runtime.status, service.state.connections.length, service.state.generating.length] as const,
             ([isVisible, hydration]) => {
                 clearInterval(timer);
                 timer = undefined;

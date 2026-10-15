@@ -1,6 +1,7 @@
 // The AI service: owns the Ollama runtime, models, conversations and the
 // approval gate, and mirrors them into panel state for the UI.
 
+import { createHash, randomBytes } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -18,14 +19,18 @@ import {
 import { EVENTS, OLLAMA_PACKAGE, OLLAMA_PROC_ID, PANEL_ID, TRIGGER_IDS } from "../contract";
 import { askSystemPrompt, isConversationId, isPromptStyle, MAX_CUSTOM_PROMPT_CHARS, MAX_USER_MESSAGE_CHARS } from "../core/conversation";
 import {
-    activeProviders,
-    CUSTOM_PROVIDER,
-    CUSTOM_PROVIDER_ID,
-    DEFAULT_PROVIDER_ID,
+    apiKeySecretName,
+    connectionLabel,
     credentialsAllowed,
+    definitionOf,
+    endpointLabel,
+    MAX_CONNECTION_LABEL_CHARS,
+    MAX_CONNECTIONS,
     normalizeBaseUrl,
+    OLLAMA_PROVIDER,
     OLLAMA_PROVIDER_ID,
-    providerFor,
+    type Connection,
+    type ProviderKind,
 } from "../core/providers";
 import { isReasoningLevel } from "../core/reasoning";
 import { quickAskModel } from "../core/widgets";
@@ -38,8 +43,6 @@ import {
     type LoadedModelsReport,
     type ModelSpeed,
     type PromptStyle,
-    type ProviderChoice,
-    type ProviderConfig,
     type RuntimeState,
     type Settings,
 } from "../core/types";
@@ -55,16 +58,31 @@ import { ConversationStore } from "./store";
 
 export type Ctx = ServiceContext<AiState>;
 
+/** A connection as saved; whether it has an API key is the vault's fact. */
+interface StoredConnection {
+    id: string;
+    kind: ProviderKind;
+    label: string;
+    baseUrl?: string;
+}
+
 interface StoredConfig {
+    /** CONFIG_VERSION once migrated; absent on 0.2 configs */
+    version?: number;
     settings?: Partial<Settings>;
     alwaysAllowed?: string[];
     speeds?: Record<string, ModelSpeed>;
-    /** provider choice and custom endpoint; the API key lives in the vault */
+    /** the providers the user added; API keys live in the vault */
+    connections?: StoredConnection[];
+    // TODO(remove after v0.3): the single provider choice of 0.2 configs,
+    // read once by migrateSingleProvider and then deleted from the document
     provider?: { id?: string; baseUrl?: string };
 }
 
-// the custom endpoint's API key is a vault secret, never panel config
-const OPENAI_API_KEY_SECRET = "openai-api-key";
+const CONFIG_VERSION = 2;
+// TODO(remove after v0.3): the 0.2 custom endpoint's vault secret, moved to
+// the migrated connection's own secret by migrateSingleProvider
+const LEGACY_API_KEY_SECRET = "openai-api-key";
 
 const MAX_ALWAYS_ALLOWED = 500;
 const MAX_SPEEDS = 100;
@@ -85,6 +103,7 @@ function clampSettings(input: Partial<Settings> | undefined): Settings {
         throw new Error(`System prompt must be at most ${MAX_CUSTOM_PROMPT_CHARS} characters.`);
     return {
         defaultModel: typeof s.defaultModel === "string" ? s.defaultModel.slice(0, 200) : "",
+        defaultProvider: typeof s.defaultProvider === "string" ? s.defaultProvider.slice(0, 64) : "",
         contextLength: Number.isInteger(s.contextLength) ? Math.min(131_072, Math.max(2048, s.contextLength)) : DEFAULT_SETTINGS.contextLength,
         reasoning: isReasoningLevel(s.reasoning) ? s.reasoning : DEFAULT_SETTINGS.reasoning,
         panelActions: typeof s.panelActions === "boolean" ? s.panelActions : DEFAULT_SETTINGS.panelActions,
@@ -121,8 +140,8 @@ export class AiApp {
         });
         this.models = new ModelManager({
             clients: () => this.buildProviderClients(),
-            onModels: (models) => {
-                this.ctx.setState({ models });
+            onModels: (models, modelErrors) => {
+                this.ctx.setState({ models, modelErrors });
                 // the model dropdowns on Ask AI and the triggers follow this list
                 void republishPublicActions(this).catch((err) =>
                     console.error("[ai] republishing action options failed:", String(err)),
@@ -143,115 +162,214 @@ export class AiApp {
         }
     }
 
-    // ─── provider selection ────────────────────────────────────────────────
+    // ─── connections ───────────────────────────────────────────────────────
 
-    /** The providers reachable right now, from the stored provider choice. */
-    private configuredProviders() {
-        const provider = this.ctx?.state.provider;
-        return activeProviders(provider && provider.id === CUSTOM_PROVIDER_ID ? provider.baseUrl : undefined);
+    private get connections(): Connection[] {
+        return this.ctx?.state.connections ?? [];
     }
 
-    private async apiKeyFor(providerId: string): Promise<string | undefined> {
-        if (providerId !== CUSTOM_PROVIDER_ID) return undefined;
-        if (!this.ctx?.state.provider.hasApiKey) return undefined;
-        const { found, value } = await secretsApi.get(OPENAI_API_KEY_SECRET, PANEL_ID);
+    private connection(id: string): Connection {
+        const found = this.connections.find((c) => c.id === id);
+        if (!found) throw new Error("That provider was removed.");
+        return found;
+    }
+
+    private hasOllama(): boolean {
+        return this.connections.some((c) => c.kind === "ollama");
+    }
+
+    private async apiKeyFor(connectionId: string): Promise<string | undefined> {
+        const connection = this.connections.find((c) => c.id === connectionId);
+        if (!connection?.hasApiKey) return undefined;
+        const { found, value } = await secretsApi.get(apiKeySecretName(connectionId), PANEL_ID);
         return found && value ? value : undefined;
     }
 
-    private async secretExists(): Promise<boolean> {
-        try {
-            const { found, value } = await secretsApi.get(OPENAI_API_KEY_SECRET, PANEL_ID);
-            return found && Boolean(value);
-        } catch (err) {
-            console.warn("[ai] could not read the endpoint API key from the vault:", String(err));
-            return false;
-        }
+    private buildProviderClients() {
+        return providerClients({ ollama: this.runtime.api, apiKeyFor: (id) => this.apiKeyFor(id) }, this.connections);
     }
 
-    private buildProviderClients() {
-        return providerClients(
-            { ollama: this.runtime.api, apiKeyFor: (id) => this.apiKeyFor(id) },
-            this.configuredProviders(),
+    /** Saved connections plus which have a key in the vault. */
+    private async connectionsFromStored(stored: readonly StoredConnection[]): Promise<Connection[]> {
+        const keys = stored.some((c) => c.kind === "openai-compatible") ? new Set(await secretsApi.list(PANEL_ID)) : new Set<string>();
+        return stored.map((c) =>
+            c.kind === "openai-compatible"
+                ? { id: c.id, kind: c.kind, label: c.label, baseUrl: c.baseUrl ?? "", hasApiKey: keys.has(apiKeySecretName(c.id)) }
+                : { id: c.id, kind: c.kind, label: c.label },
         );
     }
 
-    private providerStateFromStored(): ProviderConfig {
-        const saved = this.stored.provider;
-        const id: ProviderChoice = saved?.id === CUSTOM_PROVIDER_ID ? CUSTOM_PROVIDER_ID : OLLAMA_PROVIDER_ID;
-        const baseUrl = id === CUSTOM_PROVIDER_ID && typeof saved?.baseUrl === "string" ? saved.baseUrl : "";
-        return { id, baseUrl, hasApiKey: false, configured: Boolean(saved?.id) };
+    private publishConnections(stored: readonly StoredConnection[], keyed: ReadonlySet<string>): Connection[] {
+        const connections: Connection[] = stored.map((c) =>
+            c.kind === "openai-compatible" ? { ...c, baseUrl: c.baseUrl ?? "", hasApiKey: keyed.has(c.id) } : { ...c },
+        );
+        this.ctx.setState({ connections });
+        return connections;
+    }
+
+    private keyedIds(): Set<string> {
+        return new Set(this.connections.filter((c) => c.hasApiKey).map((c) => c.id));
+    }
+
+    private static cleanLabel(raw: unknown, fallback: string): string {
+        const label = typeof raw === "string" ? raw.replace(/\s+/g, " ").trim().slice(0, MAX_CONNECTION_LABEL_CHARS) : "";
+        return label || fallback;
+    }
+
+    /** Adds Ollama, or an OpenAI-compatible endpoint whose API key goes to the vault. */
+    async addConnection(input: { kind?: unknown; label?: unknown; baseUrl?: unknown; apiKey?: unknown }): Promise<Connection> {
+        const stored = this.stored.connections ?? [];
+        if (stored.length >= MAX_CONNECTIONS) throw new Error(`At most ${MAX_CONNECTIONS} providers can be added.`);
+        if (input.kind === "ollama") {
+            if (stored.some((c) => c.kind === "ollama")) throw new Error("Ollama is already added.");
+            const added: StoredConnection = { id: OLLAMA_PROVIDER_ID, kind: "ollama", label: OLLAMA_PROVIDER.label };
+            await this.saveConfig((c) => {
+                c.connections = [...(c.connections ?? []), added];
+            });
+            this.publishConnections(this.stored.connections ?? [], this.keyedIds());
+            // setup may have started Ollama already; never bounce a ready
+            // runtime, and never await its boot: readiness and failure travel
+            // through state.runtime
+            if (this.ctx.state.runtime.status !== "ready") {
+                void this.startIfInstalled().catch((err) => console.error("[ai] Ollama did not start:", String(err)));
+            }
+            return this.connection(added.id);
+        }
+        if (input.kind !== "openai-compatible") throw new Error("Unknown provider kind.");
+        if (typeof input.baseUrl !== "string" || !input.baseUrl.trim()) throw new Error("An endpoint URL is required.");
+        const baseUrl = normalizeBaseUrl(input.baseUrl);
+        const key = typeof input.apiKey === "string" && input.apiKey.trim() ? input.apiKey.trim() : undefined;
+        if (key && !credentialsAllowed(baseUrl)) {
+            throw new Error("Refusing to store an API key for a plaintext http endpoint. Use https, or a loopback address.");
+        }
+        let id: string;
+        do id = `api-${randomBytes(4).toString("hex")}`;
+        while (stored.some((c) => c.id === id));
+        const added: StoredConnection = { id, kind: "openai-compatible", label: AiApp.cleanLabel(input.label, endpointLabel(baseUrl)), baseUrl };
+        if (key) await secretsApi.set(apiKeySecretName(id), key, PANEL_ID);
+        try {
+            await this.saveConfig((c) => {
+                c.connections = [...(c.connections ?? []), added];
+            });
+        } catch (err) {
+            // the key belongs to a connection that was never saved
+            if (key) {
+                await secretsApi.delete(apiKeySecretName(id), PANEL_ID).catch((cleanup) => {
+                    throw new Error(`${err instanceof Error ? err.message : String(err)} Its API key could not be removed from the vault: ${String(cleanup)}`);
+                });
+            }
+            throw err;
+        }
+        const keyed = this.keyedIds();
+        if (key) keyed.add(id);
+        this.publishConnections(this.stored.connections ?? [], keyed);
+        await this.models.refresh();
+        return this.connection(id);
     }
 
     /**
-     * Persists the chosen provider. The custom endpoint's API key goes to the
-     * vault (panel id explicit), never to the config document or state.
+     * Renames an endpoint, points it elsewhere, or replaces its key. A key
+     * belongs to the URL it was entered for: a new URL without a new key
+     * drops the old one rather than carrying it to another host.
      */
-    async setProvider(input: {
-        id?: unknown;
-        baseUrl?: unknown;
-        apiKey?: unknown;
-        clearApiKey?: unknown;
-    }): Promise<ProviderConfig> {
-        const id: ProviderChoice = input.id === CUSTOM_PROVIDER_ID ? CUSTOM_PROVIDER_ID : OLLAMA_PROVIDER_ID;
-        let baseUrl = "";
-        if (id === CUSTOM_PROVIDER_ID) {
-            if (typeof input.baseUrl !== "string" || !input.baseUrl.trim()) {
-                throw new Error("An endpoint URL is required.");
-            }
-            baseUrl = normalizeBaseUrl(input.baseUrl);
-            const previous = this.stored.provider;
-            const previousBaseUrl =
-                previous?.id === CUSTOM_PROVIDER_ID && typeof previous.baseUrl === "string"
-                    ? previous.baseUrl
-                    : "";
-            if (input.clearApiKey === true) {
-                await secretsApi.delete(OPENAI_API_KEY_SECRET, PANEL_ID);
-            } else if (typeof input.apiKey === "string" && input.apiKey.trim()) {
-                if (!credentialsAllowed(baseUrl)) {
-                    throw new Error(
-                        "Refusing to store an API key for a plaintext http endpoint. Use https, or a loopback address.",
-                    );
-                }
-                await secretsApi.set(OPENAI_API_KEY_SECRET, input.apiKey.trim(), PANEL_ID);
-            } else if (baseUrl !== previousBaseUrl) {
-                // a key belongs to the endpoint it was entered for:
-                // changing the endpoint must not carry it to the new host
-                await secretsApi.delete(OPENAI_API_KEY_SECRET, PANEL_ID);
-            }
+    async updateConnection(input: { id?: unknown; label?: unknown; baseUrl?: unknown; apiKey?: unknown; clearApiKey?: unknown }): Promise<Connection> {
+        if (typeof input.id !== "string") throw new Error("Unknown provider.");
+        const current = (this.stored.connections ?? []).find((c) => c.id === input.id);
+        if (!current) throw new Error("That provider was removed.");
+        if (current.kind !== "openai-compatible") throw new Error(`${current.label} has nothing to change.`);
+        const baseUrl = typeof input.baseUrl === "string" && input.baseUrl.trim() ? normalizeBaseUrl(input.baseUrl) : current.baseUrl ?? "";
+        const key = typeof input.apiKey === "string" && input.apiKey.trim() ? input.apiKey.trim() : undefined;
+        if (key && !credentialsAllowed(baseUrl)) {
+            throw new Error("Refusing to store an API key for a plaintext http endpoint. Use https, or a loopback address.");
         }
+        const secret = apiKeySecretName(current.id);
+        const keyed = this.keyedIds();
+        if (key) {
+            await secretsApi.set(secret, key, PANEL_ID);
+            keyed.add(current.id);
+        } else if (input.clearApiKey === true || baseUrl !== current.baseUrl) {
+            await secretsApi.delete(secret, PANEL_ID);
+            keyed.delete(current.id);
+        }
+        const label = AiApp.cleanLabel(input.label, current.label);
         await this.saveConfig((c) => {
-            c.provider = { id, baseUrl };
+            c.connections = (c.connections ?? []).map((x) => (x.id === current.id ? { ...x, label, baseUrl } : x));
         });
-        const hasApiKey = id === CUSTOM_PROVIDER_ID ? await this.secretExists() : false;
-        const provider: ProviderConfig = { id, baseUrl, hasApiKey, configured: true };
-        this.ctx.setState({ provider });
-        if (id === CUSTOM_PROVIDER_ID) {
-            await this.models.refresh();
-        } else if (this.ctx.state.runtime.status !== "ready") {
-            // setup already started Ollama; never bounce a ready runtime.
-            // Do not await the boot here: it can outlive the caller's
-            // deadline, and readiness/failure travel through state.runtime.
-            void this.startIfInstalled().catch((err) => console.error("[ai] Ollama did not start:", String(err)));
-        }
-        return provider;
+        this.publishConnections(this.stored.connections ?? [], keyed);
+        await this.models.refresh();
+        return this.connection(current.id);
     }
 
-    /** Probes a custom endpoint's /v1/models without persisting anything. */
-    async testProvider(input: { baseUrl?: unknown; apiKey?: unknown }): Promise<{ models: number }> {
-        if (typeof input.baseUrl !== "string" || !input.baseUrl.trim()) {
-            throw new Error("An endpoint URL is required.");
+    /**
+     * Removes a provider. Its models leave the lists; Ollama's downloads stay
+     * on disk (user data) and come back when Ollama is added again.
+     */
+    async removeConnection(id: string): Promise<void> {
+        const current = (this.stored.connections ?? []).find((c) => c.id === id);
+        if (!current) throw new Error("That provider was removed.");
+        const replying = this.ctx.state.conversations.find(
+            (c) => this.ctx.state.generating.includes(c.id) && (c.provider ?? this.models.providerOf(c.model)) === id,
+        );
+        if (replying) throw new Error(`"${replying.title}" is replying with ${current.label}. Stop it first.`);
+        await this.saveConfig((c) => {
+            c.connections = (c.connections ?? []).filter((x) => x.id !== id);
+            if (c.settings?.defaultProvider === id) c.settings = { ...c.settings, defaultModel: "", defaultProvider: "" };
+        });
+        this.ctx.setState({ settings: clampSettings(this.stored.settings) });
+        const keyed = this.keyedIds();
+        keyed.delete(id);
+        this.publishConnections(this.stored.connections ?? [], keyed);
+        if (current.kind === "ollama") {
+            this.models.cancelAll();
+            await this.runtime.stop();
+        } else {
+            await secretsApi.delete(apiKeySecretName(id), PANEL_ID).catch((err) => {
+                throw new Error(`${current.label} was removed, but its API key could not be deleted from the vault: ${String(err)}`);
+            });
         }
+        await this.models.refresh();
+    }
+
+    /** Probes an endpoint's /v1/models without saving anything. */
+    async testConnection(input: { id?: unknown; baseUrl?: unknown; apiKey?: unknown }): Promise<{ models: number }> {
+        if (typeof input.baseUrl !== "string" || !input.baseUrl.trim()) throw new Error("An endpoint URL is required.");
         const baseUrl = normalizeBaseUrl(input.baseUrl);
         const typed = typeof input.apiKey === "string" && input.apiKey.trim() ? input.apiKey.trim() : undefined;
-        const key = typed ?? (await this.apiKeyFor(CUSTOM_PROVIDER_ID));
+        // an edit may test with the stored key, but only against the URL it was saved for
+        const saved = typeof input.id === "string" ? this.connections.find((c) => c.id === input.id) : undefined;
+        const key = typed ?? (saved && saved.baseUrl === baseUrl ? await this.apiKeyFor(saved.id) : undefined);
         if (key && !credentialsAllowed(baseUrl)) {
-            throw new Error(
-                "Refusing to send an API key over plaintext http. Use https, or a loopback address.",
-            );
+            throw new Error("Refusing to send an API key over plaintext http. Use https, or a loopback address.");
         }
-        const client = new OpenAICompatibleClient({ ...CUSTOM_PROVIDER, baseUrl }, async () => key);
+        const probe: Connection = { id: "api-00000000", kind: "openai-compatible", label: endpointLabel(baseUrl), baseUrl };
+        const client = new OpenAICompatibleClient(definitionOf(probe), async () => key);
         const tags = await client.tags();
         return { models: tags.length };
+    }
+
+    // TODO(remove after v0.3): 0.2 saved one provider choice, with the custom
+    // endpoint's key under one vault name. This turns it into connections
+    // once; the endpoint's id comes from its URL, so a retry after a failed
+    // write lands on the same secret instead of leaving another behind.
+    private async migrateSingleProvider(saved: StoredConfig): Promise<StoredConfig> {
+        const { provider: legacy, ...rest } = saved;
+        const connections: StoredConnection[] = [];
+        let movedKey = false;
+        if (legacy?.id === "custom" && typeof legacy.baseUrl === "string" && legacy.baseUrl) {
+            const id = `api-${createHash("sha256").update(legacy.baseUrl).digest("hex").slice(0, 8)}`;
+            connections.push({ id, kind: "openai-compatible", label: endpointLabel(legacy.baseUrl), baseUrl: legacy.baseUrl });
+            const { found, value } = await secretsApi.get(LEGACY_API_KEY_SECRET, PANEL_ID);
+            if (found && value) {
+                await secretsApi.set(apiKeySecretName(id), value, PANEL_ID);
+                movedKey = true;
+            }
+        } else if (legacy?.id) {
+            connections.push({ id: OLLAMA_PROVIDER_ID, kind: "ollama", label: OLLAMA_PROVIDER.label });
+        }
+        const next: StoredConfig = { ...rest, version: CONFIG_VERSION, connections };
+        await config.set(next, PANEL_ID);
+        if (movedKey) await secretsApi.delete(LEGACY_API_KEY_SECRET, PANEL_ID);
+        return next;
     }
 
     async init(ctx: Ctx): Promise<void> {
@@ -294,11 +412,15 @@ export class AiApp {
         // state surfaces through patchRuntime either way.
         this.resolveReady();
         void this.refreshHardware();
-        if (this.ctx.state.provider.id === CUSTOM_PROVIDER_ID) {
-            // a URL provider needs no runtime; just read its model list
-            void this.models.refresh().catch((err) => console.error("[ai] listing endpoint models failed:", String(err)));
-        } else {
+        // endpoints need no runtime; their models list right away, and
+        // Ollama's join once its runtime reports ready
+        void this.models.refresh().catch((err) => console.error("[ai] listing models failed:", String(err)));
+        if (this.hasOllama()) {
             void this.startIfInstalled().catch((err) => console.error("[ai] Ollama startup task failed:", String(err)));
+        } else {
+            // not added, so not started; setup still needs to know whether
+            // adding it means installing or only starting
+            void this.checkInstalled().catch((err) => console.error("[ai] Ollama package check failed:", String(err)));
         }
     }
 
@@ -306,14 +428,15 @@ export class AiApp {
 
     private async loadConfig(): Promise<void> {
         try {
-            const saved = (await config.get<StoredConfig | null>(PANEL_ID)) ?? {};
-            this.stored = typeof saved === "object" ? saved : {};
+            const read = (await config.get<StoredConfig | null>(PANEL_ID)) ?? {};
+            let saved: StoredConfig = typeof read === "object" ? read : {};
+            if (saved.version !== CONFIG_VERSION) saved = await this.migrateSingleProvider(saved);
+            this.stored = saved;
+            const connections = await this.connectionsFromStored(Array.isArray(saved.connections) ? saved.connections : []);
             this.configLoaded = true;
-            const provider = this.providerStateFromStored();
-            if (provider.id === CUSTOM_PROVIDER_ID) provider.hasApiKey = await this.secretExists();
             this.ctx.setState({
                 settings: clampSettings(this.stored.settings),
-                provider,
+                connections,
                 alwaysAllowed: Array.isArray(this.stored.alwaysAllowed) ? this.stored.alwaysAllowed.filter((k) => typeof k === "string") : [],
                 speeds: this.stored.speeds && typeof this.stored.speeds === "object" ? this.stored.speeds : {},
             });
@@ -392,10 +515,18 @@ export class AiApp {
 
     // ─── conversations ─────────────────────────────────────────────────────
 
-    /** Ollama refs are canonicalized ("qwen3" → "qwen3:latest"); url providers list exact ids. */
-    private normalizeModelRef(model: string): string {
-        const provider = providerFor(this.models.providerOf(model));
-        return provider.id === DEFAULT_PROVIDER_ID ? canonicalRef(model) : model.trim();
+    /** Ollama refs are canonicalized ("qwen3" → "qwen3:latest"); endpoints list exact ids. */
+    private normalizeModelRef(model: string, provider?: string): string {
+        const found = this.models.find(model, provider);
+        if (found) return found.name;
+        return (provider ?? this.models.providerOf(model)) === OLLAMA_PROVIDER_ID ? canonicalRef(model) : model.trim();
+    }
+
+    /** A connection id the UI sent, checked against the ones added. */
+    private knownProvider(provider: string | undefined): string | undefined {
+        if (provider === undefined || provider === "") return undefined;
+        this.connection(provider);
+        return provider;
     }
 
     private async loadConversations(): Promise<void> {
@@ -413,9 +544,11 @@ export class AiApp {
         }
     }
 
-    async newConversation(model?: string): Promise<Conversation> {
-        const chosen = model?.trim() ? this.normalizeModelRef(model) : this.ctx.state.settings.defaultModel;
-        return this.chat.create(chosen);
+    async newConversation(model?: string, provider?: string): Promise<Conversation> {
+        const settings = this.ctx.state.settings;
+        if (!model?.trim()) return this.chat.create(settings.defaultModel, settings.defaultProvider || undefined);
+        const via = this.knownProvider(provider);
+        return this.chat.create(this.normalizeModelRef(model, via), via);
     }
 
     /** What a window shows when it opens a chat, replies in flight included. */
@@ -431,11 +564,14 @@ export class AiApp {
         await this.chat.rename(id, clean);
     }
 
-    async setConversationModel(id: string, model: string): Promise<void> {
+    async setConversationModel(id: string, model: string, provider?: string): Promise<void> {
         if (!isConversationId(id)) throw new Error("Unknown chat.");
         if (this.ctx.state.generating.includes(id)) throw new Error("Wait for the reply to finish before switching models.");
+        const via = this.knownProvider(provider);
         const c = await this.store.get(id);
-        c.model = this.normalizeModelRef(model);
+        c.model = this.normalizeModelRef(model, via);
+        if (via) c.provider = via;
+        else delete c.provider;
         this.ctx.setState({ conversations: await this.store.save(c) });
     }
 
@@ -474,13 +610,15 @@ export class AiApp {
         const content = text.trim();
         if (!content) throw new Error("Type a question first.");
         if (content.length > MAX_USER_MESSAGE_CHARS) throw new Error(`Questions are limited to ${MAX_USER_MESSAGE_CHARS} characters.`);
-        if (!this.ctx.state.provider.configured) throw new Error("Set up AI first.");
+        if (this.connections.length === 0) throw new Error("Set up AI first.");
         const model = quickAskModel(this.ctx.state, chosenModel);
         if (!model) throw new Error("No model is downloaded yet. Pick one in AI.");
-        if (!this.models.capabilities(model)) throw new Error(`${model} is not downloaded. Pick a model in AI.`);
+        const settings = this.ctx.state.settings;
+        const provider = !chosenModel && settings.defaultProvider ? settings.defaultProvider : this.models.providerOf(model);
+        if (!provider || !this.models.capabilities(model, provider)) throw new Error(`${model} is not downloaded. Pick a model in AI.`);
         // throws when the provider is not reachable, before a chat exists
-        this.chatClientFor(this.models.providerOf(model));
-        const conversation = await this.chat.create(model);
+        this.chatClientFor(provider);
+        const conversation = await this.chat.create(model, provider);
         try {
             await this.chat.send(conversation.id, content);
         } catch (err) {
@@ -504,8 +642,7 @@ export class AiApp {
     }
 
     async loadedModels(): Promise<LoadedModelsReport> {
-        const provider = this.ctx.state.provider.id;
-        if (provider !== OLLAMA_PROVIDER_ID) return { status: "unsupported", provider: providerFor(provider).label };
+        if (!this.hasOllama()) return { status: "unsupported", provider: "Your providers" };
         const api = this.runtime.api;
         if (!api) return { status: "stopped", runtime: this.ctx.state.runtime.status };
         return { status: "ok", models: await listLoaded(api) };
@@ -513,11 +650,11 @@ export class AiApp {
 
     /** Frees a loaded model's memory; resolves once Ollama no longer lists it. */
     async unloadModel(name: string): Promise<LoadedModelsReport> {
-        if (this.ctx.state.provider.id !== OLLAMA_PROVIDER_ID) {
-            throw new Error(`${providerFor(this.ctx.state.provider.id).label} cannot unload models from here.`);
-        }
+        if (!this.hasOllama()) throw new Error("Only Ollama's models can be unloaded from here.");
         const api = this.runtime.requireApi();
-        const replying = this.ctx.state.conversations.find((c) => c.model === name && this.ctx.state.generating.includes(c.id));
+        const replying = this.ctx.state.conversations.find(
+            (c) => c.model === name && (c.provider ?? OLLAMA_PROVIDER_ID) === OLLAMA_PROVIDER_ID && this.ctx.state.generating.includes(c.id),
+        );
         if (replying) throw new Error(`"${replying.title}" is replying with ${name}. Stop it first.`);
         return { status: "ok", models: await unloadAndConfirm(api, name) };
     }
@@ -538,6 +675,18 @@ export class AiApp {
             homeDir: path.join(this.filesDir, "home"),
             windows,
         };
+    }
+
+    /** Reports whether Ollama is installed, without starting it. */
+    private async checkInstalled(): Promise<void> {
+        let installed: boolean;
+        try {
+            installed = await packageApi.isInstalled(OLLAMA_PACKAGE);
+        } catch (err) {
+            this.patchRuntime({ status: "error", error: `Could not check for Ollama: ${String(err)}` });
+            return;
+        }
+        this.patchRuntime(installed ? { status: "stopped", packageInstalled: true } : { status: "missing", packageInstalled: false });
     }
 
     async startIfInstalled(): Promise<void> {
@@ -624,9 +773,10 @@ export class AiApp {
         const chosen = model?.trim() ? this.normalizeModelRef(model) : this.ctx.state.settings.defaultModel;
         if (!prompt?.trim()) throw new Error("Ask AI needs a prompt.");
         if (!chosen) throw new Error("No model given and no default model is set in the AI panel.");
-        if (!this.models.capabilities(chosen)) throw new Error(`${chosen} is not installed in the AI panel.`);
+        const provider = !model?.trim() && this.ctx.state.settings.defaultProvider ? this.ctx.state.settings.defaultProvider : this.models.providerOf(chosen);
+        if (!provider || !this.models.capabilities(chosen, provider)) throw new Error(`${chosen} is not installed in the AI panel.`);
         return askOnce(
-            this.chatClientFor(this.models.providerOf(chosen)),
+            this.chatClientFor(provider),
             {
                 model: chosen,
                 prompt,
@@ -640,7 +790,13 @@ export class AiApp {
 
     private chatClientFor(providerId: string) {
         const client = this.buildProviderClients().get(providerId);
-        if (!client) throw new Error(`${providerFor(providerId).label} is not running. Start it from the AI panel first.`);
+        if (!client) {
+            throw new Error(
+                providerId === OLLAMA_PROVIDER_ID || !this.connections.some((c) => c.id === providerId)
+                    ? `${connectionLabel(this.connections, providerId)} is not available. Start or add it in the AI panel first.`
+                    : `${connectionLabel(this.connections, providerId)} has no endpoint URL.`,
+            );
+        }
         return client;
     }
 
