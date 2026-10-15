@@ -17,7 +17,7 @@ import {
     PaperText,
     getVarCss,
 } from "@mileniumhq/paperui";
-import bannerImg from "./assets/PanelLibraryBanner.png";
+import bannerImg from "./assets/PanelLibraryBanner.webp";
 import type { LibraryBridge } from "./bridge";
 import PanelPage, { iconGlyph, publisherLabel } from "./PanelPage";
 import { createLibraryRoute } from "./router";
