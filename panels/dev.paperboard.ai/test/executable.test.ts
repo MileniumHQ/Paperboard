@@ -1,6 +1,6 @@
 // Finding an installed agent without a shell: PATH first, then the per-user
 // folders installers use, and npm's Windows shims run through node.
-import { afterAll, beforeAll, describe, expect, it } from "bun:test";
+import { afterAll, beforeAll, describe, expect, it, spyOn } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -51,4 +51,28 @@ describe("finding an agent", () => {
         const shim = '@ECHO off\r\n"%_prog%"  "%dp0%\\node_modules\\@zed-industries\\codex-acp\\bin\\codex-acp.js" %*\r\n';
         expect(scriptFromCmdShim(shim, "C:\\npm")).toBe("C:\\npm\\node_modules\\@zed-industries\\codex-acp\\bin\\codex-acp.js");
     });
+});
+
+// Model Windows filesystem names on every CI OS; actual Windows spawning remains an OS check.
+it("resolves absolute npm shims and already-suffixed Windows commands", async () => {
+    const files = new Map([
+        ["C:\\npm\\agent.cmd", '\"%dp0%\\node_modules\\agent\\main.js\"'],
+        ["C:\\npm\\node.exe", ""],
+        ["C:\\npm\\agent.exe", ""],
+    ]);
+    const stat = spyOn(fs.promises, "stat").mockImplementation(async (file: any) => {
+        if (files.has(String(file))) return { isFile: () => true } as any;
+        throw Object.assign(new Error("missing"), { code: "ENOENT" });
+    });
+    const read = spyOn(fs.promises, "readFile").mockImplementation(async (file: any) => files.get(String(file)) as any);
+    const windows = { platform: "win32" as const, pathEnv: "C:\\npm", home: "C:\\home", pathExt: ".EXE;.CMD" };
+    try {
+        expect(await findExecutable("C:\\npm\\agent.cmd", ["--acp"], windows)).toMatchObject({
+            command: "C:\\npm\\node.exe", args: ["C:\\npm\\node_modules\\agent\\main.js", "--acp"],
+        });
+        expect((await findExecutable("agent.exe", [], windows))?.command).toBe("C:\\npm\\agent.exe");
+    } finally {
+        stat.mockRestore();
+        read.mockRestore();
+    }
 });

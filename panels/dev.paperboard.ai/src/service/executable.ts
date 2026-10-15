@@ -106,7 +106,7 @@ export function scriptFromCmdShim(shim: string, shimDir: string): string | undef
 
 /**
  * Resolves a command to something spawnable without a shell, or null when it
- * is not installed. An absolute path is taken as is; a bare name is searched.
+ * is not installed. Absolute paths and searched names both pass through shim conversion.
  */
 export async function findExecutable(command: string, args: readonly string[], env: SearchEnv = currentSearchEnv()): Promise<Launch | null> {
     const sep = env.platform === "win32" ? ";" : ":";
@@ -116,22 +116,21 @@ export async function findExecutable(command: string, args: readonly string[], e
         args: [...extraArgs, ...args],
         pathEnv: [p.dirname(file), env.pathEnv].filter(Boolean).join(sep),
     });
-    if (checkCommandShape(command) === "absolute") {
-        return (await isExecutableFile(command, env.platform)) ? launch(command) : null;
-    }
-    const dirs = await searchDirs(env);
-    const exts = env.platform === "win32" ? (env.pathExt ?? ".COM;.EXE;.BAT;.CMD").split(";").filter(Boolean) : [""];
+    const absolute = checkCommandShape(command) === "absolute";
+    const dirs = absolute ? [p.dirname(command)] : await searchDirs(env);
+    const extensions = env.platform === "win32" ? (env.pathExt ?? ".COM;.EXE;.BAT;.CMD").split(";").filter(Boolean) : [""];
+    const exts = absolute || p.extname(command) ? [""] : extensions;
     for (const dir of dirs) {
         for (const ext of exts) {
-            const file = p.join(dir, command + ext);
+            const file = absolute ? command : p.join(dir, command + ext);
             if (!(await isExecutableFile(file, env.platform))) continue;
-            const lower = ext.toLowerCase();
-            if (lower !== ".cmd" && lower !== ".bat") return launch(file);
+            const lower = p.extname(file).toLowerCase();
+            if (env.platform !== "win32" || (lower !== ".cmd" && lower !== ".bat")) return launch(file);
             const script = scriptFromCmdShim(await fs.promises.readFile(file, "utf8"), dir);
             if (!script) continue;
             // the shim prefers a node.exe beside it, as npm writes it
             const local = p.join(dir, "node.exe");
-            const node = (await isExecutableFile(local, env.platform)) ? local : (await findExecutable("node", [], env))?.command;
+            const node = (await isExecutableFile(local, env.platform)) ? local : (await findExecutable("node.exe", [], env))?.command;
             if (!node) continue;
             return { ...launch(node, [script]), pathEnv: [dir, p.dirname(node), env.pathEnv].filter(Boolean).join(sep) };
         }
