@@ -151,7 +151,8 @@ async function run(): Promise<void> {
     await nextFrame();
     const folder = document.querySelector<HTMLElement>('#browser [role="treeitem"][data-path="plugins"]')!;
     folder.focus();
-    folder.closest('[role="tree"]')!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+    // a real key press is dispatched on the focused row and bubbles to the tree
+    folder.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
     for (let i = 0; i < 5; i++) await nextFrame();
     out.checks.childShown = !!document.querySelector('#browser [data-path="plugins/config.yml"]');
     out.checks.focusKept = document.activeElement === folder && folder.isConnected;

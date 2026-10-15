@@ -213,16 +213,30 @@ describe("PaperFileBrowser", () => {
         const fs = fakeFiles(TREE);
         const { getByRole } = render(() => <PaperFileBrowser rootLabel="Server" list={fs.list} read={fs.read} />);
         const plugins = await treeItem(getByRole, "plugins");
-        const tree = getByRole("tree");
         // one tab stop: the first row
         expect((await treeItem(getByRole, "server.properties")).tabIndex).toBe(0);
         expect(plugins.tabIndex).toBe(-1);
-        fireEvent.keyDown(tree, { key: "ArrowDown" });
+        // keys come from the focused row, not from the container
+        fireEvent.keyDown(await treeItem(getByRole, "server.properties"), { key: "ArrowDown" });
         expect(plugins.tabIndex).toBe(0);
-        fireEvent.keyDown(tree, { key: "ArrowRight" });
+        fireEvent.keyDown(plugins, { key: "ArrowRight" });
         await treeItem(getByRole, "Essentials");
         expect(plugins.getAttribute("aria-expanded")).toBe("true");
-        fireEvent.keyDown(tree, { key: "ArrowLeft" });
+        fireEvent.keyDown(plugins, { key: "ArrowLeft" });
         expect(plugins.getAttribute("aria-expanded")).toBe("false");
+    });
+
+    test("Enter and Space on a folder's Retry button are the button's, not the tree's", async () => {
+        const fs = fakeFiles(TREE);
+        const { getByRole } = render(() => <PaperFileBrowser rootLabel="Server" list={fs.list} read={fs.read} />);
+        const plugins = await treeItem(getByRole, "plugins");
+        fs.list.mockRejectedValueOnce(new Error("Permission denied"));
+        fireEvent.click(plugins);
+        const retry = await screen.findByRole("button", { name: "Retry" });
+        for (const key of ["Enter", " "]) {
+            // fireEvent returns false when the key's default action was prevented
+            expect(fireEvent.keyDown(retry, { key })).toBe(true);
+        }
+        expect(fs.read).not.toHaveBeenCalled();
     });
 });

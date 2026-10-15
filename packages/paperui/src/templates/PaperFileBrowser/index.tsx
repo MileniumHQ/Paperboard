@@ -412,6 +412,8 @@ export function PaperFileBrowser(props: PaperFileBrowserProps) {
     };
 
     const onTreeKeyDown = (e: KeyboardEvent) => {
+        // keys from a control inside the tree (a folder's Retry button) are that control's own
+        if (!(e.target instanceof Element) || e.target.getAttribute("role") !== "treeitem") return;
         const list = entryRows();
         if (list.length === 0) return;
         const index = Math.max(0, list.findIndex((row) => row.entry.path === focused()));
