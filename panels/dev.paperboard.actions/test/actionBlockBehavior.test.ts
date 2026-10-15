@@ -245,6 +245,13 @@ describe("action editable field behavior", () => {
             expect(checks.listItemFields).toBe(2);
             expect(checks.listAfterClear, "clearing an item must remove it").toEqual(["green"]);
             expect(checks.listItemFieldsAfterClear).toBe(1);
+
+            expect(checks.limitProblemBefore, "an empty field breaks no limit").toBeNull();
+            expect(checks.limitProblemAfter, "a broken limit must show before running").toBe(
+                "\"Text 1\" holds at most 3 characters (it has 7)",
+            );
+            expect(checks.limitFieldInvalid).toBe("true");
+            expect(checks.limitProblemFixed).toBeNull();
         },
         60_000,
     );

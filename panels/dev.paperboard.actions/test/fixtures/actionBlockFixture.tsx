@@ -324,6 +324,37 @@ async function run(): Promise<void> {
     await typeItem(listRoot.querySelector<HTMLElement>(".actionListItem .actionEditable"), "");
     out.checks.listAfterClear = list.lastValue();
     out.checks.listItemFieldsAfterClear = listRoot.querySelectorAll(".actionListItem:not(.actionListAdd)").length;
+
+    // a declared limit shows on the block as soon as the typed value breaks
+    // it, before the flow runs; a variable is only known at run time
+    const limitRoot = document.createElement("div");
+    document.body.appendChild(limitRoot);
+    const joinSchema = schemaOf("text-join");
+    mountAction(limitRoot, {
+        ...joinSchema,
+        inputs: {
+            ...joinSchema.inputs,
+            text1: { ...joinSchema.inputs.text1, maxLength: 3 },
+        },
+    });
+    await tick();
+    const limited = limitRoot.querySelector<HTMLElement>(".actionEditable");
+    // what assistive tech reads: the icon ligature is hidden
+    const problemText = () => {
+        const problem = limitRoot.querySelector(".actionProblem");
+        return problem
+            ? [...problem.children]
+                  .filter((child) => child.getAttribute("aria-hidden") !== "true")
+                  .map((child) => child.textContent)
+                  .join("")
+            : null;
+    };
+    out.checks.limitProblemBefore = problemText();
+    await typeItem(limited, "toolong");
+    out.checks.limitProblemAfter = problemText();
+    out.checks.limitFieldInvalid = limited?.getAttribute("aria-invalid") ?? null;
+    await typeItem(limited, "ok");
+    out.checks.limitProblemFixed = problemText();
 }
 
 function finish(): void {

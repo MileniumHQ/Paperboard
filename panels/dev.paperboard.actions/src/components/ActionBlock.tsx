@@ -7,7 +7,7 @@ import {
     PaperSelectMenu,
     PaperSelectMenuItem,
 } from "@mileniumhq/paperui";
-import type { ActionSchema } from "@mileniumhq/paperapi";
+import { checkActionInput, type ActionSchema } from "@mileniumhq/paperapi";
 import type { CanvasBlock } from "../lib/tree";
 import { plainTextFromClipboard, sanitizeNumberText } from "../lib/textInput";
 import { parseVariableToken } from "../lib/variableTypes";
@@ -160,6 +160,8 @@ interface ActionEditableFieldProps {
     isTrigger?: boolean;
     isRequired?: boolean;
     disabled?: boolean;
+    /** the value breaks a limit its input declares */
+    invalid?: boolean;
     onCommit?: (val: any) => void;
     onRequestVariablePicker?: (
         x: number,
@@ -424,7 +426,8 @@ function ActionEditableField(fieldProps: ActionEditableFieldProps) {
                 // focus arrived (click, tab, programmatic)
                 openPicker();
             }}
-            class={`actionInput actionEditable ${fieldProps.multiline ? "actionEditableMultiline" : ""} ${isColorless() ? "colorless" : ""} ${isRequiredError() ? "requiredError" : ""}`}
+            class={`actionInput actionEditable ${fieldProps.multiline ? "actionEditableMultiline" : ""} ${isColorless() ? "colorless" : ""} ${isRequiredError() || fieldProps.invalid ? "requiredError" : ""}`}
+            aria-invalid={fieldProps.invalid ? "true" : undefined}
             data-placeholder={fieldProps.placeholder}
             inputmode={fieldProps.inputMode as "url" | undefined}
             spellcheck={fieldProps.spellcheck}
@@ -758,6 +761,20 @@ export default function ActionBlock(props: ActionBlockProps) {
     const [showMoreOptions, setShowMoreOptions] = createSignal(false);
     let dragStart = { x: 0, y: 0 };
     let posStart = { x: 0, y: 0 };
+
+    // limits the action declares on its inputs, checked on what is typed;
+    // a variable is only known when the flow runs, and the call itself is
+    // checked again by the SDK then
+    const inputProblems = createMemo(() => {
+        const problems: { key: string; message: string }[] = [];
+        const isVariable = (v: unknown) => typeof v === "string" && v.includes("{{");
+        for (const [key, def] of Object.entries((props.action as ActionSchema)?.inputs || {})) {
+            const message = checkActionInput(def, props.values?.[key], isVariable);
+            if (message) problems.push({ key, message });
+        }
+        return problems;
+    });
+    const hasProblem = (key: string) => inputProblems().some((p) => p.key === key);
 
     const paramsMap = createMemo(() => {
         const act = props.action as ActionSchema;
@@ -1224,6 +1241,7 @@ export default function ActionBlock(props: ActionBlockProps) {
                 isTrigger={isTrigger}
                 isRequired={Boolean(def?.required)}
                 disabled={Boolean(props.static)}
+                invalid={hasProblem(key)}
                 onCommit={(newVal) => {
                     props.onValueChange?.(props.id!, key, newVal);
                 }}
@@ -1363,6 +1381,17 @@ export default function ActionBlock(props: ActionBlockProps) {
                     </div>
                 )}
             </Show>
+
+            <div class="actionProblems" aria-live="polite">
+                <For each={inputProblems()}>
+                    {(problem) => (
+                        <div class="actionProblem">
+                            <PaperIcon aria-hidden="true">error</PaperIcon>
+                            <PaperText size={2}>{problem.message}</PaperText>
+                        </div>
+                    )}
+                </For>
+            </div>
 
             <Show when={multilineKeys().length > 0}>
                 <For each={multilineKeys()}>
