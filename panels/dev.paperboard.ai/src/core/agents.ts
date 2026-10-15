@@ -1,5 +1,5 @@
 // Coding agents the panel can talk to: over ACP (agentclientprotocol.com),
-// or Claude Code through its built-in bridge.
+// or Claude Code and Codex through their built-in bridges.
 // The panel never downloads agent code: an agent is something the user
 // installed, found on PATH (or at an absolute path for a custom one). The
 // shipped snapshot of the ACP registry (src/data/acp-agents.json, refreshed
@@ -8,6 +8,7 @@
 
 import snapshot from "../data/acp-agents.json";
 import { CLAUDE_CODE_ID } from "./claudeCode";
+import { CODEX_ID } from "./codex";
 import type { Connection } from "./providers";
 import type { AgentCommand } from "./types";
 
@@ -35,7 +36,19 @@ const CLAUDE_CODE: RegistryAgent = {
     args: [],
     install: { kind: "npm", package: "@anthropic-ai/claude-code" },
 };
-const REPLACED_BY_BUILT_INS = new Set(["claude-acp"]);
+/**
+ * Codex is bridged too (service/codex.ts), through its own app server: it
+ * takes the place of the registry's Codex adapter.
+ */
+const CODEX: RegistryAgent = {
+    id: CODEX_ID,
+    name: "Codex",
+    description: "OpenAI's coding agent",
+    command: "codex",
+    args: [],
+    install: { kind: "npm", package: "@openai/codex" },
+};
+const REPLACED_BY_BUILT_INS = new Set(["claude-acp", "codex-acp"]);
 
 /**
  * Still in the registry, but retired by their makers: Google ended Gemini CLI
@@ -50,10 +63,10 @@ const RETIRED = new Set(["gemini"]);
  * doesn't ship on npm, by how often 2026 roundups name it). The rest keep the
  * registry's order after them.
  */
-const POPULAR = ["codex-acp", CLAUDE_CODE_ID, "opencode", "github-copilot-cli", "cursor", "pi-acp", "cline", "goose", "qwen-code", "kilo", "grok-build", "kimi"];
+const POPULAR = [CODEX_ID, CLAUDE_CODE_ID, "opencode", "github-copilot-cli", "cursor", "pi-acp", "cline", "goose", "qwen-code", "kilo", "grok-build", "kimi"];
 const popularity = (id: string) => (POPULAR.includes(id) ? POPULAR.indexOf(id) : POPULAR.length);
 
-const ALL_AGENTS: readonly RegistryAgent[] = [CLAUDE_CODE, ...(snapshot.agents as RegistryAgent[]).filter((a) => !REPLACED_BY_BUILT_INS.has(a.id))];
+const ALL_AGENTS: readonly RegistryAgent[] = [CLAUDE_CODE, CODEX, ...(snapshot.agents as RegistryAgent[]).filter((a) => !REPLACED_BY_BUILT_INS.has(a.id))];
 
 /** The agents that can be added, most used first. */
 export const AGENT_REGISTRY: readonly RegistryAgent[] = ALL_AGENTS.filter((a) => !RETIRED.has(a.id)).sort((a, b) => popularity(a.id) - popularity(b.id));

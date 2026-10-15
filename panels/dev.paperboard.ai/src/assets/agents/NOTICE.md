@@ -9,7 +9,7 @@ site and shown only to identify that agent.
 - junie.svg: https://junie.jetbrains.com/favicons/favicon.svg
 - kimi.png: https://www.kimi.com/pwa-192.png
 - mistral-vibe.png: https://mistral.ai/favicon.ico (Mistral's mark; Vibe has none of its own)
-- codex-acp.png: icon-codex-dark-color.png inside OpenAI's Codex app (https://persistent.oaistatic.com/codex-app-prod/Codex.dmg), scaled to 256px
+- codex.png: icon-codex-dark-color.png inside OpenAI's Codex app (https://persistent.oaistatic.com/codex-app-prod/Codex.dmg), scaled to 256px
 - opencode.png: https://opencode.ai/apple-touch-icon-v3.png
 - github-copilot-cli.png: GitHub's Copilot icon from its VS Code Marketplace listing (GitHub.copilot-chat)
 - cursor.png: https://cursor.com/marketing-static/icon-512x512.png, scaled to 256px

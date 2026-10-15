@@ -16,11 +16,13 @@ import {
     type PromptCapabilities,
 } from "../core/acp";
 import { CLAUDE_CODE_ID } from "../core/claudeCode";
+import { CODEX_ID } from "../core/codex";
 import type { Connection } from "../core/providers";
 import type { AgentModel, AgentPermissionOption, AgentSessionInfo, AgentState } from "../core/types";
 import type { Launch } from "./executable";
 import { INVALID_PARAMS, JsonRpcError, JsonRpcPeer, METHOD_NOT_FOUND } from "./jsonRpc";
 import { ClaudeCodeAgent } from "./claudeCode";
+import { CodexAgent } from "./codex";
 import { killObserved, StderrTail, watchExit, type ExitWatch } from "./processWatch";
 
 /** ACP's "authentication required" error code */
@@ -567,7 +569,12 @@ export class AgentHub {
             agent = undefined;
         }
         if (!agent) {
-            agent = connection.agent === CLAUDE_CODE_ID ? new ClaudeCodeAgent(this.deps, connection) : new AgentProcess(this.deps, connection);
+            agent =
+                connection.agent === CLAUDE_CODE_ID
+                    ? new ClaudeCodeAgent(this.deps, connection)
+                    : connection.agent === CODEX_ID
+                      ? new CodexAgent(this.deps, connection)
+                      : new AgentProcess(this.deps, connection);
             this.agents.set(connection.id, agent);
         }
         return agent;

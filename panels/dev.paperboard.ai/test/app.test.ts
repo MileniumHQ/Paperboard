@@ -472,9 +472,9 @@ describe("AiApp widget actions", () => {
 });
 
 describe("coding agent connections", () => {
-    // the registry's Claude adapter is installed too, but Claude Code itself is
-    // the built-in; Gemini CLI is installed but retired
-    const installed = new Set(["claude", "claude-agent-acp", "qwen", "codex-acp", "gemini"]);
+    // the registry's Claude and Codex adapters are installed too, but Claude
+    // Code and Codex themselves are the built-ins; Gemini CLI is installed but retired
+    const installed = new Set(["claude", "claude-agent-acp", "qwen", "codex", "codex-acp", "gemini"]);
     // every installed agent is the fake ACP agent, offering two models
     const FAKE_AGENT = path.join(import.meta.dir, "fixtures", "fakeAcpAgent.mjs");
     const findAgent = async (command: string) =>
@@ -496,9 +496,9 @@ describe("coding agent connections", () => {
         }
     }
 
-    it("lists the agents found on this computer, most used first, with Claude Code bridged in place of the adapter", async () => {
+    it("lists the agents found on this computer, most used first, with Codex and Claude Code bridged in place of the adapters", async () => {
         await withApp(async (app) => {
-            expect(await app.installedAgents()).toEqual(["codex-acp", "claude-code", "qwen-code"]);
+            expect(await app.installedAgents()).toEqual(["codex", "claude-code", "qwen-code"]);
         });
     });
 
