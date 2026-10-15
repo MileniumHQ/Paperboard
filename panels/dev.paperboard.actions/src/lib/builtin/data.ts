@@ -81,6 +81,29 @@ export const dataBuiltins: BuiltinDef[] = [
                         },
                     },
                 } },
+    { id: "make-list", category: "logic.data", panelId: "builtin.logic", item: {
+                    panelId: "builtin.logic",
+                    action: "make-list",
+                    schema: {
+                        id: "make-list",
+                        name: "List",
+                        description: "A list of items you type or pick; a new item field appears as you fill the last one",
+                        template: "List {items}",
+                        icon: "list",
+                        inputs: {
+                            items: {
+                                type: "list<string>",
+                                label: "Items",
+                                placeholder: "Item",
+                                required: true,
+                            },
+                        },
+                        output: {
+                            type: "list<string>",
+                            label: "List",
+                        },
+                    },
+                } },
     { id: "list-length", category: "logic.data", panelId: "builtin.logic", item: {
                     panelId: "builtin.logic",
                     action: "list-length",

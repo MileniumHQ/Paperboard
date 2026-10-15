@@ -1,4 +1,4 @@
-import { createSignal, createMemo, createEffect, onMount, For, Show } from "solid-js";
+import { createSignal, createMemo, createEffect, onMount, For, Index, Show } from "solid-js";
 import {
     PaperFlex,
     PaperIcon,
@@ -11,7 +11,7 @@ import type { ActionSchema } from "@mileniumhq/paperapi";
 import type { CanvasBlock } from "../lib/tree";
 import { plainTextFromClipboard, sanitizeNumberText } from "../lib/textInput";
 import { parseVariableToken } from "../lib/variableTypes";
-import { isArrayInputType, innerTypeOf, isTypedOnlyInput, expectedTypeOf } from "../lib/inputTypes";
+import { isArrayInputType, innerTypeOf, isTypedOnlyInput, isLiteralListInput, expectedTypeOf } from "../lib/inputTypes";
 import { typeDisplayName } from "../lib/typeCatalog";
 import {
     appendVariableChip,
@@ -528,6 +528,99 @@ function ActionEditableField(fieldProps: ActionEditableFieldProps) {
     );
 }
 
+interface ListItemsFieldProps {
+    blockId?: string;
+    paramKey: string;
+    label: string;
+    value: unknown;
+    itemPlaceholder: string;
+    isNumber: boolean;
+    isRequired: boolean;
+    disabled: boolean;
+    onChange: (items: string[] | undefined) => void;
+    onRequestVariablePicker: (
+        x: number,
+        y: number,
+        onInsert: (varId: string, label: string, icon: string) => void,
+        anchor?: HTMLElement,
+    ) => void;
+}
+
+// a typed list edited item by item: each item is its own field (text or
+// variables), and a trailing field adds the next item once it is left
+function ListItemsField(listProps: ListItemsFieldProps) {
+    const items = (): string[] => {
+        const v = listProps.value;
+        if (Array.isArray(v)) return v.map((item) => (item == null ? "" : String(item)));
+        return v == null || String(v).trim() === "" ? [] : [String(v)];
+    };
+    const [addGeneration, setAddGeneration] = createSignal(0);
+    const commit = (next: string[]) => {
+        const kept = next.filter((item) => item.trim() !== "");
+        listProps.onChange(kept.length ? kept : undefined);
+    };
+    // an edit lands when the field is left: adding or removing an item
+    // under the caret (a chip insert, a deleted chip) would move the field
+    const stillEditing = (wrap: HTMLElement | undefined) =>
+        Boolean(wrap && wrap.contains(document.activeElement));
+
+    return (
+        <span class="actionListItems" role="group" aria-label={listProps.label}>
+            <Index each={items()}>
+                {(item, index) => {
+                    let wrap: HTMLSpanElement | undefined;
+                    return (
+                        <span ref={wrap} class="actionListItem">
+                            <ActionEditableField
+                                blockId={listProps.blockId}
+                                paramKey={`${listProps.paramKey}.${index}`}
+                                isNumber={listProps.isNumber}
+                                initialValue={item()}
+                                placeholder={listProps.itemPlaceholder}
+                                disabled={listProps.disabled}
+                                onCommit={(v) => {
+                                    const text = v == null ? "" : String(v);
+                                    if (text.trim() === "" && stillEditing(wrap)) return;
+                                    const next = [...items()];
+                                    next[index] = text;
+                                    commit(next);
+                                }}
+                                onRequestVariablePicker={listProps.onRequestVariablePicker}
+                            />
+                        </span>
+                    );
+                }}
+            </Index>
+            <Show when={!listProps.disabled}>
+                <Show when={addGeneration() + 1} keyed>
+                    {(_generation) => {
+                        let wrap: HTMLSpanElement | undefined;
+                        return (
+                            <span ref={wrap} class="actionListItem actionListAdd">
+                                <ActionEditableField
+                                    blockId={listProps.blockId}
+                                    paramKey={`${listProps.paramKey}.new`}
+                                    isNumber={listProps.isNumber}
+                                    initialValue=""
+                                    placeholder={items().length ? "Add item" : listProps.itemPlaceholder}
+                                    isRequired={listProps.isRequired && items().length === 0}
+                                    onCommit={(v) => {
+                                        const text = v == null ? "" : String(v);
+                                        if (text.trim() === "" || stillEditing(wrap)) return;
+                                        commit([...items(), text]);
+                                        setAddGeneration((n) => n + 1);
+                                    }}
+                                    onRequestVariablePicker={listProps.onRequestVariablePicker}
+                                />
+                            </span>
+                        );
+                    }}
+                </Show>
+            </Show>
+        </span>
+    );
+}
+
 interface TypedVariablePillProps {
     blockId?: string;
     paramKey: string;
@@ -1000,6 +1093,43 @@ export default function ActionBlock(props: ActionBlockProps) {
                         )}
                     </Show>
                 </span>
+            );
+        }
+
+        // a typed list of text or numbers is edited item by item; a bare
+        // "array" input also takes text or an object, so it stays one field
+        if (!isTrigger && isLiteralListInput(def)) {
+            return (
+                <ListItemsField
+                    blockId={props.id}
+                    paramKey={key}
+                    label={token.label || key}
+                    value={val()}
+                    itemPlaceholder={placeholderText()}
+                    isNumber={innerTypeOf(def!.type!) === "number"}
+                    isRequired={Boolean(def?.required)}
+                    disabled={Boolean(props.static)}
+                    onChange={(items) => {
+                        if (props.id) props.onValueChange?.(props.id, key, items);
+                    }}
+                    onRequestVariablePicker={(x, y, onInsert, anchor) => {
+                        if (props.id) {
+                            props.onRequestVariablePicker?.(
+                                props.id,
+                                key,
+                                x,
+                                y,
+                                onInsert,
+                                // text items interpolate any variable; a
+                                // typed item takes its type or a whole list
+                                // of it, which the run spreads in
+                                expectedTypeOf(def) === "string" ? "string" : def!.type,
+                                true,
+                                anchor,
+                            );
+                        }
+                    }}
+                />
             );
         }
 

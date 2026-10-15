@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { expectedTypeOf, isArrayInputType, isTypedOnlyInput } from "../src/lib/inputTypes";
+import { expectedTypeOf, isArrayInputType, isLiteralListInput, isTypedOnlyInput } from "../src/lib/inputTypes";
 
 test("Discord input pills require typed variables for references and component lists", () => {
     for (const type of ["discord-user", "discord-channel", "discord-message", "discord-interaction", "list<discord-embed>", "list<discord-component>"]) {
@@ -17,4 +17,12 @@ test("a list pill requests its element type from the variable picker", () => {
     expect(expectedTypeOf({ type: "discord-user" })).toBe("discord-user");
     expect(isArrayInputType("list<discord-embed>")).toBe(true);
     expect(isArrayInputType("discord-user")).toBe(false);
+});
+
+test("typed text and number lists are edited item by item; bare arrays and custom lists are not", () => {
+    expect(isLiteralListInput({ type: "list<string>" })).toBe(true);
+    expect(isLiteralListInput({ type: "list<number>" })).toBe(true);
+    expect(isLiteralListInput({ type: "array" })).toBe(false);
+    expect(isLiteralListInput({ type: "list<discord-user>" })).toBe(false);
+    expect(isLiteralListInput({ type: "string" })).toBe(false);
 });

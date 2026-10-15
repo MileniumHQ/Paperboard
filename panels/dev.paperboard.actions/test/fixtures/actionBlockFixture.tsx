@@ -9,6 +9,7 @@ import { render } from "solid-js/web";
 import ActionBlock from "../../src/components/ActionBlock";
 import VariableMenu from "../../src/components/VariableMenu";
 import { textBuiltins } from "../../src/lib/builtin/text";
+import { dataBuiltins } from "../../src/lib/builtin/data";
 
 interface FixtureResults {
     checks: Record<string, unknown>;
@@ -21,7 +22,7 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
 function schemaOf(id: string): any {
-    const found = textBuiltins.find((builtin) => builtin.id === id);
+    const found = [...textBuiltins, ...dataBuiltins].find((builtin) => builtin.id === id);
     if (!found?.item.schema) throw new Error(`builtin ${id} has no schema`);
     return found.item.schema;
 }
@@ -296,6 +297,33 @@ async function run(): Promise<void> {
         : null;
     out.checks.deprecatedNoteVisible = note ? (note as HTMLElement).offsetHeight > 0 : false;
     out.checks.currentActionHasNote = plainRoot.querySelector('[role="note"]') !== null;
+
+    // the List block edits its items one by one: leaving the trailing field
+    // adds an item, and clearing an item removes it
+    const listRoot = document.createElement("div");
+    document.body.appendChild(listRoot);
+    const list = mountAction(listRoot, schemaOf("make-list"));
+    await tick();
+    const group = listRoot.querySelector<HTMLElement>('[role="group"]');
+    out.checks.listGroupName = group?.getAttribute("aria-label") ?? null;
+    const typeItem = async (field: HTMLElement | null, text: string) => {
+        if (!field) throw new Error("list rendered no field to type into");
+        field.focus({ preventScroll: true });
+        document.execCommand("selectAll", false);
+        if (text) document.execCommand("insertText", false, text);
+        else document.execCommand("delete", false);
+        field.blur();
+        await tick();
+    };
+    const addField = () => listRoot.querySelector<HTMLElement>(".actionListAdd .actionEditable");
+    await typeItem(addField(), "red");
+    out.checks.listAfterFirst = list.lastValue();
+    await typeItem(addField(), "green");
+    out.checks.listAfterSecond = list.lastValue();
+    out.checks.listItemFields = listRoot.querySelectorAll(".actionListItem:not(.actionListAdd)").length;
+    await typeItem(listRoot.querySelector<HTMLElement>(".actionListItem .actionEditable"), "");
+    out.checks.listAfterClear = list.lastValue();
+    out.checks.listItemFieldsAfterClear = listRoot.querySelectorAll(".actionListItem:not(.actionListAdd)").length;
 }
 
 function finish(): void {

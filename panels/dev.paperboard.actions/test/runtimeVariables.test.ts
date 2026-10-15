@@ -57,3 +57,32 @@ describe("resolveInputs with dangling references", () => {
         expect(resolved.content).toBe("hello alice!");
     });
 });
+
+describe("resolveInputs with a list edited item by item", () => {
+    const items = { items: { type: "list<string>", label: "Items" } };
+
+    test("interpolates each item, spreads list variables and skips empty items", () => {
+        const resolved = resolveInputs(
+            items,
+            { items: ["red", "", "hi {{values.name:Name:person}}", "{{values.tags:Tags:list}}"] },
+            {},
+            { values: { name: "alice", tags: ["a", "b"] } },
+        );
+        expect(resolved.items).toEqual(["red", "hi alice", "a", "b"]);
+    });
+
+    test("a list of numbers refuses an item that is not a number", () => {
+        const numbers = { n: { type: "list<number>", label: "Numbers" } };
+        expect(resolveInputs(numbers, { n: ["1", "2.5", "{{values.x:X:tag}}"] }, {}, { values: { x: 3 } }).n)
+            .toEqual([1, 2.5, 3]);
+        expect(() => resolveInputs(numbers, { n: ["1", "two"] }, {}, {})).toThrow(
+            /Item 2 of "Numbers" is "two", not a number/,
+        );
+    });
+
+    test("an item whose variable lost its source fails", () => {
+        expect(() => resolveInputs(items, { items: ["{{gone:Gone:tag}} x"] }, {}, {})).toThrow(
+            /Variable "Gone" for "Items" has no source/,
+        );
+    });
+});

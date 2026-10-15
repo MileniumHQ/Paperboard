@@ -344,6 +344,17 @@ body,
     gap: var(--paper-uigap-onefourth);
 }
 
+.actionListItems {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--paper-uigap-onefourth);
+}
+
+.actionListItem {
+    display: inline-flex;
+}
+
 .actionColorDot {
     width: var(--paper-text-size-1);
     height: var(--paper-text-size-1);

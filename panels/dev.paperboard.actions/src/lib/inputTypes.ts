@@ -25,3 +25,9 @@ export function expectedTypeOf(def?: Pick<ActionParamDefinition, "type">): strin
     const inner = isArrayInputType(def.type) ? innerTypeOf(def.type) : def.type;
     return inner === "array" ? "any" : inner;
 }
+
+/** A typed list whose items can be typed: edited item by item. */
+export function isLiteralListInput(def?: Pick<ActionParamDefinition, "type" | "options">): boolean {
+    if (!def?.type || def.options?.length || def.type === "array") return false;
+    return isArrayInputType(def.type) && !isTypedOnlyInput(def);
+}

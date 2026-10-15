@@ -5,6 +5,7 @@ import {
     getField,
     isTruthyFlowValue,
     listLength,
+    makeList,
     measureDuration,
     padText,
     parseJson,
@@ -74,6 +75,12 @@ describe("json and list helpers", () => {
         expect(pickFromList(["a", "b", "c"], -1)).toBe("c");
         expect(() => pickFromList(["a"], 5)).toThrow(/outside the list/);
         expect(() => pickFromList("nope", 0)).toThrow(/needs a list/);
+    });
+
+    it("makes a list from its items, a lone value or nothing", () => {
+        expect(makeList(["a", "b"])).toEqual(["a", "b"]);
+        expect(makeList("a")).toEqual(["a"]);
+        expect(makeList(undefined)).toEqual([]);
     });
 });
 

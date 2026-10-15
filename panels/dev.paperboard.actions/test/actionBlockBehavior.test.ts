@@ -238,6 +238,13 @@ describe("action editable field behavior", () => {
             ).toBe("Remove this step; it goes away after v0.2.");
             expect(checks.deprecatedNoteVisible, "the deprecation note is not visible").toBe(true);
             expect(checks.currentActionHasNote, "a current action must not show a note").toBe(false);
+
+            expect(checks.listGroupName, "the item group needs its input's name").toBe("Items");
+            expect(checks.listAfterFirst, "leaving the add field must add an item").toEqual(["red"]);
+            expect(checks.listAfterSecond).toEqual(["red", "green"]);
+            expect(checks.listItemFields).toBe(2);
+            expect(checks.listAfterClear, "clearing an item must remove it").toEqual(["green"]);
+            expect(checks.listItemFieldsAfterClear).toBe(1);
         },
         60_000,
     );

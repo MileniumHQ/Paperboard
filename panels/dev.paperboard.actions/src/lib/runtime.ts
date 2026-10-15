@@ -15,6 +15,7 @@ import {
     getField,
     isTruthyFlowValue,
     listLength,
+    makeList,
     measureDuration,
     padText,
     parseJson,
@@ -339,6 +340,75 @@ function unresolvedReferenceError(
     );
 }
 
+/**
+ * A list field edited item by item stores an array of item texts. Each item
+ * resolves on its own: a variable that holds a list contributes its items,
+ * any other text is interpolated, and an empty item is skipped. A list of
+ * numbers or text holds only numbers or text.
+ */
+function resolveListItems(
+    key: string,
+    def: any,
+    items: unknown[],
+    contextPayload: any,
+    triggerPayload: any,
+    outputType?: string,
+    stepOutputsByLabel?: Map<string, any>,
+    stepOutputsByRef?: Map<string, any>,
+): unknown[] {
+    const inner = String(def?.type).match(/^(?:list|array)<(.+)>$/)?.[1];
+    const out: unknown[] = [];
+    const push = (value: unknown, index: number) => {
+        if (inner === "number") {
+            const n = typeof value === "number" ? value : Number(value);
+            if (String(value).trim() === "" || !Number.isFinite(n)) {
+                throw new Error(
+                    `Item ${index + 1} of "${def?.label || key}" is "${String(value)}", not a number`,
+                );
+            }
+            out.push(n);
+        } else if (inner === "string" && (typeof value === "number" || typeof value === "boolean")) {
+            out.push(String(value));
+        } else {
+            out.push(value);
+        }
+    };
+    items.forEach((item, index) => {
+        if (typeof item !== "string") {
+            if (item !== undefined && item !== null) push(item, index);
+            return;
+        }
+        if (item.trim() === "") return;
+        const raw = tryResolveRawReferences(
+            item,
+            "array",
+            contextPayload,
+            triggerPayload,
+            outputType,
+            stepOutputsByLabel,
+            stepOutputsByRef,
+        );
+        if (raw.handled) {
+            for (const value of raw.value as unknown[]) push(value, index);
+            return;
+        }
+        const text = interpolateString(
+            item,
+            contextPayload,
+            triggerPayload,
+            outputType,
+            stepOutputsByLabel,
+            stepOutputsByRef,
+        );
+        const unresolved = findUnresolvedReferences(text);
+        if (unresolved.length > 0) {
+            throw unresolvedReferenceError(key, def?.label, unresolved);
+        }
+        push(text, index);
+    });
+    return out;
+}
+
 export function resolveInputs(
     inputsMap: Record<string, any> = {},
     values: Record<string, any> = {},
@@ -360,6 +430,20 @@ export function resolveInputs(
 
         if (val === undefined || val === null || val === "") {
             val = def?.default !== undefined ? def.default : "";
+        }
+
+        if (Array.isArray(val) && isArrayLikeType(def?.type)) {
+            resolved[key] = resolveListItems(
+                key,
+                def,
+                val,
+                contextPayload,
+                triggerPayload,
+                outputType,
+                stepOutputsByLabel,
+                stepOutputsByRef,
+            );
+            continue;
         }
 
         if (typeof val === "string") {
@@ -822,6 +906,7 @@ const builtinHandlers: Record<string, BuiltinHandler> = {
     "json-parse": (inputs) => parseJson(inputs.text),
     "json-stringify": (inputs) => stringifyJson(inputs.value, inputs.pretty),
     "get-field": (inputs) => getField(inputs.value, inputs.path),
+    "make-list": (inputs) => makeList(inputs.items),
     "list-length": (inputs) => listLength(inputs.list),
     "pick-from-list": (inputs) => pickFromList(inputs.list, inputs.index),
     text: (inputs) => String(inputs.value ?? ""),

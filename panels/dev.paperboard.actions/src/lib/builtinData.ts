@@ -155,6 +155,13 @@ export function getField(value: unknown, path: unknown): unknown {
     return current === undefined ? null : current;
 }
 
+/** The List block: its items as one list value (a lone value is a list of one). */
+export function makeList(items: unknown): unknown[] {
+    if (Array.isArray(items)) return items;
+    if (items === undefined || items === null || items === "") return [];
+    return [items];
+}
+
 export function listLength(value: unknown): number {
     if (Array.isArray(value)) return value.length;
     if (typeof value === "string") return value.length;
