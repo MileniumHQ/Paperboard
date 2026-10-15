@@ -2,7 +2,7 @@
 // truthful about what it observed, slash commands from the live session are
 // what it counts, and the status widget never reports servers for a bot that
 // is not connected.
-import { describe, it, expect } from "bun:test";
+import { afterEach, describe, it, expect } from "bun:test";
 import type { Client } from "discord.js";
 import {
     ACTIVITY_BUCKETS,
@@ -55,6 +55,13 @@ const recordingFactory = (handlers: Map<string, Handler>) =>
     }) as unknown as Client;
 
 const ctx = { emitTrigger: () => {} } as any;
+
+// startBot leaves a live session (client, uptime, command-sync result) in
+// module state shared by every suite in the process; stop it so no later
+// suite observes this one's session, whatever order the files run in
+afterEach(async () => {
+    await __botTest.stopBot();
+});
 
 describe("command activity from the live session", () => {
     it("records each slash command, not button clicks", async () => {

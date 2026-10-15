@@ -1,6 +1,6 @@
 // bot connection state machine (bun test): a failed login must null the
 // client, record the typed error, and emit it — never report "connected"
-import { describe, it, expect } from "bun:test";
+import { afterEach, describe, it, expect } from "bun:test";
 import { Client } from "discord.js";
 import {
     __botTest,
@@ -66,6 +66,12 @@ const recordingFactory = (handlers: Map<string, Handler>, hooks: object = {}) =>
             return undefined;
         },
     }) as unknown as Client;
+
+// every startBot here leaves a session in module state shared by the whole
+// test process; stop it so no other suite inherits it, in any file order
+afterEach(async () => {
+    await __botTest.stopBot();
+});
 
 const serviceCtx = (emitted: { triggerId: string; output: unknown }[]) =>
     ({

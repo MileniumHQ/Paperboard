@@ -914,7 +914,7 @@ async function startBot(
 
 // test seam: drives the real startBot with a fake transport so tests can
 // assert the state machine after failure without touching the network
-export const __botTest = { startBot };
+export const __botTest = { startBot, stopBot };
 
 // ---------------------------------------------------------------------------
 // slash command storage and registration
