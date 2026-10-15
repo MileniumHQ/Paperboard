@@ -7,6 +7,32 @@
     "base": "./dist/index.html",
     "service": "./dist/service.js",
     "icon": "./branding/icon.png",
+    "widgets": [
+        {
+            "id": "status",
+            "name": "Server status",
+            "description": "Online or offline, players and version, with a start and stop button",
+            "sizes": ["2x1", "2x2"]
+        },
+        {
+            "id": "players",
+            "name": "Players online",
+            "description": "Who is playing right now",
+            "sizes": ["2x2"]
+        },
+        {
+            "id": "console",
+            "name": "Console",
+            "description": "The server log's latest lines, errors marked",
+            "sizes": ["4x1"]
+        },
+        {
+            "id": "motd",
+            "name": "Server list message",
+            "description": "The MOTD as players see it in their server list",
+            "sizes": ["4x1"]
+        }
+    ],
     "store": {
         "about": "./store/about.md",
         "screenshots": [

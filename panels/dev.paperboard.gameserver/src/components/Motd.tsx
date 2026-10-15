@@ -11,11 +11,9 @@ import {
     applyCode,
     DEFAULT_MOTD,
     docFromMotd,
-    MOTD_COLOR_HEX,
     MOTD_COLORS,
     MOTD_FORMATS,
     motdFromDoc,
-    parseMotd,
     plainStyle,
     replaceRange,
     sameStyle,
@@ -27,12 +25,10 @@ import {
 } from "../core/motd";
 import { readServerPropertiesStrict, writeServerProperties } from "../lib/properties";
 import { loadServerConfig } from "../lib/server";
+import { cssFor, listBox } from "./MotdPreview";
 
-// the Multiplayer list is dark in every theme, so the MOTD is shown that way
-const LIST_BACKGROUND = "#000000";
-const LIST_GRAY = "#AAAAAA";
-const OBFUSCATED_GLYPHS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-const OBFUSCATED_FRAME_MS = 80;
+export { MotdPreview } from "./MotdPreview";
+
 const UNDO_LIMIT = 100;
 
 const FORMAT_ICONS: Record<string, string> = {
@@ -44,77 +40,6 @@ const FORMAT_ICONS: Record<string, string> = {
 };
 
 const SHORTCUTS: Record<string, string> = { b: "l", i: "o", u: "n" };
-
-const reducedMotion = () =>
-    window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ||
-    document.documentElement.dataset.paperuiMotion === "reduced";
-
-function scramble(text: string): string {
-    let out = "";
-    for (const ch of text) {
-        out += ch === " " ? ch : OBFUSCATED_GLYPHS[Math.floor(Math.random() * OBFUSCATED_GLYPHS.length)];
-    }
-    return out;
-}
-
-const listBox = () => ({
-    background: LIST_BACKGROUND,
-    padding: `${getVarCss("uigap-onefourth")} ${getVarCss("uigap-half")}`,
-    "border-radius": getVarCss("border-radius-half"),
-    "font-family": getVarCss("font-family-code"),
-    "line-height": "1.4",
-    "white-space": "pre",
-    overflow: "hidden",
-});
-
-// obfuscated text scrambles in the preview; in the editor it is blurred so
-// the real characters stay editable
-function cssFor(style: MotdStyle, editing: boolean): Record<string, string | undefined> {
-    return {
-        color: (style.color && MOTD_COLOR_HEX.get(style.color)) || LIST_GRAY,
-        "font-weight": style.bold ? "700" : undefined,
-        "font-style": style.italic ? "italic" : undefined,
-        "text-decoration":
-            [style.underline && "underline", style.strikethrough && "line-through"].filter(Boolean).join(" ") ||
-            undefined,
-        filter: editing && style.obfuscated ? "blur(2px)" : undefined,
-    };
-}
-
-/** the MOTD as the Multiplayer list draws it */
-export function MotdPreview(props: { motd: string }) {
-    const lines = () => parseMotd(props.motd);
-    const [frame, setFrame] = createSignal(0);
-
-    // obfuscated text cycles like it does in game, unless motion is reduced
-    createEffect(() => {
-        const animated = lines().some((line) => line.some((s) => s.obfuscated));
-        if (!animated || reducedMotion()) return;
-        const timer = setInterval(() => setFrame((n) => n + 1), OBFUSCATED_FRAME_MS);
-        onCleanup(() => clearInterval(timer));
-    });
-
-    return (
-        <div style={listBox()}>
-            <For each={lines()}>
-                {(line, index) => (
-                    <>
-                        <Show when={index() > 0}>
-                            <br />
-                        </Show>
-                        <For each={line}>
-                            {(segment) => (
-                                <span style={cssFor(segment, false)}>
-                                    {segment.obfuscated ? (frame(), scramble(segment.text)) : segment.text}
-                                </span>
-                            )}
-                        </For>
-                    </>
-                )}
-            </For>
-        </div>
-    );
-}
 
 // ---- the editable surface: one <div> per line, one <span> per style run ----
 
@@ -479,7 +404,7 @@ export function MotdEditor(props: { open: boolean; onClose: () => void }) {
                         onBlur={() => setFocused(false)}
                         style={{
                             ...listBox(),
-                            "min-height": "2.8em",
+                            "min-height": `calc(2em * ${getVarCss("leading-normal")})`,
                             "overflow-x": "auto",
                             outline: focused() ? getVarCss("focus-ring") : "none",
                             cursor: "text",

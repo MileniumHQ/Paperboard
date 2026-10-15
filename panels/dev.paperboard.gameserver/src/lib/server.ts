@@ -1,7 +1,7 @@
 import { PANEL_ID, ACTION_IDS } from "../service/contract";
 import { createSignal } from "solid-js";
 import { createPanelBridge } from "@mileniumhq/paperapi";
-import type { PaperConsoleEntry, PaperBadgeVariant } from "@mileniumhq/paperui";
+import type { PaperConsoleEntry } from "@mileniumhq/paperui";
 import stripAnsi from "strip-ansi";
 import { SOFTWARE_NAMES, type ServerSoftwareType } from "./software";
 import type { InstallProgress, ModpackProgress } from "../core/state";
@@ -160,24 +160,7 @@ export function sendChatMessage(msg: string) {
     );
 }
 
-export function getStatusBadge(status: ServerStatus): {
-    label: string;
-    variant: PaperBadgeVariant;
-} {
-    switch (status) {
-        case "online":
-            return { label: "Online", variant: "success" };
-        case "starting":
-            return { label: "Starting...", variant: "warning" };
-        case "stopping":
-            return { label: "Stopping...", variant: "danger" };
-        case "restarting":
-            return { label: "Restarting...", variant: "warning" };
-        case "offline":
-        default:
-            return { label: "Offline", variant: "monochrome" };
-    }
-}
+export { getStatusBadge } from "../core/statusBadge";
 
 export {
     forgetPlayerData,

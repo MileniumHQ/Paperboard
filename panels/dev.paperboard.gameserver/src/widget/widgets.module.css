@@ -1,0 +1,43 @@
+/* Only what PaperWidget doesn't draw itself. */
+
+/* a status dot and its word, inline in a detail, caption or footer */
+.state {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--paper-uigap-third);
+    white-space: nowrap;
+}
+
+.meta {
+    min-width: 0;
+}
+
+/* a player's head leads its row at the row's line height, like a dot */
+.player {
+    display: flex;
+    align-items: center;
+    gap: var(--paper-uigap-half);
+    min-width: 0;
+}
+
+.player .head.head {
+    width: 1lh;
+    height: 1lh;
+    flex-shrink: 0;
+}
+
+.playerName {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* log lines read as the console does */
+.mono {
+    font-family: var(--paper-font-family-code);
+}
+
+/* the game's own dark list box, on the body's left edge */
+.motd {
+    flex-shrink: 0;
+}

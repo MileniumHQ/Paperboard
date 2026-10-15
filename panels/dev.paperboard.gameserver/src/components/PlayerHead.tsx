@@ -1,11 +1,10 @@
-import { createResource } from "solid-js";
-import { PaperAvatar, type PaperAvatarSize } from "@mileniumhq/paperui";
-import { loadHead } from "../lib/skins";
+import type { PaperAvatarSize } from "@mileniumhq/paperui";
+import { loadHead, peekHead } from "../lib/skins";
+import HeadAvatar from "./HeadAvatar";
 
-/**
- * A Minecraft player head, composited from Mojang's skin service by the
- * daemon. Renders the generic person icon until (or unless) the head resolves.
- */
+const panelHeads = { loadHead, peekHead };
+
+/** A Minecraft player head from the panel's head cache. */
 export default function PlayerHead(props: {
     name: string;
     uuid?: string;
@@ -14,18 +13,5 @@ export default function PlayerHead(props: {
     alt?: string;
     class?: string;
 }) {
-    const [head] = createResource(
-        () => `${props.uuid ?? ""}:${props.name}`,
-        () => loadHead({ name: props.name, uuid: props.uuid, size: 64 }),
-    );
-    return (
-        <PaperAvatar
-            src={head() ?? undefined}
-            alt={props.alt}
-            size={props.size ?? "medium"}
-            shape={props.shape ?? "square"}
-            fallbackIcon="person"
-            class={props.class}
-        />
-    );
+    return <HeadAvatar {...props} loader={panelHeads} />;
 }
