@@ -118,7 +118,10 @@ test("startup cannot overwrite an accepted flow sync; slash commands stay scoped
         const windowOne = { flows, notes: [{ id: "n", pos: { x: 0, y: 0 }, text: "from window one" }], functions: [] };
         const saved = await actionsApi.call<any>("dev.paperboard.actions", "save-canvas",
             { canvas: windowOne, baseRevision: base.revision, clientId: "window-one" });
-        expect(saved).toEqual({ revision: base.revision + 1 });
+        // revisions are drawn from the clock (never reissued after a loaded
+        // backup), so a save only has to land on a newer one
+        expect(Object.keys(saved)).toEqual(["revision"]);
+        expect(saved.revision).toBeGreaterThan(base.revision);
         await expect(actionsApi.call("dev.paperboard.actions", "save-canvas",
             { canvas: { flows: [], notes: [], functions: [] }, baseRevision: base.revision, clientId: "window-two" }))
             .rejects.toThrow("canvas-conflict");
