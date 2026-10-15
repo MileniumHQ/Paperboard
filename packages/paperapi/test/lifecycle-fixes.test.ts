@@ -217,8 +217,28 @@ describe("actions.on identity refusal", () => {
 describe("send returns a bounded promise", () => {
     test("terminal-create and process.write/kill return promises", async () => {
         await connect();
-        expect(typeof processApi.write("p1", "hi").then).toBe("function");
+        const write = processApi.write("p1", "hi");
+        expect(typeof write.then).toBe("function");
+        // never answered: the afterEach teardown closes the transport
+        write.catch(() => undefined);
         expect(typeof processApi.kill("p1").then).toBe("function");
+    });
+});
+
+describe("process.write failures reach the caller", () => {
+    test("a daemon refusal rejects the write; a delivered write resolves", async () => {
+        await connect();
+        const refused = processApi.write("p1", "save-on\n");
+        await waitFor(() => LAST().frames().some((f) => f.action === "process:write"));
+        const frame = LAST().frames().find((f) => f.action === "process:write");
+        LAST().receive({ type: "response", id: frame.id, error: 'Process "p1" is not running' });
+        await expect(refused).rejects.toThrow("is not running");
+
+        const delivered = processApi.write("p1", "list\n");
+        await waitFor(() => LAST().frames().filter((f) => f.action === "process:write").length === 2);
+        const second = LAST().frames().filter((f) => f.action === "process:write")[1];
+        LAST().receive({ type: "response", id: second.id, result: { success: true } });
+        expect(await delivered).toBeUndefined();
     });
 });
 

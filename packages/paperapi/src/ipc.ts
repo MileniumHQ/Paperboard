@@ -499,9 +499,9 @@ export function send(channel: string, ...args: unknown[]): Promise<void> {
             );
         }
         case "process-write":
-            return t.call("process:write", args[0] as any).catch((err) =>
-                debugErr("process-write", err),
-            );
+            // the caller decides what a failed write means (a console line
+            // is not a protocol frame): the rejection must reach it
+            return t.call("process:write", args[0] as any).then(() => undefined);
         case "process-kill": {
             const { id } = args[0] as any;
             t.untrackProcess(id);

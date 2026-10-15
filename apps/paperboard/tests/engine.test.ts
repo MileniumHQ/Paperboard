@@ -62,6 +62,20 @@ describe("PaperCraneEngine killProcess hygiene", () => {
     });
 });
 
+describe("PaperCraneEngine writeProcess delivery", () => {
+    it("refuses a write to a process that is not running", () => {
+        expect(() => engine.writeProcess("ghost-write", "save-on\n")).toThrow(/not running/);
+    });
+
+    it("hands the data to a live process", () => {
+        const received: string[] = [];
+        (engine as any).clients.set("live-write", { write: (d: string) => received.push(d) });
+        engine.writeProcess("live-write", "list\n");
+        expect(received).toEqual(["list\n"]);
+        (engine as any).clients.delete("live-write");
+    });
+});
+
 describe("PaperCraneEngine panels install/uninstall parity", () => {
     it("uninstallPanel retains config and files for reinstalling", async () => {
         await engine.setConfig("somepanel", { a: 1 });

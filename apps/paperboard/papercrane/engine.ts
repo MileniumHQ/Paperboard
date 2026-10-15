@@ -444,7 +444,10 @@ export class PaperCraneEngine {
     }
 
     public writeProcess(id: string, data: string): void {
-        this.clients.get(id)?.write(data);
+        const client = this.clients.get(id);
+        // a write to a process that is gone is a failure, not a delivery
+        if (!client) throw new Error(`Process "${id}" is not running`);
+        client.write(data);
     }
 
     public async killProcess(id: string, signal: string = "SIGTERM"): Promise<void> {
