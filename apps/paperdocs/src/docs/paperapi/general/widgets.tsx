@@ -73,11 +73,53 @@ defineWidgets({
                         <td>string[]</td>
                         <td>One to four sizes such as 2x1, each at most 4 cells wide and 4 cells tall, with no repeats.</td>
                     </tr>
+                    <tr>
+                        <td><PaperCode>options</PaperCode></td>
+                        <td>&#123; id, label &#125;[]</td>
+                        <td>Optional. Up to 2 choices made in the gallery before the widget is placed. Each id follows the widget id rules and is unique within the widget; each label is up to 64 characters.</td>
+                    </tr>
                 </tbody>
             </PaperTable>
             <PaperText preset="body">
                 A panel declares at most 8 widgets. A manifest that breaks a rule is refused when the panel is packed, with a message naming the first widget at fault.
                 Packing also fails when the manifest declares widgets and dist/widget.html does not exist.
+            </PaperText>
+            <PaperText preset="subheader" id="options">Options</PaperText>
+            <PaperText preset="body">
+                An option is a choice made when the widget is added to Home: which workflow a Run button runs, which server a status card shows.
+                The gallery shows a dropdown for each declared option under the size choices, and the live preview follows what is picked.
+                The choice is fixed for that placement. To change it, people remove the widget and add it again, the same as size.
+            </PaperText>
+            <PaperText preset="body">
+                The dropdown's entries come from the panel's service, through widgetChoices in definePanelService. The gallery asks each time it shows the widget, so the list is current.
+                The widget cannot be added until every option has a value. If the service fails, the card says so and offers Retry; if it offers nothing, the card says there is nothing to choose yet.
+            </PaperText>
+            <PaperCode block language="json">
+{`{ "id": "run", "name": "Run button", "sizes": ["1x1"], "options": [{ "id": "workflow", "label": "Workflow" }] }`}
+            </PaperCode>
+            <PaperCode block language="ts">
+{`// service.ts
+definePanelService({
+    id: PANEL_ID,
+    state: { workflows: [] as { id: string; name: string }[] },
+    widgetChoices: {
+        run: {
+            workflow: (ctx) => ctx.state.workflows.map((w) => ({ value: w.id, label: w.name })),
+        },
+    },
+});
+
+// widget.html
+defineWidgets({
+    run: (root, widget) => {
+        const workflowId = widget.options.workflow;
+        // ...
+    },
+});`}
+            </PaperCode>
+            <PaperText preset="body">
+                A choice can stop existing after it was placed, such as a deleted workflow. The widget still receives the old value, so show that it is gone and refuse it in the service rather than guessing another.
+                A dropdown offers at most 64 choices; each value is a non-empty string of up to 128 characters, unique in the list, with a label of up to 64 characters. A list that breaks a rule is refused whole, never trimmed.
             </PaperText>
             <PaperText preset="subheader" id="methods-and-signatures">Methods and signatures</PaperText>
             <PaperTable>
@@ -108,6 +150,16 @@ defineWidgets({
                         <td><PaperCode>parseWidgetSize</PaperCode></td>
                         <td><PaperCode>parseWidgetSize(value: unknown): WidgetSize | null</PaperCode></td>
                         <td>Turns 2x1 into &#123; w: 2, h: 1 &#125;. Returns null for anything larger than the grid allows.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>parseWidgetChoices</PaperCode></td>
+                        <td><PaperCode>parseWidgetChoices(raw: unknown): WidgetChoice[]</PaperCode></td>
+                        <td>Returns the choices a service offers for one option, or throws naming what is wrong with them.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>getWidgetChoices</PaperCode></td>
+                        <td><PaperCode>getWidgetChoices(computerId, panelId, widgetId, optionId): Promise&lt;WidgetChoice[]&gt;</PaperCode></td>
+                        <td>Asks one panel's service on one computer what an option offers. Paperboard's gallery uses it; panels do not need it.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>isWidgetId</PaperCode></td>
@@ -144,6 +196,11 @@ defineWidgets({
                         <td>This placement on Home. Two copies of one widget get two ids.</td>
                     </tr>
                     <tr>
+                        <td><PaperCode>options</PaperCode></td>
+                        <td><PaperCode>Readonly&lt;Record&lt;string, string&gt;&gt;</PaperCode></td>
+                        <td>What was chosen in the gallery, by option id. Empty when the widget declares no options. Fixed for the frame's life.</td>
+                    </tr>
+                    <tr>
                         <td><PaperCode>size()</PaperCode></td>
                         <td><PaperCode>WidgetSize</PaperCode></td>
                         <td>The current size in grid cells, one of the sizes the manifest declares.</td>
@@ -171,7 +228,7 @@ defineWidgets({
                 </tbody>
             </PaperTable>
             <PaperText preset="body">
-                The constants WIDGET_ENTRY (widget.html), WIDGET_MAX_WIDTH (4), WIDGET_MAX_HEIGHT (4), MAX_WIDGETS_PER_PANEL (8) and MAX_SIZES_PER_WIDGET (4) are exported for tools that check manifests.
+                The constants WIDGET_ENTRY (widget.html), WIDGET_MAX_WIDTH (4), WIDGET_MAX_HEIGHT (4), MAX_WIDGETS_PER_PANEL (8), MAX_SIZES_PER_WIDGET (4), MAX_OPTIONS_PER_WIDGET (2), MAX_WIDGET_CHOICES (64) and MAX_WIDGET_OPTION_VALUE_LENGTH (128) are exported for tools that check manifests.
                 Each PanelItem returned by the Panels API carries the installed manifest's declarations in its widgets field.
             </PaperText>
             <PaperText preset="subheader" id="behavior">Behavior</PaperText>

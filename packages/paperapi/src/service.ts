@@ -1,6 +1,7 @@
 import { actionsApi } from "./actions";
 import { getPanelId } from "./ipc";
-import { STATE_GET_ACTION, STATE_SYNC_EVENT } from "./channels";
+import { STATE_GET_ACTION, STATE_SYNC_EVENT, WIDGET_CHOICES_ACTION } from "./channels";
+import { parseWidgetChoices, type WidgetChoice } from "./widgetManifest";
 import {
     type ActionCategory,
     type ActionCategoryDefinition,
@@ -55,6 +56,15 @@ export interface DefinePanelServiceOptions<
      * sort order for that name.
      */
     categories?: ActionCategoryDefinition[];
+    /**
+     * What each widget option's dropdown offers in Home's gallery, by widget
+     * id then option id, as the manifest declares them. Asked each time the
+     * gallery shows the widget, so the list is always current.
+     */
+    widgetChoices?: Record<
+        string,
+        Record<string, (ctx: ServiceContext<TState>) => WidgetChoice[] | Promise<WidgetChoice[]>>
+    >;
     onInit?: (ctx: ServiceContext<TState>) => void | Promise<void>;
 }
 
@@ -130,6 +140,30 @@ export function definePanelService<
             description: "Hydrates the panel bridge with the service's state",
         },
     ));
+
+    if (options.widgetChoices) {
+        const widgetChoices = options.widgetChoices;
+        // internal: Home's gallery calls it, never a block
+        registrations.push(actionsApi.register(
+            WIDGET_CHOICES_ACTION,
+            async (inputs: { widgetId?: unknown; optionId?: unknown } | undefined) => {
+                await ready;
+                const widgetId = String(inputs?.widgetId);
+                const optionId = String(inputs?.optionId);
+                const supply = Object.hasOwn(widgetChoices, widgetId) && Object.hasOwn(widgetChoices[widgetId], optionId)
+                    ? widgetChoices[widgetId][optionId]
+                    : undefined;
+                if (!supply) throw new Error(`This panel's service offers no choices for widget "${widgetId}" option "${optionId}"`);
+                return parseWidgetChoices(await supply(ctx));
+            },
+            panelId,
+            {
+                internal: true,
+                name: "Get Widget Choices",
+                description: "Lists what a widget option offers in Home's gallery",
+            },
+        ));
+    }
 
     if (options.actions) {
         if (Array.isArray(options.actions)) {

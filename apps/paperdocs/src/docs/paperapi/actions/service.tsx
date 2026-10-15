@@ -85,6 +85,12 @@ const service = definePanelService({
                         <td>Category sorting and icon metadata for exposed actions.</td>
                     </tr>
                     <tr>
+                        <td><PaperCode>widgetChoices</PaperCode></td>
+                        <td><PaperCode>Record&lt;string, Record&lt;string, (ctx: ServiceContext) =&gt; WidgetChoice[] | Promise&lt;WidgetChoice[]&gt;&gt;&gt;</PaperCode></td>
+                        <td><PaperCode>undefined</PaperCode></td>
+                        <td>What each widget option's dropdown offers in Home's widget gallery, by widget id then option id. See Widgets.</td>
+                    </tr>
+                    <tr>
                         <td><PaperCode>onInit</PaperCode></td>
                         <td><PaperCode>(ctx: ServiceContext) =&gt; void | Promise&lt;void&gt;</PaperCode></td>
                         <td><PaperCode>undefined</PaperCode></td>

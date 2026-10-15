@@ -8,7 +8,7 @@
 //
 // A mount function returns its cleanup (Solid's render already does).
 
-import { parseWidgetSize, isWidgetId, type WidgetSize } from "./widgetManifest";
+import { parseWidgetOptionValues, parseWidgetSize, isWidgetId, type WidgetOptionValues, type WidgetSize } from "./widgetManifest";
 
 export interface WidgetContext {
     readonly panelId: string;
@@ -16,6 +16,12 @@ export interface WidgetContext {
     readonly widgetId: string;
     /** This placement on Home; two copies of one widget get two ids. */
     readonly instanceId: string;
+    /**
+     * What was chosen in the gallery for this placement, by the option ids
+     * the manifest declares. Fixed for the frame's life. A choice can stop
+     * existing (a deleted workflow), so handle a value you no longer know.
+     */
+    readonly options: Readonly<WidgetOptionValues>;
     /** Current size in grid cells; one of the sizes the manifest declares. */
     size(): WidgetSize;
     /** False while Home is hidden or the widget is scrolled away: pause timers and polling. */
@@ -34,6 +40,7 @@ export interface WidgetInitialize {
     instanceId: string;
     size: WidgetSize;
     visible: boolean;
+    options: WidgetOptionValues;
 }
 
 const MAX_LISTENERS = 64;
@@ -62,7 +69,9 @@ export function parseWidgetInitialize(raw: unknown): WidgetInitialize | null {
     const size = record.size as Record<string, unknown> | undefined;
     const parsed = size ? parseWidgetSize(`${size.w}x${size.h}`) : null;
     if (!parsed || typeof record.visible !== "boolean") return null;
-    return { id: record.id, instanceId: record.instanceId, size: parsed, visible: record.visible };
+    const options = parseWidgetOptionValues(record.options);
+    if (!options) return null;
+    return { id: record.id, instanceId: record.instanceId, size: parsed, visible: record.visible, options };
 }
 
 function bounded<T>(set: Set<T>, value: T): () => void {
@@ -91,6 +100,7 @@ export async function mountRequestedWidget(panelId: string, generation: string, 
         panelId,
         widgetId: request.id,
         instanceId: request.instanceId,
+        options: Object.freeze({ ...request.options }),
         size: () => size,
         visible: () => visible,
         onResize: (callback) => bounded(resizeListeners, callback),
