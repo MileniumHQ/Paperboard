@@ -301,8 +301,8 @@ export function buildHealth(bot: Client | null = client): Health {
 // ---------------------------------------------------------------------------
 
 // A flow can take longer than Discord's 3-second acknowledgement window, so
-// the interaction object stays here until it is answered (or its 15-minute
-// token expires). Bounded: oldest entries are dropped at the cap and every
+// the interaction object stays here for its whole 15-minute token life:
+// Respond, Follow Up, and a second Respond (an edit) all reach it. Bounded: oldest entries are dropped at the cap and every
 // entry's timer is cleared on removal or disconnect.
 interface PendingInteraction {
     interaction: RepliableInteraction;
@@ -348,18 +348,6 @@ export function takeInteraction(interactionId: string): RepliableInteraction {
         );
     }
     return entry.interaction;
-}
-
-// A terminally answered interaction (reply / followUp / editReply) is done:
-// drop it and clear its TTL timer so health counts stay honest and the
-// object is not retained. Lookup alone (takeInteraction) does not forget:
-// a deferred interaction is still answerable later, so defer -> respond ->
-// follow up must all resolve the same live interaction.
-export function forgetInteraction(interactionId: string): void {
-    const entry = pendingInteractions.get(interactionId);
-    if (!entry) return;
-    clearTimeout(entry.timer);
-    pendingInteractions.delete(interactionId);
 }
 
 export function clearPendingInteractions(): void {
@@ -1544,7 +1532,7 @@ export const actions = [
             _ctx,
             inputs: { interactionId: string; ephemeral?: boolean },
         ) => {
-            const ops = new InteractionOps(takeInteraction, forgetInteraction);
+            const ops = new InteractionOps(takeInteraction);
             await ops.defer(inputs.interactionId, inputs.ephemeral);
             return true;
         },
@@ -1579,7 +1567,7 @@ export const actions = [
                 ephemeral?: boolean;
             },
         ) => {
-            const ops = new InteractionOps(takeInteraction, forgetInteraction);
+            const ops = new InteractionOps(takeInteraction);
             return ops.respond(inputs.interactionId, inputs);
         },
     }),
@@ -1612,7 +1600,7 @@ export const actions = [
                 ephemeral?: boolean;
             },
         ) => {
-            const ops = new InteractionOps(takeInteraction, forgetInteraction);
+            const ops = new InteractionOps(takeInteraction);
             return ops.followUp(inputs.interactionId, inputs);
         },
     }),

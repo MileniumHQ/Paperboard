@@ -41,7 +41,6 @@ import {
     syncSlashCommands,
     rememberInteraction,
     takeInteraction,
-    forgetInteraction,
     pendingInteractionCount,
     clearPendingInteractions,
 } from "../src/service";
@@ -555,29 +554,37 @@ describe("pending interaction store", () => {
         expect(() => takeInteraction("a")).toThrow(/not pending/);
     });
 
-    it("forgets an interaction once it is terminally answered", async () => {
-        const { InteractionOps } = await import("../src/discordOps");
+    // Replaces "forgets an interaction once it is terminally answered": that
+    // contract made Follow Up after Respond fail with "not pending", though
+    // Discord keeps the interaction answerable for its 15-minute window.
+    it("keeps an answered interaction for a follow-up and an edit", async () => {
+        const { actions } = await import("../src/service");
+        const run = (id: string, inputs: Record<string, unknown>) =>
+            (actions.find((a: any) => a.id === id) as any).run({}, inputs);
+        const calls: string[] = [];
         const live: any = {
             id: "live",
             deferred: false,
             replied: false,
             reply: async () => {
+                calls.push("reply");
                 live.replied = true;
             },
-            editReply: async () => {},
-            followUp: async () => ({ id: "msg" }),
+            editReply: async () => {
+                calls.push("editReply");
+                return { id: "answer" };
+            },
+            followUp: async () => {
+                calls.push("followUp");
+                return { id: "extra" };
+            },
         };
         rememberInteraction(live);
+        await run("respond-to-interaction", { interactionId: "live", content: "hi" });
+        expect(await run("follow-up-interaction", { interactionId: "live", content: "more" })).toBe("extra");
+        await run("respond-to-interaction", { interactionId: "live", content: "edited" });
+        expect(calls).toEqual(["reply", "followUp", "editReply"]);
         expect(pendingInteractionCount()).toBe(1);
-
-        const ops = new InteractionOps(takeInteraction, forgetInteraction);
-        await ops.respond("live", { content: "hi" });
-        // answered => no longer pending, and a second answer refuses
-        expect(pendingInteractionCount()).toBe(0);
-        expect(() => takeInteraction("live")).toThrow(/not pending/);
-        await expect(ops.respond("live", { content: "again" })).rejects.toThrow(
-            /not pending/,
-        );
     });
 
     it("keeps a deferred interaction answerable later", async () => {
@@ -592,12 +599,10 @@ describe("pending interaction store", () => {
             editReply: async () => {},
         };
         rememberInteraction(live);
-        const ops = new InteractionOps(takeInteraction, forgetInteraction);
+        const ops = new InteractionOps(takeInteraction);
         await ops.defer("deferred");
-        // still pending: defer is not a terminal answer
-        expect(pendingInteractionCount()).toBe(1);
         await ops.respond("deferred", { content: "late" });
-        expect(pendingInteractionCount()).toBe(0);
+        expect(pendingInteractionCount()).toBe(1);
     });
 });
 

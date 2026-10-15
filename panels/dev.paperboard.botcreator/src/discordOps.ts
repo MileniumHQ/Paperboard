@@ -518,9 +518,6 @@ export class MessageOps {
 export class InteractionOps {
     constructor(
         private readonly take: (interactionId: string) => RepliableInteraction,
-        // called once an interaction is terminally answered; lookup alone
-        // (take) must not forget, or defer -> respond would lose the handle
-        private readonly forget: (interactionId: string) => void = () => {},
     ) {}
 
     async respond(
@@ -541,7 +538,6 @@ export class InteractionOps {
                 flags: payload.ephemeral ? MessageFlags.Ephemeral : undefined,
             });
         }
-        this.forget(interaction.id);
         return interaction.id;
     }
 
@@ -567,7 +563,6 @@ export class InteractionOps {
             ...body,
             flags: payload.ephemeral ? MessageFlags.Ephemeral : undefined,
         });
-        this.forget(interaction.id);
         return sent.id;
     }
 }

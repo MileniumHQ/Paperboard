@@ -225,10 +225,11 @@ export const COMMAND_NAME_PATTERN = /^[a-z0-9_-]{1,32}$/;
 export const COMMAND_DESCRIPTION_MAX_LENGTH = 100;
 export const SNOWFLAKE_PATTERN = /^\d{17,21}$/;
 
-// interaction tokens live 15 minutes; a pending interaction is dropped after
-// that so the map can never grow past the conversations still answerable
+// interaction tokens live 15 minutes; a pending interaction is kept that long
+// (an answered one can still be followed up or edited) and then dropped. The
+// cap bounds a burst: past it the oldest is evicted
 export const INTERACTION_TTL_MS = 15 * 60 * 1000;
-export const PENDING_INTERACTION_CAP = 100;
+export const PENDING_INTERACTION_CAP = 500;
 
 // guild member fetch page size — the explorer never pulls more than one page
 export const MEMBER_SEARCH_LIMIT = 25;
