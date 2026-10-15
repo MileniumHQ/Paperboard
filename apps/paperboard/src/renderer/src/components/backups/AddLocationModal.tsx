@@ -75,7 +75,7 @@ const AddLocationModal: Component<{ computerId: string; open: boolean; onClose: 
                     {(intro) => <PaperText size={2} color="text-subtle">{intro()}</PaperText>}
                 </Show>
                 <Show when={blocked()}>
-                    <PaperText size={2} color="warning">Connect {provider().name} from the Paperboard app. Browser mode cannot open its sign-in.</PaperText>
+                    <PaperText size={2} color="warning">Connect {provider().name} from the Paperboard app. Its sign-in can't open in browser mode.</PaperText>
                 </Show>
                 <For each={provider().fields}>
                     {(field) => (

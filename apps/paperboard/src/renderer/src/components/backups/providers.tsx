@@ -36,7 +36,7 @@ export interface BackupProvider {
 }
 
 function S3Logo(): JSX.Element {
-    // a bucket: S3-compatible covers AWS, R2, B2 and MinIO, so no one brand's mark
+    // a bucket: the S3 kind covers AWS, R2, B2 and MinIO, so no one brand's mark
     return (
         <svg viewBox="0 0 24 24" aria-hidden="true" style={{ width: "100%", height: "100%" }}>
             <ellipse cx="12" cy="6" rx="8" ry="2.6" fill="none" stroke="currentColor" stroke-width="1.8" />
@@ -57,19 +57,35 @@ export function LocationLogo(props: { kind: BackupLocation["kind"]; size?: "smal
 
 export const BACKUP_PROVIDERS: readonly BackupProvider[] = [
     {
+        kind: "gdrive",
+        name: "Google Drive",
+        description: "Save backups to your Google account",
+        intro: 'Google asks for a free sign-in key before an app can save to Drive. Make one in Google Cloud (choose "Desktop app"), then paste its client ID and secret here. Paperboard can only see the "Paperboard Backups" folder it makes.',
+        fields: [
+            { key: "label", label: "Name", placeholder: "Google Drive" },
+            { key: "clientId", label: "Client ID", placeholder: "1234-abcd.apps.googleusercontent.com" },
+            { key: "clientSecret", label: "Client secret", secret: true },
+        ],
+        needsDesktopApp: true,
+        submitLabel: "Sign In With Google",
+        busyLabel: "Waiting for Google...",
+        connect: (v, _t, computerId) =>
+            shellIpc().invoke("backup-gdrive-connect", { computerId, label: v.label ?? "", clientId: v.clientId ?? "", clientSecret: v.clientSecret ?? "" }),
+    },
+    {
         kind: "s3",
-        name: "S3-compatible bucket",
-        description: "Amazon S3, Cloudflare R2, Backblaze B2, MinIO",
+        name: "Storage bucket",
+        description: "Amazon S3, Cloudflare R2, Backblaze B2, MinIO and other S3 services",
         fields: [
             { key: "label", label: "Name", placeholder: "Offsite bucket" },
-            { key: "endpoint", label: "Endpoint", placeholder: "https://s3.us-east-1.amazonaws.com" },
+            { key: "endpoint", label: "Server address", placeholder: "https://s3.us-east-1.amazonaws.com" },
             { key: "region", label: "Region", placeholder: "us-east-1" },
-            { key: "bucket", label: "Bucket", placeholder: "my-backups" },
-            { key: "prefix", label: "Folder in the bucket (optional)", placeholder: "paperboard" },
+            { key: "bucket", label: "Bucket name", placeholder: "my-backups" },
+            { key: "prefix", label: "Folder (optional)", placeholder: "paperboard" },
             { key: "accessKeyId", label: "Access key ID" },
             { key: "secretAccessKey", label: "Secret access key", secret: true },
         ],
-        toggles: [{ key: "pathStyle", label: "Path-style addresses", description: "For MinIO and other servers that do not take the bucket as a subdomain" }],
+        toggles: [{ key: "pathStyle", label: "Self-hosted server", description: "Turn on for MinIO and other servers you run yourself" }],
         submitLabel: "Add Bucket",
         busyLabel: "Checking...",
         connect: (v, t, computerId) =>
@@ -77,21 +93,5 @@ export const BACKUP_PROVIDERS: readonly BackupProvider[] = [
                 { kind: "s3", label: v.label ?? "", endpoint: v.endpoint ?? "", region: v.region ?? "", bucket: v.bucket ?? "", prefix: v.prefix ?? "", accessKeyId: v.accessKeyId ?? "", secretAccessKey: v.secretAccessKey ?? "", pathStyle: Boolean(t.pathStyle) },
                 computerId,
             ),
-    },
-    {
-        kind: "gdrive",
-        name: "Google Drive",
-        description: "Sign in with your own Google Cloud OAuth client",
-        intro: 'Use a Desktop app OAuth client from your Google Cloud project. Paperboard opens Google\'s sign-in in your browser and keeps backups in a "Paperboard Backups" folder, the only files it can see.',
-        fields: [
-            { key: "label", label: "Name", placeholder: "Google Drive" },
-            { key: "clientId", label: "OAuth client ID", placeholder: "1234-abcd.apps.googleusercontent.com" },
-            { key: "clientSecret", label: "OAuth client secret", secret: true },
-        ],
-        needsDesktopApp: true,
-        submitLabel: "Sign In With Google",
-        busyLabel: "Waiting for Google...",
-        connect: (v, _t, computerId) =>
-            shellIpc().invoke("backup-gdrive-connect", { computerId, label: v.label ?? "", clientId: v.clientId ?? "", clientSecret: v.clientSecret ?? "" }),
     },
 ];
