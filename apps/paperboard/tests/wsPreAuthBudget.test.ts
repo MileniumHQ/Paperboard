@@ -14,6 +14,13 @@ import { PaperCraneAuth } from "../papercrane/auth";
 import { PaperCraneEngine } from "../papercrane/engine";
 import { setupWebSocketServer } from "../papercrane/ws";
 import { CraneTransport } from "../../../packages/paperapi/src/ws";
+import { canBindLocalAddress } from "./loopbackAlias";
+
+// the cases below need several distinct source addresses; Linux routes all of
+// 127/8, macOS answers only 127.0.0.1 unless aliases are configured, so those
+// cases are skipped there (the budget itself is platform independent)
+const HAS_LOOPBACK_ALIASES = (await Promise.all(["127.0.0.2", "127.0.0.3", "127.0.0.20"].map(canBindLocalAddress))).every(Boolean);
+const aliasTest = test.skipIf(!HAS_LOOPBACK_ALIASES);
 
 async function fixture() {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "paperboard-preauth-"));
@@ -72,7 +79,7 @@ function idleSocket(f: { port: number; sockets: net.Socket[] }, from: string): P
     });
 }
 
-test("one network address cannot hold more than its share of pre-auth slots", async () => {
+aliasTest("one network address cannot hold more than its share of pre-auth slots", async () => {
     const f = await fixture();
     try {
         const held = await Promise.all(Array.from({ length: 16 }, () => idleSocket(f, "127.0.0.2")));
@@ -84,7 +91,7 @@ test("one network address cannot hold more than its share of pre-auth slots", as
     }
 });
 
-test("a full remote pre-auth budget does not lock out this machine", async () => {
+aliasTest("a full remote pre-auth budget does not lock out this machine", async () => {
     const f = await fixture();
     const sdk = new CraneTransport({ port: f.port, token: "test-host", computerId: "local" });
     try {

@@ -15,11 +15,14 @@ import { PaperCraneClient } from "../src/main/communication/papercrane/PaperCran
 import { certFingerprint } from "../papercrane/pinnedTls";
 import { pinnableWebSocket } from "../papercrane/pinnableWebSocket";
 import { impostorTls } from "./tlsFixture";
+import { remoteDialAddress } from "./loopbackAlias";
 
 const HOST_TOKEN = "pc_remote_tls_host_token";
-// the client treats 127.0.0.1 as this computer; 127.0.0.2 reaches the same
-// daemon (Linux routes all of 127/8 to lo) but is dialed as a remote one
-const REMOTE_ADDR = "127.0.0.2";
+// the client treats 127.0.0.1 as this computer; another address of this
+// machine reaches the same daemon (listening on 0.0.0.0) but is dialed as a
+// remote one: 127.0.0.2 where the host routes it (Linux), else a LAN address
+const REMOTE_ADDR = await remoteDialAddress();
+if (!REMOTE_ADDR) throw new Error("remoteTls needs a second local address (127.0.0.2 or a non-loopback interface)");
 let tmp = "";
 let savedDir: string | undefined;
 let daemon: ServerInstance;

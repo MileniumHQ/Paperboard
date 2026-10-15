@@ -28,6 +28,7 @@ import { pinnedRequest } from "../papercrane/pinnedTls";
 import { remoteTls, impostorTls } from "./tlsFixture";
 
 const TOKEN = "relay-test-main-token";
+const IS_LINUX = process.platform === "linux";
 let tmp = "";
 let upstream: https.Server;
 let upstreamOrigin = "";
@@ -39,6 +40,8 @@ async function relayWith(overrides: Partial<Parameters<typeof startDavRelay>[0]>
         upstream: upstreamOrigin,
         cert: remoteTls.cert,
         clientAuth: "peer",
+        // the real owner check reads /proc/net/tcp, which only Linux has
+        verifyPeer: IS_LINUX ? undefined : async () => true,
         user: session.user,
         pass: session.pass,
         idleMs: 60_000,
@@ -162,7 +165,8 @@ describe("basic mode (macOS/Windows mounts)", () => {
 });
 
 describe("who may connect", () => {
-    it("accepts this user through the real socket owner check", async () => {
+    // skipped off Linux: the owner check reads /proc/net/tcp, which only exists there
+    it.skipIf(!IS_LINUX)("accepts this user through the real socket owner check", async () => {
         // default verifyPeer: reads /proc/net/tcp for the client socket's uid
         const relay = await relayWith();
         const res = await fetch(`http://127.0.0.1:${relay.port}/dav/`, { method: "PROPFIND", headers: { Depth: "0" } });
