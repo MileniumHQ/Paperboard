@@ -20,7 +20,7 @@ import {
     type ClaudeInit,
 } from "../core/claudeCode";
 import type { Connection } from "../core/providers";
-import type { AgentSessionInfo, AgentState } from "../core/types";
+import type { AgentModel, AgentSessionInfo, AgentState } from "../core/types";
 import type { AgentHubDeps, AgentRunner, OpenedSession, SessionRequest, StopReason, TurnHandlers } from "./agents";
 import type { Launch } from "./executable";
 import { LineBuffer, LineWriter } from "./jsonRpc";
@@ -68,6 +68,8 @@ class ClaudeProcess {
     ready = false;
     turn: Turn | null = null;
     lastUsed = Date.now();
+    /** the model this process was switched to (it starts on Claude Code's default) */
+    model: string | null = null;
 
     constructor(
         private readonly owner: ClaudeCodeAgent,
@@ -316,6 +318,8 @@ export class ClaudeCodeAgent implements AgentRunner {
     private opening = new Map<string, Promise<OpenedSession>>();
     private infos = new Map<string, AgentSessionInfo>();
     private state: AgentState = { status: "stopped" };
+    private modelList: AgentModel[] | null = null;
+    private listing: Promise<AgentModel[]> | null = null;
 
     constructor(
         readonly deps: AgentHubDeps,
@@ -392,7 +396,8 @@ export class ClaudeCodeAgent implements AgentRunner {
         this.slots[slot] = process;
         this.reserved.delete(slot);
         try {
-            const init = await process.start(launch, claudeArgs(session, mode ? { mode } : {}));
+            const init = await process.start(launch, claudeArgs(session, mode));
+            this.learnModels(init.models);
             this.publish({ status: "ready", name: "Claude Code", error: undefined, errorDetail: undefined, ...(init.version ? { version: init.version } : {}) });
             return { process, init };
         } catch (err) {
@@ -413,8 +418,32 @@ export class ClaudeCodeAgent implements AgentRunner {
         else if (!this.slots.some((p) => p?.running)) this.publish({ status: "stopped", error: undefined, errorDetail: undefined });
     }
 
+    private learnModels(models: AgentModel[]): void {
+        if (this.modelList && JSON.stringify(this.modelList) === JSON.stringify(models)) return;
+        this.modelList = models;
+        this.deps.onModels?.(this.connection.id, models);
+    }
+
+    /** Switches a process to the chat's model, when Claude Code offers that model. */
+    private async applyModel(process: ClaudeProcess, model: string | undefined): Promise<void> {
+        if (!model || process.model === model || !this.modelList?.some((m) => m.id === model)) return;
+        await process.request("set_model", { model });
+        process.model = model;
+    }
+
+    /** The models Claude Code offers; the first ask starts it once without a session. */
+    models(): Promise<AgentModel[]> {
+        if (this.modelList) return Promise.resolve(this.modelList);
+        this.listing ??= this.check()
+            .then(() => this.modelList ?? [])
+            .finally(() => {
+                this.listing = null;
+            });
+        return this.listing;
+    }
+
     async check(): Promise<void> {
-        if (this.slots.some((p) => p?.running)) return;
+        if (this.modelList && this.slots.some((p) => p?.running)) return;
         this.publish({ status: "starting", error: undefined, errorDetail: undefined });
         const { process } = await this.startIn(await this.launch(), null, null, this.deps.workDir);
         await process.stop();
@@ -430,7 +459,10 @@ export class ClaudeCodeAgent implements AgentRunner {
 
     private async open(request: SessionRequest): Promise<OpenedSession> {
         const live = this.live(request.conversationId);
-        if (live && live.cwd === request.cwd) return { sessionId: live.sessionId!, resumed: true, capabilities: CAPABILITIES };
+        if (live && live.cwd === request.cwd) {
+            await this.applyModel(live, request.model);
+            return { sessionId: live.sessionId!, resumed: true, capabilities: CAPABILITIES };
+        }
         if (live) await live.stop();
         if (!this.slots.some((p) => p?.running)) this.publish({ status: "starting", error: undefined, errorDetail: undefined });
         const launch = await this.launch();
@@ -448,6 +480,7 @@ export class ClaudeCodeAgent implements AgentRunner {
         }
         started ??= await this.startIn(launch, { id: randomUUID(), resume: false }, request.conversationId, request.cwd, mode);
         this.patchInfo(request.conversationId, { modes: [...CLAUDE_MODES], mode: started.init.mode ?? mode ?? "default", commands: started.init.commands });
+        await this.applyModel(started.process, request.model);
         return { sessionId: started.process.sessionId!, resumed, capabilities: CAPABILITIES };
     }
 

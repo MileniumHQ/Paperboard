@@ -5,6 +5,26 @@
 import readline from "node:readline";
 
 const requireAuth = process.argv.includes("--auth");
+// `--models config` offers models the current way (configOptions), `--models legacy` the older draft's way
+const modelStyle = process.argv.includes("--models") ? process.argv[process.argv.indexOf("--models") + 1] : undefined;
+const MODEL_OPTIONS = [
+    { value: "big", name: "Big Model", description: "Thinks hard" },
+    { value: "small", name: "Small Model" },
+    // last though first by name: an agent's own order is kept
+    { value: "auto", name: "Auto" },
+];
+/** session id → its model */
+const sessionModel = new Map();
+function modelFields(sessionId) {
+    const current = sessionModel.get(sessionId) ?? "big";
+    if (modelStyle === "config") {
+        return { configOptions: [{ id: "model", name: "Model", category: "model", type: "select", currentValue: current, options: [{ group: "fake", name: "Fake", options: MODEL_OPTIONS }] }] };
+    }
+    if (modelStyle === "legacy") {
+        return { models: { currentModelId: current, availableModels: MODEL_OPTIONS.map((m) => ({ modelId: m.value, name: m.name })) } };
+    }
+    return {};
+}
 let authed = !requireAuth;
 let nextSession = 1;
 let nextRequest = 1000;
@@ -37,6 +57,9 @@ async function prompt(id, { sessionId, prompt: blocks }) {
         case "hello":
             say("Hi");
             say(" there");
+            return reply(id, { stopReason: "end_turn" });
+        case "model":
+            say(sessionModel.get(sessionId) ?? "big");
             return reply(id, { stopReason: "end_turn" });
         case "echo":
             say(JSON.stringify(blocks));
@@ -113,7 +136,7 @@ function handle(message) {
             if (!authed) return fail(id, -32000, "Authentication required");
             const sessionId = `s${nextSession++}`;
             sessions.add(sessionId);
-            reply(id, { sessionId, modes: MODES });
+            reply(id, { sessionId, modes: MODES, ...modelFields(sessionId) });
             return update(sessionId, { sessionUpdate: "available_commands_update", availableCommands: [{ name: "review", description: "Review changes" }] });
         }
         case "session/load":
@@ -121,10 +144,18 @@ function handle(message) {
             if (!/^s\d+$/.test(params.sessionId)) return fail(id, -32002, "Unknown session");
             sessions.add(params.sessionId);
             update(params.sessionId, { sessionUpdate: "user_message_chunk", content: { type: "text", text: "replayed" } });
-            return reply(id, { modes: MODES });
+            return reply(id, { modes: MODES, ...modelFields(params.sessionId) });
         case "session/set_mode":
             reply(id, {});
             return update(params.sessionId, { sessionUpdate: "current_mode_update", currentModeId: params.modeId });
+        case "session/set_config_option":
+            if (modelStyle !== "config" || params.configId !== "model") return fail(id, -32602, "no such option");
+            sessionModel.set(params.sessionId, params.value);
+            return reply(id, modelFields(params.sessionId));
+        case "session/set_model":
+            if (modelStyle !== "legacy") return fail(id, -32601, "no session/set_model");
+            sessionModel.set(params.sessionId, params.modelId);
+            return reply(id, {});
         case "session/prompt":
             void prompt(id, params);
             return;

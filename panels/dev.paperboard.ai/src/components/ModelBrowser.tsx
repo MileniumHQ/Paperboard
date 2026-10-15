@@ -24,6 +24,7 @@ import { catalog, catalogEntry, fitFor, makerOf } from "../lib/catalog";
 import { ensureOllamaReady } from "../lib/provisioning";
 import { call, errorText, state } from "../lib/state";
 import FitMeter from "./FitMeter";
+import AgentLogo from "./AgentLogo";
 import MakerLogo from "./MakerLogo";
 import ModelDetailModal from "./ModelDetailModal";
 import styles from "./ModelBrowser.module.css";
@@ -74,6 +75,8 @@ export default function ModelBrowser(props: ModelBrowserProps) {
 
     const mode = () => props.mode ?? "pick";
     const isEndpoint = () => props.provider !== OLLAMA_PROVIDER_ID;
+    // an agent's models are its own list too, named by the agent
+    const agent = () => state.connections.find((c) => c.id === props.provider && c.kind === "agent");
     // names can repeat across connections; this view is one connection's
     const listed = createMemo(() => state.models.filter((m) => m.provider === props.provider));
     const results = createMemo(() => searchCatalog(catalog, { text: query(), sort: sort() }));
@@ -83,7 +86,7 @@ export default function ModelBrowser(props: ModelBrowserProps) {
     // must cover them instead of a library that does not exist
     const endpointResults = createMemo(() => {
         const q = query().trim().toLowerCase();
-        return q ? listed().filter((m) => m.name.toLowerCase().includes(q)) : listed();
+        return q ? listed().filter((m) => `${m.name} ${m.label ?? ""}`.toLowerCase().includes(q)) : listed();
     });
     const endpointPageCount = () => Math.max(1, Math.ceil(endpointResults().length / PAGE_SIZE));
     const endpointVisible = createMemo(() =>
@@ -171,12 +174,21 @@ export default function ModelBrowser(props: ModelBrowserProps) {
             (state.settings.defaultProvider || cardProps.model.provider) === cardProps.model.provider;
         const chosen = () => isSelected(cardProps.model.name);
         const endpoint = () => Boolean(cardProps.endpoint);
+        const agentModel = () => agent() !== undefined;
         return (
             <PaperMediaCard
-                icon={endpoint() ? <PaperIcon>cloud</PaperIcon> : <MakerLogo icon={maker()?.icon} size="large" />}
-                title={cardProps.model.name}
-                subtitle={endpoint() ? undefined : (maker()?.name ?? "On this computer")}
-                description={endpoint() ? undefined : (entry()?.description ?? "Downloaded and ready to chat.")}
+                icon={
+                    agentModel() ? (
+                        <AgentLogo agent={agent()!.agent} size="large" />
+                    ) : endpoint() ? (
+                        <PaperIcon>cloud</PaperIcon>
+                    ) : (
+                        <MakerLogo icon={maker()?.icon} size="large" />
+                    )
+                }
+                title={cardProps.model.label ?? cardProps.model.name}
+                subtitle={agentModel() && cardProps.model.label ? cardProps.model.name : endpoint() ? undefined : (maker()?.name ?? "On this computer")}
+                description={agentModel() ? cardProps.model.description : endpoint() ? undefined : (entry()?.description ?? "Downloaded and ready to chat.")}
                 badge={
                     <Show when={isDefault()}>
                         <PaperBadge variant="primary" icon="star">Default</PaperBadge>
@@ -197,7 +209,7 @@ export default function ModelBrowser(props: ModelBrowserProps) {
                                 icon
                                 size="tiny"
                                 variant="text"
-                                aria-label={`Use ${cardProps.model.name} for new chats`}
+                                aria-label={`Use ${cardProps.model.label ?? cardProps.model.name} for new chats`}
                                 disabled={isDefault()}
                                 onClick={() => void makeDefault(cardProps.model.name)}
                             >

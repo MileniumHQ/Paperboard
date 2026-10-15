@@ -6,3 +6,16 @@
     object-fit: contain;
     border-radius: var(--paper-border-radius-half);
 }
+
+.large {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: var(--paper-control-size-large);
+    height: var(--paper-control-size-large);
+    font-size: var(--paper-icon-size-large);
+    border-radius: var(--paper-border-radius-half);
+    background-color: var(--paper-surface-inset);
+    color: var(--paper-text);
+}

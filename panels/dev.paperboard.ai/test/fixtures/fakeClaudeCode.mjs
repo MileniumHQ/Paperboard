@@ -23,6 +23,11 @@ const sessionId = resume ?? flag("--session-id");
 if (flag("--session-id")) fs.appendFileSync(sessionsFile, `${sessionId}\n`);
 
 let nextRequest = 1;
+let model = "default";
+const MODELS = [
+    { value: "default", displayName: "Default (recommended)", description: "Opus · Best for everyday tasks" },
+    { value: "haiku", displayName: "Haiku", description: "Fastest" },
+];
 const pending = new Map();
 let waiting = null;
 const send = (m) => process.stdout.write(`${JSON.stringify(m)}\n`);
@@ -46,6 +51,10 @@ async function onUser(message) {
         // a subagent's own text stays inside its tool call
         send({ type: "stream_event", event: { type: "content_block_delta", delta: { type: "text_delta", text: "SUBAGENT" } }, parent_tool_use_id: "toolu_task" });
         text("m1", ["Hel", "lo"]);
+        return result({});
+    }
+    if (word === "model") {
+        text("m1", [model]);
         return result({});
     }
     if (word === "echo") {
@@ -88,9 +97,14 @@ readline.createInterface({ input: process.stdin }).on("line", (line) => {
     if (m.type === "control_request") {
         const ok = (response = {}) => send({ type: "control_response", response: { subtype: "success", request_id: m.request_id, response } });
         if (m.request.subtype === "initialize") {
-            return ok({ commands: [{ name: "review", description: "Review a PR", argumentHint: "<pr>" }], current_permission_mode: flag("--permission-mode") ?? "default", claude_code_version: "9.9.9" });
+            return ok({ commands: [{ name: "review", description: "Review a PR", argumentHint: "<pr>" }], models: MODELS, current_permission_mode: flag("--permission-mode") ?? "default", claude_code_version: "9.9.9" });
         }
         if (m.request.subtype === "set_permission_mode") return ok({ mode: m.request.mode });
+        if (m.request.subtype === "set_model") {
+            if (!MODELS.some((x) => x.value === m.request.model)) return send({ type: "control_response", response: { subtype: "error", request_id: m.request_id, error: `Model '${m.request.model}' not found` } });
+            model = m.request.model;
+            return ok();
+        }
         if (m.request.subtype === "interrupt") {
             ok({});
             waiting?.();

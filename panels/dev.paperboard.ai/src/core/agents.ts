@@ -65,8 +65,8 @@ export function agentLaunch(connection: Connection): { command: string; args: st
 }
 
 /**
- * The single "model" an agent connection lists: the agent itself. A chat
- * names it so the picker, the chat list and the composer read the same.
+ * What an agent that offers no model choice lists: the agent itself, which
+ * then runs on its own default.
  */
 export function agentModelName(connection: Connection): string {
     return connection.label;

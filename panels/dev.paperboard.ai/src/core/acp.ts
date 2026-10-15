@@ -6,6 +6,7 @@
 import type {
     AgentAuthMethod,
     AgentCommand,
+    AgentModel,
     AgentDiff,
     AgentMode,
     AgentPermissionKind,
@@ -29,6 +30,7 @@ export const MAX_PLAN_ENTRIES = 50;
 export const MAX_PERMISSION_OPTIONS = 8;
 export const MAX_COMMANDS = 100;
 export const MAX_MODES = 20;
+export const MAX_AGENT_MODELS = 200;
 const MAX_TITLE_CHARS = 300;
 const MAX_NAME_CHARS = 200;
 
@@ -243,6 +245,55 @@ export function modesFrom(raw: unknown): { modes: AgentMode[]; current?: string 
         }));
     const current = typeof raw.currentModeId === "string" ? raw.currentModeId : undefined;
     return { modes, ...(current ? { current } : {}) };
+}
+
+/**
+ * How a session chooses its model. Current ACP puts it in configOptions
+ * (the select whose category is "model", switched with
+ * session/set_config_option); agents on the older draft send `models`
+ * and switch with session/set_model.
+ */
+export interface SessionModels {
+    models: AgentModel[];
+    current?: string;
+    /** the config option to set, or "legacy" for session/set_model */
+    via: { configId: string } | "legacy";
+}
+
+function agentModel(id: unknown, name: unknown, description: unknown): AgentModel | undefined {
+    if (typeof id !== "string" || !id || id.length > 200) return undefined;
+    const label = typeof name === "string" && name.trim() ? name.slice(0, MAX_NAME_CHARS) : id;
+    return { id, name: label, ...(typeof description === "string" && description ? { description: description.slice(0, 500) } : {}) };
+}
+
+/** A session's model choices from session/new (or load), if the agent offers any. */
+export function sessionModelsFrom(result: unknown): SessionModels | undefined {
+    if (!isObject(result)) return undefined;
+    const option = Array.isArray(result.configOptions)
+        ? result.configOptions.find((o): o is Json => isObject(o) && o.category === "model" && o.type === "select" && typeof o.id === "string")
+        : undefined;
+    if (option && Array.isArray(option.options)) {
+        // options may come in groups; the groups only arrange them
+        const flat = option.options.flatMap((o) => (isObject(o) && Array.isArray(o.options) ? o.options : [o]));
+        const models = flat
+            .filter(isObject)
+            .map((o) => agentModel(o.value, o.name, o.description))
+            .filter((m): m is AgentModel => m !== undefined)
+            .slice(0, MAX_AGENT_MODELS);
+        const current = typeof option.currentValue === "string" ? option.currentValue : undefined;
+        if (models.length) return { models, ...(current ? { current } : {}), via: { configId: option.id as string } };
+    }
+    const legacy = isObject(result.models) ? result.models : undefined;
+    if (legacy && Array.isArray(legacy.availableModels)) {
+        const models = legacy.availableModels
+            .filter(isObject)
+            .map((m) => agentModel(m.modelId, m.name, m.description))
+            .filter((m): m is AgentModel => m !== undefined)
+            .slice(0, MAX_AGENT_MODELS);
+        const current = typeof legacy.currentModelId === "string" ? legacy.currentModelId : undefined;
+        if (models.length) return { models, ...(current ? { current } : {}), via: "legacy" };
+    }
+    return undefined;
 }
 
 export function commandsFrom(raw: unknown): AgentCommand[] {

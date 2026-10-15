@@ -12,6 +12,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import type { ProcessHost } from "../src/service/runtime";
+import { ChildHost } from "./childHost";
 import type { AiState } from "../src/core/types";
 import { QUICK_ASK_DEFAULT_MODEL } from "../src/core/widgets";
 
@@ -83,6 +84,28 @@ class HangingHost implements ProcessHost {
         this.exit = cb;
         return () => {};
     }
+}
+
+/**
+ * Local AI hangs as above; agents run for real, as child processes. A plain
+ * object, like the daemon's processApi (the app spreads it).
+ */
+function agentRunHost() {
+    const ollama = new HangingHost();
+    const agents = new ChildHost();
+    const isAgent = (id: string) => id.includes(".agent.");
+    return {
+        agents,
+        start: (options: { id: string; command: string; args: string[]; cwd: string; env: Record<string, string> }) =>
+            isAgent(options.id) ? agents.start(options) : ollama.start(),
+        kill: (id: string, signal?: string) => (isAgent(id) ? agents.kill(id, signal) : ollama.kill()),
+        exists: (id: string) => (isAgent(id) ? agents.exists(id) : ollama.exists()),
+        onData: (id: string, cb: (data: string) => void) => (isAgent(id) ? agents.onStdout(id, cb) : ollama.onData()),
+        onExit: (id: string, cb: (code?: number) => void) => (isAgent(id) ? agents.onExit(id, cb) : ollama.onExit(id, cb)),
+        write: (id: string, data: string) => agents.write(id, data),
+        onStdout: (id: string, cb: (data: string) => void) => agents.onStdout(id, cb),
+        onStderr: (id: string, cb: (data: string) => void) => agents.onStderr(id, cb),
+    };
 }
 
 function makeCtx() {
@@ -451,18 +474,23 @@ describe("AiApp widget actions", () => {
 describe("coding agent connections", () => {
     // the registry's Claude adapter is installed too, but Claude Code itself is the built-in
     const installed = new Set(["claude", "claude-agent-acp", "gemini"]);
-    const findAgent = async (command: string, args: readonly string[]) =>
-        installed.has(command) ? { command: `/bin/${command}`, args: [...args], pathEnv: "/bin" } : null;
+    // every installed agent is the fake ACP agent, offering two models
+    const FAKE_AGENT = path.join(import.meta.dir, "fixtures", "fakeAcpAgent.mjs");
+    const findAgent = async (command: string) =>
+        installed.has(command) ? { command: process.execPath, args: [FAKE_AGENT, "--models", "config"], pathEnv: process.env.PATH ?? "" } : null;
+    let host: ReturnType<typeof agentRunHost>;
 
-    async function withApp(run: (app: InstanceType<typeof AiApp>, ctx: ReturnType<typeof makeCtx>) => Promise<void>) {
-        savedConfig = { connections: [] };
-        const app = new AiApp(new HangingHost() as any, { readyTimeoutMs: 100, findAgent });
+    async function withApp(run: (app: InstanceType<typeof AiApp>, ctx: ReturnType<typeof makeCtx>) => Promise<void>, config: Record<string, unknown> = { connections: [] }) {
+        savedConfig = config;
+        host = agentRunHost();
+        const app = new AiApp(host as any, { readyTimeoutMs: 100, findAgent });
         const ctx = makeCtx();
         await app.init(ctx as any);
         try {
             await run(app, ctx);
         } finally {
             await app.shutdown();
+            await host.agents.stopAll();
             savedConfig = null;
         }
     }
@@ -473,15 +501,33 @@ describe("coding agent connections", () => {
         });
     });
 
-    it("adds an installed agent once, listed as its single model", async () => {
+    it("adds an installed agent once, listed by the models it offers, which are saved and listed without starting it", async () => {
+        let saved: Record<string, unknown> = {};
         await withApp(async (app, ctx) => {
             const added = await app.addConnection({ kind: "agent", agent: "gemini" });
             expect(added).toMatchObject({ kind: "agent", agent: "gemini", label: "Gemini CLI" });
             expect(ctx.state.models.filter((m) => m.provider === added.id)).toEqual([
-                expect.objectContaining({ name: "Gemini CLI", capabilities: ["agent"] }),
+                expect.objectContaining({ name: "big", label: "Big Model", description: "Thinks hard", capabilities: ["agent"] }),
+                expect.objectContaining({ name: "small", label: "Small Model", capabilities: ["agent"] }),
+                expect.objectContaining({ name: "auto", label: "Auto", capabilities: ["agent"] }),
             ]);
             await expect(app.addConnection({ kind: "agent", agent: "gemini" })).rejects.toThrow("Gemini CLI is already added.");
+            const deadline = Date.now() + 3000;
+            while (!(savedConfig as { agentModels?: object }).agentModels && Date.now() < deadline) await new Promise((r) => setTimeout(r, 10));
+            expect((savedConfig as { agentModels: Record<string, unknown> }).agentModels[added.id]).toEqual([
+                { id: "big", name: "Big Model", description: "Thinks hard" },
+                { id: "small", name: "Small Model" },
+                { id: "auto", name: "Auto" },
+            ]);
+            saved = JSON.parse(JSON.stringify(savedConfig));
         });
+        await withApp(async (_app, ctx) => {
+            // init lists in the background
+            const deadline = Date.now() + 3000;
+            while (ctx.state.models.length === 0 && Date.now() < deadline) await new Promise((r) => setTimeout(r, 10));
+            expect(ctx.state.models.map((m) => m.label)).toEqual(["Big Model", "Small Model", "Auto"]);
+            expect(host.agents.starts).toHaveLength(0);
+        }, saved);
     });
 
     it("explains how to install an agent that isn't on this computer", async () => {

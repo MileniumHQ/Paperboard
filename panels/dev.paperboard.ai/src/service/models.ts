@@ -123,11 +123,18 @@ export class ModelManager {
                     capabilities,
                     contextLength,
                     modifiedAt: tag.modified_at,
+                    ...(tag.label ? { label: tag.label } : {}),
+                    ...(tag.description ? { description: tag.description } : {}),
                     ...(architecture ? { architecture } : {}),
                 });
             }
         }
-        next.sort((a, b) => a.name.localeCompare(b.name) || a.provider.localeCompare(b.provider));
+        // an agent lists its models in its own order, its default first
+        const isAgent = (m: InstalledModel) => m.capabilities.includes("agent");
+        const sorted = next.filter((m) => !isAgent(m)).sort((a, b) => a.name.localeCompare(b.name) || a.provider.localeCompare(b.provider));
+        sorted.push(...next.filter(isAgent));
+        next.length = 0;
+        next.push(...sorted);
         this.models = next;
         this.deps.onModels(next, errors);
         return next;

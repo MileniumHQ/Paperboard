@@ -114,10 +114,16 @@ export default function ChatView() {
     };
     const installed = createMemo(() => {
         const via = chatProvider();
-        // an agent lists only itself, so its chat follows it through a rename
-        if (via && state.connections.some((c) => c.id === via && c.kind === "agent")) return state.models.find((m) => m.provider === via);
-        return state.models.find((m) => m.name === model() && (!via || m.provider === via));
+        const listed = state.models.find((m) => m.name === model() && (!via || m.provider === via));
+        // an agent chat made before the agent listed its models names the agent; it runs on the agent's own default
+        if (!listed && via && state.connections.some((c) => c.id === via && c.kind === "agent")) return state.models.find((m) => m.provider === via);
+        return listed;
     });
+    /** the chat's model as its provider names it ("opus" is "Opus 5.5") */
+    const modelName = () => {
+        const m = installed();
+        return m && m.name === model() ? (m.label ?? m.name) : model();
+    };
     const agentConnection = () => {
         const via = installed()?.provider ?? chatProvider();
         return state.connections.find((c) => c.id === via && c.kind === "agent");
@@ -367,7 +373,7 @@ export default function ChatView() {
                     disabledReason={disabledReason()}
                     generating={generating()}
                     canThink={Boolean(installed()?.capabilities.includes("thinking"))}
-                    model={model()}
+                    model={modelName()}
                     agent={agentConnection()?.agent}
                     modelReady={Boolean(installed())}
                     reasoning={state.settings.reasoning}

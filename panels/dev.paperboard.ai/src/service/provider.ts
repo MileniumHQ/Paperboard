@@ -12,8 +12,11 @@ export interface ChatClient {
     chat(request: ChatRequest, signal: AbortSignal, onChunk: (chunk: ChatChunk) => void): Promise<void>;
 }
 
+/** A listed model; an agent's also carries the name and description it gives it. */
+export type ListedModel = TagEntry & { label?: string; description?: string };
+
 export interface ModelClient extends ChatClient {
-    tags(): Promise<TagEntry[]>;
+    tags(): Promise<ListedModel[]>;
     show(model: string): Promise<ShowResponse>;
     /** absent when the provider has no pull surface (a fixed URL endpoint) */
     pull?(model: string, signal: AbortSignal, onEvent: (event: PullEvent) => void): Promise<void>;

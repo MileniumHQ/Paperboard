@@ -4,8 +4,8 @@
 // every other agent sends, so a chat reads the same whichever agent replies.
 // Nothing here runs a process: service/claudeCode.ts does.
 
-import { commandsFrom, type AcpContentBlock } from "./acp";
-import type { AgentCommand, AgentMode, AgentPermissionOption, AgentToolKind } from "./types";
+import { commandsFrom, MAX_AGENT_MODELS, type AcpContentBlock } from "./acp";
+import type { AgentCommand, AgentMode, AgentModel, AgentPermissionOption, AgentToolKind } from "./types";
 
 export const CLAUDE_CODE_ID = "claude-code";
 
@@ -20,7 +20,7 @@ function str(v: unknown): string | undefined {
 }
 
 /** The headless flags every Claude Code process runs with. */
-export function claudeArgs(session: { id: string; resume: boolean } | null, options: { model?: string; mode?: string } = {}): string[] {
+export function claudeArgs(session: { id: string; resume: boolean } | null, mode?: string): string[] {
     return [
         "--print",
         "--input-format",
@@ -32,8 +32,7 @@ export function claudeArgs(session: { id: string; resume: boolean } | null, opti
         "--permission-prompt-tool",
         "stdio",
         ...(session ? [session.resume ? "--resume" : "--session-id", session.id] : []),
-        ...(options.model ? ["--model", options.model] : []),
-        ...(options.mode ? ["--permission-mode", options.mode] : []),
+        ...(mode ? ["--permission-mode", mode] : []),
     ];
 }
 
@@ -51,19 +50,30 @@ export function isClaudeMode(v: unknown): v is string {
 /** What `initialize` tells the panel about this Claude Code. */
 export interface ClaudeInit {
     commands: AgentCommand[];
+    /** the models this Claude Code offers, as it names them ("opus" is "Opus 5.5") */
+    models: AgentModel[];
     mode?: string;
     version?: string;
 }
 
 export function claudeInitFrom(response: unknown): ClaudeInit {
-    if (!isObject(response)) return { commands: [] };
+    if (!isObject(response)) return { commands: [], models: [] };
     const raw = Array.isArray(response.commands) ? response.commands : [];
     const commands = commandsFrom(
         raw.filter(isObject).map((c) => ({ name: c.name, description: c.description, ...(typeof c.argumentHint === "string" && c.argumentHint ? { input: { hint: c.argumentHint } } : {}) })),
     );
+    const models = (Array.isArray(response.models) ? response.models : [])
+        .filter(isObject)
+        .filter((m) => typeof m.value === "string" && m.value.length > 0 && m.value.length <= 200)
+        .slice(0, MAX_AGENT_MODELS)
+        .map((m) => ({
+            id: m.value as string,
+            name: (str(m.displayName) || (m.value as string)).slice(0, 200),
+            ...(str(m.description) ? { description: (m.description as string).slice(0, 500) } : {}),
+        }));
     const mode = str(response.current_permission_mode);
     const version = str(response.claude_code_version)?.slice(0, 50);
-    return { commands, ...(mode ? { mode } : {}), ...(version ? { version } : {}) };
+    return { commands, models, ...(mode ? { mode } : {}), ...(version ? { version } : {}) };
 }
 
 /** A user message on Claude Code's stdin, from a prompt's ACP blocks. */

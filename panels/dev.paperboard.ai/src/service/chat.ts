@@ -617,6 +617,7 @@ export class ChatEngine {
                 cwd: await deps.projectPath(conversation.project!),
                 ...(conversation.sessionId ? { sessionId: conversation.sessionId } : {}),
                 ...(conversation.mode ? { mode: conversation.mode } : {}),
+                ...(conversation.model ? { model: conversation.model } : {}),
             });
             if (!opened.resumed && hadHistory) {
                 first.notice = `${label} started a new session here: it doesn't remember this chat's earlier messages.`;

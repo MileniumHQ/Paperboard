@@ -176,11 +176,11 @@ function ConnectionPane(props: { connection: Connection; onPick: (ref: string, p
             </Show>
 
             <Show when={isAgent()}>
-                <AgentStatus connection={props.connection} onPick={props.onPick} />
+                <AgentStatus connection={props.connection} />
             </Show>
 
             <Show
-                when={!isAgent() && !listError()}
+                when={!listError()}
                 fallback={isAgent() ? undefined : (
                     <PaperQuote variant="danger" icon="cloud_off" title={`Couldn't list ${props.connection.label}'s models`}>
                         <PaperText size={2}>{listError()}</PaperText>

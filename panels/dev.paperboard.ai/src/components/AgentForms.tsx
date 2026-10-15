@@ -229,13 +229,12 @@ export function agentSidebarStatus(c: Connection): string {
     return statusText(state.agents[c.id], state.modelErrors[c.id]);
 }
 
-/** An added agent: whether it runs, sign-in, and starting a chat with it. */
-export function AgentStatus(props: { connection: Connection; onPick: (ref: string, provider: string) => void }) {
+/** An added agent: whether it runs, and sign-in. Its models are listed below it, like any provider's. */
+export function AgentStatus(props: { connection: Connection }) {
     const [busy, setBusy] = createSignal("");
     const [error, setError] = createSignal("");
     const agent = () => state.agents[props.connection.id];
     const listError = () => state.modelErrors[props.connection.id];
-    const model = () => state.models.find((m) => m.provider === props.connection.id);
 
     const run = async (what: string, action: () => Promise<unknown>) => {
         setBusy(what);
@@ -307,13 +306,10 @@ export function AgentStatus(props: { connection: Connection; onPick: (ref: strin
                     {agent()?.name ? ` · ${agent()!.name}${agent()?.version ? ` ${agent()!.version}` : ""}` : ""}
                 </PaperText>
                 <PaperText size={1} color="text-muted">
-                    The agent works in a folder you choose for each chat, with the files and commands it can reach on this computer. It asks before it changes things, unless you tell it not to.
+                    The agent works in a project you choose for each chat, with the files and commands it can reach on this computer. It asks before it changes things, unless you tell it not to.
                 </PaperText>
             </PaperFlex>
             <div class={styles.actions}>
-                <PaperButton variant="primary" disabled={!model()} onClick={() => props.onPick(model()!.name, props.connection.id)}>
-                    <PaperIcon>chat</PaperIcon> Chat with {props.connection.label}
-                </PaperButton>
                 <Show when={!listError() && agent()?.status !== "error"}>
                     <PaperButton disabled={busy() !== ""} onClick={() => void check()}>
                         <PaperIcon>play_arrow</PaperIcon> {busy() === "check" ? "Checking..." : "Check it starts"}

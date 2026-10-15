@@ -11,11 +11,21 @@ function logoFor(agent: string | undefined): string | undefined {
     return LOGOS[`../assets/agents/${agent}.png`] ?? LOGOS[`../assets/agents/${agent}.svg`];
 }
 
-/** An agent's logo, sized by the surrounding icon slot; a terminal glyph when it has none. */
-export default function AgentLogo(props: { agent?: string }) {
-    return (
+/**
+ * An agent's logo, sized by the surrounding icon slot; a terminal glyph when
+ * it has none. `large` sets it in a tile the size of a model card's maker logo.
+ */
+export default function AgentLogo(props: { agent?: string; size?: "large" }) {
+    const logo = () => (
         <Show when={logoFor(props.agent)} fallback={<PaperIcon zeroHeight>terminal</PaperIcon>}>
             {(src) => <img class={styles.AgentLogo} src={src()} alt="" aria-hidden="true" draggable={false} />}
+        </Show>
+    );
+    return (
+        <Show when={props.size === "large"} fallback={logo()}>
+            <span class={styles.large} aria-hidden="true">
+                {logo()}
+            </span>
         </Show>
     );
 }

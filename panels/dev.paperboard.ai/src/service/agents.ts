@@ -10,12 +10,14 @@ import {
     commandsFrom,
     modesFrom,
     permissionOptions,
+    sessionModelsFrom,
+    type SessionModels,
     type AcpContentBlock,
     type PromptCapabilities,
 } from "../core/acp";
 import { CLAUDE_CODE_ID } from "../core/claudeCode";
 import type { Connection } from "../core/providers";
-import type { AgentPermissionOption, AgentSessionInfo, AgentState } from "../core/types";
+import type { AgentModel, AgentPermissionOption, AgentSessionInfo, AgentState } from "../core/types";
 import type { Launch } from "./executable";
 import { INVALID_PARAMS, JsonRpcError, JsonRpcPeer, METHOD_NOT_FOUND } from "./jsonRpc";
 import { ClaudeCodeAgent } from "./claudeCode";
@@ -54,6 +56,8 @@ export interface AgentHubDeps {
     clientVersion: string;
     onState: (connectionId: string, state: AgentState | null) => void;
     onSessionInfo: (conversationId: string, info: AgentSessionInfo | null) => void;
+    /** the models an agent offers, whenever it tells them anew */
+    onModels?: (connectionId: string, models: AgentModel[]) => void;
     idleMs?: number;
     initTimeoutMs?: number;
     stopTimeoutMs?: number;
@@ -74,6 +78,8 @@ export interface SessionRequest {
     /** the chat's earlier session, resumed when the agent can load sessions */
     sessionId?: string;
     mode?: string;
+    /** the chat's model, applied when the agent offers it */
+    model?: string;
 }
 
 export interface OpenedSession {
@@ -102,6 +108,8 @@ export interface AgentRunner {
     hasTurns(): boolean;
     /** starts the agent without a chat (Test in the picker) */
     check(): Promise<void>;
+    /** the models the agent offers (an empty list: it picks its own) */
+    models(): Promise<AgentModel[]>;
     openSession(request: SessionRequest): Promise<OpenedSession>;
     prompt(sessionId: string, blocks: AcpContentBlock[], handlers: TurnHandlers, signal: AbortSignal): Promise<StopReason>;
     setMode(conversationId: string, modeId: string): Promise<void>;
@@ -133,6 +141,10 @@ class AgentProcess implements AgentRunner {
     private turns = new Map<string, TurnHandlers>();
     /** conversation id → its session's modes and commands */
     private infos = new Map<string, AgentSessionInfo>();
+    /** conversation id → how its session picks a model */
+    private sessionModels = new Map<string, SessionModels>();
+    private modelList: AgentModel[] | null = null;
+    private listing: Promise<AgentModel[]> | null = null;
     private state: AgentState = { status: "stopped" };
 
     constructor(
@@ -278,6 +290,7 @@ class AgentProcess implements AgentRunner {
         for (const conversationId of this.sessions.keys()) this.hub.onSessionInfo(conversationId, null);
         this.sessions.clear();
         this.infos.clear();
+        this.sessionModels.clear();
         this.clearIdle();
         if (expected) this.publish({ status: "stopped", error: undefined, errorDetail: undefined });
         else this.publish({ status: "error", error: reason.message, ...this.stderr.detail() });
@@ -323,6 +336,14 @@ class AgentProcess implements AgentRunner {
             if (conversationId) this.patchInfo(conversationId, { commands: commandsFrom(update.availableCommands) });
             return;
         }
+        if (update.sessionUpdate === "config_option_update") {
+            const models = sessionModelsFrom({ configOptions: update.configOptions });
+            if (conversationId && models) {
+                this.sessionModels.set(conversationId, models);
+                this.learnModels(models.models);
+            }
+            return;
+        }
         if (update.sessionUpdate === "current_mode_update") {
             if (conversationId && typeof update.currentModeId === "string") this.patchInfo(conversationId, { mode: update.currentModeId });
             return;
@@ -343,7 +364,10 @@ class AgentProcess implements AgentRunner {
         const init = await this.ensureStarted();
         const peer = this.peer!;
         const live = this.sessions.get(request.conversationId);
-        if (live) return { sessionId: live, resumed: true, capabilities: init.capabilities };
+        if (live) {
+            await this.applyModel(request.conversationId, request.model);
+            return { sessionId: live, resumed: true, capabilities: init.capabilities };
+        }
         let sessionId: string | undefined;
         let resumed = false;
         let result: unknown;
@@ -378,6 +402,12 @@ class AgentProcess implements AgentRunner {
         if (request.mode && request.mode !== current && modes.some((m) => m.id === request.mode)) {
             await this.setMode(request.conversationId, request.mode);
         }
+        const models = sessionModelsFrom(result);
+        if (models) {
+            this.sessionModels.set(request.conversationId, models);
+            this.learnModels(models.models);
+        }
+        await this.applyModel(request.conversationId, request.model);
         return { sessionId, resumed, capabilities: init.capabilities };
     }
 
@@ -395,7 +425,49 @@ class AgentProcess implements AgentRunner {
     forget(conversationId: string): void {
         if (!this.sessions.delete(conversationId)) return;
         this.infos.delete(conversationId);
+        this.sessionModels.delete(conversationId);
         this.hub.onSessionInfo(conversationId, null);
+    }
+
+    private learnModels(models: AgentModel[]): void {
+        if (this.modelList && JSON.stringify(this.modelList) === JSON.stringify(models)) return;
+        this.modelList = models;
+        this.hub.onModels?.(this.connection.id, models);
+    }
+
+    /** Switches the chat's session to its model, when the agent offers that model. */
+    private async applyModel(conversationId: string, model: string | undefined): Promise<void> {
+        const choice = this.sessionModels.get(conversationId);
+        const sessionId = this.sessions.get(conversationId);
+        if (!model || !choice || !sessionId || !this.peer || choice.current === model || !choice.models.some((m) => m.id === model)) return;
+        if (choice.via === "legacy") await this.peer.request("session/set_model", { sessionId, modelId: model });
+        else await this.peer.request("session/set_config_option", { sessionId, configId: choice.via.configId, value: model });
+        choice.current = model;
+    }
+
+    /**
+     * The models the agent offers. ACP lists them only per session, so the
+     * first ask opens a session that no chat uses.
+     */
+    models(): Promise<AgentModel[]> {
+        if (this.modelList) return Promise.resolve(this.modelList);
+        this.listing ??= this.listModels().finally(() => {
+            this.listing = null;
+        });
+        return this.listing;
+    }
+
+    private async listModels(): Promise<AgentModel[]> {
+        await this.ensureStarted();
+        let result: unknown;
+        try {
+            result = await this.peer!.request("session/new", { cwd: this.hub.workDir, mcpServers: [] });
+        } catch (err) {
+            throw this.authError(err);
+        }
+        this.learnModels(sessionModelsFrom(result)?.models ?? []);
+        this.scheduleIdle();
+        return this.modelList ?? [];
     }
 
     async setMode(conversationId: string, modeId: string): Promise<void> {
@@ -515,6 +587,10 @@ export class AgentHub {
 
     authenticate(connection: Connection, methodId: string): Promise<void> {
         return this.agent(connection).authenticate(methodId);
+    }
+
+    models(connection: Connection): Promise<AgentModel[]> {
+        return this.agent(connection).models();
     }
 
     /** Starts an agent without a chat (Test in the picker). */

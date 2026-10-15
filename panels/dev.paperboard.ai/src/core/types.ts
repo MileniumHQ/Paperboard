@@ -49,6 +49,9 @@ export interface HardwareState {
 
 export interface InstalledModel {
     name: string; // "qwen3:8b"
+    /** what the model is called when its id is not a name (an agent's "opus" is "Opus 5.5") */
+    label?: string;
+    description?: string;
     /** the connection that serves it ("ollama" or an endpoint id) */
     provider: string;
     sizeBytes: number;
@@ -326,6 +329,13 @@ export interface AgentCommand {
 }
 
 /** A live agent session's extras, for the chat that owns it. */
+/** A model a coding agent offers, as the agent names it. */
+export interface AgentModel {
+    id: string;
+    name: string;
+    description?: string;
+}
+
 export interface AgentSessionInfo {
     modes: AgentMode[];
     mode?: string;

@@ -22,7 +22,11 @@ function connection(args: string[] = [], id = "agent-0000000a"): Connection {
 }
 
 function makeHub(options: { idleMs?: number; cancelGraceMs?: number; resolve?: () => Promise<never> } = {}): AgentHub {
-    return new AgentHub({
+    return new AgentHub(makeHubDeps(options));
+}
+
+function makeHubDeps(options: { idleMs?: number; cancelGraceMs?: number; resolve?: () => Promise<never> } = {}): ConstructorParameters<typeof AgentHub>[0] {
+    return {
         host,
         procId: (id) => `dev.paperboard.ai.agent.${id}`,
         resolve: options.resolve ?? (async (c) => ({ command: c.command!, args: c.args!, pathEnv: process.env.PATH ?? "" })),
@@ -34,7 +38,7 @@ function makeHub(options: { idleMs?: number; cancelGraceMs?: number; resolve?: (
         initTimeoutMs: 5_000,
         stopTimeoutMs: 2_000,
         cancelGraceMs: options.cancelGraceMs ?? 2_000,
-    });
+    };
 }
 
 function collect(): { handlers: TurnHandlers; updates: Record<string, unknown>[]; text: () => string } {
@@ -203,6 +207,46 @@ describe("agent hub", () => {
         await host.start({ id: "dev.paperboard.ai.agent.agent-0000000a", command: NODE, args: [AGENT], cwd: import.meta.dir, env: {} });
         await hub.stopLeftovers([c]);
         expect(host.children.size).toBe(0);
+    });
+
+    it("lists the agent's models and switches a chat's session to its model", async () => {
+        const told: unknown[] = [];
+        hub = new AgentHub({ ...makeHubDeps(), onModels: (id, models) => told.push({ id, models }) });
+        const c = connection(["--models", "config"]);
+        // grouped options are one list
+        const offered = [
+            { id: "big", name: "Big Model", description: "Thinks hard" },
+            { id: "small", name: "Small Model" },
+            { id: "auto", name: "Auto" },
+        ];
+        expect(await hub.models(c)).toEqual(offered);
+        expect(told).toEqual([{ id: c.id, models: offered }]);
+
+        const opened = await hub.openSession({ conversationId: "c1", connection: c, cwd: "/w", model: "small" });
+        const turn = collect();
+        await hub.prompt(c, opened.sessionId, text("model"), turn.handlers, new AbortController().signal);
+        expect(turn.text()).toBe("small");
+        // the open session follows a model change on its next message
+        await hub.openSession({ conversationId: "c1", connection: c, cwd: "/w", model: "big" });
+        const again = collect();
+        await hub.prompt(c, opened.sessionId, text("model"), again.handlers, new AbortController().signal);
+        expect(again.text()).toBe("big");
+        // a model the agent does not offer is not sent
+        await hub.openSession({ conversationId: "c1", connection: c, cwd: "/w", model: "Fake" });
+        expect(told).toHaveLength(1);
+    });
+
+    it("switches models the older draft's way too", async () => {
+        const c = connection(["--models", "legacy"]);
+        expect((await hub.models(c)).map((m) => m.id)).toEqual(["big", "small", "auto"]);
+        const opened = await hub.openSession({ conversationId: "c1", connection: c, cwd: "/w", model: "small" });
+        const turn = collect();
+        await hub.prompt(c, opened.sessionId, text("model"), turn.handlers, new AbortController().signal);
+        expect(turn.text()).toBe("small");
+    });
+
+    it("lists no models for an agent that picks its own", async () => {
+        expect(await hub.models(connection())).toEqual([]);
     });
 
     it("refuses to stop an agent mid-reply", async () => {

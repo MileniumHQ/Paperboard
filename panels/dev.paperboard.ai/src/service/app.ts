@@ -42,9 +42,11 @@ import { findExecutable, type Launch } from "./executable";
 import type { ModelClient } from "./provider";
 import { isReasoningLevel } from "../core/reasoning";
 import { quickAskModel } from "../core/widgets";
+import { MAX_AGENT_MODELS } from "../core/acp";
 import type { RegistryAction } from "../core/tools";
 import {
     DEFAULT_SETTINGS,
+    type AgentModel,
     type AiState,
     type Conversation,
     type ConversationSnapshot,
@@ -89,6 +91,8 @@ interface StoredConfig {
     connections?: StoredConnection[];
     /** the project the last agent chat worked in; the next one starts there */
     lastProject?: string;
+    /** the models each agent connection offered last, listed without starting it */
+    agentModels?: Record<string, AgentModel[]>;
     // TODO(remove after v0.3): the single provider choice of 0.2 configs,
     // read once by migrateSingleProvider and then deleted from the document
     provider?: { id?: string; baseUrl?: string };
@@ -237,16 +241,37 @@ export class AiApp {
         );
     }
 
+    /** The models an agent offered last, as saved; undefined until it has told them. */
+    private savedAgentModels(connectionId: string): AgentModel[] | undefined {
+        const saved = this.stored.agentModels?.[connectionId];
+        if (!Array.isArray(saved)) return undefined;
+        return saved.filter((m) => typeof m?.id === "string" && typeof m.name === "string").slice(0, MAX_AGENT_MODELS);
+    }
+
+    /** An agent told its models (opening a session, or listing): saved, then listed. */
+    private async rememberAgentModels(connectionId: string, models: AgentModel[]): Promise<void> {
+        if (!this.stored.connections?.some((c) => c.id === connectionId)) return;
+        if (JSON.stringify(this.savedAgentModels(connectionId)) === JSON.stringify(models)) return;
+        await this.saveConfig((c) => {
+            c.agentModels = { ...c.agentModels, [connectionId]: models };
+        });
+        await this.models.refresh();
+    }
+
     /**
-     * An agent lists itself as its one model, once its command is found;
-     * otherwise the listing error says how to install it (a recoverable
-     * "unavailable", never an empty list).
+     * An agent lists the models it offers, once its command is found: the
+     * saved list, or the agent's own answer the first time. An agent that
+     * offers no choice lists itself, and picks its own model. A listing
+     * error says how to install or sign in (a recoverable "unavailable",
+     * never an empty list).
      */
     private agentListing(connection: Connection): ModelClient {
         return {
             tags: async () => {
                 await this.resolveAgent(connection);
-                return [{ name: agentModelName(connection), size: 0 }];
+                const models = this.savedAgentModels(connection.id) ?? (await this.agents.models(connection));
+                if (models.length === 0) return [{ name: agentModelName(connection), size: 0 }];
+                return models.map((m) => ({ name: m.id, size: 0, label: m.name, ...(m.description ? { description: m.description } : {}) }));
             },
             show: async () => ({ capabilities: ["agent"] }),
             chat: async () => {
@@ -431,6 +456,7 @@ export class AiApp {
         if (current.kind === "agent") await this.agents.stop(id);
         await this.saveConfig((c) => {
             c.connections = (c.connections ?? []).filter((x) => x.id !== id);
+            if (c.agentModels) delete c.agentModels[id];
             if (c.settings?.defaultProvider === id) c.settings = { ...c.settings, defaultModel: "", defaultProvider: "" };
         });
         this.ctx.setState({ settings: clampSettings(this.stored.settings) });
@@ -520,6 +546,8 @@ export class AiApp {
                     else delete agents[connectionId];
                     return { agents };
                 }),
+            onModels: (connectionId, models) =>
+                void this.rememberAgentModels(connectionId, models).catch((err) => console.error("[ai] saving an agent's models failed:", String(err))),
             onSessionInfo: (conversationId, info) =>
                 this.ctx.setState((prev) => {
                     const agentSessions = { ...prev.agentSessions };
@@ -775,6 +803,8 @@ export class AiApp {
         const connection = this.connection(connectionId);
         if (connection.kind !== "agent") throw new Error(`${connection.label} is not an agent.`);
         await this.agents.authenticate(connection, methodId);
+        // a listing refused before the sign-in can list now
+        await this.models.refresh();
     }
 
     /** The registry agents found on this computer, for the Add provider list. */
