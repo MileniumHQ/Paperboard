@@ -44,6 +44,7 @@ describe("parseHomeLayout", () => {
         expect(() => parseHomeLayout({ version: 2, items: [{ ...item({}), source: "remote" }] })).toThrow(/malformed/);
         expect(() => parseHomeLayout({ version: 2, items: [item({ x: MAX_CELLS_ACROSS - 1 })] })).toThrow(/off the grid/);
         expect(() => parseHomeLayout({ version: 2, items: [item({}), item({})] })).toThrow(/repeats/);
+        expect(() => parseHomeLayout({ version: 2, items: [item({}), item({ id: "b", x: 1 })] })).toThrow(/overlaps/);
     });
 
     it("reads the unreleased column format as the same picture on one grid", () => {
@@ -117,20 +118,21 @@ describe("fitCanvas", () => {
     // editing Home opens the gallery over part of it: the canvas is drawn
     // smaller in the room that's left, and its layout is not recomputed
     it("draws the canvas at full size, centered, when it fits", () => {
-        expect(fitCanvas(800, 1000)).toEqual({ scale: 1, left: 100 });
+        expect(fitCanvas(800, 1000)).toEqual({ scale: 1, left: 100, width: 900 });
     });
 
     it("draws it smaller, from the left edge, when the room is narrower", () => {
-        expect(fitCanvas(1200, 900)).toEqual({ scale: 0.75, left: 0 });
+        expect(fitCanvas(1200, 900)).toEqual({ scale: 0.75, left: 0, width: 900 });
     });
 
-    it("stops shrinking at a size that can still be read", () => {
-        expect(fitCanvas(1200, 120)).toEqual({ scale: 0.4, left: 0 });
-        expect(fitCanvas(1200, -50)).toEqual({ scale: 0.4, left: 0 });
+    it("stops shrinking at a size that can still be read, and is then wider than the room", () => {
+        // 480 px drawn in 120 px of room: Home scrolls sideways to reach the rest
+        expect(fitCanvas(1200, 120)).toEqual({ scale: 0.4, left: 0, width: 480 });
+        expect(fitCanvas(1200, -50)).toEqual({ scale: 0.4, left: 0, width: 480 });
     });
 
     it("has nothing to scale before Home is measured", () => {
-        expect(fitCanvas(0, 0)).toEqual({ scale: 1, left: 0 });
+        expect(fitCanvas(0, 0)).toEqual({ scale: 1, left: 0, width: 0 });
     });
 });
 

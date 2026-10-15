@@ -16,7 +16,8 @@
 
 .scroller {
     flex: 1;
-    overflow-x: hidden;
+    /* sideways only when the layout is wider than Home at its smallest */
+    overflow-x: auto;
     overflow-y: auto;
     /* a scrollbar appearing must not shrink the grid and reflow it */
     scrollbar-gutter: stable;

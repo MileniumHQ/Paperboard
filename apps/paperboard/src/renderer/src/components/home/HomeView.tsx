@@ -183,7 +183,8 @@ const HomeView: Component<HomeViewProps> = (props) => {
     // the gallery takes room from it, it is drawn smaller
     const geometry = createMemo(() => computeGeometry(viewport().width, items()));
     const gridWidth = () => geometry().across * geometry().cell;
-    const galleryOpen = () => editing() && loadState() === "ready";
+    // a gallery left open on a hidden Home is released with Home's widgets
+    const galleryOpen = () => editing() && loadState() === "ready" && !suspended();
     const fitted = createMemo(() => fitCanvas(gridWidth(), viewport().width - (galleryOpen() ? galleryWidth() : 0)));
     const scale = () => fitted().scale;
     const gridLeft = () => fitted().left;
@@ -619,7 +620,7 @@ const HomeView: Component<HomeViewProps> = (props) => {
                     class={styles.scroller}
                     classList={{ [styles.editing]: editing(), [styles.dragging]: !!drag()?.started }}
                 >
-                    <div class={styles.stage} style={{ height: `${gridHeight() * scale()}px` }}>
+                    <div class={styles.stage} style={{ height: `${gridHeight() * scale()}px`, width: `${fitted().width + (galleryOpen() ? galleryWidth() : 0)}px` }}>
                     <div
                         ref={grid}
                         class={`${styles.grid} ${styles.dots}`}

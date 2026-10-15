@@ -114,6 +114,8 @@ export function parseHomeLayout(raw: unknown): HomeItem[] {
     if (ids.size !== items.length) throw new Error("Home layout repeats an item id");
     for (const item of items) {
         if (!inBounds(placementOf(item))) throw new Error(`Home layout item ${item.id} is off the grid`);
+        // the rule every placement follows, so a stored layout can't break it either
+        if (!canPlace(items, placementOf(item), item.id)) throw new Error(`Home layout item ${item.id} overlaps another widget`);
     }
     return items;
 }
@@ -173,13 +175,16 @@ export function computeGeometry(width: number, items: HomeItem[]): HomeGeometry 
  * How the canvas is drawn in `room` px of width: at full size when it fits,
  * otherwise smaller, down to MIN_CANVAS_SCALE, and centered in what's left.
  * Opening the gallery, or a window narrower than the layout, takes room from
- * Home without rearranging it.
+ * Home without rearranging it. `width` is how much room the drawn canvas
+ * takes; past the smallest scale it is wider than `room`, and Home scrolls
+ * sideways to reach the rest.
  */
 export const MIN_CANVAS_SCALE = 0.4;
-export function fitCanvas(gridWidth: number, room: number): { scale: number; left: number } {
+export function fitCanvas(gridWidth: number, room: number): { scale: number; left: number; width: number } {
     const space = Math.max(room, 0);
     const scale = gridWidth > 0 ? Math.min(1, Math.max(MIN_CANVAS_SCALE, space / gridWidth)) : 1;
-    return { scale, left: Math.max(0, (space - gridWidth * scale) / 2) };
+    const left = Math.max(0, (space - gridWidth * scale) / 2);
+    return { scale, left, width: left + gridWidth * scale };
 }
 
 /** Rows the layout needs: its lowest widget, plus `extra`. */
