@@ -14,7 +14,6 @@ export async function verifyMarketingFlows(flows: ReturnType<typeof buildMarketi
     let activeBlocks: CanvasBlock[] = [];
     const flatten = (block: CanvasBlock): CanvasBlock[] => [block, ...(block.children || []).flatMap(flatten), ...(block.elseChildren || []).flatMap(flatten)];
     const answer = "Meet everyone at spawn, then follow the lantern path to town. ".repeat(40);
-    let deferred = false;
     actions.call = async (owner: string, id: string, inputs: Record<string, unknown>) => {
         const block = activeBlocks.find(item => item.panelId === owner && item.action.id === id);
         assert.ok(block, `Unexpected action ${owner}:${id}`);
@@ -26,8 +25,7 @@ export async function verifyMarketingFlows(flows: ReturnType<typeof buildMarketi
         if (id === "get-user") { assert.equal(inputs.userId, demoUser); return demoUser as any; }
         if (id === "ask") return answer as any;
         if (id === "say-chat") { assert.ok(String(inputs.message).length <= 160); return inputs.message as any; }
-        if (id === "defer-interaction") { assert.equal(inputs.interactionId, demoInteraction); deferred = true; return true as any; }
-        if (id === "respond-to-interaction") { assert.ok(deferred); assert.equal(inputs.interactionId, demoInteraction); return demoInteraction as any; }
+        if (id === "respond-to-interaction") { assert.equal(inputs.interactionId, demoInteraction); return demoInteraction as any; }
         if (id === "send-dm") { assert.equal(inputs.user, demoUser); assert.ok(String(inputs.content).length <= 600); buildMessagePayload(inputs).embeds.forEach(embed => embed.toJSON()); return demoMessage as any; }
         if (id === "send-message") {
             assert.equal(inputs.channel, demoChannel); assert.ok(String(inputs.content).length <= 2000);
@@ -44,7 +42,7 @@ export async function verifyMarketingFlows(flows: ReturnType<typeof buildMarketi
     };
     const run = async (name: keyof typeof flows, payload: unknown) => {
         const flow = flows[name]; validateMarketingFlow(flow);
-        activeBlocks = flatten(flow); calls.length = 0; deferred = false;
+        activeBlocks = flatten(flow); calls.length = 0;
         const log = await executeFlow(flow, payload);
         assert.equal(log.status, "success", log.message);
         return calls.slice();
@@ -58,7 +56,7 @@ export async function verifyMarketingFlows(flows: ReturnType<typeof buildMarketi
         assert.equal(join.find(entry => entry.action === "say-chat")!.inputs.message, answer.slice(0, 157) + "...");
         assert.match(String(join.at(-1)!.inputs.content), /Dinnerbone joined Minecraft/);
         const button = await run("button", { interactionId: demoInteraction, customId: "minecraft-status", userId: demoUser });
-        assert.deepEqual(button.map(entry => entry.action), ["defer-interaction", "player-count", "list-players", "respond-to-interaction"]);
+        assert.deepEqual(button.map(entry => entry.action), ["player-count", "list-players", "respond-to-interaction"]);
         assert.match(String(button.at(-1)!.inputs.content), /Dinnerbone, jeb_/);
         await run("member", { userId: demoUser, username: "Dinnerbone", guildId: "124800000000000050", guildName: "Lantern Town" });
         const model = await run("model", "qwen2.5:0.5b"); assert.equal(model.find(entry => entry.action === "ask")!.inputs.model, "qwen2.5:0.5b");

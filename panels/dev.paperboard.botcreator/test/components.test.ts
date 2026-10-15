@@ -195,6 +195,7 @@ describe("interaction responses carry buttons", () => {
     it("followUp includes the component row instead of dropping it", async () => {
         const { InteractionOps } = await import("../src/discordOps");
         const { interaction, calls } = fakeInteraction();
+        interaction.replied = true; // a follow-up comes after the answer
         const ops = new InteractionOps(() => interaction);
         await ops.followUp("inter_1", { content: "More", components: [button] });
         const body = calls.followUp[0] as any;

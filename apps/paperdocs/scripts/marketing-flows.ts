@@ -53,7 +53,6 @@ export function buildMarketingFlows(registry: ActionInfo[], icons: Record<string
     const buttonCount = block("button-count", GAME, "player-count");
     const players = block("button-players", GAME, "list-players");
     const button = block("server-button", BOT, "interaction-triggered", { customId: "minecraft-status" }, [
-        block("button-defer", BOT, "defer-interaction", { interactionId: "{{interactionId:Interaction:reply}}", ephemeral: true }),
         buttonCount, players,
         block("button-reply", BOT, "respond-to-interaction", {
             interactionId: "{{interactionId:Interaction:reply}}", ephemeral: true,

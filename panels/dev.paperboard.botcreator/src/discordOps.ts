@@ -11,6 +11,7 @@ import {
     EmbedBuilder,
     MessageFlags,
     type ButtonInteraction,
+    type MessageComponentInteraction,
     type ColorResolvable,
     type RepliableInteraction,
     type Guild,
@@ -512,57 +513,136 @@ export class MessageOps {
 
 // ─── interaction responses ──────────────────────────────────────────────────
 
-// One class owns answering pending interactions: the reply-vs-editReply
-// decision, ephemeral flags, and the pending-map lookup live here, not in
-// every responder action.
+// Discord fails an interaction nobody answers within 3 seconds, so the bot
+// acknowledges on the flow's behalf when it has not answered by this delay.
+// Flows never need a Defer step: a later Respond or Follow Up still lands.
+export const AUTO_ACK_DELAY_MS = 2_500;
+
+// Every operation on one interaction runs in order, so the automatic
+// acknowledgement and a flow's answer can never both claim the first
+// response. Keyed weakly: a finished interaction is collected with its chain.
+const interactionQueues = new WeakMap<object, Promise<unknown>>();
+
+function serialize<T>(interaction: object, op: () => Promise<T>): Promise<T> {
+    const previous = interactionQueues.get(interaction) ?? Promise.resolve();
+    const next = previous.then(op, op);
+    // the chain only orders work; this op's failure reaches its own caller
+    // through `next`, so the next op still runs after a failed one
+    interactionQueues.set(
+        interaction,
+        next.then(
+            () => undefined,
+            () => undefined,
+        ),
+    );
+    return next;
+}
+
+// Interactions whose first response is not an editable reply: a click acked
+// with an invisible update, or a deferral replaced to change visibility.
+// Their answers arrive as new messages.
+const answersAsNewMessage = new WeakSet<object>();
+
+function acknowledgesWithUpdate(interaction: RepliableInteraction): boolean {
+    if (interaction.isMessageComponent?.()) return true;
+    return Boolean(interaction.isModalSubmit?.() && interaction.isFromMessage());
+}
+
+/**
+ * The automatic acknowledgement. A button or select click (or a modal opened
+ * from one) gets an invisible update ack, so a flow that answers nothing
+ * leaves no trace; a slash command or modal gets "thinking…" that the flow's
+ * Respond replaces. A no-op once anything answered.
+ */
+export function autoAcknowledge(interaction: RepliableInteraction): Promise<void> {
+    return serialize(interaction, async () => {
+        if (interaction.deferred || interaction.replied) return;
+        if (acknowledgesWithUpdate(interaction)) {
+            await (interaction as MessageComponentInteraction).deferUpdate();
+            answersAsNewMessage.add(interaction);
+        } else {
+            await interaction.deferReply();
+        }
+    });
+}
+
+type MessageBody = ReturnType<typeof buildMessagePayload>;
+
+// One class owns answering pending interactions: the reply / edit / new
+// message decision, ephemeral flags, and the pending-map lookup live here,
+// not in every responder action.
 export class InteractionOps {
     constructor(
         private readonly take: (interactionId: string) => RepliableInteraction,
     ) {}
 
+    // Answers in the one way Discord allows for the interaction's state:
+    // the first answer is a reply; after "thinking…" it fills that message
+    // in (or replaces it when the visibility asked for differs, since
+    // Discord fixes visibility at defer time); after an update ack, or when
+    // a new message was asked for, it is a follow-up message.
+    private async deliver(
+        interaction: RepliableInteraction,
+        body: MessageBody,
+        ephemeral: boolean,
+        asNewMessage: boolean,
+    ): Promise<{ messageId: () => Promise<string> }> {
+        const flags = ephemeral ? MessageFlags.Ephemeral : undefined;
+        if (!interaction.deferred && !interaction.replied) {
+            await interaction.reply({ ...body, flags });
+            return { messageId: async () => (await interaction.fetchReply()).id };
+        }
+        if (answersAsNewMessage.has(interaction) || (interaction.replied && asNewMessage)) {
+            const sent = await interaction.followUp({ ...body, flags });
+            return { messageId: async () => sent.id };
+        }
+        if (!interaction.replied && Boolean(interaction.ephemeral) !== ephemeral) {
+            await interaction.deleteReply();
+            answersAsNewMessage.add(interaction);
+            const sent = await interaction.followUp({ ...body, flags });
+            return { messageId: async () => sent.id };
+        }
+        const edited = await interaction.editReply(body);
+        return { messageId: async () => edited.id };
+    }
+
+    /** The interaction's answer; responding again edits that answer. */
     async respond(
         interactionId: string,
         payload: { content?: string; embeds?: unknown; components?: unknown; ephemeral?: boolean },
     ): Promise<string> {
         const interaction = this.take(interactionId.trim());
-        const body = buildMessagePayload({
-            content: payload.content,
-            embeds: payload.embeds,
-            components: payload.components,
+        const body = buildMessagePayload(payload);
+        return serialize(interaction, async () => {
+            await this.deliver(interaction, body, Boolean(payload.ephemeral), false);
+            return interaction.id;
         });
-        if (interaction.deferred || interaction.replied) {
-            await interaction.editReply(body);
-        } else {
-            await interaction.reply({
-                ...body,
-                flags: payload.ephemeral ? MessageFlags.Ephemeral : undefined,
-            });
-        }
-        return interaction.id;
     }
 
+    // TODO(remove after v0.2): Defer Interaction is redundant now that every
+    // interaction is acknowledged automatically; it stays only so flows
+    // saved with that step keep running for one release.
     async defer(interactionId: string, ephemeral?: boolean): Promise<boolean> {
         const interaction = this.take(interactionId.trim());
-        await interaction.deferReply({
-            flags: ephemeral ? MessageFlags.Ephemeral : undefined,
+        return serialize(interaction, async () => {
+            if (interaction.deferred || interaction.replied) return true;
+            await interaction.deferReply({
+                flags: ephemeral ? MessageFlags.Ephemeral : undefined,
+            });
+            return true;
         });
-        return true;
     }
 
+    /** Another message after the answer (or the answer, if none was sent yet). */
     async followUp(
         interactionId: string,
         payload: { content?: string; embeds?: unknown; components?: unknown; ephemeral?: boolean },
     ): Promise<string> {
         const interaction = this.take(interactionId.trim());
-        const body = buildMessagePayload({
-            content: payload.content,
-            embeds: payload.embeds,
-            components: payload.components,
+        const body = buildMessagePayload(payload);
+        return serialize(interaction, async () => {
+            const sent = await this.deliver(interaction, body, Boolean(payload.ephemeral), true);
+            return sent.messageId();
         });
-        const sent = await interaction.followUp({
-            ...body,
-            flags: payload.ephemeral ? MessageFlags.Ephemeral : undefined,
-        });
-        return sent.id;
     }
 }

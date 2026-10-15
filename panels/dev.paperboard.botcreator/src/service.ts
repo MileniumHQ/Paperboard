@@ -12,7 +12,6 @@ import {
     type ChatInputApplicationCommandData,
     type ChatInputCommandInteraction,
     type ColorResolvable,
-    type ButtonInteraction,
     type RepliableInteraction,
 } from "discord.js";
 import {
@@ -20,6 +19,8 @@ import {
     MessageOps,
     InteractionOps,
     buildDiscordEmbed,
+    AUTO_ACK_DELAY_MS,
+    autoAcknowledge,
     buildButtonComponent,
     componentClickPayload,
     resolveGuild,
@@ -302,11 +303,13 @@ export function buildHealth(bot: Client | null = client): Health {
 
 // A flow can take longer than Discord's 3-second acknowledgement window, so
 // the interaction object stays here for its whole 15-minute token life:
-// Respond, Follow Up, and a second Respond (an edit) all reach it. Bounded: oldest entries are dropped at the cap and every
-// entry's timer is cleared on removal or disconnect.
+// Respond, Follow Up, and a second Respond (an edit) all reach it. Bounded:
+// oldest entries are dropped at the cap, and every entry's TTL and
+// auto-acknowledge timers are cleared on removal or disconnect.
 interface PendingInteraction {
     interaction: RepliableInteraction;
     timer: ReturnType<typeof setTimeout>;
+    ackTimer: ReturnType<typeof setTimeout>;
 }
 
 const pendingInteractions = new Map<string, PendingInteraction>();
@@ -315,29 +318,46 @@ export function pendingInteractionCount(): number {
     return pendingInteractions.size;
 }
 
+function dropEntry(key: string): void {
+    const entry = pendingInteractions.get(key);
+    if (!entry) return;
+    clearTimeout(entry.timer);
+    clearTimeout(entry.ackTimer);
+    pendingInteractions.delete(key);
+}
+
+// timers must not keep the host process alive on their own (Node/Bun
+// timers expose unref; the browser double does not)
+function unrefTimer(timer: ReturnType<typeof setTimeout>): void {
+    (timer as unknown as { unref?: () => void }).unref?.();
+}
+
+/**
+ * Records a live interaction and arms its automatic acknowledgement: if no
+ * flow answered after AUTO_ACK_DELAY_MS, the bot acknowledges so Discord
+ * does not show "interaction failed". Flows never need a Defer step.
+ */
 export function rememberInteraction(interaction: RepliableInteraction): void {
     const key = interaction.id;
-    const existing = pendingInteractions.get(key);
-    if (existing) clearTimeout(existing.timer);
+    if (pendingInteractions.has(key)) dropEntry(key);
 
-    if (!existing && pendingInteractions.size >= PENDING_INTERACTION_CAP) {
+    if (pendingInteractions.size >= PENDING_INTERACTION_CAP) {
         const oldestKey = pendingInteractions.keys().next().value;
-        if (oldestKey !== undefined) {
-            const oldest = pendingInteractions.get(oldestKey);
-            if (oldest) {
-                clearTimeout(oldest.timer);
-                pendingInteractions.delete(oldestKey);
-            }
-        }
+        if (oldestKey !== undefined) dropEntry(oldestKey);
     }
 
-    const timer = setTimeout(() => {
-        pendingInteractions.delete(key);
-    }, INTERACTION_TTL_MS);
-    // timers must not keep the host process alive on their own (Node/Bun
-    // timers expose unref; the browser double does not)
-    (timer as unknown as { unref?: () => void }).unref?.();
-    pendingInteractions.set(key, { interaction, timer });
+    const timer = setTimeout(() => dropEntry(key), INTERACTION_TTL_MS);
+    const ackTimer = setTimeout(() => {
+        autoAcknowledge(interaction).catch((err: unknown) =>
+            console.error(
+                "[DiscordService] automatic acknowledgement failed:",
+                errorToMessage(err),
+            ),
+        );
+    }, AUTO_ACK_DELAY_MS);
+    unrefTimer(timer);
+    unrefTimer(ackTimer);
+    pendingInteractions.set(key, { interaction, timer, ackTimer });
 }
 
 export function takeInteraction(interactionId: string): RepliableInteraction {
@@ -351,32 +371,7 @@ export function takeInteraction(interactionId: string): RepliableInteraction {
 }
 
 export function clearPendingInteractions(): void {
-    for (const entry of pendingInteractions.values()) clearTimeout(entry.timer);
-    pendingInteractions.clear();
-}
-
-// A button click must be acknowledged within ~3 seconds or the user sees
-// "interaction failed". The flow that handles the click may still be queued
-// or running, so this panel acks on the bot's behalf: after the delay the
-// interaction is deferred (an update ack, no visible spinner) unless it was
-// already answered. Respond/Follow Up keep working afterwards via
-// editReply/followUp. One fire-once timer per live click, never a
-// persistent structure — the click rate bounds these naturally.
-const COMPONENT_ACK_DELAY_MS = 2_500;
-
-export function scheduleComponentAck(interaction: ButtonInteraction): void {
-    const timer = setTimeout(() => {
-        if (interaction.deferred || interaction.replied) return;
-        interaction
-            .deferUpdate()
-            .catch((err: unknown) =>
-                console.error(
-                    "[DiscordService] component auto-ack failed:",
-                    errorToMessage(err),
-                ),
-            );
-    }, COMPONENT_ACK_DELAY_MS);
-    (timer as unknown as { unref?: () => void }).unref?.();
+    for (const key of [...pendingInteractions.keys()]) dropEntry(key);
 }
 
 // discord presence statuses — the only legal values for set-status
@@ -636,7 +631,6 @@ function attachListeners(bot: Client, ctx: ServiceContext<any>) {
         // interaction-triggered event by custom id
         if (interaction.isMessageComponent() && interaction.isButton()) {
             rememberInteraction(interaction);
-            scheduleComponentAck(interaction);
             ctx.emitTrigger("interaction-triggered", componentClickPayload(interaction));
             return;
         }
@@ -1513,11 +1507,13 @@ export const actions = [
     }),
 
     defineAction({
+        // TODO(remove after v0.2): kept so saved flows with this step keep
+        // running for one release; the bot now acknowledges automatically
         id: "defer-interaction",
-        name: "Defer Interaction",
+        name: "Defer Interaction (no longer needed)",
         category: "Interactions",
         description:
-            "Acknowledges a slash command so the bot can answer later without hitting Discord's 3-second timeout",
+            "No longer needed: the bot acknowledges every interaction automatically. Remove this step; it goes away in the next release",
         template: "Defer interaction {interactionId}",
         inputs: {
             interactionId: INPUTS.interaction,
@@ -1532,6 +1528,9 @@ export const actions = [
             _ctx,
             inputs: { interactionId: string; ephemeral?: boolean },
         ) => {
+            console.warn(
+                "[DiscordService] Defer Interaction is no longer needed and will be removed after v0.2: the bot acknowledges interactions automatically. Remove the step from your flow.",
+            );
             const ops = new InteractionOps(takeInteraction);
             await ops.defer(inputs.interactionId, inputs.ephemeral);
             return true;
@@ -1543,7 +1542,7 @@ export const actions = [
         name: "Respond to Interaction",
         category: "Interactions",
         description:
-            "Replies to a slash command; edits the reply when the interaction was deferred",
+            "Answers a slash command or button click. Responding again edits the answer",
         template: "Respond to interaction {interactionId} with {content}",
         inputs: {
             interactionId: INPUTS.interaction,
@@ -1576,7 +1575,7 @@ export const actions = [
         id: "follow-up-interaction",
         name: "Follow Up to Interaction",
         category: "Interactions",
-        description: "Sends an additional message after a slash command reply",
+        description: "Sends another message after the answer to an interaction",
         template: "Follow up to interaction {interactionId} with {content}",
         inputs: {
             interactionId: INPUTS.interaction,

@@ -1,7 +1,7 @@
 // slash-command validation, registration and health helpers (bun test):
 // these are the boundaries the UI and Discord both depend on, so they are
 // pinned here even though no component test exists in this repo
-import { describe, it, expect, beforeEach } from "bun:test";
+import { describe, it, expect, beforeEach, afterEach, jest } from "bun:test";
 import {
     ApplicationCommandOptionType,
     ApplicationCommandType,
@@ -595,14 +595,151 @@ describe("pending interaction store", () => {
             replied: false,
             deferReply: async () => {
                 live.deferred = true;
+                live.ephemeral = false;
             },
-            editReply: async () => {},
+            editReply: async () => ({ id: "answer" }),
         };
         rememberInteraction(live);
         const ops = new InteractionOps(takeInteraction);
         await ops.defer("deferred");
         await ops.respond("deferred", { content: "late" });
         expect(pendingInteractionCount()).toBe(1);
+    });
+});
+
+describe("automatic acknowledgement", () => {
+    beforeEach(() => {
+        clearPendingInteractions();
+        jest.useFakeTimers();
+    });
+    afterEach(() => {
+        clearPendingInteractions();
+        jest.useRealTimers();
+    });
+
+    function slashCommand(id: string) {
+        const calls: string[] = [];
+        const interaction: any = {
+            id,
+            deferred: false,
+            replied: false,
+            ephemeral: null,
+            isMessageComponent: () => false,
+            isModalSubmit: () => false,
+            deferReply: async (options?: { flags?: number }) => {
+                calls.push("deferReply");
+                interaction.deferred = true;
+                interaction.ephemeral = Boolean(options?.flags);
+            },
+            reply: async () => {
+                calls.push("reply");
+                interaction.replied = true;
+            },
+            editReply: async () => {
+                calls.push("editReply");
+                interaction.replied = true;
+                return { id: "answer" };
+            },
+            deleteReply: async () => {
+                calls.push("deleteReply");
+            },
+            followUp: async () => {
+                calls.push("followUp");
+                return { id: "message" };
+            },
+            showModal: async () => {
+                calls.push("showModal");
+                interaction.replied = true;
+            },
+        };
+        return { interaction, calls };
+    }
+
+    const settle = async () => {
+        for (let n = 0; n < 5; n++) await Promise.resolve();
+    };
+
+    it("defers a slash command nobody answered in time, so Respond still lands", async () => {
+        const { InteractionOps, AUTO_ACK_DELAY_MS } = await import("../src/discordOps");
+        const { interaction, calls } = slashCommand("slow");
+        rememberInteraction(interaction);
+        jest.advanceTimersByTime(AUTO_ACK_DELAY_MS + 1);
+        await settle();
+        expect(calls).toEqual(["deferReply"]);
+        await new InteractionOps(takeInteraction).respond("slow", { content: "done" });
+        expect(calls).toEqual(["deferReply", "editReply"]);
+    });
+
+    it("does nothing once the flow answered first", async () => {
+        const { InteractionOps, AUTO_ACK_DELAY_MS } = await import("../src/discordOps");
+        const { interaction, calls } = slashCommand("fast");
+        rememberInteraction(interaction);
+        await new InteractionOps(takeInteraction).respond("fast", { content: "hi" });
+        jest.advanceTimersByTime(AUTO_ACK_DELAY_MS + 1);
+        await settle();
+        expect(calls).toEqual(["reply"]);
+    });
+
+    it("never fires for an interaction cleared on disconnect", async () => {
+        const { AUTO_ACK_DELAY_MS } = await import("../src/discordOps");
+        const { interaction, calls } = slashCommand("gone");
+        rememberInteraction(interaction);
+        clearPendingInteractions();
+        jest.advanceTimersByTime(AUTO_ACK_DELAY_MS + 1);
+        await settle();
+        expect(calls).toEqual([]);
+    });
+
+    it("a private answer after a public auto-defer replaces the thinking message", async () => {
+        const { InteractionOps, autoAcknowledge } = await import("../src/discordOps");
+        const { interaction, calls } = slashCommand("private");
+        rememberInteraction(interaction);
+        await autoAcknowledge(interaction);
+        const ops = new InteractionOps(takeInteraction);
+        await ops.respond("private", { content: "secret", ephemeral: true });
+        expect(calls).toEqual(["deferReply", "deleteReply", "followUp"]);
+        // the thinking message is gone: answering again sends, never edits it
+        await ops.respond("private", { content: "again", ephemeral: true });
+        expect(calls.at(-1)).toBe("followUp");
+    });
+
+    it("a racing answer and auto-ack never both claim the first response", async () => {
+        const { InteractionOps, autoAcknowledge } = await import("../src/discordOps");
+        const { interaction, calls } = slashCommand("race");
+        rememberInteraction(interaction);
+        await Promise.all([
+            autoAcknowledge(interaction),
+            new InteractionOps(takeInteraction).respond("race", { content: "hi" }),
+        ]);
+        expect(calls).toEqual(["deferReply", "editReply"]);
+    });
+
+    it("acks a click invisibly, and Respond then sends a new message", async () => {
+        const { InteractionOps, autoAcknowledge } = await import("../src/discordOps");
+        const calls: string[] = [];
+        const click: any = {
+            id: "click",
+            deferred: false,
+            replied: false,
+            isMessageComponent: () => true,
+            deferUpdate: async () => {
+                calls.push("deferUpdate");
+                click.deferred = true;
+            },
+            editReply: async () => {
+                calls.push("editReply");
+                return { id: "x" };
+            },
+            followUp: async () => {
+                calls.push("followUp");
+                return { id: "m" };
+            },
+        };
+        rememberInteraction(click);
+        await autoAcknowledge(click);
+        await new InteractionOps(takeInteraction).respond("click", { content: "clicked" });
+        // editReply would overwrite the message holding the button
+        expect(calls).toEqual(["deferUpdate", "followUp"]);
     });
 });
 
