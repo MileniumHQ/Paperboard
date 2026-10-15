@@ -134,3 +134,16 @@ describe("buildLibrarySections", () => {
         expect(sections[0].actions).toHaveLength(1);
     });
 });
+
+describe("Get Variable", () => {
+    test("is deprecated: not offered, but an existing block keeps working and says what to use instead", async () => {
+        const { BUILTIN_CATEGORIES, BUILTIN_SCHEMA_ENTRIES } = await import("../src/lib/builtins");
+        const { mergeActionSchemas } = await import("../src/lib/tree");
+        const offered = BUILTIN_CATEGORIES.flatMap((c) => c.items.map((item) => item.action));
+        expect(offered).toContain("set-variable");
+        expect(offered).not.toContain("get-variable");
+        const stored = [{ id: "b1", panelId: "builtin.logic", action: { id: "get-variable", name: "Get Variable" }, values: { key: "x" } }];
+        const [merged] = mergeActionSchemas(stored as any, BUILTIN_SCHEMA_ENTRIES as any);
+        expect((merged.action as { deprecated?: string }).deprecated).toMatch(/removed after v0\.2/);
+    });
+});

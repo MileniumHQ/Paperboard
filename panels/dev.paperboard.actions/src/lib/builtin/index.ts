@@ -9,6 +9,7 @@ import { datetimeBuiltins } from "./datetime";
 import { webBuiltins } from "./web";
 import { textBuiltins } from "./text";
 import { utilityBuiltins } from "./utility";
+import { isLibraryVisible } from "../librarySections";
 
 export * from "./types";
 
@@ -25,16 +26,12 @@ export const BUILTIN_DEFS: BuiltinDef[] = [
     ...utilityBuiltins,
 ];
 
-// Get Variable stays registered and runnable for existing flows, but the
-// library no longer offers it: set-variable names appear directly in the
-// variable picker, which made the extra hop block redundant.
-const LIBRARY_HIDDEN_BUILTINS = new Set(["get-variable"]);
-
+// A deprecated builtin (Get Variable) stays registered and runnable for
+// existing flows, which show its deprecation note, but the library no
+// longer offers it: the same rule as a panel's deprecated actions.
 export const BUILTIN_CATEGORIES: BuiltinCategory[] = BUILTIN_CATEGORY_META.map((meta) => ({
     ...meta,
-    items: BUILTIN_DEFS.filter(
-        (d) => d.category === meta.id && !LIBRARY_HIDDEN_BUILTINS.has(d.id),
-    ).map((d) => d.item),
+    items: BUILTIN_DEFS.filter((d) => d.category === meta.id && isLibraryVisible(d.item)).map((d) => d.item),
 }));
 
 // Registry-shaped entries for the stored-block schema merge: a flow saved
