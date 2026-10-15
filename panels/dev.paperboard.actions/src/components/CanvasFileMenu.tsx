@@ -48,7 +48,7 @@ export default function CanvasFileMenu(props: {
     /** saves the latest edits now; false with a reason when they did not save */
     flush: () => Promise<{ ok: true } | { ok: false; message: string }>;
     /** shows the canvas the service has now */
-    reload: () => Promise<void>;
+    reload: () => Promise<import("../lib/canvasSync").CanvasSyncResult>;
     onNotice: (notice: CanvasNotice) => void;
 }) {
     const menu = useContextMenuState("below-right");
@@ -171,7 +171,8 @@ export default function CanvasFileMenu(props: {
         setLoadOpen(false);
         setRestoring(false);
         try {
-            await props.reload();
+            const reloaded = await props.reload();
+            if (!reloaded.ok) throw new Error(reloaded.message);
             props.onNotice({ kind: "done", text: `Loaded the backup from ${dateText(record.createdAt)}.` });
         } catch (err) {
             props.onNotice({ kind: "failed", text: `The backup was loaded, but the canvas could not show it: ${message(err)}` });

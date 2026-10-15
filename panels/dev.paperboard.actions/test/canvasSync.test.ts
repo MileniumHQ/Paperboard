@@ -90,3 +90,20 @@ test("closing during a save prevents applying it and emitting later UI state", a
         expect(states.length).toBe(count);
     } finally { blocked.resolve(); sync.dispose(); }
 });
+
+test("backup reload returns failure to its caller, and a retry shows the canvas", async () => {
+    const { createCanvasFollower } = await import("../src/lib/canvasSync");
+    let fail = true;
+    let shown = 0;
+    const follower = createCanvasFollower({
+        clientId: "test", revision: () => 10, busy: () => false,
+        fetch: async () => { if (fail) throw new Error("service unavailable"); return { revision: 1 }; },
+        show: () => { shown++; }, onError: () => {},
+    });
+    try {
+        expect(await follower.reload()).toEqual({ ok: false, message: "Changes from another window could not be loaded: service unavailable" });
+        fail = false;
+        expect(await follower.reload()).toEqual({ ok: true });
+        expect(shown).toBe(1);
+    } finally { follower.dispose(); }
+});

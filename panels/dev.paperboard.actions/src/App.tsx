@@ -1469,7 +1469,11 @@ export default function App() {
                         canvas={() => ({ flows: unwrap(blocks), notes: unwrap(notes), functions: functions() })}
                         add={addFile}
                         flush={() => canvasSync.flush()}
-                        reload={() => follower.reload().then(() => refreshBlockSchemas())}
+                        reload={async () => {
+                            const result = await follower.reload();
+                            if (result.ok) await refreshBlockSchemas();
+                            return result;
+                        }}
                         onNotice={setFileNotice}
                     />
                     <PaperEffect variant="success">

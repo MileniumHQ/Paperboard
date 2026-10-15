@@ -95,54 +95,55 @@ export function createCanvasFollower<S extends { revision: number }>(options: {
 }) {
     let wanted = 0;
     let force = false;
-    let pulling = false;
+    let active: Promise<CanvasSyncResult> | undefined;
     let again = false;
     let disposed = false;
 
-    async function pull(): Promise<void> {
-        if (pulling) {
-            again = true;
-            return;
-        }
-        pulling = true;
-        try {
+    function pull(): Promise<CanvasSyncResult> {
+        if (active) { again = true; return active; }
+        active = drain().finally(() => { active = undefined; });
+        return active;
+    }
+
+    async function drain(): Promise<CanvasSyncResult> {
             do {
                 again = false;
-                if (disposed || options.busy() || (!force && wanted <= options.revision())) return;
+                if (disposed) return { ok: false, message: "Canvas follower is closed" };
+                if (options.busy()) return { ok: false, message: "Wait for local edits to finish, then retry loading the canvas" };
+                if (!force && wanted <= options.revision()) return { ok: true };
                 const forced = force;
                 force = false;
                 try {
                     const snapshot = await options.fetch();
                     // re-checked after the wait: an edit made meanwhile wins,
                     // and its save on the older revision is refused and reloads
-                    if (disposed || options.busy()) return;
+                    if (disposed || options.busy()) return { ok: false, message: "Canvas changed while loading; retry loading the canvas" };
                     // a forced pull shows any other revision: after a backup
                     // is loaded the service's revision is older than this one
                     if (forced ? snapshot.revision !== options.revision() : snapshot.revision > options.revision()) options.show(snapshot);
                 } catch (err) {
-                    if (!disposed) options.onError(`Changes from another window could not be loaded: ${err instanceof Error ? err.message : String(err)}`);
-                    return;
+                    const message = `Changes from another window could not be loaded: ${err instanceof Error ? err.message : String(err)}`;
+                    if (!disposed) options.onError(message);
+                    return { ok: false, message };
                 }
             } while (again);
-        } finally {
-            pulling = false;
-        }
+        return { ok: true };
     }
 
     return {
         /** A revision was saved somewhere. */
-        changed(change: { revision?: unknown; clientId?: unknown }): Promise<void> {
-            if (change?.clientId === options.clientId) return Promise.resolve();
-            if (typeof change?.revision !== "number") return Promise.resolve();
+        changed(change: { revision?: unknown; clientId?: unknown }): Promise<CanvasSyncResult> {
+            if (change?.clientId === options.clientId) return Promise.resolve({ ok: true });
+            if (typeof change?.revision !== "number") return Promise.resolve({ ok: true });
             wanted = Math.max(wanted, change.revision);
             return pull();
         },
         /** Local edits settled; catch up on anything announced meanwhile. */
-        idle(): Promise<void> {
+        idle(): Promise<CanvasSyncResult> {
             return pull();
         },
         /** Pull the service's canvas now (after a refused save or a loaded backup). */
-        reload(): Promise<void> {
+        reload(): Promise<CanvasSyncResult> {
             force = true;
             return pull();
         },
