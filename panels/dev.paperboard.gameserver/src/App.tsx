@@ -29,6 +29,7 @@ import Datapacks from "./components/Datapacks";
 import Modpacks from "./components/Modpacks";
 import { MODPACK_LOADER } from "./core/modpack";
 import Files from "./components/Files";
+import Backups from "./components/Backups";
 import type { PaperFileReveal } from "@mileniumhq/paperui";
 import "@mileniumhq/paperui/style.css";
 import "@mileniumhq/paperui/panel.css";
@@ -163,6 +164,9 @@ export default function App() {
                             <PaperMenuItem value="logs" icon="description">
                                 Logs
                             </PaperMenuItem>
+                            <PaperMenuItem value="backups" icon="backup">
+                                Backups
+                            </PaperMenuItem>
                             <PaperMenuItem value="advanced" icon="settings">
                                 Advanced
                             </PaperMenuItem>
@@ -236,6 +240,9 @@ export default function App() {
                         </PaperInterfaceItem>
                         <PaperInterfaceItem value="logs" variant="full">
                             <Logs />
+                        </PaperInterfaceItem>
+                        <PaperInterfaceItem value="backups">
+                            <Backups active={activeTab() === "backups"} />
                         </PaperInterfaceItem>
                         <Show when={showWorlds()}>
                             <PaperInterfaceItem value="worlds">
