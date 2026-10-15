@@ -264,6 +264,11 @@ export async function recoverStagedInstalls(
     fs: ActivationFs = nodeFs as unknown as ActivationFs,
 ): Promise<RecoveryResult> {
     const result: RecoveryResult = { committed: [], rolledBack: [], discarded: [] };
+    // every journal is read before anything is changed: an unreadable one
+    // throws with the whole install untouched, whatever order the
+    // directory lists its entries in, and it may be the only copy of the
+    // previous install
+    const staged: { entry: string; stagingDir: string; journal: ActivationJournal | null }[] = [];
     for (const entry of await fs.readdir(root)) {
         if (!STAGING_PATTERN.test(entry)) continue;
         const stagingDir = nodePath.join(root, entry);
@@ -274,16 +279,14 @@ export async function recoverStagedInstalls(
             if (errorCode(err) !== "ENOENT") throw err;
             raw = null;
         }
-        if (raw === null) {
+        staged.push({ entry, stagingDir, journal: raw === null ? null : parseJournal(raw) });
+    }
+    for (const { entry, stagingDir, journal } of staged) {
+        if (journal === null) {
             // never activated: it holds only downloads and installer output
             await fs.rm(stagingDir, { recursive: true, force: true });
             result.discarded.push(entry);
-            continue;
-        }
-        // an unreadable journal throws here and the directory stays put:
-        // it may be the only copy of the previous install
-        const journal = parseJournal(raw);
-        if (entry === committedStaging) {
+        } else if (entry === committedStaging) {
             await commitStaging(root, entry, journal, fs);
             result.committed.push(entry);
         } else {
