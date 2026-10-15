@@ -17,6 +17,7 @@ import {
     subscribeChatEvents,
 } from "../lib/state";
 import { loadPanelInfo } from "../lib/panels";
+import { createStickToBottom } from "../lib/stickToBottom";
 import Composer from "./Composer";
 import ConversationList from "./ConversationList";
 import { groupTurns, type Turn } from "../core/chain";
@@ -41,9 +42,7 @@ export default function ChatView() {
     const [starting, setStarting] = createSignal(false);
     // a draft agent chat's project, applied when the first message creates the chat
     const [draftProject, setDraftProject] = createSignal<string>();
-    let scroller: HTMLDivElement | undefined;
-    let thread: HTMLDivElement | undefined;
-    let stickToBottom = true;
+    const scroll = createStickToBottom();
 
     onMount(() => {
         const off = subscribeChatEvents();
@@ -53,17 +52,6 @@ export default function ChatView() {
             off();
             offRegistry();
         });
-    });
-
-    // the reader stays pinned to the newest message; any upward scroll lets go
-    onMount(() => {
-        const pin = () => {
-            if (stickToBottom && scroller) scroller.scrollTop = scroller.scrollHeight;
-        };
-        const observer = new ResizeObserver(pin);
-        if (scroller) observer.observe(scroller);
-        if (thread) observer.observe(thread);
-        onCleanup(() => observer.disconnect());
     });
 
     // the open conversation's title and model follow the saved summary, so
@@ -79,11 +67,9 @@ export default function ChatView() {
 
     createEffect(
         on(selected, (id) => {
-            stickToBottom = true;
+            scroll.stick();
             void openChat(id).then(() => {
-                requestAnimationFrame(() => {
-                    if (stickToBottom && scroller) scroller.scrollTop = scroller.scrollHeight;
-                });
+                requestAnimationFrame(scroll.pin);
             });
         }),
     );
@@ -216,7 +202,7 @@ export default function ChatView() {
                 setDraftProject(undefined);
                 if (agentConnection() && chosen && chosen !== c.project) await call(UI_ACTION_IDS.setConversationProject, { id, project: chosen });
             }
-            stickToBottom = true;
+            scroll.stick();
             await call(UI_ACTION_IDS.sendMessage, { id, text, reasoning, attachments });
             return true;
         } catch (err) {
@@ -282,11 +268,7 @@ export default function ChatView() {
 
                 <div
                     class={styles.messages}
-                    ref={scroller}
-                    onScroll={(e) => {
-                        const el = e.currentTarget;
-                        stickToBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 48;
-                    }}
+                    ref={scroll.scrollerRef}
                 >
                     <Show when={openError()}>
                         <div class={styles.welcome}>
@@ -318,7 +300,7 @@ export default function ChatView() {
                             </Show>
                         </div>
                     </Show>
-                    <div class={styles.thread} ref={thread}>
+                    <div class={styles.thread} ref={scroll.contentRef}>
                         {/* by position: turns only append, so a streaming reply updates in place */}
                         <Index each={turns()}>
                             {(turn) => (
