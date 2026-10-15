@@ -116,4 +116,3 @@ export function loadedDetail(model: LoadedModel): string {
     if (share <= 0) return `${size} on CPU`;
     return `${size}, ${share}% GPU`;
 }
-

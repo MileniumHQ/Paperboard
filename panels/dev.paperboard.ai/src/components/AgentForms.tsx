@@ -264,4 +264,3 @@ export function AgentStatus(props: { connection: Connection }) {
         </>
     );
 }
-
