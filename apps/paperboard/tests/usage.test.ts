@@ -6,8 +6,11 @@ import { handleSystem } from "../papercrane/rpc/system";
 import {
     attribute,
     computeUsage,
+    parseLinuxNetDev,
     parseLinuxStat,
+    parseNetstat,
     parsePsTable,
+    parseWindowsNetwork,
     parsePsTime,
     parseWindowsTable,
     readProcessTable,
@@ -95,6 +98,16 @@ describe("usage report", () => {
         expect(report.cpu).toEqual({ cores: 4, otherPercent: 20, idlePercent: 50 });
     });
 
+    it("reports network traffic as a rate over the interval, and none across a counter reset", () => {
+        const before = { ...snapshot(0, {}, 0, 0), network: { receivedBytes: 1000, sentBytes: 500 } };
+        const after = { ...snapshot(2000, {}, 0, 0), network: { receivedBytes: 5000, sentBytes: 1500 } };
+        expect(computeUsage(before, after, roots()).network).toEqual({ receivePerSecond: 2000, sendPerSecond: 500 });
+        const reset = { ...after, network: { receivedBytes: 10, sentBytes: 10 } };
+        expect(computeUsage(after, reset, roots()).network).toBeNull();
+        // a computer that can't read its adapters reports none, not zero
+        expect(computeUsage(before, { ...after, network: null }, roots()).network).toBeNull();
+    });
+
     it("never reports a negative remainder when resident sets overlap", () => {
         const snap = snapshot(0, {}, 0, 0);
         snap.availableBytes = 16 * GiB - 100 * MiB;
@@ -111,6 +124,9 @@ describe("usage sampler", () => {
                 reads++;
                 return processes();
             },
+            readNetwork: async () => ({ receivedBytes: clock, sentBytes: clock }),
+            readDisk: async () => ({ totalBytes: 100, freeBytes: 40 }),
+            uptimeSeconds: () => 3600,
             readCpu: () => ({ busyMs: clock, totalMs: clock * 2 }),
             cores: () => 4,
             totalBytes: () => 16 * GiB,
@@ -124,6 +140,9 @@ describe("usage sampler", () => {
         expect(a).toBe(b);
         expect(reads).toBe(2);
         expect(a.cpu).not.toBeNull();
+        expect(a.disk).toEqual({ totalBytes: 100, freeBytes: 40 });
+        expect(a.uptimeSeconds).toBe(3600);
+        expect(a.network).not.toBeNull();
         // within the reuse window the same report comes back without a read
         clock += 200;
         expect(await sampler.sample(roots)).toBe(a);
@@ -132,6 +151,58 @@ describe("usage sampler", () => {
         clock += 2000;
         await sampler.sample(roots);
         expect(reads).toBe(3);
+    });
+});
+
+describe("usage sampler figures", () => {
+    it("reports a figure it can't read as unavailable without failing the report", async () => {
+        const sampler = new UsageSampler({
+            readTable: async () => processes(),
+            readNetwork: async () => { throw new Error("no adapters"); },
+            readDisk: async () => { throw new Error("EACCES"); },
+            uptimeSeconds: () => 5,
+            sleep: async () => undefined,
+        });
+        const report = await sampler.sample(roots);
+        expect(report.network).toBeNull();
+        expect(report.disk).toBeNull();
+        expect(report.memory.totalBytes).toBeGreaterThan(0);
+    });
+});
+
+describe("network counter parsers", () => {
+    it("adds up physical adapters from /proc/net/dev", () => {
+        const dev = [
+            "Inter-|   Receive                                                |  Transmit",
+            " face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets errs drop fifo colls carrier compressed",
+            "    lo: 900 1 0 0 0 0 0 0 900 1 0 0 0 0 0 0",
+            "enp7s0: 1000 10 0 0 0 0 0 0 400 4 0 0 0 0 0 0",
+            "wlan0: 50 1 0 0 0 0 0 0 20 1 0 0 0 0 0 0",
+            "docker0: 7000 1 0 0 0 0 0 0 7000 1 0 0 0 0 0 0",
+        ].join("\n");
+        expect(parseLinuxNetDev(dev, (name) => name === "enp7s0" || name === "wlan0")).toEqual({ receivedBytes: 1050, sentBytes: 420 });
+    });
+
+    it("reads macOS link rows for en adapters only", () => {
+        const out = [
+            "Name       Mtu   Network       Address            Ipkts Ierrs     Ibytes    Opkts Oerrs     Obytes  Coll",
+            "lo0        16384 <Link#1>                         100     0       9000      100     0       9000     0",
+            "en0        1500  <Link#6>    aa:bb:cc:dd:ee:ff    10      0       1000      5       0        300     0",
+            "en0        1500  192.168.1     192.168.1.5        10      -       1000      5       -        300     -",
+            "utun0      1380  <Link#9>                         3       0        999      3       0        999     0",
+        ].join("\n");
+        expect(parseNetstat(out)).toEqual({ receivedBytes: 1000, sentBytes: 300 });
+    });
+
+    it("reads Windows adapter rows", () => {
+        expect(parseWindowsNetwork("100 50\r\n20 5\r\n\r\n")).toEqual({ receivedBytes: 120, sentBytes: 55 });
+    });
+
+    it("refuses to report zero traffic when no adapter was counted", () => {
+        const dev = "    lo: 900 1 0 0 0 0 0 0 900 1 0 0 0 0 0 0\neth0: 1000 10 0 0 0 0 0 0 400 4 0 0 0 0 0 0";
+        expect(() => parseLinuxNetDev(dev, () => false)).toThrow(/no network adapter/);
+        expect(() => parseNetstat("Name Mtu Network Address Ipkts Ierrs Ibytes Opkts Oerrs Obytes Coll\nlo0 16384 <Link#1> 1 0 9 1 0 9 0")).toThrow(/no network adapter/);
+        expect(() => parseWindowsNetwork("\r\n")).toThrow(/no network adapter/);
     });
 });
 

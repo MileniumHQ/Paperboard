@@ -159,6 +159,7 @@ if (best) {
             <PaperText preset="subheader" id="usage">Usage</PaperText>
             <PaperText preset="body">
                 getUsage reports how a computer's CPU and memory are being used, and by whom: Paperboard itself, each panel, and everything else.
+                It also reports the disk holding Paperboard's data, network traffic, and uptime.
                 It is for the Paperboard app. A panel's scoped token is refused.
                 CPU is measured between two readings, so cpu is null, and each group's cpuPercent is null, until an interval has been measured.
             </PaperText>
@@ -168,6 +169,9 @@ if (best) {
     memory: { totalBytes: number; availableBytes: number; otherBytes: number };
     cpu: { cores: number; idlePercent: number; otherPercent: number } | null;
     groups: UsageGroup[];
+    disk?: { totalBytes: number; freeBytes: number } | null;
+    network?: { receivePerSecond: number; sendPerSecond: number } | null;
+    uptimeSeconds?: number;
 }
 
 interface UsageGroup {
@@ -192,6 +196,18 @@ interface UsageGroup {
                     <tr>
                         <td><PaperCode>cpu.idlePercent</PaperCode>, <PaperCode>cpu.otherPercent</PaperCode></td>
                         <td>Shares of the whole computer, every core together, from 0 to 100.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>disk</PaperCode></td>
+                        <td>The drive holding Paperboard's data. null when the computer can't read it.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>network</PaperCode></td>
+                        <td>Bytes per second received and sent over the physical network adapters, measured between two readings. null until an interval has been measured, after a counter reset, or when the computer can't read it.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>uptimeSeconds</PaperCode></td>
+                        <td>How long the computer has been running.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>groups[].id</PaperCode></td>

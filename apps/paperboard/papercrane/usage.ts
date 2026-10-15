@@ -1,6 +1,6 @@
-// Resource use for Home's CPU and Memory widgets: how much of this computer
-// each panel uses, how much Paperboard itself uses, how much everything else
-// uses, and how much is free. Attribution follows ownership, never process
+// Resource use for Home's CPU, Memory, Disk, Network and Uptime widgets: how
+// much of this computer each panel uses, how much Paperboard itself uses, how
+// much everything else uses, and how much is free. Attribution follows ownership, never process
 // names: a panel owns its service and the supervised workloads the ledger
 // says it created, with all of their descendants.
 //
@@ -9,6 +9,8 @@
 import { execFile } from "child_process";
 import fs from "fs";
 import os from "os";
+import { logger } from "./logger";
+import { getPaperboardDir } from "./paths";
 
 export interface ProcessSample {
     ppid: number;
@@ -39,6 +41,24 @@ export interface UsageReport {
     /** null when no CPU interval could be measured */
     cpu: { cores: number; idlePercent: number; otherPercent: number } | null;
     groups: UsageGroup[];
+    /** the drive holding Paperboard's data (panels and what they keep); null when it can't be read */
+    disk: DiskSpace | null;
+    /** traffic over the network adapters, bytes per second; null when it can't be measured */
+    network: { receivePerSecond: number; sendPerSecond: number } | null;
+    /** how long the computer has been running, in seconds */
+    uptimeSeconds: number;
+}
+
+export interface DiskSpace {
+    totalBytes: number;
+    /** what an ordinary user can still write */
+    freeBytes: number;
+}
+
+/** Bytes moved by the network adapters since the computer started. */
+export interface NetworkCounters {
+    receivedBytes: number;
+    sentBytes: number;
 }
 
 export interface CpuTimes {
@@ -53,6 +73,9 @@ export interface Snapshot {
     cores: number;
     totalBytes: number;
     availableBytes: number;
+    network?: NetworkCounters | null;
+    disk?: DiskSpace | null;
+    uptimeSeconds?: number;
 }
 
 const PROBE_TIMEOUT_MS = 10_000;
@@ -195,6 +218,103 @@ export function readCpuTimes(): CpuTimes {
     return { busyMs, totalMs };
 }
 
+// ─── Disk and network ────────────────────────────────────────────────────────
+
+export async function readDiskSpace(dir: string): Promise<DiskSpace> {
+    const stats = await fs.promises.statfs(dir);
+    return { totalBytes: stats.blocks * stats.bsize, freeBytes: stats.bavail * stats.bsize };
+}
+
+/**
+ * /proc/net/dev, counting only `physical` adapters: loopback, bridges,
+ * container and VPN interfaces carry traffic a real adapter also counts.
+ */
+// no adapter counted is unmeasured, not idle: "0 B/s" would be a reading
+// nobody took (a container's veth, a host with no matching rows)
+function countedAdapters(adapters: number, receivedBytes: number, sentBytes: number): NetworkCounters {
+    if (adapters === 0) throw new Error("no network adapter to measure");
+    return { receivedBytes, sentBytes };
+}
+
+export function parseLinuxNetDev(output: string, physical: (name: string) => boolean): NetworkCounters {
+    let receivedBytes = 0;
+    let sentBytes = 0;
+    let adapters = 0;
+    for (const line of output.split("\n")) {
+        const colon = line.indexOf(":");
+        if (colon < 0) continue;
+        const name = line.slice(0, colon).trim();
+        if (!physical(name)) continue;
+        const fields = line.slice(colon + 1).trim().split(/\s+/).map(Number);
+        // receive bytes is field 0, transmit bytes field 8
+        if (!Number.isFinite(fields[0]) || !Number.isFinite(fields[8])) continue;
+        receivedBytes += fields[0];
+        sentBytes += fields[8];
+        adapters++;
+    }
+    return countedAdapters(adapters, receivedBytes, sentBytes);
+}
+
+/** `netstat -ibn` on macOS: one <Link#> row per adapter; only en* are real adapters. */
+export function parseNetstat(output: string): NetworkCounters {
+    let receivedBytes = 0;
+    let sentBytes = 0;
+    let adapters = 0;
+    const lines = output.split("\n");
+    const header = lines[0]?.trim().split(/\s+/) ?? [];
+    const ibytes = header.indexOf("Ibytes");
+    const obytes = header.indexOf("Obytes");
+    if (ibytes < 0 || obytes < 0) throw new Error("netstat printed no byte columns");
+    for (const line of lines.slice(1)) {
+        const fields = line.trim().split(/\s+/);
+        if (!/^en\d+$/.test(fields[0] ?? "") || !fields[2]?.startsWith("<Link#")) continue;
+        // a link row with no address has one column fewer than the header
+        const shift = fields.length < header.length ? -1 : 0;
+        const rx = Number(fields[ibytes + shift]);
+        const tx = Number(fields[obytes + shift]);
+        if (!Number.isFinite(rx) || !Number.isFinite(tx)) continue;
+        receivedBytes += rx;
+        sentBytes += tx;
+        adapters++;
+    }
+    return countedAdapters(adapters, receivedBytes, sentBytes);
+}
+
+/** "received sent" lines from the Windows adapter query */
+export function parseWindowsNetwork(output: string): NetworkCounters {
+    let receivedBytes = 0;
+    let sentBytes = 0;
+    let adapters = 0;
+    for (const line of output.split("\n")) {
+        const [rx, tx] = line.trim().split(/\s+/).map(Number);
+        if (!Number.isFinite(rx) || !Number.isFinite(tx)) continue;
+        receivedBytes += rx;
+        sentBytes += tx;
+        adapters++;
+    }
+    return countedAdapters(adapters, receivedBytes, sentBytes);
+}
+
+const WINDOWS_NETWORK_QUERY =
+    "Get-NetAdapterStatistics | ForEach-Object { \"$($_.ReceivedBytes) $($_.SentBytes)\" }";
+
+const linuxPhysicalAdapter = (name: string) => name !== "lo" && fs.existsSync(`/sys/class/net/${name}/device`);
+
+export async function readNetworkCounters(platform = process.platform, exec: ExecFn = defaultExec): Promise<NetworkCounters> {
+    switch (platform) {
+        case "linux":
+            return parseLinuxNetDev(await fs.promises.readFile("/proc/net/dev", "utf8"), linuxPhysicalAdapter);
+        case "darwin":
+            return parseNetstat(await exec("netstat", ["-ibn"]));
+        case "win32":
+            return parseWindowsNetwork(
+                await exec("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", WINDOWS_NETWORK_QUERY]),
+            );
+        default:
+            throw new Error(`Reading network use is not supported on ${platform}`);
+    }
+}
+
 // ─── Attribution ─────────────────────────────────────────────────────────────
 
 /**
@@ -270,6 +390,16 @@ export function computeUsage(previous: Snapshot | null, current: Snapshot, roots
             idlePercent: clampPercent(100 - Math.max(busy, oursCpu)),
         };
     }
+    // counters that went backwards were reset (an adapter came back): no rate this time
+    let network: UsageReport["network"] = null;
+    const before = previous?.network;
+    const after = current.network;
+    if (before && after && wallMs > 0 && after.receivedBytes >= before.receivedBytes && after.sentBytes >= before.sentBytes) {
+        network = {
+            receivePerSecond: ((after.receivedBytes - before.receivedBytes) * 1000) / wallMs,
+            sendPerSecond: ((after.sentBytes - before.sentBytes) * 1000) / wallMs,
+        };
+    }
     return {
         sampledAt: current.at,
         // shared pages can make the sum of resident sets exceed what is in
@@ -277,6 +407,9 @@ export function computeUsage(previous: Snapshot | null, current: Snapshot, roots
         memory: { totalBytes: current.totalBytes, availableBytes: current.availableBytes, otherBytes: Math.max(0, used - ours) },
         cpu,
         groups: list.filter((entry) => entry.kind === "paperboard" || entry.memoryBytes > 0),
+        disk: current.disk ?? null,
+        network,
+        uptimeSeconds: current.uptimeSeconds ?? 0,
     };
 }
 
@@ -284,6 +417,10 @@ export function computeUsage(previous: Snapshot | null, current: Snapshot, roots
 
 export interface SamplerDeps {
     readTable: () => Promise<ProcessTable>;
+    /** a failure is that figure unavailable, not the whole report failing */
+    readNetwork?: () => Promise<NetworkCounters>;
+    readDisk?: () => Promise<DiskSpace>;
+    uptimeSeconds?: () => number;
     readCpu?: () => CpuTimes;
     cores?: () => number;
     totalBytes?: () => number;
@@ -306,6 +443,9 @@ export class UsageSampler {
 
     constructor(deps: SamplerDeps) {
         this.deps = {
+            readNetwork: () => readNetworkCounters(),
+            readDisk: () => readDiskSpace(getPaperboardDir()),
+            uptimeSeconds: () => os.uptime(),
             readCpu: readCpuTimes,
             cores: () => os.cpus().length || 1,
             totalBytes: () => os.totalmem(),
@@ -326,10 +466,17 @@ export class UsageSampler {
     }
 
     private async snapshot(): Promise<Snapshot> {
-        const table = await this.deps.readTable();
+        const [table, network, disk] = await Promise.all([
+            this.deps.readTable(),
+            unavailable("network", this.deps.readNetwork()),
+            unavailable("disk", this.deps.readDisk()),
+        ]);
         return {
             at: this.deps.now(),
             table,
+            network,
+            disk,
+            uptimeSeconds: this.deps.uptimeSeconds(),
             cpu: this.deps.readCpu(),
             cores: this.deps.cores(),
             totalBytes: this.deps.totalBytes(),
@@ -347,6 +494,16 @@ export class UsageSampler {
         this.previous = current;
         this.report = report;
         return report;
+    }
+}
+
+/** One figure that can't be read is reported as unavailable (null), and why is logged. */
+async function unavailable<T>(what: string, read: Promise<T>): Promise<T | null> {
+    try {
+        return await read;
+    } catch (err) {
+        logger.warn(`[usage] couldn't read ${what} use:`, err);
+        return null;
     }
 }
 

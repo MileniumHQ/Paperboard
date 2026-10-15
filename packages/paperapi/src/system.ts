@@ -53,6 +53,14 @@ export interface UsageReport {
     /** null when no CPU interval could be measured */
     cpu: { cores: number; idlePercent: number; otherPercent: number } | null;
     groups: UsageGroup[];
+    // Absent from servers older than these figures; null when the computer
+    // can't report them. The two are different things to show.
+    /** the drive holding Paperboard's data */
+    disk?: { totalBytes: number; freeBytes: number } | null;
+    /** traffic over the network adapters, bytes per second */
+    network?: { receivePerSecond: number; sendPerSecond: number } | null;
+    /** how long the computer has been running, in seconds */
+    uptimeSeconds?: number;
 }
 
 export const systemApi = {
@@ -66,7 +74,8 @@ export const systemApi = {
     getGpus: (): Promise<GpuReport> => invoke<GpuReport>("system-gpus"),
 
     /**
-     * CPU and memory use of a computer, split by panel. Host only: a panel's
+     * CPU and memory use of a computer, split by panel, with its disk,
+     * network and uptime. Host only: a panel's
      * scoped token is refused.
      */
     getUsage: (computerId?: string): Promise<UsageReport> => invokeIn<UsageReport>(computerId, "system-usage"),
