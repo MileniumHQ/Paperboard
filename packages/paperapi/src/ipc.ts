@@ -185,6 +185,19 @@ export const RPC_ROUTES: Record<string, WsRoute> = {
         action: "secrets:purge",
         unwrap: (r) => r.purged ?? 0,
     },
+    "backup-status": { action: "backup:status" },
+    // a backup copies and uploads the panel's data, a restore downloads and
+    // swaps it in: both take as long as the bytes do
+    "backup-create": { action: "backup:create", timeoutMs: null },
+    "backup-list": { action: "backup:list", unwrap: (r) => r.backups ?? [] },
+    "backup-restore": { action: "backup:restore", timeoutMs: null },
+    "backup-delete": { action: "backup:delete", unwrap: () => undefined },
+    "backup-locations": { action: "backup:destinations", unwrap: (r) => r.destinations ?? [] },
+    "backup-location-usage": { action: "backup:destination-usage" },
+    // adding checks the location is reachable with its credentials
+    "backup-location-add": { action: "backup:destination-add", timeoutMs: 120_000 },
+    "backup-location-remove": { action: "backup:destination-remove", unwrap: () => undefined },
+    "backup-panel-location-set": { action: "backup:panel-destination-set" },
     "package-is-installed": {
         action: "package:isInstalled",
         unwrap: (r) => r.installed,

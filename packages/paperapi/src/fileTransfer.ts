@@ -1,10 +1,9 @@
 // Exporting and importing files: an export copies a file out of the panel's
 // storage to where the user chooses, an import copies a file the user picks
 // into it. The shell owns the picker window; the panel names only a path in
-// its own storage. The panel frame asks its shell over
-// postMessage, tagged with the generation the shell gave this document.
+// its own storage. The panel frame asks its shell through requestShell.
 import { requirePanelId } from "./panelIdentity";
-import { currentFrameSession } from "./frameSession";
+import { requestShell } from "./shellRequest";
 
 export interface FileTypeFilter {
     /** the label the dialog shows, e.g. "Backups" */
@@ -46,43 +45,18 @@ export class FileTransferError extends Error {
     }
 }
 
-const REQUEST = "paperboard:file-transfer";
-const RESULT = "paperboard:file-transfer-result";
-
-// one dialog per document at a time: the shell refuses a second anyway,
-// and a pending request is the only listener this module keeps
-let pending: string | null = null;
-
 function ask<T>(kind: "export" | "import", fields: Record<string, unknown>): Promise<T> {
-    const session = currentFrameSession();
-    if (!session || typeof window === "undefined") {
-        return Promise.reject(new FileTransferError("unavailable", "Exporting and importing files needs a panel shown in Paperboard"));
-    }
-    if (session.widget) {
-        return Promise.reject(new FileTransferError("unavailable", "A widget cannot export or import files; open its panel instead"));
-    }
-    if (pending) return Promise.reject(new FileTransferError("busy", "An export or import is already running"));
-    const requestId = crypto.randomUUID();
-    pending = requestId;
-    return new Promise<T>((resolve, reject) => {
-        const finish = () => {
-            pending = null;
-            window.removeEventListener("message", receive);
-            window.removeEventListener("pagehide", finish);
-        };
-        const receive = (event: MessageEvent) => {
-            const data = event.data;
-            if (event.source !== window.parent || data?.type !== RESULT) return;
-            if (data.generation !== session.generation || data.requestId !== requestId) return;
-            finish();
-            const result = data.result;
-            if (result?.status === "failed") reject(new FileTransferError(result.code ?? "failed", String(result.message ?? "The file transfer failed")));
-            else if (result?.status === "canceled" || result?.status === "exported" || result?.status === "imported") resolve(result as T);
-            else reject(new FileTransferError("failed", "The shell sent a malformed file transfer result"));
-        };
-        window.addEventListener("message", receive);
-        window.addEventListener("pagehide", finish, { once: true });
-        window.parent.postMessage({ type: REQUEST, generation: session.generation, requestId, kind, ...fields }, "*");
+    return requestShell<T>({
+        type: "paperboard:file-transfer",
+        fields: { kind, ...fields },
+        unavailable: () => new FileTransferError("unavailable", "Exporting and importing files needs a panel shown in Paperboard"),
+        widget: () => new FileTransferError("unavailable", "A widget cannot export or import files; open its panel instead"),
+        busy: () => new FileTransferError("busy", "An export or import is already running"),
+        parse: (result: any) => {
+            if (result?.status === "failed") return new FileTransferError(result.code ?? "failed", String(result.message ?? "The file transfer failed"));
+            if (result?.status === "canceled" || result?.status === "exported" || result?.status === "imported") return result as T;
+            return new FileTransferError("failed", "The shell sent a malformed file transfer result");
+        },
     });
 }
 

@@ -9,6 +9,7 @@ export * from "./storeListing";
 export { isPanelId, requirePanelId } from "./panelIdentity";
 export * from "./identity";
 export * from "./secrets";
+export * from "./backups";
 export * from "./package";
 export * from "./file";
 export * from "./process";
