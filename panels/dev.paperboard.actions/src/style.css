@@ -1073,6 +1073,13 @@ body,
     pointer-events: auto;
 }
 
+.canvas-run-controls {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    gap: var(--paper-uigap-half);
+}
+
 .canvas-sync-status {
     display: flex;
     flex-direction: column;

@@ -1,5 +1,5 @@
 import { createSignal, createMemo, createEffect, onMount, onCleanup, For, Show } from "solid-js";
-import { createStore, reconcile } from "solid-js/store";
+import { createStore, reconcile, unwrap } from "solid-js/store";
 
 // console log ring: newest entries win, oldest drop past the cap
 const MAX_CONSOLE_LOGS = 500;
@@ -8,6 +8,8 @@ import NoteBlock, { type CanvasNote } from "./components/NoteBlock";
 import ActionLibrary from "./components/ActionLibrary";
 import VariableMenu from "./components/VariableMenu";
 import ActionDropdownMenu from "./components/ActionDropdownMenu";
+import CanvasFileMenu, { type CanvasNotice } from "./components/CanvasFileMenu";
+import { addFlowFile } from "./lib/flowFile";
 import {
     PaperContextMenu,
     PaperContextMenuItem,
@@ -679,6 +681,21 @@ export default function App() {
         userEditUnsaved = true;
         setConflictNotice(null);
         scheduleCanvas(currentBlocks, currentNotes);
+    };
+
+    const [fileNotice, setFileNotice] = createSignal<CanvasNotice | null>(null);
+    // an imported flow file goes beside what is on the canvas, with new ids
+    const addFile = (file: CanvasDocument) => {
+        const merged = addFlowFile(
+            { flows: unwrap(blocks), notes: unwrap(notes), functions: functions() },
+            file,
+            (kind) => `${kind}_${crypto.randomUUID()}`,
+        );
+        setFunctions(merged.functions);
+        setBlocks(reconcile(merged.flows, { key: "id" }));
+        setNotes(reconcile(merged.notes as CanvasNote[], { key: "id" }));
+        saveFlows();
+        void refreshBlockSchemas();
     };
 
     const handleCreateFunction = (name: string, params: { name: string; type: string }[]) => {
@@ -1428,15 +1445,34 @@ export default function App() {
                         <PaperButton size="tiny" onClick={() => { userEditUnsaved = true; scheduleCanvas(); }}>Retry saving</PaperButton>
                     </div>
                 </Show>
-                <PaperEffect variant="success">
-                    <PaperButton
-                        variant="success"
-                        icon
-                        onClick={handlePlayAllFlows}
-                        title="Run On-Play Flows">
-                        <PaperIcon>play_arrow</PaperIcon>
-                    </PaperButton>
-                </PaperEffect>
+                <Show when={fileNotice()}>
+                    {(notice) => (
+                        <div role="status" class="canvas-sync-status">
+                            <PaperText size={1} color={notice().kind === "failed" ? "danger" : undefined}>{notice().text}</PaperText>
+                            <PaperButton size="tiny" onClick={() => setFileNotice(null)}>Dismiss</PaperButton>
+                        </div>
+                    )}
+                </Show>
+                <div class="canvas-run-controls">
+                    <CanvasFileMenu
+                        clientId={clientId}
+                        loaded={canvasLoaded}
+                        canvas={() => ({ flows: unwrap(blocks), notes: unwrap(notes), functions: functions() })}
+                        add={addFile}
+                        flush={() => canvasSync.flush()}
+                        reload={() => follower.reload().then(() => refreshBlockSchemas())}
+                        onNotice={setFileNotice}
+                    />
+                    <PaperEffect variant="success">
+                        <PaperButton
+                            variant="success"
+                            icon
+                            onClick={handlePlayAllFlows}
+                            title="Run On-Play Flows">
+                            <PaperIcon>play_arrow</PaperIcon>
+                        </PaperButton>
+                    </PaperEffect>
+                </div>
 
                 <Show when={consoleLogs.length > 0}>
                     <div class="canvas-console-panel">
