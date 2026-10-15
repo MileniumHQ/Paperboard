@@ -176,6 +176,8 @@
     box-shadow: var(--paper-heavy-element-shadow);
     pointer-events: none;
     transform-origin: 0 0;
+    /* what it carries is clipped to its rounded corners, like a placed tile */
+    overflow: hidden;
 }
 
 /* what Home says when it has nothing to show, over the dots */
