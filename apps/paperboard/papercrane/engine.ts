@@ -6,7 +6,6 @@ import {
     SupervisedProcessClient,
     supervisorPresent,
     supervisorEndpointName,
-    legacySupervisorEndpointName,
     supervisorSocketPathForName,
 } from "./supervisor";
 import { PanelManifest } from "./types";
@@ -574,11 +573,7 @@ export class PaperCraneEngine {
                 continue;
             }
             if (typeof id !== "string" || !id || this.clients.has(id)) continue;
-            const current = stem === supervisorEndpointName(id);
-            // TODO(remove after v0.3): supervisors started under the old
-            // character-substituted endpoint name are still reachable there
-            const legacy = !current && stem === legacySupervisorEndpointName(id);
-            if (!current && !legacy) {
+            if (stem !== supervisorEndpointName(id)) {
                 logger.warn(`[Paperboard Server] supervisor metadata ${file} names "${id}", which does not own that endpoint; not adopting it`);
                 continue;
             }

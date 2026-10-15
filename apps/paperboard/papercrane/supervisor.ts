@@ -45,13 +45,6 @@ export function supervisorEndpointName(procId: string): string {
     return crypto.createHash("sha256").update(procId, "utf8").digest("hex").slice(0, 32);
 }
 
-// TODO(remove after v0.3): the pre-digest endpoint name, used only to
-// recover supervisors that were started before the rename and are still
-// running (engine.recoverRunningSupervisors)
-export function legacySupervisorEndpointName(procId: string): string {
-    return procId.replace(/[^a-zA-Z0-9_-]/g, "_");
-}
-
 // socket/pipe path for an endpoint name (not an id)
 export function supervisorSocketPathForName(name: string): string {
     if (process.platform === "win32") {

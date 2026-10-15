@@ -13,7 +13,6 @@ import {
     SupervisedProcessClient,
     getSupervisorSocketPath,
     getSupervisorMetadataPath,
-    legacySupervisorEndpointName,
     supervisorEndpointName,
     supervisorSocketPathForName,
 } from "../papercrane/supervisor";
@@ -86,7 +85,7 @@ describe("daemon restart recovery", () => {
         const engine = new PaperCraneEngine(root);
         await engine.recoverRunningSupervisors();
         expect(await engine.isProcessRunning(id)).toBe(true);
-        expect((engine as any).clients.has(legacySupervisorEndpointName(id))).toBe(false);
+        expect((engine as any).clients.has(id.replace(/\./g, "_"))).toBe(false);
         await engine.killProcess(id);
         expect(await exited(child)).toBe(true);
     }, 30_000);
@@ -105,15 +104,14 @@ describe("daemon restart recovery", () => {
         expect(child.exitCode).toBeNull();
     }, 30_000);
 
-    it("recovers a supervisor still listening under the pre-digest name", async () => {
+    it("does not adopt a supervisor under the pre-digest name, removed after v0.2", async () => {
+        // the pre-digest name replaced every character outside [a-zA-Z0-9_-] with _
         const id = "dev.test.legacy.proc";
-        const legacyName = legacySupervisorEndpointName(id);
+        const legacyName = id.replace(/[^a-zA-Z0-9_-]/g, "_");
         const socketPath = supervisorSocketPathForName(legacyName);
         const metaPath = path.join(getSocketsDir(), `${legacyName}.json`);
-        const received: string[] = [];
         const server = net.createServer((socket) => {
             socket.write(JSON.stringify({ type: "status", pid: 1, childPid: 1, running: true, isPty: false }) + "\n");
-            socket.on("data", (chunk) => received.push(String(chunk)));
         });
         await new Promise<void>((resolve) => server.listen(socketPath, resolve));
         fs.writeFileSync(metaPath, JSON.stringify({ id }));
@@ -122,14 +120,7 @@ describe("daemon restart recovery", () => {
         cleanup.push(() => fs.rmSync(root, { recursive: true, force: true }));
         const engine = new PaperCraneEngine(root);
         await engine.recoverRunningSupervisors();
-        expect((engine as any).clients.has(id)).toBe(true);
-        (engine as any).clients.get(id).kill("SIGTERM");
-        const deadline = Date.now() + 3000;
-        while (!received.join("").includes('"kill"')) {
-            if (Date.now() > deadline) throw new Error("kill never reached the legacy supervisor");
-            await new Promise((r) => setTimeout(r, 10));
-        }
-        (engine as any).clients.get(id).destroy();
+        expect((engine as any).clients.has(id)).toBe(false);
     }, 30_000);
 
     it("does not adopt metadata that names an id the file does not belong to", async () => {
