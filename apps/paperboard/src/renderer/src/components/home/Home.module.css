@@ -65,7 +65,6 @@
     border-radius: var(--paper-border-radius);
     background: var(--paper-surface-raised);
     border: var(--paper-border-width) solid var(--paper-border);
-    box-shadow: var(--paper-element-shadow);
     overflow: hidden;
 }
 
@@ -327,11 +326,6 @@
 
 .preview:hover:not(:disabled) {
     transform: scale(var(--paper-scale-hover));
-}
-
-/* the picker is flat: its previews sit on the page without a shadow */
-.preview .card {
-    box-shadow: none;
 }
 
 .preview:disabled {
