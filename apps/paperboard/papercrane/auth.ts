@@ -25,6 +25,11 @@ export interface AuthorizedToken {
     // this, never the local panel token for the same id (which would hand a
     // remote computer this machine's process, file and vault reach).
     relayTo?: string;
+    // the host token that minted this credential over auth:panel-token. It
+    // lives and dies with that host: revoking the host revokes it. Absent =
+    // the daemon's own credential for the panel (service spawn), which a
+    // host never owns.
+    issuedBy?: string;
 }
 
 const BASE_LOCKOUT_MS = 5_000;
@@ -44,6 +49,10 @@ function relayKey(computerId: string, panelId: string): string {
     return `${computerId}\n${panelId}`;
 }
 
+function hostMintedKey(issuedBy: string, computerId: string | undefined, panelId: string): string {
+    return `${issuedBy}\n${computerId ?? ""}\n${panelId}`;
+}
+
 // pairing auth and token store
 export class PaperCraneAuth extends EventEmitter {
     private tokensFile: string;
@@ -61,6 +70,8 @@ export class PaperCraneAuth extends EventEmitter {
     private tokenIndex: Map<string, AuthorizedToken> = new Map();
     private panelTokenIndex = new Map<string, AuthorizedToken>();
     private relayTokenIndex = new Map<string, AuthorizedToken>();
+    // host-minted credentials, one per (host, computer, panel)
+    private hostMintedIndex = new Map<string, AuthorizedToken>();
     public noAuth: boolean = false;
 
     // injectable clock for testable lockouts
@@ -93,10 +104,13 @@ export class PaperCraneAuth extends EventEmitter {
         this.tokenIndex = index;
         const entries = [...this.authorizedTokens.values()];
         this.panelTokenIndex = new Map(
-            entries.filter((entry) => entry.panelId && !entry.relayTo).map((entry) => [entry.panelId!, entry]),
+            entries.filter((entry) => entry.panelId && !entry.relayTo && !entry.issuedBy).map((entry) => [entry.panelId!, entry]),
         );
         this.relayTokenIndex = new Map(
-            entries.filter((entry) => entry.panelId && entry.relayTo).map((entry) => [relayKey(entry.relayTo!, entry.panelId!), entry]),
+            entries.filter((entry) => entry.panelId && entry.relayTo && !entry.issuedBy).map((entry) => [relayKey(entry.relayTo!, entry.panelId!), entry]),
+        );
+        this.hostMintedIndex = new Map(
+            entries.filter((entry) => entry.panelId && entry.issuedBy).map((entry) => [hostMintedKey(entry.issuedBy!, entry.relayTo, entry.panelId!), entry]),
         );
     }
 
@@ -143,44 +157,53 @@ export class PaperCraneAuth extends EventEmitter {
         this.saveTokens();
     }
 
-    // mints (or reuses) the panel-scoped token for one panel id. One live
-    // token per panel id — bounded by the panel count, never by the pairing
-    // budget, so a thousand panels cannot evict user pairings.
-    public issuePanelToken(panelId: string): string {
+    // mints (or reuses) the panel-scoped token for one panel id. Without
+    // issuedBy this is the daemon's own credential: one live token per panel
+    // id, bounded by the panel count, never by the pairing budget, so a
+    // thousand panels cannot evict user pairings. With issuedBy (the host
+    // token asking over auth:panel-token) the credential is that host's own
+    // and is revoked with it; two hosts never share one.
+    public issuePanelToken(panelId: string, issuedBy?: string): string {
         requirePanelId(panelId);
-        const existing = this.panelTokenIndex.get(panelId);
-        if (existing) return existing.token;
-        if (this.panelTokenIndex.size >= MAX_PANEL_TOKENS) throw new Error("Panel credential store is full");
-        const token = "pcp_" + crypto.randomBytes(24).toString("hex");
-        const entry: AuthorizedToken = {
-            token,
-            clientName: `panel-service:${panelId}`,
-            pairedAt: new Date().toISOString(),
-            lastSeenAt: new Date().toISOString(),
-            panelId,
-        };
-        this.authorizedTokens.set(token, entry);
-        this.saveTokens();
-        return token;
+        return this.mint("pcp_", panelId, undefined, issuedBy);
     }
 
     // mints (or reuses) the relay-only credential for a panel served from
-    // another computer. Bounded like panel tokens: one per (computer, panel).
-    public issueRelayToken(panelId: string, computerId: string): string {
+    // another computer. Bounded like panel tokens: one per (computer, panel),
+    // or per (host, computer, panel) when a host asks.
+    public issueRelayToken(panelId: string, computerId: string, issuedBy?: string): string {
         requirePanelId(panelId);
         const computer = sanitizeId(computerId);
         if (!computer || computer === "local") throw new Error(`Invalid relay computer id: ${JSON.stringify(computerId)}`);
-        const existing = this.relayTokenIndex.get(relayKey(computer, panelId));
+        return this.mint("pcr_", panelId, computer, issuedBy);
+    }
+
+    private mint(prefix: "pcp_" | "pcr_", panelId: string, relayTo: string | undefined, issuedBy: string | undefined): string {
+        let index: Map<string, AuthorizedToken>;
+        let key: string;
+        if (issuedBy) {
+            if (!this.authorizedTokens.has(issuedBy)) throw new Error("Issuing host is not authorized");
+            index = this.hostMintedIndex;
+            key = hostMintedKey(issuedBy, relayTo, panelId);
+        } else if (relayTo) {
+            index = this.relayTokenIndex;
+            key = relayKey(relayTo, panelId);
+        } else {
+            index = this.panelTokenIndex;
+            key = panelId;
+        }
+        const existing = index.get(key);
         if (existing) return existing.token;
-        if (this.relayTokenIndex.size >= MAX_PANEL_TOKENS) throw new Error("Relay credential store is full");
-        const token = "pcr_" + crypto.randomBytes(24).toString("hex");
+        if (index.size >= MAX_PANEL_TOKENS) throw new Error(relayTo ? "Relay credential store is full" : "Panel credential store is full");
+        const token = prefix + crypto.randomBytes(24).toString("hex");
         const entry: AuthorizedToken = {
             token,
-            clientName: `panel-relay:${computer}:${panelId}`,
+            clientName: relayTo ? `panel-relay:${relayTo}:${panelId}` : `panel-service:${panelId}`,
             pairedAt: new Date().toISOString(),
             lastSeenAt: new Date().toISOString(),
             panelId,
-            relayTo: computer,
+            ...(relayTo ? { relayTo } : {}),
+            ...(issuedBy ? { issuedBy } : {}),
         };
         this.authorizedTokens.set(token, entry);
         this.saveTokens();
@@ -410,11 +433,14 @@ export class PaperCraneAuth extends EventEmitter {
     public revokeToken(token: string): boolean {
         const entry = this.authorizedTokens.get(token);
         const deleted = this.authorizedTokens.delete(token);
-        if (deleted) {
-            this.saveTokens();
-            if (entry) this.emit("revoked", entry);
-        }
-        return deleted;
+        if (!deleted) return false;
+        // credentials this token minted go with it, in the same write
+        const derived = [...this.authorizedTokens.values()].filter((candidate) => candidate.issuedBy === token);
+        for (const candidate of derived) this.authorizedTokens.delete(candidate.token);
+        this.saveTokens();
+        if (entry) this.emit("revoked", entry);
+        for (const candidate of derived) this.emit("revoked", candidate);
+        return true;
     }
 
     // revokes every token carrying the panel's scope claim. Called on panel

@@ -651,7 +651,11 @@ export function setupWebSocketServer(
                     const relayTo = params?.relayTo === undefined || params?.relayTo === "local"
                         ? null
                         : assertStr(params.relayTo, "relayTo", 128);
-                    reply({ token: relayTo ? auth.issueRelayToken(panelId, relayTo) : auth.issuePanelToken(panelId) });
+                    reply({
+                        token: relayTo
+                            ? auth.issueRelayToken(panelId, relayTo, authedToken ?? undefined)
+                            : auth.issuePanelToken(panelId, authedToken ?? undefined),
+                    });
                     return;
                 }
 

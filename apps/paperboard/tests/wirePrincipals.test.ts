@@ -314,6 +314,34 @@ test("revoke-self reports revoked only after the revocation persists", async () 
 });
 
 
+test("credentials a host minted die with that host: revoke-self closes its panel and relay sockets", async () => {
+    const f = await fixture();
+    f.auth.injectToken("test-leaving", "device");
+    const leaving = new CraneTransport({ port: f.port, token: "test-leaving", computerId: "local" });
+    try {
+        const panel = (await leaving.call<{ token: string }>("auth:panel-token", { panelId: "panel.a" })).token;
+        const relay = (await leaving.call<{ token: string }>("auth:panel-token", { panelId: "panel.a", relayTo: "remote" })).token;
+        // another host asking for the same panel gets its own credential, not the leaving host's
+        const otherHost = new CraneTransport({ port: f.port, token: "test-host", computerId: "local" });
+        let other: string;
+        try { other = (await otherHost.call<{ token: string }>("auth:panel-token", { panelId: "panel.a" })).token; } finally { otherHost.close(); }
+        expect(other).not.toBe(panel);
+        const live = new CraneTransport({ port: f.port, token: panel, computerId: "local" });
+        try {
+            expect(await live.call("config:set", { id: "panel.a", data: { before: true } })).toEqual({ success: true });
+            expect(await leaving.call("auth:revoke-self", {})).toEqual({ revoked: true });
+            await Bun.sleep(40);
+            expect(f.auth.matchToken(panel)).toBeFalsy();
+            expect(f.auth.matchToken(relay)).toBeFalsy();
+            await expect(live.call("config:set", { id: "panel.a", data: { after: true } })).rejects.toThrow();
+            expect(f.auth.matchToken(other)?.panelId).toBe("panel.a");
+            // the panel's own service credential is not a host's to take away
+            expect(f.auth.matchToken(f.auth.issuePanelToken("panel.a"))?.panelId).toBe("panel.a");
+        } finally { live.close(); }
+    } finally { leaving.close(); await f.close(); }
+});
+
+
 test("authenticated SDK file operations refuse symlinked storage ancestors", async () => {
     const f = await fixture();
     const sdk = new CraneTransport({ port: f.port, token: f.auth.issuePanelToken("panel.a"), computerId: "local", panelId: "panel.a" });
