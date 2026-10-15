@@ -12,20 +12,6 @@
     padding-left: var(--paper-uigap);
 }
 
-.missing {
-    display: flex;
-    flex-direction: column;
-    gap: var(--paper-uigap-onefourth);
-    min-width: 0;
-}
-
-.hint {
-    display: flex;
-    align-items: center;
-    gap: var(--paper-uigap-half);
-    min-width: 0;
-}
-
 .actions {
     display: flex;
     flex-wrap: wrap;

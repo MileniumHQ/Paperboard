@@ -1,12 +1,11 @@
-// Coding agents (ACP): choosing which installed ones to add, and an added
-// agent's own screen. The panel never installs an agent; one that isn't on
-// this computer shows the command that installs it.
+// Coding agents (ACP): choosing which installed ones to add, and the states
+// an added agent's pane needs a recovery action for. The panel never installs
+// an agent; it lists the ones it finds on this computer.
 
 import { createSignal, For, onMount, Show } from "solid-js";
 import {
     PaperButton,
     PaperCode,
-    PaperCopyButton,
     PaperFlex,
     PaperIcon,
     PaperInput,
@@ -16,7 +15,7 @@ import {
     PaperText,
 } from "@mileniumhq/paperui";
 import { UI_ACTION_IDS } from "../contract";
-import { AGENT_REGISTRY, CUSTOM_AGENT_ID, installHint, splitArgs, type RegistryAgent } from "../core/agents";
+import { AGENT_REGISTRY, CUSTOM_AGENT_ID, splitArgs } from "../core/agents";
 import type { Connection } from "../core/providers";
 import type { AgentState } from "../core/types";
 import { call, errorText, state } from "../lib/state";
@@ -61,26 +60,6 @@ export async function addAgents(selected: readonly string[], custom: CustomAgent
     return last;
 }
 
-function InstallHint(props: { agent: RegistryAgent }) {
-    const hint = () => installHint(props.agent);
-    return (
-        <div class={styles.hint}>
-            <Show
-                when={hint().command}
-                fallback={
-                    <>
-                        <PaperText size={1} color="text-muted" truncate>{hint().url}</PaperText>
-                        <PaperCopyButton text={hint().url ?? ""} title="Copy download link" aria-label={`Copy ${props.agent.name}'s download link`} />
-                    </>
-                }
-            >
-                <PaperCode>{hint().command}</PaperCode>
-                <PaperCopyButton text={hint().command ?? ""} title="Copy install command" aria-label={`Copy ${props.agent.name}'s install command`} />
-            </Show>
-        </div>
-    );
-}
-
 export interface AgentChooserProps {
     selected: string[];
     onSelected: (ids: string[]) => void;
@@ -88,17 +67,12 @@ export interface AgentChooserProps {
     onCustom: (draft: CustomAgentDraft) => void;
 }
 
-/**
- * Every agent found on this computer to choose from, a custom command, and
- * the rest of the ACP registry with how to install each.
- */
+/** Every agent found on this computer to choose from, and a custom command. */
 export function AgentChooser(props: AgentChooserProps) {
     const [installed, setInstalled] = createSignal<string[] | null>(null);
     const [error, setError] = createSignal("");
-    const [showAll, setShowAll] = createSignal(false);
     const added = () => new Set(state.connections.filter((c) => c.kind === "agent").map((c) => c.agent));
     const found = () => AGENT_REGISTRY.filter((a) => installed()?.includes(a.id) && !added().has(a.id));
-    const missing = () => AGENT_REGISTRY.filter((a) => !installed()?.includes(a.id) && !added().has(a.id));
 
     const look = async () => {
         setError("");
@@ -133,9 +107,8 @@ export function AgentChooser(props: AgentChooserProps) {
             </Show>
             <Show when={installed() !== null || error()} fallback={<PaperText color="text-muted">Looking for agents on this computer...</PaperText>}>
                 <section class={styles.group} aria-label="Installed agents">
-                    <PaperText preset="label">On this computer</PaperText>
                     <Show when={found().length === 0}>
-                        <PaperText size={2} color="text-muted">No agents from the list below are installed{added().size > 0 ? " that aren't added already" : ""}.</PaperText>
+                        <PaperText size={2} color="text-muted">No agents found on this computer{added().size > 0 ? " that aren't added already" : ""}.</PaperText>
                     </Show>
                     <PaperSelector name="agents" multiple values={chosen()} onValuesChange={choose}>
                         <For each={found()}>
@@ -178,31 +151,6 @@ export function AgentChooser(props: AgentChooserProps) {
                         </div>
                     </Show>
                 </section>
-                <section class={styles.group} aria-label="Agents to install">
-                    <PaperButton size="small" variant="text" aria-expanded={showAll()} onClick={() => setShowAll(!showAll())}>
-                        <PaperIcon>{showAll() ? "expand_less" : "expand_more"}</PaperIcon>
-                        {showAll() ? "Hide" : "Show"} {missing().length} more agent{missing().length === 1 ? "" : "s"} you can install
-                    </PaperButton>
-                    <Show when={showAll()}>
-                        <PaperText size={1} color="text-muted">
-                            Install one in a terminal on this computer, then check again. Paperboard never downloads agents for you.
-                        </PaperText>
-                        <div>
-                            <PaperButton size="small" onClick={() => void look()}>
-                                <PaperIcon>refresh</PaperIcon> Check again
-                            </PaperButton>
-                        </div>
-                        <For each={missing()}>
-                            {(a) => (
-                                <div class={styles.missing}>
-                                    <PaperText size={2}>{a.name}</PaperText>
-                                    <PaperText size={1} color="text-muted">{a.description}</PaperText>
-                                    <InstallHint agent={a} />
-                                </div>
-                            )}
-                        </For>
-                    </Show>
-                </section>
             </Show>
         </PaperFlex>
     );
@@ -229,7 +177,11 @@ export function agentSidebarStatus(c: Connection): string {
     return statusText(state.agents[c.id], state.modelErrors[c.id]);
 }
 
-/** An added agent: whether it runs, and sign-in. Its models are listed below it, like any provider's. */
+/**
+ * An added agent's states that need the user: not found, stopped, or waiting
+ * for sign-in, each with its recovery action. Nothing shows while it works;
+ * its models are listed below, like Local AI's.
+ */
 export function AgentStatus(props: { connection: Connection }) {
     const [busy, setBusy] = createSignal("");
     const [error, setError] = createSignal("");
@@ -252,7 +204,7 @@ export function AgentStatus(props: { connection: Connection }) {
         run(`auth:${methodId}`, () => call(UI_ACTION_IDS.authenticateAgent, { id: props.connection.id, methodId }));
 
     return (
-        <PaperFlex direction="column" gap="full" fullWidth>
+        <>
             <Show when={listError()}>
                 <PaperQuote variant="danger" icon="search_off" title={`${props.connection.label} isn't available`}>
                     <PaperText size={2}>{listError()}</PaperText>
@@ -283,7 +235,16 @@ export function AgentStatus(props: { connection: Connection }) {
                     </PaperText>
                     <Show
                         when={(agent()?.authMethods ?? []).length > 0}
-                        fallback={<PaperText size={2}>Sign in with the agent's own command in a terminal, then try again.</PaperText>}
+                        fallback={
+                            <>
+                                <PaperText size={2}>Sign in with the agent's own command in a terminal, then try again.</PaperText>
+                                <div>
+                                    <PaperButton size="small" disabled={busy() !== ""} onClick={() => void check()}>
+                                        <PaperIcon>refresh</PaperIcon> {busy() === "check" ? "Starting..." : "Try again"}
+                                    </PaperButton>
+                                </div>
+                            </>
+                        }
                     >
                         <div class={styles.actions}>
                             <For each={agent()?.authMethods}>
@@ -300,75 +261,7 @@ export function AgentStatus(props: { connection: Connection }) {
             <Show when={error()}>
                 <PaperText size={2} color="danger" role="alert">{error()}</PaperText>
             </Show>
-            <PaperFlex direction="column" gap="half" fullWidth>
-                <PaperText size={2}>
-                    {statusText(agent(), listError())}
-                    {agent()?.name ? ` · ${agent()!.name}${agent()?.version ? ` ${agent()!.version}` : ""}` : ""}
-                </PaperText>
-                <PaperText size={1} color="text-muted">
-                    The agent works in a project you choose for each chat, with the files and commands it can reach on this computer. It asks before it changes things, unless you tell it not to.
-                </PaperText>
-            </PaperFlex>
-            <div class={styles.actions}>
-                <Show when={!listError() && agent()?.status !== "error"}>
-                    <PaperButton disabled={busy() !== ""} onClick={() => void check()}>
-                        <PaperIcon>play_arrow</PaperIcon> {busy() === "check" ? "Checking..." : "Check it starts"}
-                    </PaperButton>
-                </Show>
-            </div>
-        </PaperFlex>
+        </>
     );
 }
 
-/** A custom agent's command and arguments, edited in place. */
-export function EditCustomAgent(props: { connection: Connection; onDone: () => void }) {
-    const [label, setLabel] = createSignal(props.connection.label);
-    const [command, setCommand] = createSignal(props.connection.command ?? "");
-    const [args, setArgs] = createSignal((props.connection.args ?? []).join(" "));
-    const [saving, setSaving] = createSignal(false);
-    const [error, setError] = createSignal("");
-    const custom = () => props.connection.agent === CUSTOM_AGENT_ID;
-
-    const save = async () => {
-        setSaving(true);
-        setError("");
-        try {
-            await call(UI_ACTION_IDS.updateConnection, {
-                id: props.connection.id,
-                label: label(),
-                ...(custom() ? { command: command(), args: splitArgs(args()) } : {}),
-            });
-            props.onDone();
-        } catch (err) {
-            setError(errorText(err));
-        } finally {
-            setSaving(false);
-        }
-    };
-
-    return (
-        <PaperFlex direction="column" gap="half" fullWidth>
-            <PaperInput fullWidth label="Name" icon="label" value={label()} onInput={(e) => setLabel(e.currentTarget.value)} />
-            <Show when={custom()}>
-                <PaperInput fullWidth label="Command" icon="terminal" value={command()} onInput={(e) => setCommand(e.currentTarget.value)} />
-                <PaperInput
-                    fullWidth
-                    label="Arguments (separated by spaces)"
-                    icon="data_array"
-                    value={args()}
-                    onInput={(e) => setArgs(e.currentTarget.value)}
-                />
-            </Show>
-            <PaperText size={1} color="text-muted">Saving restarts the agent.</PaperText>
-            <Show when={error()}>
-                <PaperText size={2} color="danger" role="alert">{error()}</PaperText>
-            </Show>
-            <div class={styles.actions}>
-                <PaperButton onClick={props.onDone} disabled={saving()}>Cancel</PaperButton>
-                <PaperButton variant="primary" disabled={saving() || (custom() && !command().trim())} onClick={() => void save()}>
-                    {saving() ? "Saving..." : "Save"}
-                </PaperButton>
-            </div>
-        </PaperFlex>
-    );
-}

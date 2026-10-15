@@ -22,7 +22,7 @@ import ModelBrowser from "./ModelBrowser";
 import OllamaRuntimeCard from "./OllamaRuntimeCard";
 import { EndpointForm } from "./ProviderForms";
 import ProviderWizard from "./ProviderWizard";
-import { agentSidebarStatus, AgentStatus, EditCustomAgent } from "./AgentForms";
+import { agentSidebarStatus, AgentStatus } from "./AgentForms";
 import styles from "./ModelsModal.module.css";
 
 /** The sidebar entry that adds a provider; never a connection id. */
@@ -150,7 +150,7 @@ function ConnectionPane(props: { connection: Connection; onPick: (ref: string, p
                     </PaperText>
                 </div>
                 <div class={styles.paneActions}>
-                    <Show when={isEndpoint() || isAgent()}>
+                    <Show when={isEndpoint()}>
                         <PaperButton size="small" disabled={editing()} onClick={() => setEditing(true)}>
                             <PaperIcon>edit</PaperIcon> Edit
                         </PaperButton>
@@ -166,9 +166,7 @@ function ConnectionPane(props: { connection: Connection; onPick: (ref: string, p
             </Show>
 
             <Show when={editing()}>
-                <Show when={isAgent()} fallback={<EditEndpoint connection={props.connection} onDone={() => setEditing(false)} />}>
-                    <EditCustomAgent connection={props.connection} onDone={() => setEditing(false)} />
-                </Show>
+                <EditEndpoint connection={props.connection} onDone={() => setEditing(false)} />
             </Show>
 
             <Show when={props.connection.kind === "ollama" && state.runtime.status !== "ready"}>
