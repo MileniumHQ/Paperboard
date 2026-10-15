@@ -1536,9 +1536,9 @@ export default function App() {
                         top: `${ghostDrag()!.pos.y - ghostDrag()!.grabOffset.y}px`,
                         width: "max-content",
                         "pointer-events": "none",
-                        "z-index": 9999,
-                        opacity: 0.95,
-                        filter: "drop-shadow(0 16px 32px rgba(0,0,0,0.55))",
+                        "z-index": "var(--paper-z-ghost)",
+                        opacity: "var(--paper-opacity-soft)",
+                        filter: "drop-shadow(var(--paper-lifted-shadow))",
                     }}
                 >
                     <ActionBlock

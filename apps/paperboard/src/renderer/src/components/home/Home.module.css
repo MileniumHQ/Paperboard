@@ -83,7 +83,7 @@
 }
 
 .lifted {
-    opacity: 0.35;
+    opacity: var(--paper-opacity-faint);
 }
 
 .selected .card {
@@ -159,7 +159,7 @@
 
 .ghost {
     position: fixed;
-    z-index: 3000;
+    z-index: var(--paper-z-ghost);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -191,14 +191,14 @@
     position: absolute;
     top: var(--paper-uigap);
     right: var(--paper-uigap-double);
-    z-index: 3;
+    z-index: calc(var(--paper-z-raised) + 2);
 }
 
 .banner {
     position: absolute;
     left: var(--paper-uigap);
     bottom: var(--paper-uigap);
-    z-index: 3;
+    z-index: calc(var(--paper-z-raised) + 2);
     display: flex;
     align-items: center;
     gap: var(--paper-uigap-half);
@@ -215,7 +215,7 @@
     top: var(--paper-uigap);
     right: var(--paper-uigap);
     bottom: var(--paper-uigap);
-    z-index: 4;
+    z-index: calc(var(--paper-z-raised) + 3);
     width: min(var(--paper-size-split-side), calc(100% - var(--paper-uigap-double)));
     display: flex;
     flex-direction: column;
@@ -319,12 +319,12 @@
 }
 
 .preview:hover:not(:disabled) {
-    transform: scale(1.03);
+    transform: scale(var(--paper-scale-hover));
 }
 
 .preview:disabled {
     cursor: not-allowed;
-    opacity: 0.5;
+    opacity: var(--paper-opacity-dim);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -372,5 +372,5 @@
     display: inline-block;
     border-radius: var(--paper-thick-border-width);
     background: currentColor;
-    opacity: 0.6;
+    opacity: var(--paper-opacity-disabled);
 }

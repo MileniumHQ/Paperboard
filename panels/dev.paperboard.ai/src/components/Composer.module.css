@@ -87,7 +87,7 @@
     color: var(--paper-text);
     font: inherit;
     font-size: var(--paper-text-size-2);
-    font-weight: 600;
+    font-weight: var(--paper-weight-semibold);
     cursor: pointer;
     transition: color var(--paper-short-transition) var(--paper-ease-standard);
 }
@@ -136,7 +136,7 @@
 }
 
 .reasoning:disabled {
-    opacity: 0.5;
+    opacity: var(--paper-opacity-dim);
     cursor: default;
 }
 

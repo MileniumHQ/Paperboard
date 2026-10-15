@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import * as fs from "fs";
 import * as path from "path";
 import {
+    TITLEBAR_HEIGHT,
     TITLEBAR_OVERLAY_COLORS,
     TITLEBAR_SYMBOL_COLORS,
     WINDOW_BACKGROUND_COLORS,
@@ -63,5 +64,15 @@ describe("native theme constants mirror PaperUI tokens", () => {
         expect(TITLEBAR_SYMBOL_COLORS.dark.toLowerCase()).toBe(
             tokenValue(darkRegion, "text"),
         );
+    });
+
+    it("titlebar height matches the shell's --paperboard-titlebar-height", () => {
+        const shellCss = fs.readFileSync(
+            path.join(__dirname, "..", "src", "renderer", "src", "shell.css"),
+            "utf8",
+        );
+        const match = shellCss.match(/--paperboard-titlebar-height:\s*(\d+)px/);
+        if (!match) throw new Error("--paperboard-titlebar-height not found in shell.css");
+        expect(TITLEBAR_HEIGHT).toBe(Number(match[1]));
     });
 });

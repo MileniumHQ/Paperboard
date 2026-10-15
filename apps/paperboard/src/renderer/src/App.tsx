@@ -449,7 +449,7 @@ const App: Component = () => {
                     direction="row"
                     style={{
                         flex: 1,
-                        height: "calc(100vh - 38px)",
+                        height: "calc(100vh - var(--paperboard-titlebar-height))",
                         overflow: "hidden",
                     }}
                 >
@@ -621,7 +621,7 @@ const App: Component = () => {
                                                         direction="column"
                                                         gap="half"
                                                         style={{
-                                                            padding: "12px",
+                                                            padding: getVarCss("uigap"),
                                                             "align-items": "flex-start",
                                                         }}
                                                     >

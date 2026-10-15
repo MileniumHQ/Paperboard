@@ -6,6 +6,9 @@
 //   TITLEBAR_OVERLAY  -> --paper-surface-sunken
 //   WINDOW_BACKGROUND -> --paper-surface-raised (light) / --paper-surface-sunkenest (dark)
 // tests/themeConstants.test.ts parses colors.css and fails if they drift.
+// Native title bar height in px. shell.css repeats it as --paperboard-titlebar-height.
+export const TITLEBAR_HEIGHT = 38;
+
 export const TITLEBAR_OVERLAY_COLORS = {
     dark: "#1a1b1e",
     light: "#e2e6eb",

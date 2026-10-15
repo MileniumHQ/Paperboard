@@ -4,6 +4,7 @@ import {
     PaperFlex,
     PaperProgress,
     PaperText,
+    getVarCss,
 } from "@mileniumhq/paperui";
 
 export interface LoadingOverlayProps {
@@ -30,7 +31,7 @@ const LoadingOverlay: Component<LoadingOverlayProps> = (props) => (
         <Show when={!props.error}>
             <PaperProgress
                 aria-label={props.label ?? "Loading"}
-                style={{ width: "12rem" }}
+                style={{ width: getVarCss("size-field") }}
             />
         </Show>
         <Show when={props.error}>

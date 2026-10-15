@@ -1,3 +1,23 @@
+/* Layout footprints particular to this panel. PaperUI has no token for a
+   canvas node or a console, so they are named once here and nowhere else. */
+:root {
+    --actions-container-min: 260px;
+    --actions-action-max: 480px;
+    --actions-trigger-min: 320px;
+    --actions-editable-max: 192px;
+    --actions-menu-min: 250px;
+    --actions-menu-max: 340px;
+    --actions-menu-height: 300px;
+    --actions-library-width: 400px;
+    --actions-sync-status-max: 360px;
+    --actions-console-width: 320px;
+    --actions-console-height: 240px;
+    --actions-console-body-height: 180px;
+    --actions-note-width: 260px;
+    --actions-note-min-height: 90px;
+    --actions-note-max-height: 400px;
+}
+
 html,
 body,
 #app {
@@ -22,8 +42,8 @@ body,
     background-color: var(--paper-surface-app);
     background-image: radial-gradient(
         circle,
-        color-mix(in srgb, var(--paper-contrast) 22%, transparent) 0.09375rem,
-        transparent 0.09375rem
+        color-mix(in srgb, var(--paper-contrast) 22%, transparent) calc(var(--paper-border-width) * 1.5),
+        transparent calc(var(--paper-border-width) * 1.5)
     );
     background-size: var(--paper-uigap-double) var(--paper-uigap-double);
     color: var(--paper-text);
@@ -44,7 +64,7 @@ body,
 }
 
 .action.isContainer {
-    min-width: 16.25rem;
+    min-width: var(--actions-container-min);
 }
 
 .ifElsePlain {
@@ -64,7 +84,7 @@ body,
     -webkit-user-select: none;
     cursor: grab;
     width: max-content;
-    max-width: 30rem;
+    max-width: var(--actions-action-max);
     box-sizing: border-box;
     display: flex;
     gap: var(--paper-uigap-half);
@@ -73,7 +93,7 @@ body,
 
 .action.dragging {
     cursor: grabbing;
-    z-index: 100;
+    z-index: var(--paper-z-drag);
     border-color: var(--paper-primary);
 }
 
@@ -86,7 +106,7 @@ body,
 }
 
 .triggerAction {
-    min-width: 20rem;
+    min-width: var(--actions-trigger-min);
     width: fit-content;
 }
 
@@ -166,9 +186,9 @@ body,
 }
 
 .actionText {
-    font-weight: 500;
+    font-weight: var(--paper-weight-medium);
     font-size: var(--paper-text-size-3);
-    line-height: 1.45;
+    line-height: var(--paper-leading-normal);
     word-break: normal;
     overflow-wrap: break-word;
     flex: 1;
@@ -202,7 +222,7 @@ body,
     color: var(--paper-primary);
     padding: 0 var(--paper-uigap-onefourth);
     border-radius: var(--paper-border-radius-half);
-    font-weight: 400;
+    font-weight: var(--paper-weight-regular);
     cursor: pointer;
     transition: background var(--paper-tiny-transition) var(--paper-ease-standard), color var(--paper-tiny-transition) var(--paper-ease-standard);
     display: inline;
@@ -244,7 +264,7 @@ body,
     min-width: 0;
     /* a plain length: a percentage cap is ignored when the card measures
        its content, so a long hidden value would still widen the flow */
-    max-width: 12rem;
+    max-width: var(--actions-editable-max);
     vertical-align: middle;
 }
 
@@ -266,15 +286,17 @@ body,
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    padding: 0 0.25rem;
+    padding: 0 var(--paper-uigap-third);
     border-radius: var(--paper-border-radius-half);
-    font-weight: 400;
-    line-height: 1.375rem;
-    height: 1.375rem;
+    font-weight: var(--paper-weight-regular);
+    line-height: var(--paper-control-size-inline);
+    height: var(--paper-control-size-inline);
     font-size: inherit;
     border: none;
     box-sizing: border-box;
-    transition: background 0.1s ease, color 0.1s ease;
+    transition:
+        background var(--paper-tiny-transition) var(--paper-ease-standard),
+        color var(--paper-tiny-transition) var(--paper-ease-standard);
 }
 
 /* the chip rides the pill's top edge; middle alignment shoved it down and
@@ -289,7 +311,7 @@ body,
    a multiline Text action */
 .actionInput.actionEditable:not(.actionEditableMultiline):focus {
     position: relative;
-    z-index: 1;
+    z-index: var(--paper-z-raised);
     width: max-content;
     min-width: 100%;
     max-width: none;
@@ -337,7 +359,7 @@ body,
     max-width: 100%;
     height: auto;
     min-height: calc(var(--paper-uigap) * 5);
-    line-height: 1.45;
+    line-height: var(--paper-leading-normal);
     white-space: pre-wrap;
     overflow: visible;
     overflow-wrap: anywhere;
@@ -373,7 +395,7 @@ body,
 
 .actionInput.actionEditable[data-placeholder]:empty::before {
     content: attr(data-placeholder);
-    opacity: 0.65;
+    opacity: var(--paper-opacity-muted);
     pointer-events: none;
 }
 
@@ -383,13 +405,13 @@ body,
     gap: var(--paper-uigap-onefourth);
     background: var(--paper-primary);
     color: var(--paper-on-color);
-    padding: 0 0.25rem;
+    padding: 0 var(--paper-uigap-third);
     border-radius: var(--paper-border-radius-half);
     margin: 0;
-    font-size: 0.9em;
-    min-height: 1.375rem;
-    line-height: 1.375rem;
-    font-weight: 500;
+    font-size: var(--paper-badge-font-scale);
+    min-height: var(--paper-control-size-inline);
+    line-height: var(--paper-control-size-inline);
+    font-weight: var(--paper-weight-medium);
     vertical-align: middle;
     user-select: none;
     -webkit-user-select: none;
@@ -401,28 +423,28 @@ body,
     /* Icon font via the PaperUI token (single source of truth in
        paperui/src/styles). */
     font-family: var(--paper-icon-font-family) !important;
-    font-size: 0.8125rem;
-    width: 0.8125rem;
-    height: 0.8125rem;
+    font-size: var(--paper-text-size-1);
+    width: var(--paper-text-size-1);
+    height: var(--paper-text-size-1);
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    line-height: 1;
+    line-height: var(--paper-leading-none);
     font-variation-settings: "FILL" 1, "wght" 500, "GRAD" 0, "opsz" 14;
 }
 
 .actionVariableChip .chipLabel {
     font-family: inherit;
     font-size: var(--paper-text-size-1);
-    line-height: 1;
-    font-weight: 600;
+    line-height: var(--paper-leading-none);
+    font-weight: var(--paper-weight-semibold);
 }
 
 /* hover recolors only the hovered action, not subblocks */
 .action.sourceHighlight > .actionHeaderRow > .actionText,
 .action.sourceHighlight > .actionHeaderRow > .actionHeaderIcon {
     color: var(--paper-primary) !important;
-    transition: color 0.12s ease;
+    transition: color var(--paper-tiny-transition) var(--paper-ease-standard);
 }
 
 .actionVariableMenu {
@@ -431,17 +453,17 @@ body,
     background: var(--paper-surface);
     border: var(--paper-border-width) solid var(--paper-border);
     border-radius: var(--paper-border-radius);
-    min-width: 15.625rem;
-    max-width: 21.25rem;
-    max-height: 18.75rem;
+    min-width: var(--actions-menu-min);
+    max-width: var(--actions-menu-max);
+    max-height: var(--actions-menu-height);
     overflow-y: auto;
     overflow-x: hidden;
     padding: var(--paper-uigap-onefourth);
-    z-index: 1002;
+    z-index: calc(var(--paper-z-menu) + 2);
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
-    gap: 0.125rem;
+    gap: var(--paper-uigap-sixth);
     animation: scaleInVariableMenu var(--paper-tiny-transition) var(--paper-ease-standard);
 }
 
@@ -474,7 +496,7 @@ body,
 
 .actionVariableMenuGroupName {
     font-size: var(--paper-text-size-1);
-    font-weight: 700;
+    font-weight: var(--paper-weight-bold);
     text-transform: uppercase;
     color: var(--paper-text-subtle);
     white-space: nowrap;
@@ -484,24 +506,24 @@ body,
 
 .actionVariableMenuGroupCount {
     font-size: var(--paper-text-size-1);
-    font-weight: 700;
+    font-weight: var(--paper-weight-bold);
     color: var(--paper-text-subtle);
     background: color-mix(in srgb, var(--paper-contrast) 10%, transparent);
     border-radius: var(--paper-border-radius);
     padding: 0 var(--paper-uigap-half);
-    line-height: 1.6;
+    line-height: var(--paper-leading-relaxed);
     flex-shrink: 0;
 }
 
 .actionVariableMenuTypeBadge {
     font-size: var(--paper-text-size-1);
-    font-weight: 700;
+    font-weight: var(--paper-weight-bold);
     text-transform: uppercase;
     color: var(--paper-primary-deep);
     background: color-mix(in srgb, var(--paper-primary) 14%, transparent);
     border-radius: var(--paper-border-radius);
     padding: 0 var(--paper-uigap-half);
-    line-height: 1.7;
+    line-height: var(--paper-leading-relaxed);
     white-space: nowrap;
     flex-shrink: 0;
 }
@@ -513,7 +535,7 @@ body,
 @keyframes scaleInVariableMenu {
     from {
         opacity: 0;
-        transform: translateY(-0.25rem) scale(0.98);
+        transform: translateY(calc(var(--paper-uigap-third) * -1)) scale(var(--paper-scale-press));
     }
     to {
         opacity: 1;
@@ -522,12 +544,12 @@ body,
 }
 
 .actionVariableMenu::-webkit-scrollbar {
-    width: 0.25rem;
+    width: var(--paper-uigap-third);
 }
 
 .actionVariableMenu::-webkit-scrollbar-thumb {
     background: var(--paper-border);
-    border-radius: 0.125rem;
+    border-radius: var(--paper-uigap-sixth);
 }
 
 .actionVariableMenuItem {
@@ -550,22 +572,22 @@ body,
 .actionVariableMenuItemLeft {
     display: inline-flex;
     align-items: center;
-    gap: 0.375rem;
+    gap: var(--paper-uigap-half);
     min-width: 0;
     flex-shrink: 0;
 }
 
 .actionVariableMenuItemLeft [class*="PaperIcon"] {
     font-size: var(--paper-text-size-3);
-    width: 1rem;
-    height: 1rem;
+    width: var(--paper-icon-size-tiny);
+    height: var(--paper-icon-size-tiny);
     color: var(--paper-primary-deep);
     flex-shrink: 0;
 }
 
 .actionVariableMenuItemLabel {
     font-size: var(--paper-text-size-2);
-    font-weight: 500;
+    font-weight: var(--paper-weight-medium);
     color: var(--paper-text);
     white-space: nowrap;
 }
@@ -573,7 +595,7 @@ body,
 .actionInputBool {
     user-select: none;
     -webkit-user-select: none;
-    font-weight: 500;
+    font-weight: var(--paper-weight-medium);
     display: inline-block;
     transition: background-color var(--paper-tiny-transition) var(--paper-ease-standard), color var(--paper-tiny-transition) var(--paper-ease-standard);
 }
@@ -631,8 +653,8 @@ body,
     cursor: pointer;
     display: inline-flex;
     align-items: center;
-    gap: 0.125rem;
-    padding-right: 0.375rem;
+    gap: var(--paper-uigap-sixth);
+    padding-right: var(--paper-uigap-half);
     user-select: none;
     -webkit-user-select: none;
     transition: filter var(--paper-tiny-transition) var(--paper-ease-standard);
@@ -646,7 +668,7 @@ body,
 .actionVariableMenu.actionOptionMenu {
     min-width: 0;
     width: max-content;
-    max-width: 21.25rem;
+    max-width: var(--actions-menu-max);
 }
 
 /* variable-only pill, padding only when empty */
@@ -656,20 +678,20 @@ body,
     align-items: center;
     vertical-align: middle;
     gap: var(--paper-uigap-onefourth);
-    height: 1.375rem;
-    line-height: 1.375rem;
+    height: var(--paper-control-size-inline);
+    line-height: var(--paper-control-size-inline);
     padding: 0;
     cursor: pointer;
     outline: none;
 }
 
 .actionInput.actionVariableOnly[data-has-value="false"] {
-    padding: 0 0.25rem;
+    padding: 0 var(--paper-uigap-third);
 }
 
 /* array pills keep padding as click target */
 .actionInput.actionVariableOnly[data-array="true"] {
-    padding: 0 0.25rem;
+    padding: 0 var(--paper-uigap-third);
     cursor: text;
 }
 
@@ -680,7 +702,7 @@ body,
 
 .actionInput.actionVariableOnly[data-has-value="false"]:empty::before {
     content: attr(data-placeholder);
-    opacity: 0.65;
+    opacity: var(--paper-opacity-muted);
     pointer-events: none;
 }
 
@@ -726,7 +748,7 @@ body,
 .actionVariableFooterText {
     font-family: var(--paper-font-family-code);
     font-size: var(--paper-text-size-1);
-    line-height: 1;
+    line-height: var(--paper-leading-none);
     color: var(--paper-text-subtle);
     white-space: nowrap;
     overflow: hidden;
@@ -744,14 +766,14 @@ body,
     font-size: var(--paper-icon-size-small);
     width: var(--paper-icon-size-small);
     height: var(--paper-icon-size-small);
-    opacity: 0.7;
+    opacity: var(--paper-opacity-muted);
     pointer-events: none;
 }
 
 .actionVariableMenuItem.selectedOption {
     background: color-mix(in srgb, var(--paper-primary) 18%, transparent);
     color: var(--paper-primary);
-    font-weight: 600;
+    font-weight: var(--paper-weight-semibold);
 }
 
 .actionOptionCheck {
@@ -768,7 +790,7 @@ body,
     background: transparent;
     margin: calc(var(--paper-uigap-half) * -0.5) 0;
     position: relative;
-    z-index: 10;
+    z-index: var(--paper-z-float);
     transition: background-color var(--paper-tiny-transition) var(--paper-ease-standard);
 }
 
@@ -790,7 +812,7 @@ body,
     border-radius: var(--paper-border-radius-half);
     color: var(--paper-text-subtle);
     font-size: var(--paper-text-size-2);
-    font-weight: 500;
+    font-weight: var(--paper-weight-medium);
     cursor: pointer;
     transition: border-color var(--paper-tiny-transition) var(--paper-ease-standard), color var(--paper-tiny-transition) var(--paper-ease-standard), background-color var(--paper-tiny-transition) var(--paper-ease-standard), transform var(--paper-tiny-transition) var(--paper-ease-standard);
 }
@@ -799,7 +821,7 @@ body,
     border-color: var(--paper-primary);
     color: var(--paper-primary);
     background-color: color-mix(in srgb, var(--paper-primary) 18%, transparent);
-    transform: scale(1.01);
+    transform: scale(var(--paper-scale-hover));
 }
 
 .ghostDragContainer,
@@ -813,7 +835,7 @@ body,
     left: 0;
     width: auto;
     height: 100%;
-    z-index: 50;
+    z-index: var(--paper-z-sticky);
     background: var(--paper-surface);
     border-right: var(--paper-border-width) solid var(--paper-border);
     display: flex;
@@ -842,11 +864,11 @@ body,
     width: 60%;
     margin: var(--paper-uigap-onefourth) auto;
     background-color: var(--paper-border);
-    opacity: 0.6;
+    opacity: var(--paper-opacity-disabled);
 }
 
 .library-content {
-    width: 25rem;
+    width: var(--actions-library-width);
     height: 100%;
     display: flex;
     flex-direction: column;
@@ -972,8 +994,8 @@ body,
     align-items: center;
     justify-content: center;
     gap: var(--paper-uigap-half);
-    padding: 3rem 0;
-    opacity: 0.6;
+    padding: var(--paper-uigap-quadruple) 0;
+    opacity: var(--paper-opacity-disabled);
 }
 
 .library-block-wrapper {
@@ -994,7 +1016,7 @@ body,
     position: fixed;
     top: var(--paper-uigap);
     left: var(--paper-uigap);
-    z-index: 50;
+    z-index: var(--paper-z-sticky);
 }
 
 .trash-zone {
@@ -1010,7 +1032,7 @@ body,
     align-items: center;
     justify-content: center;
     color: var(--paper-text-subtle);
-    z-index: 60;
+    z-index: calc(var(--paper-z-sticky) + 10);
     transition: transform var(--paper-tiny-transition) var(--paper-ease-standard), background-color var(--paper-tiny-transition) var(--paper-ease-standard), color var(--paper-tiny-transition) var(--paper-ease-standard), border-color var(--paper-tiny-transition) var(--paper-ease-standard), opacity var(--paper-short-transition) var(--paper-ease-standard);
     cursor: pointer;
     user-select: none;
@@ -1024,7 +1046,7 @@ body,
 }
 
 .trash-zone.is-dragging {
-    opacity: 0.9;
+    opacity: var(--paper-opacity-soft);
     border-color: var(--paper-border-strong);
 }
 
@@ -1032,14 +1054,14 @@ body,
     background: color-mix(in srgb, var(--paper-danger) 25%, var(--paper-surface));
     color: var(--paper-danger);
     border-color: var(--paper-danger);
-    transform: scale(1.22);
+    transform: scale(var(--paper-scale-emphasis));
 }
 
 .canvas-top-right-controls {
     position: fixed;
     top: var(--paper-uigap);
     right: var(--paper-uigap);
-    z-index: 50;
+    z-index: var(--paper-z-sticky);
     display: flex;
     flex-direction: column;
     align-items: flex-end;
@@ -1055,7 +1077,7 @@ body,
     display: flex;
     flex-direction: column;
     gap: var(--paper-uigap-half);
-    max-width: 360px;
+    max-width: var(--actions-sync-status-max);
     padding: var(--paper-uigap);
     color: var(--paper-text);
     background: var(--paper-surface);
@@ -1063,8 +1085,8 @@ body,
 }
 
 .canvas-console-panel {
-    width: 20rem;
-    max-height: 15rem;
+    width: var(--actions-console-width);
+    max-height: var(--actions-console-height);
     border-radius: var(--paper-border-radius);
     background: color-mix(in srgb, var(--paper-surface) 72%, transparent);
     backdrop-filter: var(--paper-blur-heavy);
@@ -1102,7 +1124,7 @@ body,
 .canvas-console-body {
     padding: var(--paper-uigap-half);
     overflow-y: auto;
-    max-height: 11.25rem;
+    max-height: var(--actions-console-body-height);
     display: flex;
     flex-direction: column;
     gap: var(--paper-uigap-onefourth);
@@ -1118,7 +1140,7 @@ body,
     align-items: flex-start;
     gap: var(--paper-uigap-half);
     font-size: var(--paper-text-size-1);
-    line-height: 1.4;
+    line-height: var(--paper-leading-normal);
     word-break: break-word;
 }
 
@@ -1126,7 +1148,7 @@ body,
     color: var(--paper-text-subtle);
     font-size: var(--paper-text-size-1);
     flex-shrink: 0;
-    opacity: 0.6;
+    opacity: var(--paper-opacity-disabled);
 }
 
 .canvas-console-text {
@@ -1141,7 +1163,7 @@ body,
     border: var(--paper-border-width) solid var(--paper-border);
     border-top: var(--paper-thickest-border-width) solid var(--paper-warning);
     border-radius: var(--paper-border-radius);
-    width: 16.25rem;
+    width: var(--actions-note-width);
     user-select: none;
     -webkit-user-select: none;
     cursor: grab;
@@ -1153,7 +1175,7 @@ body,
 
 .canvas-note.dragging {
     cursor: grabbing;
-    z-index: 100;
+    z-index: var(--paper-z-drag);
     border-color: var(--paper-warning);
 }
 
@@ -1180,8 +1202,8 @@ body,
 
 .canvas-note-textarea {
     width: 100%;
-    min-height: 5.625rem;
-    max-height: 25rem;
+    min-height: var(--actions-note-min-height);
+    max-height: var(--actions-note-max-height);
     box-sizing: border-box;
     padding: var(--paper-uigap-threefourths);
     border: 0;
@@ -1190,7 +1212,7 @@ body,
     color: var(--paper-text);
     font-family: inherit;
     font-size: var(--paper-text-size-2);
-    line-height: 1.45;
+    line-height: var(--paper-leading-normal);
     resize: vertical;
     user-select: text;
     -webkit-user-select: text;
@@ -1199,5 +1221,5 @@ body,
 
 .canvas-note-textarea::placeholder {
     color: var(--paper-text-subtle);
-    opacity: 0.6;
+    opacity: var(--paper-opacity-disabled);
 }

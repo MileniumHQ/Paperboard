@@ -22,6 +22,6 @@
 }
 
 .MessageInput:disabled {
-    opacity: 0.6;
+    opacity: var(--paper-opacity-disabled);
     cursor: not-allowed;
 }

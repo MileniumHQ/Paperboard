@@ -57,14 +57,14 @@
     width: var(--paper-icon-size-small);
     height: var(--paper-icon-size-small);
     font-size: var(--paper-icon-size-small);
-    line-height: 1;
+    line-height: var(--paper-leading-none);
 }
 
 /* the glyph box is exactly the cell: no inherited line height pushing it
    below the label's center, no button icon margins shifting it sideways */
 .icon > * {
     margin: 0;
-    line-height: 1;
+    line-height: var(--paper-leading-none);
 }
 
 .appIcon {
@@ -84,7 +84,7 @@
 
 .app {
     color: var(--paper-text);
-    font-weight: 600;
+    font-weight: var(--paper-weight-semibold);
     margin-right: var(--paper-uigap-half);
 }
 

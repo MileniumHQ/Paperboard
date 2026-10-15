@@ -25,7 +25,7 @@ html, body {
 
 .big {
     font-size: var(--paper-text-size-10);
-    font-weight: 800;
+    font-weight: var(--paper-weight-bold);
     font-variant-numeric: tabular-nums;
 }
 
@@ -41,7 +41,7 @@ html, body {
 
 .clock .big {
     font-size: min(22cqw, 45cqh);
-    line-height: 1.1;
+    line-height: var(--paper-leading-tight);
 }
 
 .status {
@@ -57,7 +57,7 @@ html, body {
 }
 
 .status .label {
-    font-weight: 700;
+    font-weight: var(--paper-weight-bold);
 }
 
 button {

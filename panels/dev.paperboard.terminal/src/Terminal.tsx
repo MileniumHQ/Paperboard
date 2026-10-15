@@ -58,14 +58,14 @@ export function TerminalComponent(props: TerminalComponentProps) {
         const lightText = getVar("text-subtle", "#a0a0a0");
 
         term = new Terminal({
-            fontFamily: '"SUSE Mono", monospace',
-            fontSize: 14,
+            fontFamily: getVar("font-family-code", "monospace"),
+            fontSize: Number.parseFloat(getVar("text-size-2", "14px")),
             cursorBlink: true,
             theme: {
                 background: bg,
                 foreground: fg,
                 cursor: blue,
-                selectionBackground: "rgba(41, 129, 229, 0.3)",
+                selectionBackground: getVar("selection", "#2981e54d"),
                 black: getVar("surface-sunken", "#1d1d1d"),
                 red,
                 green,

@@ -64,7 +64,7 @@ const TopBar: Component<{
     return (
         <header
             style={{
-                height: "38px",
+                height: "var(--paperboard-titlebar-height)",
                 width: "100%",
                 display: "flex",
                 "align-items": "center",
@@ -75,7 +75,7 @@ const TopBar: Component<{
                 "border-bottom": `${getVarCss("border-width")} solid ${getVarCss("border")}`,
                 position: "relative",
                 "flex-shrink": 0,
-                "z-index": 2000,
+                "z-index": getVarCss("z-chrome"),
             }}
         >
             <PaperText
@@ -104,9 +104,9 @@ const TopBar: Component<{
             <div
                 style={{
                     position: "absolute",
-                    right: `${8 + captionReserve()}px`,
+                    right: `calc(${getVarCss("uigap-threefourths")} + ${captionReserve()}px)`,
                     display: "flex",
-                    gap: "6px",
+                    gap: getVarCss("uigap-half"),
                     "align-items": "center",
                     "-webkit-app-region": "no-drag",
                 }}

@@ -54,7 +54,7 @@ const rootStyle = {
 } as const;
 
 const columnStyle = {
-    "max-width": "62rem",
+    "max-width": getVarCss("page-width"),
     margin: "0 auto",
     display: "flex",
     "flex-direction": "column",
@@ -346,11 +346,11 @@ const PanelLibraryApp: Component<PanelLibraryAppProps> = (props) => {
                             />
                         </Show>
 
-                        <PaperMediaCardGroup minCardWidth="18rem">
+                        <PaperMediaCardGroup>
                             <For each={panels()}>
                                 {(panel) => (
                                     <PaperMediaCard
-                                        icon={<PanelIcon panel={panel} size="4.5rem" />}
+                                        icon={<PanelIcon panel={panel} size={getVarCss("avatar-size-xlarge")} />}
                                         title={panel.name}
                                         description={panel.description}
                                         badge={

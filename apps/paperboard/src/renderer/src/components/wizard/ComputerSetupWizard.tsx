@@ -8,6 +8,7 @@ import {
     PaperFlex,
     PaperText,
     useWizard,
+    getVarCss,
 } from "@mileniumhq/paperui";
 import {
     computersApi as computers,
@@ -212,7 +213,7 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
             onComplete={handleFinish}
             finishLabel="Add Computer"
             finishVariant="success"
-            style={{ width: "100%", height: "28rem" }}
+            style={{ width: "100%", height: "var(--paperboard-wizard-height)" }}
         >
             <WizardStepRouter />
 
@@ -221,7 +222,7 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
                     <PaperFlex
                         direction="column"
                         gap="full"
-                        style={{ width: "100%", "max-width": "26rem" }}
+                        style={{ width: "100%", "max-width": getVarCss("size-panel-small") }}
                     >
                         <PaperFlex direction="column" gap="half">
                             <PaperText preset="title">
@@ -268,7 +269,7 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
                     <PaperFlex
                         direction="column"
                         gap="full"
-                        style={{ width: "100%", "max-width": "26rem" }}
+                        style={{ width: "100%", "max-width": getVarCss("size-panel-small") }}
                     >
                         <PaperFlex direction="column" gap="half">
                             <PaperText preset="title">
@@ -324,7 +325,7 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
                     <PaperFlex
                         direction="column"
                         gap="full"
-                        style={{ width: "100%", "max-width": "26rem" }}
+                        style={{ width: "100%", "max-width": getVarCss("size-panel-small") }}
                     >
                         <PaperFlex direction="column" gap="half">
                             <PaperText preset="title">

@@ -109,7 +109,7 @@ const WidgetLibrary: Component<WidgetLibraryProps> = (props) => {
                     </PaperButton>
                 </Show>
                 <div class={styles.libraryTitle}>
-                    <PaperText size={3} weight={800}>{choosing() && open() ? openName() : "Add widgets"}</PaperText>
+                    <PaperText size={3} weight={700}>{choosing() && open() ? openName() : "Add widgets"}</PaperText>
                     <PaperText size={1} color="text-subtle">
                         {open() ? "Drag onto Home, or click to add" : "Choose where a widget comes from"}
                     </PaperText>

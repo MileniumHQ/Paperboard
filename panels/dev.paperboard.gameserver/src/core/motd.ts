@@ -6,6 +6,8 @@
 // The editor works on a MotdDoc: one styled cell per character, with "\n"
 // cells between lines, so an offset into the doc is an offset into the text.
 
+// paper-literal-ok-file: the colour table is Minecraft's legacy palette, data not styling
+
 export const DEFAULT_MOTD = "A Minecraft Server";
 
 /** the Multiplayer list shows two lines */

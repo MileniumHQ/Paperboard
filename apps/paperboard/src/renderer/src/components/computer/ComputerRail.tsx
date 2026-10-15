@@ -6,6 +6,7 @@ import {
     PaperRailAction,
     PaperSeparator,
     PaperIcon,
+    getVarCss,
 } from "@mileniumhq/paperui";
 import styles from "./ComputerRail.module.css";
 
@@ -44,9 +45,9 @@ const ComputerRail = (props: ComputerRailProps): JSX.Element => {
             <PaperSeparator
                 direction="vertical"
                 style={{
-                    height: "1px",
+                    height: getVarCss("border-width"),
                     width: "70%",
-                    margin: "4px auto",
+                    margin: `${getVarCss("uigap-third")} auto`,
                 }}
             />
             <For each={props.computers}>
@@ -87,9 +88,9 @@ const ComputerRail = (props: ComputerRailProps): JSX.Element => {
             <PaperSeparator
                 direction="vertical"
                 style={{
-                    height: "1px",
+                    height: getVarCss("border-width"),
                     width: "70%",
-                    margin: "4px auto",
+                    margin: `${getVarCss("uigap-third")} auto`,
                 }}
             />
             <PaperRailItem

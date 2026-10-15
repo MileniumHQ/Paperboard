@@ -1,5 +1,9 @@
 .page {
-    max-width: 62rem;
+    /* the library's own footprints: PaperUI has no token for a hero or screenshot */
+    --library-hero-size: 112px;
+    --library-shot-width: 544px;
+    --library-card-max: 288px;
+    max-width: var(--paper-page-width);
     margin: 0 auto;
     width: 100%;
     box-sizing: border-box;
@@ -25,7 +29,7 @@
     gap: var(--paper-uigap-onefourth);
     color: var(--paper-primary);
     text-decoration: none;
-    font-weight: 600;
+    font-weight: var(--paper-weight-semibold);
     border-radius: var(--paper-border-radius-half);
 }
 
@@ -45,8 +49,8 @@
 }
 
 .heroIcon {
-    width: 7rem;
-    height: 7rem;
+    width: var(--library-hero-size);
+    height: var(--library-hero-size);
     flex-shrink: 0;
     border-radius: 22%;
     object-fit: contain;
@@ -57,7 +61,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 4rem;
+    font-size: var(--paper-text-size-15);
     background: var(--paper-surface-inset);
 }
 
@@ -71,7 +75,7 @@
 
 .title {
     margin: 0;
-    line-height: 1.1;
+    line-height: var(--paper-leading-tight);
 }
 
 .heroAction {
@@ -83,7 +87,7 @@
 }
 
 .actionButton {
-    min-width: 10rem;
+    min-width: var(--paper-size-field);
 }
 
 
@@ -113,8 +117,8 @@
 .factLabel {
     font-family: var(--paper-font-family-rounded);
     font-size: var(--paper-text-size-1);
-    font-weight: 700;
-    letter-spacing: 0.06em;
+    font-weight: var(--paper-weight-bold);
+    letter-spacing: var(--paper-text-tracking);
     text-transform: uppercase;
     color: var(--paper-text-faint);
 }
@@ -122,7 +126,7 @@
 .factValue {
     font-family: var(--paper-font-family-rounded);
     font-size: var(--paper-text-size-5);
-    font-weight: 800;
+    font-weight: var(--paper-weight-bold);
     color: var(--paper-text-muted);
     white-space: nowrap;
     overflow: hidden;
@@ -152,7 +156,7 @@
 
 .shot {
     flex: 0 0 auto;
-    width: min(34rem, 85%);
+    width: min(var(--library-shot-width), 85%);
     scroll-snap-align: start;
 }
 
@@ -177,7 +181,7 @@
     display: grid;
     /* fixed, narrow columns so one or two cards match the three-card size
        instead of stretching across the page; the group stays centered */
-    grid-template-columns: repeat(auto-fit, minmax(15rem, 18rem));
+    grid-template-columns: repeat(auto-fit, minmax(var(--paper-size-card-min), var(--library-card-max)));
     justify-content: center;
     gap: var(--paper-uigap);
     align-items: stretch;
@@ -227,7 +231,7 @@
 }
 
 .rows th {
-    font-weight: 700;
+    font-weight: var(--paper-weight-bold);
     color: var(--paper-text);
     padding-right: var(--paper-uigap);
     white-space: nowrap;
@@ -239,6 +243,7 @@
 }
 
 /* narrow frames: the hero stacks and centers, the facts fold into two rows */
+/* paper-literal-ok: media queries cannot read custom properties */
 @media (max-width: 40rem) {
     .page {
         padding-left: var(--paper-uigap-sixfourths);

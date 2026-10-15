@@ -71,16 +71,16 @@ export const ConnectionLostOverlay: Component<ConnectionLostOverlayProps> = (
                 "-webkit-backdrop-filter": reducedMotion()
                     ? "none"
                     : getVarCss("blur-medium"),
-                "z-index": 100,
-                padding: "2rem",
+                "z-index": getVarCss("z-drag"),
+                padding: getVarCss("uigap-triple"),
             }}
         >
             <PaperFlex center direction="column" gap="half">
                 <PaperIcon
                     style={{
-                        "font-size": "3rem",
+                        "font-size": getVarCss("text-size-13"),
                         color: getVarCss("danger"),
-                        opacity: 0.9,
+                        opacity: getVarCss("opacity-soft"),
                     }}
                 >
                     cloud_off
@@ -93,7 +93,7 @@ export const ConnectionLostOverlay: Component<ConnectionLostOverlayProps> = (
                     color="text-subtle"
                     style={{
                         "text-align": "center",
-                        "max-width": "24rem",
+                        "max-width": getVarCss("size-panel-small"),
                     }}
                 >
                     Cannot communicate with{" "}
@@ -106,7 +106,7 @@ export const ConnectionLostOverlay: Component<ConnectionLostOverlayProps> = (
                     <PaperText
                         size={2}
                         color="text-subtle"
-                        style={{ "text-align": "center", "max-width": "24rem" }}
+                        style={{ "text-align": "center", "max-width": getVarCss("size-panel-small") }}
                     >
                         {props.computer.status?.error}
                     </PaperText>

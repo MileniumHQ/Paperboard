@@ -499,7 +499,7 @@ export default function Commands() {
                                                     </PaperSelectMenu>
                                                 </div>
                                                 <PaperFlex
-                                                    style={{ flex: 1, "min-width": "9rem" }}
+                                                    style={{ flex: 1, "min-width": getVarCss("size-field-medium") }}
                                                 >
                                                     <PaperInput
                                                         fullWidth

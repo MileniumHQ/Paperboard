@@ -20,6 +20,7 @@ import { shouldSkipUpdate, runUpdateOrchestrator, disposeAppUpdater } from "./up
 import { initAppSettingsSync } from "./appSettings";
 import { logger } from "../../papercrane/logger";
 import {
+    TITLEBAR_HEIGHT,
     TITLEBAR_OVERLAY_COLORS,
     TITLEBAR_SYMBOL_COLORS,
     WINDOW_BACKGROUND_COLORS,
@@ -149,7 +150,7 @@ function getTitleBarOverlayOptions() {
         symbolColor: isDark
             ? TITLEBAR_SYMBOL_COLORS.dark
             : TITLEBAR_SYMBOL_COLORS.light,
-        height: 38,
+        height: TITLEBAR_HEIGHT,
     };
 }
 

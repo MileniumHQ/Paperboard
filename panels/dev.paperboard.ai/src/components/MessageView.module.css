@@ -48,7 +48,7 @@
     color: inherit;
     font-family: inherit;
     font-size: var(--paper-text-size-1);
-    opacity: 0.85;
+    opacity: var(--paper-opacity-soft);
     text-decoration: underline;
     cursor: pointer;
 }
