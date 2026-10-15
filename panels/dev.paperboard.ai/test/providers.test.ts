@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { apiKeySecretName, connectionLabel, credentialsAllowed, definitionOf, endpointLabel, normalizeBaseUrl, unlistedModelReason } from "../src/core/providers";
-import { checkCommandShape, commandSuggestions, MAX_AGENT_ARGS, splitArgs, validateCustomAgent } from "../src/core/agents";
+import { checkCommandShape, commandSuggestions, MAX_AGENT_ARGS, modePicker, splitArgs, validateCustomAgent } from "../src/core/agents";
 import { providerClients } from "../src/service/provider";
 import { REASONING_LEVELS, isReasoningLevel, reasoningToThink } from "../src/core/reasoning";
 import { compactCount, groupTurns, isRoundEmpty, isThinkingLive, replyText, turnStats } from "../src/core/chain";
@@ -153,6 +153,15 @@ describe("custom agents", () => {
         expect(commandSuggestions("/re", commands).map((c) => c.name)).toEqual(["review", "rename"]);
         expect(commandSuggestions("/review now", commands)).toEqual([]);
         expect(commandSuggestions("hi /re", commands)).toEqual([]);
+    });
+
+    it("offers the composer's mode picker only once the session lists modes, on the session's current mode", () => {
+        const modes = [{ id: "default", name: "Ask" }, { id: "acceptEdits", name: "Accept edits" }, { id: "plan", name: "Plan" }];
+        expect(modePicker(undefined, "plan")).toBeUndefined();
+        expect(modePicker({ modes: [], commands: [] }, "plan")).toBeUndefined();
+        expect(modePicker({ modes, mode: "acceptEdits", commands: [] }, "plan")?.current?.name).toBe("Accept edits");
+        expect(modePicker({ modes, commands: [] }, "plan")?.current?.name).toBe("Plan");
+        expect(modePicker({ modes, commands: [] }, "gone")?.current).toBeUndefined();
     });
 });
 

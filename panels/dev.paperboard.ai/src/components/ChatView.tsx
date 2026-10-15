@@ -2,6 +2,7 @@ import { createEffect, createMemo, createSignal, Index, Match, on, onCleanup, on
 import { PaperButton, PaperEmptyState, PaperIcon, PaperPage, PaperText } from "@mileniumhq/paperui";
 import { actionsApi } from "@mileniumhq/paperapi";
 import { UI_ACTION_IDS } from "../contract";
+import { modePicker } from "../core/agents";
 import { connectionLabel, OLLAMA_PROVIDER, OLLAMA_PROVIDER_ID, unlistedModelReason } from "../core/providers";
 import type { ReasoningLevel } from "../core/reasoning";
 import type { Attachment, Conversation } from "../core/types";
@@ -37,6 +38,7 @@ export default function ChatView() {
     const [error, setError] = createSignal("");
     const [modelsOpen, setModelsOpen] = createSignal(false);
     const [starting, setStarting] = createSignal(false);
+    const [modeBusy, setModeBusy] = createSignal(false);
     // a draft agent chat's project, applied when the first message creates the chat
     const [draftProject, setDraftProject] = createSignal<string>();
     let scroller: HTMLDivElement | undefined;
@@ -132,6 +134,24 @@ export default function ChatView() {
     const lastProject = () => (state.lastProject && state.projects.includes(state.lastProject) ? state.lastProject : undefined);
     const project = () => (conversation() ? summary()?.project ?? conversation()?.project : draftProject() ?? lastProject());
     const generating = () => Boolean(conversation() && state.generating.includes(conversation()!.id));
+    // an agent chat's permission mode, once its live session lists modes
+    const modes = () => {
+        const c = conversation();
+        return c && agentConnection() ? modePicker(state.agentSessions[c.id], c.mode) : undefined;
+    };
+    const changeMode = async (mode: string) => {
+        const id = conversation()?.id;
+        if (!id) return;
+        setModeBusy(true);
+        setError("");
+        try {
+            await call(UI_ACTION_IDS.setAgentMode, { id, mode });
+        } catch (err) {
+            setError(errorText(err));
+        } finally {
+            setModeBusy(false);
+        }
+    };
     const waitingHere = () => state.approvals.filter((a) => a.conversationId === conversation()?.id).length;
     const hasOllama = () => state.connections.some((c) => c.kind === "ollama");
     // Ollama's runtime matters when this chat's model is Ollama's, or when
@@ -359,7 +379,6 @@ export default function ChatView() {
                                     connection={agent()}
                                     conversationId={conversation()?.id}
                                     project={project()}
-                                    mode={conversation()?.mode}
                                     generating={generating()}
                                     onDraftProject={setDraftProject}
                                     onError={setError}
@@ -367,6 +386,9 @@ export default function ChatView() {
                             )}
                         </Show>
                     }
+                    modes={modes()}
+                    modeDisabled={modeBusy()}
+                    onModeChange={(mode) => void changeMode(mode)}
                     commands={conversation() ? state.agentSessions[conversation()!.id]?.commands : undefined}
                     placeholder={agentConnection() ? `Tell ${agentConnection()!.label} what to do` : undefined}
                     disabled={Boolean(disabledReason())}

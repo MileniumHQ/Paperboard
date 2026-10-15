@@ -11,7 +11,7 @@ import {
 import { MAX_ATTACHMENTS } from "../core/attachments";
 import { REASONING_LABELS, REASONING_LEVELS, type ReasoningLevel } from "../core/reasoning";
 import { commandSuggestions } from "../core/agents";
-import type { AgentCommand, Attachment } from "../core/types";
+import type { AgentCommand, AgentMode, Attachment } from "../core/types";
 import { attachmentsFromFiles } from "../lib/attachments";
 import { makerOf } from "../lib/catalog";
 import { errorText } from "../lib/state";
@@ -36,8 +36,12 @@ export interface ComposerProps {
     /** a coding agent's slash commands, suggested while typing one */
     commands?: AgentCommand[];
     placeholder?: string;
-    /** shown above the message box (a coding agent's project and mode) */
+    /** shown above the message box (a coding agent's project) */
     toolbar?: JSX.Element;
+    /** a coding agent chat's permission modes, picked next to the reasoning level */
+    modes?: { modes: AgentMode[]; current: AgentMode | undefined };
+    modeDisabled?: boolean;
+    onModeChange?: (mode: string) => void;
     /** a coding agent chat: its agent, whose logo stands for the model */
     agent?: string;
 }
@@ -51,8 +55,10 @@ export default function Composer(props: ComposerProps) {
     const [attachError, setAttachError] = createSignal("");
     const [dragging, setDragging] = createSignal(false);
     const reasoningMenu = useContextMenuState("below");
+    const modeMenu = useContextMenuState("below");
     let input: HTMLTextAreaElement | undefined;
     let reasoningButton: HTMLButtonElement | undefined;
+    let modeButton: HTMLButtonElement | undefined;
     let picker: HTMLInputElement | undefined;
 
     const suggestions = () => commandSuggestions(text(), props.commands ?? []);
@@ -205,7 +211,7 @@ export default function Composer(props: ComposerProps) {
                         <button
                             ref={reasoningButton}
                             type="button"
-                            class={styles.reasoning}
+                            class={styles.picker}
                             disabled={props.disabled}
                             aria-haspopup="menu"
                             aria-expanded={reasoningMenu.isOpen()}
@@ -213,8 +219,27 @@ export default function Composer(props: ComposerProps) {
                             onClick={() => reasoningMenu.openBelow(reasoningButton!)}
                         >
                             <span>{REASONING_LABELS[props.reasoning]}</span>
-                            <PaperIcon class={styles.reasoningChevron}>expand_more</PaperIcon>
+                            <PaperIcon class={styles.pickerChevron}>expand_more</PaperIcon>
                         </button>
+                    </Show>
+
+                    <Show when={props.modes}>
+                        {(picker) => (
+                            <button
+                                ref={modeButton}
+                                type="button"
+                                class={styles.picker}
+                                disabled={props.modeDisabled}
+                                title={picker().current?.description}
+                                aria-haspopup="menu"
+                                aria-expanded={modeMenu.isOpen()}
+                                aria-label={`Agent mode: ${picker().current?.name ?? "not set"}`}
+                                onClick={() => modeMenu.openBelow(modeButton!)}
+                            >
+                                <span>{picker().current?.name ?? "Mode"}</span>
+                                <PaperIcon class={styles.pickerChevron}>expand_more</PaperIcon>
+                            </button>
+                        )}
                     </Show>
 
                     <span class={styles.spacer} />
@@ -289,6 +314,29 @@ export default function Composer(props: ComposerProps) {
                             }}
                         >
                             {REASONING_LABELS[level]}
+                        </PaperContextMenuItem>
+                    )}
+                </For>
+            </PaperContextMenu>
+
+            <PaperContextMenu
+                open={modeMenu.isOpen()}
+                target={modeMenu.target()}
+                placement={modeMenu.placement()}
+                onClose={modeMenu.close}
+            >
+                <For each={props.modes?.modes ?? []}>
+                    {(mode) => (
+                        <PaperContextMenuItem
+                            value={mode.id}
+                            description={mode.description}
+                            icon={props.modes?.current?.id === mode.id ? "check" : undefined}
+                            onClick={() => {
+                                props.onModeChange?.(mode.id);
+                                modeMenu.close();
+                            }}
+                        >
+                            {mode.name}
                         </PaperContextMenuItem>
                     )}
                 </For>

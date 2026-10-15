@@ -113,7 +113,9 @@
     color: var(--paper-text-muted);
 }
 
-.reasoning {
+/* the reasoning level and an agent's mode: quiet text that turns blue on
+   hover, like the model button */
+.picker {
     display: inline-flex;
     align-items: center;
     gap: var(--paper-uigap-onefourth);
@@ -126,33 +128,27 @@
     font: inherit;
     font-size: var(--paper-text-size-2);
     cursor: pointer;
-    transition:
-        color var(--paper-short-transition) var(--paper-ease-standard),
-        opacity var(--paper-short-transition) var(--paper-ease-standard);
+    transition: color var(--paper-short-transition) var(--paper-ease-standard);
 }
 
-.reasoning:hover:not(:disabled) {
-    color: var(--paper-text);
+.picker:hover:not(:disabled) {
+    color: var(--paper-primary);
 }
 
-.reasoning:disabled {
+.picker:disabled {
     opacity: var(--paper-opacity-dim);
     cursor: default;
 }
 
-.reasoning:focus-visible {
+.picker:focus-visible {
     outline: var(--paper-focus-ring);
     outline-offset: var(--paper-focus-offset);
     border-radius: var(--paper-border-radius-half);
 }
 
-.reasoningChevron {
+/* still: the chevron does not turn when the menu opens */
+.pickerChevron {
     font-size: var(--paper-icon-size-small);
-    transition: transform var(--paper-short-transition) var(--paper-ease-standard);
-}
-
-.reasoning[aria-expanded="true"] .reasoningChevron {
-    transform: rotate(180deg);
 }
 
 .attach {
