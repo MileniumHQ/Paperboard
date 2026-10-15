@@ -99,7 +99,7 @@ export default function ProviderWizard(props: ProviderWizardProps) {
                             <PaperSelectorItem
                                 value="agent"
                                 icon="terminal"
-                                description="Coding agents you installed, like Claude Code, Codex or Gemini CLI. Pick as many as you like."
+                                description="Coding agents you installed, like Codex, Claude Code or OpenCode. Pick as many as you like."
                             >
                                 Coding agents
                             </PaperSelectorItem>

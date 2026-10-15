@@ -472,8 +472,9 @@ describe("AiApp widget actions", () => {
 });
 
 describe("coding agent connections", () => {
-    // the registry's Claude adapter is installed too, but Claude Code itself is the built-in
-    const installed = new Set(["claude", "claude-agent-acp", "gemini"]);
+    // the registry's Claude adapter is installed too, but Claude Code itself is
+    // the built-in; Gemini CLI is installed but retired
+    const installed = new Set(["claude", "claude-agent-acp", "qwen", "codex-acp", "gemini"]);
     // every installed agent is the fake ACP agent, offering two models
     const FAKE_AGENT = path.join(import.meta.dir, "fixtures", "fakeAcpAgent.mjs");
     const findAgent = async (command: string) =>
@@ -495,23 +496,33 @@ describe("coding agent connections", () => {
         }
     }
 
-    it("lists the agents found on this computer, with Claude Code bridged in place of the adapter", async () => {
+    it("lists the agents found on this computer, most used first, with Claude Code bridged in place of the adapter", async () => {
         await withApp(async (app) => {
-            expect(await app.installedAgents()).toEqual(["claude-code", "gemini"]);
+            expect(await app.installedAgents()).toEqual(["codex-acp", "claude-code", "qwen-code"]);
         });
+    });
+
+    it("refuses to add a retired agent, but keeps one added before", async () => {
+        await withApp(
+            async (app) => {
+                await expect(app.addConnection({ kind: "agent", agent: "gemini" })).rejects.toThrow("Gemini CLI was retired by its maker");
+                await app.checkAgent("agent-0000aa01");
+            },
+            { version: 2, connections: [{ id: "agent-0000aa01", kind: "agent", label: "Gemini CLI", agent: "gemini" }] },
+        );
     });
 
     it("adds an installed agent once, listed by the models it offers, which are saved and listed without starting it", async () => {
         let saved: Record<string, unknown> = {};
         await withApp(async (app, ctx) => {
-            const added = await app.addConnection({ kind: "agent", agent: "gemini" });
-            expect(added).toMatchObject({ kind: "agent", agent: "gemini", label: "Gemini CLI" });
+            const added = await app.addConnection({ kind: "agent", agent: "qwen-code" });
+            expect(added).toMatchObject({ kind: "agent", agent: "qwen-code", label: "Qwen Code" });
             expect(ctx.state.models.filter((m) => m.provider === added.id)).toEqual([
                 expect.objectContaining({ name: "big", label: "Big Model", description: "Thinks hard", capabilities: ["agent"] }),
                 expect.objectContaining({ name: "small", label: "Small Model", capabilities: ["agent"] }),
                 expect.objectContaining({ name: "auto", label: "Auto", capabilities: ["agent"] }),
             ]);
-            await expect(app.addConnection({ kind: "agent", agent: "gemini" })).rejects.toThrow("Gemini CLI is already added.");
+            await expect(app.addConnection({ kind: "agent", agent: "qwen-code" })).rejects.toThrow("Qwen Code is already added.");
             const deadline = Date.now() + 3000;
             while (!(savedConfig as { agentModels?: object }).agentModels && Date.now() < deadline) await new Promise((r) => setTimeout(r, 10));
             expect((savedConfig as { agentModels: Record<string, unknown> }).agentModels[added.id]).toEqual([
@@ -532,8 +543,8 @@ describe("coding agent connections", () => {
 
     it("explains how to install an agent that isn't on this computer", async () => {
         await withApp(async (app, ctx) => {
-            const added = await app.addConnection({ kind: "agent", agent: "codex-acp" });
-            expect(ctx.state.modelErrors[added.id]).toBe("Codex isn't installed on this computer. Install it with: npm install -g @agentclientprotocol/codex-acp");
+            const added = await app.addConnection({ kind: "agent", agent: "cline" });
+            expect(ctx.state.modelErrors[added.id]).toBe("Cline isn't installed on this computer. Install it with: npm install -g cline");
         });
     });
 
@@ -548,8 +559,8 @@ describe("coding agent connections", () => {
     it("works in projects inside its own files, remembers the last, and starts the next agent chat there", async () => {
         try {
             await withApp(async (app, ctx) => {
-                const agent = await app.addConnection({ kind: "agent", agent: "gemini" });
-                const c = await app.newConversation("Gemini CLI", agent.id);
+                const agent = await app.addConnection({ kind: "agent", agent: "qwen-code" });
+                const c = await app.newConversation("Qwen Code", agent.id);
                 expect(c.project).toBeUndefined();
                 await expect(app.createProject("../escape")).rejects.toThrow("Use letters, numbers");
                 await expect(app.setConversationProject(c.id, "missing")).rejects.toThrow('The project "missing" no longer exists.');
@@ -562,7 +573,7 @@ describe("coding agent connections", () => {
                 await expect(app.setConversationProject(c.id, "link")).rejects.toThrow("is not a project folder");
                 expect(await app.setConversationProject(c.id, "My App")).toBe("My App");
                 expect((savedConfig as { lastProject: string }).lastProject).toBe("My App");
-                expect((await app.newConversation("Gemini CLI", agent.id)).project).toBe("My App");
+                expect((await app.newConversation("Qwen Code", agent.id)).project).toBe("My App");
             });
         } finally {
             fs.rmSync(path.join(filesDir, "agent"), { recursive: true, force: true });

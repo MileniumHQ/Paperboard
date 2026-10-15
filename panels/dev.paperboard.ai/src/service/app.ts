@@ -375,6 +375,7 @@ export class AiApp {
         } else {
             const agent = typeof input.agent === "string" ? registryAgent(input.agent) : undefined;
             if (!agent) throw new Error("Unknown agent.");
+            if (!AGENT_REGISTRY.includes(agent)) throw new Error(`${agent.name} was retired by its maker and can't be added.`);
             if (stored.some((c) => c.kind === "agent" && c.agent === agent.id)) throw new Error(`${agent.name} is already added.`);
             added = { id, kind: "agent", agent: agent.id, label: AiApp.cleanLabel(input.label, agent.name) };
         }

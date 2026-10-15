@@ -37,7 +37,26 @@ const CLAUDE_CODE: RegistryAgent = {
 };
 const REPLACED_BY_BUILT_INS = new Set(["claude-acp"]);
 
-export const AGENT_REGISTRY: readonly RegistryAgent[] = [CLAUDE_CODE, ...(snapshot.agents as RegistryAgent[]).filter((a) => !REPLACED_BY_BUILT_INS.has(a.id))];
+/**
+ * Still in the registry, but retired by their makers: Google ended Gemini CLI
+ * for individual accounts on 2026-06-18 in favour of Antigravity CLI. A
+ * connection added before keeps working; none can be added.
+ */
+const RETIRED = new Set(["gemini"]);
+
+/**
+ * The most used agents, most used first: by weekly npm installs of each
+ * agent's own CLI and its GitHub stars, checked 2026-10-15 (Cursor, which
+ * doesn't ship on npm, by how often 2026 roundups name it). The rest keep the
+ * registry's order after them.
+ */
+const POPULAR = ["codex-acp", CLAUDE_CODE_ID, "opencode", "github-copilot-cli", "cursor", "pi-acp", "cline", "goose", "qwen-code", "kilo", "grok-build", "kimi"];
+const popularity = (id: string) => (POPULAR.includes(id) ? POPULAR.indexOf(id) : POPULAR.length);
+
+const ALL_AGENTS: readonly RegistryAgent[] = [CLAUDE_CODE, ...(snapshot.agents as RegistryAgent[]).filter((a) => !REPLACED_BY_BUILT_INS.has(a.id))];
+
+/** The agents that can be added, most used first. */
+export const AGENT_REGISTRY: readonly RegistryAgent[] = ALL_AGENTS.filter((a) => !RETIRED.has(a.id)).sort((a, b) => popularity(a.id) - popularity(b.id));
 export const AGENT_REGISTRY_DATE: string = snapshot.capturedAt;
 
 /** A connection running a command the user typed rather than a registry agent. */
@@ -46,8 +65,9 @@ export const MAX_AGENT_ARGS = 32;
 export const MAX_AGENT_ARG_CHARS = 1024;
 export const MAX_AGENT_COMMAND_CHARS = 1024;
 
+/** A registry agent by id, retired ones included: connections to them still run. */
 export function registryAgent(id: string | undefined): RegistryAgent | undefined {
-    return AGENT_REGISTRY.find((a) => a.id === id);
+    return ALL_AGENTS.find((a) => a.id === id);
 }
 
 /** The command line that installs a registry agent, or where to get it. */
