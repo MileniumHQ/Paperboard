@@ -1,6 +1,9 @@
 import { invoke, on } from "./ipc";
 import { newClientId } from "./channels";
 import { requirePanelId } from "./panelIdentity";
+import { openDialog, saveDialog } from "./fileDialog";
+
+export { FileDialogError, type FileDialogErrorCode, type FileDialogFilter, type OpenDialogOptions, type OpenDialogResult, type SaveDialogOptions, type SaveDialogResult } from "./fileDialog";
 
 // every file call names the panel whose storage it touches: an omitted id
 // used to fall back to "whoever this document is", which is ambient identity
@@ -84,6 +87,12 @@ export const fileApi = {
 
     clear: (appId: string): Promise<boolean> =>
         invoke("file-clear", { appId: owner(appId) }),
+
+    /** a save dialog that copies sourcePath out of the panel's storage */
+    saveDialog,
+
+    /** an open dialog that copies the chosen file into targetPath */
+    openDialog,
 };
 
 export const files = fileApi;

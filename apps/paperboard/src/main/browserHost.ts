@@ -16,6 +16,8 @@
 //   panels  http://<computerId>.<panelId>.paperboard.localhost:<port>/
 // Browsers resolve *.localhost to loopback and treat it as a secure context.
 import * as http from "http";
+import type { Readable } from "stream";
+import { pipeline } from "stream/promises";
 import { logger } from "../../papercrane/logger";
 import { parsePanelHost } from "./panelAssets";
 import { readShellFile } from "./shellAssets";
@@ -45,6 +47,13 @@ export interface BrowserHostOptions {
     invoke: Record<string, (args: unknown) => unknown>;
     send?: Record<string, (...args: unknown[]) => void>;
     servePanel: (computerId: string, panelId: string, pathname: string) => Promise<Response>;
+    // a panel's save and open dialogs run in the browser; these move the
+    // bytes. Failures throw an error carrying a `code` the renderer reports.
+    panelFiles?: {
+        stat(args: unknown): Promise<{ size: number }>;
+        read(args: unknown): Promise<{ size: number; body: Readable }>;
+        write(args: unknown, body: Readable, size: number): Promise<unknown>;
+    };
 }
 
 export interface BrowserHost {
@@ -140,6 +149,72 @@ export function startBrowserHost(opts: BrowserHostOptions): Promise<BrowserHost>
         }
     };
 
+    const failPanelFile = (res: http.ServerResponse, err: any) => {
+        if (res.headersSent) {
+            res.destroy();
+            return;
+        }
+        const code = typeof err?.code === "string" ? err.code : "failed";
+        sendJson(res, code === "invalid-request" ? 400 : 409, { status: "failed", code, message: err?.message || String(err) });
+    };
+
+    // shell origin only, like the bridge; the bytes never pass the JSON cap
+    const handlePanelFileRead = async (req: http.IncomingMessage, res: http.ServerResponse) => {
+        assertShellCaller(req);
+        if (!opts.panelFiles) throw new HttpError(404, "Panel files are not available");
+        const args = await readJsonBody(req);
+        let file: { size: number; body: Readable };
+        try {
+            file = await opts.panelFiles.read(args);
+        } catch (err) {
+            logger.debug("[BrowserHost] panel file read refused:", (err as Error)?.message ?? err);
+            failPanelFile(res, err);
+            return;
+        }
+        res.writeHead(200, {
+            "Content-Type": "application/octet-stream",
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+            ...(Number.isFinite(file.size) ? { "Content-Length": String(file.size) } : {}),
+        });
+        // a tab that goes away cancels the daemon side too
+        await pipeline(file.body, res).catch((err) => {
+            logger.debug("[BrowserHost] panel file read ended:", err?.message || err);
+            res.destroy();
+        });
+    };
+
+    const handlePanelFileStat = async (req: http.IncomingMessage, res: http.ServerResponse) => {
+        assertShellCaller(req);
+        if (!opts.panelFiles) throw new HttpError(404, "Panel files are not available");
+        const args = await readJsonBody(req);
+        try {
+            sendJson(res, 200, await opts.panelFiles.stat(args));
+        } catch (err) {
+            failPanelFile(res, err);
+        }
+    };
+
+    const handlePanelFileWrite = async (req: http.IncomingMessage, res: http.ServerResponse, url: URL) => {
+        if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
+        if (req.headers.origin !== origin) throw new HttpError(403, "Shell bridge is shell-origin only");
+        if (!opts.panelFiles) throw new HttpError(404, "Panel files are not available");
+        const size = Number(req.headers["content-length"]);
+        if (!Number.isSafeInteger(size) || size < 0) throw new HttpError(411, "A file upload needs a Content-Length");
+        let args: unknown;
+        try {
+            args = JSON.parse(url.searchParams.get("request") || "null");
+        } catch (err) {
+            throw new HttpError(400, `Invalid request parameter: ${String(err)}`);
+        }
+        try {
+            sendJson(res, 200, await opts.panelFiles.write(args, req, size));
+        } catch (err) {
+            req.resume();
+            failPanelFile(res, err);
+        }
+    };
+
     const handleSend = async (channel: string, req: http.IncomingMessage, res: http.ServerResponse) => {
         assertShellCaller(req);
         const handler = opts.send && Object.hasOwn(opts.send, channel) ? opts.send[channel] : undefined;
@@ -229,6 +304,9 @@ export function startBrowserHost(opts: BrowserHostOptions): Promise<BrowserHost>
             return handleSend(url.pathname.slice("/_shell/send/".length), req, res);
         }
         if (url.pathname === "/_shell/events") return handleEvents(req, res);
+        if (url.pathname === "/_shell/panel-file/stat") return handlePanelFileStat(req, res);
+        if (url.pathname === "/_shell/panel-file/read") return handlePanelFileRead(req, res);
+        if (url.pathname === "/_shell/panel-file/write") return handlePanelFileWrite(req, res, url);
         if (req.method !== "GET" && req.method !== "HEAD") throw new HttpError(405, "Method not allowed");
         if (opts.rendererDevUrl) return proxyRenderer(req, res, opts.rendererDevUrl);
         return serveRendererFile(url.pathname, res);

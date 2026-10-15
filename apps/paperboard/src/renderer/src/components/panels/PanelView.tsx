@@ -3,6 +3,7 @@ import { type Component, createEffect, createSignal, For, Show, onCleanup, onMou
 import { recordUse, liveKeys, MAX_LIVE_IFRAMES } from "./panelLru";
 import LoadingOverlay from "./LoadingOverlay";
 import { panelUrl } from "../../lib/shell";
+import { FILE_DIALOG_RESULT, parseFileDialogMessage, runPanelFileDialog } from "../../lib/panelFileDialog";
 
 export type RestartState = { kind: "restarting" } | { kind: "failed"; message: string };
 
@@ -25,6 +26,7 @@ const PanelFrame: Component<{ panelKey: string; current: boolean; reload: number
     createEffect(() => {
         const reload = props.reload;
         generation = crypto.randomUUID();
+        const current = generation;
         setReady(false); setFailure("");
         if (frame) frame.src = panelUrl(computerId, panelId, `?_r=${reload}&generation=${generation}`);
         const timer = setTimeout(() => setFailure("The panel did not finish connecting to its service."), 25_000);
@@ -34,6 +36,13 @@ const PanelFrame: Component<{ panelKey: string; current: boolean; reload: number
                 clearTimeout(timer); setReady(true); setFailure("");
             } else if (event.data.type === "paperboard:failed") {
                 clearTimeout(timer); setFailure(String(event.data.message || "Panel initialization failed"));
+            } else {
+                // a save or open dialog, answered on the frame that asked
+                const request = parseFileDialogMessage(event.data);
+                const target = frame?.contentWindow;
+                if (!request || !target) return;
+                void runPanelFileDialog(computerId, panelId, request).then((result) =>
+                    target.postMessage({ type: FILE_DIALOG_RESULT, generation: current, requestId: request.requestId, result }, "*"));
             }
         };
         window.addEventListener("message", receive);

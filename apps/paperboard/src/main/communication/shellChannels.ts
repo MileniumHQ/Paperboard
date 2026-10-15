@@ -16,6 +16,8 @@ export const SHELL_INVOKE_CHANNELS = [
     "app-version",
     "app-update-state",
     "open-update-download",
+    "panel-file-save",
+    "panel-file-open",
 ] as const;
 
 export const SHELL_SEND_CHANNELS = [

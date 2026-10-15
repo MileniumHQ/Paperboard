@@ -26,6 +26,8 @@ import {
 } from "../../papercrane/themeConstants";
 import { parsePanelHost, servePanelAsset } from "./panelServe";
 import { readShellFile, SHELL_HOST, SHELL_ORIGIN, SHELL_SCHEME } from "./shellAssets";
+import { readPanelFileForBrowser, statPanelFileForBrowser, writePanelFileFromBrowser } from "./panelFileTransfer";
+import { poolEndpoint } from "./panelFileEndpoint";
 import { startBrowserHost, type BrowserHost } from "./browserHost";
 import { createShellInvokeHandlers, SHARED_SHELL_INVOKE_CHANNELS } from "./communication/shellHandlers";
 import { applySavedAppSettings } from "./communication/shelldata";
@@ -278,6 +280,11 @@ function ensureBrowserHost(): Promise<BrowserHost> {
                 "app-settings-changed": () => applySavedAppSettings(),
             },
             servePanel: servePanelAsset,
+            panelFiles: {
+                stat: (args) => statPanelFileForBrowser(args, poolEndpoint),
+                read: (args) => readPanelFileForBrowser(args, poolEndpoint),
+                write: (args, body, size) => writePanelFileFromBrowser(args, body, size, poolEndpoint),
+            },
         });
         removeBrowserPushSink = addShellPushSink((channel, payload) => host.push(channel, payload));
         ensureDesktopTray();

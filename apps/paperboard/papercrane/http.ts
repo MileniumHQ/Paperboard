@@ -16,6 +16,7 @@ import {
     isMainBearer,
 } from "./dav";
 import type { PaperCraneAuth } from "./auth";
+import { handlePanelFileRequest, PANEL_FILES_PREFIX } from "./panelFiles";
 
 export interface HttpContext {
     auth?: PaperCraneAuth;
@@ -59,6 +60,11 @@ export function handleHttpRequest(
         pathname.startsWith(`${DAV_PREFIX}/`)
     ) {
         void handleDavRequest(engine, sessions, ctx.auth, req, res);
+        return;
+    }
+
+    if (pathname.startsWith(PANEL_FILES_PREFIX)) {
+        void handlePanelFileRequest(engine, ctx.auth, req, res);
         return;
     }
 

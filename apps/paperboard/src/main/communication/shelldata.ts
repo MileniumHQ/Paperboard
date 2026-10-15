@@ -1,7 +1,7 @@
 // shell-only IPC; data operations flow through daemon.
 // Every handler below validates event.senderFrame.url via shellGuard:
 // panel:// origins get a typed PANEL_IPC_REFUSED, never an answer.
-import { type IpcMain, app, clipboard, shell } from "electron";
+import { type IpcMain, type IpcMainInvokeEvent, BrowserWindow, app, clipboard, dialog, shell } from "electron";
 import { broadcastAppSettings, syncTitleBarOverlays, applyNativeTheme, applyRunOnStartup } from "../appSettings";
 import * as fs from "fs";
 import * as path from "path";
@@ -10,6 +10,28 @@ import { logger } from "../../../papercrane/logger";
 import { getAppUpdateState } from "../appUpdateSession";
 import { assertShellFrame, isRefusedFrame } from "./shellGuard";
 import { createShellInvokeHandlers, SHARED_SHELL_INVOKE_CHANNELS } from "./shellHandlers";
+import { runPanelOpenDialog, runPanelSaveDialog, type PanelFileDialogDeps } from "../panelFileTransfer";
+import { poolEndpoint } from "../panelFileEndpoint";
+import type { FileDialogFilter } from "../../shared/panelFileDialog";
+
+// native dialogs, modal to the window whose panel asked
+function nativeFileDialogs(event: IpcMainInvokeEvent): PanelFileDialogDeps {
+    const window = BrowserWindow.fromWebContents(event.sender);
+    const filters = (list: FileDialogFilter[]) => list.map((f) => ({ name: f.name, extensions: f.extensions }));
+    return {
+        endpoint: poolEndpoint,
+        pickSavePath: async ({ suggestedName, filters: list }) => {
+            const options = { defaultPath: path.join(app.getPath("downloads"), suggestedName), filters: filters(list) };
+            const result = window ? await dialog.showSaveDialog(window, options) : await dialog.showSaveDialog(options);
+            return result.canceled || !result.filePath ? null : result.filePath;
+        },
+        pickOpenPath: async ({ filters: list }) => {
+            const options = { properties: ["openFile" as const], filters: filters(list) };
+            const result = window ? await dialog.showOpenDialog(window, options) : await dialog.showOpenDialog(options);
+            return result.canceled ? null : (result.filePaths[0] ?? null);
+        },
+    };
+}
 
 // main-side effects of freshly saved settings; browser mode runs the same
 export function applySavedAppSettings(): void {
@@ -63,6 +85,16 @@ export default function registerShellIpc(ipcMain: IpcMain) {
             return handler(args);
         });
     }
+
+    // a panel's save and open dialogs; the shell names the asking frame
+    ipcMain.handle("panel-file-save", (event, args) => {
+        assertShellFrame(event, "panel-file-save");
+        return runPanelSaveDialog(args, nativeFileDialogs(event));
+    });
+    ipcMain.handle("panel-file-open", (event, args) => {
+        assertShellFrame(event, "panel-file-open");
+        return runPanelOpenDialog(args, nativeFileDialogs(event));
+    });
 
     ipcMain.handle("app-update-state", (event) => {
         assertShellFrame(event, "app-update-state");

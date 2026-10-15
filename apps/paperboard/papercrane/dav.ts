@@ -7,6 +7,7 @@ import type { PaperCraneAuth } from "./auth";
 import { lookupMime } from "./mime";
 import { secretsMatch } from "./secretCompare";
 import { logger } from "./logger";
+import { receiveFileAtomic, UploadTooLargeError } from "./atomicUpload";
 
 // WebDAV rooted at the app-data dir, main token or ephemeral session auth
 export const DAV_PREFIX = "/dav";
@@ -433,7 +434,7 @@ async function handlePropfind(
     res.end(xml);
 }
 
-function sendFile(
+export function sendFile(
     res: http.ServerResponse,
     abs: string,
     range?: string,
@@ -610,35 +611,10 @@ export async function handleDavRequest(
             return;
         }
         const existed = fs.existsSync(target);
-        const tmp = `${target}.davpart-${process.pid}-${Date.now()}`;
         try {
-            await new Promise<void>((resolve, reject) => {
-                const cap = davMaxUploadBytes();
-                let written = 0;
-                const out = fs.createWriteStream(tmp);
-                req.on("data", (chunk: Buffer) => {
-                    written += chunk.length;
-                    if (written > cap) {
-                        req.unpipe(out);
-                        out.destroy();
-                        reject(new Error(`upload exceeds ${cap} byte cap`));
-                    }
-                });
-                req.pipe(out);
-                req.on("aborted", () => reject(new Error("aborted")));
-                out.on("finish", () => resolve());
-                out.on("error", reject);
-                req.on("error", reject);
-            });
-            fs.renameSync(tmp, target);
+            await receiveFileAtomic(req, target, davMaxUploadBytes());
         } catch (err) {
-            req.resume();
-            try {
-                fs.unlinkSync(tmp);
-            } catch (cleanupErr) {
-                logger.debug("[WebDAV] PUT tmp cleanup failed:", cleanupErr);
-            }
-            if ((err as Error)?.message?.includes("byte cap")) {
+            if (err instanceof UploadTooLargeError) {
                 res.writeHead(413, { "Content-Type": "text/plain" });
                 res.end("Upload too large");
                 return;
