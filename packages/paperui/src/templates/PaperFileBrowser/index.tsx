@@ -815,11 +815,15 @@ export function PaperFileBrowser(props: PaperFileBrowserProps) {
                             <PaperButton
                                 variant="primary"
                                 onClick={async () => {
-                                    const action = pending()?.run;
-                                    if (await save()) {
-                                        setPending(null);
-                                        action?.();
-                                    } else setPending(null);
+                                    const request = pending();
+                                    if (!request) return;
+                                    const saved = await save();
+                                    // canceled, or replaced by another question, while it saved:
+                                    // that is the decision now, and this one no longer runs
+                                    if (pending() !== request) return;
+                                    setPending(null);
+                                    // edits typed while it saved are not in the file; they stay
+                                    if (saved && !dirty()) request.run();
                                 }}
                             >
                                 Save

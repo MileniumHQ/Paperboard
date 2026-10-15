@@ -239,4 +239,40 @@ describe("PaperFileBrowser", () => {
         }
         expect(fs.read).not.toHaveBeenCalled();
     });
+
+    test("Cancel while Save is in flight keeps the newer edits instead of moving on", async () => {
+        const fs = fakeFiles(TREE);
+        let finishWrite!: () => void;
+        const gate = new Promise<void>((resolve) => (finishWrite = resolve));
+        const slowWrite = vi.fn(async (path: string, text: string, version: string | undefined) => {
+            await gate;
+            return fs.write(path, text, version);
+        });
+        const { getByRole, findByRole } = render(() => (
+            <PaperFileBrowser rootLabel="Server" list={fs.list} read={fs.read} write={slowWrite} />
+        ));
+        fireEvent.click(await treeItem(getByRole, "server.properties"));
+        const box = (await findByRole("textbox")) as HTMLTextAreaElement;
+        box.value = "motd=draft\n";
+        fireEvent.input(box);
+
+        fireEvent.click(await treeItem(getByRole, "plugins"));
+        fireEvent.click(await treeItem(getByRole, "LuckPerms"));
+        fireEvent.click(await treeItem(getByRole, "config.yml"));
+        const dialog = await screen.findByRole("dialog");
+        fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+        await waitFor(() => expect(slowWrite).toHaveBeenCalled());
+
+        // the user changes their mind and keeps typing
+        fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+        await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+        box.value = "motd=newer\n";
+        fireEvent.input(box);
+
+        finishWrite();
+        await waitFor(() => expect(fs.write).toHaveBeenCalled());
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        expect((getByRole("textbox") as HTMLTextAreaElement).value).toBe("motd=newer\n");
+        expect(fs.read).not.toHaveBeenCalledWith("plugins/LuckPerms/config.yml");
+    });
 });
