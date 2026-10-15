@@ -12,7 +12,6 @@ import {
 import { PROTOCOL_VERSION } from "../../../../papercrane/protocol";
 import { readCraneHandshake } from "../../../../papercrane/handshake";
 import { getLocalDir } from "../../../../papercrane/paths";
-import { resolveRegistryUrl } from "../../../../papercrane/util";
 import {
     peerCertPem,
     pinnedRequest,
@@ -680,9 +679,6 @@ export class PaperCraneClient extends EventEmitter {
             panelId,
             version: expected.version,
             sha256: expected.sha256,
-            // TODO(remove after v0.3): daemons before registry-resolved
-            // installs require this; current daemons ignore it
-            downloadUrl: `${resolveRegistryUrl()}/panel/${encodeURIComponent(panelId)}/download`,
         });
         if (!res.panel) throw new Error(`Panel install failed for ${panelId}`);
         return res.panel;

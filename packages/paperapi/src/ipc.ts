@@ -1,7 +1,7 @@
 // transport router, every channel rides the WebSocket
 import { CraneTransport } from "./ws";
 import { debugErr } from "./debug";
-import { REGISTRY_URL, fetchRegistryIndex } from "./config";
+import { fetchRegistryIndex } from "./config";
 import { grantedComputerId, resolvePanelId } from "./identity";
 
 export interface IpcRendererLike {
@@ -344,9 +344,6 @@ async function invokeSpecial(
                     panelId,
                     sha256,
                     version,
-                    // TODO(remove after v0.3): daemons before registry-resolved
-                    // installs require this; current daemons ignore it
-                    downloadUrl: `${REGISTRY_URL}/panel/${panelId}/download`,
                 },
                 LONG_TIMEOUT,
             );
