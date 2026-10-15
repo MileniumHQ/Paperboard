@@ -48,8 +48,8 @@ export function liveModpackDeps(ctx: ServiceContext<GameServerState>): ModpackDe
             const version = typeof saved.version === "string" ? saved.version : ctx.state.serverVersion;
             return { software, version, build: null };
         },
-        installSoftware: (software, version, build) =>
-            installServerSoftwareLocked(ctx, software, version, liveInstallDeps(ctx), { build }),
+        installSoftware: (software, version, build, configPatch) =>
+            installServerSoftwareLocked(ctx, software, version, liveInstallDeps(ctx), { build, configPatch }),
         publish: (modpackProgress) => ctx.setState({ modpackProgress }),
     };
 }

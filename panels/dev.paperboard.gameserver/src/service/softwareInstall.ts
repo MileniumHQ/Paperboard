@@ -95,10 +95,10 @@ export async function installServerSoftwareLocked(
     software: ServerSoftwareType,
     version: string,
     deps: InstallDeps,
-    opts: { build?: string } = {},
+    opts: { build?: string; configPatch?: Record<string, unknown> } = {},
 ): Promise<InstallOutcome> {
     if (!running) throw new Error("installServerSoftwareLocked called without the install lock");
-    return install(ctx, software, version, deps, opts.build);
+    return install(ctx, software, version, deps, opts.build, opts.configPatch);
 }
 
 async function install(
@@ -107,6 +107,7 @@ async function install(
     version: string,
     deps: InstallDeps,
     pinnedBuild: string | undefined,
+    configPatch: Record<string, unknown> = {},
 ): Promise<InstallOutcome> {
     const fs = fsOf(deps);
     const provider = (deps.provider ?? providerFor)(software);
@@ -221,7 +222,7 @@ async function install(
             staging,
         };
         try {
-            await deps.writeConfig({ software, version, [INSTALL_RECORD_KEY]: record });
+            await deps.writeConfig({ ...configPatch, software, version, [INSTALL_RECORD_KEY]: record });
         } catch (err) {
             await activation.rollback();
             activation = null;

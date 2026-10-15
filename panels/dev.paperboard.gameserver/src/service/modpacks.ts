@@ -59,7 +59,7 @@ export interface ModpackDeps {
     /** the installed software, version and build, from the install record */
     installed(): Promise<{ software: ServerSoftwareType; version: string; build: string | null }>;
     /** installs software under the lock the caller already holds */
-    installSoftware(software: ServerSoftwareType, version: string, build: string): Promise<{ warning?: string }>;
+    installSoftware(software: ServerSoftwareType, version: string, build: string, configPatch: Record<string, unknown>): Promise<{ warning?: string }>;
     publish(progress: ModpackProgress | null): void;
     fs?: PackFs;
 }
@@ -277,7 +277,6 @@ export async function installModpack(
 
         // until the record is written, any failure puts the old files back
         let switchServer = false;
-        let switched = false;
         let warning: string | undefined;
         try {
             const installed = await deps.installed();
@@ -285,17 +284,6 @@ export async function installModpack(
                 installed.software !== software ||
                 installed.version !== index.mcVersion ||
                 installed.build !== index.loaderVersion;
-            if (switchServer) {
-                publish({ stage: "installing-server", done: 0, total: 0 });
-                try {
-                    warning = (await deps.installSoftware(software, index.mcVersion, index.loaderVersion)).warning;
-                    switched = true;
-                } catch (err) {
-                    throw new Error(
-                        `Installing ${SOFTWARE[software].name} ${index.loaderVersion} for Minecraft ${index.mcVersion} failed: ${messageOf(err)}`,
-                    );
-                }
-            }
             const record: ModpackRecord = {
                 projectId,
                 versionId,
@@ -312,15 +300,27 @@ export async function installModpack(
             for (const name of Object.keys(modRecords)) {
                 if (!stagedKeys.has(packPathKey(`mods/${name}`))) delete modRecords[name];
             }
-            await deps.writeConfig({
+            const configPatch = {
                 [MODPACK_RECORD_KEY]: record,
                 [MODPACK_STAGING_KEY]: staging,
                 [INSTALL_RECORDS_KEY]: modRecords,
-            });
+            };
+            // One durable record commits both journals. Before it, both roll back.
+            if (switchServer) {
+                publish({ stage: "installing-server", done: 0, total: 0 });
+                try {
+                    warning = (await deps.installSoftware(software, index.mcVersion, index.loaderVersion, configPatch)).warning;
+                } catch (err) {
+                    throw new Error(
+                        `Installing ${SOFTWARE[software].name} ${index.loaderVersion} for Minecraft ${index.mcVersion} failed: ${messageOf(err)}`,
+                    );
+                }
+            }
+            else await deps.writeConfig(configPatch);
         } catch (err) {
             await activation.rollback();
             throw new Error(
-                `${messageOf(err)}. The previous mods were put back${switched ? `; the server software stays on ${SOFTWARE[software].name} ${index.loaderVersion} for Minecraft ${index.mcVersion}` : ""}.`,
+                `${messageOf(err)}. The previous mods were put back.`,
             );
         }
         try {

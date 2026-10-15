@@ -109,9 +109,10 @@ function harness(opts: { installed?: { version: string; build: string | null }; 
             config = { ...config, ...patch };
         },
         installed: async () => installed,
-        installSoftware: async (software, version, build) => {
+        installSoftware: async (software, version, build, configPatch) => {
             softwareInstalls.push([software, version, build]);
             if (opts.installFails) throw new Error("installer exploded");
+            await deps.writeConfig(configPatch);
             installed = { software, version, build };
             return {};
         },
@@ -374,4 +375,33 @@ test("pack activation and rollback failure preserve parked originals for recover
     await recoverStagedPacks(h.root, null);
     expect(h.read("mods/old.jar")).toBe("old");
     expect(h.leftovers()).toEqual([]);
+});
+
+test("a refused combined record restores both server software and pack files", async () => {
+    const { installServerSoftwareLocked, withInstallLock } = await import("../src/service/softwareInstall");
+    const { SOFTWARE_PROVIDERS } = await import("../src/software/providers");
+    const h = harness({ installed: { version: "1.20.1", build: "0.15.0" } });
+    h.write("server.jar", "old server");
+    h.write("mods/old.jar", "old mods");
+    h.publishPack("v1", mrpack(index([]), { "overrides/mods/new.jar": "new mods" }));
+    const save = h.deps.writeConfig;
+    h.deps.writeConfig = async (patch) => {
+        if (MODPACK_RECORD_KEY in patch) throw new Error("config refused");
+        await save(patch);
+    };
+    h.deps.installSoftware = (software, version, build, configPatch) => installServerSoftwareLocked(
+        { setState: () => {} } as any, software, version, {
+            serverDir: async () => h.root,
+            readConfig: h.deps.readConfig, writeConfig: h.deps.writeConfig,
+            javaBinary: async () => ({ bin: "/java", home: "/" }),
+            download: async ({ targetPath }) => h.write(targetPath, "new server"),
+            runInstaller: async () => { throw new Error("not an installer"); },
+            provider: () => ({ ...SOFTWARE_PROVIDERS.fabric, resolveBuild: async () => ({ build, artifact: { url: "https://example.invalid/server.jar" } }) }),
+        }, { build, configPatch },
+    );
+    await expect(withInstallLock(() => install(h, "v1"))).rejects.toThrow("config refused");
+    expect(h.read("server.jar")).toBe("old server");
+    expect(h.read("mods/old.jar")).toBe("old mods");
+    expect(h.has("mods/new.jar")).toBe(false);
+    expect(h.config().install).toBeUndefined();
 });
