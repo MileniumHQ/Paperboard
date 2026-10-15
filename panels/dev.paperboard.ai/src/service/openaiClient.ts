@@ -218,7 +218,8 @@ function parseArguments(raw: string): unknown {
         // malformed JSON: hand the raw text to the validator, which reports
         // "arguments must be a JSON object" to the model as a tool error
         // instead of running the action on default arguments
-        console.debug("[ai] tool-call arguments were not valid JSON:", raw.slice(0, 200));
+        // the model's text can carry user data or secrets: log only its size
+        console.debug(`[ai] tool-call arguments were not valid JSON (${raw.length} characters)`);
         return raw;
     }
 }

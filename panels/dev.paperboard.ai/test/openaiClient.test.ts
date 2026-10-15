@@ -148,14 +148,23 @@ describe("OpenAI-compatible client", () => {
     it("hands malformed tool arguments downstream instead of running on defaults", async () => {
         // '{"a":' + 'oops' is not valid JSON; the raw text must survive so the
         // validator can report a tool error rather than an empty call
-        toolArgFragments = ['{"a":', "oops"];
+        toolArgFragments = ['{"a":', "oops-sk-secret-token"];
         const client = new OpenAICompatibleClient({ ...provider, baseUrl: start() });
         const chunks: ChatChunk[] = [];
-        await client.chat(
-            { model: "local:7b", messages: [{ role: "user", content: "x" }] },
-            AbortSignal.timeout(5_000),
-            (chunk) => chunks.push(chunk),
-        );
+        const logged: string[] = [];
+        const debug = console.debug;
+        console.debug = (...args: unknown[]) => void logged.push(args.map(String).join(" "));
+        try {
+            await client.chat(
+                { model: "local:7b", messages: [{ role: "user", content: "x" }] },
+                AbortSignal.timeout(5_000),
+                (chunk) => chunks.push(chunk),
+            );
+        } finally {
+            console.debug = debug;
+        }
+        expect(logged.some((line) => line.includes("not valid JSON"))).toBe(true);
+        expect(logged.join("\n")).not.toContain("sk-secret-token");
         const call = chunks.at(-1)!.message!.tool_calls![0] as any;
         expect(typeof call.function.arguments).toBe("string");
         const target = {
