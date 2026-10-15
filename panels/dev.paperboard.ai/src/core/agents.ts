@@ -1,4 +1,5 @@
-// Coding agents the panel can talk to over ACP (agentclientprotocol.com).
+// Coding agents the panel can talk to: over ACP (agentclientprotocol.com),
+// or Claude Code through its built-in bridge.
 // The panel never downloads agent code: an agent is something the user
 // installed, found on PATH (or at an absolute path for a custom one). The
 // shipped snapshot of the ACP registry (src/data/acp-agents.json, refreshed
@@ -6,6 +7,7 @@
 // install it.
 
 import snapshot from "../data/acp-agents.json";
+import { CLAUDE_CODE_ID } from "./claudeCode";
 import type { Connection } from "./providers";
 import type { AgentCommand } from "./types";
 
@@ -20,7 +22,22 @@ export interface RegistryAgent {
     install: { kind: "npm"; package: string } | { kind: "download"; url: string };
 }
 
-export const AGENT_REGISTRY: readonly RegistryAgent[] = snapshot.agents as RegistryAgent[];
+/**
+ * Claude Code is bridged, not reached through ACP (service/claudeCode.ts):
+ * the panel drives the installed `claude` itself. It takes the place of the
+ * registry's Claude adapter, which ships a separate SDK.
+ */
+const CLAUDE_CODE: RegistryAgent = {
+    id: CLAUDE_CODE_ID,
+    name: "Claude Code",
+    description: "Anthropic's coding agent",
+    command: "claude",
+    args: [],
+    install: { kind: "npm", package: "@anthropic-ai/claude-code" },
+};
+const REPLACED_BY_BUILT_INS = new Set(["claude-acp"]);
+
+export const AGENT_REGISTRY: readonly RegistryAgent[] = [CLAUDE_CODE, ...(snapshot.agents as RegistryAgent[]).filter((a) => !REPLACED_BY_BUILT_INS.has(a.id))];
 export const AGENT_REGISTRY_DATE: string = snapshot.capturedAt;
 
 /** A connection running a command the user typed rather than a registry agent. */

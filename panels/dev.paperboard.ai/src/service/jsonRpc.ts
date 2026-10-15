@@ -65,6 +65,25 @@ export class LineBuffer {
     }
 }
 
+/** Lines to a process's stdin: each goes out whole and in order, however many writes it takes. */
+export class LineWriter {
+    private writing: Promise<void> = Promise.resolve();
+
+    constructor(private readonly write: (chunk: string) => Promise<void>) {}
+
+    send(message: unknown): Promise<void> {
+        const text = `${JSON.stringify(message)}\n`;
+        const next = this.writing.then(async () => {
+            for (let i = 0; i < text.length; i += WRITE_CHUNK_CHARS) {
+                await this.write(text.slice(i, i + WRITE_CHUNK_CHARS));
+            }
+        });
+        // one failed write must not wedge every later message
+        this.writing = next.catch(() => undefined);
+        return next;
+    }
+}
+
 interface Pending {
     method: string;
     resolve: (value: unknown) => void;
@@ -75,13 +94,15 @@ export class JsonRpcPeer {
     private nextId = 1;
     private pending = new Map<number, Pending>();
     private lines = new LineBuffer();
-    private writing: Promise<void> = Promise.resolve();
+    private writer: LineWriter;
     private closedWith: Error | null = null;
 
     constructor(
-        private readonly write: (chunk: string) => Promise<void>,
+        write: (chunk: string) => Promise<void>,
         private readonly handlers: JsonRpcHandlers,
-    ) {}
+    ) {
+        this.writer = new LineWriter(write);
+    }
 
     get closed(): boolean {
         return this.closedWith !== null;
@@ -140,17 +161,8 @@ export class JsonRpcPeer {
         this.handlers.onProtocolError(err);
     }
 
-    /** Messages go out whole and in order, however many writes each takes. */
     private send(message: unknown): Promise<void> {
-        const text = `${JSON.stringify(message)}\n`;
-        const next = this.writing.then(async () => {
-            for (let i = 0; i < text.length; i += WRITE_CHUNK_CHARS) {
-                await this.write(text.slice(i, i + WRITE_CHUNK_CHARS));
-            }
-        });
-        // one failed write must not wedge every later message
-        this.writing = next.catch(() => undefined);
-        return next;
+        return this.writer.send(message);
     }
 
     private settle(id: number, result: unknown, error?: unknown): void {

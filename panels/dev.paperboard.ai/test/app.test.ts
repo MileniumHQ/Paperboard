@@ -449,7 +449,8 @@ describe("AiApp widget actions", () => {
 });
 
 describe("coding agent connections", () => {
-    const installed = new Set(["claude-agent-acp"]);
+    // the registry's Claude adapter is installed too, but Claude Code itself is the built-in
+    const installed = new Set(["claude", "claude-agent-acp", "gemini"]);
     const findAgent = async (command: string, args: readonly string[]) =>
         installed.has(command) ? { command: `/bin/${command}`, args: [...args], pathEnv: "/bin" } : null;
 
@@ -466,20 +467,20 @@ describe("coding agent connections", () => {
         }
     }
 
-    it("lists the registry agents found on this computer", async () => {
+    it("lists the agents found on this computer, with Claude Code bridged in place of the adapter", async () => {
         await withApp(async (app) => {
-            expect(await app.installedAgents()).toEqual(["claude-acp"]);
+            expect(await app.installedAgents()).toEqual(["claude-code", "gemini"]);
         });
     });
 
     it("adds an installed agent once, listed as its single model", async () => {
         await withApp(async (app, ctx) => {
-            const added = await app.addConnection({ kind: "agent", agent: "claude-acp" });
-            expect(added).toMatchObject({ kind: "agent", agent: "claude-acp", label: "Claude Agent" });
+            const added = await app.addConnection({ kind: "agent", agent: "gemini" });
+            expect(added).toMatchObject({ kind: "agent", agent: "gemini", label: "Gemini CLI" });
             expect(ctx.state.models.filter((m) => m.provider === added.id)).toEqual([
-                expect.objectContaining({ name: "Claude Agent", capabilities: ["agent"] }),
+                expect.objectContaining({ name: "Gemini CLI", capabilities: ["agent"] }),
             ]);
-            await expect(app.addConnection({ kind: "agent", agent: "claude-acp" })).rejects.toThrow("Claude Agent is already added.");
+            await expect(app.addConnection({ kind: "agent", agent: "gemini" })).rejects.toThrow("Gemini CLI is already added.");
         });
     });
 
@@ -501,8 +502,8 @@ describe("coding agent connections", () => {
     it("works in projects inside its own files, remembers the last, and starts the next agent chat there", async () => {
         try {
             await withApp(async (app, ctx) => {
-                const agent = await app.addConnection({ kind: "agent", agent: "claude-acp" });
-                const c = await app.newConversation("Claude Agent", agent.id);
+                const agent = await app.addConnection({ kind: "agent", agent: "gemini" });
+                const c = await app.newConversation("Gemini CLI", agent.id);
                 expect(c.project).toBeUndefined();
                 await expect(app.createProject("../escape")).rejects.toThrow("Use letters, numbers");
                 await expect(app.setConversationProject(c.id, "missing")).rejects.toThrow('The project "missing" no longer exists.');
@@ -515,7 +516,7 @@ describe("coding agent connections", () => {
                 await expect(app.setConversationProject(c.id, "link")).rejects.toThrow("is not a project folder");
                 expect(await app.setConversationProject(c.id, "My App")).toBe("My App");
                 expect((savedConfig as { lastProject: string }).lastProject).toBe("My App");
-                expect((await app.newConversation("Claude Agent", agent.id)).project).toBe("My App");
+                expect((await app.newConversation("Gemini CLI", agent.id)).project).toBe("My App");
             });
         } finally {
             fs.rmSync(path.join(filesDir, "agent"), { recursive: true, force: true });

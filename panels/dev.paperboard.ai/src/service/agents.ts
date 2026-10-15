@@ -13,11 +13,13 @@ import {
     type AcpContentBlock,
     type PromptCapabilities,
 } from "../core/acp";
-import { appendTail } from "../core/ollamaLog";
+import { CLAUDE_CODE_ID } from "../core/claudeCode";
 import type { Connection } from "../core/providers";
 import type { AgentPermissionOption, AgentSessionInfo, AgentState } from "../core/types";
 import type { Launch } from "./executable";
 import { INVALID_PARAMS, JsonRpcError, JsonRpcPeer, METHOD_NOT_FOUND } from "./jsonRpc";
+import { ClaudeCodeAgent } from "./claudeCode";
+import { killObserved, StderrTail, watchExit, type ExitWatch } from "./processWatch";
 
 /** ACP's "authentication required" error code */
 export const AUTH_REQUIRED = -32000;
@@ -27,7 +29,6 @@ const INIT_TIMEOUT_MS = 60_000;
 const STOP_TIMEOUT_MS = 10_000;
 /** how long a cancelled turn may take to wind down before the agent is restarted */
 const CANCEL_GRACE_MS = 10_000;
-const STDERR_TAIL_LINES = 20;
 
 export type StopReason = "end_turn" | "max_tokens" | "max_turn_requests" | "refusal" | "cancelled";
 
@@ -89,12 +90,25 @@ export class AgentAuthError extends Error {
     }
 }
 
-function delay(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 function isObject(v: unknown): v is Record<string, unknown> {
     return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+/** What runs an agent connection's chats: an ACP process, or a bridge. */
+export interface AgentRunner {
+    readonly connection: Connection;
+    /** starting, running or mid-turn: replacing it would start a second process under the same id */
+    readonly busy: boolean;
+    hasTurns(): boolean;
+    /** starts the agent without a chat (Test in the picker) */
+    check(): Promise<void>;
+    openSession(request: SessionRequest): Promise<OpenedSession>;
+    prompt(sessionId: string, blocks: AcpContentBlock[], handlers: TurnHandlers, signal: AbortSignal): Promise<StopReason>;
+    setMode(conversationId: string, modeId: string): Promise<void>;
+    authenticate(methodId: string): Promise<void>;
+    forget(conversationId: string): void;
+    stop(): Promise<void>;
+    stopLeftover(): Promise<void>;
 }
 
 interface Initialized {
@@ -105,15 +119,14 @@ interface Initialized {
 }
 
 /** One agent process: started once, shared by its chats' sessions. */
-class AgentProcess {
+class AgentProcess implements AgentRunner {
     private peer: JsonRpcPeer | null = null;
     private starting: Promise<Initialized> | null = null;
     private init: Initialized | null = null;
     private offs: (() => void)[] = [];
     private exited: Promise<number | undefined> | null = null;
     private stopping = false;
-    private stderrTail: string[] = [];
-    private stderrPartial = "";
+    private stderr = new StderrTail();
     private idleTimer: ReturnType<typeof setTimeout> | null = null;
     /** conversation id → session id, oldest first */
     private sessions = new Map<string, string>();
@@ -149,6 +162,10 @@ class AgentProcess {
         return this.turns.size > 0;
     }
 
+    async check(): Promise<void> {
+        await this.ensureStarted();
+    }
+
     /** Starts the process and runs initialize, once; concurrent callers share it. */
     ensureStarted(): Promise<Initialized> {
         if (this.init && this.running) return Promise.resolve(this.init);
@@ -173,8 +190,7 @@ class AgentProcess {
         if (await host.exists(this.procId)) await this.killObserved(this.watchExit());
 
         this.stopping = false;
-        this.stderrTail = [];
-        this.stderrPartial = "";
+        this.stderr.clear();
         const procId = this.procId;
         const peer = new JsonRpcPeer((chunk) => host.write(procId, chunk), {
             onRequest: (method, params) => this.onRequest(method, params),
@@ -191,7 +207,7 @@ class AgentProcess {
         this.offs = [
             watch.off,
             host.onStdout(procId, (data) => peer.receive(data)),
-            host.onStderr(procId, (data) => this.onStderr(data)),
+            host.onStderr(procId, (data) => this.stderr.push(data)),
         ];
         watch.exited.then((code) => this.onExit(peer, code));
 
@@ -213,7 +229,7 @@ class AgentProcess {
         } catch (err) {
             const message = err instanceof Error ? err.message : String(err);
             await this.stop().catch((stopErr) => console.error("[ai] stopping an agent that failed to start:", String(stopErr)));
-            this.publish({ status: "error", error: message, ...this.detail() });
+            this.publish({ status: "error", error: message, ...this.stderr.detail() });
             throw new Error(message);
         }
     }
@@ -245,24 +261,8 @@ class AgentProcess {
         }
     }
 
-    private watchExit(): { exited: Promise<number | undefined>; off: () => void } {
-        let off: () => void = () => {};
-        const exited = new Promise<number | undefined>((resolve) => {
-            off = this.hub.host.onExit(this.procId, (code) => resolve(code));
-        });
-        return { exited, off: () => off() };
-    }
-
-    private onStderr(data: string): void {
-        const text = this.stderrPartial + data;
-        const lines = text.split(/\r?\n/);
-        this.stderrPartial = (lines.pop() ?? "").slice(-4096);
-        this.stderrTail = appendTail(this.stderrTail, lines.map((l) => l.slice(0, 1000)), STDERR_TAIL_LINES);
-    }
-
-    private detail(): { errorDetail?: string } {
-        const tail = [...this.stderrTail, this.stderrPartial].filter((l) => l.trim()).slice(-STDERR_TAIL_LINES);
-        return tail.length ? { errorDetail: tail.join("\n") } : {};
+    private watchExit(): ExitWatch {
+        return watchExit(this.hub.host, this.procId);
     }
 
     private onExit(peer: JsonRpcPeer, code: number | undefined): void {
@@ -280,7 +280,7 @@ class AgentProcess {
         this.infos.clear();
         this.clearIdle();
         if (expected) this.publish({ status: "stopped", error: undefined, errorDetail: undefined });
-        else this.publish({ status: "error", error: reason.message, ...this.detail() });
+        else this.publish({ status: "error", error: reason.message, ...this.stderr.detail() });
     }
 
     private async onRequest(method: string, params: unknown): Promise<unknown> {
@@ -471,18 +471,8 @@ class AgentProcess {
         await this.killObserved({ exited, off: () => {} });
     }
 
-    private async killObserved(watch: { exited: Promise<number | undefined>; off: () => void }): Promise<void> {
-        const { host } = this.hub;
-        const timeoutMs = this.hub.stopTimeoutMs ?? STOP_TIMEOUT_MS;
-        try {
-            await host.kill(this.procId, "SIGTERM");
-            if (await Promise.race([watch.exited.then(() => true), delay(timeoutMs).then(() => false)])) return;
-            await host.kill(this.procId, "SIGKILL");
-            if (await Promise.race([watch.exited.then(() => true), delay(timeoutMs).then(() => false)])) return;
-            if (await host.exists(this.procId)) throw new Error(`${this.connection.label} did not exit after SIGKILL.`);
-        } finally {
-            watch.off();
-        }
+    private killObserved(watch: ExitWatch): Promise<void> {
+        return killObserved(this.hub.host, this.procId, watch, this.hub.stopTimeoutMs ?? STOP_TIMEOUT_MS, this.connection.label);
     }
 
     /** A connection's process left by an earlier service run, stopped. */
@@ -493,11 +483,11 @@ class AgentProcess {
 
 /** Every agent connection's process, keyed by connection id. */
 export class AgentHub {
-    private agents = new Map<string, AgentProcess>();
+    private agents = new Map<string, AgentRunner>();
 
     constructor(private readonly deps: AgentHubDeps) {}
 
-    private agent(connection: Connection): AgentProcess {
+    private agent(connection: Connection): AgentRunner {
         let agent = this.agents.get(connection.id);
         // a renamed or re-pointed connection runs as its new self
         if (agent && agent.connection !== connection && !agent.busy) {
@@ -505,7 +495,7 @@ export class AgentHub {
             agent = undefined;
         }
         if (!agent) {
-            agent = new AgentProcess(this.deps, connection);
+            agent = connection.agent === CLAUDE_CODE_ID ? new ClaudeCodeAgent(this.deps, connection) : new AgentProcess(this.deps, connection);
             this.agents.set(connection.id, agent);
         }
         return agent;
@@ -529,7 +519,7 @@ export class AgentHub {
 
     /** Starts an agent without a chat (Test in the picker). */
     async check(connection: Connection): Promise<void> {
-        await this.agent(connection).ensureStarted();
+        await this.agent(connection).check();
     }
 
     /** The chat's session is dropped (rewound, moved, deleted); the next message starts another. */
