@@ -4,6 +4,8 @@ import { recordUse, liveKeys, MAX_LIVE_IFRAMES } from "./panelLru";
 import LoadingOverlay from "./LoadingOverlay";
 import { panelUrl } from "../../lib/shell";
 import { FILE_TRANSFER_RESULT, parseFileTransferMessage, runPanelFileTransfer } from "../../lib/panelFileTransfer";
+import BackupLocationChooser, { type BackupLocationChoice } from "../backups/BackupLocationChooser";
+import { BACKUP_LOCATION_REQUEST, BACKUP_LOCATION_RESULT, parseBackupLocationRequest } from "../../lib/backupLocationRequest";
 
 export type RestartState = { kind: "restarting" } | { kind: "failed"; message: string };
 
@@ -23,6 +25,8 @@ const PanelFrame: Component<{ panelKey: string; current: boolean; reload: number
     const [failure, setFailure] = createSignal("");
     let frame: HTMLIFrameElement | undefined;
     let generation = "";
+    // the backup location window this frame asked for, answered on it
+    const [chooser, setChooser] = createSignal<{ requestId: string; generation: string; target: Window } | null>(null);
     createEffect(() => {
         const reload = props.reload;
         generation = crypto.randomUUID();
@@ -36,6 +40,14 @@ const PanelFrame: Component<{ panelKey: string; current: boolean; reload: number
                 clearTimeout(timer); setReady(true); setFailure("");
             } else if (event.data.type === "paperboard:failed") {
                 clearTimeout(timer); setFailure(String(event.data.message || "Panel initialization failed"));
+            } else if (event.data.type === BACKUP_LOCATION_REQUEST) {
+                const target = frame?.contentWindow;
+                const request = parseBackupLocationRequest(event.data, panelId, chooser() !== null);
+                if (!target || !request) return;
+                const answer = (result: BackupLocationChoice) =>
+                    target.postMessage({ type: BACKUP_LOCATION_RESULT, generation: current, requestId: request.requestId, result }, "*");
+                if (request.refused) answer({ status: "failed", message: request.refused });
+                else setChooser({ requestId: request.requestId, generation: current, target });
             } else {
                 // a save or open dialog, answered on the frame that asked
                 const request = parseFileTransferMessage(event.data);
@@ -46,7 +58,8 @@ const PanelFrame: Component<{ panelKey: string; current: boolean; reload: number
             }
         };
         window.addEventListener("message", receive);
-        onCleanup(() => { clearTimeout(timer); window.removeEventListener("message", receive); });
+        // a reloaded document asked nothing; its open window closes unanswered
+        onCleanup(() => { clearTimeout(timer); window.removeEventListener("message", receive); setChooser(null); });
     });
     onMount(() => { if (frame) frame.src = panelUrl(computerId, panelId, `?_r=${props.reload}&generation=${generation}`); });
     return <div style={{ position: "absolute", inset: "0", visibility: props.current ? "visible" : "hidden", "pointer-events": props.current ? "auto" : "none" }}>
@@ -55,6 +68,12 @@ const PanelFrame: Component<{ panelKey: string; current: boolean; reload: number
             allow="clipboard-read; clipboard-write"
             onLoad={() => frame?.contentWindow?.postMessage({ type: "paperboard:initialize", generation }, "*")}
             style={{ width: "100%", height: "100%", border: "none", "border-left": `${getVarCss("border-width")} solid ${getVarCss("border")}`, opacity: ready() && !failure() && !props.restart ? "1" : "0", "pointer-events": ready() && !failure() && !props.restart ? "auto" : "none" }} />
+        <Show when={chooser()} keyed>{(request) => (
+            <BackupLocationChooser computerId={computerId} panelId={panelId} onDone={(result) => {
+                setChooser(null);
+                if (request.generation === generation) request.target.postMessage({ type: BACKUP_LOCATION_RESULT, generation: request.generation, requestId: request.requestId, result }, "*");
+            }} />
+        )}</Show>
         <Show when={props.restart}>{(restart) => (
             <LoadingOverlay
                 label={restart().kind === "failed" ? undefined : "Restarting panel service…"}

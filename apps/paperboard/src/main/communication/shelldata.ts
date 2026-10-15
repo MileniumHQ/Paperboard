@@ -13,6 +13,8 @@ import { createShellInvokeHandlers, SHARED_SHELL_INVOKE_CHANNELS } from "./shell
 import { runPanelImport, runPanelExport, type PanelFileTransferDeps } from "../panelFileTransfer";
 import { poolEndpoint } from "../panelFileEndpoint";
 import type { FileTypeFilter } from "../../shared/fileTransfer";
+import { signInToGoogleDrive } from "../googleOAuth";
+import connectionPool from "./papercrane/ConnectionPool";
 
 // native dialogs, modal to the window whose panel asked
 function nativeFileDialogs(event: IpcMainInvokeEvent): PanelFileTransferDeps {
@@ -94,6 +96,24 @@ export default function registerShellIpc(ipcMain: IpcMain) {
     ipcMain.handle("panel-file-import", (event, args) => {
         assertShellFrame(event, "panel-file-import");
         return runPanelImport(args, nativeFileDialogs(event));
+    });
+
+    // adds a Google Drive backup location to a computer: main runs the
+    // sign-in and hands the refresh token straight to that computer's daemon
+    ipcMain.handle("backup-gdrive-connect", async (event, args) => {
+        assertShellFrame(event, "backup-gdrive-connect");
+        const field = (name: string, max: number) => {
+            const value = args?.[name];
+            if (typeof value !== "string" || !value.trim() || value.length > max) throw new Error(`${name} is required`);
+            return value.trim();
+        };
+        const computerId = field("computerId", 128);
+        const label = field("label", 60);
+        const clientId = field("clientId", 512);
+        const clientSecret = field("clientSecret", 1024);
+        const client = connectionPool.getClient(computerId);
+        const refreshToken = await signInToGoogleDrive({ clientId, clientSecret }, { openExternal: (url) => shell.openExternal(url) });
+        return client.call("backup:destination-add", { destination: { kind: "gdrive", label, clientId, clientSecret, refreshToken } }, 120_000);
     });
 
     ipcMain.handle("app-update-state", (event) => {

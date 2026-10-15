@@ -18,6 +18,7 @@ export const SHELL_INVOKE_CHANNELS = [
     "open-update-download",
     "panel-file-export",
     "panel-file-import",
+    "backup-gdrive-connect",
 ] as const;
 
 export const SHELL_SEND_CHANNELS = [
