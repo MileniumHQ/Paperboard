@@ -5,7 +5,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { panelFilesDirName, writeFileAtomic } from "../storage";
 import { logger } from "../logger";
-import { newestFirst, parseBackupRecord, type BackupRecord, type BackupStore, type BackupUsage } from "./types";
+import { BACKUP_ID_RE, BackupListingError, newestFirst, parseBackupRecord, type BackupRecord, type BackupStore, type BackupUsage } from "./types";
 
 export class LocalBackupStore implements BackupStore {
     constructor(private readonly root: string) {}
@@ -41,17 +41,26 @@ export class LocalBackupStore implements BackupStore {
         const dir = this.panelDir(panelId);
         if (!fs.existsSync(dir)) return [];
         const records: BackupRecord[] = [];
+        const unreadable: string[] = [];
         for (const file of fs.readdirSync(dir)) {
-            if (!file.endsWith(".json")) continue;
+            const id = file.endsWith(".json") ? file.slice(0, -".json".length) : "";
+            if (!BACKUP_ID_RE.test(id)) continue;
             let parsed: BackupRecord | null = null;
             try {
                 parsed = parseBackupRecord(JSON.parse(fs.readFileSync(path.join(dir, file), "utf8")));
             } catch (err) {
+                unreadable.push(id);
                 logger.warn(`[backups] unreadable backup record ${file}:`, err);
+                continue;
+            }
+            if (!parsed) {
+                unreadable.push(id);
+                continue;
             }
             // a record for another panel, or without its archive, is not listed
-            if (parsed && parsed.panelId === panelId && fs.existsSync(this.files(parsed).archive)) records.push(parsed);
+            if (parsed.panelId === panelId && fs.existsSync(this.files(parsed).archive)) records.push(parsed);
         }
+        if (unreadable.length) throw new BackupListingError(unreadable);
         return newestFirst(records);
     }
 

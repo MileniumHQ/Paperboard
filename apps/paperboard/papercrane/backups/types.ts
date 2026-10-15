@@ -83,6 +83,19 @@ export function parseBackupRecord(raw: unknown): BackupRecord | null {
     };
 }
 
+/** A location holds records this Paperboard could not read. The listing is
+ * refused rather than shortened: a damaged record must not look like a
+ * backup that was never made. */
+export class BackupListingError extends Error {
+    constructor(readonly unreadable: string[]) {
+        const shown = unreadable.slice(0, 5).join(", ");
+        super(
+            `${unreadable.length} backup record${unreadable.length === 1 ? "" : "s"} at this location could not be read (${shown}${unreadable.length > 5 ? ", ..." : ""}), so its backups are not listed. Check the location, or remove the damaged records there`,
+        );
+        this.name = "BackupListingError";
+    }
+}
+
 export function newestFirst(records: BackupRecord[]): BackupRecord[] {
     return records.sort((a, b) => (a.id < b.id ? 1 : a.id > b.id ? -1 : 0)).slice(0, MAX_LISTED_BACKUPS);
 }

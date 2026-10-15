@@ -6,7 +6,7 @@
 import * as crypto from "crypto";
 import { logger } from "../logger";
 import { assertSecureUrl, expectOk, httpRequest } from "./http";
-import { backupArchiveDownloadCap, MAX_LISTED_BACKUPS, newestFirst, parseBackupRecord, type BackupRecord, type BackupStore, type BackupUsage } from "./types";
+import { BackupListingError, backupArchiveDownloadCap, MAX_LISTED_BACKUPS, newestFirst, parseBackupRecord, type BackupRecord, type BackupStore, type BackupUsage } from "./types";
 
 export interface DriveEndpoints {
     tokenUrl: string;
@@ -148,14 +148,19 @@ export class DriveBackupStore implements BackupStore {
     async list(panelId: string): Promise<BackupRecord[]> {
         const files = await this.files(`${this.inFolder()} and appProperties has { key='pbPanel' and value=${quote(panelKey(panelId))} }`, "id, description");
         const records: BackupRecord[] = [];
+        const unreadable: string[] = [];
         for (const file of files.slice(0, MAX_LISTED_BACKUPS * 2)) {
+            let parsed: BackupRecord | null;
             try {
-                const parsed = parseBackupRecord(JSON.parse(String(file.description ?? "")));
-                if (parsed && parsed.panelId === panelId) records.push(parsed);
+                parsed = parseBackupRecord(JSON.parse(String(file.description ?? "")));
             } catch (err) {
                 logger.warn(`[backups] Google Drive file ${file.id} has no readable record:`, err);
+                parsed = null;
             }
+            if (!parsed) unreadable.push(String(file.id));
+            else if (parsed.panelId === panelId) records.push(parsed);
         }
+        if (unreadable.length) throw new BackupListingError(unreadable);
         return newestFirst(records);
     }
 

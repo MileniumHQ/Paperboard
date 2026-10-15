@@ -14,10 +14,11 @@ import { handleBackups } from "../papercrane/rpc/backups";
 import { extractPanelArchive } from "../papercrane/backups/archive";
 import { S3BackupStore, signS3Request } from "../papercrane/backups/s3Store";
 import { DriveBackupStore } from "../papercrane/backups/driveStore";
+import { LocalBackupStore } from "../papercrane/backups/localStore";
 import { BackupService, isNewerVersion } from "../papercrane/backups/service";
 import { MAX_KEEP, SCHEDULE_HOURS, SCHEDULED_LABEL } from "../papercrane/backups/schedules";
 import { MAX_ROUTINE_BACKUPS_KEPT, ROUTINE_BACKUP_HOURS, ROUTINE_BACKUP_LABEL } from "../../../packages/paperapi/src/backups";
-import { newBackupId, type BackupRecord } from "../papercrane/backups/types";
+import { BackupListingError, newBackupId, type BackupRecord } from "../papercrane/backups/types";
 import { createPanelArchive } from "../papercrane/backups/archive";
 
 const ID = "dev.test.backups";
@@ -466,6 +467,21 @@ async function sampleArchive(): Promise<{ record: BackupRecord; archive: string 
     return { record, archive };
 }
 
+test("the computer's own folder refuses to list when a backup record cannot be read", async () => {
+    const root = tmp("local-store-");
+    const store = new LocalBackupStore(root);
+    const { record, archive } = await sampleArchive();
+    await store.put(record, archive);
+    expect(await store.list(ID)).toEqual([record]);
+    const recordFile = path.join(root, panelFilesDirName(ID), `${record.id}.json`);
+    fs.writeFileSync(recordFile, "{ not json");
+    await expect(store.list(ID)).rejects.toThrow(record.id);
+    // files that are not backup records are not this listing's business
+    fs.writeFileSync(recordFile, JSON.stringify(record));
+    fs.writeFileSync(path.join(root, panelFilesDirName(ID), "notes.json"), "{ not json");
+    expect(await store.list(ID)).toEqual([record]);
+});
+
 test("S3 store round-trips a backup through a signed bucket", async () => {
     const objects = new Map<string, Buffer>();
     const base = await serve((req, body, res) => {
@@ -497,6 +513,12 @@ test("S3 store round-trips a backup through a signed bucket", async () => {
     expect(await store.list(ID)).toEqual([record]);
     expect(await store.list("dev.test.other")).toEqual([]);
     expect((await store.usage()).used).toBe(record.size);
+    // a record that cannot be read is a failed listing, not a shorter one
+    const recordKey = [...objects.keys()].find((k) => k.endsWith(".json"))!;
+    const goodRecord = objects.get(recordKey)!;
+    objects.set(recordKey, Buffer.from("{ not json"));
+    await expect(store.list(ID)).rejects.toThrow(record.id);
+    objects.set(recordKey, goodRecord);
     const back = path.join(tmp("s3-get-"), "b.pbbackup");
     await store.get(record, back);
     expect(fs.readFileSync(back).equals(fs.readFileSync(archive))).toBe(true);
@@ -596,6 +618,11 @@ test("Google Drive store round-trips a backup in its folder", async () => {
     expect(await store.list(ID)).toEqual([record]);
     expect(await store.list("dev.test.other")).toEqual([]);
     expect(await store.usage()).toEqual({ used: record.size, available: 999000 });
+    const archiveFile = [...files.values()].find((f) => f.meta.description)!;
+    const goodDescription = archiveFile.meta.description;
+    archiveFile.meta.description = "{ not json";
+    await expect(store.list(ID)).rejects.toBeInstanceOf(BackupListingError);
+    archiveFile.meta.description = goodDescription;
     const back = path.join(tmp("drive-get-"), "b.pbbackup");
     await store.get(record, back);
     expect(fs.readFileSync(back).equals(fs.readFileSync(archive))).toBe(true);

@@ -6,7 +6,7 @@ import * as crypto from "crypto";
 import { panelFilesDirName } from "../storage";
 import { logger } from "../logger";
 import { assertSecureUrl, expectOk, httpRequest, type HttpRequestInit } from "./http";
-import { backupArchiveDownloadCap, BACKUP_ARCHIVE_MAX_BYTES, MAX_LISTED_BACKUPS, newestFirst, parseBackupRecord, type BackupRecord, type BackupStore, type BackupUsage } from "./types";
+import { backupArchiveDownloadCap, BACKUP_ARCHIVE_MAX_BYTES, BackupListingError, MAX_LISTED_BACKUPS, newestFirst, parseBackupRecord, type BackupRecord, type BackupStore, type BackupUsage } from "./types";
 
 export interface S3Settings {
     /** https://s3.<region>.amazonaws.com, https://<account>.r2.cloudflarestorage.com */
@@ -182,6 +182,7 @@ export class S3BackupStore implements BackupStore {
             .reverse()
             .slice(0, MAX_LISTED_BACKUPS);
         const records: BackupRecord[] = [];
+        const unreadable: string[] = [];
         for (const key of recordKeys) {
             const res = await this.send("GET", this.objectUrl(key), { maxBytes: 64 * 1024 });
             // a record deleted since the listing is gone, not a failure
@@ -190,13 +191,17 @@ export class S3BackupStore implements BackupStore {
                 continue;
             }
             expectOk(res, "Reading a backup record");
+            let parsed: BackupRecord | null;
             try {
-                const parsed = parseBackupRecord(JSON.parse(res.body.toString("utf8")));
-                if (parsed && parsed.panelId === panelId) records.push(parsed);
+                parsed = parseBackupRecord(JSON.parse(res.body.toString("utf8")));
             } catch (err) {
                 logger.warn(`[backups] record ${key} is not JSON:`, err);
+                parsed = null;
             }
+            if (!parsed) unreadable.push(key.slice(key.lastIndexOf("/") + 1, -".json".length));
+            else if (parsed.panelId === panelId) records.push(parsed);
         }
+        if (unreadable.length) throw new BackupListingError(unreadable);
         return newestFirst(records);
     }
 
