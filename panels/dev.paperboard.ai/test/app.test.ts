@@ -55,6 +55,7 @@ mock.module("@mileniumhq/paperapi", () => ({
 
 const { AiApp } = await import("../src/service/app");
 const { initialState } = await import("../src/core/types");
+const { MAX_ACTIVE_REPLIES } = await import("../src/service/chat");
 
 afterAll(() => {
     fs.rmSync(filesDir, { recursive: true, force: true });
@@ -238,6 +239,126 @@ describe("AiApp installRuntime", () => {
             packageInstalled = true;
             downloadImpl = async () => {};
             await app.stopRuntime().catch((err) => console.debug("[ai] test teardown:", String(err)));
+        }
+    });
+});
+
+// Quick ask (Home widget): starts a chat the panel then opens, and leaves no
+// chat behind when it is refused. Loaded model reports "unsupported" for a
+// URL endpoint and "stopped" for a down Ollama, never an empty list.
+describe("AiApp widget actions", () => {
+    let holdReplies = false;
+    const held: (() => void)[] = [];
+    const release = () => held.splice(0).forEach((r) => r());
+    const enc = new TextEncoder();
+    const endpoint = Bun.serve({
+        hostname: "127.0.0.1",
+        port: 0,
+        async fetch(req) {
+            const url = new URL(req.url);
+            if (url.pathname === "/v1/models") return Response.json({ data: [{ id: "local:7b" }] });
+            if (url.pathname === "/v1/chat/completions") {
+                const wait = holdReplies ? new Promise<void>((r) => held.push(r)) : Promise.resolve();
+                return new Response(
+                    new ReadableStream({
+                        async start(controller) {
+                            await wait;
+                            controller.enqueue(enc.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: "Hi." } }] })}\n\n`));
+                            controller.enqueue(enc.encode("data: [DONE]\n\n"));
+                            controller.close();
+                        },
+                    }),
+                    { headers: { "Content-Type": "text/event-stream" } },
+                );
+            }
+            return new Response("not found", { status: 404 });
+        },
+    });
+    afterAll(() => endpoint.stop(true));
+
+    async function withApp(stored: unknown, run: (app: InstanceType<typeof AiApp>, ctx: ReturnType<typeof makeCtx>) => Promise<void>) {
+        savedConfig = stored;
+        const app = new AiApp(new HangingHost(), { readyTimeoutMs: 100 });
+        const ctx = makeCtx();
+        await app.init(ctx as any);
+        try {
+            await run(app, ctx);
+        } finally {
+            holdReplies = false;
+            release();
+            savedConfig = null;
+            await app.stopRuntime().catch((err) => console.debug("[ai] test teardown:", String(err)));
+            await app.deleteAllConversations();
+        }
+    }
+    const custom = () => ({ provider: { id: "custom", baseUrl: `http://127.0.0.1:${endpoint.port}` } });
+    async function modelsListed(ctx: ReturnType<typeof makeCtx>) {
+        const start = Date.now();
+        while (ctx.state.models.length === 0) {
+            if (Date.now() - start > 3000) throw new Error("the endpoint's models never listed");
+            await new Promise((r) => setTimeout(r, 10));
+        }
+    }
+
+    it("starts a chat with the question and hands it to one panel window", async () => {
+        await withApp(custom(), async (app, ctx) => {
+            await modelsListed(ctx);
+            const { conversationId } = await app.quickAsk("  What is a panel?  ");
+            const snapshot = await app.getConversation(conversationId);
+            expect(snapshot.conversation.model).toBe("local:7b");
+            expect(snapshot.conversation.messages[0]).toMatchObject({ role: "user", content: "What is a panel?" });
+            expect(ctx.state.openRequest).toBe(conversationId);
+            expect(app.takeOpenRequest()).toBe(conversationId);
+            // taken once: a second window (or a reload) does not jump to it
+            expect(app.takeOpenRequest()).toBeNull();
+            expect(ctx.state.openRequest).toBeNull();
+        });
+    });
+
+    it("refuses before creating a chat: blank, unconfigured, nothing downloaded", async () => {
+        await withApp(null, async (app, ctx) => {
+            await expect(app.quickAsk("   ")).rejects.toThrow("Type a question first.");
+            await expect(app.quickAsk("hi")).rejects.toThrow("Set up AI first.");
+            expect(ctx.state.conversations).toEqual([]);
+            expect(ctx.state.openRequest).toBeNull();
+        });
+        await withApp({ ...custom(), settings: { defaultModel: "gone:1b" } }, async (app, ctx) => {
+            await modelsListed(ctx);
+            await expect(app.quickAsk("hi")).rejects.toThrow("gone:1b is not downloaded.");
+            expect(ctx.state.conversations).toEqual([]);
+        });
+    });
+
+    it("removes the chat it created when the message is refused", async () => {
+        await withApp(custom(), async (app, ctx) => {
+            await modelsListed(ctx);
+            holdReplies = true;
+            for (let i = 0; i < MAX_ACTIVE_REPLIES; i++) await app.quickAsk(`question ${i}`);
+            const before = ctx.state.conversations.map((c) => c.id);
+            const pending = ctx.state.openRequest;
+            await expect(app.quickAsk("one too many")).rejects.toThrow(`Only ${MAX_ACTIVE_REPLIES} chats can reply at once.`);
+            expect(ctx.state.conversations.map((c) => c.id)).toEqual(before);
+            expect(ctx.state.openRequest).toBe(pending);
+        });
+    });
+
+    it("reports memory as unsupported for a URL endpoint and refuses to unload there", async () => {
+        await withApp(custom(), async (app) => {
+            expect(await app.loadedModels()).toEqual({ status: "unsupported", provider: "OpenAI-compatible endpoint" });
+            await expect(app.unloadModel("local:7b")).rejects.toThrow("cannot unload");
+        });
+    });
+
+    it("reports a down Ollama as stopped, not as nothing loaded", async () => {
+        packageInstalled = false;
+        try {
+            await withApp({ provider: { id: "ollama" } }, async (app) => {
+                const report = await app.loadedModels();
+                expect(report.status).toBe("stopped");
+                await expect(app.unloadModel("qwen3:8b")).rejects.toThrow("Ollama is not running");
+            });
+        } finally {
+            packageInstalled = true;
         }
     });
 });

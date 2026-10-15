@@ -240,6 +240,26 @@ export interface PendingApproval {
     builtin?: BuiltinTool;
 }
 
+/** A model Ollama holds in memory right now (its /api/ps). */
+export interface LoadedModel {
+    name: string;
+    /** bytes in memory, on the GPU and in RAM together */
+    sizeBytes: number;
+    /** the part of sizeBytes on the GPU */
+    vramBytes: number;
+    /** when Ollama unloads it if it stays idle */
+    expiresAt?: string;
+}
+
+/**
+ * What the Loaded model widget can show. Only Ollama reports and unloads the
+ * models in memory; a URL endpoint is `unsupported`, never "nothing loaded".
+ */
+export type LoadedModelsReport =
+    | { status: "ok"; models: LoadedModel[] }
+    | { status: "stopped"; runtime: RuntimeStatus }
+    | { status: "unsupported"; provider: string };
+
 export interface AiState {
     runtime: RuntimeState;
     /** the active provider and how the panel reaches it */
@@ -257,6 +277,11 @@ export interface AiState {
     settings: Settings;
     /** conversation history could not be read; writes are refused */
     storageError?: string;
+    /**
+     * A chat started from outside the panel (the Quick ask widget) that a
+     * panel window should open; the window that takes it clears it.
+     */
+    openRequest: string | null;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -285,5 +310,6 @@ export function initialState(): AiState {
         approvals: [],
         alwaysAllowed: [],
         settings: { ...DEFAULT_SETTINGS },
+        openRequest: null,
     };
 }

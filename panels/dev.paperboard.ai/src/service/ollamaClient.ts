@@ -23,6 +23,14 @@ export interface TagEntry {
     remote_host?: string;
 }
 
+export interface PsEntry {
+    name: string;
+    model?: string;
+    size?: number;
+    size_vram?: number;
+    expires_at?: string;
+}
+
 export interface ShowResponse {
     capabilities?: string[];
     model_info?: Record<string, unknown>;
@@ -103,6 +111,17 @@ export class OllamaClient {
     async tags(): Promise<TagEntry[]> {
         const body = await this.json<{ models?: TagEntry[] }>("/api/tags");
         return Array.isArray(body.models) ? body.models : [];
+    }
+
+    /** The models loaded in memory right now. */
+    async ps(): Promise<PsEntry[]> {
+        const body = await this.json<{ models?: PsEntry[] }>("/api/ps");
+        return Array.isArray(body.models) ? body.models : [];
+    }
+
+    /** Asks Ollama to drop a model from memory now (keep_alive 0). */
+    async unload(model: string): Promise<void> {
+        await this.json("/api/generate", { method: "POST", body: JSON.stringify({ model, keep_alive: 0, stream: false }) });
     }
 
     show(model: string): Promise<ShowResponse> {

@@ -7,6 +7,20 @@
     "base": "./dist/index.html",
     "service": "./dist/service.js",
     "icon": "./branding/icon.png",
+    "widgets": [
+        {
+            "id": "quick-ask",
+            "name": "Quick ask",
+            "description": "Ask a question from Home; the answer opens in AI",
+            "sizes": ["4x1"]
+        },
+        {
+            "id": "loaded-model",
+            "name": "Loaded model",
+            "description": "The model in memory, how much it takes, and a button to unload it",
+            "sizes": ["2x1"]
+        }
+    ],
     "store": {
         "about": "./store/about.md",
         "screenshots": [

@@ -39,6 +39,20 @@ export const UI_ACTION_IDS = {
     resolveApproval: "ui-resolve-approval",
     revokePermission: "ui-revoke-permission",
     updateSettings: "ui-update-settings",
+    takeOpenRequest: "ui-take-open-request",
+} as const;
+
+/** What the Home widgets call (widget.html); internal, never flow blocks. */
+export const WIDGET_ACTION_IDS = {
+    quickAsk: "widget-quick-ask",
+    loadedModels: "widget-loaded-models",
+    unloadModel: "widget-unload-model",
+} as const;
+
+/** Widget ids, as manifest.json declares them. */
+export const WIDGET_IDS = {
+    quickAsk: "quick-ask",
+    loadedModel: "loaded-model",
 } as const;
 
 export const TRIGGER_IDS = {

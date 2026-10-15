@@ -30,6 +30,12 @@ export interface FakeOllama {
     releasePulls: () => void;
     /** hold chat replies open until released (to test concurrent-reply caps) */
     holdChats: boolean;
+    /** what /api/ps reports as in memory */
+    loaded: { name: string; size: number; size_vram: number }[];
+    /** accept unloads but keep the model listed (a stuck runner) */
+    ignoreUnload: boolean;
+    /** models /api/generate was asked to unload */
+    unloads: string[];
     releaseChats: () => void;
     stop: () => Promise<void>;
 }
@@ -51,6 +57,9 @@ export function startFakeOllama(): FakeOllama {
         releaseChats: () => {
             state.holdChats = false;
         },
+        loaded: [],
+        ignoreUnload: false,
+        unloads: [],
     };
 
     const stream = (gen: (push: (obj: unknown) => void) => Promise<void>) =>
@@ -99,6 +108,19 @@ export function startFakeOllama(): FakeOllama {
                             "fake.context_length": 40960,
                         },
                     });
+                }
+                case "/api/ps":
+                    return Response.json({
+                        models: state.loaded.map((m) => ({ ...m, model: m.name, expires_at: "2026-10-12T17:00:00Z" })),
+                    });
+                case "/api/generate": {
+                    // only the unload form (keep_alive 0, no prompt) is scripted
+                    if (body?.keep_alive !== 0 || body?.prompt) return Response.json({ error: "fake: only unload is scripted" }, { status: 400 });
+                    const name = String(body?.model);
+                    state.unloads.push(name);
+                    if (!state.models.some((m) => m.name === name)) return Response.json({ error: `model '${name}' not found` }, { status: 404 });
+                    if (!state.ignoreUnload) state.loaded = state.loaded.filter((m) => m.name !== name);
+                    return Response.json({ model: name, response: "", done: true, done_reason: "unload" });
                 }
                 case "/api/delete": {
                     const before = state.models.length;
@@ -178,6 +200,21 @@ export function startFakeOllama(): FakeOllama {
         },
         set holdPulls(v) {
             state.holdPulls = v;
+        },
+        get loaded() {
+            return state.loaded;
+        },
+        set loaded(v) {
+            state.loaded = v;
+        },
+        get ignoreUnload() {
+            return state.ignoreUnload;
+        },
+        set ignoreUnload(v) {
+            state.ignoreUnload = v;
+        },
+        get unloads() {
+            return state.unloads;
         },
         get holdChats() {
             return state.holdChats;

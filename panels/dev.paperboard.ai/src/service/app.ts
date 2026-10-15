@@ -16,7 +16,7 @@ import {
     type ServiceContext,
 } from "@mileniumhq/paperapi";
 import { EVENTS, OLLAMA_PACKAGE, OLLAMA_PROC_ID, PANEL_ID, TRIGGER_IDS } from "../contract";
-import { askSystemPrompt, isConversationId, isPromptStyle, MAX_CUSTOM_PROMPT_CHARS } from "../core/conversation";
+import { askSystemPrompt, isConversationId, isPromptStyle, MAX_CUSTOM_PROMPT_CHARS, MAX_USER_MESSAGE_CHARS } from "../core/conversation";
 import {
     activeProviders,
     CUSTOM_PROVIDER,
@@ -34,6 +34,7 @@ import {
     type AiState,
     type Conversation,
     type ConversationSnapshot,
+    type LoadedModelsReport,
     type ModelSpeed,
     type PromptStyle,
     type ProviderChoice,
@@ -44,6 +45,7 @@ import {
 import { republishPublicActions } from "./actions";
 import { runShell, webSearch } from "./builtins";
 import { askOnce, ChatEngine, type ApprovalDecision } from "./chat";
+import { listLoaded, unloadAndConfirm } from "./loaded";
 import { canonicalRef, ModelManager } from "./models";
 import { OpenAICompatibleClient } from "./openaiClient";
 import { providerClients } from "./provider";
@@ -461,6 +463,68 @@ export class AiApp {
             // read error is a different failure and stays
             ...(this.configLoaded ? { storageError: undefined } : {}),
         }));
+    }
+
+    /** The model a chat started outside the panel uses: the one a new chat in the panel would. */
+    private quickAskModel(): string {
+        return this.ctx.state.settings.defaultModel || this.ctx.state.models[0]?.name || "";
+    }
+
+    /**
+     * Starts a chat with `text` (the Quick ask widget) and asks a panel
+     * window to open it. Resolves once the message is accepted and the reply
+     * has started; a chat whose message was refused is removed again.
+     */
+    async quickAsk(text: string): Promise<{ conversationId: string }> {
+        const content = text.trim();
+        if (!content) throw new Error("Type a question first.");
+        if (content.length > MAX_USER_MESSAGE_CHARS) throw new Error(`Questions are limited to ${MAX_USER_MESSAGE_CHARS} characters.`);
+        if (!this.ctx.state.provider.configured) throw new Error("Set up AI first.");
+        const model = this.quickAskModel();
+        if (!model) throw new Error("No model is downloaded yet. Pick one in AI.");
+        if (!this.models.capabilities(model)) throw new Error(`${model} is not downloaded. Pick a model in AI.`);
+        // throws when the provider is not reachable, before a chat exists
+        this.chatClientFor(this.models.providerOf(model));
+        const conversation = await this.chat.create(model);
+        try {
+            await this.chat.send(conversation.id, content);
+        } catch (err) {
+            try {
+                this.ctx.setState({ conversations: await this.store.delete(conversation.id) });
+            } catch (cleanup) {
+                throw new Error(`${err instanceof Error ? err.message : String(err)} The empty chat could not be removed: ${String(cleanup)}`);
+            }
+            throw err;
+        }
+        this.ctx.setState({ openRequest: conversation.id });
+        return { conversationId: conversation.id };
+    }
+
+    /** Hands the pending open request to one panel window, once. */
+    takeOpenRequest(): string | null {
+        const id = this.ctx.state.openRequest;
+        if (!id) return null;
+        this.ctx.setState({ openRequest: null });
+        return this.ctx.state.conversations.some((c) => c.id === id) ? id : null;
+    }
+
+    async loadedModels(): Promise<LoadedModelsReport> {
+        const provider = this.ctx.state.provider.id;
+        if (provider !== OLLAMA_PROVIDER_ID) return { status: "unsupported", provider: providerFor(provider).label };
+        const api = this.runtime.api;
+        if (!api) return { status: "stopped", runtime: this.ctx.state.runtime.status };
+        return { status: "ok", models: await listLoaded(api) };
+    }
+
+    /** Frees a loaded model's memory; resolves once Ollama no longer lists it. */
+    async unloadModel(name: string): Promise<LoadedModelsReport> {
+        if (this.ctx.state.provider.id !== OLLAMA_PROVIDER_ID) {
+            throw new Error(`${providerFor(this.ctx.state.provider.id).label} cannot unload models from here.`);
+        }
+        const api = this.runtime.requireApi();
+        const replying = this.ctx.state.conversations.find((c) => c.model === name && this.ctx.state.generating.includes(c.id));
+        if (replying) throw new Error(`"${replying.title}" is replying with ${name}. Stop it first.`);
+        return { status: "ok", models: await unloadAndConfirm(api, name) };
     }
 
     resolveApproval(id: string, decision: ApprovalDecision): void {

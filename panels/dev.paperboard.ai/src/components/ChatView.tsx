@@ -83,6 +83,23 @@ export default function ChatView() {
         }),
     );
 
+    // a chat started from Home (Quick ask) opens here; one window takes it
+    createEffect(
+        on(
+            () => state.openRequest,
+            (request) => {
+                if (!request) return;
+                void call<string | null>(UI_ACTION_IDS.takeOpenRequest)
+                    .then((id) => {
+                        if (!id) return;
+                        setSettingsOpen(false);
+                        selection.created(id);
+                    })
+                    .catch((err) => setError(errorText(err)));
+            },
+        ),
+    );
+
     const conversation = () => openConversation();
     const turns = createMemo(() => groupTurns(conversation()?.messages ?? []));
     const model = () => conversation()?.model || state.settings.defaultModel || state.models[0]?.name || "";

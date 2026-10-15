@@ -1,6 +1,6 @@
 import { actionsApi, defineAction, type ActionDefinition } from "@mileniumhq/paperapi";
-import { ACTION_IDS, PANEL_ID, TRIGGER_IDS, UI_ACTION_IDS } from "../contract";
-import { isPromptStyle, PROMPT_STYLES, PROMPT_STYLE_DESCRIPTIONS, PROMPT_STYLE_LABELS } from "../core/conversation";
+import { ACTION_IDS, PANEL_ID, TRIGGER_IDS, UI_ACTION_IDS, WIDGET_ACTION_IDS } from "../contract";
+import { isPromptStyle, MAX_USER_MESSAGE_CHARS, PROMPT_STYLES, PROMPT_STYLE_DESCRIPTIONS, PROMPT_STYLE_LABELS } from "../core/conversation";
 import { isReasoningLevel } from "../core/reasoning";
 import type { AiApp } from "./app";
 import type { ApprovalDecision } from "./chat";
@@ -242,6 +242,12 @@ export function uiActions(app: AiApp): ActionDefinition[] {
             ready(() => app.resolveApproval(str(i.id, "id", 64), str(i.decision, "decision", 16) as ApprovalDecision)),
         ),
         ui(UI_ACTION_IDS.revokePermission, "Revoke permission", (i) => ready(() => app.revoke(str(i.key, "key", 400)))),
+        ui(UI_ACTION_IDS.takeOpenRequest, "Take chat to open", () => ready(() => app.takeOpenRequest())),
+        ui(WIDGET_ACTION_IDS.quickAsk, "Quick ask", (i) =>
+            ready(() => app.quickAsk(str(i.text, "text", MAX_USER_MESSAGE_CHARS))),
+        ),
+        ui(WIDGET_ACTION_IDS.loadedModels, "Loaded models", () => ready(() => app.loadedModels())),
+        ui(WIDGET_ACTION_IDS.unloadModel, "Unload model", (i) => ready(() => app.unloadModel(str(i.model, "model")))),
         ui(UI_ACTION_IDS.updateSettings, "Update settings", (i) =>
             ready(() =>
                 app.updateSettings({
