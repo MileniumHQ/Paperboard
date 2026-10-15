@@ -1,0 +1,7 @@
+/* Home widgets: PaperWidget lays them out and paints the card */
+html,
+body {
+    margin: 0;
+    height: 100%;
+    overflow: hidden;
+}

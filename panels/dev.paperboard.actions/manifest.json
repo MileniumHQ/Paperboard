@@ -7,6 +7,31 @@
     "base": "./dist/index.html",
     "service": "./dist/service.js",
     "icon": "./branding/icon.png",
+    "widgets": [
+        {
+            "id": "run-button",
+            "name": "Run button",
+            "description": "Runs one workflow that starts on play, and shows whether it passed",
+            "sizes": [
+                "1x1",
+                "2x1"
+            ],
+            "options": [
+                {
+                    "id": "flow",
+                    "label": "Workflow"
+                }
+            ]
+        },
+        {
+            "id": "recent-runs",
+            "name": "Recent runs",
+            "description": "The latest workflow runs, passed or failed",
+            "sizes": [
+                "2x2"
+            ]
+        }
+    ],
     "store": {
         "about": "./store/about.md",
         "screenshots": [

@@ -23,11 +23,16 @@ import { CANVAS_CHANGED_EVENT, createCanvasDocument, type CanvasDocument } from 
 // every config/registry call below carries
 import { ACTIONS_PANEL_ID } from "./panelId";
 import { isBlankMatchInput, matchHolds, payloadFieldValue } from "./lib/runtime";
+import { findManualFlow, flowLabels, manualFlowChoices, recordRun, type FlowRun } from "./lib/widgetFlows";
 
-interface ActionsServiceState {
+export interface ActionsServiceState {
     flowCount: number;
     functionCount: number;
     rev: number;
+    /** the latest runs of any flow, newest first (Home's widgets) */
+    runs: FlowRun[];
+    /** trigger ids of the flows running now */
+    running: string[];
 }
 
 type Ctx = ServiceContext<ActionsServiceState>;
@@ -36,6 +41,13 @@ let flows: CanvasBlock[] = [];
 let functions: FunctionDef[] = [];
 let rev = 0;
 let serviceCtx: Ctx | null = null;
+// unreadable is not empty: until the stored flows are read, Home's widgets
+// are told so instead of being shown no workflows
+let definitionsError: string | null = "Actions is still loading its workflows";
+let runHistory: FlowRun[] = [];
+// trigger id -> runs in flight; bounded by the run gate's cap
+const runningByFlow = new Map<string, number>();
+let runSeq = 0;
 
 const registeredFunctionIds = new Set<string>();
 
@@ -184,14 +196,64 @@ async function executeFlowGated(
         throw new FlowRunRefused(message);
     }
     runningFlows++;
-    ctx.emitTrigger("flow-start", { triggerBlockId: triggerBlock.id });
+    const flowId = triggerBlock.id;
+    const label = flowLabels(flows).get(flowId) ?? triggerBlock.action?.name ?? flowId;
+    runningByFlow.set(flowId, (runningByFlow.get(flowId) ?? 0) + 1);
+    ctx.setState({ running: [...runningByFlow.keys()] });
+    ctx.emitTrigger("flow-start", { triggerBlockId: flowId });
     const { onStepChange, onLog } = flowCallbacks(ctx);
+    let outcome: { status: FlowRun["status"]; message: string } = { status: "failed", message: "The run did not finish" };
     try {
-        return await executeFlow(triggerBlock, payload, undefined, onStepChange, onLog, serviceHooks());
+        const log = await executeFlow(triggerBlock, payload, undefined, onStepChange, onLog, serviceHooks());
+        outcome = log.status === "success"
+            ? { status: "passed", message: log.message }
+            : { status: "failed", message: log.message || `Flow ended with status ${log.status}` };
+        return log;
+    } catch (err) {
+        outcome = { status: "failed", message: err instanceof Error ? err.message : String(err) };
+        throw err;
     } finally {
         runningFlows--;
-        ctx.emitTrigger("flow-end", { triggerBlockId: triggerBlock.id });
+        const left = (runningByFlow.get(flowId) ?? 1) - 1;
+        if (left > 0) runningByFlow.set(flowId, left);
+        else runningByFlow.delete(flowId);
+        runHistory = recordRun(runHistory, { id: `run_${Date.now()}_${++runSeq}`, flowId, label, ...outcome, finishedAt: Date.now() });
+        ctx.setState({ running: [...runningByFlow.keys()], runs: runHistory });
+        ctx.emitTrigger("flow-end", { triggerBlockId: flowId });
     }
+}
+
+function requireDefinitions(): void {
+    if (definitionsError) throw new Error(definitionsError);
+}
+
+/** Home's Run button: the manual flow it names, by its current label, or gone. */
+export function describeWidgetFlow(flowId: unknown): { id: string; label: string } | { gone: true } {
+    requireDefinitions();
+    const flow = findManualFlow(flows, flowId);
+    if (!flow) return { gone: true };
+    return { id: flow.id, label: flowLabels(flows).get(flow.id)! };
+}
+
+/**
+ * Home's Run button: runs one manual flow and answers with its result. A
+ * flow that was deleted, or is not started by hand, is refused.
+ */
+export async function runWidgetFlow(ctx: Ctx, flowId: unknown): Promise<{ status: FlowRun["status"]; message: string }> {
+    requireDefinitions();
+    const flow = findManualFlow(flows, flowId);
+    if (!flow) throw new Error("This workflow no longer exists in Actions");
+    serviceCtx = ctx;
+    const log = await executeFlowGated(ctx, flow, {});
+    return log.status === "success"
+        ? { status: "passed", message: log.message }
+        : { status: "failed", message: log.message || `Flow ended with status ${log.status}` };
+}
+
+/** Home's gallery: the flows a Run button can start. */
+export function widgetFlowChoices() {
+    requireDefinitions();
+    return manualFlowChoices(flows);
 }
 
 function handleTriggerEvent(output: any, data: any): void {
@@ -246,6 +308,10 @@ export const __actionsTestState = {
     setServiceCtx: (ctx: Ctx | null) => {
         serviceCtx = ctx;
     },
+    setDefinitionsError: (message: string | null) => {
+        definitionsError = message;
+    },
+    runs: () => runHistory,
     running: () => runningFlows,
 };
 
@@ -343,6 +409,7 @@ function validFunctions(list: unknown[]): FunctionDef[] {
 async function applyDefinitions(ctx: Ctx, nextFlows: CanvasBlock[], nextFunctions: FunctionDef[]): Promise<void> {
     flows = nextFlows;
     functions = nextFunctions;
+    definitionsError = null;
     rev += 1;
     serviceCtx = ctx;
     resubscribeTriggers();
@@ -443,6 +510,36 @@ export const actions = [
     }),
 
     defineAction({
+        id: "widget-flow",
+        name: "Widget Flow",
+        internal: true,
+        description: "What a Home Run button's workflow is called, or that it is gone",
+        template: "Describe widget flow",
+        inputs: { flowId: { type: "string", label: "Workflow", required: true } },
+        output: { type: "object", label: "Workflow" },
+        icon: "widgets",
+        run: async (_ctx: Ctx, inputs: { flowId?: unknown }) => {
+            await actionsService.ready;
+            return describeWidgetFlow(inputs?.flowId);
+        },
+    }),
+
+    defineAction({
+        id: "run-widget-flow",
+        name: "Run Widget Flow",
+        internal: true,
+        description: "Runs the manual workflow a Home Run button names and returns its result",
+        template: "Run widget flow",
+        inputs: { flowId: { type: "string", label: "Workflow", required: true } },
+        output: { type: "object", label: "Run Result" },
+        icon: "play_arrow",
+        run: async (ctx: Ctx, inputs: { flowId?: unknown }) => {
+            await actionsService.ready;
+            return runWidgetFlow(ctx, inputs?.flowId);
+        },
+    }),
+
+    defineAction({
         id: "test-run-flow",
         name: "Test Run Flow",
         description: "Executes one stored flow by trigger block id and returns its log",
@@ -478,8 +575,14 @@ export const actionsService = definePanelService({
         flowCount: 0,
         functionCount: 0,
         rev: 0,
-    },
+        runs: [],
+        running: [],
+    } as ActionsServiceState,
     actions,
+    // what the Run button's "Workflow" dropdown offers in Home's gallery
+    widgetChoices: {
+        "run-button": { flow: () => widgetFlowChoices() },
+    },
     async onInit(ctx: Ctx) {
         serviceCtx = ctx;
 
@@ -489,7 +592,9 @@ export const actionsService = definePanelService({
             const { canvas } = await canvasDoc.load();
             flows = canvas.flows;
             functions = canvas.functions;
+            definitionsError = null;
         } catch (err) {
+            definitionsError = `Actions couldn't read its saved workflows: ${err instanceof Error ? err.message : String(err)}`;
             // the panel shows this and retries; saves stay refused until the
             // stored canvas reads, so it is never overwritten as empty
             console.error("[ActionsService] Failed to load stored flows:", err);
