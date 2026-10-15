@@ -34,6 +34,8 @@ export interface WidgetLibraryProps {
     panelsByComputer: Record<string, PanelItem[]>;
     panelsLoadFailed: Record<string, boolean>;
     full: boolean;
+    /** Home is on screen; hidden previews stop ticking and polling */
+    visible: boolean;
     /** Home's cell size, so a preview is drawn exactly as it will look */
     cell: number;
     inset: number;
@@ -309,7 +311,7 @@ const WidgetCard: Component<WidgetLibraryProps & { widget: WidgetDeclaration; en
                                                 widgetId={props.widget.id}
                                                 instanceId={previewId}
                                                 size={parsed()}
-                                                visible={true}
+                                                visible={props.visible}
                                                 label={`${props.widget.name} preview`}
                                                 queue={props.queue}
                                             />
@@ -324,8 +326,12 @@ const WidgetCard: Component<WidgetLibraryProps & { widget: WidgetDeclaration; en
                                         computerName={computerName()}
                                         showComputer={props.computers.length > 1}
                                         size={parsed()}
-                                        visible={true}
+                                        visible={props.visible}
                                         panelName={(panelId) => props.panelName(entry().computerId, panelId)}
+                                        computers={props.computers}
+                                        panels={props.panelsByComputer[entry().computerId]}
+                                        panelsFailed={!!props.panelsLoadFailed[entry().computerId]}
+                                        onRetryPanels={() => props.onRetry(entry().computerId)}
                                     />
                                 )}
                             </Show>

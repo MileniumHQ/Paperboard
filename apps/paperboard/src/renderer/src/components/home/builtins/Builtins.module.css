@@ -10,7 +10,7 @@
     color: var(--paper-text);
     font-family: var(--paper-font-family);
     font-size: var(--paper-text-size-1);
-    line-height: 1.25;
+    line-height: var(--paper-leading-snug);
     text-align: left;
     overflow: hidden;
 }
@@ -23,7 +23,8 @@
     padding: var(--pad);
     display: flex;
     flex-direction: column;
-    align-items: center;
+    /* on the same left edge as every other widget's text */
+    align-items: flex-start;
     justify-content: center;
     gap: var(--paper-uigap-onefourth);
     font-variant-numeric: tabular-nums;
@@ -32,8 +33,8 @@
 
 .clockTime {
     font-size: min(40cqh, 20cqw);
-    font-weight: 800;
-    line-height: 1;
+    font-weight: var(--paper-weight-bold);
+    line-height: var(--paper-leading-none);
 }
 
 .clockDate {
@@ -44,8 +45,8 @@
 .clockWide {
     flex-direction: row;
     justify-content: space-between;
+    align-items: center;
     gap: var(--pad);
-    padding: var(--pad) calc(var(--pad) * 2.5);
 }
 
 .clockWide .clockTime {
@@ -62,7 +63,7 @@
 
 .clockWeekday {
     font-size: clamp(var(--paper-text-size-2), 19cqh, var(--paper-text-size-5));
-    font-weight: 800;
+    font-weight: var(--paper-weight-bold);
 }
 
 .clockWide .clockDate {
@@ -102,9 +103,9 @@
 
 .faceDay {
     fill: var(--paper-text-subtle);
-    /* in the face's own units: its viewBox is 100 across */
+    /* paper-literal-ok: in the face's own units, its viewBox is 100 across */
     font-size: 7px;
-    font-weight: 700;
+    font-weight: var(--paper-weight-bold);
     letter-spacing: var(--paper-text-tracking);
 }
 
@@ -134,50 +135,22 @@
 
 /* ── CPU and Memory ───────────────────────────────────────────────────── */
 
-.usage {
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-    box-sizing: border-box;
-    padding: var(--pad);
-    gap: var(--gap);
-}
-
-.usageHeader {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: var(--gap);
-    min-width: 0;
-}
-
-.usageTitle {
-    flex: 1;
-    min-width: 0;
-}
-
-.usageSubtle {
-    flex-shrink: 0;
-    white-space: nowrap;
-}
-
-/* the ring, with what it's made of beside it (wide) or under it (square) */
+/* the ring with its legend beside it (wide) or the ring and its trend over
+   the legend (square); the header, padding and messages are PaperWidget's */
 .usageBody {
     flex: 1;
     min-height: 0;
     display: flex;
     align-items: center;
-    justify-content: center;
     gap: var(--pad);
 }
 
-.usageTall .usageBody {
+.usageTall {
     flex-direction: column;
     align-items: stretch;
     gap: var(--gap);
 }
 
-/* the ring alone, except in a square tile, where the trend sits beside it */
 .usageCharts {
     display: contents;
 }
@@ -191,43 +164,31 @@
 }
 
 /* sized by the height the tile leaves it, never by its width */
-.usage .donut {
+.donut {
+    flex-shrink: 0;
     width: auto;
     height: 100%;
 }
 
-.usageTall .donut {
-    max-height: 34cqmin;
-}
-
-.usage .trend {
+.trend {
     flex: 1;
     min-width: 0;
     width: auto;
     height: 100%;
-    max-height: 34cqmin;
 }
 
 .donutValue {
     font-size: 22cqh;
-    font-weight: 800;
+    font-weight: var(--paper-weight-bold);
     font-variant-numeric: tabular-nums;
 }
 
-.usageSmall .donutValue {
-    font-size: 20cqmin;
-}
-
 .usageTall .donutValue {
-    font-size: 8.5cqmin;
+    font-size: 9cqh;
 }
 
-.donutCaption {
-    font-size: clamp(var(--paper-rail-label-size), 10.5cqmin, var(--paper-text-size-1));
-    color: var(--paper-text-subtle);
-}
-
-.usageSide {
+/* as many rows as fit, hanging from the ring's top edge */
+.legendBox {
     flex: 1;
     align-self: stretch;
     min-width: 0;
@@ -235,34 +196,23 @@
     display: flex;
     flex-direction: column;
     justify-content: center;
-}
-
-/* the square tile splits its height between the charts and the legend */
-.usageTall .usageSide {
-    flex: 1 1 0;
-}
-
-/* as many rows as fit; the wide tile's title takes one line of its cell */
-.legendBox {
-    flex: 1;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
     overflow: hidden;
 }
 
-/* rows sit on their line height alone: a wide tile is one cell high */
-.usage .legend {
+.usageTall .legendBox {
+    flex: 1 1 0;
+    justify-content: flex-start;
+}
+
+.legend {
     gap: 0;
 }
 
-.usageMessage {
+/* ── Network ──────────────────────────────────────────────────────────── */
+
+.trendFill {
     flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: var(--paper-uigap-half);
-    text-align: center;
+    min-height: 0;
+    width: 100%;
+    height: auto;
 }

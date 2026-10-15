@@ -804,6 +804,7 @@ const App: Component = () => {
                         panelsLoadFailed={panelsLoadFailed()}
                         onRefreshPanels={(compId) => void refreshPanelsForComputer(compId)}
                         onOpenPanel={openPanelFromHome}
+                        onOpenComputer={(compId) => handleRailSelect(compId)}
                     />
                 </PaperFlex>
             </PaperFlex>

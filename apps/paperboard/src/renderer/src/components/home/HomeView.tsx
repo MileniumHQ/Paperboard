@@ -78,6 +78,7 @@ export interface HomeViewProps {
     panelsLoadFailed: Record<string, boolean>;
     onRefreshPanels: (computerId: string) => void;
     onOpenPanel: (computerId: string, panelId: string) => void;
+    onOpenComputer: (computerId: string) => void;
 }
 
 const HomeView: Component<HomeViewProps> = (props) => {
@@ -564,6 +565,8 @@ const HomeView: Component<HomeViewProps> = (props) => {
             },
         };
     };
+    // a widget being arranged doesn't navigate when pressed
+    const navigates = () => !editing();
     // a built-in widget draws in place; a panel widget is the panel's frame
     const content = (from: WidgetRef, size: () => WidgetSize, visible: () => boolean, instanceId: string, label: () => string) => {
         const builtin = from.source === "builtin" ? builtinWidget(from.widgetId) : undefined;
@@ -577,6 +580,12 @@ const HomeView: Component<HomeViewProps> = (props) => {
                     size={size()}
                     visible={visible()}
                     panelName={(panelId) => panelName(from.computerId, panelId)}
+                    computers={props.computers}
+                    panels={props.panelsByComputer[from.computerId]}
+                    panelsFailed={!!props.panelsLoadFailed[from.computerId]}
+                    onRetryPanels={() => props.onRefreshPanels(from.computerId)}
+                    onOpenPanel={navigates() ? (panelId) => props.onOpenPanel(from.computerId, panelId) : undefined}
+                    onOpenComputer={navigates() ? props.onOpenComputer : undefined}
                 />
             );
         }
@@ -722,6 +731,7 @@ const HomeView: Component<HomeViewProps> = (props) => {
                     panelsByComputer={props.panelsByComputer}
                     panelsLoadFailed={props.panelsLoadFailed}
                     full={items().length >= MAX_HOME_ITEMS}
+                    visible={props.visible}
                     cell={geometry().cell}
                     inset={inset()}
                     queue={queue}

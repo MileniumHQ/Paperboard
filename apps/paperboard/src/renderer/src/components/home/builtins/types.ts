@@ -1,5 +1,6 @@
 import type { Component } from "solid-js";
-import type { WidgetDeclaration, WidgetSize } from "@mileniumhq/paperapi";
+import type { PanelItem, WidgetDeclaration, WidgetSize } from "@mileniumhq/paperapi";
+import type { ComputerInfo } from "../../../lib/shell";
 
 export interface BuiltinWidgetProps {
     /** the computer the widget shows */
@@ -12,6 +13,16 @@ export interface BuiltinWidgetProps {
     visible: boolean;
     /** a panel's display name on this widget's computer */
     panelName: (panelId: string) => string;
+    /** every paired computer */
+    computers: ComputerInfo[];
+    /** the panels installed on this widget's computer; undefined until listed */
+    panels: PanelItem[] | undefined;
+    /** listing this computer's panels failed */
+    panelsFailed: boolean;
+    onRetryPanels: () => void;
+    /** absent in gallery previews and while Home is being edited, which don't navigate */
+    onOpenPanel?: (panelId: string) => void;
+    onOpenComputer?: (computerId: string) => void;
 }
 
 /** A widget Paperboard draws itself, in the shell, with no frame. */

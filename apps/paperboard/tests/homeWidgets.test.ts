@@ -4,6 +4,8 @@ import { describe, expect, it } from "bun:test";
 import type { UsageReport } from "@mileniumhq/paperapi";
 import { canPlace, parseHomeLayout, placementOf, serializeHomeLayout } from "../src/renderer/src/lib/homeLayout";
 import { defaultHomeItems } from "../src/renderer/src/components/home/builtins/defaults";
+import { figureOf, formatRate, formatUptime, panelRunState } from "../src/renderer/src/components/home/builtins/systemFigures";
+import { nextShownUsage, type ShownUsage } from "../src/renderer/src/components/home/builtins/usageStore";
 import { formatBytes, MAX_PANEL_SEGMENTS, usageChart, usedFraction } from "../src/renderer/src/components/home/builtins/usageSegments";
 
 const GiB = 1024 ** 3;
@@ -102,5 +104,50 @@ describe("a new Home", () => {
         expect(items.map((i) => i.widgetId)).toEqual(["clock", "cpu", "memory"]);
         expect(parseHomeLayout(JSON.parse(JSON.stringify(serializeHomeLayout(items))))).toEqual(items);
         for (const item of items) expect(canPlace(items, placementOf(item), item.id)).toBe(true);
+    });
+});
+
+describe("usage shown while a widget waits", () => {
+    const report = { totalMemory: 1 } as unknown as UsageReport;
+    const shownA: ShownUsage = { computerId: "a", state: { kind: "ready", report } };
+
+    it("keeps the last reading of the same computer until the next lands", () => {
+        expect(nextShownUsage(shownA, "a", { kind: "loading" })).toBe(shownA);
+    });
+
+    it("never shows one computer's reading under another's name", () => {
+        expect(nextShownUsage(shownA, "b", { kind: "loading" })).toEqual({ computerId: "b", state: { kind: "loading" } });
+    });
+});
+
+describe("system figures", () => {
+    const ready = (report: Partial<UsageReport>) => ({ kind: "ready" as const, report: report as UsageReport });
+
+    it("tells an old server from a computer that can't measure, and neither is zero", () => {
+        expect(figureOf(ready({}), "disk", "Den")).toEqual({
+            kind: "unavailable", message: "Update Paperboard Server on Den to see this.", retry: false,
+        });
+        expect(figureOf(ready({ network: null }), "network", "Den")).toEqual({
+            kind: "unavailable", message: "Den couldn't report its network use.", retry: true,
+        });
+        expect(figureOf(ready({ uptimeSeconds: 0 }), "uptimeSeconds", "Den")).toEqual({ kind: "ready", value: 0 });
+        expect(figureOf({ kind: "unavailable", message: "offline" }, "disk", "Den")).toEqual({ kind: "unavailable", message: "offline", retry: true });
+    });
+
+    it("formats uptime by its two largest units and rates per second", () => {
+        expect(formatUptime(3 * 86400 + 4 * 3600 + 59)).toBe("3 d 4 h");
+        expect(formatUptime(5 * 3600 + 12 * 60)).toBe("5 h 12 min");
+        expect(formatUptime(30)).toBe("0 min");
+        expect(formatRate(1.5 * 1024 * 1024)).toBe("1.5 MB/s");
+    });
+});
+
+describe("panel run state", () => {
+    it("is running only with live processes, and unknown without a report rather than stopped", () => {
+        const live = new Set(["dev.paperboard.gameserver"]);
+        expect(panelRunState(true, live, "dev.paperboard.gameserver")).toBe("running");
+        expect(panelRunState(true, live, "dev.paperboard.ai")).toBe("stopped");
+        expect(panelRunState(false, live, "dev.paperboard.ai")).toBe("no-service");
+        expect(panelRunState(true, null, "dev.paperboard.ai")).toBe("unknown");
     });
 });

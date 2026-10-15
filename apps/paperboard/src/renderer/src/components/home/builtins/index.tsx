@@ -5,6 +5,8 @@ import { Dynamic } from "solid-js/web";
 import Clock from "./Clock";
 import type { BuiltinWidget, BuiltinWidgetProps } from "./types";
 import UsageDonut from "./UsageDonut";
+import { Disk, Network, Uptime } from "./SystemWidgets";
+import { Computers, Panels } from "./ListWidgets";
 import styles from "./Builtins.module.css";
 
 export type { BuiltinWidget, BuiltinWidgetProps } from "./types";
@@ -35,6 +37,31 @@ export const BUILTIN_WIDGETS: BuiltinWidget[] = [
         },
         perComputer: true,
         component: (props) => <UsageDonut {...props} metric="memory" />,
+    },
+    {
+        declaration: { id: "disk", name: "Disk", description: "How full the drive holding Paperboard's panels is", sizes: ["1x1", "2x1"] },
+        perComputer: true,
+        component: Disk,
+    },
+    {
+        declaration: { id: "network", name: "Network", description: "What a computer is downloading and uploading right now", sizes: ["2x1", "2x2"] },
+        perComputer: true,
+        component: Network,
+    },
+    {
+        declaration: { id: "uptime", name: "Uptime", description: "How long a computer has been running", sizes: ["1x1"] },
+        perComputer: true,
+        component: Uptime,
+    },
+    {
+        declaration: { id: "panels", name: "Panels", description: "Every panel on a computer and whether it's running", sizes: ["2x2", "2x1"] },
+        perComputer: true,
+        component: Panels,
+    },
+    {
+        declaration: { id: "computers", name: "Computers", description: "Each paired computer, online or not", sizes: ["2x1", "2x2"] },
+        perComputer: false,
+        component: Computers,
     },
 ];
 

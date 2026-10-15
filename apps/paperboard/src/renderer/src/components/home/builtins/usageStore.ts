@@ -76,24 +76,45 @@ function unwatch(computerId: string, poller: Poller): void {
     if (pollers.get(computerId) === poller) pollers.delete(computerId);
 }
 
+export interface ShownUsage {
+    computerId: string;
+    state: UsageState;
+}
+
+/**
+ * What a widget shows next. A widget shown again keeps its last reading
+ * until the next one lands, but only for the same computer: another
+ * computer starts from loading, never under the old one's numbers.
+ */
+export function nextShownUsage(previous: ShownUsage, computerId: string, next: UsageState): ShownUsage {
+    const keep = next.kind === "loading" && previous.computerId === computerId && previous.state.kind !== "loading";
+    return keep ? previous : { computerId, state: next };
+}
+
 /**
  * A computer's usage while `active` (the widget is on screen). Hidden
  * widgets keep the last reading but stop asking.
  */
 export function useUsage(computerId: Accessor<string>, active: Accessor<boolean>) {
-    const [current, setCurrent] = createSignal<Poller | null>(null);
+    const [watched, setWatched] = createSignal<{ computerId: string; poller: Poller } | null>(null);
+    // the poller for the computer asked about now; a stale one (the effect
+    // hasn't moved yet) is no poller, never another computer's readings
+    const current = () => {
+        const w = watched();
+        return w && w.computerId === computerId() ? w.poller : null;
+    };
     createEffect(() => {
         if (!active()) return;
         const id = computerId();
         const poller = watch(id);
-        setCurrent(poller);
+        setWatched({ computerId: id, poller });
         onCleanup(() => unwatch(id, poller));
     });
-    // a widget shown again keeps its last reading until the next one lands
-    const state = createMemo<UsageState>((previous) => {
-        const next = current()?.state() ?? { kind: "loading" };
-        return next.kind === "loading" && previous.kind !== "loading" ? previous : next;
-    }, { kind: "loading" });
+    const shown = createMemo<ShownUsage>(
+        (previous) => nextShownUsage(previous, computerId(), current()?.state() ?? { kind: "loading" }),
+        { computerId: "", state: { kind: "loading" } },
+    );
+    const state = () => shown().state;
     const retry = () => {
         const poller = current();
         const id = computerId();
