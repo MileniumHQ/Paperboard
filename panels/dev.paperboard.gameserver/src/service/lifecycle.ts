@@ -12,6 +12,7 @@ import { isWindowsTarget } from "../lib/platform";
 import { currentInstall } from "../software/installRecord";
 import { javaLaunchArgs, launchEntryFile } from "../software/launch";
 import { isInstallRunning } from "./softwareInstall";
+import { assertRecoverySettled } from "./recoveryState";
 import { javaBinaryPath } from "./java";
 import { parseChatMessage, parseLogLine } from "../lib/logs";
 import { parseGameruleValue } from "../core/gamerules";
@@ -67,6 +68,8 @@ export async function startServerInstance(
     ctx: ServiceContext<GameServerState>,
 ): Promise<void> {
     if (ctx.state.serverStatus !== "offline") return;
+    // refused to the caller: a half-settled server folder is not a launch failure
+    assertRecoverySettled("starting the server");
     try {
         ctx.setState({ activeIssue: null });
         await loadConfigAndProperties(ctx);

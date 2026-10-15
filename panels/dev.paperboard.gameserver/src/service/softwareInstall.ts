@@ -17,6 +17,7 @@ import {
 } from "./activation";
 import { InstallerStillRunningError, type InstallerResult, type InstallerRun } from "./installerProcess";
 import { shouldRelayInstallProgress, toInstallProgress, type InstallProgress } from "./installProgress";
+import { assertRecoverySettled } from "./recoveryState";
 import type { GameServerState } from "./types";
 
 // Installs a server software for a Minecraft version: resolve the build,
@@ -70,6 +71,7 @@ function fsOf(deps: InstallDeps): ActivationFs {
  * cannot race a start.
  */
 export async function withInstallLock<T>(work: () => Promise<T>): Promise<T> {
+    assertRecoverySettled("installing");
     if (running) throw new Error("A server install is already running");
     running = true;
     try {

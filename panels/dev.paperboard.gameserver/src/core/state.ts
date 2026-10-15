@@ -47,6 +47,7 @@ export interface StateSetters {
     setServerVersion: (v: string) => void;
     setRamAllocation: (v: number) => void;
     setActiveIssue: (v: ServerIssue | null) => void;
+    setRecoveryBlock: (v: string | null) => void;
     setOnlinePlayerNames: (v: Set<string>) => void;
     setSeenPlayerNames: (v: Set<string>) => void;
     setPlayerStats: (v: Map<string, PlayerStatData>) => void;
@@ -83,6 +84,7 @@ export function applyStatePatch(
         },
         { key: "ramAllocation", apply: (v) => setters.setRamAllocation(v as number) },
         { key: "activeIssue", apply: (v) => setters.setActiveIssue(v as ServerIssue | null) },
+        { key: "recoveryBlock", apply: (v) => setters.setRecoveryBlock((v as string | null) ?? null) },
         {
             key: "onlinePlayers",
             apply: (v) => setters.setOnlinePlayerNames(new Set<string>(v as string[])),

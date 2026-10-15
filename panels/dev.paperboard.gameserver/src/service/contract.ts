@@ -29,6 +29,7 @@ export const ACTION_IDS = {
     killConflictingProcess: "kill-conflicting-process",
     resetWorldFiles: "reset-world-files",
     clearActiveIssue: "clear-active-issue",
+    retryRecovery: "retry-recovery",
     updatePanelConfig: "update-panel-config",
     listWorldDirs: "list-world-dirs",
     listWorlds: "list-worlds",

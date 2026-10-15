@@ -45,6 +45,7 @@ import { listLogFiles, readLogFile } from "./logs";
 import { queryGamerules, setGamerule } from "./gamerules";
 import { applyRuntimeProperties } from "./runtimeProperties";
 import { installServerSoftware, isInstallRunning, withInstallLock } from "./softwareInstall";
+import { settleInterruptedWork } from "./recovery";
 import { readLoaderSettings, writeLoaderSetting } from "./loaderSettings";
 import { listServerFiles, readServerFile, writeServerFile } from "./serverFiles";
 import { locateAddonConfig } from "./addonConfig";
@@ -757,6 +758,25 @@ export const panelActions: ActionDefinition[] = [
         icon: "check",
         run: async (ctx: ServiceContext<GameServerState>) => {
             clearActiveIssue(ctx);
+            return true;
+        },
+    }),
+
+    defineAction({
+        id: ACTION_IDS.retryRecovery,
+        name: "Retry Recovery",
+        category: "Server",
+        description: "Retries cleaning up an install or modpack change that an earlier run left unfinished",
+        internal: true,
+        template: "Retry recovery",
+        inputs: {},
+        output: { type: "boolean", label: "Settled" },
+        quick: false,
+        icon: "refresh",
+        run: async (ctx: ServiceContext<GameServerState>) => {
+            if (isInstallRunning()) throw new Error("An install is running; retry when it finishes.");
+            const settled = await settleInterruptedWork(ctx);
+            if (!settled) throw new Error(ctx.state.recoveryBlock ?? "The interrupted work could not be cleaned up.");
             return true;
         },
     }),

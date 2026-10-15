@@ -53,6 +53,9 @@ export interface GameServerState {
     // live modpack install progress; null when none has run
     modpackProgress: ModpackProgress | null;
     activeIssue: ServerIssue | null;
+    // why an interrupted install or modpack change could not be settled;
+    // starting and installing refuse while set. null when settled.
+    recoveryBlock: string | null;
 }
 
 export const SERVER_PROC_ID = CORE_SERVER_PROC_ID;

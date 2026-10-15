@@ -31,6 +31,7 @@ import {
 } from "../lib/server";
 import { SOFTWARE_NAMES } from "../lib/software";
 import ServerIssueModal from "./ServerIssueModal";
+import RecoveryNotice from "./RecoveryNotice";
 import { MotdEditor, MotdPreview } from "./Motd";
 import { fileApi } from "@mileniumhq/paperapi";
 import { PANEL_ID } from "../service/contract";
@@ -177,6 +178,8 @@ export default function Overview(props: {
                     </PaperBadge>
                 </PaperFlex>
             </PaperFlex>
+
+            <RecoveryNotice />
 
             <Show when={serverActionError()}>
                 <PaperQuote variant="danger" icon="warning" title="Server action failed">

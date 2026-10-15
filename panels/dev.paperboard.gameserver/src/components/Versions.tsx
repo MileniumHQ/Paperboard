@@ -1,4 +1,5 @@
 import { createSignal, For, onMount, Show } from "solid-js";
+import RecoveryNotice from "./RecoveryNotice";
 import {
     PaperButton,
     PaperFlex,
@@ -130,6 +131,8 @@ export default function Versions(props: { onRequestPluginUpdate?: () => void }) 
     return (
         <>
                     <PaperPageHeader icon="deployed_code" title="Versions" />
+
+                    <RecoveryNotice />
 
                     <Show when={error()}>
                         <PaperQuote variant="danger" icon="warning" title="Error">

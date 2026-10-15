@@ -1,9 +1,6 @@
 import { definePanelService, processApi } from "@mileniumhq/paperapi";
 import { SERVER_PROC_ID, appendCapped, type GameServerState } from "./service/types";
-import { recoverInterruptedInstall } from "./service/softwareInstall";
-import { liveRecoveryDeps } from "./service/softwareInstallDeps";
-import { recoverInterruptedModpack } from "./service/modpacks";
-import { liveModpackRecoveryDeps } from "./service/modpackDeps";
+import { settleInterruptedWork } from "./service/recovery";
 import { loadConfigAndProperties } from "./service/config";
 import { DEFAULT_MOTD } from "./core/motd";
 import { handleProcessData, handleProcessExit } from "./service/lifecycle";
@@ -40,6 +37,7 @@ const initialState: GameServerState = {
     installProgress: null,
     modpackProgress: null,
     activeIssue: null,
+    recoveryBlock: null,
 };
 
 export const gameServerService = definePanelService({
@@ -58,37 +56,10 @@ export const gameServerService = definePanelService({
     actions: [...panelActions, ...panelEventActions],
     async onInit(ctx) {
         await loadConfigAndProperties(ctx);
-        // an install the previous service run never finished is settled
-        // before anything reads the server folder
-        try {
-            const recovered = await recoverInterruptedInstall(liveRecoveryDeps());
-            if (recovered.committed.length || recovered.rolledBack.length || recovered.discarded.length) {
-                console.log("[gameserver] settled interrupted install:", JSON.stringify(recovered));
-            }
-        } catch (err) {
-            console.error("[gameserver] interrupted install could not be settled:", String(err));
-            ctx.setState({
-                serverEntries: appendCapped(ctx.state.serverEntries, {
-                    type: "error",
-                    content: `[Server] An interrupted install could not be cleaned up: ${err instanceof Error ? err.message : String(err)}`,
-                }),
-            });
-        }
-        // then a modpack change, which may have been waiting on that install
-        try {
-            const recovered = await recoverInterruptedModpack(liveModpackRecoveryDeps());
-            if (recovered.committed.length || recovered.rolledBack.length || recovered.discarded.length) {
-                console.log("[gameserver] settled interrupted modpack change:", JSON.stringify(recovered));
-            }
-        } catch (err) {
-            console.error("[gameserver] interrupted modpack change could not be settled:", String(err));
-            ctx.setState({
-                serverEntries: appendCapped(ctx.state.serverEntries, {
-                    type: "error",
-                    content: `[Server] An interrupted modpack change could not be cleaned up: ${err instanceof Error ? err.message : String(err)}`,
-                }),
-            });
-        }
+        // an install or modpack change the previous service run never
+        // finished is settled before anything reads the server folder; when
+        // it cannot be, starting and installing stay blocked (recovery.ts)
+        await settleInterruptedWork(ctx);
         // a newly seen player name must reach the join/leave triggers'
         // dropdowns without a restart
         setPlayerNamesChangedHandler(() => scheduleRepublishDynamicActions(ctx));

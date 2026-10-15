@@ -1,4 +1,5 @@
 import { createEffect, createSignal, For, on, onCleanup, Show } from "solid-js";
+import RecoveryNotice from "./RecoveryNotice";
 import {
     PaperAvatar,
     PaperBadge,
@@ -191,6 +192,8 @@ export default function Modpacks(props: { active: boolean }) {
     return (
         <>
             <PaperPageHeader icon="package_2" title="Modpacks" />
+
+            <RecoveryNotice />
 
             <Show when={!offline()}>
                 <PaperQuote icon="info" title="The server is running">
