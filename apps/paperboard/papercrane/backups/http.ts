@@ -126,7 +126,8 @@ export async function httpRequest(rawUrl: string, init: HttpRequestInit = {}): P
                 pipeline(upload, req, { signal: controller.signal }).catch(reject);
             } else req.end(init.body);
         });
-    } catch (error) {
+    } catch (caught) {
+        let error = caught;
         req?.destroy();
         response?.destroy();
         upload?.destroy();
