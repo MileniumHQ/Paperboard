@@ -114,11 +114,15 @@ export default function registerShellIpc(ipcMain: IpcMain) {
         const google = paperboardGoogleClient(import.meta.env);
         if (!google) throw new Error("This build of Paperboard has no Google sign-in. Use a release build to connect Google Drive.");
         const client = connectionPool.getClient(computerId);
-        const refreshToken = await signInToGoogleDrive(google, {
-            openExternal: (url) => shell.openExternal(url),
-            page: (outcome) => googleSignInPage(outcome, nativeTheme.shouldUseDarkColors),
-        });
-        return client.call("backup:destination-add", { destination: { kind: "gdrive", label, ...google, refreshToken } }, 120_000);
+        // the browser tab is answered after the daemon keeps the sign-in
+        return signInToGoogleDrive(
+            google,
+            {
+                openExternal: (url) => shell.openExternal(url),
+                page: (outcome, reason) => googleSignInPage(outcome, nativeTheme.shouldUseDarkColors, reason),
+            },
+            (refreshToken) => client.call("backup:destination-add", { destination: { kind: "gdrive", label, ...google, refreshToken } }, 120_000),
+        );
     });
 
     ipcMain.handle("app-update-state", (event) => {

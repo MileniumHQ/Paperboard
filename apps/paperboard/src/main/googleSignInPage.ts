@@ -5,6 +5,8 @@ import colors from "../../../../packages/paperui/src/styles/colors.css?raw";
 import tokens from "../../../../packages/paperui/src/styles/styles.css?raw";
 import nunitoSans from "../../../../packages/paperui/src/font/NunitoSans.woff2?inline";
 
+import { signInReasonHtml } from "./signInReason";
+
 export type SignInPageOutcome = "connected" | "not-connected";
 
 const ICONS: Record<SignInPageOutcome, string> = {
@@ -17,7 +19,8 @@ const TEXT: Record<SignInPageOutcome, { title: string; description: string }> = 
     "not-connected": { title: "Google Drive wasn't connected", description: "You can close this tab and try again in Paperboard." },
 };
 
-export function googleSignInPage(outcome: SignInPageOutcome, dark: boolean): string {
+/** reason: why the sign-in was not connected, shown under the title */
+export function googleSignInPage(outcome: SignInPageOutcome, dark: boolean, reason?: string): string {
     const theme = dark ? "dark" : "light";
     const text = TEXT[outcome];
     return `<!doctype html>
@@ -44,7 +47,7 @@ body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify
 <main class="state">
 <svg class="icon ${outcome}" viewBox="0 0 24 24" aria-hidden="true">${ICONS[outcome]}</svg>
 <h1 class="title">${text.title}</h1>
-<p class="description">${text.description}</p>
+<p class="description">${text.description}</p>${reason ? `\n<p class="description">${signInReasonHtml(reason)}</p>` : ""}
 </main>
 </body>
 </html>`;

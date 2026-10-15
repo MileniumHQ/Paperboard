@@ -7,6 +7,7 @@
 import * as crypto from "crypto";
 import * as http from "http";
 import { once } from "events";
+import { signInReasonHtml } from "./signInReason";
 import { logger } from "../../papercrane/logger";
 
 export const DRIVE_FILE_SCOPE = "https://www.googleapis.com/auth/drive.file";
@@ -43,23 +44,34 @@ export interface GoogleSignInDeps {
     openExternal: (url: string) => Promise<void>;
     endpoints?: GoogleOAuthEndpoints;
     timeoutMs?: number;
-    /** the page the browser lands on afterwards; a bare one by default */
-    page?: (outcome: "connected" | "not-connected") => string;
+    /** the page the browser lands on afterwards, a bare one by default; the
+     * reason says why a sign-in was not connected */
+    page?: (outcome: "connected" | "not-connected", reason?: string) => string;
 }
 
 const base64url = (buf: Buffer) => buf.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 
-const PAGE = (message: string) =>
-    `<!doctype html><meta charset="utf-8"><title>Paperboard</title><body style="font-family:sans-serif;padding:3em">${message}</body>`;
+const PAGE = (outcome: "connected" | "not-connected", reason?: string) =>
+    `<!doctype html><meta charset="utf-8"><title>Paperboard</title><body style="font-family:sans-serif;padding:3em">${
+        outcome === "connected"
+            ? "Google Drive is connected. You can close this tab and go back to Paperboard."
+            : `Google Drive was not connected${reason ? `: ${signInReasonHtml(reason)}` : ""}. You can close this tab.`
+    }</body>`;
 
 // one sign-in at a time: each holds a listening socket and a browser tab
 let signingIn = false;
 
-/** resolves with the refresh token once the user signs in and allows access */
-export async function signInToGoogleDrive(
+/**
+ * Signs in, exchanges the code for a refresh token, and hands the token to
+ * `persist` (the daemon keeping it). Resolves with what persist resolves
+ * with. The browser tab is answered last, with the real outcome: "connected"
+ * only once persist succeeded, otherwise "not-connected" with the reason.
+ */
+export async function signInToGoogleDrive<T>(
     client: GoogleClient,
     deps: GoogleSignInDeps,
-): Promise<string> {
+    persist: (refreshToken: string) => Promise<T>,
+): Promise<T> {
     if (signingIn) throw new Error("A Google sign-in is already open in your browser");
     signingIn = true;
     const endpoints = deps.endpoints ?? GOOGLE_OAUTH;
@@ -67,6 +79,9 @@ export async function signInToGoogleDrive(
     const state = base64url(crypto.randomBytes(16));
     let finish!: (outcome: { code: string } | { error: string }) => void;
     const outcome = new Promise<{ code: string } | { error: string }>((resolve) => (finish = resolve));
+    // answers the tab that came back from Google, once, when the outcome is known
+    let answered = false;
+    const tab: { respond: ((outcome: "connected" | "not-connected", reason?: string) => Promise<void>) | null } = { respond: null };
     const server = http.createServer((req, res) => {
         const url = new URL(req.url ?? "/", "http://127.0.0.1");
         if (url.pathname !== "/callback" || url.searchParams.get("state") !== state) {
@@ -75,11 +90,16 @@ export async function signInToGoogleDrive(
         }
         const code = url.searchParams.get("code");
         const error = url.searchParams.get("error");
-        res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(
-            deps.page
-                ? deps.page(code ? "connected" : "not-connected")
-                : PAGE(code ? "Google Drive is connected. You can close this tab and go back to Paperboard." : "Google Drive was not connected. You can close this tab."),
-        );
+        if (tab.respond) {
+            res.writeHead(404).end();
+            return;
+        }
+        tab.respond = (outcome, reason) =>
+            new Promise<void>((resolve) => {
+                if (answered) return resolve();
+                answered = true;
+                res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(deps.page ? deps.page(outcome, reason) : PAGE(outcome, reason), () => resolve());
+            });
         finish(code ? { code } : { error: error === "access_denied" ? "Google access was not allowed" : `Google sign-in failed: ${error ?? "no code"}` });
     });
     const timer = setTimeout(() => finish({ error: "The Google sign-in was not finished within 5 minutes" }), deps.timeoutMs ?? SIGN_IN_TIMEOUT_MS);
@@ -123,7 +143,12 @@ export async function signInToGoogleDrive(
         if (!body) throw new Error(`Google sent an unreadable answer (HTTP ${res.status})`);
         if (!res.ok) throw new Error(`Google refused the sign-in: ${String(body?.error_description ?? body?.error ?? `HTTP ${res.status}`)}`);
         if (typeof body?.refresh_token !== "string") throw new Error("Google did not grant offline access, so backups could not run later");
-        return body.refresh_token;
+        const saved = await persist(body.refresh_token);
+        await tab.respond?.("connected");
+        return saved;
+    } catch (err) {
+        await tab.respond?.("not-connected", (err as Error)?.message ?? String(err));
+        throw err;
     } finally {
         clearTimeout(timer);
         signingIn = false;
