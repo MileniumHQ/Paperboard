@@ -9,6 +9,9 @@
 #     packages       shared library builds + packed external consumer check
 #     paperapi       SDK: build, typecheck, tests, silent-catches
 #     paperui        design system: build, tests, styling, silent-catches
+#   paperboard, origami-library and the panels also run an advisory styling
+#   check (scripts/check-app-styling.sh): literal sizes, colors, motion,
+#   z-index and the like that have a PaperUI token. It warns, never fails.
 #     create-panel   panel scaffolder: build, tests, silent-catches
 #     paperboard     desktop app: typechecks, tests, lint, silent-catches
 #     paperdocs      docs site: tests, build
@@ -124,6 +127,17 @@ gstep() {
     fi
 }
 
+# gwarn <target> <desc> <cmd...>: like gstep, but advisory. The command's
+# output is shown and a nonzero exit is reported, but never fails the gate.
+gwarn() {
+    local target="$1" desc="$2"
+    shift 2
+    if want "$target"; then
+        echo "--- gate (advisory): $desc"
+        "$@" || echo "warn: $desc exited nonzero (advisory, not failing the gate)" >&2
+    fi
+}
+
 # ── shared library artifacts ─────────────────────────────────────────────────
 # Test current shared artifacts, never whatever an earlier developer built.
 gstep paperapi-build "paperapi build" run_in "$ROOT/packages/paperapi" bun run build
@@ -137,6 +151,7 @@ gstep paperboard "paperboard typecheck:web" run_in "$ROOT/apps/paperboard" bun r
 gstep paperboard "paperboard tests" run_in "$ROOT/apps/paperboard" bun test
 gstep paperboard "paperboard lint" run_in "$ROOT/apps/paperboard" bunx biome lint
 gstep paperboard "paperboard silent-catches" run_in "$ROOT/apps/paperboard" bash "$CATCH"
+gwarn paperboard "paperboard styling literals" bash "$ROOT/scripts/check-app-styling.sh" apps/paperboard
 
 # ── root dev scripts: publisher release-math proofs + silent-catch backstop ──
 gstep scripts "root scripts tests" run_in "$ROOT" bun test scripts
@@ -168,6 +183,7 @@ gstep origami "origami silent-catches" run_in "$ROOT/apps/origami" bash "$CATCH"
 gstep origami-library "origami library tests" run_in "$ROOT/apps/origami/library" bun run test
 gstep origami-library "origami library build" run_in "$ROOT/apps/origami/library" bun run build
 gstep origami-library "origami library silent-catches" run_in "$ROOT/apps/origami/library" bash "$CATCH" src test
+gwarn origami-library "origami library styling literals" bash "$ROOT/scripts/check-app-styling.sh" apps/origami/library
 
 # ── first-party panels: suite, typecheck, production build, silent-catch gate.
 # The daemon runs the built dist/service.js, not the TypeScript source, so the
@@ -179,6 +195,7 @@ for short in actions ai botcreator gameserver terminal; do
     gstep "$short" "$panel typecheck" run_in "$ROOT/$panel" bunx tsc --noEmit
     gstep "$short" "$panel build" run_in "$ROOT/$panel" bun run build
     gstep "$short" "$panel silent-catches" run_in "$ROOT/$panel" bash "$CATCH" src test
+    gwarn "$short" "$panel styling literals" bash "$ROOT/scripts/check-app-styling.sh" "$panel"
 done
 
 # ── repo-wide checks (full gate only) ────────────────────────────────────────
