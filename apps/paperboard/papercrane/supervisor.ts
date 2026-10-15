@@ -148,8 +148,10 @@ export class SupervisedProcessClient {
                 resolve(true);
             });
 
-            socket.on("data", (chunk) => {
-                this.buffer += chunk.toString("utf8");
+            // a decoding stream keeps a character split across reads whole
+            socket.setEncoding("utf8");
+            socket.on("data", (chunk: string) => {
+                this.buffer += chunk;
                 const lines = this.buffer.split("\n");
                 this.buffer = lines.pop() || "";
 
@@ -436,8 +438,9 @@ export async function runSupervisor(procId: string): Promise<void> {
         if (startError) cleanupAndExit(1);
 
         let socketBuffer = "";
-        socket.on("data", (chunk) => {
-            socketBuffer += chunk.toString("utf8");
+        socket.setEncoding("utf8");
+        socket.on("data", (chunk: string) => {
+            socketBuffer += chunk;
             const lines = socketBuffer.split("\n");
             socketBuffer = lines.pop() || "";
             for (const line of lines) {
@@ -535,8 +538,12 @@ export async function runSupervisor(procId: string): Promise<void> {
             childProcess = cp.spawn(command, args, { cwd: finalCwd, env: mergedEnv, windowsHide: true });
             childPid = childProcess.pid || 0;
 
-            childProcess.stdout?.on("data", (chunk) => emitOutput("stdout", chunk.toString("utf8")));
-            childProcess.stderr?.on("data", (chunk) => emitOutput("stderr", chunk.toString("utf8")));
+            // decode per stream, not per chunk: a multibyte character split
+            // across two pipe reads must not turn into two U+FFFD
+            childProcess.stdout?.setEncoding("utf8");
+            childProcess.stderr?.setEncoding("utf8");
+            childProcess.stdout?.on("data", (chunk: string) => emitOutput("stdout", chunk));
+            childProcess.stderr?.on("data", (chunk: string) => emitOutput("stderr", chunk));
             childProcess.on("close", (code) => workloadExited(code ?? 0));
             childProcess.on("error", (err) => {
                 emitOutput("stderr", `\n[Process Error] ${err.message}\n`);

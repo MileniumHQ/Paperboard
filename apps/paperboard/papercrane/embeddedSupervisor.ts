@@ -133,16 +133,15 @@ export class EmbeddedSupervisor implements PaperCraneClientLike {
                     this.emit("exit", code);
                 });
             } else {
-                this.proc.stdout?.on("data", (chunk: Buffer) =>
-                    this.emit("data", chunk.toString("utf8")),
-                );
-                this.proc.stderr?.on("data", (chunk: Buffer) => {
-                    this.emit("stderr", chunk.toString("utf8"));
-                    this.emit("data", chunk.toString("utf8"));
+                // decode per stream, not per chunk, so a split character stays whole
+                this.proc.stdout?.setEncoding("utf8");
+                this.proc.stderr?.setEncoding("utf8");
+                this.proc.stdout?.on("data", (chunk: string) => this.emit("data", chunk));
+                this.proc.stderr?.on("data", (chunk: string) => {
+                    this.emit("stderr", chunk);
+                    this.emit("data", chunk);
                 });
-                this.proc.stdout?.on("data", (chunk: Buffer) =>
-                    this.emit("stdout", chunk.toString("utf8")),
-                );
+                this.proc.stdout?.on("data", (chunk: string) => this.emit("stdout", chunk));
                 this.proc.on("close", (code: number | null) => {
                     this.alive = false;
                     this.emit("exit", code ?? 0);
