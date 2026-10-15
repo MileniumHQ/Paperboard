@@ -74,6 +74,21 @@
     border: none;
     display: block;
     background: transparent;
+    /* hidden until its document answers ready, then eased in */
+    transition: opacity var(--paper-medium-transition) var(--paper-ease-standard);
+}
+
+/* a widget's content eases in as it mounts instead of popping onto its
+   card. A panel's frame is left out: it fades when it's ready, not when
+   it mounts, and an animation would override its hidden opacity. */
+.card > :not(.frame) {
+    animation: contentIn var(--paper-medium-transition) var(--paper-ease-standard) both;
+}
+
+@keyframes contentIn {
+    from {
+        opacity: 0;
+    }
 }
 
 /* widget frames never take the pointer while Home is being arranged */

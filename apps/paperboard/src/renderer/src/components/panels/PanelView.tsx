@@ -69,7 +69,7 @@ const PanelFrame: Component<{ panelKey: string; computerName: string; current: b
             sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
             allow="clipboard-read; clipboard-write"
             onLoad={() => frame?.contentWindow?.postMessage({ type: "paperboard:initialize", generation, computerName: props.computerName }, "*")}
-            style={{ width: "100%", height: "100%", border: "none", "border-left": `${getVarCss("border-width")} solid ${getVarCss("border")}`, opacity: ready() && !failure() && !props.restart ? "1" : "0", "pointer-events": ready() && !failure() && !props.restart ? "auto" : "none" }} />
+            style={{ display: "block", width: "100%", height: "100%", border: "none", "border-left": `${getVarCss("border-width")} solid ${getVarCss("border")}`, opacity: ready() && !failure() && !props.restart ? "1" : "0", "pointer-events": ready() && !failure() && !props.restart ? "auto" : "none" }} />
         <BackupLocationChooser computerId={computerId} computerName={props.computerName} panelId={panelId} open={chooser() !== null} onDone={(result) => {
             const request = chooser();
             setChooser(null);
