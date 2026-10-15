@@ -1,6 +1,6 @@
 import { type Component, createSignal, For, onMount, Show } from "solid-js";
 import { PaperButton, PaperCard, PaperFlex, PaperModal, PaperSectionHeader, PaperText, getVarCss } from "@mileniumhq/paperui";
-import { backupLocationsApi, type BackupLocation } from "@mileniumhq/paperapi";
+import { backupLocationLabel, backupLocationsApi, type BackupLocation } from "@mileniumhq/paperapi";
 import { loadUsage, usageText, type UsageState } from "./locationUsage";
 import { LocationLogo } from "./providers";
 import AddLocationModal from "./AddLocationModal";
@@ -8,7 +8,7 @@ import AddLocationModal from "./AddLocationModal";
 // The Backups section of a computer's Computer Info: the locations its
 // panels can keep backups in, what each holds and has free, adding one, and
 // removing one. Removing a location keeps the backups already there.
-const BackupLocations: Component<{ computerId: string }> = (props) => {
+const BackupLocations: Component<{ computerId: string; computerName: string }> = (props) => {
     const [locations, setLocations] = createSignal<BackupLocation[] | null>(null);
     const [usage, setUsage] = createSignal<Record<string, UsageState>>({});
     const [loadError, setLoadError] = createSignal("");
@@ -82,7 +82,7 @@ const BackupLocations: Component<{ computerId: string }> = (props) => {
                                     <LocationLogo kind={location.kind} size="large" />
                                 </span>
                                 <PaperFlex direction="column" style={{ flex: 1, "min-width": 0 }}>
-                                    <PaperText size={3} weight={700} truncate>{location.label}</PaperText>
+                                    <PaperText size={3} weight={700} truncate>{backupLocationLabel(location, props.computerName)}</PaperText>
                                     <PaperText size={2} color="text-subtle" truncate>{location.detail}</PaperText>
                                     <PaperText size={2} color={usage()[location.id]?.kind === "failed" ? "danger" : "text-subtle"}>
                                         {usageText(usage()[location.id] ?? { kind: "loading" })}
@@ -102,7 +102,7 @@ const BackupLocations: Component<{ computerId: string }> = (props) => {
 
             <AddLocationModal
                 computerId={props.computerId}
-                takenLabels={(locations() ?? []).map((location) => location.label)}
+                takenLabels={(locations() ?? []).map((location) => backupLocationLabel(location, props.computerName))}
                 open={adding()} onClose={() => setAdding(false)} onAdded={() => void load()} />
 
             <PaperModal

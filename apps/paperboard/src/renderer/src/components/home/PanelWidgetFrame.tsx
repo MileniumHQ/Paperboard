@@ -13,10 +13,13 @@ const READY_TIMEOUT_MS = 25_000;
 export interface FrameFacts {
     service: boolean;
     revision: string;
+    /** what the shell calls the computer the panel runs on */
+    computerName: string;
 }
 
 export interface PanelWidgetFrameProps {
     computerId: string;
+    computerName: string;
     panelId: string;
     widgetId: string;
     /** a tile's item id, or a gallery preview's own id */
@@ -125,6 +128,7 @@ const PanelWidgetFrame: Component<PanelWidgetFrameProps> = (props) => {
                     post({
                         type: "paperboard:initialize",
                         service: props.service,
+                        computerName: props.computerName,
                         widget: {
                             id: props.widgetId,
                             instanceId: props.instanceId,

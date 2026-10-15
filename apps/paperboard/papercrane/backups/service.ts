@@ -260,7 +260,7 @@ export class BackupService {
 
     /** forgets the location; backups already there stay where they are */
     async removeDestination(destinationId: string): Promise<void> {
-        if (destinationId === LOCAL_DESTINATION_ID) throw invalidParams("This computer is built in and cannot be removed");
+        if (destinationId === LOCAL_DESTINATION_ID) throw invalidParams("The computer's own folder is built in and cannot be removed");
         await this.mutate((config) => {
             this.destination(destinationId, config);
             config.destinations = config.destinations.filter((d) => d.id !== destinationId);

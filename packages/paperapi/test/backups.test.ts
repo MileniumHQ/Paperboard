@@ -24,7 +24,7 @@ beforeEach(() => {
         addEventListener: (type: string, fn: Listener) => type === "message" && listeners.add(fn),
         removeEventListener: (type: string, fn: Listener) => type === "message" && listeners.delete(fn),
     };
-    setFrameSession({ generation: "gen-1", widget: false });
+    setFrameSession({ generation: "gen-1", widget: false, computerName: null });
 });
 
 afterEach(() => {
@@ -59,10 +59,24 @@ describe("chooseLocation", () => {
     it("asks the shell for this panel and resolves the chosen location", async () => {
         const result = backupApi.chooseLocation(PANEL);
         expect(posted[0]).toMatchObject({ type: "paperboard:backup-location", generation: "gen-1", panelId: PANEL });
-        const location = { id: "local", kind: "local", label: "This computer", detail: "/x", removable: false };
+        const location = { id: "local", kind: "local", label: "pxl-desktop", detail: "/x", removable: false };
         reply({ type: "paperboard:backup-location-result", generation: "gen-1", requestId: posted[0].requestId, result: { status: "chosen", location } });
         expect(await result).toEqual({ status: "chosen", location });
         expect(listeners.size).toBe(0);
+    });
+
+    it("names the computer's own folder after the computer, as the shell calls it", async () => {
+        setFrameSession({ generation: "gen-1", widget: false, computerName: "Studio PC" });
+        const result = backupApi.chooseLocation(PANEL);
+        const location = { id: "local", kind: "local", label: "studio-pc", detail: "/x", removable: false };
+        reply({ type: "paperboard:backup-location-result", generation: "gen-1", requestId: posted[0].requestId, result: { status: "chosen", location } });
+        expect(await result).toEqual({ status: "chosen", location: { ...location, label: "Studio PC" } });
+
+        // a bucket keeps the label it was given
+        const bucket = backupApi.chooseLocation(PANEL);
+        const s3 = { id: "d-000000000001", kind: "s3", label: "Offsite", detail: "b at s3", removable: true };
+        reply({ type: "paperboard:backup-location-result", generation: "gen-1", requestId: posted[1].requestId, result: { status: "chosen", location: s3 } });
+        expect(await bucket).toEqual({ status: "chosen", location: s3 });
     });
 
     it("throws the shell's failure and refuses widgets", async () => {
@@ -71,7 +85,7 @@ describe("chooseLocation", () => {
         const err = await result.catch((e) => e);
         expect(err instanceof BackupLocationError && err.code === "failed").toBe(true);
 
-        setFrameSession({ generation: "gen-2", widget: true });
+        setFrameSession({ generation: "gen-2", widget: true, computerName: null });
         const widgetErr = await backupApi.chooseLocation(PANEL).catch((e) => e);
         expect(widgetErr instanceof BackupLocationError && widgetErr.code === "unavailable").toBe(true);
         expect(listeners.size).toBe(0);

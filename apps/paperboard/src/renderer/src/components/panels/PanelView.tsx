@@ -12,6 +12,8 @@ export type RestartState = { kind: "restarting" } | { kind: "failed"; message: s
 export interface PanelViewProps {
     activePanel: string;
     activeComputerId: string;
+    /** what the shell calls each computer; a panel is told its own */
+    computerName: (computerId: string) => string;
     openedPanels: string[];
     reloadTokens?: Record<string, number>;
     onReloadPanel?: (key: string) => void;
@@ -19,7 +21,7 @@ export interface PanelViewProps {
     onRestartPanel?: (key: string) => void;
 }
 
-const PanelFrame: Component<{ panelKey: string; current: boolean; reload: number; retry: () => void; restart?: RestartState; retryRestart: () => void }> = (props) => {
+const PanelFrame: Component<{ panelKey: string; computerName: string; current: boolean; reload: number; retry: () => void; restart?: RestartState; retryRestart: () => void }> = (props) => {
     const [computerId, panelId] = props.panelKey.split("::");
     const [ready, setReady] = createSignal(false);
     const [failure, setFailure] = createSignal("");
@@ -66,9 +68,9 @@ const PanelFrame: Component<{ panelKey: string; current: boolean; reload: number
         <iframe ref={frame} data-panel-key={props.panelKey} title={panelId}
             sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
             allow="clipboard-read; clipboard-write"
-            onLoad={() => frame?.contentWindow?.postMessage({ type: "paperboard:initialize", generation }, "*")}
+            onLoad={() => frame?.contentWindow?.postMessage({ type: "paperboard:initialize", generation, computerName: props.computerName }, "*")}
             style={{ width: "100%", height: "100%", border: "none", "border-left": `${getVarCss("border-width")} solid ${getVarCss("border")}`, opacity: ready() && !failure() && !props.restart ? "1" : "0", "pointer-events": ready() && !failure() && !props.restart ? "auto" : "none" }} />
-        <BackupLocationChooser computerId={computerId} panelId={panelId} open={chooser() !== null} onDone={(result) => {
+        <BackupLocationChooser computerId={computerId} computerName={props.computerName} panelId={panelId} open={chooser() !== null} onDone={(result) => {
             const request = chooser();
             setChooser(null);
             if (request && request.generation === generation) request.target.postMessage({ type: BACKUP_LOCATION_RESULT, generation: request.generation, requestId: request.requestId, result }, "*");
@@ -99,7 +101,7 @@ const PanelView: Component<PanelViewProps> = (props) => {
     const live = () => liveKeys(props.openedPanels, usageOrder(), currentKey(), MAX_LIVE_IFRAMES);
     return <PaperFlex fullWidth fullHeight background="surface-raised" style={{ flex: "1", position: "relative", overflow: "hidden" }}>
         <For each={props.openedPanels}>{(key) => <Show when={live().has(key)}>
-            <PanelFrame panelKey={key} current={key === currentKey()} reload={props.reloadTokens?.[key] || 0} retry={() => props.onReloadPanel?.(key)}
+            <PanelFrame panelKey={key} computerName={props.computerName(key.split("::")[0])} current={key === currentKey()} reload={props.reloadTokens?.[key] || 0} retry={() => props.onReloadPanel?.(key)}
                 restart={props.restartStates?.[key]} retryRestart={() => props.onRestartPanel?.(key)} />
         </Show>}</For>
     </PaperFlex>;

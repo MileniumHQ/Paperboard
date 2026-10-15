@@ -383,6 +383,7 @@ const WidgetCard: Component<WidgetLibraryProps & { widget: WidgetDeclaration; en
                                             return (
                                             <PanelWidgetFrame
                                                 computerId={panelEntry().computerId}
+                                                computerName={props.frameFacts(panelEntry().computerId, panelEntry().panelId).computerName}
                                                 panelId={panelEntry().panelId}
                                                 widgetId={props.widget.id}
                                                 instanceId={previewId}

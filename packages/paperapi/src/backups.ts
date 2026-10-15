@@ -6,6 +6,7 @@
 import { invokeIn } from "./ipc";
 import { requirePanelId } from "./panelIdentity";
 import { requestShell } from "./shellRequest";
+import { currentFrameSession } from "./frameSession";
 
 export interface BackupRecord {
     format: 1;
@@ -87,7 +88,18 @@ export class BackupLocationError extends Error {
     }
 }
 
-const status = (r: any): BackupStatus => ({ location: r?.destination ?? null, running: r?.running ?? null, schedule: r?.schedule ?? null });
+// The computer's own folder is named after the computer. The daemon knows
+// only the machine's hostname; the shell tells a panel page the name it
+// shows for the computer, which is the one people know it by.
+export function backupLocationLabel(location: Pick<BackupLocation, "kind" | "label">, computerName: string | null | undefined): string {
+    return location.kind === "local" && computerName ? computerName : location.label;
+}
+
+function named(location: BackupLocation | null): BackupLocation | null {
+    return location && { ...location, label: backupLocationLabel(location, currentFrameSession()?.computerName) };
+}
+
+const status = (r: any): BackupStatus => ({ location: named(r?.destination ?? null), running: r?.running ?? null, schedule: r?.schedule ?? null });
 
 export const backupApi = {
     /** where this panel's backups go, and whether one is running */
@@ -127,7 +139,7 @@ export const backupApi = {
             busy: () => new BackupLocationError("busy", "The backup location window is already open"),
             parse: (result: any) => {
                 if (result?.status === "canceled") return { status: "canceled" };
-                if (result?.status === "chosen" && result.location && typeof result.location.id === "string") return { status: "chosen", location: result.location };
+                if (result?.status === "chosen" && result.location && typeof result.location.id === "string") return { status: "chosen", location: named(result.location)! };
                 if (result?.status === "failed") return new BackupLocationError("failed", String(result.message ?? "Choosing a backup location failed"));
                 return new BackupLocationError("failed", "The shell sent a malformed backup location result");
             },

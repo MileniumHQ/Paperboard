@@ -775,6 +775,7 @@ const App: Component = () => {
                                         activeComputerId(),
                                     )}
                                     activeComputerId={activeComputerId()}
+                                    computerName={(id) => computers().find((c) => c.id === id)?.name || "This Computer"}
                                     openedPanels={openedPanels()}
                                     reloadTokens={reloadTokens()}
                                     onReloadPanel={bumpReloadToken}

@@ -26,7 +26,7 @@ beforeEach(() => {
         addEventListener: (type: string, fn: Listener) => type === "message" && listeners.add(fn),
         removeEventListener: (type: string, fn: Listener) => type === "message" && listeners.delete(fn),
     };
-    setFrameSession({ generation: "gen-1", widget: false });
+    setFrameSession({ generation: "gen-1", widget: false, computerName: null });
 });
 
 afterEach(() => {
@@ -67,7 +67,7 @@ describe("file export and import", () => {
     });
 
     it("refuses widget frames without asking the shell", async () => {
-        setFrameSession({ generation: "gen-2", widget: true });
+        setFrameSession({ generation: "gen-2", widget: true, computerName: null });
         expect((await fileApi.exportFile("a.txt", PANEL).catch((e) => e)).code).toBe("unavailable");
         expect(posted).toHaveLength(0);
         expect(listeners.size).toBe(0);

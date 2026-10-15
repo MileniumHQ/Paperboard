@@ -1,6 +1,6 @@
 import { type Component, createEffect, createSignal, For, on, Show } from "solid-js";
 import { PaperButton, PaperFlex, PaperModal, PaperSelector, PaperSelectorItem, PaperText } from "@mileniumhq/paperui";
-import { backupApi, backupLocationsApi, type BackupLocation } from "@mileniumhq/paperapi";
+import { backupApi, backupLocationLabel, backupLocationsApi, type BackupLocation } from "@mileniumhq/paperapi";
 import { loadUsage, usageText, type UsageState } from "./locationUsage";
 import { LocationLogo } from "./providers";
 
@@ -10,7 +10,7 @@ export type BackupLocationChoice = { status: "chosen"; location: BackupLocation 
 // backup locations with how much space each has, and which one this
 // panel's backups go to. Only the shell sets the choice. It stays mounted and
 // opens per request, so PaperModal plays its own open and close.
-const BackupLocationChooser: Component<{ computerId: string; panelId: string; open: boolean; onDone: (choice: BackupLocationChoice) => void }> = (props) => {
+const BackupLocationChooser: Component<{ computerId: string; computerName: string; panelId: string; open: boolean; onDone: (choice: BackupLocationChoice) => void }> = (props) => {
     const [locations, setLocations] = createSignal<BackupLocation[] | null>(null);
     const [usage, setUsage] = createSignal<Record<string, UsageState>>({});
     const [selected, setSelected] = createSignal("");
@@ -84,14 +84,14 @@ const BackupLocationChooser: Component<{ computerId: string; panelId: string; op
                             <For each={list()}>
                                 {(location) => (
                                     <PaperSelectorItem value={location.id} icon={<LocationLogo kind={location.kind} />} description={`${location.detail}. ${usageText(usage()[location.id] ?? { kind: "loading" })}`}>
-                                        {location.label}
+                                        {backupLocationLabel(location, props.computerName)}
                                     </PaperSelectorItem>
                                 )}
                             </For>
                         </PaperSelector>
                     )}
                 </Show>
-                <PaperText size={2} color="text-subtle">Add Google Drive or an S3 bucket in this computer's Computer Info.</PaperText>
+                <PaperText size={2} color="text-subtle">Add Google Drive or an S3 bucket in {props.computerName}'s Computer Info.</PaperText>
                 <Show when={error()}>
                     <PaperText size={2} color="danger">{error()}</PaperText>
                 </Show>

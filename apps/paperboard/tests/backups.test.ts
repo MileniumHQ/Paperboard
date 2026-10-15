@@ -9,6 +9,7 @@ import { PaperCraneEngine } from "../papercrane/engine";
 import { PaperCraneAuth } from "../papercrane/auth";
 import { PanelServicesManager } from "../papercrane/panelServices";
 import { panelFilesDirName } from "../papercrane/storage";
+import { computerHostname } from "../papercrane/hostname";
 import { handleBackups } from "../papercrane/rpc/backups";
 import { extractPanelArchive } from "../papercrane/backups/archive";
 import { S3BackupStore, signS3Request } from "../papercrane/backups/s3Store";
@@ -366,7 +367,10 @@ describe("backup scoping", () => {
             ["backup:panel-destination-set", { panelId: ID, destinationId: "local" }],
         ] as const;
         for (const [action, params] of host) expect((await f.call(action, params, ID)).code).toBe("FORBIDDEN");
-        expect((await f.call("backup:destinations", {})).result.destinations.map((d: any) => d.id)).toEqual(["local"]);
+        const [local] = (await f.call("backup:destinations", {})).result.destinations;
+        expect(local.id).toBe("local");
+        // named after the machine; the shell shows its own name for the computer instead
+        expect(local.label).toBe(computerHostname());
     });
 });
 

@@ -56,7 +56,7 @@ const ComputerSettings: Component<ComputerSettingsProps> = (props) => {
 
             <PaperFlex direction="column" gap="double" fullWidth>
                 <Show when={props.computer}>
-                    {(computer) => <BackupLocations computerId={computer().id} />}
+                    {(computer) => <BackupLocations computerId={computer().id} computerName={computer().name || "This Computer"} />}
                 </Show>
 
                 <Show when={!isLocal()}>

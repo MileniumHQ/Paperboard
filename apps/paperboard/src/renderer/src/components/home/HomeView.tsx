@@ -258,6 +258,7 @@ const HomeView: Component<HomeViewProps> = (props) => {
         const panel = props.panelsByComputer[computerId]?.find((p) => p.id === panelId);
         return {
             service: !!panel?.service,
+            computerName: computerName(computerId),
             revision: `${panel?.version ?? ""}|${panel?.updatedAt ?? ""}|${props.reloadTokens[`${computerId}::${panelId}`] ?? 0}`,
         };
     };
@@ -613,6 +614,7 @@ const HomeView: Component<HomeViewProps> = (props) => {
         return (
             <PanelWidgetFrame
                 computerId={from.computerId}
+                computerName={frameFacts(from.computerId, panelId).computerName}
                 panelId={panelId}
                 widgetId={from.widgetId}
                 instanceId={instanceId}

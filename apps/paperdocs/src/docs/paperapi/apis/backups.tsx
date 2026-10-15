@@ -12,7 +12,8 @@ export default function BackupsApiDoc() {
             <PaperText preset="body">
                 backupApi makes, lists, restores, and deletes backups of a panel's data.
                 A backup holds the panel's file storage and its config document. Vault secrets are not part of a backup.
-                The user decides where a panel's backups go: this computer, an S3-compatible bucket, or Google Drive.
+                The user decides where a panel's backups go: a folder on the computer the panel runs on, an S3-compatible bucket, or Google Drive.
+                A location's <PaperCode>label</PaperCode> names it for people. The computer's own folder is labelled with the name Paperboard shows for that computer, such as "This Computer".
                 Reach for backupApi to give users a way back after a bad edit, a migration, or a move.
             </PaperText>
 

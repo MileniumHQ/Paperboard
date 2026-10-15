@@ -1,4 +1,5 @@
 import * as os from "os";
+import { computerHostname } from "../hostname";
 import * as fs from "fs";
 import { spawn } from "child_process";
 import { getDetailedOsInfo, getNetworkIp } from "../index";
@@ -63,7 +64,7 @@ export async function handleSystem(action: string, id: unknown, params: any, ctx
             reply(id, {
                 service: "papercrane",
                 version: PAPERCRANE_VERSION,
-                hostname: os.hostname().replace(/\.local$/i, ""),
+                hostname: computerHostname(),
                 os: osInfo.os,
                 osVersion: osInfo.osVersion,
                 distroId: osInfo.distroId,

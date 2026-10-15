@@ -4,6 +4,17 @@
 export interface FrameSession {
     generation: string;
     widget: boolean;
+    /** what the shell calls the computer this panel runs on ("This
+     * Computer", or a paired computer's name); null when it did not say */
+    computerName: string | null;
+}
+
+export const COMPUTER_NAME_MAX = 120;
+
+export function frameComputerName(value: unknown): string | null {
+    if (typeof value !== "string") return null;
+    const name = value.trim();
+    return name ? name.slice(0, COMPUTER_NAME_MAX) : null;
 }
 
 let session: FrameSession | null = null;

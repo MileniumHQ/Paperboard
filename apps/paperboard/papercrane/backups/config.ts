@@ -1,12 +1,14 @@
 // Where backups go. The daemon owns the list of backup locations and which
 // one each panel uses, in <data dir>/backups/destinations.json. Location
 // secrets (S3 secret keys, Google sign-ins) live in the vault under the
-// reserved "shell-backups" owner, never in this file. "This computer" is
-// built in and cannot be removed.
+// reserved "shell-backups" owner, never in this file. The computer's own
+// folder is built in and cannot be removed; it carries the machine's name,
+// which the shell shows as the name it gives the computer.
 import * as fs from "fs";
 import * as path from "path";
 import { isPanelId } from "../../../../packages/paperapi/src/panelIdentity";
 import { readStateFileSync, writeFileAtomic } from "../storage";
+import { computerHostname } from "../hostname";
 import type { S3Settings } from "./s3Store";
 import type { DriveSettings } from "./driveStore";
 
@@ -29,7 +31,9 @@ export interface BackupConfig {
     panels: Record<string, string>;
 }
 
-export const LOCAL_DESTINATION: Destination = { id: LOCAL_DESTINATION_ID, kind: "local", label: "This computer" };
+export function localDestination(): Destination {
+    return { id: LOCAL_DESTINATION_ID, kind: "local", label: computerHostname() };
+}
 
 export function isDestinationId(value: unknown): value is string {
     return typeof value === "string" && (value === LOCAL_DESTINATION_ID || DESTINATION_ID_RE.test(value));
@@ -59,11 +63,11 @@ function parseDestination(raw: any): Destination | null {
  * malformed entry is an error, never silently dropped */
 export function readBackupConfig(file: string): BackupConfig {
     const raw = readStateFileSync<any>(file, null, "backup locations");
-    if (raw === null) return { version: 1, destinations: [LOCAL_DESTINATION], panels: {} };
+    if (raw === null) return { version: 1, destinations: [localDestination()], panels: {} };
     if (raw.version !== 1 || !Array.isArray(raw.destinations) || !raw.panels || typeof raw.panels !== "object") {
         throw new Error(`${file} is not a backup locations file this Paperboard understands`);
     }
-    const destinations: Destination[] = [LOCAL_DESTINATION];
+    const destinations: Destination[] = [localDestination()];
     for (const entry of raw.destinations) {
         if (entry?.id === LOCAL_DESTINATION_ID) continue;
         const parsed = parseDestination(entry);

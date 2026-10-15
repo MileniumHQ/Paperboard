@@ -1,4 +1,4 @@
-// "This computer": backups in <data dir>/backups/panels/<panel dir>/, an
+// The computer's own folder: backups in <data dir>/backups/panels/<panel dir>/, an
 // archive and its record side by side. The archive lands under a temp name
 // and the record is written last, so a listed backup always has its bytes.
 import * as fs from "fs";
