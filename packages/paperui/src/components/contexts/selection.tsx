@@ -14,10 +14,16 @@ export interface SelectionProviderProps {
     value?: string | number;
     defaultValue?: string | number;
     onValueChange?: (value: string | number) => void;
+    /** Any number of items can be chosen; `values` and `onValuesChange` replace `value`. */
+    multiple?: boolean;
+    values?: readonly (string | number)[];
+    defaultValues?: readonly (string | number)[];
+    onValuesChange?: (values: (string | number)[]) => void;
 }
 
 export interface SelectionContextType {
     name: Accessor<string>;
+    multiple: Accessor<boolean>;
     currentValue: Accessor<string | number | undefined>;
     isSelected: (key: string | number) => boolean;
     setValue: (val: string | number) => void;
@@ -35,15 +41,26 @@ export function useSelectionContext() {
 
 export function SelectionProvider(props: ParentProps<SelectionProviderProps>) {
     const [internalValue, setInternalValue] = createSignal(props.defaultValue);
+    const [internalValues, setInternalValues] = createSignal<readonly (string | number)[]>(props.defaultValues ?? []);
 
     const currentValue = () => (props.value !== undefined ? props.value : internalValue());
+    const currentValues = () => props.values ?? internalValues();
     const isSelected = createSelector(currentValue);
 
     const contextValue: SelectionContextType = {
         name: () => props.name,
+        multiple: () => Boolean(props.multiple),
         currentValue,
-        isSelected: (key) => isSelected(key),
+        isSelected: (key) => (props.multiple ? currentValues().includes(key) : isSelected(key)),
         setValue: (val: string | number) => {
+            if (props.multiple) {
+                // choosing a chosen item unchooses it
+                const was = currentValues();
+                const next = was.includes(val) ? was.filter((v) => v !== val) : [...was, val];
+                if (props.values === undefined) setInternalValues(next);
+                props.onValuesChange?.(next);
+                return;
+            }
             if (props.value === undefined) {
                 setInternalValue(() => val);
             }
@@ -83,11 +100,12 @@ export interface SelectionRadioInputProps extends JSX.InputHTMLAttributes<HTMLIn
 export function SelectionRadioInput(props: SelectionRadioInputProps) {
     const [local, rest] = splitProps(props, ["value", "disabled"]);
     const { isSelected, select, name } = useSelectionItem(local.value, local.disabled);
+    const context = useSelectionContext();
 
     return (
         <input
             {...rest}
-            type="radio"
+            type={context.multiple() ? "checkbox" : "radio"}
             name={name()}
             value={local.value}
             checked={isSelected()}

@@ -22,6 +22,10 @@ export function PaperSelector(props: ParentProps<PaperSelectorProps>) {
         "value",
         "defaultValue",
         "onValueChange",
+        "multiple",
+        "values",
+        "defaultValues",
+        "onValuesChange",
         "direction",
         "horizontal",
         "class",
@@ -47,6 +51,10 @@ export function PaperSelector(props: ParentProps<PaperSelectorProps>) {
             value={local.value}
             defaultValue={local.defaultValue}
             onValueChange={local.onValueChange}
+            multiple={local.multiple}
+            values={local.values}
+            defaultValues={local.defaultValues}
+            onValuesChange={local.onValuesChange}
         >
             <div {...rest} class={className()} classList={local.classList}>
                 {local.children}

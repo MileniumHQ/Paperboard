@@ -54,4 +54,24 @@ describe("PaperSelector & SelectionRadioInput Accessibility Tests", () => {
         const firstItem = container.querySelector('[class*="PaperSelectorItem"]');
         expect(firstItem?.className).toContain("reverse");
     });
+
+    test("multiple chooses any number of items, and choosing one again unchooses it", async () => {
+        const [values, setValues] = createSignal<(string | number)[]>([]);
+        render(() => (
+            <PaperSelector name="test-group" multiple values={values()} onValuesChange={setValues}>
+                <PaperSelectorItem value="opt1">Option 1</PaperSelectorItem>
+                <PaperSelectorItem value="opt2">Option 2</PaperSelectorItem>
+            </PaperSelector>
+        ));
+
+        const boxes = screen.getAllByRole("checkbox") as HTMLInputElement[];
+        expect(boxes.length).toBe(2);
+        await fireEvent.click(screen.getByText("Option 1"));
+        await fireEvent.click(screen.getByText("Option 2"));
+        expect(values()).toEqual(["opt1", "opt2"]);
+        expect(boxes.map((b) => b.checked)).toEqual([true, true]);
+        await fireEvent.click(screen.getByText("Option 1"));
+        expect(values()).toEqual(["opt2"]);
+        expect(boxes[0].checked).toBe(false);
+    });
 });
