@@ -733,3 +733,128 @@ describe("Ask AI memory", () => {
         });
     });
 });
+
+// Favorites: hearted models from any provider, stored in the panel config,
+// validated by the service, gone with their provider, and runnable from
+// Ask AI and Quick ask on the provider they name. Two real loopback
+// endpoints list the same model name, so a favorite that resolved by name
+// alone would reach the wrong one.
+describe("favorite models", () => {
+    const enc = new TextEncoder();
+    const hits: string[] = [];
+    function serve(name: string, models: string[]) {
+        return Bun.serve({
+            hostname: "127.0.0.1",
+            port: 0,
+            async fetch(req) {
+                const url = new URL(req.url);
+                if (url.pathname === "/v1/models") return Response.json({ data: models.map((id) => ({ id })) });
+                if (url.pathname === "/v1/chat/completions") {
+                    hits.push(name);
+                    return new Response(enc.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: `from ${name}` } }] })}\n\ndata: [DONE]\n\n`), {
+                        headers: { "Content-Type": "text/event-stream" },
+                    });
+                }
+                return new Response("not found", { status: 404 });
+            },
+        });
+    }
+    const first = serve("first", ["shared:1", "only-first:1"]);
+    const second = serve("second", ["shared:1"]);
+    afterAll(() => {
+        first.stop(true);
+        second.stop(true);
+    });
+    const A = "api-000000a1";
+    const B = "api-000000b2";
+    const stored = (extra: Record<string, unknown> = {}) => ({
+        version: 2,
+        connections: [
+            { id: A, kind: "openai-compatible", label: "First", baseUrl: `http://127.0.0.1:${first.port}` },
+            { id: B, kind: "openai-compatible", label: "Second", baseUrl: `http://127.0.0.1:${second.port}` },
+        ],
+        ...extra,
+    });
+
+    async function withApp(config: unknown, run: (app: InstanceType<typeof AiApp>, ctx: ReturnType<typeof makeCtx>) => Promise<void>) {
+        savedConfig = config;
+        hits.length = 0;
+        const app = new AiApp(new HangingHost(), { readyTimeoutMs: 100 });
+        const ctx = makeCtx();
+        await app.init(ctx as any);
+        try {
+            const start = Date.now();
+            while (ctx.state.models.length < 3) {
+                if (Date.now() - start > 3000) throw new Error("the endpoints' models never listed");
+                await new Promise((r) => setTimeout(r, 10));
+            }
+            await run(app, ctx);
+        } finally {
+            savedConfig = null;
+            await app.stopRuntime().catch((err) => console.debug("[ai] test teardown:", String(err)));
+            await app.deleteAllConversations();
+        }
+    }
+
+    it("hearts and un-hearts a listed model, saved in the panel config", async () => {
+        await withApp(stored(), async (app, ctx) => {
+            await app.setFavorite({ provider: B, model: "shared:1", favorite: true });
+            await app.setFavorite({ provider: B, model: "shared:1", favorite: true });
+            expect(ctx.state.favorites).toEqual([{ provider: B, model: "shared:1" }]);
+            expect((savedConfig as any).favorites).toEqual([{ provider: B, model: "shared:1" }]);
+            await app.setFavorite({ provider: B, model: "shared:1", favorite: false });
+            expect(ctx.state.favorites).toEqual([]);
+            expect((savedConfig as any).favorites).toEqual([]);
+        });
+    });
+
+    it("refuses a favorite its provider doesn't list, an unknown provider, or a malformed call", async () => {
+        await withApp(stored(), async (app, ctx) => {
+            await expect(app.setFavorite({ provider: B, model: "only-first:1", favorite: true })).rejects.toThrow("Second doesn't list only-first:1.");
+            await expect(app.setFavorite({ provider: "api-0000dead", model: "shared:1", favorite: true })).rejects.toThrow("That provider was removed.");
+            await expect(app.setFavorite({ provider: A, model: "shared:1", favorite: "yes" })).rejects.toThrow("Say whether");
+            await expect(app.setFavorite({ provider: A, model: "  ", favorite: true })).rejects.toThrow("needs a model");
+            expect(ctx.state.favorites).toEqual([]);
+        });
+    });
+
+    it("refuses the 51st favorite instead of dropping one", async () => {
+        const fifty = Array.from({ length: 50 }, (_, i) => ({ provider: A, model: `m${i}:1` }));
+        await withApp(stored({ favorites: fifty }), async (app, ctx) => {
+            expect(ctx.state.favorites).toHaveLength(50);
+            await expect(app.setFavorite({ provider: A, model: "shared:1", favorite: true })).rejects.toThrow("At most 50");
+            expect((savedConfig as any).favorites).toHaveLength(50);
+        });
+    });
+
+    it("drops a removed provider's favorites, in state, in the config, and on load", async () => {
+        await withApp(stored(), async (app, ctx) => {
+            await app.setFavorite({ provider: A, model: "shared:1", favorite: true });
+            await app.setFavorite({ provider: B, model: "shared:1", favorite: true });
+            await app.removeConnection(A);
+            expect(ctx.state.favorites).toEqual([{ provider: B, model: "shared:1" }]);
+            expect((savedConfig as any).favorites).toEqual([{ provider: B, model: "shared:1" }]);
+        });
+        // a favorite naming a provider that is not in the document never surfaces
+        await withApp(stored({ favorites: [{ provider: "api-0000dead", model: "x:1" }, { provider: A, model: "shared:1" }] }), async (_app, ctx) => {
+            expect(ctx.state.favorites).toEqual([{ provider: A, model: "shared:1" }]);
+        });
+    });
+
+    it("runs Ask AI and Quick ask on the favorite's own provider, and keeps plain names working", async () => {
+        await withApp(stored(), async (app) => {
+            await app.setFavorite({ provider: B, model: "shared:1", favorite: true });
+            const value = app.askModelChoices()[0]!.value;
+            expect(value).toBe(`${B}|shared:1`);
+            // by name alone the first endpoint would serve it
+            expect(await app.ask("hi", value)).toBe("from second");
+            // an action saved before favorites names a plain model
+            expect(await app.ask("hi", "shared:1")).toBe("from first");
+            const asked = await app.quickAsk("hi", value);
+            const conversation = (await app.getConversation(asked.conversationId)).conversation;
+            expect(conversation).toMatchObject({ model: "shared:1", provider: B });
+            await expect(app.ask("hi", "api-0000dead|shared:1")).rejects.toThrow("was removed");
+            await expect(app.ask("hi", `${B}|only-first:1`)).rejects.toThrow("only-first:1 is not installed");
+        });
+    });
+});

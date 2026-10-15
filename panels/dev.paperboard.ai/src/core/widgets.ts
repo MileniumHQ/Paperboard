@@ -2,6 +2,7 @@
 // Pure so every branch is testable without a browser.
 
 import { MAX_WIDGET_CHOICES, type WidgetChoice } from "@mileniumhq/paperapi";
+import { favoriteChoices, parseModelChoice } from "./favorites";
 import { formatBytes } from "./fit";
 import { OLLAMA_PROVIDER_ID } from "./providers";
 import type { AiState, LoadedModel, RuntimeStatus } from "./types";
@@ -48,27 +49,46 @@ export const QUICK_ASK_DEFAULT_MODEL = "@default";
  * panel would.
  */
 export function quickAskModel(state: Pick<AiState, "settings" | "models">, chosen?: string): string {
-    if (chosen && chosen !== QUICK_ASK_DEFAULT_MODEL) return chosen;
-    return state.settings.defaultModel || state.models[0]?.name || "";
+    return quickAskTarget(state, chosen).model;
 }
 
-/** What the "Model" option offers in Home's gallery: the default, then each downloaded model. */
-export function quickAskModelChoices(state: Pick<AiState, "models">): WidgetChoice[] {
+/**
+ * The model and, when the choice names one, the connection a Quick ask
+ * uses. A favorite names its connection (`<connection>|<model>`); a plain
+ * name, as widgets placed before favorites hold, is served by the first
+ * connection listing it; the default follows the panel's default provider.
+ */
+export function quickAskTarget(state: Pick<AiState, "settings" | "models">, chosen?: string): { model: string; provider?: string } {
+    if (chosen && chosen !== QUICK_ASK_DEFAULT_MODEL) return parseModelChoice(chosen);
+    if (state.settings.defaultModel) {
+        return { model: state.settings.defaultModel, ...(state.settings.defaultProvider ? { provider: state.settings.defaultProvider } : {}) };
+    }
+    const first = state.models[0];
+    return first ? { model: first.name, provider: first.provider } : { model: "" };
+}
+
+/** What the "Model" option offers in Home's gallery: the default, then each favorite. */
+export function quickAskModelChoices(state: Pick<AiState, "favorites" | "connections">): WidgetChoice[] {
     return [
         { value: QUICK_ASK_DEFAULT_MODEL, label: "Default model" },
         // a coding agent needs a folder, which a widget has nowhere to pick
-        ...state.models
-            .filter((m) => !m.capabilities.includes("agent"))
-            .slice(0, MAX_WIDGET_CHOICES - 1)
-            .map((m) => ({ value: m.name, label: m.name })),
+        ...favoriteChoices(state.favorites, state.connections, MAX_WIDGET_CHOICES - 1).map((c) => ({
+            value: c.value,
+            label: `${c.label} · ${c.description}`,
+        })),
     ];
 }
 
 /** Why Quick ask cannot send now, or null when it can. */
 export function quickAskBlocker(state: Pick<AiState, "connections" | "runtime" | "settings" | "models">, chosen?: string): Blocker | null {
     if (state.connections.length === 0) return { text: "Set up AI to ask from here", recovery: "open" };
-    const model = quickAskModel(state, chosen);
-    const listed = model ? state.models.find((m) => m.name === model) : undefined;
+    const { model, provider } = quickAskTarget(state, chosen);
+    if (provider !== undefined && !state.connections.some((c) => c.id === provider)) {
+        return { text: `${model}'s provider was removed`, recovery: "open" };
+    }
+    const listed = model
+        ? state.models.find((m) => (provider === undefined || m.provider === provider) && m.name === model)
+        : undefined;
     // an endpoint's model needs no local runtime; anything else waits on Ollama
     if (listed && listed.provider !== OLLAMA_PROVIDER_ID) return null;
     if (state.connections.some((c) => c.kind === "ollama")) {

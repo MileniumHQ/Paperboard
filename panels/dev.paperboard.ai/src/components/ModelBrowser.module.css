@@ -46,6 +46,15 @@
     gap: var(--paper-uigap-onefourth);
 }
 
+/* the heart: red when the model is a favorite, quiet otherwise */
+.favoriteOn {
+    color: var(--paper-danger);
+}
+
+.favoriteOff {
+    color: var(--paper-text-subtle);
+}
+
 .sortRow {
     display: flex;
     align-items: center;

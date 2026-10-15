@@ -23,6 +23,7 @@ import type { InstalledModel } from "../core/types";
 import { catalog, catalogEntry, fitFor, makerOf } from "../lib/catalog";
 import { ensureOllamaReady } from "../lib/provisioning";
 import { call, errorText, state } from "../lib/state";
+import { FavoriteToggle } from "./Favorites";
 import FitMeter from "./FitMeter";
 import AgentLogo from "./AgentLogo";
 import MakerLogo from "./MakerLogo";
@@ -51,7 +52,7 @@ export interface ModelBrowserProps {
     onChoose?: (ref: string) => void;
     /** choose mode: the currently selected model ref. */
     selected?: string;
-    /** show default/delete controls on installed models. */
+    /** show favorite/delete controls on installed models. */
     manage?: boolean;
     class?: string;
 }
@@ -157,15 +158,6 @@ export default function ModelBrowser(props: ModelBrowserProps) {
         }
     };
 
-    const makeDefault = async (model: string) => {
-        setError("");
-        try {
-            await call(UI_ACTION_IDS.updateSettings, { defaultModel: model, defaultProvider: props.provider });
-        } catch (err) {
-            setError(errorText(err));
-        }
-    };
-
     function InstalledCard(cardProps: { model: InstalledModel; endpoint?: boolean }) {
         const entry = () => catalogEntry(cardProps.model.name);
         const maker = () => makerOf(cardProps.model.name);
@@ -205,16 +197,12 @@ export default function ModelBrowser(props: ModelBrowserProps) {
                 footerRight={
                     <Show when={props.manage}>
                         <span class={styles.cardActions} onClick={(e) => e.stopPropagation()}>
-                            <PaperButton
-                                icon
-                                size="tiny"
-                                variant="text"
-                                aria-label={`Use ${cardProps.model.label ?? cardProps.model.name} for new chats`}
-                                disabled={isDefault()}
-                                onClick={() => void makeDefault(cardProps.model.name)}
-                            >
-                                star
-                            </PaperButton>
+                            <FavoriteToggle
+                                provider={cardProps.model.provider}
+                                model={cardProps.model.name}
+                                label={cardProps.model.label ?? cardProps.model.name}
+                                onError={setError}
+                            />
                             <Show when={!endpoint()}>
                                 <PaperButton
                                     icon

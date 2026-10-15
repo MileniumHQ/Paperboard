@@ -5,10 +5,23 @@ import { publicActions, uiActions } from "../src/service/actions";
 import { UI_ACTION_IDS } from "../src/contract";
 import { PROMPT_STYLES } from "../src/core/conversation";
 import { askSystemPrompt } from "../src/core/conversation";
+import { favoriteChoices, type FavoriteModel } from "../src/core/favorites";
+
+// Ask AI's model dropdown is the favorites (it used to be every installed
+// model); "agent:" names stand for a coding agent's favorite.
+const CONNECTIONS = [
+    { id: "ollama", kind: "ollama", label: "Local AI" },
+    { id: "api-0000000a", kind: "openai-compatible", label: "OpenRouter", baseUrl: "https://openrouter.example/api" },
+    { id: "agent-0000000b", kind: "agent", label: "Codex", agent: "codex" },
+] as const;
 
 function fakeApp(models: string[]) {
+    const favorites: FavoriteModel[] = models.map((name) =>
+        name.startsWith("agent:") ? { provider: "agent-0000000b", model: name.slice(6) } : { provider: "ollama", model: name },
+    );
     return {
-        models: { list: models.map((name) => ({ name, capabilities: name.startsWith("agent:") ? ["agent"] : ["completion"] })) },
+        favorites,
+        askModelChoices: () => favoriteChoices(favorites, CONNECTIONS as any),
         ready: Promise.resolve(),
     } as any;
 }
@@ -20,17 +33,18 @@ function findAction(app: any, id: string) {
 }
 
 describe("Ask AI schema", () => {
-    it("offers the installed models with a default-model entry", () => {
+    it("offers the favorites, each naming its provider, with a default-model entry", () => {
         const ask = findAction(fakeApp(["qwen3:8b", "llama3:2b"]), "ask");
         const model = ask.inputs.model;
-        expect(model.options.map((o: any) => o.value)).toEqual(["qwen3:8b", "llama3:2b"]);
+        expect(model.options.map((o: any) => o.value)).toEqual(["ollama|qwen3:8b", "ollama|llama3:2b"]);
+        expect(model.options[0]).toMatchObject({ label: "qwen3:8b", description: "Local AI" });
         expect(model.allowEmpty).toBe(true);
         expect(model.emptyLabel).toBe("Default model");
     });
 
     it("leaves coding agents out of the model list", () => {
         const ask = findAction(fakeApp(["qwen3:8b", "agent:Codex"]), "ask");
-        expect(ask.inputs.model.options.map((o: any) => o.value)).toEqual(["qwen3:8b"]);
+        expect(ask.inputs.model.options.map((o: any) => o.value)).toEqual(["ollama|qwen3:8b"]);
     });
 
     it("offers every personality, defaulting to standard", () => {
@@ -47,10 +61,10 @@ describe("Ask AI schema", () => {
     it("keeps the model list live when the schema is rebuilt", () => {
         expect(
             findAction(fakeApp(["a:1"]), "ask").inputs.model.options.map((o: any) => o.value),
-        ).toEqual(["a:1"]);
+        ).toEqual(["ollama|a:1"]);
         expect(
             findAction(fakeApp(["a:1", "b:1"]), "ask").inputs.model.options.map((o: any) => o.value),
-        ).toEqual(["a:1", "b:1"]);
+        ).toEqual(["ollama|a:1", "ollama|b:1"]);
     });
 
     it("takes instructions and a memory key, and labels the prompt plainly", () => {
@@ -95,6 +109,22 @@ describe("AI trigger filters", () => {
         const trigger = findAction(fakeApp(["qwen3:8b"]), "reply-finished");
         expect(trigger.match).toEqual({ field: "model", input: "model" });
         expect(trigger.inputs.model.allowEmpty).toBe(true);
+    });
+
+    it("offers the favorites by plain name, the value the reply event carries", () => {
+        const trigger = findAction(fakeApp(["qwen3:8b", "agent:gpt-5", "qwen3:8b"]), "reply-finished");
+        // agent chats reply too, so their favorites filter replies; names repeat once
+        expect(trigger.inputs.model.options.map((o: any) => o.value)).toEqual(["qwen3:8b", "gpt-5"]);
+    });
+});
+
+describe("favorite UI action", () => {
+    it("forwards provider, model and the heart's state to the service", async () => {
+        let input: unknown;
+        const app = { ready: Promise.resolve(), setFavorite: async (value: unknown) => { input = value; return []; } } as any;
+        const action = uiActions(app).find((a) => a.id === UI_ACTION_IDS.setFavorite)!;
+        await action.run!({}, { provider: "api-0000000a", model: "gpt-4o", favorite: true, extra: 1 });
+        expect(input).toEqual({ provider: "api-0000000a", model: "gpt-4o", favorite: true });
     });
 });
 

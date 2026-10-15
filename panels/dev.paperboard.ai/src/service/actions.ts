@@ -20,13 +20,30 @@ function optStr(value: unknown, name: string, max = 200): string | undefined {
 // ─── public: flow blocks and AI-panel services for other apps ───────────────
 
 /**
- * The model inputs' dropdown options. Registered models change (downloads,
- * deletes), so the same builder feeds the initial registration and every
- * republish — one list, never a stale copy.
+ * Ask AI's model dropdown: the favorites, from any provider, each naming
+ * its connection (`<connection>|<model>`). Favorites change (heart, removed
+ * provider), so the same builder feeds the initial registration and every
+ * republish: one list, never a stale copy. Coding agents answer in chats,
+ * never in flows, so their favorites are not offered.
  */
-function modelOptions(app: AiApp): { label: string; value: string }[] {
-    // coding agents answer in chats, never in flows
-    return app.models.list.filter((m) => !m.capabilities.includes("agent")).map((m) => ({ label: m.name, value: m.name }));
+function askModelOptions(app: AiApp): { label: string; value: string; description: string }[] {
+    return app.askModelChoices();
+}
+
+/**
+ * The reply trigger's model filter: the favorites again, but valued by the
+ * plain model name, because that is what the reply event carries and what
+ * filters saved before favorites hold.
+ */
+function replyModelOptions(app: AiApp): { label: string; value: string }[] {
+    const seen = new Set<string>();
+    const out: { label: string; value: string }[] = [];
+    for (const f of app.favorites) {
+        if (seen.has(f.model)) continue;
+        seen.add(f.model);
+        out.push({ label: f.model, value: f.model });
+    }
+    return out;
 }
 
 const personalityOptions = PROMPT_STYLES.map((style) => ({
@@ -39,13 +56,13 @@ const MAX_PROMPT_CHARS = 32_000;
 const MAX_INSTRUCTIONS_CHARS = 8_000;
 
 export function publicActions(app: AiApp): ActionDefinition[] {
-    const models = modelOptions(app);
+    const models = askModelOptions(app);
     const modelInput = (label = "Model") => ({
         type: "string",
         label,
         allowEmpty: true,
         emptyLabel: "(any)",
-        options: models,
+        options: replyModelOptions(app),
     });
     return [
         defineAction({
@@ -62,6 +79,7 @@ export function publicActions(app: AiApp): ActionDefinition[] {
                     label: "Model",
                     allowEmpty: true,
                     emptyLabel: "Default model",
+                    description: "Your favorite models. Heart a model in the AI panel's Models to offer it here.",
                     options: models,
                 },
                 personality: {
@@ -256,6 +274,9 @@ export function uiActions(app: AiApp): ActionDefinition[] {
             ),
         ),
         ui(UI_ACTION_IDS.revokePermission, "Revoke permission", (i) => ready(() => app.revoke(str(i.key, "key", 400)))),
+        ui(UI_ACTION_IDS.setFavorite, "Favorite model", (i) =>
+            ready(() => app.setFavorite({ provider: i.provider, model: i.model, favorite: i.favorite })),
+        ),
         ui(UI_ACTION_IDS.takeOpenRequest, "Take chat to open", () => ready(() => app.takeOpenRequest())),
         ui(WIDGET_ACTION_IDS.quickAsk, "Quick ask", (i) =>
             ready(() => app.quickAsk(str(i.text, "text", MAX_USER_MESSAGE_CHARS), optStr(i.model, "model", MAX_WIDGET_OPTION_VALUE_LENGTH))),

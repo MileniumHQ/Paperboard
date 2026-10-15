@@ -42,7 +42,17 @@ import { AgentHub, type AgentProcessHost } from "./agents";
 import { findExecutable, type Launch } from "./executable";
 import type { ModelClient } from "./provider";
 import { isReasoningLevel } from "../core/reasoning";
-import { quickAskModel } from "../core/widgets";
+import { quickAskTarget } from "../core/widgets";
+import {
+    addFavorite,
+    favoriteChoices,
+    isFavoriteModelName,
+    MAX_FAVORITE_MODEL_CHARS,
+    parseModelChoice,
+    removeFavorite,
+    sanitizeFavorites,
+    type FavoriteModel,
+} from "../core/favorites";
 import { MAX_AGENT_MODELS } from "../core/acp";
 import type { RegistryAction } from "../core/tools";
 import {
@@ -92,6 +102,8 @@ interface StoredConfig {
     connections?: StoredConnection[];
     /** the project the last agent chat worked in; the next one starts there */
     lastProject?: string;
+    /** hearted models: connection id plus model name, at most MAX_FAVORITES */
+    favorites?: FavoriteModel[];
     /** the models each agent connection offered last, listed without starting it */
     agentModels?: Record<string, AgentModel[]>;
     // TODO(remove after v0.3): the single provider choice of 0.2 configs,
@@ -459,9 +471,14 @@ export class AiApp {
         await this.saveConfig((c) => {
             c.connections = (c.connections ?? []).filter((x) => x.id !== id);
             if (c.agentModels) delete c.agentModels[id];
+            // a removed provider's favorites leave with it
+            if (c.favorites) c.favorites = c.favorites.filter((f) => f.provider !== id);
             if (c.settings?.defaultProvider === id) c.settings = { ...c.settings, defaultModel: "", defaultProvider: "" };
         });
-        this.ctx.setState({ settings: clampSettings(this.stored.settings) });
+        this.ctx.setState({
+            settings: clampSettings(this.stored.settings),
+            favorites: this.ctx.state.favorites.filter((f) => f.provider !== id),
+        });
         const keyed = this.keyedIds();
         keyed.delete(id);
         this.publishConnections(this.stored.connections ?? [], keyed);
@@ -624,6 +641,7 @@ export class AiApp {
                 settings: clampSettings(this.stored.settings),
                 connections,
                 alwaysAllowed: Array.isArray(this.stored.alwaysAllowed) ? this.stored.alwaysAllowed.filter((k) => typeof k === "string") : [],
+                favorites: sanitizeFavorites(this.stored.favorites, connections.map((c) => c.id)),
                 speeds: this.stored.speeds && typeof this.stored.speeds === "object" ? this.stored.speeds : {},
                 lastProject: typeof this.stored.lastProject === "string" ? this.stored.lastProject : undefined,
             });
@@ -667,6 +685,72 @@ export class AiApp {
         });
         this.ctx.setState({ settings });
         return settings;
+    }
+
+    /**
+     * Hearts or un-hearts a model. Adding is validated here, the boundary
+     * that owns the list: the connection must exist and list the model right
+     * now. Removing always works, so a favorite whose model left its
+     * provider can still be cleared.
+     */
+    async setFavorite(input: { provider?: unknown; model?: unknown; favorite?: unknown }): Promise<FavoriteModel[]> {
+        if (typeof input.provider !== "string" || !input.provider) throw new Error("A favorite needs its provider.");
+        if (typeof input.model !== "string" || !input.model.trim()) throw new Error("A favorite needs a model.");
+        if (typeof input.favorite !== "boolean") throw new Error("Say whether the model is a favorite.");
+        const provider = input.provider;
+        const raw = input.model.trim();
+        const add = input.favorite;
+        let favorites!: FavoriteModel[];
+        await this.saveConfig((c) => {
+            const current = sanitizeFavorites(c.favorites, this.connections.map((x) => x.id));
+            if (add) {
+                const owner = this.connection(provider);
+                const listed = this.models.find(raw, provider);
+                if (!listed) throw new Error(`${owner.label} doesn't list ${raw}.`);
+                if (!isFavoriteModelName(listed.name)) {
+                    throw new Error(`Model names longer than ${MAX_FAVORITE_MODEL_CHARS} characters can't be favorites.`);
+                }
+                favorites = addFavorite(current, { provider, model: listed.name });
+            } else {
+                favorites = removeFavorite(current, { provider, model: raw });
+            }
+            c.favorites = favorites;
+        });
+        this.ctx.setState({ favorites });
+        // the model dropdowns of Ask AI and the reply trigger are the favorites
+        void republishPublicActions(this).catch((err) => console.error("[ai] republishing action options failed:", String(err)));
+        return favorites;
+    }
+
+    /** The hearted models, as the service holds them. */
+    get favorites(): readonly FavoriteModel[] {
+        return this.ctx?.state.favorites ?? [];
+    }
+
+    /** The favorites Ask AI can run, labelled with their provider. */
+    askModelChoices(): { label: string; value: string; description: string }[] {
+        return favoriteChoices(this.favorites, this.connections);
+    }
+
+    /**
+     * The model and connection a flow or widget names: a favorite's
+     * `<connection>|<model>`, a plain name (saved before favorites: the first
+     * connection listing it serves it), or nothing for the default model.
+     */
+    private resolveChoice(choice: string | undefined): { model: string; provider: string | undefined } {
+        const settings = this.ctx.state.settings;
+        if (!choice?.trim()) {
+            return { model: settings.defaultModel, provider: settings.defaultProvider || this.models.providerOf(settings.defaultModel) };
+        }
+        const parsed = parseModelChoice(choice);
+        if (parsed.provider !== undefined) {
+            if (!this.connections.some((c) => c.id === parsed.provider)) {
+                throw new Error(`The provider of ${parsed.model} was removed from the AI panel. Pick another model.`);
+            }
+            return { model: this.normalizeModelRef(parsed.model, parsed.provider), provider: parsed.provider };
+        }
+        const model = this.normalizeModelRef(parsed.model);
+        return { model, provider: this.models.providerOf(model) };
     }
 
     async allowAlways(key: string): Promise<void> {
@@ -924,10 +1008,13 @@ export class AiApp {
         if (!content) throw new Error("Type a question first.");
         if (content.length > MAX_USER_MESSAGE_CHARS) throw new Error(`Questions are limited to ${MAX_USER_MESSAGE_CHARS} characters.`);
         if (this.connections.length === 0) throw new Error("Set up AI first.");
-        const model = quickAskModel(this.ctx.state, chosenModel);
+        const target = quickAskTarget(this.ctx.state, chosenModel);
+        const model = target.model;
         if (!model) throw new Error("No model is downloaded yet. Pick one in AI.");
-        const settings = this.ctx.state.settings;
-        const provider = !chosenModel && settings.defaultProvider ? settings.defaultProvider : this.models.providerOf(model);
+        if (target.provider !== undefined && !this.connections.some((c) => c.id === target.provider)) {
+            throw new Error(`The provider of ${model} was removed. Pick another model for this widget.`);
+        }
+        const provider = target.provider ?? this.models.providerOf(model);
         if (!provider || !this.models.capabilities(model, provider)) throw new Error(`${model} is not downloaded. Pick a model in AI.`);
         const agent = this.connections.find((c) => c.id === provider && c.kind === "agent");
         const project = this.defaultProject(provider);
@@ -1091,10 +1178,9 @@ export class AiApp {
      * ask remembers nothing.
      */
     async ask(prompt: string, model?: string, system?: string, personality?: PromptStyle, memory?: string): Promise<string> {
-        const chosen = model?.trim() ? this.normalizeModelRef(model) : this.ctx.state.settings.defaultModel;
         if (!prompt?.trim()) throw new Error("Ask AI needs a prompt.");
+        const { model: chosen, provider } = this.resolveChoice(model);
         if (!chosen) throw new Error("No model given and no default model is set in the AI panel.");
-        const provider = !model?.trim() && this.ctx.state.settings.defaultProvider ? this.ctx.state.settings.defaultProvider : this.models.providerOf(chosen);
         if (!provider || !this.models.capabilities(chosen, provider)) throw new Error(`${chosen} is not installed in the AI panel.`);
         const agent = this.connections.find((c) => c.id === provider && c.kind === "agent");
         if (agent) throw new Error(`${agent.label} is a coding agent; it answers in the AI panel's chats, not in flows.`);
