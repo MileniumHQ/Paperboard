@@ -2,7 +2,7 @@ import { afterEach, expect, test } from "bun:test";
 import * as crypto from "node:crypto";
 import http from "node:http";
 import { once } from "node:events";
-import { signInToGoogleDrive } from "../src/main/googleOAuth";
+import { paperboardGoogleClient, signInToGoogleDrive } from "../src/main/googleOAuth";
 
 const servers: http.Server[] = [];
 afterEach(async () => {
@@ -58,4 +58,14 @@ test("a refused consent fails the sign-in and frees it for another try", async (
     });
     await expect(signInToGoogleDrive({ clientId: "c", clientSecret: "s" }, deps("access_denied"))).rejects.toThrow("not allowed");
     await expect(signInToGoogleDrive({ clientId: "c", clientSecret: "s" }, deps("server_error"))).rejects.toThrow("server_error");
+});
+
+test("Paperboard's Google client comes from the build, and a build without both halves has none", () => {
+    expect(paperboardGoogleClient({ MAIN_VITE_GOOGLE_CLIENT_ID: " id.apps.googleusercontent.com ", MAIN_VITE_GOOGLE_CLIENT_SECRET: "s" })).toEqual({
+        clientId: "id.apps.googleusercontent.com",
+        clientSecret: "s",
+    });
+    expect(paperboardGoogleClient({ MAIN_VITE_GOOGLE_CLIENT_ID: "id" })).toBeNull();
+    expect(paperboardGoogleClient({ MAIN_VITE_GOOGLE_CLIENT_ID: "id", MAIN_VITE_GOOGLE_CLIENT_SECRET: "  " })).toBeNull();
+    expect(paperboardGoogleClient({})).toBeNull();
 });

@@ -1,7 +1,7 @@
 // Connecting Google Drive for backups: Google's installed-app sign-in with
-// PKCE and a loopback redirect. The user brings their own OAuth client
-// (a "Desktop app" client in Google Cloud), so Paperboard holds no Google
-// secret. The browser comes back to a one-shot listener on 127.0.0.1; the
+// PKCE and a loopback redirect, with Paperboard's own "Desktop app" client so
+// Google's screen asks for Paperboard. The browser comes back to a one-shot
+// listener on 127.0.0.1; the
 // refresh token it yields goes from here to the daemon's vault and never
 // passes through a renderer. Electron-free so it can be tested.
 import * as crypto from "crypto";
@@ -22,6 +22,22 @@ export const GOOGLE_OAUTH: GoogleOAuthEndpoints = {
     tokenUrl: "https://oauth2.googleapis.com/token",
 };
 
+export interface GoogleClient {
+    clientId: string;
+    clientSecret: string;
+}
+
+/** Paperboard's Google client, built in from MAIN_VITE_GOOGLE_CLIENT_ID and
+ * MAIN_VITE_GOOGLE_CLIENT_SECRET (apps/paperboard/.env.local, gitignored).
+ * Google does not treat a Desktop app client's secret as confidential, since
+ * it ships inside the app; it stays out of git so secret scanning does not
+ * flag it. null when the build has no client. */
+export function paperboardGoogleClient(env: { MAIN_VITE_GOOGLE_CLIENT_ID?: unknown; MAIN_VITE_GOOGLE_CLIENT_SECRET?: unknown }): GoogleClient | null {
+    const clientId = typeof env.MAIN_VITE_GOOGLE_CLIENT_ID === "string" ? env.MAIN_VITE_GOOGLE_CLIENT_ID.trim() : "";
+    const clientSecret = typeof env.MAIN_VITE_GOOGLE_CLIENT_SECRET === "string" ? env.MAIN_VITE_GOOGLE_CLIENT_SECRET.trim() : "";
+    return clientId && clientSecret ? { clientId, clientSecret } : null;
+}
+
 export interface GoogleSignInDeps {
     /** shows the sign-in page in the user's browser */
     openExternal: (url: string) => Promise<void>;
@@ -39,7 +55,7 @@ let signingIn = false;
 
 /** resolves with the refresh token once the user signs in and allows access */
 export async function signInToGoogleDrive(
-    client: { clientId: string; clientSecret: string },
+    client: GoogleClient,
     deps: GoogleSignInDeps,
 ): Promise<string> {
     if (signingIn) throw new Error("A Google sign-in is already open in your browser");

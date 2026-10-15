@@ -60,17 +60,13 @@ export const BACKUP_PROVIDERS: readonly BackupProvider[] = [
         kind: "gdrive",
         name: "Google Drive",
         description: "Save backups to your Google account",
-        intro: 'Google asks for a free sign-in key before an app can save to Drive. Make one in Google Cloud (choose "Desktop app"), then paste its client ID and secret here. Paperboard can only see the "Paperboard Backups" folder it makes.',
-        fields: [
-            { key: "label", label: "Name", placeholder: "Google Drive" },
-            { key: "clientId", label: "Client ID", placeholder: "1234-abcd.apps.googleusercontent.com" },
-            { key: "clientSecret", label: "Client secret", secret: true },
-        ],
+        intro: 'Paperboard keeps backups in a "Paperboard Backups" folder in your Drive and can\'t see your other files.',
+        fields: [{ key: "label", label: "Name", placeholder: "Google Drive" }],
         needsDesktopApp: true,
         submitLabel: "Sign In With Google",
         busyLabel: "Waiting for Google...",
         connect: (v, _t, computerId) =>
-            shellIpc().invoke("backup-gdrive-connect", { computerId, label: v.label ?? "", clientId: v.clientId ?? "", clientSecret: v.clientSecret ?? "" }),
+            shellIpc().invoke("backup-gdrive-connect", { computerId, label: v.label ?? "" }),
     },
     {
         kind: "s3",

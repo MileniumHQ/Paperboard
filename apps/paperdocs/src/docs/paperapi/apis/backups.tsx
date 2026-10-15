@@ -132,7 +132,7 @@ async function restoreNewest() {
             <PaperText preset="body">
                 chooseLocation shows the computer's backup locations with the space each one uses and has free. The user picks one, and the panel's later backups go there.
                 A panel cannot set its location itself. Call chooseLocation from a click handler in the panel page; a widget gets a BackupLocationError with code <PaperCode>unavailable</PaperCode>.
-                The user adds S3 buckets and Google Drive in the computer's settings. Google Drive is connected from the Paperboard app with the user's own Desktop OAuth client, and Paperboard sees only the "Paperboard Backups" folder it creates.
+                The user adds S3 buckets and Google Drive on the computer's Computer Info page. Google Drive is connected by signing in to Google from the Paperboard app, and Paperboard sees only the "Paperboard Backups" folder it creates.
                 Changing a panel's location does not move its existing backups. list shows the backups at the current location.
             </PaperText>
 

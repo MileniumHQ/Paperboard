@@ -13,7 +13,7 @@ import { createShellInvokeHandlers, SHARED_SHELL_INVOKE_CHANNELS } from "./shell
 import { runPanelImport, runPanelExport, type PanelFileTransferDeps } from "../panelFileTransfer";
 import { poolEndpoint } from "../panelFileEndpoint";
 import type { FileTypeFilter } from "../../shared/fileTransfer";
-import { signInToGoogleDrive } from "../googleOAuth";
+import { paperboardGoogleClient, signInToGoogleDrive } from "../googleOAuth";
 import connectionPool from "./papercrane/ConnectionPool";
 
 // native dialogs, modal to the window whose panel asked
@@ -99,7 +99,8 @@ export default function registerShellIpc(ipcMain: IpcMain) {
     });
 
     // adds a Google Drive backup location to a computer: main runs the
-    // sign-in and hands the refresh token straight to that computer's daemon
+    // sign-in with Paperboard's Google client and hands the refresh token
+    // straight to that computer's daemon, which refreshes with the same client
     ipcMain.handle("backup-gdrive-connect", async (event, args) => {
         assertShellFrame(event, "backup-gdrive-connect");
         const field = (name: string, max: number) => {
@@ -109,11 +110,11 @@ export default function registerShellIpc(ipcMain: IpcMain) {
         };
         const computerId = field("computerId", 128);
         const label = field("label", 60);
-        const clientId = field("clientId", 512);
-        const clientSecret = field("clientSecret", 1024);
+        const google = paperboardGoogleClient(import.meta.env);
+        if (!google) throw new Error("This build of Paperboard has no Google sign-in. Use a release build to connect Google Drive.");
         const client = connectionPool.getClient(computerId);
-        const refreshToken = await signInToGoogleDrive({ clientId, clientSecret }, { openExternal: (url) => shell.openExternal(url) });
-        return client.call("backup:destination-add", { destination: { kind: "gdrive", label, clientId, clientSecret, refreshToken } }, 120_000);
+        const refreshToken = await signInToGoogleDrive(google, { openExternal: (url) => shell.openExternal(url) });
+        return client.call("backup:destination-add", { destination: { kind: "gdrive", label, ...google, refreshToken } }, 120_000);
     });
 
     ipcMain.handle("app-update-state", (event) => {
