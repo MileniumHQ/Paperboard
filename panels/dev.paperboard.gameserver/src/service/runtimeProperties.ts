@@ -118,8 +118,14 @@ export async function applyPendingRuntimeProperties(
     if (rawPending["force-gamemode"] === "true") values["force-gamemode"] = "true";
 
     const commands = runtimeCommandsFor(values);
-    for (const command of commands) {
-        processApi.write(SERVER_PROC_ID, `${command}\n`);
+    try {
+        for (const command of commands) {
+            await processApi.write(SERVER_PROC_ID, `${command}\n`);
+        }
+    } catch (err) {
+        // the edits stay saved and apply on the next boot
+        console.error("[Service:Properties] pending edit not applied:", err);
+        return;
     }
 
     try {

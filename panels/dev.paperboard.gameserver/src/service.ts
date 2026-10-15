@@ -104,6 +104,12 @@ export const gameServerService = definePanelService({
         } catch (err) {
             console.error("[gameserver] process-exists probe failed:", String(err));
         }
+        // listening comes first: recovering a paused world waits for the
+        // server's own confirmation line
+        processApi.onData(SERVER_PROC_ID, (chunk: string) =>
+            handleProcessData(ctx, chunk),
+        );
+        processApi.onExit(SERVER_PROC_ID, () => handleProcessExit(ctx));
         // a world copy the last service left unfinished kept saving off
         try {
             if (await recoverPausedSaving()) {
@@ -117,11 +123,6 @@ export const gameServerService = definePanelService({
                 }),
             });
         }
-
-        processApi.onData(SERVER_PROC_ID, (chunk: string) =>
-            handleProcessData(ctx, chunk),
-        );
-        processApi.onExit(SERVER_PROC_ID, () => handleProcessExit(ctx));
     },
     // a backup copies the server folder; the world must not change under it
     beforeBackup: (ctx) => pauseSavingForBackup(ctx),

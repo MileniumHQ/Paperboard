@@ -68,6 +68,7 @@ beforeEach(() => {
     confirmations = {
         "save-off": "[12:00:00 INFO]: Automatic saving is now disabled",
         "save-all flush": "[12:00:01 INFO]: Saved the game",
+        "save-on": "[12:00:02 INFO]: Automatic saving is now enabled",
     };
 });
 
@@ -117,6 +118,23 @@ describe("world download and upload", () => {
         expect(written).toEqual(["save-on"]);
         expect(fs.existsSync(inRoot(".paperboard-saving-paused"))).toBe(false);
         expect(await saving.recoverPausedSaving()).toBe(false);
+    });
+
+    it("keeps the marker when save-on cannot be delivered, so recovery retries", async () => {
+        fs.writeFileSync(inRoot(".paperboard-saving-paused"), "then");
+        failOn = "save-on";
+        await expect(saving.recoverPausedSaving()).rejects.toThrow("console is gone");
+        expect(fs.existsSync(inRoot(".paperboard-saving-paused"))).toBe(true);
+        failOn = null;
+        expect(await saving.recoverPausedSaving()).toBe(true);
+        expect(fs.existsSync(inRoot(".paperboard-saving-paused"))).toBe(false);
+    });
+
+    it("a copy that cannot turn saving back on reports it and keeps the marker", async () => {
+        seed("world");
+        failOn = "save-on";
+        await expect(transfer.exportWorld(online, "world")).rejects.toThrow("Saving could not be turned back on");
+        expect(fs.existsSync(inRoot(".paperboard-saving-paused"))).toBe(true);
     });
 
     it("a backup leaves saving paused for the service that starts after it", async () => {

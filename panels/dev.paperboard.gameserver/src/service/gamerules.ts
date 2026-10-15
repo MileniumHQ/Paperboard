@@ -1,4 +1,5 @@
 import { config, processApi, type ServiceContext } from "@mileniumhq/paperapi";
+import { writeServerLineBestEffort } from "./serverConsole";
 import {
     assertGameruleName,
     assertGameruleValue,
@@ -39,7 +40,7 @@ export function setGamerule(
     const serverValue = serverGameruleValue(profile, name, value);
 
     if (ctx.state.serverStatus === "online") {
-        processApi.write(SERVER_PROC_ID, `gamerule ${serverName} ${serverValue}\n`);
+        writeServerLineBestEffort(`gamerule ${serverName} ${serverValue}\n`);
     } else {
         // offline edits must never look applied-and-dropped: they persist
         // in panel config and re-apply the next time the server boots
@@ -80,10 +81,7 @@ export function queryGamerules(
     const profile = profileFor(ctx);
     const known = names.filter(isKnownGameruleName).slice(0, MAX_GAMERULE_WRITES);
     for (const name of known) {
-        processApi.write(
-            SERVER_PROC_ID,
-            `gamerule ${serverGameruleName(profile, name)}\n`,
-        );
+        writeServerLineBestEffort(`gamerule ${serverGameruleName(profile, name)}\n`);
     }
     return true;
 }
@@ -114,20 +112,24 @@ export async function applyPendingGamerules(
     }
 
     const profile = profileFor(ctx);
+    let undelivered = false;
     for (const [name, value] of entries) {
         try {
             // re-validate at this boundary: the config file is edited by
             // users too, and these strings reach console commands
             const safeName = assertGameruleName(name);
             const safeValue = assertGameruleValue(safeName, value);
-            processApi.write(
+            await processApi.write(
                 SERVER_PROC_ID,
                 `gamerule ${serverGameruleName(profile, safeName)} ${serverGameruleValue(profile, safeName, safeValue)}\n`,
             );
         } catch (err) {
-            console.error(`[Service:Gamerules] pending edit refused:`, err);
+            console.error(`[Service:Gamerules] pending edit not applied:`, err);
+            undelivered = true;
         }
     }
+    // a write that failed keeps its edits saved for the next boot
+    if (undelivered) return;
 
     try {
         await config.set({ ...(saved ?? {}), pendingGamerules: {} }, PANEL_ID);

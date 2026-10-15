@@ -24,6 +24,7 @@ import { checkLogForIssues } from "./diagnostics";
 import { onServerOnline } from "./gamerules";
 import { applyPendingRuntimeProperties } from "./runtimeProperties";
 import { observeSavingLine } from "./saving";
+import { writeServerLineBestEffort } from "./serverConsole";
 import { type GameServerState, SERVER_PROC_ID, appendCapped, PANEL_ID } from "./types";
 import { TRIGGER_IDS } from "./contract";
 
@@ -175,7 +176,7 @@ export async function stopServerInstance(
                 content: "stop",
             }),
         });
-        processApi.write(SERVER_PROC_ID, "stop\n");
+        writeServerLineBestEffort("stop\n");
 
         scheduleStopForceKill(ctx);
     }
@@ -199,7 +200,7 @@ export async function restartServerInstance(
             },
         ),
     });
-    processApi.write(SERVER_PROC_ID, "stop\n");
+    writeServerLineBestEffort("stop\n");
 
     scheduleStopForceKill(ctx);
 }
@@ -234,7 +235,7 @@ export async function sendServerCommand(
         ctx.state.serverStatus === "starting"
     ) {
         const rawCmd = trimmed.startsWith("/") ? trimmed.slice(1) : trimmed;
-        processApi.write(SERVER_PROC_ID, `${rawCmd}\n`);
+        await processApi.write(SERVER_PROC_ID, `${rawCmd}\n`);
     } else {
         ctx.setState({
             serverEntries: appendCapped(ctx.state.serverEntries, {
@@ -256,7 +257,7 @@ export async function sendChatMessage(
         ctx.state.serverStatus === "online" ||
         ctx.state.serverStatus === "starting"
     ) {
-        processApi.write(SERVER_PROC_ID, `say ${trimmed}\n`);
+        await processApi.write(SERVER_PROC_ID, `say ${trimmed}\n`);
     } else {
         const now = new Date();
         const timeStr = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`;

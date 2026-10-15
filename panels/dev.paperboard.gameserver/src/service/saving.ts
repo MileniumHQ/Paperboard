@@ -6,7 +6,10 @@ import { PANEL_ID, SERVER_PROC_ID, type GameServerState } from "./types";
 // switched off (save-off), everything in memory is written out
 // (save-all flush), the copy is made, and saving is switched back on.
 // A marker file records the pause, so a service that died mid-copy turns
-// saving back on when it starts and finds the server still running. A
+// saving back on when it starts and finds the server still running. The
+// marker is removed only once the server has confirmed save-on: a write the
+// daemon could not deliver, or one the server never answered, leaves the
+// marker for the next recovery. A
 // backup of the whole server uses that on purpose: Paperboard stops this
 // service for the copy, and the service that starts after it ends the pause.
 
@@ -45,6 +48,8 @@ function waitForLine(match: (line: string) => boolean, timeoutMs: number, what: 
 
 // "Automatic saving is now disabled", "Saving is already turned off"
 const savingOff = (line: string) => /saving is (now disabled|already turned off)/i.test(line);
+// "Automatic saving is now enabled", "Saving is already turned on"
+const savingOn = (line: string) => /saving is (now enabled|already turned on)/i.test(line);
 // "Saved the game", "Saved the world"
 const flushed = (line: string) => /Saved the (game|world)/i.test(line);
 
@@ -70,12 +75,27 @@ export async function withSavingPaused<T>(ctx: ServiceContext<GameServerState>, 
     if (pausing) throw new Error("Saving is already paused for another copy");
     pausing = true;
     try {
+        let result!: T;
+        let workError: unknown;
+        let workFailed = false;
         try {
             await pauseSaving();
-            return await work();
-        } finally {
-            await resumeSaving();
+            result = await work();
+        } catch (err) {
+            workFailed = true;
+            workError = err;
         }
+        try {
+            await resumeSaving();
+        } catch (err) {
+            // saving is still off and the marker stays: say so, and keep
+            // the failure that came first
+            const reason = err instanceof Error ? err.message : String(err);
+            const earlier = workFailed ? ` (the copy also failed: ${workError instanceof Error ? workError.message : String(workError)})` : "";
+            throw new Error(`Saving could not be turned back on: ${reason}${earlier}`, { cause: err });
+        }
+        if (workFailed) throw workError;
+        return result;
     } finally {
         pausing = false;
     }
@@ -103,15 +123,23 @@ export async function pauseSavingForBackup(ctx: ServiceContext<GameServerState>)
     try {
         await pauseSaving();
     } catch (err) {
-        await resumeSaving();
+        try {
+            await resumeSaving();
+        } catch (resumeErr) {
+            const reason = resumeErr instanceof Error ? resumeErr.message : String(resumeErr);
+            throw new Error(`${err instanceof Error ? err.message : String(err)} (saving could not be turned back on: ${reason})`, { cause: err });
+        }
         throw err;
     } finally {
         pausing = false;
     }
 }
 
+/** the marker goes only after the server confirmed save-on */
 async function resumeSaving(): Promise<void> {
-    if (await processApi.exists(SERVER_PROC_ID)) await processApi.write(SERVER_PROC_ID, "save-on\n");
+    if (await processApi.exists(SERVER_PROC_ID)) {
+        await send("save-on", savingOn, COMMAND_TIMEOUT_MS, "that saving is back on");
+    }
     await fileApi.delete(PAUSED_MARKER, PANEL_ID);
 }
 

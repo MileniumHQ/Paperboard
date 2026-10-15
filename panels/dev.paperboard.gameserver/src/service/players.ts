@@ -1,4 +1,5 @@
-import { processApi, type ServiceContext } from "@mileniumhq/paperapi";
+import { type ServiceContext } from "@mileniumhq/paperapi";
+import { writeServerLineBestEffort } from "./serverConsole";
 import {
     type GameServerState,
     type PlayerStatData,
@@ -197,7 +198,7 @@ export function handleStatResponse(
 
 export function queryOnlinePlayers(ctx: ServiceContext<GameServerState>): void {
     if (ctx.state.serverStatus === "online") {
-        processApi.write(SERVER_PROC_ID, "list\n");
+        writeServerLineBestEffort("list\n");
     }
 }
 
@@ -212,7 +213,7 @@ export function queryPlayerStats(
     pendingStatFields = pendingStatFields.filter((p) => p.player !== key);
     for (const { field, path } of STAT_QUERIES) {
         pendingStatFields.push({ player: key, field });
-        processApi.write(SERVER_PROC_ID, `data get entity ${safe} ${path}\n`);
+        writeServerLineBestEffort(`data get entity ${safe} ${path}\n`);
     }
     // bounded: bursts of stat queries from many players evict oldest first
     while (pendingStatFields.length > MAX_BUFFERED_ENTRIES) {
@@ -250,8 +251,8 @@ export function queryPlayerPositions(ctx: ServiceContext<GameServerState>): void
         const key = normalizePlayerKey(safe);
         pendingPositionQueries.push({ player: key, kind: "pos" });
         pendingPositionQueries.push({ player: key, kind: "dim" });
-        processApi.write(SERVER_PROC_ID, `data get entity ${safe} Pos\n`);
-        processApi.write(SERVER_PROC_ID, `data get entity ${safe} Dimension\n`);
+        writeServerLineBestEffort(`data get entity ${safe} Pos\n`);
+        writeServerLineBestEffort(`data get entity ${safe} Dimension\n`);
     }
     while (pendingPositionQueries.length > MAX_BUFFERED_ENTRIES) {
         pendingPositionQueries.shift();
