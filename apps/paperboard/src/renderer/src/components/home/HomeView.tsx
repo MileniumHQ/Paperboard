@@ -19,7 +19,6 @@ import {
     fitCanvas,
     HOME_LAYOUT_COMPUTER,
     HOME_LAYOUT_ID,
-    isLegacyHomeLayout,
     MAX_HOME_ITEMS,
     parseHomeLayout,
     placementOf,
@@ -130,11 +129,6 @@ const HomeView: Component<HomeViewProps> = (props) => {
             // nothing is saved until it is changed
             setItems(raw === null || raw === undefined ? defaultHomeItems(HOME_LAYOUT_COMPUTER) : parseHomeLayout(raw));
             setLoadState("ready");
-            if (isLegacyHomeLayout(raw)) {
-                // TODO(remove after v0.3): rewrite a column-format layout once, as it was read
-                logToMain("warn", "Home layout was in the unreleased column format; saving it in the current one.");
-                commit(items());
-            }
         } catch (err) {
             logToMain("error", "Failed to load the Home layout:", err);
             setLoadState({ error: err instanceof Error ? err.message : String(err) });

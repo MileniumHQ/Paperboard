@@ -7,7 +7,6 @@ import {
     computeGeometry,
     findFreeSpot,
     fitCanvas,
-    isLegacyHomeLayout,
     MAX_CELL,
     MAX_CELLS_ACROSS,
     MIN_CELL,
@@ -55,13 +54,8 @@ describe("parseHomeLayout", () => {
         expect(() => parseHomeLayout({ version: 2, items: [item({}), item({ id: "b", x: 1 })] })).toThrow(/overlaps/);
     });
 
-    it("reads the unreleased column format as the same picture on one grid", () => {
-        const legacy = { version: 1, items: [{ ...item({ x: 2, y: 1 }), column: 2 }] };
-        expect(isLegacyHomeLayout(legacy)).toBe(true);
-        expect(parseHomeLayout(legacy)).toEqual([item({ x: 10, y: 1 })]);
-        // what it is saved back as is not legacy, so the rewrite happens once
-        expect(isLegacyHomeLayout(serializeHomeLayout(parseHomeLayout(legacy)))).toBe(false);
-        expect(() => parseHomeLayout({ version: 1, items: [item({})] })).toThrow(/malformed/);
+    it("refuses the unreleased column format (version 1) instead of guessing at it", () => {
+        expect(() => parseHomeLayout({ version: 1, items: [{ ...item({ x: 2, y: 1 }), column: 2 }] })).toThrow(/version 1 is not one/);
     });
 });
 

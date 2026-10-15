@@ -64,16 +64,6 @@ export function placementOf(item: HomeItem): Placement {
     return { x: item.x, y: item.y, w, h };
 }
 
-// TODO(remove after v0.3): version 1 cut Home into columns CELL_STEP cells
-// wide and stored a column beside x. It was never released; this reads the
-// layouts development builds saved, and HomeView saves them back as version 2.
-const LEGACY_COLUMN_VERSION = 1;
-
-/** True for a stored layout in the column format, which is rewritten once read. */
-export function isLegacyHomeLayout(raw: unknown): boolean {
-    return typeof raw === "object" && raw !== null && (raw as { version?: unknown }).version === LEGACY_COLUMN_VERSION;
-}
-
 /**
  * Reads the stored document. null (never saved) is an empty Home; anything
  * else that doesn't parse throws, so a damaged layout is reported instead
@@ -83,8 +73,7 @@ export function parseHomeLayout(raw: unknown): HomeItem[] {
     if (raw === null || raw === undefined) return [];
     if (typeof raw !== "object" || Array.isArray(raw)) throw new Error("Home layout is not an object");
     const doc = raw as Record<string, unknown>;
-    const legacy = isLegacyHomeLayout(raw);
-    if (doc.version !== HOME_LAYOUT_VERSION && !legacy) {
+    if (doc.version !== HOME_LAYOUT_VERSION) {
         throw new Error(`Home layout version ${String(doc.version)} is not one this Paperboard reads`);
     }
     if (!Array.isArray(doc.items) || doc.items.length > MAX_HOME_ITEMS) {
@@ -99,8 +88,7 @@ export function parseHomeLayout(raw: unknown): HomeItem[] {
             (item.source === "builtin" || (item.source === "panel" && typeof item.panelId === "string" && PANEL_ID.test(item.panelId))) &&
             isWidgetId(item.widgetId) &&
             parseWidgetSize(item.size) !== null &&
-            Number.isInteger(item.x) && Number.isInteger(item.y) &&
-            (!legacy || (Number.isInteger(item.column) && (item.column as number) >= 0));
+            Number.isInteger(item.x) && Number.isInteger(item.y);
         const options = item?.source === "panel" ? parseWidgetOptionValues(item.options) : {};
         if (!ok || !options || (item.source === "builtin" && item.options !== undefined)) {
             throw new Error(`Home layout item ${index} is malformed`);
@@ -110,7 +98,7 @@ export function parseHomeLayout(raw: unknown): HomeItem[] {
             computerId: item.computerId as string,
             widgetId: item.widgetId as string,
             size: item.size as string,
-            x: (item.x as number) + (legacy ? (item.column as number) * CELL_STEP : 0),
+            x: item.x as number,
             y: item.y as number,
         };
         return item.source === "builtin"
