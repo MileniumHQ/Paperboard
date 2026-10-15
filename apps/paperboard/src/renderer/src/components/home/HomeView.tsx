@@ -131,7 +131,7 @@ const HomeView: Component<HomeViewProps> = (props) => {
             setItems(raw === null || raw === undefined ? defaultHomeItems(HOME_LAYOUT_COMPUTER) : parseHomeLayout(raw));
             setLoadState("ready");
             if (isLegacyHomeLayout(raw)) {
-                // TODO(remove after v0.2): rewrite a column-format layout once, as it was read
+                // TODO(remove after v0.3): rewrite a column-format layout once, as it was read
                 logToMain("warn", "Home layout was in the unreleased column format; saving it in the current one.");
                 commit(items());
             }

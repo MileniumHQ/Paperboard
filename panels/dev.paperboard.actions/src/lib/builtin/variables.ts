@@ -79,7 +79,7 @@ export const variablesBuiltins: BuiltinDef[] = [
                         },
                     },
                 } },
-    // TODO(remove after v0.2): Get Variable, with its runtime handler. Variable
+    // TODO(remove after v0.3): Get Variable, with its runtime handler. Variable
     // names appear directly in the variable picker, so the extra block is redundant.
     { id: "get-variable", category: "logic.variables", panelId: "builtin.logic", item: {
                     panelId: "builtin.logic",
@@ -88,7 +88,7 @@ export const variablesBuiltins: BuiltinDef[] = [
                         id: "get-variable",
                         name: "Get Variable",
                         description: "Retrieves the value of a saved variable",
-                        deprecated: "Get Variable is removed after v0.2. Pick the variable by name in the input that needs it instead.",
+                        deprecated: "Get Variable is removed after v0.3. Pick the variable by name in the input that needs it instead.",
                         template: "Get variable {key}",
                         icon: "data_object",
                         inputs: {

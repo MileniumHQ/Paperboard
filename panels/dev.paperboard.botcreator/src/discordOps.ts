@@ -974,7 +974,7 @@ export class InteractionOps {
         });
     }
 
-    // TODO(remove after v0.2): Defer Interaction is redundant now that every
+    // TODO(remove after v0.3): Defer Interaction is redundant now that every
     // interaction is acknowledged automatically; it stays only so flows
     // saved with that step keep running for one release.
     async defer(interactionId: string, ephemeral?: boolean): Promise<boolean> {

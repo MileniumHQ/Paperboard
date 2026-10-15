@@ -778,7 +778,7 @@ const builtinHandlers: Record<string, BuiltinHandler> = {
         schedulePersistVariables();
         return null;
     },
-    // TODO(remove after v0.2): with the deprecated Get Variable builtin
+    // TODO(remove after v0.3): with the deprecated Get Variable builtin
     "get-variable": (inputs) => {
         const key = String(inputs.key || "");
         return flowVariablesStore.get(key) ?? "";

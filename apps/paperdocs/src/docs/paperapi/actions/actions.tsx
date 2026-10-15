@@ -151,7 +151,7 @@ await actionsApi.call("dev.example.runtime", "install", { version: "1.2.0" }, {
     id: "defer-interaction",
     name: "Defer Interaction",
     description: "Shows that the bot is thinking about a slash command",
-    deprecated: "No longer needed: interactions are acknowledged automatically. Remove this step; it stops working after v0.2.",
+    deprecated: "No longer needed: interactions are acknowledged automatically. Remove this step; it stops working after v0.3.",
     run: async (ctx, inputs) => { /* still works meanwhile */ },
 });`}
             </PaperCode>

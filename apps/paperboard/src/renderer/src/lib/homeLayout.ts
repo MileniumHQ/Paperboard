@@ -64,7 +64,7 @@ export function placementOf(item: HomeItem): Placement {
     return { x: item.x, y: item.y, w, h };
 }
 
-// TODO(remove after v0.2): version 1 cut Home into columns CELL_STEP cells
+// TODO(remove after v0.3): version 1 cut Home into columns CELL_STEP cells
 // wide and stored a column beside x. It was never released; this reads the
 // layouts development builds saved, and HomeView saves them back as version 2.
 const LEGACY_COLUMN_VERSION = 1;

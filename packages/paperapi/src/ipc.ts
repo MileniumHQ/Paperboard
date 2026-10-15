@@ -344,7 +344,7 @@ async function invokeSpecial(
                     panelId,
                     sha256,
                     version,
-                    // TODO(remove after v0.2): daemons before registry-resolved
+                    // TODO(remove after v0.3): daemons before registry-resolved
                     // installs require this; current daemons ignore it
                     downloadUrl: `${REGISTRY_URL}/panel/${panelId}/download`,
                 },

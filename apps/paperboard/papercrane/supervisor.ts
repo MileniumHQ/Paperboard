@@ -45,7 +45,7 @@ export function supervisorEndpointName(procId: string): string {
     return crypto.createHash("sha256").update(procId, "utf8").digest("hex").slice(0, 32);
 }
 
-// TODO(remove after v0.2): the pre-digest endpoint name, used only to
+// TODO(remove after v0.3): the pre-digest endpoint name, used only to
 // recover supervisors that were started before the rename and are still
 // running (engine.recoverRunningSupervisors)
 export function legacySupervisorEndpointName(procId: string): string {

@@ -680,7 +680,7 @@ export class PaperCraneClient extends EventEmitter {
             panelId,
             version: expected.version,
             sha256: expected.sha256,
-            // TODO(remove after v0.2): daemons before registry-resolved
+            // TODO(remove after v0.3): daemons before registry-resolved
             // installs require this; current daemons ignore it
             downloadUrl: `${resolveRegistryUrl()}/panel/${encodeURIComponent(panelId)}/download`,
         });

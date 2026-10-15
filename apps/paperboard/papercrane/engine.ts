@@ -575,7 +575,7 @@ export class PaperCraneEngine {
             }
             if (typeof id !== "string" || !id || this.clients.has(id)) continue;
             const current = stem === supervisorEndpointName(id);
-            // TODO(remove after v0.2): supervisors started under the old
+            // TODO(remove after v0.3): supervisors started under the old
             // character-substituted endpoint name are still reachable there
             const legacy = !current && stem === legacySupervisorEndpointName(id);
             if (!current && !legacy) {

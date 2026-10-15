@@ -144,6 +144,6 @@ describe("Get Variable", () => {
         expect(offered).not.toContain("get-variable");
         const stored = [{ id: "b1", panelId: "builtin.logic", action: { id: "get-variable", name: "Get Variable" }, values: { key: "x" } }];
         const [merged] = mergeActionSchemas(stored as any, BUILTIN_SCHEMA_ENTRIES as any);
-        expect((merged.action as { deprecated?: string }).deprecated).toMatch(/removed after v0\.2/);
+        expect((merged.action as { deprecated?: string }).deprecated).toMatch(/removed after v0\.3/);
     });
 });
