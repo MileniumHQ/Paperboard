@@ -1,4 +1,4 @@
-import { type Component, createSignal, For, onMount, Show } from "solid-js";
+import { type Component, createEffect, createSignal, For, on, Show } from "solid-js";
 import { PaperButton, PaperFlex, PaperModal, PaperSelector, PaperSelectorItem, PaperText } from "@mileniumhq/paperui";
 import { backupApi, backupLocationsApi, type BackupLocation } from "@mileniumhq/paperapi";
 import { loadUsage, usageText, type UsageState } from "./locationUsage";
@@ -8,8 +8,9 @@ export type BackupLocationChoice = { status: "chosen"; location: BackupLocation 
 
 // The window a panel opens with backupApi.chooseLocation: the computer's
 // backup locations with how much space each has, and which one this
-// panel's backups go to. Only the shell sets the choice.
-const BackupLocationChooser: Component<{ computerId: string; panelId: string; onDone: (choice: BackupLocationChoice) => void }> = (props) => {
+// panel's backups go to. Only the shell sets the choice. It stays mounted and
+// opens per request, so PaperModal plays its own open and close.
+const BackupLocationChooser: Component<{ computerId: string; panelId: string; open: boolean; onDone: (choice: BackupLocationChoice) => void }> = (props) => {
     const [locations, setLocations] = createSignal<BackupLocation[] | null>(null);
     const [usage, setUsage] = createSignal<Record<string, UsageState>>({});
     const [selected, setSelected] = createSignal("");
@@ -37,7 +38,12 @@ const BackupLocationChooser: Component<{ computerId: string; panelId: string; on
             setError(`Backup locations could not be loaded: ${(err as Error)?.message ?? err}`);
         }
     };
-    onMount(() => void load());
+    createEffect(on(() => props.open, (open) => {
+        if (!open) return;
+        done = false;
+        setSaving(false);
+        void load();
+    }));
 
     const choose = async () => {
         setSaving(true);
@@ -55,7 +61,7 @@ const BackupLocationChooser: Component<{ computerId: string; panelId: string; on
 
     return (
         <PaperModal
-            open
+            open={props.open}
             title="Where should backups go?"
             size="small"
             onClose={() => finish({ status: "canceled" })}

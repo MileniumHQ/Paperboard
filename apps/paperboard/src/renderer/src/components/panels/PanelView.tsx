@@ -68,12 +68,11 @@ const PanelFrame: Component<{ panelKey: string; current: boolean; reload: number
             allow="clipboard-read; clipboard-write"
             onLoad={() => frame?.contentWindow?.postMessage({ type: "paperboard:initialize", generation }, "*")}
             style={{ width: "100%", height: "100%", border: "none", "border-left": `${getVarCss("border-width")} solid ${getVarCss("border")}`, opacity: ready() && !failure() && !props.restart ? "1" : "0", "pointer-events": ready() && !failure() && !props.restart ? "auto" : "none" }} />
-        <Show when={chooser()} keyed>{(request) => (
-            <BackupLocationChooser computerId={computerId} panelId={panelId} onDone={(result) => {
-                setChooser(null);
-                if (request.generation === generation) request.target.postMessage({ type: BACKUP_LOCATION_RESULT, generation: request.generation, requestId: request.requestId, result }, "*");
-            }} />
-        )}</Show>
+        <BackupLocationChooser computerId={computerId} panelId={panelId} open={chooser() !== null} onDone={(result) => {
+            const request = chooser();
+            setChooser(null);
+            if (request && request.generation === generation) request.target.postMessage({ type: BACKUP_LOCATION_RESULT, generation: request.generation, requestId: request.requestId, result }, "*");
+        }} />
         <Show when={props.restart}>{(restart) => (
             <LoadingOverlay
                 label={restart().kind === "failed" ? undefined : "Restarting panel service…"}
