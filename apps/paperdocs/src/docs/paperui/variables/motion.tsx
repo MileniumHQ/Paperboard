@@ -94,6 +94,38 @@ export default function MotionDoc() {
                 </tbody>
             </PaperTable>
 
+            <PaperText preset="subheader" id="transform-scales">Transform scales</PaperText>
+            <PaperText preset="body">
+                Scale factors for press, hover and emphasis feedback. Pair them with a duration and easing token.
+            </PaperText>
+
+            <PaperTable>
+                <thead>
+                    <tr>
+                        <th>Variable</th>
+                        <th>Value</th>
+                        <th>Application</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><PaperCode>--paper-scale-press</PaperCode></td>
+                        <td>0.98</td>
+                        <td>Menus and popovers entering, pressed controls</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>--paper-scale-hover</PaperCode></td>
+                        <td>1.03</td>
+                        <td>Hover lift on cards and previews</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>--paper-scale-emphasis</PaperCode></td>
+                        <td>1.2</td>
+                        <td>Drop targets that are about to accept</td>
+                    </tr>
+                </tbody>
+            </PaperTable>
+
             <PaperText preset="subheader" id="reduced-motion-contract">Reduced motion contract</PaperText>
             <PaperText preset="body">
                 When the system reports prefers-reduced-motion: reduce or when data-paperui-motion="reduced" is set on the document, all transition variables collapse to 0s.

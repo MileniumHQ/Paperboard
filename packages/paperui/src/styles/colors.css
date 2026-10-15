@@ -35,6 +35,8 @@
     --paper-scrim: rgba(0, 0, 0, 0.45);
     /* inverted scrim for dark surfaces (light dim behind overlays) */
     --paper-scrim-light: rgba(255, 255, 255, 0.7);
+    /* text selection fill for surfaces that cannot use ::selection (terminals, canvases) */
+    --paper-selection: #2981e54d;
 
     /* OS brand colors — semantic identities, not theme colors (an OS is
        its color); they survive theming by design */

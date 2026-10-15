@@ -112,6 +112,48 @@ export default function SurfacesDoc() {
                 </tbody>
             </PaperTable>
 
+            <PaperText preset="subheader" id="opacity-steps">Opacity steps</PaperText>
+            <PaperText preset="body">
+                Use these to dim an element in a state, such as disabled or lifted, rather than recolouring it.
+            </PaperText>
+
+            <PaperTable>
+                <thead>
+                    <tr>
+                        <th>Variable</th>
+                        <th>Value</th>
+                        <th>Application</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><PaperCode>--paper-opacity-faint</PaperCode></td>
+                        <td>0.35</td>
+                        <td>An item lifted out of its place</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>--paper-opacity-dim</PaperCode></td>
+                        <td>0.5</td>
+                        <td>Unavailable previews and controls</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>--paper-opacity-disabled</PaperCode></td>
+                        <td>0.6</td>
+                        <td>Disabled controls and secondary glyphs</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>--paper-opacity-muted</PaperCode></td>
+                        <td>0.65</td>
+                        <td>Placeholders and empty values</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>--paper-opacity-soft</PaperCode></td>
+                        <td>0.85</td>
+                        <td>Slightly receded content and drag ghosts</td>
+                    </tr>
+                </tbody>
+            </PaperTable>
+
             <PaperText preset="subheader" id="recipes">Recipes</PaperText>
             <PaperText preset="body">
                 Apply surface tokens directly in custom card styles:

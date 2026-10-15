@@ -147,6 +147,8 @@ body[data-unselectable="true"],
     --paper-element-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
     --paper-heavy-element-shadow: 0 2px 6px 1px rgba(0, 0, 0, 0.2);
     /* recessed field well: a translucent shade reads on any surface */
+    /* an element lifted off the page mid-drag; usable in box-shadow and drop-shadow() */
+    --paper-lifted-shadow: 0 16px 32px rgba(0, 0, 0, 0.55);
     --paper-field-well: rgba(0, 0, 0, 0.06);
     --paper-blur-light: blur(5px);
     --paper-blur-medium: blur(10px);
@@ -239,6 +241,46 @@ body[data-unselectable="true"],
     --paper-control-size-medium: 36px;
     --paper-control-size-large: 48px;
     --paper-control-size-xlarge: 64px;
+    /* inline chips and editable fields that sit inside a line of text */
+    --paper-control-size-inline: 22px;
+    --paper-icon-size-tiny: 16px;
+
+    /* the small end of the gap scale, below --paper-uigap-onefourth */
+    --paper-uigap-sixth: calc(var(--paper-uigap) / 6);
+    --paper-uigap-third: calc(var(--paper-uigap) / 3);
+
+    /* type weights and line heights: components name a step, never a number */
+    --paper-weight-regular: 400;
+    --paper-weight-medium: 500;
+    --paper-weight-semibold: 600;
+    --paper-weight-bold: 700;
+    --paper-leading-none: 1;
+    --paper-leading-tight: 1.1;
+    --paper-leading-snug: 1.25;
+    --paper-leading-normal: 1.45;
+    --paper-leading-relaxed: 1.6;
+
+    /* opacity steps for states that dim an element rather than recolour it */
+    --paper-opacity-faint: 0.35;
+    --paper-opacity-dim: 0.5;
+    --paper-opacity-disabled: 0.6;
+    --paper-opacity-muted: 0.65;
+    --paper-opacity-soft: 0.85;
+
+    /* stacking: each step sits above the one before it. Local layering
+       inside a component is --paper-z-raised plus a small offset */
+    --paper-z-raised: 1;
+    --paper-z-float: 10;
+    --paper-z-sticky: 50;
+    --paper-z-drag: 100;
+    --paper-z-menu: 1000;
+    --paper-z-chrome: 2000;
+    --paper-z-ghost: 3000;
+
+    /* transform scales for press, hover and emphasis feedback */
+    --paper-scale-press: 0.98;
+    --paper-scale-hover: 1.03;
+    --paper-scale-emphasis: 1.2;
 }
 
 /* scoped scrollbar styling — the bare ::-webkit-scrollbar selectors that

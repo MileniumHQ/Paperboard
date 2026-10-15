@@ -30,6 +30,16 @@ export default function SpacingDoc() {
                 </thead>
                 <tbody>
                     <tr>
+                        <td>sixth</td>
+                        <td><PaperCode>--paper-uigap-sixth</PaperCode></td>
+                        <td>2px</td>
+                    </tr>
+                    <tr>
+                        <td>third</td>
+                        <td><PaperCode>--paper-uigap-third</PaperCode></td>
+                        <td>4px</td>
+                    </tr>
+                    <tr>
                         <td>onefourth</td>
                         <td><PaperCode>--paper-uigap-onefourth</PaperCode></td>
                         <td>3px</td>
@@ -167,6 +177,58 @@ export default function SpacingDoc() {
                         <td><PaperCode>--paper-page-width-wide</PaperCode></td>
                         <td>1400px</td>
                         <td>Wide dashboard content boundary</td>
+                    </tr>
+                </tbody>
+            </PaperTable>
+
+            <PaperText preset="subheader" id="stacking">Stacking</PaperText>
+            <PaperText preset="body">
+                Name a layer instead of writing a z-index number. Each step sits above the one before it; layering inside one component is raised plus a small offset.
+            </PaperText>
+
+            <PaperTable>
+                <thead>
+                    <tr>
+                        <th>Variable</th>
+                        <th>Value</th>
+                        <th>Application</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><PaperCode>--paper-z-raised</PaperCode></td>
+                        <td>1</td>
+                        <td>Local stacking within a component</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>--paper-z-float</PaperCode></td>
+                        <td>10</td>
+                        <td>Insertion markers and in-flow overlays</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>--paper-z-sticky</PaperCode></td>
+                        <td>50</td>
+                        <td>Sidebars and pinned controls</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>--paper-z-drag</PaperCode></td>
+                        <td>100</td>
+                        <td>Elements being dragged</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>--paper-z-menu</PaperCode></td>
+                        <td>1000</td>
+                        <td>Menus and popovers</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>--paper-z-chrome</PaperCode></td>
+                        <td>2000</td>
+                        <td>Window chrome such as the title bar</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>--paper-z-ghost</PaperCode></td>
+                        <td>3000</td>
+                        <td>Drag ghosts above everything</td>
                     </tr>
                 </tbody>
             </PaperTable>

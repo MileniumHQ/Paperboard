@@ -145,6 +145,58 @@ export default function TypographyDoc() {
                     </tr>
                 </tbody>
             </PaperTable>
+
+            <PaperText preset="subheader" id="weights-and-leading">Weights and line heights</PaperText>
+            <PaperText preset="body">
+                Components name a step rather than a number, so a weight or line height changes everywhere at once.
+            </PaperText>
+
+            <PaperTable>
+                <thead>
+                    <tr>
+                        <th>Variable</th>
+                        <th>Value</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><PaperCode>--paper-weight-regular</PaperCode></td>
+                        <td>400</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>--paper-weight-medium</PaperCode></td>
+                        <td>500</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>--paper-weight-semibold</PaperCode></td>
+                        <td>600</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>--paper-weight-bold</PaperCode></td>
+                        <td>700</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>--paper-leading-none</PaperCode></td>
+                        <td>1</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>--paper-leading-tight</PaperCode></td>
+                        <td>1.1</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>--paper-leading-snug</PaperCode></td>
+                        <td>1.25</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>--paper-leading-normal</PaperCode></td>
+                        <td>1.45</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>--paper-leading-relaxed</PaperCode></td>
+                        <td>1.6</td>
+                    </tr>
+                </tbody>
+            </PaperTable>
         </PaperFlex>
     );
 }
