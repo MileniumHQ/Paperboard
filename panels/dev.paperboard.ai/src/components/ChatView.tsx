@@ -3,6 +3,7 @@ import { PaperButton, PaperEmptyState, PaperIcon, PaperPage, PaperText } from "@
 import { actionsApi } from "@mileniumhq/paperapi";
 import { UI_ACTION_IDS } from "../contract";
 import { modePicker } from "../core/agents";
+import { localModePicker } from "../core/projectTools";
 import { connectionLabel, OLLAMA_PROVIDER, OLLAMA_PROVIDER_ID, unlistedModelReason } from "../core/providers";
 import type { ReasoningLevel } from "../core/reasoning";
 import type { Attachment, Conversation } from "../core/types";
@@ -130,14 +131,25 @@ export default function ChatView() {
         const via = installed()?.provider ?? chatProvider();
         return state.connections.find((c) => c.id === via && c.kind === "agent");
     };
+    /** a Local AI chat whose model can call tools: it may work in a project */
+    const localConnection = () => {
+        if (agentConnection() || !installed()?.capabilities.includes("tools")) return undefined;
+        const via = installed()?.provider ?? chatProvider();
+        return state.connections.find((c) => c.id === via);
+    };
     const summary = () => state.conversations.find((s) => s.id === conversation()?.id);
     const lastProject = () => (state.lastProject && state.projects.includes(state.lastProject) ? state.lastProject : undefined);
-    const project = () => (conversation() ? summary()?.project ?? conversation()?.project : draftProject() ?? lastProject());
+    // an agent's draft starts where the last agent chat worked; a Local AI draft starts with none
+    const project = () =>
+        conversation() ? summary()?.project ?? conversation()?.project : draftProject() ?? (agentConnection() ? lastProject() : undefined);
     const generating = () => Boolean(conversation() && state.generating.includes(conversation()!.id));
-    // an agent chat's permission mode, once its live session lists modes
+    // an agent chat's permission mode, once its live session lists modes; a
+    // Local AI chat's once it works in a project, where its file tools are offered
     const modes = () => {
         const c = conversation();
-        return c && agentConnection() ? modePicker(state.agentSessions[c.id], c.mode) : undefined;
+        if (!c) return undefined;
+        if (agentConnection()) return modePicker(state.agentSessions[c.id], c.mode);
+        return localConnection() && project() ? localModePicker(c.mode) : undefined;
     };
     const changeMode = async (mode: string) => {
         const id = conversation()?.id;
@@ -230,7 +242,7 @@ export default function ChatView() {
                 id = c.id;
                 const chosen = draftProject();
                 setDraftProject(undefined);
-                if (agentConnection() && chosen && chosen !== c.project) await call(UI_ACTION_IDS.setConversationProject, { id, project: chosen });
+                if ((agentConnection() || localConnection()) && chosen && chosen !== c.project) await call(UI_ACTION_IDS.setConversationProject, { id, project: chosen });
             }
             stickToBottom = true;
             await call(UI_ACTION_IDS.sendMessage, { id, text, reasoning, attachments });
@@ -373,10 +385,10 @@ export default function ChatView() {
                 </Show>
                 <Composer
                     toolbar={
-                        <Show when={agentConnection()}>
-                            {(agent) => (
+                        <Show when={agentConnection() ?? localConnection()}>
+                            {(connection) => (
                                 <AgentBar
-                                    connection={agent()}
+                                    connection={connection()}
                                     conversationId={conversation()?.id}
                                     project={project()}
                                     generating={generating()}

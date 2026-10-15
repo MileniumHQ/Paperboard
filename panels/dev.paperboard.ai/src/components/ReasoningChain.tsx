@@ -82,11 +82,21 @@ function ActionStatus(props: { call: ToolCallRecord }) {
 }
 
 /** A decided action is a chain row; one still waiting is the approval card. */
-const BUILTIN_ICONS: Record<BuiltinTool, string> = { web_search: "travel_explore", run_shell_command: "terminal" };
+const BUILTIN_ICONS: Record<BuiltinTool, string> = {
+    web_search: "travel_explore",
+    run_shell_command: "terminal",
+    read_file: AGENT_TOOL_ICONS.read,
+    list_directory: "folder_open",
+    search_files: AGENT_TOOL_ICONS.search,
+    write_file: AGENT_TOOL_ICONS.edit,
+    edit_file: AGENT_TOOL_ICONS.edit,
+};
 
-/** What a built-in step shows after its label: the query or the command. */
+/** What a built-in step shows after its label: the query, the command, or the file. */
 function builtinSubject(call: ToolCallRecord): string {
-    const value = call.builtin === "web_search" ? call.arguments.query : call.arguments.command;
+    const a = call.arguments;
+    const value =
+        call.builtin === "web_search" ? a.query : call.builtin === "run_shell_command" ? a.command : call.builtin === "search_files" ? a.text ?? a.pattern : a.path;
     return typeof value === "string" ? value : "";
 }
 
@@ -98,8 +108,8 @@ export function ActionStep(props: { call: ToolCallRecord }) {
             <ChainStep
                 icon={
                     <Switch fallback={<PaperIcon>bolt</PaperIcon>}>
-                        <Match when={props.call.agent}>{(a) => <PaperIcon>{AGENT_TOOL_ICONS[a().kind]}</PaperIcon>}</Match>
                         <Match when={props.call.builtin}>{(b) => <PaperIcon>{BUILTIN_ICONS[b()]}</PaperIcon>}</Match>
+                        <Match when={props.call.agent}>{(a) => <PaperIcon>{AGENT_TOOL_ICONS[a().kind]}</PaperIcon>}</Match>
                         <Match when={known()}>
                             <img class={styles.appIcon} src={panelIcon(props.call.panelId)} alt="" />
                         </Match>

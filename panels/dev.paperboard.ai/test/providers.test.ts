@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { apiKeySecretName, connectionLabel, credentialsAllowed, definitionOf, endpointLabel, normalizeBaseUrl, unlistedModelReason } from "../src/core/providers";
+import { LOCAL_MODES, localModePicker } from "../src/core/projectTools";
 import { checkCommandShape, commandSuggestions, MAX_AGENT_ARGS, modePicker, splitArgs, validateCustomAgent } from "../src/core/agents";
 import { providerClients } from "../src/service/provider";
 import { REASONING_LEVELS, isReasoningLevel, reasoningToThink } from "../src/core/reasoning";
@@ -173,5 +174,13 @@ describe("agent commands", () => {
         expect(checkCommandShape("\\\\server\\share\\agent.exe")).toBe("absolute");
         expect(() => checkCommandShape("./agent")).toThrow("must be a command name or an absolute path");
         expect(() => validateCustomAgent("bin/agent", [])).toThrow("must be a command name or an absolute path");
+    });
+});
+
+describe("Local AI mode picker", () => {
+    it("offers Local AI's modes, with an unknown saved mode falling back to Ask", () => {
+        expect(localModePicker(undefined).modes.map((m) => m.id)).toEqual(LOCAL_MODES.map((m) => m.id));
+        expect(localModePicker("nonsense").current?.id).toBe("ask");
+        expect(localModePicker("accept-edits").current?.id).toBe("accept-edits");
     });
 });

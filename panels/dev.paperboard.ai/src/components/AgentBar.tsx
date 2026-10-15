@@ -1,6 +1,7 @@
 // The strip above the composer in a coding agent's chat: the project it
-// works in, and what to do when it can't start or needs a sign-in. Its mode
-// is picked in the composer, next to the reasoning level.
+// works in, and what to do when it can't start or needs a sign-in. A Local AI
+// chat whose model can call tools shows it too, with the project optional.
+// Modes are picked in the composer, next to the reasoning level.
 
 import { createSignal, For, Show } from "solid-js";
 import {
@@ -19,19 +20,21 @@ import { call, errorText, state } from "../lib/state";
 import styles from "./AgentBar.module.css";
 
 export interface AgentBarProps {
+    /** a coding agent, or the Local AI connection a tool-calling model runs on */
     connection: Connection;
     /** unset while the chat is a draft: the project is kept here until the first message creates it */
     conversationId?: string;
     project?: string;
     generating: boolean;
-    onDraftProject: (project: string) => void;
+    onDraftProject: (project: string | undefined) => void;
     onError: (text: string) => void;
 }
 
 export default function AgentBar(props: AgentBarProps) {
     const [choosing, setChoosing] = createSignal(false);
     const [busy, setBusy] = createSignal(false);
-    const agent = () => state.agents[props.connection.id];
+    const local = () => props.connection.kind !== "agent";
+    const agent = () => (local() ? undefined : state.agents[props.connection.id]);
 
     const act = async (action: () => Promise<unknown>) => {
         setBusy(true);
@@ -84,12 +87,13 @@ export default function AgentBar(props: AgentBarProps) {
                 open={choosing()}
                 current={props.project}
                 agentLabel={props.connection.label}
+                optional={local()}
                 onClose={() => setChoosing(false)}
                 onChoose={async (project) => {
                     if (props.conversationId) {
                         await call(UI_ACTION_IDS.setConversationProject, { id: props.conversationId, project });
                     } else {
-                        props.onDraftProject(project);
+                        props.onDraftProject(project ?? undefined);
                     }
                     setChoosing(false);
                 }}
@@ -102,8 +106,11 @@ function ProjectModal(props: {
     open: boolean;
     current?: string;
     agentLabel: string;
+    /** Local AI: a chat can leave its project and be a plain chat again */
+    optional: boolean;
     onClose: () => void;
-    onChoose: (project: string) => Promise<void>;
+    /** null: no project */
+    onChoose: (project: string | null) => Promise<void>;
 }) {
     const [name, setName] = createSignal("");
     const [saving, setSaving] = createSignal(false);
@@ -132,7 +139,9 @@ function ProjectModal(props: {
         <PaperModal open={props.open} onClose={() => !saving() && props.onClose()} title="Choose a project" size="small">
             <PaperFlex direction="column" gap="full" fullWidth>
                 <PaperText size={2}>
-                    {props.agentLabel} reads, edits and runs commands in the project's folder. Changing it starts a new session.
+                    {props.optional
+                        ? `In a project, ${props.agentLabel} can read the project's files, and change them or run commands there after you approve. Without one, it's a plain chat.`
+                        : `${props.agentLabel} reads, edits and runs commands in the project's folder. Changing it starts a new session.`}
                 </PaperText>
                 <Show when={state.projects.length > 0}>
                     <PaperSelector name="agent-project" value={props.current} onValueChange={(v) => !saving() && void choose(String(v))}>
@@ -164,6 +173,11 @@ function ProjectModal(props: {
                         <PaperIcon>add</PaperIcon> {saving() ? "Creating..." : "Create"}
                     </PaperButton>
                 </div>
+                <Show when={props.optional && props.current}>
+                    <PaperButton variant="text" disabled={saving()} onClick={() => void run(() => props.onChoose(null))}>
+                        <PaperIcon>folder_off</PaperIcon> Leave the project
+                    </PaperButton>
+                </Show>
                 <Show when={error()}>
                     <PaperText size={2} color="danger" role="alert">{error()}</PaperText>
                 </Show>

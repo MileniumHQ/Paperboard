@@ -126,10 +126,12 @@ export interface ConversationSummary {
 
 export type ToolCallStatus = "awaiting-approval" | "running" | "done" | "denied" | "error";
 
+/** the file tools a Local AI chat is offered in a project (core/projectTools.ts) */
+export type ProjectToolName = "read_file" | "list_directory" | "search_files" | "write_file" | "edit_file";
 /** every built-in kind a chat may have recorded; web_search is no longer offered */
-export type BuiltinTool = "web_search" | "run_shell_command";
+export type BuiltinTool = "web_search" | "run_shell_command" | ProjectToolName;
 /** the built-ins a model can be offered */
-export type OfferedBuiltin = "run_shell_command";
+export type OfferedBuiltin = "run_shell_command" | ProjectToolName;
 
 /** What an agent says a tool call does (ACP ToolKind); picks its icon. */
 export type AgentToolKind = "read" | "edit" | "delete" | "move" | "search" | "execute" | "think" | "fetch" | "switch_mode" | "other";
@@ -224,11 +226,11 @@ export interface Conversation {
     model: string;
     /** the connection the chat runs on; set at the first message when absent */
     provider?: string;
-    /** agent chats: the project the agent works in (files/agent/<project>) */
+    /** the project the chat works in (files/agent/<project>): an agent's folder, or Local AI's file tools' */
     project?: string;
     /** agent chats: the agent's session, resumed when the agent can load it */
     sessionId?: string;
-    /** agent chats: the mode the user picked (the agent's own mode ids) */
+    /** the mode the user picked: an agent's own mode ids, or Local AI's (LOCAL_MODES) */
     mode?: string;
     createdAt: number;
     updatedAt: number;
@@ -275,7 +277,7 @@ export interface PendingApproval {
     action: string;
     label: string;
     arguments: Record<string, unknown>;
-    /** a built-in tool; its approval rules are fixed (BUILTIN_APPROVAL) */
+    /** a built-in tool; it asks by its kind and the chat's mode (builtinAsks) */
     builtin?: OfferedBuiltin;
     /** an agent's permission request: the answers it offers, in its order */
     options?: AgentPermissionOption[];
