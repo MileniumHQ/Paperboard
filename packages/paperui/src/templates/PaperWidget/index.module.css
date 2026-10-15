@@ -1,0 +1,337 @@
+/* A widget sizes itself to its tile, not the window: padding and type grow
+   a little with the tile, between fixed ends. Every part aligns to one left
+   edge, the padding, so widgets from different panels line up on Home. */
+.PaperWidget {
+    --pad: clamp(var(--paper-uigap-threefourths), 9cqmin, var(--paper-uigap-sixfourths));
+    --gap: clamp(var(--paper-uigap-half), 4.5cqmin, var(--paper-uigap));
+    position: absolute;
+    inset: 0;
+    container-type: size;
+    overflow: hidden;
+    /* the card, whether the shell or a panel's widget page draws it */
+    background: var(--paper-surface-raised);
+    color: var(--paper-text);
+    font-family: var(--paper-font-family);
+    font-size: var(--paper-text-size-1);
+    line-height: var(--paper-leading-snug);
+    text-align: left;
+}
+
+/* a pressable tile: the button fills it from behind, and the content sits
+   over it letting presses through, except on its own controls */
+.press {
+    position: absolute;
+    inset: 0;
+    padding: 0;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    transition: background-color var(--paper-tiny-transition) var(--paper-ease-standard);
+}
+
+.press:hover:not(:disabled) {
+    background: var(--paper-surface-inset);
+}
+
+.press:focus-visible {
+    outline: var(--paper-focus-ring);
+    outline-offset: calc(var(--paper-uigap-sixth) * -1);
+}
+
+.press:disabled {
+    cursor: default;
+}
+
+.layout {
+    position: relative;
+    height: 100%;
+    box-sizing: border-box;
+    padding: var(--pad);
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap);
+}
+
+/* only a pressable tile lets presses through its content to the button
+   behind; any other widget's body keeps its own clicks, hovers and scroll */
+.PaperWidget[data-pressable] > .layout {
+    pointer-events: none;
+}
+
+.PaperWidget[data-pressable] > .layout :is(button, a, input, select, textarea) {
+    pointer-events: auto;
+}
+
+/* one line, the same height in every widget, whatever sits at its end */
+.header {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--paper-uigap-half);
+    min-width: 0;
+    height: calc(var(--paper-text-size-2) * var(--paper-leading-snug));
+    font-size: var(--paper-text-size-2);
+}
+
+.headerIcon {
+    flex-shrink: 0;
+    font-size: var(--paper-icon-size-tiny);
+    color: var(--paper-text-subtle);
+}
+
+/* a one-cell tile keeps its width for the title */
+@container (max-width: 150px) {
+    .headerIcon {
+        display: none;
+    }
+}
+
+/* the title gives way last: the detail shrinks long before it does */
+.title {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: var(--paper-weight-bold);
+}
+
+.detail {
+    flex: 0 1000 auto;
+    min-width: 0;
+    margin-inline-start: auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--paper-text-size-1);
+    color: var(--paper-text-subtle);
+    font-variant-numeric: tabular-nums;
+}
+
+/* a control taller than the line overhangs it evenly instead of growing it */
+.headerAction {
+    flex-shrink: 0;
+    margin-inline-start: auto;
+    display: flex;
+    align-items: center;
+    margin-block: calc((1lh - var(--paper-control-size-tiny)) / 2);
+    margin-inline-end: calc(var(--paper-uigap-onefourth) * -1);
+}
+
+.detail + .headerAction {
+    margin-inline-start: 0;
+}
+
+.body {
+    flex: 1;
+    min-height: 0;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    /* content too tall for a short tile clips at the bottom, never over the header */
+    justify-content: safe center;
+    gap: var(--gap);
+    container-type: size;
+    overflow: hidden;
+}
+
+.footer {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--paper-uigap-half);
+    min-width: 0;
+    min-height: var(--paper-control-size-tiny);
+    color: var(--paper-text-subtle);
+}
+
+/* ── stat ── sized by the body it sits in */
+
+/* the value sizes to the stat's own width, so stats side by side fit */
+.stat {
+    container-type: inline-size;
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap-onefourth);
+    min-width: 0;
+}
+
+.statValue {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: clamp(var(--paper-text-size-3), min(40cqh, 20cqw), var(--paper-text-size-12));
+    font-weight: var(--paper-weight-bold);
+    line-height: var(--paper-leading-none);
+    font-variant-numeric: tabular-nums;
+}
+
+.stat:not(:has(.statCaption)) .statValue {
+    font-size: clamp(var(--paper-text-size-3), min(60cqh, 20cqw), var(--paper-text-size-14));
+}
+
+/* a meter takes a line of its own, so the value gives up a little height */
+.stat:has(.statMeter) .statValue {
+    font-size: clamp(var(--paper-text-size-3), min(30cqh, 20cqw), var(--paper-text-size-12));
+}
+
+.stat[data-tone] .statValue {
+    color: var(--role-base, var(--paper-text));
+}
+
+.statCaption {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--paper-text-subtle);
+}
+
+.statMeter {
+    flex-shrink: 0;
+    margin-top: var(--paper-uigap-sixth);
+}
+
+.stats {
+    display: flex;
+    gap: var(--pad);
+    min-width: 0;
+}
+
+.stats > * {
+    flex: 1 1 0;
+}
+
+/* ── rows ── a row that doesn't fit wraps into a clipped second column,
+   so the list shows whole rows only */
+
+.rows {
+    flex: 1;
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    overflow: hidden;
+}
+
+/* rows hang from the top of the body, under the header */
+.body:has(> .rows) {
+    justify-content: flex-start;
+}
+
+.row {
+    width: 100%;
+    flex-shrink: 0;
+}
+
+.rowInner {
+    width: 100%;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    gap: var(--paper-uigap-half);
+    padding: var(--paper-uigap-sixth) 0;
+    border: none;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+}
+
+/* the hover fill reaches past the text; the text stays on the edge */
+button.rowInner {
+    margin-inline: calc(var(--paper-uigap-third) * -1);
+    width: calc(100% + var(--paper-uigap-third) * 2);
+    padding-inline: var(--paper-uigap-third);
+    border-radius: var(--paper-border-radius-half);
+    cursor: pointer;
+    transition: background-color var(--paper-tiny-transition) var(--paper-ease-standard);
+}
+
+button.rowInner:hover {
+    background: var(--paper-surface-inset);
+}
+
+button.rowInner:focus-visible {
+    outline: var(--paper-focus-ring);
+    outline-offset: calc(var(--paper-uigap-sixth) * -1);
+}
+
+.rowLabel {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.rowDetail {
+    flex-shrink: 0;
+    max-width: 45%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--paper-text-subtle);
+    font-variant-numeric: tabular-nums;
+}
+
+.dot {
+    display: inline-block;
+    flex-shrink: 0;
+    width: var(--paper-uigap-half);
+    height: var(--paper-uigap-half);
+    box-sizing: border-box;
+    border-radius: var(--paper-border-radius-pill);
+    background: var(--role-base);
+}
+
+.dot[data-tone="none"] {
+    background: none;
+    border: var(--paper-thick-border-width) solid var(--paper-text-faint);
+}
+
+/* ── message ── loading, empty, failed */
+
+.message {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--paper-uigap-onefourth);
+    min-width: 0;
+}
+
+.messageTitle {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--paper-text-size-2);
+    font-weight: var(--paper-weight-semibold);
+}
+
+.message[data-tone] .messageTitle {
+    color: var(--role-base, var(--paper-text));
+}
+
+.messageDescription {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    overflow: hidden;
+    color: var(--paper-text-subtle);
+}
+
+/* actions are tiny buttons: their hover fill reaches past the edge the
+   title starts on, and their text sits on it, as rows do */
+.messageActions {
+    margin-inline-start: calc(var(--paper-uigap-threefourths) * -1);
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--paper-uigap-half);
+    margin-top: var(--paper-uigap-onefourth);
+}

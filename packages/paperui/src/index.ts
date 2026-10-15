@@ -57,6 +57,7 @@ export * from "./templates/PaperPage";
 export * from "./templates/PaperSettingList";
 export * from "./templates/PaperSplit";
 export * from "./templates/PaperWizard";
+export * from "./templates/PaperWidget";
 
 export * from "./contexts/layout";
 export * from "./contexts/panel";

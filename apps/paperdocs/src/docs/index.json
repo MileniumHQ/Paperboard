@@ -303,6 +303,10 @@
                         "name": "PaperSplit",
                         "file": "paper-split"
                     },
+                    "paperwidget": {
+                        "name": "PaperWidget",
+                        "file": "paper-widget"
+                    },
                     "paperwizard": {
                         "name": "PaperWizard",
                         "file": "paper-wizard"

@@ -1,0 +1,15 @@
+/* Home tiles at roughly their 2x1 size, on the page's sunken surface */
+.examples {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--paper-uigap);
+}
+
+.tile {
+    position: relative;
+    width: 280px;
+    height: 140px;
+    border: var(--paper-border-width) solid var(--paper-border);
+    border-radius: var(--paper-border-radius);
+    overflow: hidden;
+}
