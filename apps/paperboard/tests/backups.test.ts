@@ -206,6 +206,29 @@ describe("backups on this computer", () => {
         expect(f.seen()).toEqual(["good", "good"]);
     });
 
+    test("a restore that cannot park the config puts the parked files back and restarts the panel", async () => {
+        const f = panelFixture();
+        f.writeData("one", { n: 1 });
+        await f.call("backup:panel-destination-set", { panelId: ID, destinationId: "local" });
+        const made = await f.call("backup:create", { panelId: ID }, ID);
+        expect(made.error).toBeUndefined();
+
+        f.writeData("two", { n: 2 });
+        f.services.startService(ID);
+        await f.services.waitUntilReady(ID);
+
+        // the files park, then the config's rename is refused
+        const configsDir = path.join(f.root, "configs");
+        fs.chmodSync(configsDir, 0o500);
+        cleanups.push(() => fs.chmodSync(configsDir, 0o700));
+        const restored = await f.call("backup:restore", { panelId: ID, backupId: made.result.id }, ID);
+        fs.chmodSync(configsDir, 0o700);
+        expect(restored.error).toBeTruthy();
+        expect(f.readData()).toEqual({ mode: "two", config: { n: 2 } });
+        expect(fs.readdirSync(path.join(f.root, "files")).filter((n) => n.startsWith(".restore-parked"))).toEqual([]);
+        expect(f.services.isActive(ID)).toBe(true);
+    });
+
     test("a backup from a newer panel version is refused before any data moves", async () => {
         const f = panelFixture("0.3.0");
         f.writeData("new", { n: 3 });

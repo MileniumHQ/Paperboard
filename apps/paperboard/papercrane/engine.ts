@@ -1232,25 +1232,45 @@ export class PaperCraneEngine {
         const parkedConfig = path.join(this.configsDir, `.restore-parked-${stamp}-${path.basename(liveConfig)}`);
 
         const wasActive = this.services.isActive(cleanId);
-        await this.services.stopService(cleanId);
-        for (const [id, client] of [...this.clients]) {
-            if (this.clientOwners.get(id) === cleanId) await this.stopOwnedClient(id, client);
-        }
-
         const hadFiles = fs.existsSync(liveFiles);
         const hadConfig = fs.existsSync(liveConfig);
-        if (hadFiles) await fs.promises.rename(liveFiles, parkedFiles);
-        if (hadConfig) await fs.promises.rename(liveConfig, parkedConfig);
+        let parkedFilesDone = false;
+        let parkedConfigDone = false;
+        let installing = false;
         try {
+            await this.services.stopService(cleanId);
+            for (const [id, client] of [...this.clients]) {
+                if (this.clientOwners.get(id) === cleanId) await this.stopOwnedClient(id, client);
+            }
+            if (hadFiles) {
+                await fs.promises.rename(liveFiles, parkedFiles);
+                parkedFilesDone = true;
+            }
+            if (hadConfig) {
+                await fs.promises.rename(liveConfig, parkedConfig);
+                parkedConfigDone = true;
+            }
+            installing = true;
             await moveFileSafe(staged.filesDir, liveFiles);
             if (staged.configFile) await moveFileSafe(staged.configFile, liveConfig);
             if (wasActive && this.services.startService(cleanId)) await this.services.waitUntilReady(cleanId);
         } catch (err) {
-            await this.services.stopService(cleanId);
-            await fs.promises.rm(liveFiles, { recursive: true, force: true });
-            await fs.promises.rm(liveConfig, { force: true });
-            if (hadFiles) await fs.promises.rename(parkedFiles, liveFiles);
-            if (hadConfig) await fs.promises.rename(parkedConfig, liveConfig);
+            // anything from the stop onward leaves the previous data in
+            // place and the panel running on it again
+            try {
+                await this.services.stopService(cleanId);
+                if (installing) {
+                    await fs.promises.rm(liveFiles, { recursive: true, force: true });
+                    await fs.promises.rm(liveConfig, { force: true });
+                }
+                if (parkedFilesDone) await fs.promises.rename(parkedFiles, liveFiles);
+                if (parkedConfigDone) await fs.promises.rename(parkedConfig, liveConfig);
+            } catch (rollbackErr) {
+                throw new Error(
+                    `The restore failed (${(err as Error).message}) and the previous data of ${cleanId} could not be put back (${(rollbackErr as Error).message}); it is parked at ${parkedFiles} and ${parkedConfig}`,
+                    { cause: err },
+                );
+            }
             // the restore's failure is the answer; a panel that also fails
             // to come back on its own data is logged, not swallowed
             try {
