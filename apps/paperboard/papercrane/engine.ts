@@ -14,6 +14,7 @@ import {
     streamToFileWithProgress,
     moveFileSafe,
     resolveSecureTargetPath,
+    openResolvedFile,
     sanitizeId,
     panelFilesDirName,
     validatePanelManifest,
@@ -148,7 +149,7 @@ export class PaperCraneEngine {
 
     // Resolves isolated files directory for a panel
     public resolveAppFilesDir(appId?: string): string {
-        const dir = path.join(this.filesDir, panelFilesDirName(appId));
+        const dir = this.resolveSecureTargetPath("", appId);
         if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
         return dir;
     }
@@ -521,7 +522,9 @@ export class PaperCraneEngine {
         const fullPath = this.resolveSecureTargetPath(targetPath, appId);
         const dir = path.dirname(fullPath);
         if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-        await fs.promises.writeFile(fullPath, content, "utf-8");
+        const fd = openResolvedFile(fullPath, () => this.resolveSecureTargetPath(targetPath, appId), fs.constants.O_WRONLY | fs.constants.O_CREAT);
+        try { fs.ftruncateSync(fd, 0); fs.writeFileSync(fd, content, "utf-8"); }
+        finally { fs.closeSync(fd); }
         return fullPath;
     }
 
@@ -533,13 +536,14 @@ export class PaperCraneEngine {
         if (!fs.existsSync(fullPath)) return null;
         // bounded read: stat first so a runaway data file refuses instead
         // of slurping gigabytes into one WS frame (self-DoS otherwise)
-        const stat = await fs.promises.stat(fullPath);
-        if (stat.size > FILE_READ_MAX_BYTES) {
-            throw new LimitError(
-                `File exceeds ${FILE_READ_MAX_BYTES} byte read cap: ${targetPath}`,
-            );
-        }
-        return await fs.promises.readFile(fullPath, "utf-8");
+        const fd = openResolvedFile(fullPath, () => this.resolveSecureTargetPath(targetPath, appId));
+        try {
+            const stat = fs.fstatSync(fd);
+            if (stat.size > FILE_READ_MAX_BYTES) {
+                throw new LimitError(`File exceeds ${FILE_READ_MAX_BYTES} byte read cap: ${targetPath}`);
+            }
+            return fs.readFileSync(fd, "utf-8");
+        } finally { fs.closeSync(fd); }
     }
 
     public async clearFiles(appId?: string): Promise<boolean> {

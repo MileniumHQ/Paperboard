@@ -134,6 +134,59 @@ describe("/panel-files on the daemon", () => {
         expect(fs.readFileSync(panelFile(OTHER, "notes.txt"), "utf8")).toBe("other panel");
     });
 
+    it("refuses symlinked ancestors for authenticated HTTP and shell transfers", async () => {
+        const outside = path.join(localDir, "outside-storage");
+        fs.mkdirSync(outside);
+        fs.writeFileSync(path.join(outside, "keep.txt"), "outside bytes");
+        fs.symlinkSync(outside, panelFile(PANEL, "escape-dir"), "dir");
+        for (const method of ["GET", "HEAD", "PUT"]) {
+            const response = await rawRequest(method, `/panel-files/${PANEL}/escape-dir/keep.txt`, method === "PUT" ? "clobbered" : undefined);
+            expect(response.status).toBe(403);
+        }
+        expect((await runPanelExport(ref("escape-dir/keep.txt"), pickers({ save: path.join(localDir, "escaped.txt") }))).status).toBe("failed");
+        const source = path.join(localDir, "attack.txt");
+        fs.writeFileSync(source, "clobbered");
+        expect((await runPanelImport(ref("escape-dir/new/nested.txt"), pickers({ open: source }))).status).toBe("failed");
+        expect(fs.readFileSync(path.join(outside, "keep.txt"), "utf8")).toBe("outside bytes");
+        expect(fs.existsSync(path.join(outside, "new"))).toBe(false);
+        expect(fs.existsSync(path.join(localDir, "escaped.txt"))).toBe(false);
+
+        const linkedPanel = "dev.example.linked";
+        fs.symlinkSync(outside, panelFile(linkedPanel, ""), "dir");
+        expect((await rawRequest("GET", `/panel-files/${linkedPanel}/keep.txt`)).status).toBe(403);
+    });
+
+    it("refuses an ancestor replaced while an authenticated upload is streaming", async () => {
+        seed(PANEL, "swap-dir/keep.txt", "previous");
+        const outside = path.join(localDir, "swap-outside");
+        fs.mkdirSync(outside);
+        fs.writeFileSync(path.join(outside, "keep.txt"), "outside");
+        const pending = new Promise<number>((resolve, reject) => {
+            const request = http.request({ host: "127.0.0.1", port, method: "PUT", path: `/panel-files/${PANEL}/swap-dir/keep.txt`, headers: { Authorization: `Bearer ${TOKEN}`, "Content-Length": "6" } }, (response) => {
+                response.resume();
+                response.on("end", () => resolve(response.statusCode!));
+            });
+            request.on("error", reject);
+            request.write("abc");
+            void (async () => {
+                try {
+                    const deadline = Date.now() + 2000;
+                    while (!fs.readdirSync(panelFile(PANEL, "swap-dir")).some((name) => name.includes(".davpart"))) {
+                        if (Date.now() > deadline) throw new Error("Upload staging file did not appear");
+                        await Bun.sleep(5);
+                    }
+                    fs.renameSync(panelFile(PANEL, "swap-dir"), panelFile(PANEL, "parked-dir"));
+                    fs.symlinkSync(outside, panelFile(PANEL, "swap-dir"), "dir");
+                    request.end("def");
+                } catch (error) { request.destroy(); reject(error); }
+            })();
+        });
+        expect(await pending).toBe(500);
+        expect(fs.readFileSync(path.join(outside, "keep.txt"), "utf8")).toBe("outside");
+        expect(fs.readFileSync(panelFile(PANEL, "parked-dir/keep.txt"), "utf8")).toBe("previous");
+        expect(fs.readdirSync(panelFile(PANEL, "parked-dir"))).toEqual(["keep.txt"]);
+    });
+
     it("refuses reserved and malformed panel ids", async () => {
         for (const id of ["settings", "Bad.Id", "shell-x"]) {
             expect((await fetch(url(`${id}/a.txt`), { headers: auth })).status).toBe(400);

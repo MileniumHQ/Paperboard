@@ -312,3 +312,18 @@ test("revoke-self reports revoked only after the revocation persists", async () 
         expect(f.auth.matchToken("test-forget")).toBeFalsy();
     } finally { fs.chmodSync(tokenDir, 0o700); sdk.close(); await f.close(); }
 });
+
+
+test("authenticated SDK file operations refuse symlinked storage ancestors", async () => {
+    const f = await fixture();
+    const sdk = new CraneTransport({ port: f.port, token: f.auth.issuePanelToken("panel.a"), computerId: "local", panelId: "panel.a" });
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), "wire-file-outside-"));
+    try {
+        fs.writeFileSync(path.join(outside, "keep.txt"), "outside");
+        const home = f.engine.resolveAppFilesDir("panel.a");
+        fs.symlinkSync(outside, path.join(home, "linked"), "dir");
+        await expect(sdk.call("file:read", { targetPath: "linked/keep.txt" })).rejects.toThrow(/Access denied/);
+        await expect(sdk.call("file:write", { targetPath: "linked/keep.txt", content: "clobbered" })).rejects.toThrow(/Access denied/);
+        expect(fs.readFileSync(path.join(outside, "keep.txt"), "utf8")).toBe("outside");
+    } finally { sdk.close(); await f.close(); fs.rmSync(outside, { recursive: true, force: true }); }
+});

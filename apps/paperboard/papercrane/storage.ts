@@ -163,7 +163,8 @@ export function panelFilesDirName(id: string | undefined | null): string {
     return id.replace(/[^a-zA-Z0-9_.-]/g, "_") || "default";
 }
 
-// Resolve a relative path inside an isolated dir, rejecting traversal
+// Resolve a relative path inside an isolated dir, rejecting traversal and links.
+// Call again immediately before filesystem use after any asynchronous work.
 export function resolveSecureTargetPath(
     baseDir: string,
     targetPath: string,
@@ -172,6 +173,7 @@ export function resolveSecureTargetPath(
     const cleanAppId = appId
         ? appId.replace(/[^a-zA-Z0-9_.-]/g, "_")
         : "default";
+    baseDir = path.resolve(baseDir);
     const base = path.join(baseDir, cleanAppId);
     const resolved = path.resolve(base, String(targetPath).replace(/^[/\\]+/, ""));
     const baseWithSep = base.endsWith(path.sep) ? base : base + path.sep;
@@ -180,7 +182,48 @@ export function resolveSecureTargetPath(
             `Access denied: path traverses outside assigned storage for ${cleanAppId}`,
         );
     }
+    // The files root is daemon-owned; OS aliases above it (e.g. /var on
+    // macOS) are allowed, but the root, panel home and every existing path
+    // component below it must be real entries, including dangling links.
+    let rootStat: fs.Stats;
+    try { rootStat = fs.lstatSync(baseDir); }
+    catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") return resolved;
+        throw error;
+    }
+    if (rootStat.isSymbolicLink()) throw new Error("Access denied: symbolic link at storage root");
+    const canonicalRoot = fs.realpathSync(baseDir);
+    let current = baseDir;
+    for (const segment of ["", ...path.relative(baseDir, resolved).split(path.sep)]) {
+        if (segment) current = path.join(current, segment);
+        let stat: fs.Stats;
+        try { stat = fs.lstatSync(current); }
+        catch (error) {
+            if ((error as NodeJS.ErrnoException).code === "ENOENT") break;
+            throw error;
+        }
+        const expected = path.join(canonicalRoot, path.relative(baseDir, current));
+        if (stat.isSymbolicLink() || fs.realpathSync(current) !== expected) {
+            throw new Error(`Access denied: symbolic link in storage path for ${cleanAppId}`);
+        }
+    }
     return resolved;
+}
+
+/** Open without following the leaf, then recheck the chain and inode before use. */
+export function openResolvedFile(target: string, validate: () => string, flags = fs.constants.O_RDONLY): number {
+    validate();
+    // Never truncate before validation: an ancestor may change during open.
+    const fd = fs.openSync(target, flags | fs.constants.O_NOFOLLOW);
+    try {
+        validate();
+        const opened = fs.fstatSync(fd);
+        const current = fs.lstatSync(target);
+        if (!opened.isFile() || current.isSymbolicLink() || opened.dev !== current.dev || opened.ino !== current.ino) {
+            throw new Error("Access denied: storage file changed while opening");
+        }
+        return fd;
+    } catch (error) { fs.closeSync(fd); throw error; }
 }
 
 // ─── Manifest validation ─────────────────────────────────────────────────────

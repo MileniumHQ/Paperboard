@@ -8,10 +8,11 @@ import * as fs from "fs";
 import * as path from "path";
 import type { PaperCraneEngine } from "./engine";
 import type { PaperCraneAuth } from "./auth";
-import { davMaxUploadBytes, isMainBearer, sendFile } from "./dav";
+import { davMaxUploadBytes, isMainBearer } from "./dav";
 import { receiveFileAtomic, UploadTooLargeError } from "./atomicUpload";
 import { isPanelId } from "../../../packages/paperapi/src/panelIdentity";
 import { logger } from "./logger";
+import { openResolvedFile } from "./storage";
 
 export const PANEL_FILES_PREFIX = "/panel-files/";
 export const PANEL_FILE_PATH_MAX = 1024;
@@ -74,9 +75,10 @@ async function servePanelFile(
         reply(res, 400, "Invalid panel id or file path");
         return;
     }
+    const validate = () => engine.resolveSecureTargetPath(parsed.filePath, parsed.panelId);
     let target: string;
     try {
-        target = engine.resolveSecureTargetPath(parsed.filePath, parsed.panelId);
+        target = validate();
     } catch (err) {
         req.resume();
         reply(res, 403, (err as Error).message);
@@ -108,7 +110,13 @@ async function servePanelFile(
             res.end();
             return;
         }
-        sendFile(res, target);
+        const fd = openResolvedFile(target, validate);
+        const opened = fs.fstatSync(fd);
+        res.writeHead(200, { "Content-Length": String(opened.size), "Content-Type": "application/octet-stream" });
+        const body = fs.createReadStream(target, { fd, autoClose: true });
+        body.on("error", (error) => res.destroy(error));
+        res.once("close", () => body.destroy());
+        body.pipe(res);
         return;
     }
 
@@ -121,7 +129,7 @@ async function servePanelFile(
                 return;
             }
             const existed = fs.existsSync(target);
-            await receiveFileAtomic(req, target, davMaxUploadBytes());
+            await receiveFileAtomic(req, target, davMaxUploadBytes(), validate);
             res.writeHead(existed ? 204 : 201);
             res.end();
         } catch (err) {

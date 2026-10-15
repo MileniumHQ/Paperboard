@@ -5,6 +5,10 @@
 import type * as http from "http";
 import * as fs from "fs";
 import { logger } from "./logger";
+import * as path from "path";
+import { randomUUID } from "crypto";
+import { Transform } from "stream";
+import { pipeline } from "stream/promises";
 
 export class UploadTooLargeError extends Error {
     constructor(readonly cap: number) {
@@ -12,39 +16,67 @@ export class UploadTooLargeError extends Error {
     }
 }
 
-export async function receiveFileAtomic(req: http.IncomingMessage, target: string, cap: number): Promise<void> {
+export async function receiveFileAtomic(
+    req: http.IncomingMessage,
+    target: string,
+    cap: number,
+    validateTarget?: () => string,
+): Promise<void> {
     const declared = Number(req.headers["content-length"]);
     if (Number.isFinite(declared) && declared > cap) {
         req.resume();
         throw new UploadTooLargeError(cap);
     }
-    const tmp = `${target}.davpart-${process.pid}-${Date.now()}`;
+    validateTarget?.();
+    const parent = path.dirname(target);
+    const dirFd = process.platform === "linux"
+        ? fs.openSync(parent, fs.constants.O_RDONLY | fs.constants.O_DIRECTORY | fs.constants.O_NOFOLLOW)
+        : undefined;
+    // Linux exposes descriptor-relative paths. Pin the parent through the
+    // transfer so even a renamed directory permits cleanup of our own temp.
+    const pinnedParent = dirFd !== undefined ? `/proc/self/fd/${dirFd}` : parent;
+    const tmp = path.join(pinnedParent, `${path.basename(target)}.davpart-${randomUUID()}`);
+    let created = false;
     try {
-        await new Promise<void>((resolve, reject) => {
-            let written = 0;
-            const out = fs.createWriteStream(tmp);
-            req.on("data", (chunk: Buffer) => {
+        validateTarget?.();
+        const before = dirFd !== undefined ? fs.fstatSync(dirFd) : fs.lstatSync(parent);
+        const current = fs.lstatSync(parent);
+        if (before.dev !== current.dev || before.ino !== current.ino || current.isSymbolicLink()) {
+            throw new Error("Access denied: upload directory changed");
+        }
+        const fd = fs.openSync(tmp, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_NOFOLLOW, 0o600);
+        created = true;
+        let written = 0;
+        const counter = new Transform({
+            transform(chunk: Buffer, _encoding, done) {
                 written += chunk.length;
-                if (written > cap) {
-                    req.unpipe(out);
-                    out.destroy();
-                    reject(new UploadTooLargeError(cap));
-                }
-            });
-            req.pipe(out);
-            req.on("aborted", () => reject(new Error("aborted")));
-            out.on("finish", () => resolve());
-            out.on("error", reject);
-            req.on("error", reject);
+                if (written > cap) done(new UploadTooLargeError(cap));
+                else done(null, chunk);
+            },
         });
-        fs.renameSync(tmp, target);
+        // Keep the HTTP request alive long enough to return a typed refusal;
+        // pipeline owns and closes both file-side streams on failure.
+        const body = req.pipe(counter);
+        const abort = () => counter.destroy(new Error("Upload aborted"));
+        const fail = (error: Error) => counter.destroy(error);
+        req.once("aborted", abort);
+        req.once("error", fail);
+        try { await pipeline(body, fs.createWriteStream(tmp, { fd, autoClose: true })); }
+        finally {
+            req.unpipe(counter);
+            req.off("aborted", abort);
+            req.off("error", fail);
+        }
+        validateTarget?.();
+        const after = fs.lstatSync(parent);
+        if (before.dev !== after.dev || before.ino !== after.ino || after.isSymbolicLink()) {
+            throw new Error("Access denied: upload directory changed");
+        }
+        fs.renameSync(tmp, path.join(pinnedParent, path.basename(target)));
     } catch (err) {
         req.resume();
-        try {
-            fs.unlinkSync(tmp);
-        } catch (cleanupErr) {
-            logger.debug("[upload] tmp cleanup failed:", cleanupErr);
-        }
+        try { if (created) fs.unlinkSync(tmp); }
+        catch (cleanupErr) { logger.warn("[upload] tmp cleanup failed:", cleanupErr); }
         throw err;
-    }
+    } finally { if (dirFd !== undefined) fs.closeSync(dirFd); }
 }
