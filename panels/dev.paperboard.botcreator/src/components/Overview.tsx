@@ -13,7 +13,6 @@ import { actionsApi, config } from "@mileniumhq/paperapi";
 import {
     appendCapped,
     DEFAULT_DISCORD_AVATAR,
-    formatBytes,
     formatDuration,
     RECENT_MESSAGE_CAP,
 } from "../types";
@@ -37,8 +36,6 @@ interface Health {
     guildCount: number;
     cachedUsers: number;
     cachedChannels: number;
-    memoryRss: number;
-    memoryHeapUsed: number;
     commandsReceived: number;
     pendingInteractions: number;
     commandSyncError: string | null;
@@ -248,14 +245,6 @@ export default function Overview() {
                                         <td>
                                             {health()?.cachedUsers ?? 0} /{" "}
                                             {health()?.cachedChannels ?? 0}
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <th>Memory</th>
-                                        <td>
-                                            {health()
-                                                ? `${formatBytes(health()!.memoryRss)} RSS · ${formatBytes(health()!.memoryHeapUsed)} heap`
-                                                : "—"}
                                         </td>
                                     </tr>
                                     <tr>

@@ -654,8 +654,6 @@ export interface Health {
     guildCount: number;
     cachedUsers: number;
     cachedChannels: number;
-    memoryRss: number;
-    memoryHeapUsed: number;
     commandsReceived: number;
     pendingInteractions: number;
     /** null when every stored command matched Discord; the error otherwise */

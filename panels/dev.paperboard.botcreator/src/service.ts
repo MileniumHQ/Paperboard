@@ -339,7 +339,6 @@ let commandsReceived = 0;
 let commandSyncError: string | null = null;
 
 export function buildHealth(bot: Client | null = client): Health {
-    const memory = process.memoryUsage();
     return {
         connected: bot !== null && connectionStatus.connected,
         lastError: connectionStatus.error ?? null,
@@ -349,8 +348,6 @@ export function buildHealth(bot: Client | null = client): Health {
         guildCount: bot?.guilds?.cache?.size ?? 0,
         cachedUsers: bot?.users?.cache?.size ?? 0,
         cachedChannels: bot?.channels?.cache?.size ?? 0,
-        memoryRss: memory.rss,
-        memoryHeapUsed: memory.heapUsed,
         commandsReceived,
         pendingInteractions: pendingInteractions.size,
         commandSyncError,

@@ -835,7 +835,8 @@ describe("health payload", () => {
         expect(health.wsPing).toBe(-1);
         expect(health.guildCount).toBe(0);
         expect(health.uptimeMs).toBe(0);
-        expect(health.memoryRss).toBeGreaterThan(0);
+        // the overview has no memory row; health does not report it
+        expect(health).not.toHaveProperty("memoryRss");
         expect(health.commandSyncError).toBeNull();
     });
 
