@@ -70,7 +70,10 @@ describe("Ask AI schema", () => {
     it("takes instructions and a memory key, and labels the prompt plainly", () => {
         const ask = findAction(fakeApp([]), "ask");
         expect(ask.inputs.prompt.label).toBe("Prompt");
-        expect(ask.inputs.instructions).toMatchObject({ type: "string", multiline: true });
+        // instructions are a short line in the flow editor; only the prompt wraps
+        expect(ask.inputs.instructions.type).toBe("string");
+        expect(ask.inputs.instructions.multiline).toBeUndefined();
+        expect(ask.inputs.prompt.multiline).toBe(true);
         expect(ask.inputs.memory).toMatchObject({ type: "string", label: "Memory key", maxLength: 200 });
     });
 

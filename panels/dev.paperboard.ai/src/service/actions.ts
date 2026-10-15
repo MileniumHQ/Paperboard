@@ -94,7 +94,6 @@ export function publicActions(app: AiApp): ActionDefinition[] {
                     description: "Who the AI is and how it answers here, added to the personality.",
                     placeholder: "You are the helper for our server. Answer in two sentences.",
                     maxLength: MAX_INSTRUCTIONS_CHARS,
-                    multiline: true,
                 },
                 memory: {
                     type: "string",
