@@ -41,6 +41,8 @@ describe("backup routes", () => {
             "backup-delete": "backup:delete",
             "backup-schedule-set": "backup:schedule-set",
             "backup-locations": "backup:destinations",
+            "backup-locations-problem": "backup:destinations-problem",
+            "backup-locations-recover": "backup:destinations-recover",
             "backup-location-usage": "backup:destination-usage",
             "backup-location-add": "backup:destination-add",
             "backup-location-remove": "backup:destination-remove",

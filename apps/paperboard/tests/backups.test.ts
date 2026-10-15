@@ -397,10 +397,39 @@ describe("backup scoping", () => {
         }
     });
 
+    test("a damaged locations file is not a fresh install: it is kept, mutations refuse, and recovery is explicit", async () => {
+        const f = panelFixture();
+        f.writeData("one", { n: 1 });
+        const file = path.join(f.root, "backups", "destinations.json");
+        fs.mkdirSync(path.dirname(file), { recursive: true });
+        // a missing file is a fresh install
+        expect((await f.call("backup:destinations-problem", {})).result.problem).toBeNull();
+        fs.writeFileSync(file, "{ not json");
+
+        expect((await f.call("backup:destinations-problem", {})).result.problem).toContain("destinations.json");
+        for (const [action, params] of [
+            ["backup:destinations", {}],
+            ["backup:panel-destination-set", { panelId: ID, destinationId: "local" }],
+        ] as const) {
+            expect((await f.call(action, params)).error).toContain("could not be read");
+        }
+        expect(fs.readFileSync(file, "utf8")).toBe("{ not json");
+
+        const recovered = await f.call("backup:destinations-recover", {});
+        expect(recovered.error).toBeUndefined();
+        expect(fs.readFileSync(path.join(path.dirname(file), recovered.result.keptAs), "utf8")).toBe("{ not json");
+        expect(fs.existsSync(file)).toBe(false);
+        expect((await f.call("backup:destinations", {})).result.destinations.map((d: any) => d.id)).toEqual(["local"]);
+        // a readable file has nothing to recover
+        expect((await f.call("backup:destinations-recover", {})).code).toBe("CONFLICT");
+    });
+
     test("only the host chooses and manages backup locations", async () => {
         const f = panelFixture();
         const host = [
             ["backup:destinations", {}],
+            ["backup:destinations-problem", {}],
+            ["backup:destinations-recover", {}],
             ["backup:destination-usage", { destinationId: "local" }],
             ["backup:destination-add", { destination: { kind: "s3" } }],
             ["backup:destination-remove", { destinationId: "d-000000000000" }],

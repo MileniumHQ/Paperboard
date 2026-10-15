@@ -12,6 +12,9 @@ const BackupLocations: Component<{ computerId: string; computerName: string }> =
     const [locations, setLocations] = createSignal<BackupLocation[] | null>(null);
     const [usage, setUsage] = createSignal<Record<string, UsageState>>({});
     const [loadError, setLoadError] = createSignal("");
+    // the locations file is damaged: shown with its own recovery action
+    const [problem, setProblem] = createSignal("");
+    const [recovering, setRecovering] = createSignal(false);
     const [adding, setAdding] = createSignal(false);
     const [removing, setRemoving] = createSignal<BackupLocation | null>(null);
     const [removeBusy, setRemoveBusy] = createSignal(false);
@@ -19,7 +22,14 @@ const BackupLocations: Component<{ computerId: string; computerName: string }> =
 
     const load = async () => {
         setLoadError("");
+        setProblem("");
         try {
+            const damaged = await backupLocationsApi.problem(props.computerId);
+            if (damaged) {
+                setLocations(null);
+                setProblem(damaged);
+                return;
+            }
             const list = await backupLocationsApi.list(props.computerId);
             setLocations(list);
             for (const location of list) {
@@ -32,6 +42,18 @@ const BackupLocations: Component<{ computerId: string; computerName: string }> =
         }
     };
     onMount(() => void load());
+
+    const recover = async () => {
+        setRecovering(true);
+        try {
+            await backupLocationsApi.recover(props.computerId);
+            await load();
+        } catch (err) {
+            setProblem(`The damaged locations file could not be set aside: ${(err as Error)?.message ?? err}`);
+        } finally {
+            setRecovering(false);
+        }
+    };
 
     const remove = async () => {
         const target = removing();
@@ -52,7 +74,7 @@ const BackupLocations: Component<{ computerId: string; computerName: string }> =
     return (
         <PaperFlex direction="column" gap="half" fullWidth>
             <PaperSectionHeader icon="backup" title="Backups">
-                <PaperButton size="small" onClick={() => setAdding(true)}>Add Location</PaperButton>
+                <PaperButton size="small" disabled={Boolean(problem())} onClick={() => setAdding(true)}>Add Location</PaperButton>
             </PaperSectionHeader>
 
             <PaperFlex direction="column" gap="full" fullWidth>
@@ -64,7 +86,23 @@ const BackupLocations: Component<{ computerId: string; computerName: string }> =
                         </PaperFlex>
                     </PaperCard>
                 </Show>
-                <Show when={!locations() && !loadError()}>
+                <Show when={problem()}>
+                    <PaperCard accent="danger" padding="full">
+                        <PaperFlex direction="column" gap="half">
+                            <PaperText size={2} color="danger">{problem()}</PaperText>
+                            <PaperText size={2} color="text-subtle">
+                                Starting fresh keeps the damaged file beside it and empties this list. Panels choose a location again; backups already at your locations are not deleted.
+                            </PaperText>
+                            <PaperFlex direction="row" gap="half">
+                                <PaperButton variant="danger" disabled={recovering()} onClick={() => void recover()}>
+                                    {recovering() ? "Setting Aside..." : "Set Aside and Start Fresh"}
+                                </PaperButton>
+                                <PaperButton variant="text" disabled={recovering()} onClick={() => void load()}>Try Again</PaperButton>
+                            </PaperFlex>
+                        </PaperFlex>
+                    </PaperCard>
+                </Show>
+                <Show when={!locations() && !loadError() && !problem()}>
                     <PaperText size={2} color="text-subtle">Loading locations…</PaperText>
                 </Show>
                 <For each={locations() ?? []}>

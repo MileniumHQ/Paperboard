@@ -23,7 +23,9 @@ import {
     DESTINATION_LABEL_MAX,
     LOCAL_DESTINATION_ID,
     MAX_DESTINATIONS,
+    BackupConfigUnreadableError,
     readBackupConfig,
+    recoverBackupConfig,
     writeBackupConfig,
     type BackupConfig,
     type Destination,
@@ -155,6 +157,28 @@ export class BackupService {
             return result;
         });
         this.configWrites = next.catch((err) => logger.debug("[backups] a locations change failed:", err));
+        return next;
+    }
+
+    /** null when the locations file reads fine (or does not exist yet);
+     * otherwise why it cannot be used. Every other locations call refuses
+     * until recoverLocations sets the file aside. */
+    locationsProblem(): string | null {
+        try {
+            this.config();
+            return null;
+        } catch (err) {
+            if (err instanceof BackupConfigUnreadableError) return err.message;
+            throw err;
+        }
+    }
+
+    /** the explicit recovery from an unreadable locations file: it is kept
+     * under a new name and the list starts fresh. Panels that used a
+     * location choose again; backups at the locations are untouched. */
+    recoverLocations(): Promise<{ keptAs: string }> {
+        const next = this.configWrites.then(() => ({ keptAs: recoverBackupConfig(this.configFile) }));
+        this.configWrites = next.catch((err) => logger.debug("[backups] recovering the locations failed:", err));
         return next;
     }
 

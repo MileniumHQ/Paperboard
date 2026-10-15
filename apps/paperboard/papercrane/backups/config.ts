@@ -7,7 +7,9 @@
 import * as fs from "fs";
 import * as path from "path";
 import { isPanelId } from "../../../../packages/paperapi/src/panelIdentity";
-import { readStateFileSync, writeFileAtomic } from "../storage";
+import { writeFileAtomic } from "../storage";
+import { ErrorCode } from "../protocol";
+import { RpcError } from "../rpc/errors";
 import { computerHostname } from "../hostname";
 import type { S3Settings } from "./s3Store";
 import type { DriveSettings } from "./driveStore";
@@ -59,28 +61,70 @@ function parseDestination(raw: any): Destination | null {
     return null;
 }
 
-/** reads the config; an unreadable file is quarantined by the state reader, a
- * malformed entry is an error, never silently dropped */
-export function readBackupConfig(file: string): BackupConfig {
-    const raw = readStateFileSync<any>(file, null, "backup locations");
-    if (raw === null) return { version: 1, destinations: [localDestination()], panels: {} };
-    if (raw.version !== 1 || !Array.isArray(raw.destinations) || !raw.panels || typeof raw.panels !== "object") {
-        throw new Error(`${file} is not a backup locations file this Paperboard understands`);
+/** The locations file exists but cannot be trusted. Reads and writes refuse
+ * until recoverBackupConfig sets it aside: a fresh list written over it
+ * would destroy the only record of where backups live. */
+export class BackupConfigUnreadableError extends RpcError {
+    constructor(file: string, reason: string) {
+        super(
+            ErrorCode.CONFLICT,
+            `The backup locations file ${path.basename(file)} could not be read (${reason}). Set it aside from Computer Info > Backups to start a fresh list; the damaged file is kept`,
+        );
+        this.name = "BackupConfigUnreadableError";
+    }
+}
+
+function parseBackupConfig(raw: any): BackupConfig {
+    if (!raw || typeof raw !== "object" || raw.version !== 1 || !Array.isArray(raw.destinations) || !raw.panels || typeof raw.panels !== "object") {
+        throw new Error("it is not a backup locations file this Paperboard understands");
     }
     const destinations: Destination[] = [localDestination()];
     for (const entry of raw.destinations) {
         if (entry?.id === LOCAL_DESTINATION_ID) continue;
         const parsed = parseDestination(entry);
-        if (!parsed) throw new Error(`${file} has a malformed backup location: ${JSON.stringify(entry?.id ?? null)}`);
+        if (!parsed) throw new Error(`it has a malformed backup location: ${JSON.stringify(entry?.id ?? null)}`);
         destinations.push(parsed);
     }
     const panels: Record<string, string> = {};
     for (const [panelId, destId] of Object.entries(raw.panels)) {
-        if (!isPanelId(panelId) || !isDestinationId(destId)) throw new Error(`${file} has a malformed panel entry: ${JSON.stringify(panelId)}`);
+        if (!isPanelId(panelId) || !isDestinationId(destId)) throw new Error(`it has a malformed panel entry: ${JSON.stringify(panelId)}`);
         // a panel pointing at a removed location has no location
         if (destinations.some((d) => d.id === destId)) panels[panelId] = destId;
     }
     return { version: 1, destinations, panels };
+}
+
+/** reads the config. A missing file is a fresh install; a file that is
+ * there but unreadable or malformed is a BackupConfigUnreadableError, never
+ * an empty config */
+export function readBackupConfig(file: string): BackupConfig {
+    let text: string;
+    try {
+        text = fs.readFileSync(file, "utf8");
+    } catch (err) {
+        if ((err as NodeJS.ErrnoException)?.code === "ENOENT") return { version: 1, destinations: [localDestination()], panels: {} };
+        throw new BackupConfigUnreadableError(file, (err as Error).message);
+    }
+    try {
+        return parseBackupConfig(JSON.parse(text));
+    } catch (err) {
+        throw new BackupConfigUnreadableError(file, (err as Error).message);
+    }
+}
+
+/** the explicit recovery: moves an unreadable locations file aside
+ * (<file>.corrupt-<ms>, kept) so a fresh list can start. Refuses when the
+ * file reads fine. Resolves with the kept file's name. */
+export function recoverBackupConfig(file: string): string {
+    try {
+        readBackupConfig(file);
+    } catch (err) {
+        if (!(err instanceof BackupConfigUnreadableError)) throw err;
+        const kept = `${file}.corrupt-${Date.now()}`;
+        fs.renameSync(file, kept);
+        return path.basename(kept);
+    }
+    throw new RpcError(ErrorCode.CONFLICT, "The backup locations file is readable; there is nothing to recover");
 }
 
 export async function writeBackupConfig(file: string, config: BackupConfig): Promise<void> {

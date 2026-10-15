@@ -154,6 +154,11 @@ export type NewBackupLocation =
  * the host's credential; a panel's is refused. */
 export const backupLocationsApi = {
     list: (scope?: string): Promise<BackupLocation[]> => invokeIn<BackupLocation[]>(scope, "backup-locations"),
+    /** why the computer's locations file cannot be used; null when it can */
+    problem: (scope?: string): Promise<string | null> => invokeIn<string | null>(scope, "backup-locations-problem"),
+    /** sets an unreadable locations file aside (it is kept) and starts a
+     * fresh list; panels that used a location choose again */
+    recover: (scope?: string): Promise<{ keptAs: string }> => invokeIn<{ keptAs: string }>(scope, "backup-locations-recover"),
     usage: (locationId: string, scope?: string): Promise<BackupLocationUsage> =>
         invokeIn<BackupLocationUsage>(scope, "backup-location-usage", { destinationId: locationId }),
     add: (location: NewBackupLocation, scope?: string): Promise<BackupLocation> =>

@@ -41,6 +41,14 @@ export async function handleBackups(action: string, id: unknown, params: any, ct
                 requireHost(ctx.callerPanelId(), action);
                 reply(id, { destinations: backups.listDestinations() });
                 return true;
+            case "backup:destinations-problem":
+                requireHost(ctx.callerPanelId(), action);
+                reply(id, { problem: backups.locationsProblem() });
+                return true;
+            case "backup:destinations-recover":
+                requireHost(ctx.callerPanelId(), action);
+                reply(id, await backups.recoverLocations());
+                return true;
             case "backup:destination-usage":
                 requireHost(ctx.callerPanelId(), action);
                 reply(id, await backups.destinationUsage(destinationId(params?.destinationId)));
