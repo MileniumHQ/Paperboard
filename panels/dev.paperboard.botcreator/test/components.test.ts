@@ -1,5 +1,7 @@
 // Message components and the parameterized interaction triggers (bun test,
-// hermetic): the builders validate Discord's hard limits up front, the
+// hermetic): Discord's per-value limits are declared on the action inputs
+// (the SDK refuses a call that breaks one; the editor shows it first), the
+// builders check presence, kinds and how inputs relate, the
 // Components field lays buttons, select menus and Interaction Rows out into
 // rows, and clicks and modal submits route by id through the match rule.
 import { describe, expect, it } from "bun:test";
@@ -17,7 +19,11 @@ import {
 import { ComponentType, TextInputStyle } from "discord.js";
 import { staticTriggers, actions } from "../src/service";
 import { INPUTS } from "../src/discordOps";
-import { validateActionDefinition } from "@mileniumhq/paperapi";
+import { checkActionInput, validateActionDefinition } from "@mileniumhq/paperapi";
+
+/** The limit an action's input declares, as the SDK applies it on a call. */
+const limit = (actionId: string, key: string, value: unknown) =>
+    checkActionInput((actions.find((a) => a.id === actionId) as any).inputs[key], value);
 
 const WRITING_ACTIONS = [
     "send-message",
@@ -88,7 +94,8 @@ describe("buildButtonComponent", () => {
 
     it("refuses a missing or over-long label (Discord caps at 80)", () => {
         expect(() => buildButtonComponent({ label: "  ", customId: "x" })).toThrow(/needs a label/);
-        expect(() => buildButtonComponent({ label: "x".repeat(81), customId: "x" })).toThrow(/needs a label/);
+        expect(limit("create-button", "label", "x".repeat(81))).toMatch(/at most 80 characters/);
+        expect(limit("create-button", "label", "x".repeat(80))).toBeUndefined();
     });
 
     it("a non-link button needs an interaction id", () => {
@@ -96,9 +103,13 @@ describe("buildButtonComponent", () => {
     });
 
     it("an interaction id beyond 100 characters is refused", () => {
-        expect(() =>
-            buildButtonComponent({ label: "Roll", customId: "x".repeat(101) }),
-        ).toThrow(/100-character limit/);
+        for (const [action, key] of [
+            ["create-button", "customId"],
+            ["create-select-menu", "customId"],
+            ["show-modal", "modalId"],
+        ]) {
+            expect(limit(action, key, "x".repeat(101))).toMatch(/at most 100 characters/);
+        }
     });
 
     it("a link button needs a URL and needs no interaction id", () => {
@@ -109,7 +120,7 @@ describe("buildButtonComponent", () => {
 });
 
 const button = (id: string) => buildButtonComponent({ label: id, customId: id });
-const menu = (id: string) => buildSelectMenuComponent({ customId: id, options: "Red, Green" });
+const menu = (id: string) => buildSelectMenuComponent({ customId: id, options: ["Red", "Green"] });
 const ids = (rows: { customId?: string }[][]) => rows.map((row) => row.map((c) => c.customId));
 
 describe("component row layout", () => {
@@ -173,11 +184,15 @@ describe("Interaction Row", () => {
 });
 
 describe("Create Select Menu", () => {
-    it("takes comma-separated or listed options", () => {
+    it("takes listed options, or a lone value as one option", () => {
         expect(menu("pick").options).toEqual(["Red", "Green"]);
         expect(
             buildSelectMenuComponent({ customId: "x", options: ["A", " B "] }).options,
         ).toEqual(["A", "B"]);
+        // text with a comma is one option, not two
+        expect(buildSelectMenuComponent({ customId: "x", options: "Yes, please" }).options).toEqual([
+            "Yes, please",
+        ]);
     });
 
     it("user, role and channel menus need no options", () => {
@@ -191,12 +206,19 @@ describe("Create Select Menu", () => {
     it("enforces Discord's limits", () => {
         expect(() => buildSelectMenuComponent({ options: "A" })).toThrow(/Interaction ID/);
         expect(() => buildSelectMenuComponent({ customId: "x" })).toThrow(/at least one option/);
+        expect(
+            limit("create-select-menu", "options", Array.from({ length: 26 }, (_, i) => `o${i}`)),
+        ).toMatch(/at most 25 items/);
+        expect(limit("create-select-menu", "options", ["ok", "x".repeat(101)])).toMatch(
+            /Item 2 of "Options" holds at most 100 characters/,
+        );
+        expect(limit("create-select-menu", "placeholder", "x".repeat(151))).toMatch(/at most 150/);
+        expect(limit("create-select-menu", "minValues", 26)).toMatch(/at most 25/);
+        expect(limit("create-select-menu", "maxValues", 0)).toMatch(/at least 1/);
+        expect(limit("create-select-menu", "maxValues", 1.5)).toMatch(/whole number/);
+        expect(() => buildSelectMenuComponent({ customId: "x", options: ["A", "A"] })).toThrow(/unique/);
         expect(() =>
-            buildSelectMenuComponent({ customId: "x", options: Array.from({ length: 26 }, (_, i) => `o${i}`) }),
-        ).toThrow(/at most 25/);
-        expect(() => buildSelectMenuComponent({ customId: "x", options: "A, A" })).toThrow(/unique/);
-        expect(() =>
-            buildSelectMenuComponent({ customId: "x", options: "A, B", minValues: 2, maxValues: 1 }),
+            buildSelectMenuComponent({ customId: "x", options: ["A", "B"], minValues: 2, maxValues: 1 }),
         ).toThrow(/Minimum picks/);
         expect(() =>
             buildSelectMenuComponent({ customId: "x", options: "A", maxValues: 2 }),
@@ -234,12 +256,15 @@ describe("modals", () => {
         expect(() => buildModalPayload({ title: "T", fields: [field] })).toThrow(/Interaction ID/);
         expect(() => buildModalPayload({ modalId: "m", fields: [field] })).toThrow(/title/);
         expect(() => buildModalPayload({ modalId: "m", title: "T" })).toThrow(/at least one/);
-        expect(() =>
-            buildModalPayload({ modalId: "m", title: "T", fields: Array(6).fill(field) }),
-        ).toThrow(/at most 5/);
+        expect(limit("show-modal", "fields", Array(6).fill(field))).toMatch(/at most 5 items/);
+        expect(limit("show-modal", "title", "x".repeat(46))).toMatch(/at most 45/);
         expect(() => buildModalPayload({ modalId: "m", title: "T", fields: [button("a")] })).toThrow(/Create Text Field/);
         expect(() => buildModalPayload({ modalId: "m", title: "T", fields: ["text"] })).toThrow(/Create Text Field/);
-        expect(() => buildModalField({ label: "x".repeat(46) })).toThrow(/45/);
+        expect(limit("create-text-field", "label", "x".repeat(46))).toMatch(/at most 45/);
+        expect(limit("create-text-field", "placeholder", "x".repeat(101))).toMatch(/at most 100/);
+        expect(limit("create-text-field", "value", "x".repeat(4001))).toMatch(/at most 4000/);
+        expect(limit("create-text-field", "maxLength", 4001)).toMatch(/at most 4000/);
+        expect(limit("create-text-field", "minLength", -1)).toMatch(/at least 0/);
         expect(() => buildModalField({ label: "Q", minLength: 10, maxLength: 5 })).toThrow(/Minimum length/);
     });
 

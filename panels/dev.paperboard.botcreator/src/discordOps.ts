@@ -134,15 +134,14 @@ export const BUTTON_STYLES = [
     "link",
 ] as const;
 
+// Discord's per-value limits (lengths, counts, item caps) are declared on
+// the actions' inputs and refused by the SDK before these builders run, and
+// shown on the block before the flow does; the builders check what a single
+// input can't say: presence, kinds, and how inputs relate.
 function checkCustomId(customId: string, what: string): string {
     const trimmed = customId.trim();
     if (!trimmed) {
         throw new Error(`${what} needs an Interaction ID so flows can react to it`);
-    }
-    if (trimmed.length > 100) {
-        throw new Error(
-            `The interaction id "${trimmed}" exceeds Discord's 100-character limit`,
-        );
     }
     return trimmed;
 }
@@ -157,8 +156,8 @@ export function buildButtonComponent(
         );
     }
     const label = (inputs.label || "").trim();
-    if (!label || label.length > 80) {
-        throw new Error("A button needs a label of up to 80 characters");
+    if (!label) {
+        throw new Error("A button needs a label");
     }
     if (style === "link") {
         if (!inputs.url || !inputs.url.trim()) {
@@ -175,25 +174,20 @@ export function buildButtonComponent(
     return { ...inputs, kind: "button", label, style, customId };
 }
 
-// Text options arrive as a list (the Options field is edited item by item)
-// or, from a flow that passes plain text, separated by commas
-// ("Red, Green, Blue"); each option's label is also its value.
+// Text options arrive as a list (the Options field is edited item by item;
+// a lone text value is one option); each option's label is also its value.
 export function parseSelectOptions(input: unknown): string[] {
     const raw = Array.isArray(input)
         ? input.map((item) => String(item ?? ""))
         : typeof input === "string"
-            ? input.split(",")
+            ? [input]
             : [];
     return raw.map((option) => option.trim()).filter(Boolean);
 }
 
-function optionalCount(value: unknown, name: string): number | undefined {
+function optionalNumber(value: unknown): number | undefined {
     if (value === undefined || value === null || value === "") return undefined;
-    const n = Number(value);
-    if (!Number.isInteger(n) || n < 0 || n > MAX_SELECT_OPTIONS) {
-        throw new Error(`${name} must be a whole number from 0 to ${MAX_SELECT_OPTIONS}`);
-    }
-    return n;
+    return Number(value);
 }
 
 export function buildSelectMenuComponent(inputs: {
@@ -213,14 +207,8 @@ export function buildSelectMenuComponent(inputs: {
     }
     const customId = checkCustomId(inputs.customId || "", "A select menu");
     const placeholder = (inputs.placeholder || "").trim();
-    if (placeholder.length > 150) {
-        throw new Error("A select menu placeholder holds at most 150 characters");
-    }
-    const minValues = optionalCount(inputs.minValues, "Minimum picks");
-    const maxValues = optionalCount(inputs.maxValues, "Maximum picks");
-    if (maxValues === 0) {
-        throw new Error("Maximum picks must be at least 1");
-    }
+    const minValues = optionalNumber(inputs.minValues);
+    const maxValues = optionalNumber(inputs.maxValues);
     if (minValues !== undefined && maxValues !== undefined && minValues > maxValues) {
         throw new Error("Minimum picks cannot be more than maximum picks");
     }
@@ -238,15 +226,6 @@ export function buildSelectMenuComponent(inputs: {
     const options = parseSelectOptions(inputs.options);
     if (options.length === 0) {
         throw new Error("A text select menu needs at least one option");
-    }
-    if (options.length > MAX_SELECT_OPTIONS) {
-        throw new Error(
-            `A select menu holds at most ${MAX_SELECT_OPTIONS} options (got ${options.length})`,
-        );
-    }
-    const tooLong = options.find((option) => option.length > 100);
-    if (tooLong) {
-        throw new Error(`The option "${tooLong.slice(0, 40)}…" exceeds Discord's 100-character limit`);
     }
     if (new Set(options).size !== options.length) {
         throw new Error("Select menu options must be unique");
@@ -453,15 +432,6 @@ export interface DiscordModalFieldData {
     maxLength?: number;
 }
 
-function optionalLength(value: unknown, name: string): number | undefined {
-    if (value === undefined || value === null || value === "") return undefined;
-    const n = Number(value);
-    if (!Number.isInteger(n) || n < 0 || n > 4000) {
-        throw new Error(`${name} must be a whole number from 0 to 4000`);
-    }
-    return n;
-}
-
 export function buildModalField(inputs: {
     label?: string;
     style?: string;
@@ -472,20 +442,16 @@ export function buildModalField(inputs: {
     maxLength?: unknown;
 }): DiscordModalFieldData {
     const label = (inputs.label || "").trim();
-    if (!label || label.length > 45) {
-        throw new Error("A text field needs a label of up to 45 characters");
+    if (!label) {
+        throw new Error("A text field needs a label");
     }
     const style = (inputs.style || "short").toLowerCase();
     if (style !== "short" && style !== "paragraph") {
         throw new Error(`Unknown text field style "${inputs.style}"; use short or paragraph`);
     }
     const placeholder = (inputs.placeholder || "").trim();
-    if (placeholder.length > 100) {
-        throw new Error("A text field placeholder holds at most 100 characters");
-    }
-    const minLength = optionalLength(inputs.minLength, "Minimum length");
-    const maxLength = optionalLength(inputs.maxLength, "Maximum length");
-    if (maxLength === 0) throw new Error("Maximum length must be at least 1");
+    const minLength = optionalNumber(inputs.minLength);
+    const maxLength = optionalNumber(inputs.maxLength);
     if (minLength !== undefined && maxLength !== undefined && minLength > maxLength) {
         throw new Error("Minimum length cannot be more than maximum length");
     }
@@ -513,15 +479,12 @@ export function buildModalPayload(input: {
 }) {
     const customId = checkCustomId(input.modalId || "", "A modal");
     const title = (input.title || "").trim();
-    if (!title || title.length > 45) {
-        throw new Error("A modal needs a title of up to 45 characters");
+    if (!title) {
+        throw new Error("A modal needs a title");
     }
     const raw = Array.isArray(input.fields) ? input.fields : input.fields ? [input.fields] : [];
     if (raw.length === 0) {
         throw new Error("A modal needs at least one text field");
-    }
-    if (raw.length > MAX_MODAL_FIELDS) {
-        throw new Error(`A modal holds at most ${MAX_MODAL_FIELDS} text fields (got ${raw.length})`);
     }
     const fields = raw.map((item) => {
         if (!item || typeof item !== "object" || (item as { kind?: unknown }).kind !== "text-field") {
