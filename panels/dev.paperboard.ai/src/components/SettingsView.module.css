@@ -11,3 +11,13 @@
     gap: var(--paper-uigap);
     width: 100%;
 }
+
+.Group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap);
+}
+
+.GroupTitle {
+    margin: 0;
+}
