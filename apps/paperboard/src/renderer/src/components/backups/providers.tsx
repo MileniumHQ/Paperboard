@@ -23,7 +23,7 @@ export interface ProviderToggle {
 export interface BackupProvider {
     kind: Exclude<BackupLocation["kind"], "local">;
     name: string;
-    description: string;
+    description?: string;
     /** a short paragraph shown above the form */
     intro?: string;
     fields: readonly ProviderField[];
@@ -74,8 +74,7 @@ export const BACKUP_PROVIDERS: readonly BackupProvider[] = [
     },
     {
         kind: "s3",
-        name: "Storage bucket",
-        description: "Amazon S3, Cloudflare R2, Backblaze B2, MinIO and other S3 services",
+        name: "S3 bucket",
         fields: [
             { key: "label", label: "Name", placeholder: "Offsite bucket" },
             { key: "endpoint", label: "Server address", placeholder: "https://s3.us-east-1.amazonaws.com" },
