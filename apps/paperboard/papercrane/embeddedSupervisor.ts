@@ -4,6 +4,7 @@
 import * as cp from "child_process";
 import * as fs from "fs";
 import { logger } from "./logger";
+import { workloadExitCode } from "./exitStatus";
 import * as os from "os";
 import { spawnPty } from "./pty";
 import type { PaperCraneClientLike } from "./supervisorTypes";
@@ -142,9 +143,9 @@ export class EmbeddedSupervisor implements PaperCraneClientLike {
                     this.emit("data", chunk);
                 });
                 this.proc.stdout?.on("data", (chunk: string) => this.emit("stdout", chunk));
-                this.proc.on("close", (code: number | null) => {
+                this.proc.on("close", (code: number | null, signal: NodeJS.Signals | null) => {
                     this.alive = false;
-                    this.emit("exit", code ?? 0);
+                    this.emit("exit", workloadExitCode(code, signal));
                 });
                 this.proc.on("error", (err: Error) => {
                     // surface spawn failures on every stream

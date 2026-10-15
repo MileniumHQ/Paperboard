@@ -7,6 +7,7 @@ import * as crypto from "crypto";
 import { spawnPty, getDefaultShell } from "./pty";
 import { IPtyProcess } from "./types";
 import { logger } from "./logger";
+import { workloadExitCode } from "./exitStatus";
 import { redactEnvValues, unrefTimer } from "./storage";
 
 export interface SupervisorSpawnConfig {
@@ -544,7 +545,7 @@ export async function runSupervisor(procId: string): Promise<void> {
             childProcess.stderr?.setEncoding("utf8");
             childProcess.stdout?.on("data", (chunk: string) => emitOutput("stdout", chunk));
             childProcess.stderr?.on("data", (chunk: string) => emitOutput("stderr", chunk));
-            childProcess.on("close", (code) => workloadExited(code ?? 0));
+            childProcess.on("close", (code, signal) => workloadExited(workloadExitCode(code, signal)));
             childProcess.on("error", (err) => {
                 emitOutput("stderr", `\n[Process Error] ${err.message}\n`);
                 workloadExited(1);
