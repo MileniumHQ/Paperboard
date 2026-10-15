@@ -2,11 +2,19 @@ import { type Component, createEffect, createSignal, For, on, Show } from "solid
 import { PaperButton, PaperCheckbox, PaperFlex, PaperInput, PaperModal, PaperSelectMenu, PaperSelectMenuItem, PaperText } from "@mileniumhq/paperui";
 import { isBrowserShell } from "../../lib/shell";
 import { BACKUP_PROVIDERS, LocationLogo, type BackupProvider } from "./providers";
+import { uniqueLocationLabel } from "./locationLabel";
 
 // Adding a backup location: pick a provider from the dropdown, then fill in
 // that provider's form. The location is added on the computer, which checks
 // it can reach it before keeping it.
-const AddLocationModal: Component<{ computerId: string; open: boolean; onClose: () => void; onAdded: () => void }> = (props) => {
+const AddLocationModal: Component<{
+    computerId: string;
+    /** the computer's location names, so an unnamed one gets a name of its own */
+    takenLabels: readonly string[];
+    open: boolean;
+    onClose: () => void;
+    onAdded: () => void;
+}> = (props) => {
     const [kind, setKind] = createSignal<BackupProvider["kind"]>(BACKUP_PROVIDERS[0].kind);
     const [values, setValues] = createSignal<Record<string, string>>({});
     const [toggles, setToggles] = createSignal<Record<string, boolean>>({});
@@ -35,7 +43,9 @@ const AddLocationModal: Component<{ computerId: string; open: boolean; onClose: 
         setBusy(true);
         setError("");
         try {
-            await provider().connect(values(), toggles(), props.computerId);
+            const chosen = provider();
+            const named = chosen.defaultLabel ? { label: uniqueLocationLabel(chosen.defaultLabel, props.takenLabels), ...values() } : values();
+            await chosen.connect(named, toggles(), props.computerId);
             setBusy(false);
             close();
             props.onAdded();

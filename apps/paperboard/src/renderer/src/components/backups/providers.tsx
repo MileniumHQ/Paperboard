@@ -26,6 +26,8 @@ export interface BackupProvider {
     description?: string;
     /** a short paragraph shown above the form */
     intro?: string;
+    /** the location's name when the provider has no Name field */
+    defaultLabel?: string;
     fields: readonly ProviderField[];
     toggles?: readonly ProviderToggle[];
     /** connecting signs in through a browser on this machine, which browser mode cannot host */
@@ -61,7 +63,8 @@ export const BACKUP_PROVIDERS: readonly BackupProvider[] = [
         name: "Google Drive",
         description: "Save backups to your Google account",
         intro: 'Paperboard keeps backups in a "Paperboard Backups" folder in your Drive and can\'t see your other files.',
-        fields: [{ key: "label", label: "Name", placeholder: "Google Drive" }],
+        defaultLabel: "Google Drive",
+        fields: [],
         needsDesktopApp: true,
         submitLabel: "Sign In With Google",
         busyLabel: "Waiting for Google...",

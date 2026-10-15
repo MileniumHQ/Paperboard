@@ -100,7 +100,10 @@ const BackupLocations: Component<{ computerId: string }> = (props) => {
                 </PaperText>
             </PaperFlex>
 
-            <AddLocationModal computerId={props.computerId} open={adding()} onClose={() => setAdding(false)} onAdded={() => void load()} />
+            <AddLocationModal
+                computerId={props.computerId}
+                takenLabels={(locations() ?? []).map((location) => location.label)}
+                open={adding()} onClose={() => setAdding(false)} onAdded={() => void load()} />
 
             <PaperModal
                 open={removing() !== null}
