@@ -42,9 +42,9 @@ export function claudeArgs(session: { id: string; resume: boolean } | null, mode
 
 /** Claude Code's permission modes a chat can switch between. */
 export const CLAUDE_MODES: readonly AgentMode[] = [
-    { id: "default", name: "Ask", description: "Asks before editing files or running commands." },
-    { id: "acceptEdits", name: "Accept edits", description: "Edits files without asking; still asks before running commands." },
-    { id: "plan", name: "Plan", description: "Reads and plans without changing anything." },
+    { id: "default", name: "Ask", description: "Asks before every change" },
+    { id: "acceptEdits", name: "Accept edits", description: "Edits freely, asks for the rest" },
+    { id: "plan", name: "Plan", description: "Reads only, changes nothing" },
     CLAUDE_NO_SANDBOX_MODE,
 ];
 

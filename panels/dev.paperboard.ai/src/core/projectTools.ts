@@ -34,8 +34,8 @@ export const LOCAL_MODE_ASK = "ask";
 export const LOCAL_MODE_ACCEPT_EDITS = "accept-edits";
 
 export const LOCAL_MODES: readonly AgentMode[] = [
-    { id: LOCAL_MODE_ASK, name: "Ask", description: "Approve every file change, command and action" },
-    { id: LOCAL_MODE_ACCEPT_EDITS, name: "Accept edits", description: "File changes apply without asking; commands and actions still ask" },
+    { id: LOCAL_MODE_ASK, name: "Ask", description: "Asks before every change" },
+    { id: LOCAL_MODE_ACCEPT_EDITS, name: "Accept edits", description: "Edits freely, asks for the rest" },
     NO_SANDBOX_MODE,
 ];
 

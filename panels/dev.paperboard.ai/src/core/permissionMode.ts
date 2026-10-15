@@ -11,7 +11,7 @@ export const NO_SANDBOX_MODE_ID = "no-sandbox";
 export const CLAUDE_NO_SANDBOX_MODE_ID = "bypassPermissions";
 
 const NO_SANDBOX_NAME = "No sandbox";
-const NO_SANDBOX_DESCRIPTION = "Edits files and runs commands without asking.";
+const NO_SANDBOX_DESCRIPTION = "Never asks";
 
 export const NO_SANDBOX_MODE: AgentMode = { id: NO_SANDBOX_MODE_ID, name: NO_SANDBOX_NAME, description: NO_SANDBOX_DESCRIPTION };
 export const CLAUDE_NO_SANDBOX_MODE: AgentMode = { id: CLAUDE_NO_SANDBOX_MODE_ID, name: NO_SANDBOX_NAME, description: NO_SANDBOX_DESCRIPTION };

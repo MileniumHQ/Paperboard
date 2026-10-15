@@ -46,9 +46,9 @@ export const CODEX_QUIET_NOTIFICATIONS: readonly string[] = [
  * project (service/codex.ts), so commands still ask.
  */
 export const CODEX_MODES: readonly AgentMode[] = [
-    { id: "default", name: "Ask", description: "Asks before editing files and before running commands it can't tell are safe." },
-    { id: "acceptEdits", name: "Accept edits", description: "Edits files in the project without asking; still asks before running commands." },
-    { id: "plan", name: "Plan", description: "Reads and plans without changing anything." },
+    { id: "default", name: "Ask", description: "Asks before every change" },
+    { id: "acceptEdits", name: "Accept edits", description: "Edits freely, asks for the rest" },
+    { id: "plan", name: "Plan", description: "Reads only, changes nothing" },
     NO_SANDBOX_MODE,
 ];
 
