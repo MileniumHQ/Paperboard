@@ -10,14 +10,14 @@ import { logger } from "../../../papercrane/logger";
 import { getAppUpdateState } from "../appUpdateSession";
 import { assertShellFrame, isRefusedFrame } from "./shellGuard";
 import { createShellInvokeHandlers, SHARED_SHELL_INVOKE_CHANNELS } from "./shellHandlers";
-import { runPanelOpenDialog, runPanelSaveDialog, type PanelFileDialogDeps } from "../panelFileTransfer";
+import { runPanelImport, runPanelExport, type PanelFileTransferDeps } from "../panelFileTransfer";
 import { poolEndpoint } from "../panelFileEndpoint";
-import type { FileDialogFilter } from "../../shared/panelFileDialog";
+import type { FileTypeFilter } from "../../shared/fileTransfer";
 
 // native dialogs, modal to the window whose panel asked
-function nativeFileDialogs(event: IpcMainInvokeEvent): PanelFileDialogDeps {
+function nativeFileDialogs(event: IpcMainInvokeEvent): PanelFileTransferDeps {
     const window = BrowserWindow.fromWebContents(event.sender);
-    const filters = (list: FileDialogFilter[]) => list.map((f) => ({ name: f.name, extensions: f.extensions }));
+    const filters = (list: FileTypeFilter[]) => list.map((f) => ({ name: f.name, extensions: f.extensions }));
     return {
         endpoint: poolEndpoint,
         pickSavePath: async ({ suggestedName, filters: list }) => {
@@ -87,13 +87,13 @@ export default function registerShellIpc(ipcMain: IpcMain) {
     }
 
     // a panel's save and open dialogs; the shell names the asking frame
-    ipcMain.handle("panel-file-save", (event, args) => {
-        assertShellFrame(event, "panel-file-save");
-        return runPanelSaveDialog(args, nativeFileDialogs(event));
+    ipcMain.handle("panel-file-export", (event, args) => {
+        assertShellFrame(event, "panel-file-export");
+        return runPanelExport(args, nativeFileDialogs(event));
     });
-    ipcMain.handle("panel-file-open", (event, args) => {
-        assertShellFrame(event, "panel-file-open");
-        return runPanelOpenDialog(args, nativeFileDialogs(event));
+    ipcMain.handle("panel-file-import", (event, args) => {
+        assertShellFrame(event, "panel-file-import");
+        return runPanelImport(args, nativeFileDialogs(event));
     });
 
     ipcMain.handle("app-update-state", (event) => {

@@ -10,7 +10,7 @@ export default function FileApiDoc() {
         <PaperFlex direction="column" gap="double" fullWidth>
             <PaperText preset="header">File API</PaperText>
             <PaperText preset="body">
-                fileApi manages a panel's file storage: text file reading and writing, checksummed downloads, and save and open dialogs that move files between panel storage and the user's machine.
+                fileApi manages a panel's file storage: text file reading and writing, checksummed downloads, and exporting and importing files between panel storage and the user's machine.
                 Reach for fileApi when downloading assets, storing local caches, reading persistent working files, or exporting and importing a file.
                 Every operation stays inside the named panel's storage folder.
             </PaperText>
@@ -85,14 +85,14 @@ const content = await fileApi.read("data/log.txt", PANEL_ID);`}
                         <td>Streams a remote URL to disk with progress tracking and SHA-256 verification.</td>
                     </tr>
                     <tr>
-                        <td><PaperCode>saveDialog</PaperCode></td>
-                        <td><PaperCode>saveDialog(sourcePath, appId, options?): Promise&lt;SaveDialogResult&gt;</PaperCode></td>
-                        <td>Opens a save dialog and copies a file from panel storage to the location the user picks.</td>
+                        <td><PaperCode>exportFile</PaperCode></td>
+                        <td><PaperCode>exportFile(sourcePath, appId, options?): Promise&lt;ExportFileResult&gt;</PaperCode></td>
+                        <td>Asks the user where to save a copy of a file from panel storage, then copies it there.</td>
                     </tr>
                     <tr>
-                        <td><PaperCode>openDialog</PaperCode></td>
-                        <td><PaperCode>openDialog(targetPath, appId, options?): Promise&lt;OpenDialogResult&gt;</PaperCode></td>
-                        <td>Opens an open dialog and copies the file the user picks into panel storage at targetPath.</td>
+                        <td><PaperCode>importFile</PaperCode></td>
+                        <td><PaperCode>importFile(targetPath, appId, options?): Promise&lt;ImportFileResult&gt;</PaperCode></td>
+                        <td>Asks the user for a file, then copies it into panel storage at targetPath.</td>
                     </tr>
                 </tbody>
             </PaperTable>
@@ -104,31 +104,31 @@ const content = await fileApi.read("data/log.txt", PANEL_ID);`}
                 Downloads verify checksums before committing the temporary file to its final destination.
             </PaperText>
 
-            <PaperText preset="subheader" id="save-and-open-dialogs">Save and open dialogs</PaperText>
+            <PaperText preset="subheader" id="exporting-and-importing-files">Exporting and importing files</PaperText>
             <PaperText preset="body">
-                Call saveDialog to hand the user a file from panel storage, such as an export or a backup. Call openDialog to take a file from the user into panel storage, such as an import or a restore.
-                Paperboard owns the dialog window. The panel names a path in its own storage and never sees a path on the user's disk.
-                Call both from a click handler in the panel page. A widget page cannot open a dialog.
+                Call exportFile to hand the user a file from panel storage, such as a report or a backup. Call importFile to take a file from the user into panel storage, such as a settings file or a restore.
+                Paperboard owns the picker window. The panel names a path in its own storage and never sees a path on the user's disk.
+                Call both from a click handler in the panel page. A widget page cannot export or import.
             </PaperText>
             <PaperCode block language="tsx">
-{`import { FileDialogError, fileApi } from "@mileniumhq/paperapi";
+{`import { FileTransferError, fileApi } from "@mileniumhq/paperapi";
 
 const PANEL_ID = "dev.example.panel";
 const filters = [{ name: "Archive", extensions: ["zip"] }];
 
-const saved = await fileApi.saveDialog("exports/data.zip", PANEL_ID, { suggestedName: "data.zip", filters });
-if (saved.status === "saved") console.log(\`Saved \${saved.bytes} bytes as \${saved.name}\`);
+const exported = await fileApi.exportFile("exports/data.zip", PANEL_ID, { suggestedName: "data.zip", filters });
+if (exported.status === "exported") console.log(\`Saved \${exported.bytes} bytes as \${exported.name}\`);
 
 try {
-    const opened = await fileApi.openDialog("imports/data.zip", PANEL_ID, { filters });
-    if (opened.status === "opened") console.log(\`Received \${opened.name}\`);
+    const imported = await fileApi.importFile("imports/data.zip", PANEL_ID, { filters });
+    if (imported.status === "imported") console.log(\`Received \${imported.name}\`);
 } catch (err) {
-    if (err instanceof FileDialogError && err.code === "too-large") console.log("The file is over the limit");
+    if (err instanceof FileTransferError && err.code === "too-large") console.log("The file is over the limit");
     else throw err;
 }`}
             </PaperCode>
 
-            <PaperText preset="subheader" id="dialog-options">Dialog options</PaperText>
+            <PaperText preset="subheader" id="export-and-import-options">Export and import options</PaperText>
             <PaperTable>
                 <thead>
                     <tr>
@@ -143,26 +143,26 @@ try {
                         <td><PaperCode>suggestedName</PaperCode></td>
                         <td><PaperCode>string</PaperCode></td>
                         <td>The source file's name</td>
-                        <td>saveDialog only. The file name the dialog starts with. Slashes are refused.</td>
+                        <td>exportFile only. The file name the picker starts with. Slashes are refused.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>filters</PaperCode></td>
-                        <td><PaperCode>FileDialogFilter[]</PaperCode></td>
+                        <td><PaperCode>FileTypeFilter[]</PaperCode></td>
                         <td>No filters, any file</td>
                         <td>Each filter is <PaperCode>{"{ name, extensions }"}</PaperCode>. Write extensions without the dot, letters and digits only. At most 16 filters of at most 32 extensions each.</td>
                     </tr>
                 </tbody>
             </PaperTable>
 
-            <PaperText preset="subheader" id="dialog-results">Dialog results</PaperText>
+            <PaperText preset="subheader" id="export-and-import-results">Export and import results</PaperText>
             <PaperText preset="body">
-                Both methods resolve with what the user did and throw a FileDialogError when the copy fails. A canceled dialog resolves with <PaperCode>{"{ status: \"canceled\" }"}</PaperCode> and changes no file.
-                A finished saveDialog resolves with <PaperCode>{"{ status: \"saved\", name, bytes }"}</PaperCode> and a finished openDialog with <PaperCode>{"{ status: \"opened\", name, bytes }"}</PaperCode>. The name is the file name the user picked, without its folder.
+                Both methods resolve with what the user did and throw a FileTransferError when the copy fails. A canceled picker resolves with <PaperCode>{"{ status: \"canceled\" }"}</PaperCode> and changes no file.
+                A finished exportFile resolves with <PaperCode>{"{ status: \"exported\", name, bytes }"}</PaperCode> and a finished importFile with <PaperCode>{"{ status: \"imported\", name, bytes }"}</PaperCode>. The name is the file name the user picked, without its folder.
             </PaperText>
             <PaperTable>
                 <thead>
                     <tr>
-                        <th>FileDialogError code</th>
+                        <th>FileTransferError code</th>
                         <th>Meaning</th>
                     </tr>
                 </thead>
@@ -173,11 +173,11 @@ try {
                     </tr>
                     <tr>
                         <td><PaperCode>busy</PaperCode></td>
-                        <td>This panel already has a dialog open, or Paperboard is running four transfers.</td>
+                        <td>This panel already has an export or import running, or Paperboard is running four transfers.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>not-found</PaperCode></td>
-                        <td>saveDialog: the source file does not exist. The dialog never opens.</td>
+                        <td>exportFile: the source file does not exist. The picker never opens.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>too-large</PaperCode></td>
@@ -202,13 +202,13 @@ try {
                 </tbody>
             </PaperTable>
 
-            <PaperText preset="subheader" id="dialog-behavior">Dialog behavior</PaperText>
+            <PaperText preset="subheader" id="export-and-import-behavior">Export and import behavior</PaperText>
             <PaperText preset="body">
-                The dialog opens on the machine showing Paperboard. When the panel runs on another computer, the file travels between that computer's panel storage and this machine.
-                A save writes the picked location only after the whole file arrives. A broken transfer leaves an existing file at that location as it was.
-                An open replaces targetPath only after the whole file arrives, and creates its parent folders. The computer that stores the file checks that targetPath stays inside the panel's storage.
-                saveDialog copies files up to 2 GiB. openDialog copies files up to the receiving computer's upload limit, 512 MiB unless PAPERCRANE_DAV_MAX_UPLOAD sets another byte count.
-                One dialog per panel is open at a time. A second call while one is open throws <PaperCode>busy</PaperCode>.
+                The picker opens on the machine showing Paperboard. When the panel runs on another computer, the file travels between that computer's panel storage and this machine.
+                An export writes the picked location only after the whole file arrives. A broken transfer leaves an existing file at that location as it was.
+                An import replaces targetPath only after the whole file arrives, and creates its parent folders. The computer that stores the file checks that targetPath stays inside the panel's storage.
+                exportFile copies files up to 2 GiB. importFile copies files up to the receiving computer's upload limit, 512 MiB unless PAPERCRANE_DAV_MAX_UPLOAD sets another byte count.
+                One export or import per panel runs at a time. A second call while one is open throws <PaperCode>busy</PaperCode>.
             </PaperText>
 
             <PaperText preset="subheader" id="recipes">Recipes</PaperText>

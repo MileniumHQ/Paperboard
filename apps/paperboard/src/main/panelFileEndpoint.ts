@@ -2,7 +2,7 @@
 // paired-computer pool. Kept apart from panelFileTransfer.ts so that module
 // can be exercised without constructing the pool.
 import connectionPool from "./communication/papercrane/ConnectionPool";
-import { PanelFileDialogError } from "../shared/panelFileDialog";
+import { PanelFileTransferError } from "../shared/fileTransfer";
 import type { DaemonEndpoint } from "./panelFileTransfer";
 
 function isLoopback(host: string): boolean {
@@ -14,14 +14,14 @@ export function poolEndpoint(computerId: string): DaemonEndpoint {
     try {
         client = connectionPool.getClient(computerId);
     } catch (err) {
-        throw new PanelFileDialogError("unreachable", (err as Error).message);
+        throw new PanelFileTransferError("unreachable", (err as Error).message);
     }
     const token = client.getToken();
-    if (!token) throw new PanelFileDialogError("unreachable", `Computer ${computerId} is not connected`);
+    if (!token) throw new PanelFileTransferError("unreachable", `Computer ${computerId} is not connected`);
     const host = client.getHost();
     const cert = client.getCert();
     if (!isLoopback(host) && !cert) {
-        throw new PanelFileDialogError("unreachable", `${host} has no pinned certificate. Remove this computer and pair it again`);
+        throw new PanelFileTransferError("unreachable", `${host} has no pinned certificate. Remove this computer and pair it again`);
     }
     return { host, port: client.getPort(), token, ...(isLoopback(host) ? {} : { cert }) };
 }

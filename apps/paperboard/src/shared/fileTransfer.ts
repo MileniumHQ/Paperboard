@@ -4,22 +4,22 @@
 // main and the browser-mode host both parse with this one function.
 import { isPanelId } from "../../../../packages/paperapi/src/panelIdentity";
 
-export interface FileDialogFilter {
+export interface FileTypeFilter {
     name: string;
     extensions: string[];
 }
 
-export interface PanelFileDialogRequest {
+export interface PanelFileTransferRequest {
     computerId: string;
     panelId: string;
     /** a path in the panel's own file storage on that computer */
     path: string;
     /** save only: the file name the dialog starts with */
     suggestedName?: string;
-    filters: FileDialogFilter[];
+    filters: FileTypeFilter[];
 }
 
-export type PanelFileDialogFailure =
+export type PanelFileTransferFailure =
     | "invalid-request"
     | "busy"
     | "not-found"
@@ -28,15 +28,15 @@ export type PanelFileDialogFailure =
     | "unsupported"
     | "failed";
 
-export type PanelFileDialogResult =
-    | { status: "saved"; name: string; bytes: number }
-    | { status: "opened"; name: string; bytes: number }
+export type PanelFileTransferResult =
+    | { status: "exported"; name: string; bytes: number }
+    | { status: "imported"; name: string; bytes: number }
     | { status: "canceled" }
-    | { status: "failed"; code: PanelFileDialogFailure; message: string };
+    | { status: "failed"; code: PanelFileTransferFailure; message: string };
 
-export class PanelFileDialogError extends Error {
+export class PanelFileTransferError extends Error {
     constructor(
-        readonly code: PanelFileDialogFailure,
+        readonly code: PanelFileTransferFailure,
         message: string,
     ) {
         super(message);
@@ -50,14 +50,14 @@ const EXTENSIONS_MAX = 32;
 const EXTENSION_RE = /^[A-Za-z0-9]{1,16}$/;
 
 function invalid(message: string): never {
-    throw new PanelFileDialogError("invalid-request", message);
+    throw new PanelFileTransferError("invalid-request", message);
 }
 
 function field(args: unknown, key: string): unknown {
     return args && typeof args === "object" ? (args as Record<string, unknown>)[key] : undefined;
 }
 
-function parseFilters(raw: unknown): FileDialogFilter[] {
+function parseFilters(raw: unknown): FileTypeFilter[] {
     if (raw === undefined) return [];
     if (!Array.isArray(raw) || raw.length > FILTERS_MAX) invalid(`filters must be a list of at most ${FILTERS_MAX}`);
     return raw.map((filter) => {
@@ -76,8 +76,8 @@ function parseFilters(raw: unknown): FileDialogFilter[] {
     });
 }
 
-/** The one shape check for a dialog request; throws PanelFileDialogError. */
-export function parsePanelFileDialogRequest(args: unknown): PanelFileDialogRequest {
+/** The one shape check for a dialog request; throws PanelFileTransferError. */
+export function parsePanelFileTransferRequest(args: unknown): PanelFileTransferRequest {
     const computerId = field(args, "computerId");
     const panelId = field(args, "panelId");
     const path = field(args, "path");
@@ -103,7 +103,7 @@ export function parsePanelFileDialogRequest(args: unknown): PanelFileDialogReque
     };
 }
 
-export function failedResult(err: unknown): PanelFileDialogResult {
-    if (err instanceof PanelFileDialogError) return { status: "failed", code: err.code, message: err.message };
+export function failedResult(err: unknown): PanelFileTransferResult {
+    if (err instanceof PanelFileTransferError) return { status: "failed", code: err.code, message: err.message };
     return { status: "failed", code: "failed", message: err instanceof Error ? err.message : String(err) };
 }

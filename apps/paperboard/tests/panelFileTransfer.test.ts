@@ -1,4 +1,4 @@
-// Panel save and open dialogs (bun test): a real daemon HTTP server on
+// Panel file export and import (bun test): a real daemon HTTP server on
 // loopback with a temp data dir, the host-side transfer module with fake
 // pickers standing in for the native dialog, and the browser-mode host
 // routes. Proves the daemon owns the path check, a save writes the chosen
@@ -16,17 +16,17 @@ import { DavSessionStore } from "../papercrane/dav";
 import { handleHttpRequest } from "../papercrane/http";
 import {
     readPanelFileForBrowser,
-    runPanelOpenDialog,
-    runPanelSaveDialog,
+    runPanelImport,
+    runPanelExport,
     statPanelFileForBrowser,
     writePanelFileFromBrowser,
     type DaemonEndpoint,
-    type PanelFileDialogDeps,
+    type PanelFileTransferDeps,
 } from "../src/main/panelFileTransfer";
 import { BROWSER_HOST_SUFFIX, startBrowserHost, type BrowserHost } from "../src/main/browserHost";
-import { parsePanelFileDialogRequest } from "../src/shared/panelFileDialog";
+import { parsePanelFileTransferRequest } from "../src/shared/fileTransfer";
 
-const TOKEN = "panel-file-dialog-token";
+const TOKEN = "panel-file-transfer-token";
 const PANEL = "dev.example.backups";
 const OTHER = "dev.example.other";
 
@@ -41,7 +41,7 @@ const endpoint = (): DaemonEndpoint => ({ host: "127.0.0.1", port, token: TOKEN 
 const panelFile = (panelId: string, rel: string) => path.join(dataDir, "files", panelId, rel);
 const ref = (p: string, extra: Record<string, unknown> = {}) => ({ computerId: "local", panelId: PANEL, path: p, ...extra });
 
-function pickers(choice: { save?: string | null; open?: string | null }, calls: string[] = []): PanelFileDialogDeps {
+function pickers(choice: { save?: string | null; open?: string | null }, calls: string[] = []): PanelFileTransferDeps {
     return {
         endpoint,
         pickSavePath: async (options) => {
@@ -149,14 +149,14 @@ describe("/panel-files on the daemon", () => {
     });
 });
 
-describe("save dialog", () => {
+describe("export", () => {
     it("copies the panel file to the chosen path", async () => {
         const bytes = Buffer.from(Array.from({ length: 300_000 }, (_, i) => i % 251));
         seed(PANEL, "backups/world.zip", bytes);
         const dest = path.join(localDir, "saved.zip");
         const calls: string[] = [];
-        const result = await runPanelSaveDialog(ref("backups/world.zip"), pickers({ save: dest }, calls));
-        expect(result).toEqual({ status: "saved", name: "saved.zip", bytes: bytes.length });
+        const result = await runPanelExport(ref("backups/world.zip"), pickers({ save: dest }, calls));
+        expect(result).toEqual({ status: "exported", name: "saved.zip", bytes: bytes.length });
         expect(calls).toEqual(["save:world.zip"]);
         expect(fs.readFileSync(dest).equals(bytes)).toBe(true);
         expect(fs.existsSync(`${dest}.paperboard-part`)).toBe(false);
@@ -164,14 +164,14 @@ describe("save dialog", () => {
 
     it("writes nothing when the user cancels", async () => {
         seed(PANEL, "c.txt", "cancel me");
-        const result = await runPanelSaveDialog(ref("c.txt", { suggestedName: "named.txt" }), pickers({ save: null }));
+        const result = await runPanelExport(ref("c.txt", { suggestedName: "named.txt" }), pickers({ save: null }));
         expect(result).toEqual({ status: "canceled" });
         expect(fs.readdirSync(localDir).filter((f) => f.startsWith("named"))).toEqual([]);
     });
 
     it("fails before any dialog when the panel file is missing", async () => {
         const calls: string[] = [];
-        const result = await runPanelSaveDialog(ref("missing.zip"), pickers({ save: path.join(localDir, "x.zip") }, calls));
+        const result = await runPanelExport(ref("missing.zip"), pickers({ save: path.join(localDir, "x.zip") }, calls));
         expect(result).toMatchObject({ status: "failed", code: "not-found" });
         expect(calls).toEqual([]);
     });
@@ -189,7 +189,7 @@ describe("save dialog", () => {
             const brokenPort = (broken.address() as { port: number }).port;
             const dest = path.join(localDir, "keep.bin");
             fs.writeFileSync(dest, "previous");
-            const result = await runPanelSaveDialog(ref("big.bin"), {
+            const result = await runPanelExport(ref("big.bin"), {
                 ...pickers({ save: dest }),
                 endpoint: () => ({ host: "127.0.0.1", port: brokenPort, token: TOKEN }),
             });
@@ -205,7 +205,7 @@ describe("save dialog", () => {
         seed(PANEL, "one.txt", "one");
         let release!: () => void;
         const gate = new Promise<void>((resolve) => (release = resolve));
-        const first = runPanelSaveDialog(ref("one.txt"), {
+        const first = runPanelExport(ref("one.txt"), {
             ...pickers({}),
             pickSavePath: async () => {
                 await gate;
@@ -213,20 +213,20 @@ describe("save dialog", () => {
             },
         });
         await Bun.sleep(50);
-        const second = await runPanelSaveDialog(ref("one.txt"), pickers({ save: null }));
+        const second = await runPanelExport(ref("one.txt"), pickers({ save: null }));
         expect(second).toMatchObject({ status: "failed", code: "busy" });
         release();
         expect(await first).toEqual({ status: "canceled" });
-        expect(await runPanelSaveDialog(ref("one.txt"), pickers({ save: null }))).toEqual({ status: "canceled" });
+        expect(await runPanelExport(ref("one.txt"), pickers({ save: null }))).toEqual({ status: "canceled" });
     });
 });
 
-describe("open dialog", () => {
+describe("import", () => {
     it("copies the chosen file into the panel's storage", async () => {
         const source = path.join(localDir, "restore.zip");
         fs.writeFileSync(source, "restore bytes");
-        const result = await runPanelOpenDialog(ref("imports/restore.zip"), pickers({ open: source }));
-        expect(result).toEqual({ status: "opened", name: "restore.zip", bytes: 13 });
+        const result = await runPanelImport(ref("imports/restore.zip"), pickers({ open: source }));
+        expect(result).toEqual({ status: "imported", name: "restore.zip", bytes: 13 });
         expect(fs.readFileSync(panelFile(PANEL, "imports/restore.zip"), "utf8")).toBe("restore bytes");
     });
 
@@ -235,7 +235,7 @@ describe("open dialog", () => {
         const source = path.join(localDir, "huge.json");
         fs.writeFileSync(source, "x".repeat(4096));
         process.env.PAPERCRANE_DAV_MAX_UPLOAD = "1024";
-        const result = await runPanelOpenDialog(ref("state.json"), pickers({ open: source }));
+        const result = await runPanelImport(ref("state.json"), pickers({ open: source }));
         expect(result).toMatchObject({ status: "failed", code: "too-large" });
         expect(fs.readFileSync(panelFile(PANEL, "state.json"), "utf8")).toBe("old state");
         expect(fs.readdirSync(path.dirname(panelFile(PANEL, "state.json"))).filter((f) => f.includes(".davpart"))).toEqual([]);
@@ -245,13 +245,13 @@ describe("open dialog", () => {
         const source = path.join(localDir, "evil.txt");
         fs.writeFileSync(source, "evil");
         seed(OTHER, "keep.txt", "kept");
-        const result = await runPanelOpenDialog(ref(`../${OTHER}/keep.txt`), pickers({ open: source }));
+        const result = await runPanelImport(ref(`../${OTHER}/keep.txt`), pickers({ open: source }));
         expect(result.status).toBe("failed");
         expect(fs.readFileSync(panelFile(OTHER, "keep.txt"), "utf8")).toBe("kept");
     });
 
     it("writes nothing when the user cancels", async () => {
-        const result = await runPanelOpenDialog(ref("never.txt"), pickers({ open: null }));
+        const result = await runPanelImport(ref("never.txt"), pickers({ open: null }));
         expect(result).toEqual({ status: "canceled" });
         expect(fs.existsSync(panelFile(PANEL, "never.txt"))).toBe(false);
     });
@@ -266,10 +266,10 @@ describe("request contract", () => {
             ref("a.txt", { suggestedName: "../escape.txt" }),
             ref("a.txt", { filters: [{ name: "Zip", extensions: [".zip"] }] }),
         ]) {
-            expect(await runPanelSaveDialog(bad, pickers({ save: null }, calls))).toMatchObject({ status: "failed", code: "invalid-request" });
+            expect(await runPanelExport(bad, pickers({ save: null }, calls))).toMatchObject({ status: "failed", code: "invalid-request" });
         }
         expect(calls).toEqual([]);
-        expect(parsePanelFileDialogRequest(ref("a.txt", { filters: [{ name: "Zip", extensions: ["zip"] }] })).filters).toEqual([
+        expect(parsePanelFileTransferRequest(ref("a.txt", { filters: [{ name: "Zip", extensions: ["zip"] }] })).filters).toEqual([
             { name: "Zip", extensions: ["zip"] },
         ]);
     });
@@ -318,7 +318,7 @@ describe("browser-mode routes", () => {
         expect(refused.status).toBe(403);
         expect(fs.existsSync(panelFile(PANEL, "uploaded.txt"))).toBe(false);
         const ok = await call("write", "from shell", { origin: browser.origin }, query);
-        expect(JSON.parse(ok.body.toString())).toMatchObject({ status: "opened", bytes: 10 });
+        expect(JSON.parse(ok.body.toString())).toMatchObject({ status: "imported", bytes: 10 });
         expect(fs.readFileSync(panelFile(PANEL, "uploaded.txt"), "utf8")).toBe("from shell");
     });
 

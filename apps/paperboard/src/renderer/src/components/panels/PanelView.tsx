@@ -3,7 +3,7 @@ import { type Component, createEffect, createSignal, For, Show, onCleanup, onMou
 import { recordUse, liveKeys, MAX_LIVE_IFRAMES } from "./panelLru";
 import LoadingOverlay from "./LoadingOverlay";
 import { panelUrl } from "../../lib/shell";
-import { FILE_DIALOG_RESULT, parseFileDialogMessage, runPanelFileDialog } from "../../lib/panelFileDialog";
+import { FILE_TRANSFER_RESULT, parseFileTransferMessage, runPanelFileTransfer } from "../../lib/panelFileTransfer";
 
 export type RestartState = { kind: "restarting" } | { kind: "failed"; message: string };
 
@@ -38,11 +38,11 @@ const PanelFrame: Component<{ panelKey: string; current: boolean; reload: number
                 clearTimeout(timer); setFailure(String(event.data.message || "Panel initialization failed"));
             } else {
                 // a save or open dialog, answered on the frame that asked
-                const request = parseFileDialogMessage(event.data);
+                const request = parseFileTransferMessage(event.data);
                 const target = frame?.contentWindow;
                 if (!request || !target) return;
-                void runPanelFileDialog(computerId, panelId, request).then((result) =>
-                    target.postMessage({ type: FILE_DIALOG_RESULT, generation: current, requestId: request.requestId, result }, "*"));
+                void runPanelFileTransfer(computerId, panelId, request).then((result) =>
+                    target.postMessage({ type: FILE_TRANSFER_RESULT, generation: current, requestId: request.requestId, result }, "*"));
             }
         };
         window.addEventListener("message", receive);

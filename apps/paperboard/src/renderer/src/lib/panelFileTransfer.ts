@@ -1,17 +1,17 @@
 // A panel frame asks for a save or open dialog with
-// { type: "paperboard:file-dialog", generation, requestId, kind, panelId, path, ... }.
-// The shell answers on the same frame with "paperboard:file-dialog-result".
+// { type: "paperboard:file-transfer", generation, requestId, kind, panelId, path, ... }.
+// The shell answers on the same frame with "paperboard:file-transfer-result".
 // Identity comes from the frame the message arrived on; the panelId the
 // panel names must agree with it. The request's fields are checked once,
-// by the host that runs the dialog (src/shared/panelFileDialog.ts).
-import type { FileDialogFilter, PanelFileDialogResult } from "../../../shared/panelFileDialog";
+// by the host that runs the dialog (src/shared/fileTransfer.ts).
+import type { FileTypeFilter, PanelFileTransferResult } from "../../../shared/fileTransfer";
 import { isBrowserShell, shellIpc } from "./shell";
 
-export const FILE_DIALOG_REQUEST = "paperboard:file-dialog";
-export const FILE_DIALOG_RESULT = "paperboard:file-dialog-result";
+export const FILE_TRANSFER_REQUEST = "paperboard:file-transfer";
+export const FILE_TRANSFER_RESULT = "paperboard:file-transfer-result";
 
-export interface PanelFileDialogMessage {
-    kind: "save" | "open";
+export interface PanelFileTransferMessage {
+    kind: "export" | "import";
     requestId: string;
     panelId: unknown;
     path: unknown;
@@ -20,11 +20,11 @@ export interface PanelFileDialogMessage {
 }
 
 /** routing fields only; null for anything that is not a dialog request */
-export function parseFileDialogMessage(data: unknown): PanelFileDialogMessage | null {
+export function parseFileTransferMessage(data: unknown): PanelFileTransferMessage | null {
     if (!data || typeof data !== "object") return null;
     const message = data as Record<string, unknown>;
-    if (message.type !== FILE_DIALOG_REQUEST) return null;
-    if (message.kind !== "save" && message.kind !== "open") return null;
+    if (message.type !== FILE_TRANSFER_REQUEST) return null;
+    if (message.kind !== "export" && message.kind !== "import") return null;
     if (typeof message.requestId !== "string" || !message.requestId || message.requestId.length > 128) return null;
     return {
         kind: message.kind,
@@ -36,15 +36,15 @@ export function parseFileDialogMessage(data: unknown): PanelFileDialogMessage | 
     };
 }
 
-function failed(code: Extract<PanelFileDialogResult, { status: "failed" }>["code"], message: string): PanelFileDialogResult {
+function failed(code: Extract<PanelFileTransferResult, { status: "failed" }>["code"], message: string): PanelFileTransferResult {
     return { status: "failed", code, message };
 }
 
-export async function runPanelFileDialog(
+export async function runPanelFileTransfer(
     computerId: string,
     framePanelId: string,
-    message: PanelFileDialogMessage,
-): Promise<PanelFileDialogResult> {
+    message: PanelFileTransferMessage,
+): Promise<PanelFileTransferResult> {
     if (message.panelId !== framePanelId) {
         return failed("invalid-request", "The panel id does not match the panel that asked");
     }
@@ -57,23 +57,23 @@ export async function runPanelFileDialog(
     };
     try {
         if (!isBrowserShell()) {
-            return await shellIpc().invoke<PanelFileDialogResult>(
-                message.kind === "save" ? "panel-file-save" : "panel-file-open",
+            return await shellIpc().invoke<PanelFileTransferResult>(
+                message.kind === "export" ? "panel-file-export" : "panel-file-import",
                 request,
             );
         }
-        return message.kind === "save" ? await browserSave(request) : await browserOpen(request);
+        return message.kind === "export" ? await browserSave(request) : await browserOpen(request);
     } catch (err) {
-        console.error("[panel-files] file dialog failed:", err);
+        console.error("[panel-files] file transfer failed:", err);
         return failed("failed", err instanceof Error ? err.message : String(err));
     }
 }
 
 // ── browser mode: the browser's own pickers, bytes through the host ──
 
-async function failureFrom(res: Response): Promise<PanelFileDialogResult> {
+async function failureFrom(res: Response): Promise<PanelFileTransferResult> {
     try {
-        const body = (await res.json()) as PanelFileDialogResult;
+        const body = (await res.json()) as PanelFileTransferResult;
         if (body?.status === "failed") return body;
     } catch (err) {
         console.error("[panel-files] unreadable failure response:", err);
@@ -83,7 +83,7 @@ async function failureFrom(res: Response): Promise<PanelFileDialogResult> {
 
 function pickerTypes(filters: unknown): { description: string; accept: Record<string, string[]> }[] | undefined {
     if (!Array.isArray(filters)) return undefined;
-    return (filters as FileDialogFilter[]).map((f) => ({
+    return (filters as FileTypeFilter[]).map((f) => ({
         description: String(f?.name ?? ""),
         accept: { "application/octet-stream": (Array.isArray(f?.extensions) ? f.extensions : []).map((ext) => `.${ext}`) },
     }));
@@ -92,7 +92,7 @@ function pickerTypes(filters: unknown): { description: string; accept: Record<st
 type SaveHandle = { name: string; createWritable(): Promise<WritableStream<Uint8Array>> };
 type SavePicker = (options: { suggestedName?: string; types?: ReturnType<typeof pickerTypes> }) => Promise<SaveHandle>;
 
-async function browserSave(request: Record<string, unknown>): Promise<PanelFileDialogResult> {
+async function browserSave(request: Record<string, unknown>): Promise<PanelFileTransferResult> {
     const showSaveFilePicker = (window as unknown as { showSaveFilePicker?: SavePicker }).showSaveFilePicker;
     if (!showSaveFilePicker) {
         return failed("unsupported", "This browser cannot choose where to save a file. Use the Paperboard app or a Chromium-based browser.");
@@ -132,7 +132,7 @@ async function browserSave(request: Record<string, unknown>): Promise<PanelFileD
         },
     });
     await res.body.pipeThrough(counter).pipeTo(await handle.createWritable());
-    return { status: "saved", name: handle.name, bytes };
+    return { status: "exported", name: handle.name, bytes };
 }
 
 // <input type=file> works in every browser and reports a cancel
@@ -148,7 +148,7 @@ function pickFile(filters: unknown): Promise<File | null> {
     });
 }
 
-async function browserOpen(request: Record<string, unknown>): Promise<PanelFileDialogResult> {
+async function browserOpen(request: Record<string, unknown>): Promise<PanelFileTransferResult> {
     const file = await pickFile(request.filters);
     if (!file) return { status: "canceled" };
     const res = await fetch(`/_shell/panel-file/write?request=${encodeURIComponent(JSON.stringify(request))}`, {
@@ -157,6 +157,6 @@ async function browserOpen(request: Record<string, unknown>): Promise<PanelFileD
         body: file,
     });
     if (!res.ok) return failureFrom(res);
-    const result = (await res.json()) as PanelFileDialogResult;
-    return result.status === "opened" ? { ...result, name: file.name } : result;
+    const result = (await res.json()) as PanelFileTransferResult;
+    return result.status === "imported" ? { ...result, name: file.name } : result;
 }

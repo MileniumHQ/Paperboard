@@ -15,12 +15,12 @@ import { pinnedTlsOptions } from "../../papercrane/pinnedTls";
 import { logger } from "../../papercrane/logger";
 import {
     failedResult,
-    parsePanelFileDialogRequest,
-    PanelFileDialogError,
-    type FileDialogFilter,
-    type PanelFileDialogRequest,
-    type PanelFileDialogResult,
-} from "../shared/panelFileDialog";
+    parsePanelFileTransferRequest,
+    PanelFileTransferError,
+    type FileTypeFilter,
+    type PanelFileTransferRequest,
+    type PanelFileTransferResult,
+} from "../shared/fileTransfer";
 
 // the largest file a save writes to this machine; uploads are capped by
 // the receiving daemon (PAPERCRANE_DAV_MAX_UPLOAD)
@@ -28,7 +28,7 @@ export const PANEL_FILE_SAVE_MAX_BYTES = 2 * 1024 * 1024 * 1024;
 // a daemon that sends or accepts nothing for this long has failed the transfer
 const TRANSFER_IDLE_MS = 60_000;
 // open dialogs and transfers across every panel; each panel holds one
-export const MAX_ACTIVE_PANEL_FILE_DIALOGS = 4;
+export const MAX_ACTIVE_PANEL_FILE_TRANSFERS = 4;
 
 export interface DaemonEndpoint {
     host: string;
@@ -38,14 +38,14 @@ export interface DaemonEndpoint {
     cert?: string;
 }
 
-export interface PanelFileDialogDeps {
+export interface PanelFileTransferDeps {
     /** absolute local path the user chose, or null when they canceled */
-    pickSavePath(options: { suggestedName: string; filters: FileDialogFilter[] }): Promise<string | null>;
-    pickOpenPath(options: { filters: FileDialogFilter[] }): Promise<string | null>;
+    pickSavePath(options: { suggestedName: string; filters: FileTypeFilter[] }): Promise<string | null>;
+    pickOpenPath(options: { filters: FileTypeFilter[] }): Promise<string | null>;
     endpoint: (computerId: string) => DaemonEndpoint;
 }
 
-function filePath(req: PanelFileDialogRequest): string {
+function filePath(req: PanelFileTransferRequest): string {
     const segments = req.path.replace(/^[/\\]+/, "").split("/").map(encodeURIComponent);
     return `/panel-files/${encodeURIComponent(req.panelId)}/${segments.join("/")}`;
 }
@@ -68,7 +68,7 @@ function daemonRequest(
     const req = endpoint.cert
         ? https.request({ ...options, ...pinnedTlsOptions(endpoint.cert) })
         : http.request(options);
-    req.on("timeout", () => req.destroy(new PanelFileDialogError("unreachable", "The computer stopped responding")));
+    req.on("timeout", () => req.destroy(new PanelFileTransferError("unreachable", "The computer stopped responding")));
     // an error after the response was handled must not crash main; the
     // response or the pipeline already carries the failure to the caller
     req.on("error", (err) => logger.debug("[panel-files] daemon request ended:", err.message));
@@ -79,7 +79,7 @@ function awaitResponse(req: http.ClientRequest): Promise<http.IncomingMessage> {
     return new Promise((resolve, reject) => {
         req.once("response", resolve);
         req.once("error", (err) =>
-            reject(err instanceof PanelFileDialogError ? err : new PanelFileDialogError("unreachable", err.message)),
+            reject(err instanceof PanelFileTransferError ? err : new PanelFileTransferError("unreachable", err.message)),
         );
     });
 }
@@ -94,15 +94,15 @@ async function readText(res: http.IncomingMessage): Promise<string> {
     return Buffer.concat(chunks).toString("utf8").slice(0, 4096);
 }
 
-async function statusFailure(res: http.IncomingMessage, what: string): Promise<PanelFileDialogError> {
+async function statusFailure(res: http.IncomingMessage, what: string): Promise<PanelFileTransferError> {
     const detail = (await readText(res)).trim();
     const code = res.statusCode === 404 ? "not-found" : res.statusCode === 413 ? "too-large" : "failed";
     const message = res.statusCode === 404 ? `${what} does not exist` : detail || `${what} failed (HTTP ${res.statusCode})`;
-    return new PanelFileDialogError(code, message);
+    return new PanelFileTransferError(code, message);
 }
 
 /** size of the panel file, failing before any dialog when it can't be saved */
-async function statPanelFile(endpoint: DaemonEndpoint, req: PanelFileDialogRequest): Promise<number> {
+async function statPanelFile(endpoint: DaemonEndpoint, req: PanelFileTransferRequest): Promise<number> {
     const head = daemonRequest(endpoint, "HEAD", filePath(req));
     const response = awaitResponse(head);
     head.end();
@@ -110,9 +110,9 @@ async function statPanelFile(endpoint: DaemonEndpoint, req: PanelFileDialogReque
     if (res.statusCode !== 200) throw await statusFailure(res, `The panel file "${req.path}"`);
     res.resume();
     const size = Number(res.headers["content-length"]);
-    if (!Number.isFinite(size) || size < 0) throw new PanelFileDialogError("failed", "The computer did not report the file size");
+    if (!Number.isFinite(size) || size < 0) throw new PanelFileTransferError("failed", "The computer did not report the file size");
     if (size > PANEL_FILE_SAVE_MAX_BYTES) {
-        throw new PanelFileDialogError("too-large", `The file is larger than Paperboard saves (${PANEL_FILE_SAVE_MAX_BYTES} bytes)`);
+        throw new PanelFileTransferError("too-large", `The file is larger than Paperboard saves (${PANEL_FILE_SAVE_MAX_BYTES} bytes)`);
     }
     return size;
 }
@@ -121,7 +121,7 @@ function byteCap(cap: number, counted: { bytes: number }): Transform {
     return new Transform({
         transform(chunk: Buffer, _encoding, done) {
             counted.bytes += chunk.length;
-            if (counted.bytes > cap) done(new PanelFileDialogError("too-large", `The file grew past ${cap} bytes while saving`));
+            if (counted.bytes > cap) done(new PanelFileTransferError("too-large", `The file grew past ${cap} bytes while saving`));
             else done(null, chunk);
         },
     });
@@ -130,7 +130,7 @@ function byteCap(cap: number, counted: { bytes: number }): Transform {
 /** GET the panel file as a stream, capped; the caller consumes or destroys it */
 export async function readPanelFile(
     endpoint: DaemonEndpoint,
-    req: PanelFileDialogRequest,
+    req: PanelFileTransferRequest,
 ): Promise<{ size: number; body: Readable; received: () => number }> {
     const get = daemonRequest(endpoint, "GET", filePath(req));
     const response = awaitResponse(get);
@@ -140,7 +140,7 @@ export async function readPanelFile(
     const size = Number(res.headers["content-length"]);
     if (Number.isFinite(size) && size > PANEL_FILE_SAVE_MAX_BYTES) {
         res.destroy();
-        throw new PanelFileDialogError("too-large", `The file is larger than Paperboard saves (${PANEL_FILE_SAVE_MAX_BYTES} bytes)`);
+        throw new PanelFileTransferError("too-large", `The file is larger than Paperboard saves (${PANEL_FILE_SAVE_MAX_BYTES} bytes)`);
     }
     const counted = { bytes: 0 };
     const capped = byteCap(PANEL_FILE_SAVE_MAX_BYTES, counted);
@@ -152,7 +152,7 @@ export async function readPanelFile(
 /** PUT a stream of known size into the panel's storage */
 export async function writePanelFile(
     endpoint: DaemonEndpoint,
-    req: PanelFileDialogRequest,
+    req: PanelFileTransferRequest,
     body: Readable,
     size: number,
 ): Promise<void> {
@@ -175,17 +175,17 @@ export async function writePanelFile(
     }
     res.resume();
     const sendError = await sent;
-    if (sendError) throw new PanelFileDialogError("failed", sendError.message);
+    if (sendError) throw new PanelFileTransferError("failed", sendError.message);
 }
 
 /** stream the panel file to dest; the chosen path changes only on success */
-async function saveTo(endpoint: DaemonEndpoint, req: PanelFileDialogRequest, dest: string): Promise<number> {
+async function saveTo(endpoint: DaemonEndpoint, req: PanelFileTransferRequest, dest: string): Promise<number> {
     const { size, body, received } = await readPanelFile(endpoint, req);
     const part = `${dest}.paperboard-part`;
     try {
         await pipeline(body, fs.createWriteStream(part));
         if (Number.isFinite(size) && received() !== size) {
-            throw new PanelFileDialogError("unreachable", "The transfer ended before the whole file arrived");
+            throw new PanelFileTransferError("unreachable", "The transfer ended before the whole file arrived");
         }
         fs.renameSync(part, dest);
         return received();
@@ -195,18 +195,18 @@ async function saveTo(endpoint: DaemonEndpoint, req: PanelFileDialogRequest, des
         } catch (cleanupErr) {
             logger.warn("[panel-files] could not remove the partial save:", cleanupErr);
         }
-        throw err instanceof PanelFileDialogError ? err : new PanelFileDialogError("failed", (err as Error).message);
+        throw err instanceof PanelFileTransferError ? err : new PanelFileTransferError("failed", (err as Error).message);
     }
 }
 
-async function uploadFrom(endpoint: DaemonEndpoint, req: PanelFileDialogRequest, source: string): Promise<number> {
+async function uploadFrom(endpoint: DaemonEndpoint, req: PanelFileTransferRequest, source: string): Promise<number> {
     let st: fs.Stats;
     try {
         st = fs.statSync(source);
     } catch (err) {
-        throw new PanelFileDialogError("not-found", (err as Error).message);
+        throw new PanelFileTransferError("not-found", (err as Error).message);
     }
-    if (!st.isFile()) throw new PanelFileDialogError("failed", "Only a single file can be opened");
+    if (!st.isFile()) throw new PanelFileTransferError("failed", "Only a single file can be opened");
     await writePanelFile(endpoint, req, fs.createReadStream(source), st.size);
     return st.size;
 }
@@ -215,17 +215,17 @@ async function uploadFrom(endpoint: DaemonEndpoint, req: PanelFileDialogRequest,
 // user, and a transfer holds a socket and a file
 const activeDialogs = new Set<string>();
 
-function acquireSlot(req: PanelFileDialogRequest): () => void {
+function acquireSlot(req: PanelFileTransferRequest): () => void {
     const key = `${req.computerId}::${req.panelId}`;
-    if (activeDialogs.has(key)) throw new PanelFileDialogError("busy", "This panel already has a file dialog open");
-    if (activeDialogs.size >= MAX_ACTIVE_PANEL_FILE_DIALOGS) {
-        throw new PanelFileDialogError("busy", "Too many file transfers are running; try again when one finishes");
+    if (activeDialogs.has(key)) throw new PanelFileTransferError("busy", "This panel already has an export or import running");
+    if (activeDialogs.size >= MAX_ACTIVE_PANEL_FILE_TRANSFERS) {
+        throw new PanelFileTransferError("busy", "Too many file transfers are running; try again when one finishes");
     }
     activeDialogs.add(key);
     return () => activeDialogs.delete(key);
 }
 
-async function withPanelFileSlot<T>(req: PanelFileDialogRequest, run: () => Promise<T>): Promise<T> {
+async function withPanelFileSlot<T>(req: PanelFileTransferRequest, run: () => Promise<T>): Promise<T> {
     const release = acquireSlot(req);
     try {
         return await run();
@@ -234,9 +234,9 @@ async function withPanelFileSlot<T>(req: PanelFileDialogRequest, run: () => Prom
     }
 }
 
-export async function runPanelSaveDialog(args: unknown, deps: PanelFileDialogDeps): Promise<PanelFileDialogResult> {
+export async function runPanelExport(args: unknown, deps: PanelFileTransferDeps): Promise<PanelFileTransferResult> {
     try {
-        const req = parsePanelFileDialogRequest(args);
+        const req = parsePanelFileTransferRequest(args);
         const endpoint = deps.endpoint(req.computerId);
         return await withPanelFileSlot(req, async () => {
             await statPanelFile(endpoint, req);
@@ -246,26 +246,26 @@ export async function runPanelSaveDialog(args: unknown, deps: PanelFileDialogDep
             });
             if (!dest) return { status: "canceled" } as const;
             const bytes = await saveTo(endpoint, req, dest);
-            return { status: "saved", name: path.basename(dest), bytes } as const;
+            return { status: "exported", name: path.basename(dest), bytes } as const;
         });
     } catch (err) {
-        logger.warn("[panel-files] file dialog failed:", (err as Error)?.message ?? err);
+        logger.warn("[panel-files] file transfer failed:", (err as Error)?.message ?? err);
         return failedResult(err);
     }
 }
 
-export async function runPanelOpenDialog(args: unknown, deps: PanelFileDialogDeps): Promise<PanelFileDialogResult> {
+export async function runPanelImport(args: unknown, deps: PanelFileTransferDeps): Promise<PanelFileTransferResult> {
     try {
-        const req = parsePanelFileDialogRequest(args);
+        const req = parsePanelFileTransferRequest(args);
         const endpoint = deps.endpoint(req.computerId);
         return await withPanelFileSlot(req, async () => {
             const source = await deps.pickOpenPath({ filters: req.filters });
             if (!source) return { status: "canceled" } as const;
             const bytes = await uploadFrom(endpoint, req, source);
-            return { status: "opened", name: path.basename(source), bytes } as const;
+            return { status: "imported", name: path.basename(source), bytes } as const;
         });
     } catch (err) {
-        logger.warn("[panel-files] file dialog failed:", (err as Error)?.message ?? err);
+        logger.warn("[panel-files] file transfer failed:", (err as Error)?.message ?? err);
         return failedResult(err);
     }
 }
@@ -277,7 +277,7 @@ export async function statPanelFileForBrowser(
     args: unknown,
     endpoint: (computerId: string) => DaemonEndpoint,
 ): Promise<{ size: number }> {
-    const req = parsePanelFileDialogRequest(args);
+    const req = parsePanelFileTransferRequest(args);
     return { size: await statPanelFile(endpoint(req.computerId), req) };
 }
 
@@ -285,7 +285,7 @@ export async function readPanelFileForBrowser(
     args: unknown,
     endpoint: (computerId: string) => DaemonEndpoint,
 ): Promise<{ size: number; body: Readable }> {
-    const req = parsePanelFileDialogRequest(args);
+    const req = parsePanelFileTransferRequest(args);
     const target = endpoint(req.computerId);
     const release = acquireSlot(req);
     try {
@@ -303,11 +303,11 @@ export async function writePanelFileFromBrowser(
     body: Readable,
     size: number,
     endpoint: (computerId: string) => DaemonEndpoint,
-): Promise<PanelFileDialogResult> {
-    const req = parsePanelFileDialogRequest(args);
+): Promise<PanelFileTransferResult> {
+    const req = parsePanelFileTransferRequest(args);
     const target = endpoint(req.computerId);
     return withPanelFileSlot(req, async () => {
         await writePanelFile(target, req, body, size);
-        return { status: "opened", name: path.posix.basename(req.path.replace(/\\/g, "/")), bytes: size } as const;
+        return { status: "imported", name: path.posix.basename(req.path.replace(/\\/g, "/")), bytes: size } as const;
     });
 }
