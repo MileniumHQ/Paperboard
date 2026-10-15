@@ -90,7 +90,8 @@ export function ActionDetails(props: { call: ToolCallRecord }) {
     return (
         <>
             <Show when={props.call.agent}>{(details) => <AgentToolView details={details()} />}</Show>
-            <Show when={args().length > 0}>
+            {/* a file change's arguments are its path and text: the diff above already shows them */}
+            <Show when={args().length > 0 && !props.call.agent?.diffs.length}>
                 <dl class={styles.args}>
                     <For each={args()}>
                         {([key, value]) => (
@@ -123,7 +124,19 @@ export default function ToolCallApproval(props: { call: ToolCallRecord }) {
     const known = () => Boolean(record().panelId);
     const status = () => ACTION_STATUS[record().status];
     const shell = () => record().builtin === "run_shell_command";
-    const agent = () => record().agent;
+    // a coding agent's own request; Local AI's file tools carry details too, but answer with the usual buttons
+    const agent = () => (record().builtin ? undefined : record().agent);
+    const fileChange = () => (record().builtin ? record().agent : undefined);
+    const project = () => {
+        const id = state.approvals.find((a) => a.id === record().id)?.conversationId;
+        return state.conversations.find((c) => c.id === id)?.project;
+    };
+    const title = () => (shell() ? "Run shell command" : record().builtin === "write_file" ? "Write file" : record().builtin === "edit_file" ? "Edit file" : record().label);
+    const where = () => {
+        if (fileChange() || (shell() && project())) return `In ${project() ?? "the project"}`;
+        if (shell()) return "On this computer";
+        return known() ? panelName(record().panelId) : record().tool;
+    };
     const options = () => state.approvals.find((a) => a.id === record().id)?.options ?? [];
     const optionVariant = (kind: AgentPermissionKind) => (kind === "allow_once" ? "primary" : kind.startsWith("reject") ? "danger" : undefined);
 
@@ -145,7 +158,13 @@ export default function ToolCallApproval(props: { call: ToolCallRecord }) {
                 class={styles.ToolCallCard}
                 classList={{ [styles.waiting!]: true }}
                 aria-label={
-                    agent() ? record().label : shell() ? "Run a shell command" : `${record().label} in ${known() ? panelName(record().panelId) : "an unknown app"}`
+                    agent()
+                        ? record().label
+                        : shell()
+                          ? "Run a shell command"
+                          : fileChange()
+                            ? `${title()}: ${fileChange()!.locations[0] ?? ""}`
+                            : `${record().label} in ${known() ? panelName(record().panelId) : "an unknown app"}`
                 }
             >
                 <Show when={agent()}>
@@ -178,15 +197,16 @@ export default function ToolCallApproval(props: { call: ToolCallRecord }) {
                         <Match when={shell()}>
                             <PaperIcon class={styles.appIcon}>terminal</PaperIcon>
                         </Match>
+                        <Match when={fileChange()}>
+                            {(details) => <PaperIcon class={styles.appIcon}>{AGENT_TOOL_ICONS[details().kind]}</PaperIcon>}
+                        </Match>
                         <Match when={known()}>
                             <img class={styles.appIcon} src={panelIcon(record().panelId)} alt="" />
                         </Match>
                     </Switch>
                     <div class={styles.title}>
-                        <PaperText size={3} weight={700} truncate>{shell() ? "Run shell command" : record().label}</PaperText>
-                        <PaperText size={2} color="text-muted" truncate>
-                            {shell() ? "On this computer" : known() ? panelName(record().panelId) : record().tool}
-                        </PaperText>
+                        <PaperText size={3} weight={700} truncate>{title()}</PaperText>
+                        <PaperText size={2} color="text-muted" truncate>{where()}</PaperText>
                     </div>
                     <PaperBadge variant={status().variant} icon={status().icon}>{status().text}</PaperBadge>
                 </div>
@@ -194,7 +214,8 @@ export default function ToolCallApproval(props: { call: ToolCallRecord }) {
                 <Show when={shell()}>
                     <PaperCode block class={styles.request}>{String(record().arguments.command ?? "")}</PaperCode>
                 </Show>
-                <Show when={!shell() && args().length > 0}>
+                <Show when={fileChange()}>{(details) => <AgentToolView details={details()} />}</Show>
+                <Show when={!shell() && !fileChange() && args().length > 0}>
                     <div class={styles.requestBox}>
                         <PaperCopyButton
                             class={styles.requestCopy}
@@ -218,7 +239,9 @@ export default function ToolCallApproval(props: { call: ToolCallRecord }) {
                 <PaperText size={2} color="text-muted">
                     {shell()
                         ? "The AI wants to run this command. It asks every time, and nothing runs until you choose."
-                        : "The AI wants to run this action. Nothing happens until you choose."}
+                        : fileChange()
+                          ? "The AI wants to make this change. Nothing is written until you choose; in Accept edits mode, changes apply without asking."
+                          : "The AI wants to run this action. Nothing happens until you choose."}
                 </PaperText>
                 <div class={styles.actions}>
                     <PaperButton variant="primary" size="small" disabled={busy()} onClick={() => answer("once")}>

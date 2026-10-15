@@ -128,9 +128,17 @@ export default function ChatView() {
         const via = installed()?.provider ?? chatProvider();
         return state.connections.find((c) => c.id === via && c.kind === "agent");
     };
+    /** a Local AI chat whose model can call tools: it may work in a project */
+    const localConnection = () => {
+        if (agentConnection() || !installed()?.capabilities.includes("tools")) return undefined;
+        const via = installed()?.provider ?? chatProvider();
+        return state.connections.find((c) => c.id === via);
+    };
     const summary = () => state.conversations.find((s) => s.id === conversation()?.id);
     const lastProject = () => (state.lastProject && state.projects.includes(state.lastProject) ? state.lastProject : undefined);
-    const project = () => (conversation() ? summary()?.project ?? conversation()?.project : draftProject() ?? lastProject());
+    // an agent's draft starts where the last agent chat worked; a Local AI draft starts with none
+    const project = () =>
+        conversation() ? summary()?.project ?? conversation()?.project : draftProject() ?? (agentConnection() ? lastProject() : undefined);
     const generating = () => Boolean(conversation() && state.generating.includes(conversation()!.id));
     const waitingHere = () => state.approvals.filter((a) => a.conversationId === conversation()?.id).length;
     const hasOllama = () => state.connections.some((c) => c.kind === "ollama");
@@ -210,7 +218,7 @@ export default function ChatView() {
                 id = c.id;
                 const chosen = draftProject();
                 setDraftProject(undefined);
-                if (agentConnection() && chosen && chosen !== c.project) await call(UI_ACTION_IDS.setConversationProject, { id, project: chosen });
+                if ((agentConnection() || localConnection()) && chosen && chosen !== c.project) await call(UI_ACTION_IDS.setConversationProject, { id, project: chosen });
             }
             stickToBottom = true;
             await call(UI_ACTION_IDS.sendMessage, { id, text, reasoning, attachments });
@@ -353,10 +361,10 @@ export default function ChatView() {
                 </Show>
                 <Composer
                     toolbar={
-                        <Show when={agentConnection()}>
-                            {(agent) => (
+                        <Show when={agentConnection() ?? localConnection()}>
+                            {(connection) => (
                                 <AgentBar
-                                    connection={agent()}
+                                    connection={connection()}
                                     conversationId={conversation()?.id}
                                     project={project()}
                                     mode={conversation()?.mode}
