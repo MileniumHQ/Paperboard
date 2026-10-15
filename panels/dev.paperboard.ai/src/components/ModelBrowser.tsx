@@ -158,6 +158,15 @@ export default function ModelBrowser(props: ModelBrowserProps) {
         }
     };
 
+    const makeDefault = async (model: string) => {
+        setError("");
+        try {
+            await call(UI_ACTION_IDS.updateSettings, { defaultModel: model, defaultProvider: props.provider });
+        } catch (err) {
+            setError(errorText(err));
+        }
+    };
+
     function InstalledCard(cardProps: { model: InstalledModel; endpoint?: boolean }) {
         const entry = () => catalogEntry(cardProps.model.name);
         const maker = () => makerOf(cardProps.model.name);
@@ -197,6 +206,16 @@ export default function ModelBrowser(props: ModelBrowserProps) {
                 footerRight={
                     <Show when={props.manage}>
                         <span class={styles.cardActions} onClick={(e) => e.stopPropagation()}>
+                            <PaperButton
+                                icon
+                                size="tiny"
+                                variant="text"
+                                aria-label={`Use ${cardProps.model.label ?? cardProps.model.name} for new chats`}
+                                disabled={isDefault()}
+                                onClick={() => void makeDefault(cardProps.model.name)}
+                            >
+                                star
+                            </PaperButton>
                             <FavoriteToggle
                                 provider={cardProps.model.provider}
                                 model={cardProps.model.name}
