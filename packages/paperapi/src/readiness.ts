@@ -1,13 +1,15 @@
 import { actionsApi } from "./actions";
 import { resolvePanelId } from "./identity";
 import { STATE_GET_ACTION } from "./channels";
+import { getTransport } from "./ipc";
 import { hydratePanelBridges } from "./panelHydration";
 import { waitForContentPainted } from "./paintReady";
 import { mountRequestedWidget, parseWidgetInitialize } from "./widget";
 import { setFrameSession } from "./frameSession";
 
 // A document load is not readiness. The shell challenges this generation;
-// only a successful authenticated service hydration answers ready.
+// only an authenticated connection, and service hydration when the panel
+// has a service, answers ready.
 if (typeof window !== "undefined" && window.parent !== window) {
     const receive = async (event: MessageEvent) => {
         if (event.source !== window.parent || event.data?.type !== "paperboard:initialize" || typeof event.data.generation !== "string") return;
@@ -16,7 +18,11 @@ if (typeof window !== "undefined" && window.parent !== window) {
         try {
             const panelId = resolvePanelId();
             if (!panelId) throw new Error("Panel identity is missing");
-            await actionsApi.call(panelId, STATE_GET_ACTION);
+            // A panel without a service still proves an authenticated
+            // connection; one with a service proves the service answers.
+            // Only the shell says there is none (from the daemon's manifest).
+            if (event.data.service === false) await getTransport().ensureConnected();
+            else await actionsApi.call(panelId, STATE_GET_ACTION);
             // A widget frame is the same challenge plus one more fact: the
             // widget the shell asked for is mounted before hydration runs.
             if (event.data.widget !== undefined) {

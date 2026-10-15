@@ -34,6 +34,8 @@ export interface PanelItem {
     store?: StoreListing;
     /** widgets the installed manifest declares, already validated by the daemon */
     widgets?: WidgetDeclaration[];
+    /** the installed manifest's service entry; absent when the panel runs no service */
+    service?: string;
 }
 
 export interface RegistryPanelRecord {
@@ -114,6 +116,9 @@ export function mergeRegistryWithInstalled(
             installedVersion: localPanel?.version,
             installSource: localPanel?.installSource,
             isLinked: localPanel?.isLinked,
+            // what runs here comes from the installed manifest, registry or not
+            ...(localPanel?.widgets ? { widgets: localPanel.widgets } : {}),
+            ...(localPanel?.service ? { service: localPanel.service } : {}),
         });
     }
 

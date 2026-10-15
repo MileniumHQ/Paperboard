@@ -136,3 +136,14 @@ test("trailing slashes on the registry base are dropped, however many", () => {
     mergeRegistryWithInstalled({ "panel.a": { name: "A", version: "1.0.0", description: "" } }, [], long);
     expect(Date.now() - t).toBeLessThan(500);
 });
+
+test("an installed panel in the registry keeps its widgets and service from its own manifest", () => {
+    const widgets = [{ id: "status", name: "Status", sizes: ["2x1"] }];
+    const [panel] = mergeRegistryWithInstalled(
+        { "panel.a": { name: "A", version: "2.0.0" } },
+        [{ id: "panel.a", name: "A", version: "1.0.0", isInstalled: true, widgets, service: "./dist/service.js" }],
+        "",
+    );
+    expect(panel.widgets).toEqual(widgets);
+    expect(panel.service).toBe("./dist/service.js");
+});
