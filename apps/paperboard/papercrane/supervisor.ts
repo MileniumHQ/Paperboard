@@ -491,7 +491,7 @@ export async function runSupervisor(procId: string): Promise<void> {
         unrefTimer(giveUp);
     };
 
-    server.listen(socketPath, () => {
+    const startWorkload = () => {
         // explicit but missing cwd must fail with its path attached
         let finalCwd: string;
         if (config.cwd) {
@@ -578,8 +578,14 @@ export async function runSupervisor(procId: string): Promise<void> {
         try {
             fs.writeFileSync(metadataPath, JSON.stringify(meta, null, 2), { encoding: "utf8", mode: 0o600 });
         } catch (err) { logger.debug("[supervisor.ts] op failed:", err) }
-    });
+    };
 
     process.on("SIGTERM", () => cleanupAndExit(pendingExit ?? 0));
     process.on("SIGINT", () => cleanupAndExit(pendingExit ?? 0));
+
+    // Bun can accept a connection before invoking the listen callback. Set
+    // the spawn outcome first so no client can read a speculative success
+    // while cwd validation or synchronous PTY startup is still pending.
+    startWorkload();
+    server.listen(socketPath);
 }

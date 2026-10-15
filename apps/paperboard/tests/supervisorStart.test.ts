@@ -8,15 +8,25 @@ import { describe, it, expect, afterEach } from "bun:test";
 import { spawn, type ChildProcess } from "node:child_process";
 import * as path from "node:path";
 import { batchFileRefusal } from "../papercrane/batchFile";
-import { SupervisedProcessClient } from "../papercrane/supervisor";
+import { existsSync } from "node:fs";
+import { SupervisedProcessClient, getSupervisorMetadataPath } from "../papercrane/supervisor";
 
 const MAIN = path.join(import.meta.dir, "..", "papercrane", "main.ts");
 const children: ChildProcess[] = [];
 const clients: SupervisedProcessClient[] = [];
 
-afterEach(() => {
+function exited(child: ChildProcess): Promise<number | null> {
+    if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve(child.exitCode);
+    return new Promise((resolve) => child.once("exit", resolve));
+}
+
+afterEach(async () => {
     for (const client of clients.splice(0)) client.destroy();
-    for (const child of children.splice(0)) if (child.exitCode === null) child.kill("SIGKILL");
+    await Promise.all(children.splice(0).map(async (child) => {
+        const done = exited(child);
+        if (child.exitCode === null && child.signalCode === null) child.kill("SIGTERM");
+        await done;
+    }));
 });
 
 async function superviseAndConnect(id: string, config: Record<string, unknown>) {
@@ -43,15 +53,11 @@ describe("supervisor start outcome", () => {
         });
         await expect(client.awaitStarted()).rejects.toThrow(/Could not start a terminal/);
         // the failed supervisor exits instead of lingering on its pipe
-        const code = await new Promise<number | null>((resolve) => {
-            if (child.exitCode !== null) resolve(child.exitCode);
-            else child.once("exit", (c) => resolve(c));
-        });
-        expect(code).toBe(1);
+        expect(await exited(child)).toBe(1);
     }, 15_000);
 
     it("rejects with the missing working directory", async () => {
-        const { client } = await superviseAndConnect("start-fail-cwd", {
+        const { child, client } = await superviseAndConnect("start-fail-cwd", {
             isPty: true,
             command: "/bin/sh",
             cwd: "/nonexistent/paperboard-test-cwd",
@@ -59,6 +65,8 @@ describe("supervisor start outcome", () => {
         await expect(client.awaitStarted()).rejects.toThrow(
             "Working directory does not exist: /nonexistent/paperboard-test-cwd",
         );
+        expect(existsSync(getSupervisorMetadataPath(client.id))).toBe(false);
+        expect(await exited(child)).toBe(1);
     }, 15_000);
 
     it("resolves for a workload that started", async () => {
