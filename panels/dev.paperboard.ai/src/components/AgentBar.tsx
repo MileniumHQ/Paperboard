@@ -1,5 +1,5 @@
-// The strip above the composer in a coding agent's chat: the folder it works
-// in, its mode, and what to do when it can't start or needs a sign-in.
+// The strip above the composer in a coding agent's chat: the project it
+// works in, its mode, and what to do when it can't start or needs a sign-in.
 
 import { createSignal, For, Show } from "solid-js";
 import {
@@ -10,6 +10,8 @@ import {
     PaperModal,
     PaperSelectMenu,
     PaperSelectMenuItem,
+    PaperSelector,
+    PaperSelectorItem,
     PaperText,
 } from "@mileniumhq/paperui";
 import { UI_ACTION_IDS } from "../contract";
@@ -19,17 +21,13 @@ import styles from "./AgentBar.module.css";
 
 export interface AgentBarProps {
     connection: Connection;
-    /** unset while the chat is a draft: the folder is kept here until the first message creates it */
+    /** unset while the chat is a draft: the project is kept here until the first message creates it */
     conversationId?: string;
-    folder?: string;
+    project?: string;
     mode?: string;
     generating: boolean;
-    onDraftFolder: (folder: string) => void;
+    onDraftProject: (project: string) => void;
     onError: (text: string) => void;
-}
-
-function folderName(folder: string): string {
-    return folder.split(/[\\/]/).filter(Boolean).pop() ?? folder;
 }
 
 export default function AgentBar(props: AgentBarProps) {
@@ -83,11 +81,10 @@ export default function AgentBar(props: AgentBarProps) {
                     size="small"
                     variant="text"
                     disabled={props.generating}
-                    title={props.folder ? `${props.connection.label} works in ${props.folder}` : undefined}
-                    aria-label={props.folder ? `Folder: ${props.folder}. Change folder` : "Choose a folder"}
+                    aria-label={props.project ? `Project: ${props.project}. Change project` : "Choose a project"}
                     onClick={() => setChoosing(true)}
                 >
-                    <PaperIcon>folder</PaperIcon> {props.folder ? folderName(props.folder) : "Choose a folder"}
+                    <PaperIcon>folder</PaperIcon> {props.project ?? "Choose a project"}
                 </PaperButton>
                 <Show when={(session()?.modes.length ?? 0) > 0}>
                     <div class={styles.mode}>
@@ -109,16 +106,16 @@ export default function AgentBar(props: AgentBarProps) {
                     </div>
                 </Show>
             </div>
-            <FolderModal
+            <ProjectModal
                 open={choosing()}
-                current={props.folder}
+                current={props.project}
                 agentLabel={props.connection.label}
                 onClose={() => setChoosing(false)}
-                onChoose={async (folder) => {
+                onChoose={async (project) => {
                     if (props.conversationId) {
-                        await call(UI_ACTION_IDS.setConversationFolder, { id: props.conversationId, folder });
+                        await call(UI_ACTION_IDS.setConversationProject, { id: props.conversationId, project });
                     } else {
-                        props.onDraftFolder(folder);
+                        props.onDraftProject(project);
                     }
                     setChoosing(false);
                 }}
@@ -127,72 +124,72 @@ export default function AgentBar(props: AgentBarProps) {
     );
 }
 
-function FolderModal(props: {
+function ProjectModal(props: {
     open: boolean;
     current?: string;
     agentLabel: string;
     onClose: () => void;
-    onChoose: (folder: string) => Promise<void>;
+    onChoose: (project: string) => Promise<void>;
 }) {
-    const [path, setPath] = createSignal("");
+    const [name, setName] = createSignal("");
     const [saving, setSaving] = createSignal(false);
     const [error, setError] = createSignal("");
 
-    const choose = async (folder: string) => {
+    const run = async (action: () => Promise<void>) => {
         setSaving(true);
         setError("");
         try {
-            await props.onChoose(folder);
-            setPath("");
+            await action();
         } catch (err) {
             setError(errorText(err));
         } finally {
             setSaving(false);
         }
     };
+    const choose = (project: string) => run(() => props.onChoose(project));
+    const create = () =>
+        run(async () => {
+            const created = await call<string>(UI_ACTION_IDS.createProject, { name: name() });
+            setName("");
+            await props.onChoose(created);
+        });
 
     return (
-        <PaperModal
-            open={props.open}
-            onClose={() => !saving() && props.onClose()}
-            title="Choose a folder"
-            size="small"
-            footer={
-                <>
-                    <PaperButton onClick={props.onClose} disabled={saving()}>Cancel</PaperButton>
-                    <PaperButton variant="primary" disabled={saving() || !path().trim()} onClick={() => void choose(path())}>
-                        {saving() ? "Checking..." : "Use this folder"}
-                    </PaperButton>
-                </>
-            }
-        >
-            <PaperFlex direction="column" gap="half" fullWidth>
+        <PaperModal open={props.open} onClose={() => !saving() && props.onClose()} title="Choose a project" size="small">
+            <PaperFlex direction="column" gap="full" fullWidth>
                 <PaperText size={2}>
-                    {props.agentLabel} reads, edits and runs commands in this folder on this computer. Changing it starts a new session.
+                    {props.agentLabel} reads, edits and runs commands in the project's folder. Changing it starts a new session.
                 </PaperText>
-                <PaperInput
-                    fullWidth
-                    label="Folder"
-                    icon="folder"
-                    placeholder={props.current ?? "~/projects/my-app"}
-                    value={path()}
-                    onInput={(e) => setPath(e.currentTarget.value)}
-                    onKeyDown={(e) => {
-                        if (e.key === "Enter" && path().trim()) void choose(path());
-                    }}
-                />
-                <Show when={state.recentFolders.length > 0}>
-                    <PaperText preset="label">Recent</PaperText>
-                    <div class={styles.recents}>
-                        <For each={state.recentFolders}>
-                            {(f) => (
-                                <PaperButton size="small" variant="text" disabled={saving()} title={f} onClick={() => void choose(f)}>
-                                    <PaperIcon>{f === props.current ? "folder_open" : "folder"}</PaperIcon> {f}
-                                </PaperButton>
+                <Show when={state.projects.length > 0}>
+                    <PaperSelector name="agent-project" value={props.current} onValueChange={(v) => !saving() && void choose(String(v))}>
+                        <For each={state.projects}>
+                            {(p) => (
+                                <PaperSelectorItem value={p} icon="folder" disabled={saving()}>
+                                    {p}
+                                </PaperSelectorItem>
                             )}
                         </For>
-                    </div>
+                    </PaperSelector>
+                    <Show when={state.projectsTruncated}>
+                        <PaperText size={1} color="text-muted">Not every project is listed.</PaperText>
+                    </Show>
                 </Show>
+                <div class={styles.create}>
+                    <PaperInput
+                        fullWidth
+                        label="New project"
+                        icon="create_new_folder"
+                        placeholder="my-app"
+                        value={name()}
+                        onInput={(e) => setName(e.currentTarget.value)}
+                        onKeyDown={(e) => {
+                            if (e.key === "Enter" && name().trim()) void create();
+                        }}
+                    />
+                    <PaperButton variant="primary" disabled={saving() || !name().trim()} onClick={() => void create()}>
+                        <PaperIcon>add</PaperIcon> {saving() ? "Creating..." : "Create"}
+                    </PaperButton>
+                </div>
                 <Show when={error()}>
                     <PaperText size={2} color="danger" role="alert">{error()}</PaperText>
                 </Show>

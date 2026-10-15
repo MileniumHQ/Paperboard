@@ -116,7 +116,7 @@ export interface ConversationSummary {
     title: string;
     model: string;
     provider?: string;
-    cwd?: string;
+    project?: string;
     updatedAt: number;
     messageCount: number;
 }
@@ -221,8 +221,8 @@ export interface Conversation {
     model: string;
     /** the connection the chat runs on; set at the first message when absent */
     provider?: string;
-    /** agent chats: the folder the agent works in (on the daemon's computer) */
-    cwd?: string;
+    /** agent chats: the project the agent works in (files/agent/<project>) */
+    project?: string;
     /** agent chats: the agent's session, resumed when the agent can load it */
     sessionId?: string;
     /** agent chats: the mode the user picked (the agent's own mode ids) */
@@ -370,8 +370,12 @@ export interface AiState {
     agents: Record<string, AgentState>;
     /** conversation id → its live agent session's modes and commands */
     agentSessions: Record<string, AgentSessionInfo>;
-    /** folders agent chats used, newest first */
-    recentFolders: string[];
+    /** the projects agent chats can work in, by name */
+    projects: string[];
+    /** more projects exist than are listed */
+    projectsTruncated: boolean;
+    /** the project the next agent chat starts in */
+    lastProject?: string;
     /** "panelId:action" keys the user allowed always */
     alwaysAllowed: string[];
     settings: Settings;
@@ -411,7 +415,8 @@ export function initialState(): AiState {
         approvals: [],
         agents: {},
         agentSessions: {},
-        recentFolders: [],
+        projects: [],
+        projectsTruncated: false,
         alwaysAllowed: [],
         settings: { ...DEFAULT_SETTINGS },
         openRequest: null,

@@ -37,8 +37,8 @@ export default function ChatView() {
     const [error, setError] = createSignal("");
     const [modelsOpen, setModelsOpen] = createSignal(false);
     const [starting, setStarting] = createSignal(false);
-    // a draft agent chat's folder, applied when the first message creates the chat
-    const [draftFolder, setDraftFolder] = createSignal<string>();
+    // a draft agent chat's project, applied when the first message creates the chat
+    const [draftProject, setDraftProject] = createSignal<string>();
     let scroller: HTMLDivElement | undefined;
     let thread: HTMLDivElement | undefined;
     let stickToBottom = true;
@@ -123,7 +123,8 @@ export default function ChatView() {
         return state.connections.find((c) => c.id === via && c.kind === "agent");
     };
     const summary = () => state.conversations.find((s) => s.id === conversation()?.id);
-    const folder = () => (conversation() ? summary()?.cwd ?? conversation()?.cwd : draftFolder() ?? state.recentFolders[0]);
+    const lastProject = () => (state.lastProject && state.projects.includes(state.lastProject) ? state.lastProject : undefined);
+    const project = () => (conversation() ? summary()?.project ?? conversation()?.project : draftProject() ?? lastProject());
     const generating = () => Boolean(conversation() && state.generating.includes(conversation()!.id));
     const waitingHere = () => state.approvals.filter((a) => a.conversationId === conversation()?.id).length;
     const hasOllama = () => state.connections.some((c) => c.kind === "ollama");
@@ -140,7 +141,7 @@ export default function ChatView() {
         if (usingOllama() && state.runtime.status !== "ready") return `${OLLAMA_PROVIDER.label} is not running.`;
         if (!model()) return "Choose a model for this chat.";
         if (!installed()) return unlistedModelReason(state.connections, model(), chatProvider());
-        if (agentConnection() && !folder()) return `Choose a folder for ${agentConnection()!.label} to work in.`;
+        if (agentConnection() && !project()) return `Choose a project for ${agentConnection()!.label} to work in.`;
         return undefined;
     };
 
@@ -180,7 +181,7 @@ export default function ChatView() {
     const newChat = () => {
         setError("");
         setSettingsOpen(false);
-        setDraftFolder(undefined);
+        setDraftProject(undefined);
         selection.newChat();
     };
 
@@ -201,9 +202,9 @@ export default function ChatView() {
                 selection.created(c.id);
                 await openChat(c.id);
                 id = c.id;
-                const chosen = draftFolder();
-                setDraftFolder(undefined);
-                if (agentConnection() && chosen && chosen !== c.cwd) await call(UI_ACTION_IDS.setConversationFolder, { id, folder: chosen });
+                const chosen = draftProject();
+                setDraftProject(undefined);
+                if (agentConnection() && chosen && chosen !== c.project) await call(UI_ACTION_IDS.setConversationProject, { id, project: chosen });
             }
             stickToBottom = true;
             await call(UI_ACTION_IDS.sendMessage, { id, text, reasoning, attachments });
@@ -294,7 +295,7 @@ export default function ChatView() {
                                 title={agentConnection() ? `Work with ${agentConnection()!.label}` : "Ask anything"}
                                 description={
                                     agentConnection()
-                                        ? `${agentConnection()!.label} reads, edits and runs commands in the folder below, asking before it changes things.`
+                                        ? `${agentConnection()!.label} reads, edits and runs commands in the project below, asking before it changes things.`
                                         : usingOllama()
                                         ? "Replies are generated on this computer."
                                         : `Replies come from ${connectionLabel(state.connections, installed()?.provider ?? chatProvider())}.`
@@ -351,10 +352,10 @@ export default function ChatView() {
                                 <AgentBar
                                     connection={agent()}
                                     conversationId={conversation()?.id}
-                                    folder={folder()}
+                                    project={project()}
                                     mode={conversation()?.mode}
                                     generating={generating()}
-                                    onDraftFolder={setDraftFolder}
+                                    onDraftProject={setDraftProject}
                                     onError={setError}
                                 />
                             )}

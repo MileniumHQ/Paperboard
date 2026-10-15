@@ -83,6 +83,8 @@ export interface ChatDeps {
     rememberAllowed: (key: string) => Promise<void>;
     /** the agent connection a provider id names, if it is one */
     agentConnection: (providerId: string) => Connection | undefined;
+    /** the folder an agent works in for a project; throws when it is gone */
+    projectPath: (project: string) => Promise<string>;
     agents: Pick<AgentHub, "openSession" | "prompt" | "forget">;
     /** the built-in tools' effects */
     runShell: (command: string, signal: AbortSignal) => Promise<{ stdout: string; stderr: string; exitCode: number }>;
@@ -166,14 +168,14 @@ export class ChatEngine {
         this.deps.onSummaries(await this.deps.store.save(conversation));
     }
 
-    async create(model: string, provider?: string, cwd?: string): Promise<Conversation> {
+    async create(model: string, provider?: string, project?: string): Promise<Conversation> {
         const now = Date.now();
         const conversation: Conversation = {
             id: newId(),
             title: "New chat",
             model,
             ...(provider ? { provider } : {}),
-            ...(cwd ? { cwd } : {}),
+            ...(project ? { project } : {}),
             createdAt: now,
             updatedAt: now,
             messages: [],
@@ -212,7 +214,7 @@ export class ChatEngine {
         const agent = provider ? this.deps.agentConnection(provider) : undefined;
         let capabilities: string[] | undefined;
         if (agent) {
-            if (!conversation.cwd) throw new Error(`Choose a folder for ${agent.label} to work in first.`);
+            if (!conversation.project) throw new Error(`Choose a project for ${agent.label} to work in first.`);
             // whether the agent takes images is its answer once the session opens
             validateAttachments(attachments, { vision: true });
         } else {
@@ -612,7 +614,7 @@ export class ChatEngine {
             const opened = await deps.agents.openSession({
                 conversationId: conversation.id,
                 connection,
-                cwd: conversation.cwd!,
+                cwd: await deps.projectPath(conversation.project!),
                 ...(conversation.sessionId ? { sessionId: conversation.sessionId } : {}),
                 ...(conversation.mode ? { mode: conversation.mode } : {}),
             });

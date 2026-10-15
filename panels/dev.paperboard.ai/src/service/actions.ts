@@ -209,7 +209,8 @@ export function uiActions(app: AiApp): ActionDefinition[] {
         ui(UI_ACTION_IDS.installedAgents, "Find installed agents", () => ready(() => app.installedAgents())),
         ui(UI_ACTION_IDS.checkAgent, "Check agent", (i) => ready(() => app.checkAgent(i.id))),
         ui(UI_ACTION_IDS.authenticateAgent, "Sign in to agent", (i) => ready(() => app.authenticateAgent(i.id, i.methodId))),
-        ui(UI_ACTION_IDS.setConversationFolder, "Set chat folder", (i) => ready(() => app.setConversationFolder(str(i.id, "id", 64), i.folder))),
+        ui(UI_ACTION_IDS.setConversationProject, "Set chat project", (i) => ready(() => app.setConversationProject(str(i.id, "id", 64), i.project))),
+        ui(UI_ACTION_IDS.createProject, "Create project", (i) => ready(() => app.createProject(i.name))),
         ui(UI_ACTION_IDS.setAgentMode, "Set agent mode", (i) => ready(() => app.setAgentMode(str(i.id, "id", 64), i.mode))),
         ui(UI_ACTION_IDS.testConnection, "Test provider", (i) =>
             ready(() => app.testConnection({ id: i.id, baseUrl: i.baseUrl, apiKey: i.apiKey })),

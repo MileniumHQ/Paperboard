@@ -48,6 +48,7 @@ function engine(): ChatEngine {
         onSpeed: () => {},
         onReplyFinished: (p) => finished.push(p),
         agentConnection: (id) => (id === AGENT_CONNECTION.id ? AGENT_CONNECTION : undefined),
+        projectPath: async (project) => (project === "work" ? dir : Promise.reject(new Error(`The project "${project}" no longer exists.`))),
         agents: hub,
     });
 }
@@ -88,16 +89,16 @@ afterEach(async () => {
 });
 
 describe("agent chats", () => {
-    it("needs a folder before the agent starts", async () => {
+    it("needs a project before the agent starts", async () => {
         const chat = engine();
         const c = await chat.create("Fake", AGENT_CONNECTION.id);
-        await expect(chat.send(c.id, "hello")).rejects.toThrow("Choose a folder for Fake to work in first.");
+        await expect(chat.send(c.id, "hello")).rejects.toThrow("Choose a project for Fake to work in first.");
         expect(host.starts).toHaveLength(0);
     });
 
     it("streams the agent's reply into the chat and keeps its session", async () => {
         const chat = engine();
-        const c = await chat.create("Fake", AGENT_CONNECTION.id, dir);
+        const c = await chat.create("Fake", AGENT_CONNECTION.id, "work");
         await (await chat.send(c.id, "hello")).done;
         const [reply] = await assistants(c.id);
         expect(reply).toMatchObject({ content: "Hi there", status: "done" });
@@ -110,7 +111,7 @@ describe("agent chats", () => {
 
     it("waits for the user's answer to a permission request, then shows the edit as done", async () => {
         const chat = engine();
-        const c = await chat.create("Fake", AGENT_CONNECTION.id, dir);
+        const c = await chat.create("Fake", AGENT_CONNECTION.id, "work");
         const { done } = await chat.send(c.id, "edit");
         await until(() => approvals.length === 1);
         expect(approvals[0]!.options).toEqual([
@@ -135,7 +136,7 @@ describe("agent chats", () => {
 
     it("records a rejected request as denied", async () => {
         const chat = engine();
-        const c = await chat.create("Fake", AGENT_CONNECTION.id, dir);
+        const c = await chat.create("Fake", AGENT_CONNECTION.id, "work");
         const { done } = await chat.send(c.id, "edit");
         await until(() => approvals.length === 1);
         chat.resolveApproval(approvals[0]!.id, "deny", "no");
@@ -147,7 +148,7 @@ describe("agent chats", () => {
 
     it("stopping a reply cancels the agent's turn and an open request", async () => {
         const chat = engine();
-        const c = await chat.create("Fake", AGENT_CONNECTION.id, dir);
+        const c = await chat.create("Fake", AGENT_CONNECTION.id, "work");
         const { done } = await chat.send(c.id, "edit");
         await until(() => approvals.length === 1);
         chat.stop(c.id);
@@ -160,7 +161,7 @@ describe("agent chats", () => {
 
     it("shows the agent's plan and a crash as a failed reply", async () => {
         const chat = engine();
-        const c = await chat.create("Fake", AGENT_CONNECTION.id, dir);
+        const c = await chat.create("Fake", AGENT_CONNECTION.id, "work");
         await (await chat.send(c.id, "plan")).done;
         expect((await assistants(c.id))[0]!.plan).toEqual([
             { content: "Read", status: "completed" },
@@ -172,7 +173,7 @@ describe("agent chats", () => {
 
     it("says so when a chat's earlier session can't be resumed", async () => {
         const chat = engine();
-        const c = await chat.create("Fake", AGENT_CONNECTION.id, dir);
+        const c = await chat.create("Fake", AGENT_CONNECTION.id, "work");
         await (await chat.send(c.id, "hello")).done;
         const saved = await store.get(c.id);
         saved.sessionId = "lost-session";
@@ -186,7 +187,7 @@ describe("agent chats", () => {
 
     it("turns the agent's refusal into a failed reply", async () => {
         const chat = engine();
-        const c = await chat.create("Fake", AGENT_CONNECTION.id, dir);
+        const c = await chat.create("Fake", AGENT_CONNECTION.id, "work");
         await (await chat.send(c.id, "refuse")).done;
         expect((await assistants(c.id))[0]).toMatchObject({ status: "error", error: "Fake declined to continue." });
     });

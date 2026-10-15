@@ -498,25 +498,27 @@ describe("coding agent connections", () => {
         });
     });
 
-    it("works in a real folder only, remembers it, and starts the next agent chat there", async () => {
-        const work = fs.mkdtempSync(path.join(os.tmpdir(), "ai-folder-"));
+    it("works in projects inside its own files, remembers the last, and starts the next agent chat there", async () => {
         try {
             await withApp(async (app, ctx) => {
                 const agent = await app.addConnection({ kind: "agent", agent: "claude-acp" });
                 const c = await app.newConversation("Claude Agent", agent.id);
-                expect(c.cwd).toBeUndefined();
-                await expect(app.setConversationFolder(c.id, "relative/dir")).rejects.toThrow("Use a full path");
-                await expect(app.setConversationFolder(c.id, path.join(work, "missing"))).rejects.toThrow("does not exist");
-                fs.writeFileSync(path.join(work, "file.txt"), "x");
-                await expect(app.setConversationFolder(c.id, path.join(work, "file.txt"))).rejects.toThrow("is not a folder");
-                const real = await app.setConversationFolder(c.id, `${work}/./`);
-                expect(real).toBe(fs.realpathSync(work));
-                expect(ctx.state.recentFolders).toEqual([real]);
-                expect((savedConfig as { recentFolders: string[] }).recentFolders).toEqual([real]);
-                expect((await app.newConversation("Claude Agent", agent.id)).cwd).toBe(real);
+                expect(c.project).toBeUndefined();
+                await expect(app.createProject("../escape")).rejects.toThrow("Use letters, numbers");
+                await expect(app.setConversationProject(c.id, "missing")).rejects.toThrow('The project "missing" no longer exists.');
+                expect(await app.createProject(" My App ")).toBe("My App");
+                expect(fs.statSync(path.join(filesDir, "agent", "My App")).isDirectory()).toBe(true);
+                expect(ctx.state.projects).toEqual(["My App"]);
+                await expect(app.createProject("My App")).rejects.toThrow("already exists");
+                // a symlink in the projects folder is not a project
+                fs.symlinkSync(os.tmpdir(), path.join(filesDir, "agent", "link"));
+                await expect(app.setConversationProject(c.id, "link")).rejects.toThrow("is not a project folder");
+                expect(await app.setConversationProject(c.id, "My App")).toBe("My App");
+                expect((savedConfig as { lastProject: string }).lastProject).toBe("My App");
+                expect((await app.newConversation("Claude Agent", agent.id)).project).toBe("My App");
             });
         } finally {
-            fs.rmSync(work, { recursive: true, force: true });
+            fs.rmSync(path.join(filesDir, "agent"), { recursive: true, force: true });
         }
     });
 });

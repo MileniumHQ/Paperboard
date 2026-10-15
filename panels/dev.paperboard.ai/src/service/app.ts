@@ -3,6 +3,8 @@
 
 import { memoryKey } from "../core/askMemory";
 import { AskMemory } from "./askMemory";
+import { Projects } from "./projects";
+import { projectName } from "../core/projects";
 import { createHash, randomBytes } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
@@ -85,8 +87,8 @@ interface StoredConfig {
     speeds?: Record<string, ModelSpeed>;
     /** the providers the user added; API keys live in the vault */
     connections?: StoredConnection[];
-    /** folders agent chats used, newest first */
-    recentFolders?: string[];
+    /** the project the last agent chat worked in; the next one starts there */
+    lastProject?: string;
     // TODO(remove after v0.3): the single provider choice of 0.2 configs,
     // read once by migrateSingleProvider and then deleted from the document
     provider?: { id?: string; baseUrl?: string };
@@ -98,8 +100,6 @@ const CONFIG_VERSION = 2;
 const LEGACY_API_KEY_SECRET = "openai-api-key";
 
 const MAX_ALWAYS_ALLOWED = 500;
-const MAX_RECENT_FOLDERS = 8;
-const MAX_FOLDER_CHARS = 1024;
 const MAX_SPEEDS = 100;
 // under the 30 s default action-call timeout, so flows get a real error
 export const ASK_DEADLINE_MS = 28_000;
@@ -145,6 +145,7 @@ export class AiApp {
     private ctx!: Ctx;
     private filesDir = "";
     private memory!: AskMemory;
+    private projects!: Projects;
     private configLoaded = false;
     private stored: StoredConfig = {};
     private configQueue: Promise<unknown> = Promise.resolve();
@@ -497,6 +498,8 @@ export class AiApp {
         }
         this.store = new ConversationStore(this.filesDir);
         this.memory = new AskMemory(this.filesDir);
+        this.projects = new Projects(this.filesDir);
+        await this.refreshProjects();
         await this.memory.load();
         const host = this.host;
         this.agents = new AgentHub({
@@ -529,6 +532,7 @@ export class AiApp {
             ownPanelId: PANEL_ID,
             clientFor: (providerId) => this.chatClientFor(providerId),
             agentConnection: (providerId) => this.connections.find((c) => c.id === providerId && c.kind === "agent"),
+            projectPath: (project) => this.projects.path(project),
             agents: this.agents,
             providerOf: (model) => this.models.providerOf(model),
             store: this.store,
@@ -590,10 +594,8 @@ export class AiApp {
                 settings: clampSettings(this.stored.settings),
                 connections,
                 alwaysAllowed: Array.isArray(this.stored.alwaysAllowed) ? this.stored.alwaysAllowed.filter((k) => typeof k === "string") : [],
-                recentFolders: Array.isArray(this.stored.recentFolders)
-                    ? this.stored.recentFolders.filter((f) => typeof f === "string").slice(0, MAX_RECENT_FOLDERS)
-                    : [],
                 speeds: this.stored.speeds && typeof this.stored.speeds === "object" ? this.stored.speeds : {},
+                lastProject: typeof this.stored.lastProject === "string" ? this.stored.lastProject : undefined,
             });
         } catch (err) {
             // unreadable is not empty: keep defaults in memory, refuse to
@@ -701,53 +703,55 @@ export class AiApp {
 
     async newConversation(model?: string, provider?: string): Promise<Conversation> {
         const settings = this.ctx.state.settings;
-        if (!model?.trim()) return this.chat.create(settings.defaultModel, settings.defaultProvider || undefined, this.defaultFolder(settings.defaultProvider));
+        if (!model?.trim()) return this.chat.create(settings.defaultModel, settings.defaultProvider || undefined, this.defaultProject(settings.defaultProvider));
         const via = this.knownProvider(provider);
-        return this.chat.create(this.normalizeModelRef(model, via), via, this.defaultFolder(via));
+        return this.chat.create(this.normalizeModelRef(model, via), via, this.defaultProject(via));
     }
 
-    /** An agent chat starts in the folder the last one used. */
-    private defaultFolder(provider: string | undefined): string | undefined {
+    /** An agent chat starts in the project the last one used, while it exists. */
+    private defaultProject(provider: string | undefined): string | undefined {
         const agent = provider ? this.connections.find((c) => c.id === provider && c.kind === "agent") : undefined;
-        return agent ? this.ctx.state.recentFolders[0] : undefined;
+        const last = this.ctx.state.lastProject;
+        return agent && last && this.ctx.state.projects.includes(last) ? last : undefined;
+    }
+
+    private async refreshProjects(): Promise<string[]> {
+        const { names, truncated } = await this.projects.list();
+        this.ctx.setState({ projects: names, projectsTruncated: truncated });
+        return names;
+    }
+
+    /** A new, empty project for agents to work in. */
+    async createProject(name: unknown): Promise<string> {
+        const created = await this.projects.create(name);
+        await this.refreshProjects();
+        return created;
     }
 
     /**
-     * The folder an agent chat works in, on this daemon's computer. Checked
-     * here, where it is used: an absolute path to an existing folder. A new
-     * folder means a new session (the old one's files are elsewhere).
+     * The project an agent chat works in. A different project means a new
+     * session: the old one's files are elsewhere.
      */
-    async setConversationFolder(id: string, folder: unknown): Promise<string> {
+    async setConversationProject(id: string, project: unknown): Promise<string> {
         if (!isConversationId(id)) throw new Error("Unknown chat.");
-        if (typeof folder !== "string" || !folder.trim()) throw new Error("Choose a folder.");
-        const raw = folder.trim();
-        if (raw.length > MAX_FOLDER_CHARS) throw new Error(`Folder paths are limited to ${MAX_FOLDER_CHARS} characters.`);
-        const expanded = raw === "~" || raw.startsWith("~/") ? path.join(os.homedir(), raw.slice(1)) : raw;
-        if (!path.isAbsolute(expanded)) throw new Error("Use a full path, like /home/you/project.");
-        let real: string;
-        try {
-            real = await fs.promises.realpath(expanded);
-        } catch (err) {
-            if ((err as NodeJS.ErrnoException).code === "ENOENT") throw new Error(`${expanded} does not exist.`);
-            throw err;
-        }
-        if (!(await fs.promises.stat(real)).isDirectory()) throw new Error(`${real} is not a folder.`);
-        if (this.ctx.state.generating.includes(id)) throw new Error("Wait for the reply to finish before changing the folder.");
+        const name = projectName(project);
+        // refuses a name that isn't a project folder
+        await this.projects.path(name);
+        if (this.ctx.state.generating.includes(id)) throw new Error("Wait for the reply to finish before changing the project.");
         const c = await this.store.get(id);
-        if (c.cwd !== real) {
-            c.cwd = real;
+        if (c.project !== name) {
+            c.project = name;
             if (c.sessionId) {
                 delete c.sessionId;
                 this.agents.forget(id);
             }
             this.ctx.setState({ conversations: await this.store.save(c) });
         }
-        const recentFolders = [real, ...this.ctx.state.recentFolders.filter((f) => f !== real)].slice(0, MAX_RECENT_FOLDERS);
         await this.saveConfig((cfg) => {
-            cfg.recentFolders = recentFolders;
+            cfg.lastProject = name;
         });
-        this.ctx.setState({ recentFolders });
-        return real;
+        this.ctx.setState({ lastProject: name });
+        return name;
     }
 
     /** An agent chat's mode; applied now when its session is live, else when it opens. */
@@ -814,9 +818,9 @@ export class AiApp {
         }
         if (via) c.provider = via;
         else delete c.provider;
-        if (!c.cwd) {
-            const folder = this.defaultFolder(via);
-            if (folder) c.cwd = folder;
+        if (!c.project) {
+            const project = this.defaultProject(via);
+            if (project) c.project = project;
         }
         this.ctx.setState({ conversations: await this.store.save(c) });
     }
@@ -864,11 +868,11 @@ export class AiApp {
         const provider = !chosenModel && settings.defaultProvider ? settings.defaultProvider : this.models.providerOf(model);
         if (!provider || !this.models.capabilities(model, provider)) throw new Error(`${model} is not downloaded. Pick a model in AI.`);
         const agent = this.connections.find((c) => c.id === provider && c.kind === "agent");
-        const folder = this.defaultFolder(provider);
-        if (agent && !folder) throw new Error(`${agent.label} needs a folder to work in. Start a chat in AI first.`);
+        const project = this.defaultProject(provider);
+        if (agent && !project) throw new Error(`${agent.label} needs a project to work in. Start a chat in AI first.`);
         // throws when the provider is not reachable, before a chat exists
         if (!agent) this.chatClientFor(provider);
-        const conversation = await this.chat.create(model, provider, folder);
+        const conversation = await this.chat.create(model, provider, project);
         try {
             await this.chat.send(conversation.id, content);
         } catch (err) {
