@@ -1,0 +1,18 @@
+/* Bot Creator's Home widgets. PaperWidget owns the layout, surface, type and
+   padding; this file only sizes the two things PaperWidget leaves to the
+   widget: the header avatar and the chart. */
+.bc-widget {
+    position: relative;
+}
+
+/* the bot's avatar stands in for the header icon, at the icon's size */
+.bc-widget .bc-header-avatar {
+    width: var(--paper-icon-size-tiny);
+    height: var(--paper-icon-size-tiny);
+}
+
+.bc-chart {
+    flex: 1;
+    min-height: 0;
+    height: auto;
+}

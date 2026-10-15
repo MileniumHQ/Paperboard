@@ -7,6 +7,25 @@
     "base": "./dist/index.html",
     "service": "./dist/service.js",
     "icon": "./branding/icon.png",
+    "widgets": [
+        {
+            "id": "bot-status",
+            "name": "Bot status",
+            "description": "Your bot's avatar, whether it is online, and how many servers it is in",
+            "sizes": [
+                "1x1",
+                "2x1"
+            ]
+        },
+        {
+            "id": "command-activity",
+            "name": "Command activity",
+            "description": "Slash commands run per hour over the last day",
+            "sizes": [
+                "2x2"
+            ]
+        }
+    ],
     "store": {
         "about": "./store/about.md",
         "screenshots": [

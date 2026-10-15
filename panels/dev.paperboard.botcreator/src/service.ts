@@ -45,6 +45,7 @@ import {
     type ServiceContext,
 } from "@mileniumhq/paperapi";
 import { randomUUID } from "node:crypto";
+import { CommandActivityRecorder } from "./commandActivity";
 import {
     extractApplicationIdFromToken,
     appendCapped,
@@ -290,6 +291,40 @@ export function buildBotInfo(bot: Client | null = client) {
         connected: bot !== null && connectionStatus.connected,
         lastError: connectionStatus.error ?? null,
         recentMessages: getRecentMessages(),
+    };
+}
+
+// ---------------------------------------------------------------------------
+// Home widgets
+// ---------------------------------------------------------------------------
+
+// slash commands run, per hour, for the Command activity widget. One owner
+// (this module), fixed size, outlives reconnects so a gateway blip does not
+// wipe the day's chart
+export const commandActivity = new CommandActivityRecorder();
+
+export interface BotWidgetStatus {
+    /** a token was saved through setup; false means the bot needs setting up */
+    configured: boolean;
+    connected: boolean;
+    lastError: string | null;
+    name: string;
+    avatar: string;
+    guildCount: number;
+}
+
+// what the Bot status widget shows: the identity and server count of the
+// live session only. A bot that is not connected reports no servers rather
+// than a stale count from a session that ended
+export function buildWidgetStatus(configured: boolean, bot: Client | null = client): BotWidgetStatus {
+    const connected = bot !== null && connectionStatus.connected;
+    return {
+        configured,
+        connected,
+        lastError: connectionStatus.error ?? null,
+        name: bot?.user?.username || "Discord bot",
+        avatar: bot?.user?.displayAvatarURL() || "",
+        guildCount: connected ? bot?.guilds?.cache?.size ?? 0 : 0,
     };
 }
 
@@ -667,6 +702,7 @@ function attachListeners(bot: Client, ctx: ServiceContext<any>) {
         }
         if (!interaction.isChatInputCommand()) return;
         commandsReceived++;
+        commandActivity.record();
 
         // Discord resolves a guild command over a same-named global one;
         // the trigger to fire must follow the same rule
@@ -2926,6 +2962,24 @@ export const botService = definePanelService({
             "Get Bot Info",
             "Panel UI only: identity and recent-message read.",
             () => buildBotInfo(),
+        );
+
+        registerInternal(
+            "get-widget-status",
+            "Get Widget Status",
+            "Home widget only: identity, connection and server count.",
+            async () => {
+                // an unreadable config is a failure, never "not set up"
+                const saved = await readStoredConfig();
+                return buildWidgetStatus(Boolean(saved.configured));
+            },
+        );
+
+        registerInternal(
+            "get-command-activity",
+            "Get Command Activity",
+            "Home widget only: slash commands run per hour over the last day.",
+            () => commandActivity.snapshot(),
         );
 
         registerInternal(
