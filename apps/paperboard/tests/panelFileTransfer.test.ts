@@ -156,35 +156,41 @@ describe("/panel-files on the daemon", () => {
         expect((await rawRequest("GET", `/panel-files/${linkedPanel}/keep.txt`)).status).toBe(403);
     });
 
-    it("refuses an ancestor replaced while an authenticated upload is streaming", async () => {
-        seed(PANEL, "swap-dir/keep.txt", "previous");
-        const outside = path.join(localDir, "swap-outside");
-        fs.mkdirSync(outside);
-        fs.writeFileSync(path.join(outside, "keep.txt"), "outside");
-        const pending = new Promise<number>((resolve, reject) => {
-            const request = http.request({ host: "127.0.0.1", port, method: "PUT", path: `/panel-files/${PANEL}/swap-dir/keep.txt`, headers: { Authorization: `Bearer ${TOKEN}`, "Content-Length": "6" } }, (response) => {
-                response.resume();
-                response.on("end", () => resolve(response.statusCode!));
+    // The descriptor-pinned path only exists on Linux; "darwin" makes the
+    // upload take the portable path macOS uses, which has no such pin.
+    for (const platform of ["linux", "darwin"] as const) it.skipIf(process.platform !== "linux" && platform === "linux")(`refuses an ancestor replaced while an authenticated upload is streaming (${platform} path)`, async () => {
+        const real = process.platform;
+        Object.defineProperty(process, "platform", { value: platform });
+        try {
+            seed(PANEL, `${platform}-swap-dir/keep.txt`, "previous");
+            const outside = path.join(localDir, `${platform}-swap-outside`);
+            fs.mkdirSync(outside);
+            fs.writeFileSync(path.join(outside, "keep.txt"), "outside");
+            const pending = new Promise<number>((resolve, reject) => {
+                const request = http.request({ host: "127.0.0.1", port, method: "PUT", path: `/panel-files/${PANEL}/${platform}-swap-dir/keep.txt`, headers: { Authorization: `Bearer ${TOKEN}`, "Content-Length": "6" } }, (response) => {
+                    response.resume();
+                    response.on("end", () => resolve(response.statusCode!));
+                });
+                request.on("error", reject);
+                request.write("abc");
+                void (async () => {
+                    try {
+                        const deadline = Date.now() + 2000;
+                        while (!fs.readdirSync(panelFile(PANEL, `${platform}-swap-dir`)).some((name) => name.includes(".davpart"))) {
+                            if (Date.now() > deadline) throw new Error("Upload staging file did not appear");
+                            await Bun.sleep(5);
+                        }
+                        fs.renameSync(panelFile(PANEL, `${platform}-swap-dir`), panelFile(PANEL, `${platform}-parked-dir`));
+                        fs.symlinkSync(outside, panelFile(PANEL, `${platform}-swap-dir`), "dir");
+                        request.end("def");
+                    } catch (error) { request.destroy(); reject(error); }
+                })();
             });
-            request.on("error", reject);
-            request.write("abc");
-            void (async () => {
-                try {
-                    const deadline = Date.now() + 2000;
-                    while (!fs.readdirSync(panelFile(PANEL, "swap-dir")).some((name) => name.includes(".davpart"))) {
-                        if (Date.now() > deadline) throw new Error("Upload staging file did not appear");
-                        await Bun.sleep(5);
-                    }
-                    fs.renameSync(panelFile(PANEL, "swap-dir"), panelFile(PANEL, "parked-dir"));
-                    fs.symlinkSync(outside, panelFile(PANEL, "swap-dir"), "dir");
-                    request.end("def");
-                } catch (error) { request.destroy(); reject(error); }
-            })();
-        });
-        expect(await pending).toBe(500);
-        expect(fs.readFileSync(path.join(outside, "keep.txt"), "utf8")).toBe("outside");
-        expect(fs.readFileSync(panelFile(PANEL, "parked-dir/keep.txt"), "utf8")).toBe("previous");
-        expect(fs.readdirSync(panelFile(PANEL, "parked-dir"))).toEqual(["keep.txt"]);
+            expect(await pending).toBe(500);
+            expect(fs.readFileSync(path.join(outside, "keep.txt"), "utf8")).toBe("outside");
+            expect(fs.readFileSync(panelFile(PANEL, `${platform}-parked-dir/keep.txt`), "utf8")).toBe("previous");
+            expect(fs.readdirSync(panelFile(PANEL, `${platform}-parked-dir`))).toEqual(["keep.txt"]);
+        } finally { Object.defineProperty(process, "platform", { value: real }); }
     });
 
     it("refuses reserved and malformed panel ids", async () => {
