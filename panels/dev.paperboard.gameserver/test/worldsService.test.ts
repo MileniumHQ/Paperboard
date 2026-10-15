@@ -88,6 +88,17 @@ beforeEach(() => {
     configSets.length = 0;
 });
 
+describe("a Paper world's dimension folders", () => {
+    it("are listed as the world's nether and end, not as worlds", async () => {
+        seedWorld("world", { nether: true, end: true });
+        seedWorld("lonely_nether");
+        setLevelName("world");
+        const infos = await listWorlds();
+        expect(infos.map((w) => w.name)).toEqual(["world", "lonely_nether"]);
+        expect(infos[0]).toMatchObject({ hasNether: true, hasEnd: true });
+    });
+});
+
 describe("world deletion reaches the next listing", () => {
     it("drops a deleted inactive world", async () => {
         seedWorld("survival");

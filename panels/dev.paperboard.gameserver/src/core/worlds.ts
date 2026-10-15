@@ -47,7 +47,15 @@ export async function collectWorldDirs(deps: WorldListDeps): Promise<string[]> {
             onError?.(safe, err);
         }
     }
-    return worlds.sort((a, b) => a.localeCompare(b));
+    // Paper and Spigot keep a world's nether and end in <name>_nether and
+    // <name>_the_end, each with its own level.dat: those are the world's
+    // dimensions, not worlds of their own
+    const names = new Set(worlds.map((name) => name.toLowerCase()));
+    const dimension = (name: string) => {
+        const base = name.match(/^(.+)_(nether|the_end)$/i)?.[1];
+        return base !== undefined && names.has(base.toLowerCase());
+    };
+    return worlds.filter((name) => !dimension(name)).sort((a, b) => a.localeCompare(b));
 }
 
 // ─── World manager model ─────────────────────────────────────────────
