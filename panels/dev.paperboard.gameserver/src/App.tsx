@@ -3,6 +3,7 @@ import {
     PaperPanel,
     PaperMenu,
     PaperMenuItem,
+    PaperMenuSection,
     PaperInterfaceGroup,
     PaperInterfaceItem,
 } from "@mileniumhq/paperui";
@@ -102,62 +103,70 @@ export default function App() {
                         <PaperMenuItem value="overview" icon="dashboard">
                             Overview
                         </PaperMenuItem>
-                        <PaperMenuItem value="options" icon="tune">
-                            Options
-                        </PaperMenuItem>
-                        <PaperMenuItem value="chat" icon="chat">
-                            Chat
-                        </PaperMenuItem>
-                        <PaperMenuItem value="gamerules" icon="list_alt_check">
-                            Game Rules
-                        </PaperMenuItem>
-                        <Show when={showMap()}>
-                            <PaperMenuItem value="map" icon="map">
-                                Map
+                        <PaperMenuSection title="Play" collapsible={false}>
+                            <PaperMenuItem value="chat" icon="chat">
+                                Chat
                             </PaperMenuItem>
-                        </Show>
-                        <Show when={showPlayers()}>
-                            <PaperMenuItem value="players" icon="group">
-                                Players
+                            <Show when={showPlayers()}>
+                                <PaperMenuItem value="players" icon="group">
+                                    Players
+                                </PaperMenuItem>
+                            </Show>
+                            <Show when={showMap()}>
+                                <PaperMenuItem value="map" icon="map">
+                                    Map
+                                </PaperMenuItem>
+                            </Show>
+                        </PaperMenuSection>
+                        <PaperMenuSection title="World" collapsible={false}>
+                            <Show when={showWorlds()}>
+                                <PaperMenuItem value="worlds" icon="public">
+                                    Worlds
+                                </PaperMenuItem>
+                            </Show>
+                            <PaperMenuItem value="gamerules" icon="list_alt_check">
+                                Game Rules
                             </PaperMenuItem>
-                        </Show>
-                        <PaperMenuItem value="versions" icon="deployed_code">
-                            Versions
-                        </PaperMenuItem>
-                        <Show when={hasLoaderTab()}>
-                            <PaperMenuItem value="loader" icon="settings_applications">
-                                Loader
+                            <Show when={showDatapacks()}>
+                                <PaperMenuItem value="datapacks" icon="dataset">
+                                    Datapacks
+                                </PaperMenuItem>
+                            </Show>
+                        </PaperMenuSection>
+                        <PaperMenuSection title="Software" collapsible={false}>
+                            <PaperMenuItem value="versions" icon="deployed_code">
+                                Versions
                             </PaperMenuItem>
-                        </Show>
-                        <Show when={hasPluginTab()}>
-                            <PaperMenuItem value="plugins" icon="extension">
-                                {pluginKind()}
+                            <Show when={hasLoaderTab()}>
+                                <PaperMenuItem value="loader" icon="settings_applications">
+                                    Loader
+                                </PaperMenuItem>
+                            </Show>
+                            <Show when={hasPluginTab()}>
+                                <PaperMenuItem value="plugins" icon="extension">
+                                    {pluginKind()}
+                                </PaperMenuItem>
+                            </Show>
+                            <Show when={hasModpackTab()}>
+                                <PaperMenuItem value="modpacks" icon="package_2">
+                                    Modpacks
+                                </PaperMenuItem>
+                            </Show>
+                        </PaperMenuSection>
+                        <PaperMenuSection title="Server" collapsible={false}>
+                            <PaperMenuItem value="options" icon="tune">
+                                Options
                             </PaperMenuItem>
-                        </Show>
-                        <Show when={hasModpackTab()}>
-                            <PaperMenuItem value="modpacks" icon="package_2">
-                                Modpacks
+                            <PaperMenuItem value="files" icon="folder">
+                                Files
                             </PaperMenuItem>
-                        </Show>
-                        <Show when={showDatapacks()}>
-                            <PaperMenuItem value="datapacks" icon="dataset">
-                                Datapacks
+                            <PaperMenuItem value="logs" icon="description">
+                                Logs
                             </PaperMenuItem>
-                        </Show>
-                        <PaperMenuItem value="files" icon="folder">
-                            Files
-                        </PaperMenuItem>
-                        <PaperMenuItem value="logs" icon="description">
-                            Logs
-                        </PaperMenuItem>
-                        <Show when={showWorlds()}>
-                            <PaperMenuItem value="worlds" icon="public">
-                                Worlds
+                            <PaperMenuItem value="advanced" icon="settings">
+                                Advanced
                             </PaperMenuItem>
-                        </Show>
-                        <PaperMenuItem value="advanced" icon="settings">
-                            Advanced
-                        </PaperMenuItem>
+                        </PaperMenuSection>
                     </PaperMenu>
 
                     <PaperInterfaceGroup value={activeTab()}>
