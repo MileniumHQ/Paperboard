@@ -1,5 +1,5 @@
 import styles from "./index.module.css";
-import { splitProps, Show, createSignal, createEffect, type JSX } from "solid-js";
+import { splitProps, Show, createSignal, createEffect, createUniqueId, type JSX } from "solid-js";
 import { PaperIcon } from "../PaperIcon";
 
 /**
@@ -9,6 +9,8 @@ import { PaperIcon } from "../PaperIcon";
  * multiline field and are ignored.
  */
 export interface PaperInputProps extends Omit<JSX.InputHTMLAttributes<HTMLInputElement>, "ref"> {
+    /** The field's name, shown in a notch of its top border. It is the input's accessible name. */
+    label?: string;
     icon?: JSX.Element | string;
     compact?: boolean;
     fullWidth?: boolean;
@@ -26,6 +28,8 @@ export interface PaperInputProps extends Omit<JSX.InputHTMLAttributes<HTMLInputE
 
 export function PaperInput(props: PaperInputProps) {
     const [local, rest] = splitProps(props, [
+        "label",
+        "id",
         "icon",
         "compact",
         "fullWidth",
@@ -82,6 +86,8 @@ export function PaperInput(props: PaperInputProps) {
     };
 
     const isMultiline = () => Boolean(local.multiline);
+    const generatedId = createUniqueId();
+    const fieldId = () => local.id ?? (local.label ? `paper-input-${generatedId}` : undefined);
 
     // width:fit-content assumes a single-line field; a textarea should fill the
     // frame it is given, and its resize handle must not be clipped.
@@ -91,6 +97,7 @@ export function PaperInput(props: PaperInputProps) {
             local.compact ? styles.compact : "",
             local.fullWidth ? styles.fullWidth : "",
             local.icon ? styles.hasIcon : "",
+            local.label ? styles.labelled : "",
             isInvalid() ? styles.invalid : "",
             local.disabled ? styles.disabled : "",
             isMultiline() ? styles.multiline : "",
@@ -107,6 +114,17 @@ export function PaperInput(props: PaperInputProps) {
             data-disabled={local.disabled ? "true" : "false"}
             data-invalid={isInvalid() ? "true" : "false"}
         >
+            <Show when={local.label}>
+                {/* the legend cuts the notch in the border; the visible name is the label */}
+                <fieldset class={styles.outline} aria-hidden="true">
+                    <legend>
+                        <span>{local.label}</span>
+                    </legend>
+                </fieldset>
+                <label class={styles.label} for={fieldId()}>
+                    {local.label}
+                </label>
+            </Show>
             <Show when={local.icon}>
                 {typeof local.icon === "string" ? (
                     <PaperIcon class={styles.inputIcon} zeroHeight>
@@ -121,6 +139,7 @@ export function PaperInput(props: PaperInputProps) {
                 fallback={
                     <input
                         {...rest}
+                        id={fieldId()}
                         type={local.type ?? "text"}
                         disabled={local.disabled}
                         ref={local.ref as never}
@@ -133,6 +152,7 @@ export function PaperInput(props: PaperInputProps) {
             >
                 <textarea
                     {...(rest as unknown as JSX.TextareaHTMLAttributes<HTMLTextAreaElement>)}
+                    id={fieldId()}
                     rows={local.rows ?? 4}
                     disabled={local.disabled}
                     ref={local.ref as never}

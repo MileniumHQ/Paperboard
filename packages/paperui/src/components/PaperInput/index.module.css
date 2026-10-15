@@ -166,3 +166,103 @@
 .PaperInput.disabled::after {
     display: none;
 }
+
+/* Labelled: the name sits in a notch of the top border. The fieldset draws
+   the border and fill; its legend reserves the notch, so the gap follows the
+   label's width on any background. */
+.PaperInput.labelled {
+    --paper-input-label-line: calc(var(--paper-text-size-1) * 1.4);
+    overflow: visible;
+    margin-top: calc(var(--paper-input-label-line) / 2);
+}
+.PaperInput.labelled::after {
+    display: none;
+}
+.PaperInput.labelled .outline {
+    position: absolute;
+    inset: calc(var(--paper-input-label-line) / -2) 0 0 0;
+    margin: 0;
+    padding: 0 calc(var(--paper-uigap) - var(--paper-uigap-onefourth));
+    border: var(--paper-border-width) solid var(--paper-border);
+    border-radius: inherit;
+    background: var(--paper-field-well);
+    pointer-events: none;
+    min-width: 0;
+    transition: var(--paper-medium-transition) border-color;
+}
+.PaperInput.labelled .outline legend {
+    float: none;
+    width: auto;
+    max-width: 100%;
+    height: var(--paper-input-label-line);
+    padding: 0 var(--paper-uigap-onefourth);
+    font-family: var(--paper-font-family-rounded);
+    font-size: var(--paper-text-size-1);
+    font-weight: 700;
+    line-height: var(--paper-input-label-line);
+    white-space: nowrap;
+    overflow: hidden;
+}
+.PaperInput.labelled .outline legend span {
+    visibility: hidden;
+}
+.PaperInput.labelled .label {
+    position: absolute;
+    top: 0;
+    left: calc(var(--paper-uigap) - var(--paper-uigap-onefourth) + var(--paper-border-width));
+    max-width: calc(100% - var(--paper-uigap) * 2);
+    transform: translateY(-50%);
+    padding: 0 var(--paper-uigap-onefourth);
+    font-family: var(--paper-font-family-rounded);
+    font-size: var(--paper-text-size-1);
+    font-weight: 700;
+    line-height: var(--paper-input-label-line);
+    color: var(--paper-text-faint);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    pointer-events: none;
+    z-index: 1;
+    transition: var(--paper-medium-transition) color;
+}
+.PaperInput.labelled.compact .outline {
+    padding: 0 calc(var(--paper-uigap-threefourths) - var(--paper-uigap-onefourth));
+}
+.PaperInput.labelled.compact .label {
+    left: calc(var(--paper-uigap-threefourths) - var(--paper-uigap-onefourth) + var(--paper-border-width));
+}
+.PaperInput.labelled input,
+.PaperInput.labelled textarea,
+.PaperInput.labelled input:focus,
+.PaperInput.labelled textarea:focus,
+.PaperInput.labelled input:disabled,
+.PaperInput.labelled textarea:disabled {
+    position: relative;
+    background: transparent;
+    border-color: transparent;
+}
+.PaperInput.labelled:focus-within .outline {
+    border-color: var(--paper-primary);
+    border-width: var(--paper-thick-border-width);
+}
+.PaperInput.labelled:focus-within .label {
+    color: var(--paper-primary);
+}
+.PaperInput.labelled.invalid .outline,
+.PaperInput.labelled:has(input:invalid) .outline {
+    border-color: var(--paper-danger);
+}
+.PaperInput.labelled.invalid .label,
+.PaperInput.labelled:has(input:invalid) .label {
+    color: var(--paper-danger);
+}
+.PaperInput.labelled.invalid input,
+.PaperInput.labelled.invalid textarea,
+.PaperInput.labelled input:invalid,
+.PaperInput.labelled textarea:invalid {
+    border-color: transparent;
+}
+.PaperInput.labelled.disabled .outline {
+    background: var(--paper-surface-inset);
+    border-color: var(--paper-border);
+}

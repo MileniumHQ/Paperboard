@@ -30,6 +30,19 @@ describe("PaperInput - Controlled State & Input Handling Tests", () => {
         expect(val()).toBe("New Value");
     });
 
+    test("a label names the field, single-line and multiline, keeping a caller's id", () => {
+        const { getByLabelText } = render(() => (
+            <>
+                <PaperInput label="Bucket" />
+                <PaperInput label="Notes" multiline />
+                <PaperInput label="Region" id="region-field" />
+            </>
+        ));
+        expect(getByLabelText("Bucket").tagName).toBe("INPUT");
+        expect(getByLabelText("Notes").tagName).toBe("TEXTAREA");
+        expect(getByLabelText("Region").id).toBe("region-field");
+    });
+
     test("renders a textarea when multiline is set", () => {
         const { container } = render(() => <PaperInput multiline rows={6} defaultValue="Notes" />);
 
