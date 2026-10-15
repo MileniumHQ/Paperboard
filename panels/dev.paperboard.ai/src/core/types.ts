@@ -116,6 +116,7 @@ export interface ConversationSummary {
     title: string;
     model: string;
     provider?: string;
+    cwd?: string;
     updatedAt: number;
     messageCount: number;
 }
@@ -127,8 +128,35 @@ export type BuiltinTool = "web_search" | "run_shell_command";
 /** the built-ins a model can be offered */
 export type OfferedBuiltin = "run_shell_command";
 
+/** What an agent says a tool call does (ACP ToolKind); picks its icon. */
+export type AgentToolKind = "read" | "edit" | "delete" | "move" | "search" | "execute" | "think" | "fetch" | "switch_mode" | "other";
+
+/** A file change an agent proposed or made. */
+export interface AgentDiff {
+    path: string;
+    /** null for a new file */
+    oldText: string | null;
+    newText: string;
+    /** the texts were cut to fit the chat */
+    truncated?: boolean;
+}
+
+/** The parts of a tool call only an agent reports. */
+export interface AgentToolDetails {
+    kind: AgentToolKind;
+    /** files it touches */
+    locations: string[];
+    diffs: AgentDiff[];
+    /** a shell command it runs, when it said so */
+    command?: string;
+    /** the tool's text output so far */
+    output?: string;
+}
+
 export interface ToolCallRecord {
     id: string;
+    /** set when a coding agent ran the tool itself; panelId and action are then empty */
+    agent?: AgentToolDetails;
     /** set for the panel's own tools; panelId and action are then empty */
     builtin?: BuiltinTool;
     /** the function name the model used */
@@ -154,6 +182,13 @@ export interface UserMessage {
 
 export type AssistantStatus = "streaming" | "done" | "stopped" | "error";
 
+export type PlanStatus = "pending" | "in_progress" | "completed";
+
+export interface PlanEntry {
+    content: string;
+    status: PlanStatus;
+}
+
 export interface AssistantMessage {
     id: string;
     role: "assistant";
@@ -161,6 +196,10 @@ export interface AssistantMessage {
     content: string;
     thinking?: string;
     toolCalls?: ToolCallRecord[];
+    /** an agent's plan for the turn, as it last reported it */
+    plan?: PlanEntry[];
+    /** something the reader should know about this reply (an agent's session restarted) */
+    notice?: string;
     status: AssistantStatus;
     error?: string;
     createdAt: number;
@@ -182,6 +221,12 @@ export interface Conversation {
     model: string;
     /** the connection the chat runs on; set at the first message when absent */
     provider?: string;
+    /** agent chats: the folder the agent works in (on the daemon's computer) */
+    cwd?: string;
+    /** agent chats: the agent's session, resumed when the agent can load it */
+    sessionId?: string;
+    /** agent chats: the mode the user picked (the agent's own mode ids) */
+    mode?: string;
     createdAt: number;
     updatedAt: number;
     messages: ChatMessage[];
@@ -229,6 +274,62 @@ export interface PendingApproval {
     arguments: Record<string, unknown>;
     /** a built-in tool; its approval rules are fixed (BUILTIN_APPROVAL) */
     builtin?: OfferedBuiltin;
+    /** an agent's permission request: the answers it offers, in its order */
+    options?: AgentPermissionOption[];
+}
+
+export type AgentPermissionKind = "allow_once" | "allow_always" | "reject_once" | "reject_always";
+
+export interface AgentPermissionOption {
+    id: string;
+    name: string;
+    kind: AgentPermissionKind;
+}
+
+export type AgentStatus =
+    | "stopped" // not running; starts with the next message
+    | "starting"
+    | "ready"
+    | "auth-required"
+    | "error";
+
+/** A way an agent offers to sign in (ACP authMethods). */
+export interface AgentAuthMethod {
+    id: string;
+    name: string;
+    description?: string;
+}
+
+/** An agent connection's process, as the service observes it. */
+export interface AgentState {
+    status: AgentStatus;
+    error?: string;
+    /** last lines the agent printed to stderr when it failed */
+    errorDetail?: string;
+    authMethods?: AgentAuthMethod[];
+    /** what the agent says it is (initialize's agentInfo) */
+    name?: string;
+    version?: string;
+}
+
+export interface AgentMode {
+    id: string;
+    name: string;
+    description?: string;
+}
+
+export interface AgentCommand {
+    name: string;
+    description: string;
+    /** what to type after the command, when it takes input */
+    hint?: string;
+}
+
+/** A live agent session's extras, for the chat that owns it. */
+export interface AgentSessionInfo {
+    modes: AgentMode[];
+    mode?: string;
+    commands: AgentCommand[];
 }
 
 /** A model Ollama holds in memory right now (its /api/ps). */
@@ -265,6 +366,12 @@ export interface AiState {
     /** conversation ids with a reply in flight */
     generating: string[];
     approvals: PendingApproval[];
+    /** agent connection id → its process */
+    agents: Record<string, AgentState>;
+    /** conversation id → its live agent session's modes and commands */
+    agentSessions: Record<string, AgentSessionInfo>;
+    /** folders agent chats used, newest first */
+    recentFolders: string[];
     /** "panelId:action" keys the user allowed always */
     alwaysAllowed: string[];
     settings: Settings;
@@ -302,6 +409,9 @@ export function initialState(): AiState {
         conversations: [],
         generating: [],
         approvals: [],
+        agents: {},
+        agentSessions: {},
+        recentFolders: [],
         alwaysAllowed: [],
         settings: { ...DEFAULT_SETTINGS },
         openRequest: null,

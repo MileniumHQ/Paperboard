@@ -1,0 +1,558 @@
+// Coding agents over ACP. One supervised process per agent connection, run
+// through the daemon's process ledger (never a child of this service), and
+// one JSON-RPC peer on its stdio. A chat is a session on that process; the
+// process starts with the first message, stops after it sits idle, and
+// every stop is observed through the exit event.
+
+import {
+    ACP_PROTOCOL_VERSION,
+    authMethodsFrom,
+    commandsFrom,
+    modesFrom,
+    permissionOptions,
+    type AcpContentBlock,
+    type PromptCapabilities,
+} from "../core/acp";
+import { appendTail } from "../core/ollamaLog";
+import type { Connection } from "../core/providers";
+import type { AgentPermissionOption, AgentSessionInfo, AgentState } from "../core/types";
+import type { Launch } from "./executable";
+import { INVALID_PARAMS, JsonRpcError, JsonRpcPeer, METHOD_NOT_FOUND } from "./jsonRpc";
+
+/** ACP's "authentication required" error code */
+export const AUTH_REQUIRED = -32000;
+export const MAX_SESSIONS_PER_AGENT = 32;
+const IDLE_MS = 10 * 60_000;
+const INIT_TIMEOUT_MS = 60_000;
+const STOP_TIMEOUT_MS = 10_000;
+/** how long a cancelled turn may take to wind down before the agent is restarted */
+const CANCEL_GRACE_MS = 10_000;
+const STDERR_TAIL_LINES = 20;
+
+export type StopReason = "end_turn" | "max_tokens" | "max_turn_requests" | "refusal" | "cancelled";
+
+/** The process surface agents need (processApi in production). */
+export interface AgentProcessHost {
+    start(options: { id: string; command: string; args: string[]; cwd: string; env: Record<string, string> }): Promise<unknown>;
+    kill(id: string, signal?: string): Promise<void>;
+    exists(id: string): Promise<boolean>;
+    write(id: string, data: string): Promise<void>;
+    onStdout(id: string, cb: (data: string) => void): () => void;
+    onStderr(id: string, cb: (data: string) => void): () => void;
+    onExit(id: string, cb: (code?: number) => void): () => void;
+}
+
+export interface AgentHubDeps {
+    host: AgentProcessHost;
+    /** the supervised process id for a connection (namespaced by panel) */
+    procId: (connectionId: string) => string;
+    /** resolves what to run; throws a readable "not installed" error */
+    resolve: (connection: Connection) => Promise<Launch>;
+    /** the agent process's own working folder (sessions carry their own) */
+    workDir: string;
+    clientVersion: string;
+    onState: (connectionId: string, state: AgentState | null) => void;
+    onSessionInfo: (conversationId: string, info: AgentSessionInfo | null) => void;
+    idleMs?: number;
+    initTimeoutMs?: number;
+    stopTimeoutMs?: number;
+    cancelGraceMs?: number;
+}
+
+/** What a turn hands back to the agent and hears from it. */
+export interface TurnHandlers {
+    onUpdate: (update: Record<string, unknown>) => void;
+    /** resolves the chosen option id, or null when the turn was cancelled */
+    requestPermission: (toolCall: Record<string, unknown>, options: AgentPermissionOption[]) => Promise<string | null>;
+}
+
+export interface SessionRequest {
+    conversationId: string;
+    connection: Connection;
+    cwd: string;
+    /** the chat's earlier session, resumed when the agent can load sessions */
+    sessionId?: string;
+    mode?: string;
+}
+
+export interface OpenedSession {
+    sessionId: string;
+    /** false when an earlier session could not be resumed and this one starts empty */
+    resumed: boolean;
+    capabilities: PromptCapabilities;
+}
+
+export class AgentAuthError extends Error {
+    constructor(label: string) {
+        super(`Sign in to ${label} to continue.`);
+        this.name = "AgentAuthError";
+    }
+}
+
+function delay(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isObject(v: unknown): v is Record<string, unknown> {
+    return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+interface Initialized {
+    capabilities: PromptCapabilities;
+    loadSession: boolean;
+    name?: string;
+    version?: string;
+}
+
+/** One agent process: started once, shared by its chats' sessions. */
+class AgentProcess {
+    private peer: JsonRpcPeer | null = null;
+    private starting: Promise<Initialized> | null = null;
+    private init: Initialized | null = null;
+    private offs: (() => void)[] = [];
+    private exited: Promise<number | undefined> | null = null;
+    private stopping = false;
+    private stderrTail: string[] = [];
+    private stderrPartial = "";
+    private idleTimer: ReturnType<typeof setTimeout> | null = null;
+    /** conversation id → session id, oldest first */
+    private sessions = new Map<string, string>();
+    private turns = new Map<string, TurnHandlers>();
+    /** conversation id → its session's modes and commands */
+    private infos = new Map<string, AgentSessionInfo>();
+    private state: AgentState = { status: "stopped" };
+
+    constructor(
+        private readonly hub: AgentHubDeps,
+        readonly connection: Connection,
+    ) {}
+
+    private get procId(): string {
+        return this.hub.procId(this.connection.id);
+    }
+
+    private publish(patch: Partial<AgentState>): void {
+        this.state = { ...this.state, ...patch };
+        this.hub.onState(this.connection.id, this.state);
+    }
+
+    get running(): boolean {
+        return this.peer !== null && !this.peer.closed;
+    }
+
+    /** starting, running or mid-turn: replacing it would start a second process under the same id */
+    get busy(): boolean {
+        return this.running || this.starting !== null || this.turns.size > 0;
+    }
+
+    hasTurns(): boolean {
+        return this.turns.size > 0;
+    }
+
+    /** Starts the process and runs initialize, once; concurrent callers share it. */
+    ensureStarted(): Promise<Initialized> {
+        if (this.init && this.running) return Promise.resolve(this.init);
+        this.starting ??= this.start().finally(() => {
+            this.starting = null;
+        });
+        return this.starting;
+    }
+
+    private async start(): Promise<Initialized> {
+        const { host } = this.hub;
+        this.clearIdle();
+        this.publish({ status: "starting", error: undefined, errorDetail: undefined });
+        let launch: Launch;
+        try {
+            launch = await this.hub.resolve(this.connection);
+        } catch (err) {
+            this.publish({ status: "error", error: err instanceof Error ? err.message : String(err) });
+            throw err;
+        }
+        // a process left by an earlier service run has lost its protocol state
+        if (await host.exists(this.procId)) await this.killObserved(this.watchExit());
+
+        this.stopping = false;
+        this.stderrTail = [];
+        this.stderrPartial = "";
+        const procId = this.procId;
+        const peer = new JsonRpcPeer((chunk) => host.write(procId, chunk), {
+            onRequest: (method, params) => this.onRequest(method, params),
+            onNotification: (method, params) => this.onNotification(method, params),
+            onProtocolError: (err) => {
+                console.error(`[ai] ${this.connection.label} broke the protocol:`, err.message);
+                this.publish({ status: "error", error: `${this.connection.label} sent a message the panel could not read: ${err.message}` });
+                void this.stop().catch((stopErr) => console.error("[ai] stopping a broken agent failed:", String(stopErr)));
+            },
+        });
+        this.peer = peer;
+        const watch = this.watchExit();
+        this.exited = watch.exited;
+        this.offs = [
+            watch.off,
+            host.onStdout(procId, (data) => peer.receive(data)),
+            host.onStderr(procId, (data) => this.onStderr(data)),
+        ];
+        watch.exited.then((code) => this.onExit(peer, code));
+
+        try {
+            await host.start({ id: procId, command: launch.command, args: launch.args, cwd: this.hub.workDir, env: { PATH: launch.pathEnv } });
+            const result = await this.withDeadline(
+                peer.request("initialize", {
+                    protocolVersion: ACP_PROTOCOL_VERSION,
+                    clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
+                    clientInfo: { name: "paperboard", title: "Paperboard", version: this.hub.clientVersion },
+                }),
+                this.hub.initTimeoutMs ?? INIT_TIMEOUT_MS,
+                `${this.connection.label} did not answer within ${Math.round((this.hub.initTimeoutMs ?? INIT_TIMEOUT_MS) / 1000)} seconds.`,
+            );
+            const init = this.readInitialize(result);
+            this.init = init;
+            this.publish({ status: "ready", ...(init.name ? { name: init.name } : {}), ...(init.version ? { version: init.version } : {}) });
+            return init;
+        } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            await this.stop().catch((stopErr) => console.error("[ai] stopping an agent that failed to start:", String(stopErr)));
+            this.publish({ status: "error", error: message, ...this.detail() });
+            throw new Error(message);
+        }
+    }
+
+    private readInitialize(result: unknown): Initialized {
+        if (!isObject(result)) throw new Error(`${this.connection.label} answered initialize with nothing usable.`);
+        if (result.protocolVersion !== ACP_PROTOCOL_VERSION) {
+            throw new Error(`${this.connection.label} speaks ACP version ${String(result.protocolVersion)}; the panel speaks version ${ACP_PROTOCOL_VERSION}.`);
+        }
+        const caps = isObject(result.agentCapabilities) ? result.agentCapabilities : {};
+        const prompt = isObject(caps.promptCapabilities) ? caps.promptCapabilities : {};
+        const info = isObject(result.agentInfo) ? result.agentInfo : {};
+        const methods = authMethodsFrom(result.authMethods);
+        if (methods.length) this.state = { ...this.state, authMethods: methods };
+        return {
+            capabilities: { image: prompt.image === true, embeddedContext: prompt.embeddedContext === true },
+            loadSession: caps.loadSession === true,
+            ...(typeof info.title === "string" || typeof info.name === "string" ? { name: String(info.title ?? info.name).slice(0, 100) } : {}),
+            ...(typeof info.version === "string" ? { version: info.version.slice(0, 50) } : {}),
+        };
+    }
+
+    private async withDeadline<T>(work: Promise<T>, ms: number, message: string): Promise<T> {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        try {
+            return await Promise.race([work, new Promise<never>((_, reject) => (timer = setTimeout(() => reject(new Error(message)), ms)))]);
+        } finally {
+            clearTimeout(timer);
+        }
+    }
+
+    private watchExit(): { exited: Promise<number | undefined>; off: () => void } {
+        let off: () => void = () => {};
+        const exited = new Promise<number | undefined>((resolve) => {
+            off = this.hub.host.onExit(this.procId, (code) => resolve(code));
+        });
+        return { exited, off: () => off() };
+    }
+
+    private onStderr(data: string): void {
+        const text = this.stderrPartial + data;
+        const lines = text.split(/\r?\n/);
+        this.stderrPartial = (lines.pop() ?? "").slice(-4096);
+        this.stderrTail = appendTail(this.stderrTail, lines.map((l) => l.slice(0, 1000)), STDERR_TAIL_LINES);
+    }
+
+    private detail(): { errorDetail?: string } {
+        const tail = [...this.stderrTail, this.stderrPartial].filter((l) => l.trim()).slice(-STDERR_TAIL_LINES);
+        return tail.length ? { errorDetail: tail.join("\n") } : {};
+    }
+
+    private onExit(peer: JsonRpcPeer, code: number | undefined): void {
+        if (this.peer !== peer) return;
+        const expected = this.stopping;
+        const reason = new Error(
+            expected ? `${this.connection.label} was stopped.` : `${this.connection.label} stopped unexpectedly${code !== undefined ? ` (exit code ${code})` : ""}.`,
+        );
+        peer.close(reason);
+        this.peer = null;
+        this.init = null;
+        for (const off of this.offs.splice(0)) off();
+        for (const conversationId of this.sessions.keys()) this.hub.onSessionInfo(conversationId, null);
+        this.sessions.clear();
+        this.infos.clear();
+        this.clearIdle();
+        if (expected) this.publish({ status: "stopped", error: undefined, errorDetail: undefined });
+        else this.publish({ status: "error", error: reason.message, ...this.detail() });
+    }
+
+    private async onRequest(method: string, params: unknown): Promise<unknown> {
+        if (method !== "session/request_permission") {
+            // fs/* and terminal/* are not offered in initialize
+            throw new JsonRpcError(METHOD_NOT_FOUND, `${method} is not supported by Paperboard.`);
+        }
+        if (!isObject(params) || typeof params.sessionId !== "string" || !isObject(params.toolCall)) {
+            throw new JsonRpcError(INVALID_PARAMS, "session/request_permission needs a sessionId and a toolCall.");
+        }
+        let options: AgentPermissionOption[];
+        try {
+            options = permissionOptions(params.options);
+        } catch (err) {
+            throw new JsonRpcError(INVALID_PARAMS, err instanceof Error ? err.message : String(err));
+        }
+        const turn = this.turns.get(params.sessionId);
+        // nobody is there to answer outside a turn
+        if (!turn) return { outcome: { outcome: "cancelled" } };
+        const chosen = await turn.requestPermission(params.toolCall, options);
+        return chosen ? { outcome: { outcome: "selected", optionId: chosen } } : { outcome: { outcome: "cancelled" } };
+    }
+
+    private conversationOf(sessionId: string): string | undefined {
+        for (const [conversationId, id] of this.sessions) if (id === sessionId) return conversationId;
+        return undefined;
+    }
+
+    private patchInfo(conversationId: string, patch: Partial<AgentSessionInfo>): void {
+        const next = { ...(this.infos.get(conversationId) ?? { modes: [], commands: [] }), ...patch };
+        this.infos.set(conversationId, next);
+        this.hub.onSessionInfo(conversationId, next);
+    }
+
+    private onNotification(method: string, params: unknown): void {
+        if (method !== "session/update" || !isObject(params) || typeof params.sessionId !== "string" || !isObject(params.update)) return;
+        const update = params.update;
+        const conversationId = this.conversationOf(params.sessionId);
+        if (update.sessionUpdate === "available_commands_update") {
+            if (conversationId) this.patchInfo(conversationId, { commands: commandsFrom(update.availableCommands) });
+            return;
+        }
+        if (update.sessionUpdate === "current_mode_update") {
+            if (conversationId && typeof update.currentModeId === "string") this.patchInfo(conversationId, { mode: update.currentModeId });
+            return;
+        }
+        // replayed history (session/load) arrives with no turn listening
+        this.turns.get(params.sessionId)?.onUpdate(update);
+    }
+
+    private authError(err: unknown): Error {
+        if (err instanceof JsonRpcError && err.code === AUTH_REQUIRED) {
+            this.publish({ status: "auth-required", error: undefined });
+            return new AgentAuthError(this.connection.label);
+        }
+        return err instanceof Error ? err : new Error(String(err));
+    }
+
+    async openSession(request: SessionRequest): Promise<OpenedSession> {
+        const init = await this.ensureStarted();
+        const peer = this.peer!;
+        const live = this.sessions.get(request.conversationId);
+        if (live) return { sessionId: live, resumed: true, capabilities: init.capabilities };
+        let sessionId: string | undefined;
+        let resumed = false;
+        let result: unknown;
+        if (request.sessionId && init.loadSession) {
+            try {
+                // registered first: the replayed history is addressed to it
+                this.track(request.conversationId, request.sessionId);
+                result = await peer.request("session/load", { sessionId: request.sessionId, cwd: request.cwd, mcpServers: [] });
+                sessionId = request.sessionId;
+                resumed = true;
+            } catch (err) {
+                this.sessions.delete(request.conversationId);
+                if (err instanceof JsonRpcError && err.code === AUTH_REQUIRED) throw this.authError(err);
+                console.warn(`[ai] ${this.connection.label} could not resume its session; starting a new one:`, String(err));
+            }
+        }
+        if (!sessionId) {
+            try {
+                result = await peer.request("session/new", { cwd: request.cwd, mcpServers: [] });
+            } catch (err) {
+                throw this.authError(err);
+            }
+            if (!isObject(result) || typeof result.sessionId !== "string" || !result.sessionId) {
+                throw new Error(`${this.connection.label} did not start a session.`);
+            }
+            sessionId = result.sessionId;
+            this.track(request.conversationId, sessionId);
+        }
+        if (this.state.status === "auth-required") this.publish({ status: "ready" });
+        const { modes, current } = modesFrom(isObject(result) ? result.modes : undefined);
+        this.patchInfo(request.conversationId, { modes, ...(current ? { mode: current } : {}) });
+        if (request.mode && request.mode !== current && modes.some((m) => m.id === request.mode)) {
+            await this.setMode(request.conversationId, request.mode);
+        }
+        return { sessionId, resumed, capabilities: init.capabilities };
+    }
+
+    private track(conversationId: string, sessionId: string): void {
+        this.sessions.delete(conversationId);
+        this.sessions.set(conversationId, sessionId);
+        // the oldest idle session is forgotten (the agent keeps it on disk if it can)
+        while (this.sessions.size > MAX_SESSIONS_PER_AGENT) {
+            const oldest = [...this.sessions].find(([, id]) => !this.turns.has(id));
+            if (!oldest) break;
+            this.forget(oldest[0]);
+        }
+    }
+
+    forget(conversationId: string): void {
+        if (!this.sessions.delete(conversationId)) return;
+        this.infos.delete(conversationId);
+        this.hub.onSessionInfo(conversationId, null);
+    }
+
+    async setMode(conversationId: string, modeId: string): Promise<void> {
+        const sessionId = this.sessions.get(conversationId);
+        if (!sessionId || !this.peer) throw new Error(`${this.connection.label} has no session for this chat yet. Send a message first.`);
+        await this.peer.request("session/set_mode", { sessionId, modeId });
+        this.patchInfo(conversationId, { mode: modeId });
+    }
+
+    async authenticate(methodId: string): Promise<void> {
+        await this.ensureStarted();
+        if (!this.state.authMethods?.some((m) => m.id === methodId)) throw new Error("That sign-in method is not offered.");
+        await this.peer!.request("authenticate", { methodId });
+        this.publish({ status: "ready", error: undefined });
+    }
+
+    /** Runs one prompt turn; resolves with the agent's stop reason. */
+    async prompt(sessionId: string, blocks: AcpContentBlock[], handlers: TurnHandlers, signal: AbortSignal): Promise<StopReason> {
+        const peer = this.peer;
+        if (!peer || peer.closed) throw new Error(`${this.connection.label} is not running.`);
+        if (this.turns.has(sessionId)) throw new Error("This chat is already waiting on the agent.");
+        this.clearIdle();
+        this.turns.set(sessionId, handlers);
+        let grace: ReturnType<typeof setTimeout> | undefined;
+        const onAbort = () => {
+            void peer.notify("session/cancel", { sessionId }).catch((err) => console.warn("[ai] cancel did not reach the agent:", String(err)));
+            // an agent that ignores cancel is restarted rather than waited on forever
+            grace = setTimeout(() => {
+                void this.stop().catch((err) => console.error("[ai] restarting an unresponsive agent failed:", String(err)));
+            }, this.hub.cancelGraceMs ?? CANCEL_GRACE_MS);
+        };
+        signal.addEventListener("abort", onAbort, { once: true });
+        if (signal.aborted) onAbort();
+        try {
+            const result = await peer.request("session/prompt", { sessionId, prompt: blocks });
+            const reason = isObject(result) ? result.stopReason : undefined;
+            const known: StopReason[] = ["end_turn", "max_tokens", "max_turn_requests", "refusal", "cancelled"];
+            return known.includes(reason as StopReason) ? (reason as StopReason) : "end_turn";
+        } catch (err) {
+            throw this.authError(err);
+        } finally {
+            clearTimeout(grace);
+            signal.removeEventListener("abort", onAbort);
+            this.turns.delete(sessionId);
+            this.scheduleIdle();
+        }
+    }
+
+    private clearIdle(): void {
+        if (this.idleTimer) clearTimeout(this.idleTimer);
+        this.idleTimer = null;
+    }
+
+    private scheduleIdle(): void {
+        this.clearIdle();
+        if (this.turns.size > 0 || !this.running) return;
+        this.idleTimer = setTimeout(() => {
+            this.idleTimer = null;
+            if (this.turns.size === 0) void this.stop().catch((err) => console.error("[ai] stopping an idle agent failed:", String(err)));
+        }, this.hub.idleMs ?? IDLE_MS);
+    }
+
+    /** Stops the process and waits until its exit is observed. */
+    async stop(): Promise<void> {
+        this.clearIdle();
+        const exited = this.exited;
+        if (!this.running || !exited) {
+            this.peer = null;
+            this.init = null;
+            return;
+        }
+        this.stopping = true;
+        await this.killObserved({ exited, off: () => {} });
+    }
+
+    private async killObserved(watch: { exited: Promise<number | undefined>; off: () => void }): Promise<void> {
+        const { host } = this.hub;
+        const timeoutMs = this.hub.stopTimeoutMs ?? STOP_TIMEOUT_MS;
+        try {
+            await host.kill(this.procId, "SIGTERM");
+            if (await Promise.race([watch.exited.then(() => true), delay(timeoutMs).then(() => false)])) return;
+            await host.kill(this.procId, "SIGKILL");
+            if (await Promise.race([watch.exited.then(() => true), delay(timeoutMs).then(() => false)])) return;
+            if (await host.exists(this.procId)) throw new Error(`${this.connection.label} did not exit after SIGKILL.`);
+        } finally {
+            watch.off();
+        }
+    }
+
+    /** A connection's process left by an earlier service run, stopped. */
+    async stopLeftover(): Promise<void> {
+        if (await this.hub.host.exists(this.procId)) await this.killObserved(this.watchExit());
+    }
+}
+
+/** Every agent connection's process, keyed by connection id. */
+export class AgentHub {
+    private agents = new Map<string, AgentProcess>();
+
+    constructor(private readonly deps: AgentHubDeps) {}
+
+    private agent(connection: Connection): AgentProcess {
+        let agent = this.agents.get(connection.id);
+        // a renamed or re-pointed connection runs as its new self
+        if (agent && agent.connection !== connection && !agent.busy) {
+            this.agents.delete(connection.id);
+            agent = undefined;
+        }
+        if (!agent) {
+            agent = new AgentProcess(this.deps, connection);
+            this.agents.set(connection.id, agent);
+        }
+        return agent;
+    }
+
+    openSession(request: SessionRequest): Promise<OpenedSession> {
+        return this.agent(request.connection).openSession(request);
+    }
+
+    prompt(connection: Connection, sessionId: string, blocks: AcpContentBlock[], handlers: TurnHandlers, signal: AbortSignal): Promise<StopReason> {
+        return this.agent(connection).prompt(sessionId, blocks, handlers, signal);
+    }
+
+    setMode(connection: Connection, conversationId: string, modeId: string): Promise<void> {
+        return this.agent(connection).setMode(conversationId, modeId);
+    }
+
+    authenticate(connection: Connection, methodId: string): Promise<void> {
+        return this.agent(connection).authenticate(methodId);
+    }
+
+    /** Starts an agent without a chat (Test in the picker). */
+    async check(connection: Connection): Promise<void> {
+        await this.agent(connection).ensureStarted();
+    }
+
+    /** The chat's session is dropped (rewound, moved, deleted); the next message starts another. */
+    forget(conversationId: string): void {
+        for (const agent of this.agents.values()) agent.forget(conversationId);
+    }
+
+    /** Stops a connection's agent and forgets it (removed or changed). */
+    async stop(connectionId: string): Promise<void> {
+        const agent = this.agents.get(connectionId);
+        if (!agent) return;
+        if (agent.hasTurns()) throw new Error(`${agent.connection.label} is replying. Stop it first.`);
+        await agent.stop();
+        this.agents.delete(connectionId);
+        this.deps.onState(connectionId, null);
+    }
+
+    /** Agents an earlier service run left running lost their sessions; stop them. */
+    async stopLeftovers(connections: readonly Connection[]): Promise<void> {
+        await Promise.all(connections.map((c) => this.agent(c).stopLeftover()));
+    }
+
+    async stopAll(): Promise<void> {
+        await Promise.all([...this.agents.values()].map((a) => a.stop()));
+    }
+}

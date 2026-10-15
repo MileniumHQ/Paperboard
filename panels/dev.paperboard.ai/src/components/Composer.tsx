@@ -1,4 +1,4 @@
-import { createSignal, For, Show } from "solid-js";
+import { createSignal, For, Show, type JSX } from "solid-js";
 import {
     PaperButton,
     PaperContextMenu,
@@ -10,7 +10,8 @@ import {
 } from "@mileniumhq/paperui";
 import { MAX_ATTACHMENTS } from "../core/attachments";
 import { REASONING_LABELS, REASONING_LEVELS, type ReasoningLevel } from "../core/reasoning";
-import type { Attachment } from "../core/types";
+import { commandSuggestions } from "../core/agents";
+import type { AgentCommand, Attachment } from "../core/types";
 import { attachmentsFromFiles } from "../lib/attachments";
 import { makerOf } from "../lib/catalog";
 import { errorText } from "../lib/state";
@@ -31,7 +32,13 @@ export interface ComposerProps {
     onReasoningChange: (level: ReasoningLevel) => void;
     onSend: (text: string, reasoning: ReasoningLevel, attachments: Attachment[]) => Promise<boolean>;
     onStop: () => void;
+    /** a coding agent's slash commands, suggested while typing one */
+    commands?: AgentCommand[];
+    placeholder?: string;
+    /** shown above the message box (a coding agent's folder and mode) */
+    toolbar?: JSX.Element;
 }
+
 
 /** Enter sends, Shift+Enter adds a line. Files attach by paperclip, drop, or paste. */
 export default function Composer(props: ComposerProps) {
@@ -45,6 +52,11 @@ export default function Composer(props: ComposerProps) {
     let reasoningButton: HTMLButtonElement | undefined;
     let picker: HTMLInputElement | undefined;
 
+    const suggestions = () => commandSuggestions(text(), props.commands ?? []);
+    const complete = (c: AgentCommand) => {
+        setText(`/${c.name} `);
+        input?.focus();
+    };
     const canSend = () => !props.disabled && !props.generating && !sending() && (text().trim() !== "" || attachments().length > 0);
 
     const addFiles = async (files: Iterable<File>) => {
@@ -88,6 +100,21 @@ export default function Composer(props: ComposerProps) {
 
     return (
         <div class={styles.Composer}>
+            {props.toolbar}
+            <Show when={suggestions().length > 0}>
+                <ul class={styles.commands} aria-label="Agent commands">
+                    <For each={suggestions()}>
+                        {(c) => (
+                            <li>
+                                <button type="button" class={styles.command} onClick={() => complete(c)}>
+                                    <span class={styles.commandName}>/{c.name}</span>
+                                    <span class={styles.commandDescription}>{c.description}{c.hint ? ` (${c.hint})` : ""}</span>
+                                </button>
+                            </li>
+                        )}
+                    </For>
+                </ul>
+            </Show>
             <div
                 class={styles.box}
                 classList={{ [styles.dragging!]: dragging() }}
@@ -132,7 +159,7 @@ export default function Composer(props: ComposerProps) {
                     ref={(el) => (input = el)}
                     value={text()}
                     disabled={props.disabled}
-                    placeholder="Ask anything"
+                    placeholder={props.placeholder ?? "Ask anything"}
                     onInput={setText}
                     onPaste={(e) => {
                         const files = [...(e.clipboardData?.files ?? [])];
@@ -142,6 +169,12 @@ export default function Composer(props: ComposerProps) {
                         }
                     }}
                     onKeyDown={(e) => {
+                        // Tab takes the first suggested command
+                        if (e.key === "Tab" && !e.shiftKey && suggestions().length > 0) {
+                            e.preventDefault();
+                            complete(suggestions()[0]!);
+                            return;
+                        }
                         if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
                             e.preventDefault();
                             void send();

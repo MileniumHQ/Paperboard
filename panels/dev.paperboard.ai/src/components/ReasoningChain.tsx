@@ -4,7 +4,7 @@ import { isThinkingLive } from "../core/chain";
 import type { AssistantMessage, BuiltinTool, ToolCallRecord } from "../core/types";
 import { state } from "../lib/state";
 import { panelIcon, panelName } from "../lib/panels";
-import ToolCallApproval, { ACTION_STATUS, ActionDetails } from "./ToolCallCard";
+import ToolCallApproval, { ACTION_STATUS, ActionDetails, AGENT_TOOL_ICONS } from "./ToolCallCard";
 import styles from "./ReasoningChain.module.css";
 
 /** One collapsible row of the chain: icon, label, status, details. */
@@ -98,6 +98,7 @@ export function ActionStep(props: { call: ToolCallRecord }) {
             <ChainStep
                 icon={
                     <Switch fallback={<PaperIcon>bolt</PaperIcon>}>
+                        <Match when={props.call.agent}>{(a) => <PaperIcon>{AGENT_TOOL_ICONS[a().kind]}</PaperIcon>}</Match>
                         <Match when={props.call.builtin}>{(b) => <PaperIcon>{BUILTIN_ICONS[b()]}</PaperIcon>}</Match>
                         <Match when={known()}>
                             <img class={styles.appIcon} src={panelIcon(props.call.panelId)} alt="" />

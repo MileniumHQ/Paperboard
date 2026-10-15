@@ -445,3 +445,76 @@ describe("AiApp widget actions", () => {
         }
     });
 });
+
+describe("coding agent connections", () => {
+    const installed = new Set(["claude-agent-acp"]);
+    const findAgent = async (command: string, args: readonly string[]) =>
+        installed.has(command) ? { command: `/bin/${command}`, args: [...args], pathEnv: "/bin" } : null;
+
+    async function withApp(run: (app: InstanceType<typeof AiApp>, ctx: ReturnType<typeof makeCtx>) => Promise<void>) {
+        savedConfig = { connections: [] };
+        const app = new AiApp(new HangingHost() as any, { readyTimeoutMs: 100, findAgent });
+        const ctx = makeCtx();
+        await app.init(ctx as any);
+        try {
+            await run(app, ctx);
+        } finally {
+            await app.shutdown();
+            savedConfig = null;
+        }
+    }
+
+    it("lists the registry agents found on this computer", async () => {
+        await withApp(async (app) => {
+            expect(await app.installedAgents()).toEqual(["claude-acp"]);
+        });
+    });
+
+    it("adds an installed agent once, listed as its single model", async () => {
+        await withApp(async (app, ctx) => {
+            const added = await app.addConnection({ kind: "agent", agent: "claude-acp" });
+            expect(added).toMatchObject({ kind: "agent", agent: "claude-acp", label: "Claude Agent" });
+            expect(ctx.state.models.filter((m) => m.provider === added.id)).toEqual([
+                expect.objectContaining({ name: "Claude Agent", capabilities: ["agent"] }),
+            ]);
+            await expect(app.addConnection({ kind: "agent", agent: "claude-acp" })).rejects.toThrow("Claude Agent is already added.");
+        });
+    });
+
+    it("explains how to install an agent that isn't on this computer", async () => {
+        await withApp(async (app, ctx) => {
+            const added = await app.addConnection({ kind: "agent", agent: "codex-acp" });
+            expect(ctx.state.modelErrors[added.id]).toBe("Codex isn't installed on this computer. Install it with: npm install -g @agentclientprotocol/codex-acp");
+        });
+    });
+
+    it("saves a custom agent's argv and refuses a relative command", async () => {
+        await withApp(async (app) => {
+            await expect(app.addConnection({ kind: "agent", agent: "custom", command: "./agent" })).rejects.toThrow("must be a command name or an absolute path");
+            const added = await app.addConnection({ kind: "agent", agent: "custom", command: "/opt/my agent/run", args: ["--acp"] });
+            expect(added).toMatchObject({ label: "run", command: "/opt/my agent/run", args: ["--acp"] });
+        });
+    });
+
+    it("works in a real folder only, remembers it, and starts the next agent chat there", async () => {
+        const work = fs.mkdtempSync(path.join(os.tmpdir(), "ai-folder-"));
+        try {
+            await withApp(async (app, ctx) => {
+                const agent = await app.addConnection({ kind: "agent", agent: "claude-acp" });
+                const c = await app.newConversation("Claude Agent", agent.id);
+                expect(c.cwd).toBeUndefined();
+                await expect(app.setConversationFolder(c.id, "relative/dir")).rejects.toThrow("Use a full path");
+                await expect(app.setConversationFolder(c.id, path.join(work, "missing"))).rejects.toThrow("does not exist");
+                fs.writeFileSync(path.join(work, "file.txt"), "x");
+                await expect(app.setConversationFolder(c.id, path.join(work, "file.txt"))).rejects.toThrow("is not a folder");
+                const real = await app.setConversationFolder(c.id, `${work}/./`);
+                expect(real).toBe(fs.realpathSync(work));
+                expect(ctx.state.recentFolders).toEqual([real]);
+                expect((savedConfig as { recentFolders: string[] }).recentFolders).toEqual([real]);
+                expect((await app.newConversation("Claude Agent", agent.id)).cwd).toBe(real);
+            });
+        } finally {
+            fs.rmSync(work, { recursive: true, force: true });
+        }
+    });
+});

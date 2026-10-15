@@ -168,3 +168,48 @@
     align-items: center;
     gap: var(--paper-uigap-onefourth);
 }
+
+/* a coding agent's slash commands, while one is being typed */
+.commands {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: var(--paper-uigap-onefourth);
+    list-style: none;
+    border: var(--paper-border-width) solid var(--paper-border);
+    border-radius: var(--paper-border-radius);
+    background: var(--paper-surface-raised);
+}
+
+.command {
+    display: flex;
+    gap: var(--paper-uigap-half);
+    width: 100%;
+    padding: var(--paper-uigap-onefourth) var(--paper-uigap-half);
+    border: none;
+    border-radius: var(--paper-border-radius-half);
+    background: none;
+    color: var(--paper-text);
+    font: inherit;
+    font-size: var(--paper-text-size-2);
+    text-align: left;
+    cursor: pointer;
+}
+
+.command:hover,
+.command:focus-visible {
+    background: var(--paper-surface-inset);
+}
+
+.commandName {
+    flex-shrink: 0;
+    font-family: var(--paper-font-family-code);
+}
+
+.commandDescription {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--paper-text-muted);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { apiKeySecretName, connectionLabel, credentialsAllowed, definitionOf, endpointLabel, normalizeBaseUrl, unlistedModelReason } from "../src/core/providers";
+import { checkCommandShape, commandSuggestions, MAX_AGENT_ARGS, splitArgs, validateCustomAgent } from "../src/core/agents";
 import { providerClients } from "../src/service/provider";
 import { REASONING_LEVELS, isReasoningLevel, reasoningToThink } from "../src/core/reasoning";
 import { compactCount, groupTurns, isRoundEmpty, isThinkingLive, replyText, turnStats } from "../src/core/chain";
@@ -131,5 +132,37 @@ describe("chain", () => {
         expect(compactCount(950)).toBe("950");
         expect(compactCount(12_345)).toBe("12.3K");
         expect(compactCount(131_072)).toBe("131K");
+    });
+});
+
+describe("custom agents", () => {
+    it("keeps a command and argv as typed, without a shell", () => {
+        expect(validateCustomAgent(" my-agent ", ["--acp", " ", "--model=x y"])).toEqual({ command: "my-agent", args: ["--acp", "--model=x y"] });
+        expect(splitArgs("  --acp   --verbose ")).toEqual(["--acp", "--verbose"]);
+    });
+
+    it("refuses what can't be one argv entry", () => {
+        expect(() => validateCustomAgent("", [])).toThrow("A command is required.");
+        expect(() => validateCustomAgent("a\nb", [])).toThrow("line breaks");
+        expect(() => validateCustomAgent("a", "--acp")).toThrow("list of strings");
+        expect(() => validateCustomAgent("a", Array(MAX_AGENT_ARGS + 1).fill("x"))).toThrow(`At most ${MAX_AGENT_ARGS}`);
+    });
+
+    it("suggests an agent's slash commands while one is typed", () => {
+        const commands = [{ name: "review", description: "" }, { name: "rename", description: "" }, { name: "plan", description: "" }];
+        expect(commandSuggestions("/re", commands).map((c) => c.name)).toEqual(["review", "rename"]);
+        expect(commandSuggestions("/review now", commands)).toEqual([]);
+        expect(commandSuggestions("hi /re", commands)).toEqual([]);
+    });
+});
+
+describe("agent commands", () => {
+    it("are a name searched on PATH or an absolute path", () => {
+        expect(checkCommandShape("codex-acp")).toBe("name");
+        expect(checkCommandShape("/usr/bin/codex-acp")).toBe("absolute");
+        expect(checkCommandShape("C:\\Tools\\agent.exe")).toBe("absolute");
+        expect(checkCommandShape("\\\\server\\share\\agent.exe")).toBe("absolute");
+        expect(() => checkCommandShape("./agent")).toThrow("must be a command name or an absolute path");
+        expect(() => validateCustomAgent("bin/agent", [])).toThrow("must be a command name or an absolute path");
     });
 });

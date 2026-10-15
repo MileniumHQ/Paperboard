@@ -56,7 +56,11 @@ export function quickAskModel(state: Pick<AiState, "settings" | "models">, chose
 export function quickAskModelChoices(state: Pick<AiState, "models">): WidgetChoice[] {
     return [
         { value: QUICK_ASK_DEFAULT_MODEL, label: "Default model" },
-        ...state.models.slice(0, MAX_WIDGET_CHOICES - 1).map((m) => ({ value: m.name, label: m.name })),
+        // a coding agent needs a folder, which a widget has nowhere to pick
+        ...state.models
+            .filter((m) => !m.capabilities.includes("agent"))
+            .slice(0, MAX_WIDGET_CHOICES - 1)
+            .map((m) => ({ value: m.name, label: m.name })),
     ];
 }
 

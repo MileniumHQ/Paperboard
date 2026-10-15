@@ -16,7 +16,8 @@ import {
     systemApi,
     type ServiceContext,
 } from "@mileniumhq/paperapi";
-import { EVENTS, OLLAMA_PACKAGE, OLLAMA_PROC_ID, PANEL_ID, TRIGGER_IDS } from "../contract";
+import { agentProcId, EVENTS, OLLAMA_PACKAGE, OLLAMA_PROC_ID, PANEL_ID, TRIGGER_IDS } from "../contract";
+import { AGENT_REGISTRY, agentLaunch, agentModelName, CUSTOM_AGENT_ID, installHint, registryAgent, validateCustomAgent } from "../core/agents";
 import { askSystemPrompt, isConversationId, isPromptStyle, MAX_CUSTOM_PROMPT_CHARS, MAX_USER_MESSAGE_CHARS } from "../core/conversation";
 import {
     apiKeySecretName,
@@ -32,6 +33,9 @@ import {
     type Connection,
     type ProviderKind,
 } from "../core/providers";
+import { AgentHub, type AgentProcessHost } from "./agents";
+import { findExecutable, type Launch } from "./executable";
+import type { ModelClient } from "./provider";
 import { isReasoningLevel } from "../core/reasoning";
 import { quickAskModel } from "../core/widgets";
 import type { RegistryAction } from "../core/tools";
@@ -46,6 +50,7 @@ import {
     type RuntimeState,
     type Settings,
 } from "../core/types";
+import manifest from "../../manifest.json";
 import { republishPublicActions } from "./actions";
 import { runShell } from "./builtins";
 import { askOnce, ChatEngine, type ApprovalDecision } from "./chat";
@@ -64,6 +69,10 @@ interface StoredConnection {
     kind: ProviderKind;
     label: string;
     baseUrl?: string;
+    /** agent: registry id or "custom"; custom agents also save their argv */
+    agent?: string;
+    command?: string;
+    args?: string[];
 }
 
 interface StoredConfig {
@@ -74,6 +83,8 @@ interface StoredConfig {
     speeds?: Record<string, ModelSpeed>;
     /** the providers the user added; API keys live in the vault */
     connections?: StoredConnection[];
+    /** folders agent chats used, newest first */
+    recentFolders?: string[];
     // TODO(remove after v0.3): the single provider choice of 0.2 configs,
     // read once by migrateSingleProvider and then deleted from the document
     provider?: { id?: string; baseUrl?: string };
@@ -85,15 +96,21 @@ const CONFIG_VERSION = 2;
 const LEGACY_API_KEY_SECRET = "openai-api-key";
 
 const MAX_ALWAYS_ALLOWED = 500;
+const MAX_RECENT_FOLDERS = 8;
+const MAX_FOLDER_CHARS = 1024;
 const MAX_SPEEDS = 100;
 // under the 30 s default action-call timeout, so flows get a real error
 export const ASK_DEADLINE_MS = 28_000;
 
-export const processHost: ProcessHost = {
+export const processHost: ProcessHost & AgentProcessHost = {
     start: (options) => processApi.start(options),
     kill: (id, signal) => processApi.kill(id, signal),
     exists: (id) => processApi.exists(id),
+    write: (id, data) => processApi.write(id, data),
     onData: (id, cb) => processApi.onData(id, cb),
+    // an agent's stdout is its protocol: stderr must never be mixed into it
+    onStdout: (id, cb) => processApi.onStdout(id, cb),
+    onStderr: (id, cb) => processApi.onStderr(id, cb),
     onExit: (id, cb) => processApi.onExit(id, cb),
 };
 
@@ -125,13 +142,15 @@ export class AiApp {
     readonly models: ModelManager;
     store!: ConversationStore;
     chat!: ChatEngine;
+    agents!: AgentHub;
     private resolveReady!: () => void;
     readonly ready = new Promise<void>((resolve) => (this.resolveReady = resolve));
 
     constructor(
-        private readonly host: ProcessHost = processHost,
-        options: { readyTimeoutMs?: number } = {},
+        private readonly host: ProcessHost & Partial<AgentProcessHost> = processHost,
+        options: { readyTimeoutMs?: number; findAgent?: (command: string, args: readonly string[]) => Promise<Launch | null> } = {},
     ) {
+        this.findAgent = options.findAgent ?? ((command, args) => findExecutable(command, args));
         this.runtime = new OllamaRuntime({
             procId: OLLAMA_PROC_ID,
             host,
@@ -151,6 +170,8 @@ export class AiApp {
             onDownloaded: (model) => this.ctx.emitTrigger(TRIGGER_IDS.modelDownloaded, model),
         });
     }
+
+    private readonly findAgent: (command: string, args: readonly string[]) => Promise<Launch | null>;
 
     private patchRuntime(patch: Partial<RuntimeState>): void {
         this.ctx.setState((prev) => ({ runtime: { ...prev.runtime, ...patch } }));
@@ -186,7 +207,42 @@ export class AiApp {
     }
 
     private buildProviderClients() {
-        return providerClients({ ollama: this.runtime.api, apiKeyFor: (id) => this.apiKeyFor(id) }, this.connections);
+        const clients = providerClients({ ollama: this.runtime.api, apiKeyFor: (id) => this.apiKeyFor(id) }, this.connections);
+        for (const c of this.connections) if (c.kind === "agent") clients.set(c.id, this.agentListing(c));
+        return clients;
+    }
+
+    /** What an agent connection runs, or a readable reason it can't be run. */
+    private async resolveAgent(connection: Connection): Promise<Launch> {
+        const { command, args } = agentLaunch(connection);
+        const found = await this.findAgent(command, args);
+        if (found) return found;
+        if (connection.agent === CUSTOM_AGENT_ID) throw new Error(`"${command}" was not found on this computer.`);
+        const agent = registryAgent(connection.agent)!;
+        const hint = installHint(agent);
+        throw new Error(
+            hint.command
+                ? `${connection.label} isn't installed on this computer. Install it with: ${hint.command}`
+                : `${connection.label} isn't installed on this computer. Get it from ${hint.url}`,
+        );
+    }
+
+    /**
+     * An agent lists itself as its one model, once its command is found;
+     * otherwise the listing error says how to install it (a recoverable
+     * "unavailable", never an empty list).
+     */
+    private agentListing(connection: Connection): ModelClient {
+        return {
+            tags: async () => {
+                await this.resolveAgent(connection);
+                return [{ name: agentModelName(connection), size: 0 }];
+            },
+            show: async () => ({ capabilities: ["agent"] }),
+            chat: async () => {
+                throw new Error(`${connection.label} replies in chats, not to single prompts.`);
+            },
+        };
     }
 
     /** Saved connections plus which have a key in the vault. */
@@ -195,7 +251,7 @@ export class AiApp {
         return stored.map((c) =>
             c.kind === "openai-compatible"
                 ? { id: c.id, kind: c.kind, label: c.label, baseUrl: c.baseUrl ?? "", hasApiKey: keys.has(apiKeySecretName(c.id)) }
-                : { id: c.id, kind: c.kind, label: c.label },
+                : { ...c },
         );
     }
 
@@ -216,10 +272,22 @@ export class AiApp {
         return label || fallback;
     }
 
-    /** Adds Ollama, or an OpenAI-compatible endpoint whose API key goes to the vault. */
-    async addConnection(input: { kind?: unknown; label?: unknown; baseUrl?: unknown; apiKey?: unknown }): Promise<Connection> {
+    /**
+     * Adds Ollama, an OpenAI-compatible endpoint whose API key goes to the
+     * vault, or a coding agent (a registry agent, or a custom command).
+     */
+    async addConnection(input: {
+        kind?: unknown;
+        label?: unknown;
+        baseUrl?: unknown;
+        apiKey?: unknown;
+        agent?: unknown;
+        command?: unknown;
+        args?: unknown;
+    }): Promise<Connection> {
         const stored = this.stored.connections ?? [];
         if (stored.length >= MAX_CONNECTIONS) throw new Error(`At most ${MAX_CONNECTIONS} providers can be added.`);
+        if (input.kind === "agent") return this.addAgent(input, stored);
         if (input.kind === "ollama") {
             if (stored.some((c) => c.kind === "ollama")) throw new Error("Ollama is already added.");
             const added: StoredConnection = { id: OLLAMA_PROVIDER_ID, kind: "ollama", label: OLLAMA_PROVIDER.label };
@@ -267,15 +335,59 @@ export class AiApp {
         return this.connection(id);
     }
 
+    private async addAgent(input: { label?: unknown; agent?: unknown; command?: unknown; args?: unknown }, stored: readonly StoredConnection[]): Promise<Connection> {
+        let id: string;
+        do id = `agent-${randomBytes(4).toString("hex")}`;
+        while (stored.some((c) => c.id === id));
+        let added: StoredConnection;
+        if (input.agent === CUSTOM_AGENT_ID) {
+            const { command, args } = validateCustomAgent(input.command, input.args);
+            added = { id, kind: "agent", agent: CUSTOM_AGENT_ID, label: AiApp.cleanLabel(input.label, path.basename(command)), command, args };
+        } else {
+            const agent = typeof input.agent === "string" ? registryAgent(input.agent) : undefined;
+            if (!agent) throw new Error("Unknown agent.");
+            if (stored.some((c) => c.kind === "agent" && c.agent === agent.id)) throw new Error(`${agent.name} is already added.`);
+            added = { id, kind: "agent", agent: agent.id, label: AiApp.cleanLabel(input.label, agent.name) };
+        }
+        await this.saveConfig((c) => {
+            c.connections = [...(c.connections ?? []), added];
+        });
+        this.publishConnections(this.stored.connections ?? [], this.keyedIds());
+        await this.models.refresh();
+        return this.connection(id);
+    }
+
+    /** A custom agent's name, command or arguments; a registry agent's name. The running agent restarts as the new one. */
+    private async updateAgent(current: StoredConnection, input: { label?: unknown; command?: unknown; args?: unknown }): Promise<Connection> {
+        const label = AiApp.cleanLabel(input.label, current.label);
+        const custom = current.agent === CUSTOM_AGENT_ID ? validateCustomAgent(input.command ?? current.command, input.args ?? current.args) : undefined;
+        await this.agents.stop(current.id);
+        await this.saveConfig((c) => {
+            c.connections = (c.connections ?? []).map((x) => (x.id === current.id ? { ...x, label, ...(custom ?? {}) } : x));
+        });
+        this.publishConnections(this.stored.connections ?? [], this.keyedIds());
+        await this.models.refresh();
+        return this.connection(current.id);
+    }
+
     /**
      * Renames an endpoint, points it elsewhere, or replaces its key. A key
      * belongs to the URL it was entered for: a new URL without a new key
      * drops the old one rather than carrying it to another host.
      */
-    async updateConnection(input: { id?: unknown; label?: unknown; baseUrl?: unknown; apiKey?: unknown; clearApiKey?: unknown }): Promise<Connection> {
+    async updateConnection(input: {
+        id?: unknown;
+        label?: unknown;
+        baseUrl?: unknown;
+        apiKey?: unknown;
+        clearApiKey?: unknown;
+        command?: unknown;
+        args?: unknown;
+    }): Promise<Connection> {
         if (typeof input.id !== "string") throw new Error("Unknown provider.");
         const current = (this.stored.connections ?? []).find((c) => c.id === input.id);
         if (!current) throw new Error("That provider was removed.");
+        if (current.kind === "agent") return this.updateAgent(current, input);
         if (current.kind !== "openai-compatible") throw new Error(`${current.label} has nothing to change.`);
         const baseUrl = typeof input.baseUrl === "string" && input.baseUrl.trim() ? normalizeBaseUrl(input.baseUrl) : current.baseUrl ?? "";
         const key = typeof input.apiKey === "string" && input.apiKey.trim() ? input.apiKey.trim() : undefined;
@@ -311,6 +423,8 @@ export class AiApp {
             (c) => this.ctx.state.generating.includes(c.id) && (c.provider ?? this.models.providerOf(c.model)) === id,
         );
         if (replying) throw new Error(`"${replying.title}" is replying with ${current.label}. Stop it first.`);
+        // the agent's exit is observed before it leaves the list
+        if (current.kind === "agent") await this.agents.stop(id);
         await this.saveConfig((c) => {
             c.connections = (c.connections ?? []).filter((x) => x.id !== id);
             if (c.settings?.defaultProvider === id) c.settings = { ...c.settings, defaultModel: "", defaultProvider: "" };
@@ -322,7 +436,7 @@ export class AiApp {
         if (current.kind === "ollama") {
             this.models.cancelAll();
             await this.runtime.stop();
-        } else {
+        } else if (current.kind === "openai-compatible") {
             await secretsApi.delete(apiKeySecretName(id), PANEL_ID).catch((err) => {
                 throw new Error(`${current.label} was removed, but its API key could not be deleted from the vault: ${String(err)}`);
             });
@@ -379,9 +493,38 @@ export class AiApp {
             await fs.promises.mkdir(path.join(this.filesDir, dir), { recursive: true });
         }
         this.store = new ConversationStore(this.filesDir);
+        const host = this.host;
+        this.agents = new AgentHub({
+            host: {
+                ...host,
+                write: (id, data) => (host.write ? host.write(id, data) : Promise.reject(new Error("This host cannot write to processes."))),
+                onStdout: (id, cb) => (host.onStdout ? host.onStdout(id, cb) : host.onData(id, cb)),
+                onStderr: (id, cb) => (host.onStderr ? host.onStderr(id, cb) : () => {}),
+            },
+            procId: agentProcId,
+            resolve: (connection) => this.resolveAgent(connection),
+            workDir: os.homedir(),
+            clientVersion: manifest.version,
+            onState: (connectionId, agentState) =>
+                this.ctx.setState((prev) => {
+                    const agents = { ...prev.agents };
+                    if (agentState) agents[connectionId] = agentState;
+                    else delete agents[connectionId];
+                    return { agents };
+                }),
+            onSessionInfo: (conversationId, info) =>
+                this.ctx.setState((prev) => {
+                    const agentSessions = { ...prev.agentSessions };
+                    if (info) agentSessions[conversationId] = info;
+                    else delete agentSessions[conversationId];
+                    return { agentSessions };
+                }),
+        });
         this.chat = new ChatEngine({
             ownPanelId: PANEL_ID,
             clientFor: (providerId) => this.chatClientFor(providerId),
+            agentConnection: (providerId) => this.connections.find((c) => c.id === providerId && c.kind === "agent"),
+            agents: this.agents,
             providerOf: (model) => this.models.providerOf(model),
             store: this.store,
             settings: () => this.ctx.state.settings,
@@ -415,6 +558,10 @@ export class AiApp {
         // endpoints need no runtime; their models list right away, and
         // Ollama's join once its runtime reports ready
         void this.models.refresh().catch((err) => console.error("[ai] listing models failed:", String(err)));
+        // an agent a previous service run left behind has lost its sessions
+        void this.agents
+            .stopLeftovers(this.connections.filter((c) => c.kind === "agent"))
+            .catch((err) => console.error("[ai] stopping agents left from an earlier run failed:", String(err)));
         if (this.hasOllama()) {
             void this.startIfInstalled().catch((err) => console.error("[ai] Ollama startup task failed:", String(err)));
         } else {
@@ -438,6 +585,9 @@ export class AiApp {
                 settings: clampSettings(this.stored.settings),
                 connections,
                 alwaysAllowed: Array.isArray(this.stored.alwaysAllowed) ? this.stored.alwaysAllowed.filter((k) => typeof k === "string") : [],
+                recentFolders: Array.isArray(this.stored.recentFolders)
+                    ? this.stored.recentFolders.filter((f) => typeof f === "string").slice(0, MAX_RECENT_FOLDERS)
+                    : [],
                 speeds: this.stored.speeds && typeof this.stored.speeds === "object" ? this.stored.speeds : {},
             });
         } catch (err) {
@@ -546,9 +696,91 @@ export class AiApp {
 
     async newConversation(model?: string, provider?: string): Promise<Conversation> {
         const settings = this.ctx.state.settings;
-        if (!model?.trim()) return this.chat.create(settings.defaultModel, settings.defaultProvider || undefined);
+        if (!model?.trim()) return this.chat.create(settings.defaultModel, settings.defaultProvider || undefined, this.defaultFolder(settings.defaultProvider));
         const via = this.knownProvider(provider);
-        return this.chat.create(this.normalizeModelRef(model, via), via);
+        return this.chat.create(this.normalizeModelRef(model, via), via, this.defaultFolder(via));
+    }
+
+    /** An agent chat starts in the folder the last one used. */
+    private defaultFolder(provider: string | undefined): string | undefined {
+        const agent = provider ? this.connections.find((c) => c.id === provider && c.kind === "agent") : undefined;
+        return agent ? this.ctx.state.recentFolders[0] : undefined;
+    }
+
+    /**
+     * The folder an agent chat works in, on this daemon's computer. Checked
+     * here, where it is used: an absolute path to an existing folder. A new
+     * folder means a new session (the old one's files are elsewhere).
+     */
+    async setConversationFolder(id: string, folder: unknown): Promise<string> {
+        if (!isConversationId(id)) throw new Error("Unknown chat.");
+        if (typeof folder !== "string" || !folder.trim()) throw new Error("Choose a folder.");
+        const raw = folder.trim();
+        if (raw.length > MAX_FOLDER_CHARS) throw new Error(`Folder paths are limited to ${MAX_FOLDER_CHARS} characters.`);
+        const expanded = raw === "~" || raw.startsWith("~/") ? path.join(os.homedir(), raw.slice(1)) : raw;
+        if (!path.isAbsolute(expanded)) throw new Error("Use a full path, like /home/you/project.");
+        let real: string;
+        try {
+            real = await fs.promises.realpath(expanded);
+        } catch (err) {
+            if ((err as NodeJS.ErrnoException).code === "ENOENT") throw new Error(`${expanded} does not exist.`);
+            throw err;
+        }
+        if (!(await fs.promises.stat(real)).isDirectory()) throw new Error(`${real} is not a folder.`);
+        if (this.ctx.state.generating.includes(id)) throw new Error("Wait for the reply to finish before changing the folder.");
+        const c = await this.store.get(id);
+        if (c.cwd !== real) {
+            c.cwd = real;
+            if (c.sessionId) {
+                delete c.sessionId;
+                this.agents.forget(id);
+            }
+            this.ctx.setState({ conversations: await this.store.save(c) });
+        }
+        const recentFolders = [real, ...this.ctx.state.recentFolders.filter((f) => f !== real)].slice(0, MAX_RECENT_FOLDERS);
+        await this.saveConfig((cfg) => {
+            cfg.recentFolders = recentFolders;
+        });
+        this.ctx.setState({ recentFolders });
+        return real;
+    }
+
+    /** An agent chat's mode; applied now when its session is live, else when it opens. */
+    async setAgentMode(id: string, modeId: unknown): Promise<void> {
+        if (!isConversationId(id)) throw new Error("Unknown chat.");
+        if (typeof modeId !== "string" || !modeId) throw new Error("Choose a mode.");
+        const c = await this.store.get(id);
+        const connection = c.provider ? this.connections.find((x) => x.id === c.provider && x.kind === "agent") : undefined;
+        if (!connection) throw new Error("Only agent chats have modes.");
+        const live = this.ctx.state.agentSessions[id];
+        if (live) {
+            if (!live.modes.some((m) => m.id === modeId)) throw new Error("The agent does not offer that mode.");
+            await this.agents.setMode(connection, id, modeId);
+        }
+        c.mode = modeId;
+        this.ctx.setState({ conversations: await this.store.save(c) });
+    }
+
+    async authenticateAgent(connectionId: unknown, methodId: unknown): Promise<void> {
+        if (typeof connectionId !== "string" || typeof methodId !== "string") throw new Error("Choose how to sign in.");
+        const connection = this.connection(connectionId);
+        if (connection.kind !== "agent") throw new Error(`${connection.label} is not an agent.`);
+        await this.agents.authenticate(connection, methodId);
+    }
+
+    /** The registry agents found on this computer, for the Add provider list. */
+    async installedAgents(): Promise<string[]> {
+        const found = await Promise.all(AGENT_REGISTRY.map(async (a) => ((await this.findAgent(a.command, a.args)) ? a.id : null)));
+        return found.filter((id): id is string => id !== null);
+    }
+
+    /** Starts an agent and asks it what it is: proves it runs before a chat needs it. */
+    async checkAgent(connectionId: unknown): Promise<void> {
+        if (typeof connectionId !== "string") throw new Error("Unknown provider.");
+        const connection = this.connection(connectionId);
+        if (connection.kind !== "agent") throw new Error(`${connection.label} is not an agent.`);
+        await this.agents.check(connection);
+        await this.models.refresh();
     }
 
     /** What a window shows when it opens a chat, replies in flight included. */
@@ -570,8 +802,17 @@ export class AiApp {
         const via = this.knownProvider(provider);
         const c = await this.store.get(id);
         c.model = this.normalizeModelRef(model, via);
+        if (via !== c.provider && c.sessionId) {
+            delete c.sessionId;
+            delete c.mode;
+            this.agents.forget(id);
+        }
         if (via) c.provider = via;
         else delete c.provider;
+        if (!c.cwd) {
+            const folder = this.defaultFolder(via);
+            if (folder) c.cwd = folder;
+        }
         this.ctx.setState({ conversations: await this.store.save(c) });
     }
 
@@ -584,6 +825,7 @@ export class AiApp {
         if (!isConversationId(id)) throw new Error("Unknown chat.");
         // a stopped reply saves once more; delete after it, not before
         await this.chat.stopAndSettle(id);
+        this.agents.forget(id);
         this.ctx.setState({ conversations: await this.store.delete(id) });
     }
 
@@ -616,9 +858,12 @@ export class AiApp {
         const settings = this.ctx.state.settings;
         const provider = !chosenModel && settings.defaultProvider ? settings.defaultProvider : this.models.providerOf(model);
         if (!provider || !this.models.capabilities(model, provider)) throw new Error(`${model} is not downloaded. Pick a model in AI.`);
+        const agent = this.connections.find((c) => c.id === provider && c.kind === "agent");
+        const folder = this.defaultFolder(provider);
+        if (agent && !folder) throw new Error(`${agent.label} needs a folder to work in. Start a chat in AI first.`);
         // throws when the provider is not reachable, before a chat exists
-        this.chatClientFor(provider);
-        const conversation = await this.chat.create(model, provider);
+        if (!agent) this.chatClientFor(provider);
+        const conversation = await this.chat.create(model, provider, folder);
         try {
             await this.chat.send(conversation.id, content);
         } catch (err) {
@@ -659,8 +904,8 @@ export class AiApp {
         return { status: "ok", models: await unloadAndConfirm(api, name) };
     }
 
-    resolveApproval(id: string, decision: ApprovalDecision): void {
-        this.chat.resolveApproval(id, decision);
+    resolveApproval(id: string, decision: ApprovalDecision, optionId?: string): void {
+        this.chat.resolveApproval(id, decision, optionId);
     }
 
     // ─── runtime ───────────────────────────────────────────────────────────
@@ -775,6 +1020,8 @@ export class AiApp {
         if (!chosen) throw new Error("No model given and no default model is set in the AI panel.");
         const provider = !model?.trim() && this.ctx.state.settings.defaultProvider ? this.ctx.state.settings.defaultProvider : this.models.providerOf(chosen);
         if (!provider || !this.models.capabilities(chosen, provider)) throw new Error(`${chosen} is not installed in the AI panel.`);
+        const agent = this.connections.find((c) => c.id === provider && c.kind === "agent");
+        if (agent) throw new Error(`${agent.label} is a coding agent; it answers in the AI panel's chats, not in flows.`);
         return askOnce(
             this.chatClientFor(provider),
             {
@@ -814,5 +1061,6 @@ export class AiApp {
     async shutdown(): Promise<void> {
         await this.chat?.stopAll();
         this.models.cancelAll();
+        await this.agents?.stopAll();
     }
 }

@@ -19,6 +19,7 @@ import { call, errorText, state } from "../lib/state";
 import ModelBrowser from "./ModelBrowser";
 import OllamaRuntimeCard from "./OllamaRuntimeCard";
 import { EndpointForm } from "./ProviderForms";
+import { addAgents, agentChoiceReady, AgentChooser, agentSidebarStatus, AgentStatus, EditCustomAgent, emptyCustomAgent } from "./AgentForms";
 import styles from "./ModelsModal.module.css";
 
 /** The sidebar entry that adds a provider; never a connection id. */
@@ -33,6 +34,7 @@ export interface ModelsModalProps {
 }
 
 function connectionStatus(c: Connection): string {
+    if (c.kind === "agent") return agentSidebarStatus(c);
     if (state.modelErrors[c.id]) return "Unavailable";
     if (c.kind === "ollama" && state.runtime.status !== "ready") {
         return state.runtime.status === "missing" ? "Not installed" : state.runtime.status === "error" ? "Stopped" : "Not running";
@@ -64,7 +66,7 @@ export default function ModelsModal(props: ModelsModalProps) {
                     <PaperMenu name="model-provider" value={pane()} onValueChange={(value) => setPane(String(value))}>
                         <For each={state.connections}>
                             {(c) => (
-                                <PaperMenuItem value={c.id} icon={c.kind === "ollama" ? "memory" : "cloud"} description={connectionStatus(c)}>
+                                <PaperMenuItem value={c.id} icon={c.kind === "ollama" ? "memory" : c.kind === "agent" ? "terminal" : "cloud"} description={connectionStatus(c)}>
                                     {c.label}
                                 </PaperMenuItem>
                             )}
@@ -94,6 +96,7 @@ function ConnectionPane(props: { connection: Connection; onPick: (ref: string, p
     const [retrying, setRetrying] = createSignal(false);
     const [error, setError] = createSignal("");
     const isEndpoint = () => props.connection.kind === "openai-compatible";
+    const isAgent = () => props.connection.kind === "agent";
     const listError = () => state.modelErrors[props.connection.id];
     // editing one provider never carries over to the next one shown
     createEffect(on(() => props.connection.id, () => {
@@ -135,11 +138,13 @@ function ConnectionPane(props: { connection: Connection; onPick: (ref: string, p
                     <PaperText size={1} color="text-muted" truncate>
                         {isEndpoint()
                             ? `${props.connection.baseUrl}${props.connection.hasApiKey ? " · API key stored" : ""}`
-                            : "Runs models on this computer"}
+                            : isAgent()
+                              ? "Coding agent on this computer"
+                              : "Runs models on this computer"}
                     </PaperText>
                 </div>
                 <div class={styles.paneActions}>
-                    <Show when={isEndpoint()}>
+                    <Show when={isEndpoint() || isAgent()}>
                         <PaperButton size="small" disabled={editing()} onClick={() => setEditing(true)}>
                             <PaperIcon>edit</PaperIcon> Edit
                         </PaperButton>
@@ -155,16 +160,22 @@ function ConnectionPane(props: { connection: Connection; onPick: (ref: string, p
             </Show>
 
             <Show when={editing()}>
-                <EditEndpoint connection={props.connection} onDone={() => setEditing(false)} />
+                <Show when={isAgent()} fallback={<EditEndpoint connection={props.connection} onDone={() => setEditing(false)} />}>
+                    <EditCustomAgent connection={props.connection} onDone={() => setEditing(false)} />
+                </Show>
             </Show>
 
             <Show when={props.connection.kind === "ollama" && state.runtime.status !== "ready"}>
                 <OllamaRuntimeCard />
             </Show>
 
+            <Show when={isAgent()}>
+                <AgentStatus connection={props.connection} onPick={props.onPick} />
+            </Show>
+
             <Show
-                when={!listError()}
-                fallback={
+                when={!isAgent() && !listError()}
+                fallback={isAgent() ? undefined : (
                     <PaperQuote variant="danger" icon="cloud_off" title={`Couldn't list ${props.connection.label}'s models`}>
                         <PaperText size={2}>{listError()}</PaperText>
                         <div>
@@ -173,7 +184,7 @@ function ConnectionPane(props: { connection: Connection; onPick: (ref: string, p
                             </PaperButton>
                         </div>
                     </PaperQuote>
-                }
+                )}
             >
                 <ModelBrowser provider={props.connection.id} mode="pick" manage onPick={props.onPick} />
             </Show>
@@ -191,7 +202,9 @@ function ConnectionPane(props: { connection: Connection; onPick: (ref: string, p
                 }
             >
                 <PaperText>
-                    {isEndpoint()
+                    {isAgent()
+                        ? `${props.connection.label} stops and leaves the picker. It stays installed on this computer, and chats that used it stay.`
+                        : isEndpoint()
                         ? `Its models leave the picker${props.connection.hasApiKey ? " and its stored API key is deleted" : ""}. Chats that used it stay.`
                         : "Ollama stops and its models leave the picker. The downloaded models stay on this computer and come back if you add Ollama again."}
                 </PaperText>
@@ -254,14 +267,25 @@ function AddProviderPane(props: { onAdded: (id: string) => void }) {
     const [label, setLabel] = createSignal("");
     const [baseUrl, setBaseUrl] = createSignal("");
     const [apiKey, setApiKey] = createSignal("");
+    const [agents, setAgents] = createSignal<string[]>([]);
+    const [custom, setCustom] = createSignal(emptyCustomAgent());
     const [adding, setAdding] = createSignal(false);
     const [error, setError] = createSignal("");
     const isEndpoint = () => kind() === "openai-compatible";
+    const isAgent = () => kind() === "agent";
+    const canAdd = () => !adding() && (isEndpoint() ? baseUrl().trim() !== "" : isAgent() ? agentChoiceReady(agents(), custom()) : true);
 
     const add = async () => {
         setAdding(true);
         setError("");
         try {
+            if (isAgent()) {
+                const last = await addAgents(agents(), custom());
+                setAgents([]);
+                setCustom(emptyCustomAgent());
+                if (last) props.onAdded(last);
+                return;
+            }
             const added = await call<Connection>(UI_ACTION_IDS.addConnection, {
                 kind: kind(),
                 ...(isEndpoint() ? { label: label(), baseUrl: baseUrl(), apiKey: apiKey() } : {}),
@@ -286,7 +310,13 @@ function AddProviderPane(props: { onAdded: (id: string) => void }) {
                 <PaperSelectorItem value="openai-compatible" icon="cloud" description="Point at any OpenAI-compatible endpoint by URL, with an optional API key.">
                     Custom endpoint
                 </PaperSelectorItem>
+                <PaperSelectorItem value="agent" icon="terminal" description="A coding agent you installed, like Claude Agent, Codex or Gemini CLI. It works in a folder you choose.">
+                    Coding agent
+                </PaperSelectorItem>
             </PaperSelector>
+            <Show when={isAgent()}>
+                <AgentChooser selected={agents()} onSelected={setAgents} custom={custom()} onCustom={setCustom} />
+            </Show>
             <Show when={isEndpoint()}>
                 <EndpointForm
                     label={label()}
@@ -303,8 +333,8 @@ function AddProviderPane(props: { onAdded: (id: string) => void }) {
                 </PaperQuote>
             </Show>
             <div>
-                <PaperButton variant="primary" disabled={adding() || (isEndpoint() && !baseUrl().trim())} onClick={() => void add()}>
-                    <PaperIcon>add</PaperIcon> {adding() ? "Adding..." : "Add provider"}
+                <PaperButton variant="primary" disabled={!canAdd()} onClick={() => void add()}>
+                    <PaperIcon>add</PaperIcon> {adding() ? "Adding..." : isAgent() && agents().length + (custom().on ? 1 : 0) > 1 ? "Add agents" : "Add provider"}
                 </PaperButton>
             </div>
         </section>

@@ -13,6 +13,7 @@ import { UI_ACTION_IDS } from "../contract";
 import type { ProviderKind } from "../core/providers";
 import { call, errorText, state } from "../lib/state";
 import { EndpointForm, OllamaSetup } from "./ProviderForms";
+import { addAgents, agentChoiceReady, AgentChooser, emptyCustomAgent } from "./AgentForms";
 
 export interface SetupProps {
     onComplete?: () => void;
@@ -27,17 +28,31 @@ export default function Setup(props: SetupProps) {
     const [label, setLabel] = createSignal("");
     const [baseUrl, setBaseUrl] = createSignal("");
     const [apiKey, setApiKey] = createSignal("");
+    const [agents, setAgents] = createSignal<string[]>([]);
+    const [custom, setCustom] = createSignal(emptyCustomAgent());
     const [saving, setSaving] = createSignal(false);
     const [error, setError] = createSignal("");
 
     const isEndpoint = () => choice() === "openai-compatible";
+    const isAgent = () => choice() === "agent";
     const canFinish = () =>
-        saving() ? false : isEndpoint() ? baseUrl().trim().length > 0 : state.runtime.status === "ready";
+        saving()
+            ? false
+            : isEndpoint()
+              ? baseUrl().trim().length > 0
+              : isAgent()
+                ? agentChoiceReady(agents(), custom())
+                : state.runtime.status === "ready";
 
     const finish = async () => {
         setSaving(true);
         setError("");
         try {
+            if (isAgent()) {
+                await addAgents(agents(), custom());
+                props.onComplete?.();
+                return;
+            }
             await call(UI_ACTION_IDS.addConnection, {
                 kind: choice(),
                 ...(isEndpoint() ? { label: label(), baseUrl: baseUrl(), apiKey: apiKey() } : {}),
@@ -84,13 +99,28 @@ export default function Setup(props: SetupProps) {
                             >
                                 Custom endpoint
                             </PaperSelectorItem>
+                            <PaperSelectorItem
+                                value="agent"
+                                icon="terminal"
+                                description="Coding agents you installed, like Claude Agent, Codex or Gemini CLI. Pick as many as you like."
+                            >
+                                Coding agents
+                            </PaperSelectorItem>
                         </PaperSelector>
                     </PaperFlex>
                 </PaperCenteredInterface>
             </PaperWizardStep>
 
             <PaperWizardStep index={1} canProceed={canFinish()}>
-                <Show when={isEndpoint()} fallback={<OllamaSetup />}>
+                <Show when={isAgent()}>
+                    <PaperCenteredInterface size="compact">
+                        <PaperFlex direction="column" gap="full" fullWidth>
+                            <PaperText preset="title">Choose your agents</PaperText>
+                            <AgentChooser selected={agents()} onSelected={setAgents} custom={custom()} onCustom={setCustom} />
+                        </PaperFlex>
+                    </PaperCenteredInterface>
+                </Show>
+                <Show when={isEndpoint()} fallback={isAgent() ? undefined : <OllamaSetup />}>
                     <EndpointForm
                         title="Connect an endpoint"
                         label={label()}

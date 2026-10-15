@@ -107,3 +107,18 @@
     text-overflow: ellipsis;
     white-space: nowrap;
 }
+
+/* a coding agent's plan */
+.plan ol {
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap-onefourth);
+    margin: var(--paper-uigap-onefourth) 0 0;
+    padding: 0;
+    list-style: none;
+    font-size: var(--paper-text-size-2);
+}
+
+.planDone {
+    color: var(--paper-text-muted);
+}

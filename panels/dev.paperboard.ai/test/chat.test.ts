@@ -67,6 +67,16 @@ function engine(): ChatEngine {
         onApprovals: (list) => (approvals = list),
         onSpeed: () => {},
         onReplyFinished: (p) => finished.push(p),
+        agentConnection: () => undefined,
+        agents: {
+            openSession: async () => {
+                throw new Error("no agents in these tests");
+            },
+            prompt: async () => {
+                throw new Error("no agents in these tests");
+            },
+            forget: () => {},
+        },
     });
 }
 

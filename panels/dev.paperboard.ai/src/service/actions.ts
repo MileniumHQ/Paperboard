@@ -24,7 +24,8 @@ function optStr(value: unknown, name: string, max = 200): string | undefined {
  * republish — one list, never a stale copy.
  */
 function modelOptions(app: AiApp): { label: string; value: string }[] {
-    return app.models.list.map((m) => ({ label: m.name, value: m.name }));
+    // coding agents answer in chats, never in flows
+    return app.models.list.filter((m) => !m.capabilities.includes("agent")).map((m) => ({ label: m.name, value: m.name }));
 }
 
 const personalityOptions = PROMPT_STYLES.map((style) => ({
@@ -198,15 +199,30 @@ export function uiActions(app: AiApp): ActionDefinition[] {
             }),
         ),
         ui(UI_ACTION_IDS.addConnection, "Add provider", (i) =>
-            ready(() => app.addConnection({ kind: i.kind, label: i.label, baseUrl: i.baseUrl, apiKey: i.apiKey })),
+            ready(() =>
+                app.addConnection({ kind: i.kind, label: i.label, baseUrl: i.baseUrl, apiKey: i.apiKey, agent: i.agent, command: i.command, args: i.args }),
+            ),
         ),
         ui(UI_ACTION_IDS.updateConnection, "Change provider", (i) =>
             ready(() =>
-                app.updateConnection({ id: i.id, label: i.label, baseUrl: i.baseUrl, apiKey: i.apiKey, clearApiKey: i.clearApiKey }),
+                app.updateConnection({
+                    id: i.id,
+                    label: i.label,
+                    baseUrl: i.baseUrl,
+                    apiKey: i.apiKey,
+                    clearApiKey: i.clearApiKey,
+                    command: i.command,
+                    args: i.args,
+                }),
             ),
         ),
         ui(UI_ACTION_IDS.removeConnection, "Remove provider", (i) => ready(() => app.removeConnection(str(i.id, "id", 64)))),
         ui(UI_ACTION_IDS.refreshModels, "Refresh models", () => ready(async () => void (await app.models.refresh()))),
+        ui(UI_ACTION_IDS.installedAgents, "Find installed agents", () => ready(() => app.installedAgents())),
+        ui(UI_ACTION_IDS.checkAgent, "Check agent", (i) => ready(() => app.checkAgent(i.id))),
+        ui(UI_ACTION_IDS.authenticateAgent, "Sign in to agent", (i) => ready(() => app.authenticateAgent(i.id, i.methodId))),
+        ui(UI_ACTION_IDS.setConversationFolder, "Set chat folder", (i) => ready(() => app.setConversationFolder(str(i.id, "id", 64), i.folder))),
+        ui(UI_ACTION_IDS.setAgentMode, "Set agent mode", (i) => ready(() => app.setAgentMode(str(i.id, "id", 64), i.mode))),
         ui(UI_ACTION_IDS.testConnection, "Test provider", (i) =>
             ready(() => app.testConnection({ id: i.id, baseUrl: i.baseUrl, apiKey: i.apiKey })),
         ),
@@ -246,7 +262,9 @@ export function uiActions(app: AiApp): ActionDefinition[] {
         ),
         ui(UI_ACTION_IDS.stopGeneration, "Stop reply", (i) => ready(() => app.chat.stop(str(i.id, "id", 64)))),
         ui(UI_ACTION_IDS.resolveApproval, "Answer approval", (i) =>
-            ready(() => app.resolveApproval(str(i.id, "id", 64), str(i.decision, "decision", 16) as ApprovalDecision)),
+            ready(() =>
+                app.resolveApproval(str(i.id, "id", 64), (optStr(i.decision, "decision", 16) ?? "") as ApprovalDecision, optStr(i.optionId, "optionId", 200)),
+            ),
         ),
         ui(UI_ACTION_IDS.revokePermission, "Revoke permission", (i) => ready(() => app.revoke(str(i.key, "key", 400)))),
         ui(UI_ACTION_IDS.takeOpenRequest, "Take chat to open", () => ready(() => app.takeOpenRequest())),

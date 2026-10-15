@@ -1,14 +1,42 @@
 import { createEffect, createSignal, For, Match, Show, Switch } from "solid-js";
 import { PaperButton, PaperCopyButton, PaperIcon, PaperMarkdown, PaperModal, PaperText } from "@mileniumhq/paperui";
 import { compactCount, isRoundEmpty, replyText, turnStats } from "../core/chain";
-import type { AssistantMessage, UserMessage as UserMessageData } from "../core/types";
+import type { AssistantMessage, PlanEntry, UserMessage as UserMessageData } from "../core/types";
 import { errorText, rewindOpen } from "../lib/state";
 import { ActionSteps, ThinkingStep } from "./ReasoningChain";
 import styles from "./MessageView.module.css";
 
+const PLAN_ICONS: Record<PlanEntry["status"], string> = { pending: "radio_button_unchecked", in_progress: "pending", completed: "check_circle" };
+
+/** A coding agent's plan, as it last reported it. */
+function Plan(props: { entries: PlanEntry[] }) {
+    return (
+        <section class={styles.plan} aria-label="Plan">
+            <PaperText size={1} weight={600} color="text-muted">Plan</PaperText>
+            <ol>
+                <For each={props.entries}>
+                    {(e) => (
+                        <li classList={{ [styles.planDone!]: e.status === "completed" }}>
+                            <PaperIcon zeroHeight aria-label={e.status.replace("_", " ")}>{PLAN_ICONS[e.status]}</PaperIcon> {e.content}
+                        </li>
+                    )}
+                </For>
+            </ol>
+        </section>
+    );
+}
+
 function Round(props: { round: AssistantMessage }) {
     return (
         <>
+            <Show when={props.round.notice}>
+                <PaperText size={1} color="text-muted" role="note">
+                    <PaperIcon zeroHeight>info</PaperIcon> {props.round.notice}
+                </PaperText>
+            </Show>
+            <Show when={(props.round.plan?.length ?? 0) > 0}>
+                <Plan entries={props.round.plan!} />
+            </Show>
             {/* one step from "waiting" through "thinking" to "thought process",
                 so the loader keeps its place instead of jumping between rows */}
             <Show when={Boolean(props.round.thinking) || (props.round.status === "streaming" && isRoundEmpty(props.round))}>
@@ -75,7 +103,7 @@ function sentAt(ms: number): string {
 }
 
 /** Long prompts start clamped; the toggle appears only when one overflows. */
-export function UserMessage(props: { message: UserMessageData }) {
+export function UserMessage(props: { message: UserMessageData; agent?: string }) {
     const [expanded, setExpanded] = createSignal(false);
     const [overflowing, setOverflowing] = createSignal(false);
     let body: HTMLDivElement | undefined;
@@ -181,6 +209,7 @@ export function UserMessage(props: { message: UserMessageData }) {
             >
                 <PaperText>
                     This message and everything after it are erased from the chat. A reply still being written is stopped. This cannot be undone.
+                    {props.agent ? ` Files ${props.agent} changed stay as they are, and it starts a new session.` : ""}
                 </PaperText>
                 <Show when={undoError()}>
                     <PaperText color="danger" role="alert">{undoError()}</PaperText>

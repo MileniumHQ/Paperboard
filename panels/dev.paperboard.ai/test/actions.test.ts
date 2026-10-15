@@ -8,7 +8,7 @@ import { askSystemPrompt } from "../src/core/conversation";
 
 function fakeApp(models: string[]) {
     return {
-        models: { list: models.map((name) => ({ name })) },
+        models: { list: models.map((name) => ({ name, capabilities: name.startsWith("agent:") ? ["agent"] : ["completion"] })) },
         ready: Promise.resolve(),
     } as any;
 }
@@ -26,6 +26,11 @@ describe("Ask AI schema", () => {
         expect(model.options.map((o: any) => o.value)).toEqual(["qwen3:8b", "llama3:2b"]);
         expect(model.allowEmpty).toBe(true);
         expect(model.emptyLabel).toBe("Default model");
+    });
+
+    it("leaves coding agents out of the model list", () => {
+        const ask = findAction(fakeApp(["qwen3:8b", "agent:Codex"]), "ask");
+        expect(ask.inputs.model.options.map((o: any) => o.value)).toEqual(["qwen3:8b"]);
     });
 
     it("offers every personality, defaulting to standard", () => {

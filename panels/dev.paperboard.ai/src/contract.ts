@@ -7,6 +7,10 @@ export const PANEL_ID = "dev.paperboard.ai";
 
 // supervised process ids share one daemon-wide namespace
 export const OLLAMA_PROC_ID = `${PANEL_ID}.ollama`;
+/** an agent connection's process; one per connection */
+export function agentProcId(connectionId: string): string {
+    return `${PANEL_ID}.agent.${connectionId}`;
+}
 // the package id is the provider's own fact (core/providers.ts)
 export const OLLAMA_PACKAGE = OLLAMA_PROVIDER.runtime!.packageId;
 
@@ -27,6 +31,11 @@ export const UI_ACTION_IDS = {
     removeConnection: "ui-remove-connection",
     testConnection: "ui-test-connection",
     refreshModels: "ui-refresh-models",
+    checkAgent: "ui-check-agent",
+    installedAgents: "ui-installed-agents",
+    authenticateAgent: "ui-authenticate-agent",
+    setConversationFolder: "ui-set-conversation-folder",
+    setAgentMode: "ui-set-agent-mode",
     pullModel: "ui-pull-model",
     cancelPull: "ui-cancel-pull",
     deleteModel: "ui-delete-model",

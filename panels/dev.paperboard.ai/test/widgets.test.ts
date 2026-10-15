@@ -81,6 +81,11 @@ describe("Quick ask's Model option", () => {
         expect(quickAskModel(s, "other:1b")).toBe("other:1b");
         expect(quickAskBlocker(s, "gone:1b")).toEqual({ text: "gone:1b is not downloaded", recovery: "open" });
     });
+
+    it("leaves coding agents out, since a widget can't pick their folder", () => {
+        const s = ready({ models: [model("qwen3:8b"), { name: "Codex", provider: "agent-0123abcd", sizeBytes: 0, capabilities: ["agent"] }] });
+        expect(quickAskModelChoices(s).slice(1).map((c) => c.value)).toEqual(["qwen3:8b"]);
+    });
 });
 
 describe("Quick ask readiness", () => {

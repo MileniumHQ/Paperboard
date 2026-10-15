@@ -93,3 +93,61 @@
     top: var(--paper-uigap-onefourth);
     right: var(--paper-uigap-onefourth);
 }
+
+/* a coding agent's tool: its command, files, edits and output */
+.agentTool {
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap-half);
+    min-width: 0;
+}
+
+.locations {
+    margin: 0;
+    padding-left: var(--paper-uigap);
+    font-family: var(--paper-font-family-code);
+    font-size: var(--paper-text-size-1);
+    overflow-wrap: anywhere;
+}
+
+.diff {
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap-onefourth);
+    margin: 0;
+    min-width: 0;
+}
+
+.diff figcaption {
+    display: flex;
+    gap: var(--paper-uigap-half);
+    overflow-wrap: anywhere;
+}
+
+.diffLines {
+    margin: 0;
+    max-height: calc(var(--paper-size-panel-height-small) * 0.6);
+    overflow: auto;
+    padding: var(--paper-uigap-onefourth) var(--paper-uigap-half);
+    border-radius: var(--paper-border-radius-half);
+    background-color: var(--paper-surface);
+    font-family: var(--paper-font-family-code);
+    font-size: var(--paper-text-size-1);
+}
+
+.diffLines span {
+    display: block;
+    white-space: pre;
+}
+
+.context {
+    color: var(--paper-text-muted);
+}
+
+.removed {
+    color: var(--paper-danger);
+}
+
+.added {
+    color: var(--paper-success);
+}

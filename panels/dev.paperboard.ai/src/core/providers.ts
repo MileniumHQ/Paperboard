@@ -1,10 +1,11 @@
 // Providers: how the panel reaches a model. The user adds connections: the
-// local Ollama runtime the panel installs and starts, and any number of
-// OpenAI-compatible endpoints it is simply pointed at. The transport
+// local Ollama runtime the panel installs and starts, any number of
+// OpenAI-compatible endpoints it is simply pointed at, and coding agents
+// (ACP) the user installed, which the panel runs and talks to over stdio. The transport
 // differs, everything above it does not: models carry their connection id,
 // so a chat, an install or a stop is routed and labelled truthfully.
 
-export type ProviderKind = "ollama" | "openai-compatible";
+export type ProviderKind = "ollama" | "openai-compatible" | "agent";
 
 export interface ProviderDefinition {
     id: string;
@@ -49,9 +50,20 @@ export interface Connection {
     baseUrl?: string;
     /** openai-compatible: an API key is stored in the vault */
     hasApiKey?: boolean;
+    /** agent: the registry agent's id, or CUSTOM_AGENT_ID */
+    agent?: string;
+    /** agent (custom only): the executable, a name on PATH or an absolute path */
+    command?: string;
+    /** agent (custom only): its arguments, one per entry (never a shell string) */
+    args?: string[];
 }
 
 const API_ID = /^api-[0-9a-f]{8}$/;
+const AGENT_ID = /^agent-[0-9a-f]{8}$/;
+
+export function isAgentConnectionId(id: string): boolean {
+    return AGENT_ID.test(id);
+}
 
 export function isApiConnectionId(id: string): boolean {
     return API_ID.test(id);
@@ -66,6 +78,7 @@ export function apiKeySecretName(connectionId: string): string {
 /** How the service reaches a connection. */
 export function definitionOf(connection: Connection): ProviderDefinition {
     if (connection.kind === "ollama") return OLLAMA_PROVIDER;
+    if (connection.kind === "agent") return { id: connection.id, label: connection.label, kind: "agent", canPull: false };
     return {
         id: connection.id,
         label: connection.label,
@@ -81,7 +94,6 @@ export function connectionLabel(connections: readonly Connection[], id: string |
     return connections.find((c) => c.id === id)?.label ?? id ?? "Unknown provider";
 }
 
-/** A short default name for an endpoint: its host. */
 /**
  * Why a chat's model can't be used: its provider was removed, the endpoint
  * no longer lists it, or (Ollama) it isn't downloaded.
@@ -89,10 +101,12 @@ export function connectionLabel(connections: readonly Connection[], id: string |
 export function unlistedModelReason(connections: readonly Connection[], model: string, provider: string | undefined): string {
     const owner = provider === undefined ? undefined : connections.find((c) => c.id === provider);
     if (provider !== undefined && !owner) return `The provider ${model} ran on was removed. Pick a model from Models.`;
+    if (owner?.kind === "agent") return `${owner.label} can't be started. Open Models to see why.`;
     if (owner && owner.kind !== "ollama") return `${owner.label} doesn't list ${model}. Pick a model from Models.`;
     return `${model} is not downloaded. Pick one from Models.`;
 }
 
+/** A short default name for an endpoint: its host. */
 export function endpointLabel(baseUrl: string): string {
     try {
         return new URL(baseUrl).host || baseUrl;

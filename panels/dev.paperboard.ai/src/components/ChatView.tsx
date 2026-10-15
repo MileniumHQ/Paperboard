@@ -23,6 +23,7 @@ import { groupTurns, type Turn } from "../core/chain";
 import { createChatSelection } from "../lib/selection";
 import { AssistantTurn, UserMessage } from "./MessageView";
 import ModelsModal from "./ModelsModal";
+import AgentBar from "./AgentBar";
 import SettingsTab from "./SettingsTab";
 import styles from "./ChatView.module.css";
 
@@ -36,6 +37,8 @@ export default function ChatView() {
     const [error, setError] = createSignal("");
     const [modelsOpen, setModelsOpen] = createSignal(false);
     const [starting, setStarting] = createSignal(false);
+    // a draft agent chat's folder, applied when the first message creates the chat
+    const [draftFolder, setDraftFolder] = createSignal<string>();
     let scroller: HTMLDivElement | undefined;
     let thread: HTMLDivElement | undefined;
     let stickToBottom = true;
@@ -111,8 +114,16 @@ export default function ChatView() {
     };
     const installed = createMemo(() => {
         const via = chatProvider();
+        // an agent lists only itself, so its chat follows it through a rename
+        if (via && state.connections.some((c) => c.id === via && c.kind === "agent")) return state.models.find((m) => m.provider === via);
         return state.models.find((m) => m.name === model() && (!via || m.provider === via));
     });
+    const agentConnection = () => {
+        const via = installed()?.provider ?? chatProvider();
+        return state.connections.find((c) => c.id === via && c.kind === "agent");
+    };
+    const summary = () => state.conversations.find((s) => s.id === conversation()?.id);
+    const folder = () => (conversation() ? summary()?.cwd ?? conversation()?.cwd : draftFolder() ?? state.recentFolders[0]);
     const generating = () => Boolean(conversation() && state.generating.includes(conversation()!.id));
     const waitingHere = () => state.approvals.filter((a) => a.conversationId === conversation()?.id).length;
     const hasOllama = () => state.connections.some((c) => c.kind === "ollama");
@@ -129,6 +140,7 @@ export default function ChatView() {
         if (usingOllama() && state.runtime.status !== "ready") return `${OLLAMA_PROVIDER.label} is not running.`;
         if (!model()) return "Choose a model for this chat.";
         if (!installed()) return unlistedModelReason(state.connections, model(), chatProvider());
+        if (agentConnection() && !folder()) return `Choose a folder for ${agentConnection()!.label} to work in.`;
         return undefined;
     };
 
@@ -168,6 +180,7 @@ export default function ChatView() {
     const newChat = () => {
         setError("");
         setSettingsOpen(false);
+        setDraftFolder(undefined);
         selection.newChat();
     };
 
@@ -181,12 +194,16 @@ export default function ChatView() {
         let id = conversation()?.id;
         try {
             if (!id) {
-                const c = await call<Conversation>(UI_ACTION_IDS.newConversation, { model: model() });
+                const provider = installed()?.provider ?? chatProvider();
+                const c = await call<Conversation>(UI_ACTION_IDS.newConversation, { model: model(), ...(provider ? { provider } : {}) });
                 // hold the selection before the draft flag drops: the summary
                 // event may still be travelling when this call's answer lands
                 selection.created(c.id);
                 await openChat(c.id);
                 id = c.id;
+                const chosen = draftFolder();
+                setDraftFolder(undefined);
+                if (agentConnection() && chosen && chosen !== c.cwd) await call(UI_ACTION_IDS.setConversationFolder, { id, folder: chosen });
             }
             stickToBottom = true;
             await call(UI_ACTION_IDS.sendMessage, { id, text, reasoning, attachments });
@@ -274,9 +291,11 @@ export default function ChatView() {
                         <div class={styles.welcome}>
                             <PaperEmptyState
                                 icon="smart_toy"
-                                title="Ask anything"
+                                title={agentConnection() ? `Work with ${agentConnection()!.label}` : "Ask anything"}
                                 description={
-                                    usingOllama()
+                                    agentConnection()
+                                        ? `${agentConnection()!.label} reads, edits and runs commands in the folder below, asking before it changes things.`
+                                        : usingOllama()
                                         ? "Replies are generated on this computer."
                                         : `Replies come from ${connectionLabel(state.connections, installed()?.provider ?? chatProvider())}.`
                                 }
@@ -294,7 +313,7 @@ export default function ChatView() {
                             {(turn) => (
                                 <Switch>
                                     <Match when={turn().kind === "user" && turn()}>
-                                        {(t) => <UserMessage message={(t() as Extract<Turn, { kind: "user" }>).message} />}
+                                        {(t) => <UserMessage message={(t() as Extract<Turn, { kind: "user" }>).message} agent={agentConnection()?.label} />}
                                     </Match>
                                     <Match when={turn().kind === "assistant" && turn()}>
                                         {(t) => <AssistantTurn rounds={(t() as Extract<Turn, { kind: "assistant" }>).rounds} />}
@@ -326,6 +345,23 @@ export default function ChatView() {
                     )}
                 </Show>
                 <Composer
+                    toolbar={
+                        <Show when={agentConnection()}>
+                            {(agent) => (
+                                <AgentBar
+                                    connection={agent()}
+                                    conversationId={conversation()?.id}
+                                    folder={folder()}
+                                    mode={conversation()?.mode}
+                                    generating={generating()}
+                                    onDraftFolder={setDraftFolder}
+                                    onError={setError}
+                                />
+                            )}
+                        </Show>
+                    }
+                    commands={conversation() ? state.agentSessions[conversation()!.id]?.commands : undefined}
+                    placeholder={agentConnection() ? `Tell ${agentConnection()!.label} what to do` : undefined}
                     disabled={Boolean(disabledReason())}
                     disabledReason={disabledReason()}
                     generating={generating()}

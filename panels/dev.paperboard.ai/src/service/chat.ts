@@ -21,6 +21,8 @@ import {
     formatShellResult,
     isBuiltinTool,
 } from "../core/builtins";
+import { applyToolUpdate, contentText, planFrom, promptBlocks, toolRecordFrom } from "../core/acp";
+import { replyText } from "../core/chain";
 import { validateAttachments } from "../core/attachments";
 import { reasoningToThink, type ReasoningLevel } from "../core/reasoning";
 import {
@@ -42,10 +44,14 @@ import type {
     Conversation,
     ConversationSnapshot,
     ConversationSummary,
+    AgentPermissionOption,
     PendingApproval,
     Settings,
     ToolCallRecord,
+    UserMessage,
 } from "../core/types";
+import type { Connection } from "../core/providers";
+import type { AgentHub, StopReason } from "./agents";
 import type { ChatChunk } from "./ollamaClient";
 import type { ChatClient } from "./provider";
 import type { ConversationStore } from "./store";
@@ -53,7 +59,10 @@ import type { ConversationStore } from "./store";
 export const MAX_ACTIVE_REPLIES = 3;
 export const MAX_CALLS_PER_ROUND = 8;
 export const MAX_REPLY_CHARS = 200_000;
+/** tool calls an agent turn records in the chat; later ones still run, unrecorded */
+export const MAX_AGENT_TOOL_CALLS = 500;
 const DELTA_INTERVAL_MS = 60;
+const AGENT_MESSAGE_INTERVAL_MS = 150;
 
 export type ApprovalDecision = "once" | "always" | "deny";
 
@@ -71,6 +80,9 @@ export interface ChatDeps {
     callAction: (panelId: string, action: string, args: Record<string, unknown>) => Promise<unknown>;
     isAllowed: (key: string) => boolean;
     rememberAllowed: (key: string) => Promise<void>;
+    /** the agent connection a provider id names, if it is one */
+    agentConnection: (providerId: string) => Connection | undefined;
+    agents: Pick<AgentHub, "openSession" | "prompt" | "forget">;
     /** the built-in tools' effects */
     runShell: (command: string, signal: AbortSignal) => Promise<{ stdout: string; stderr: string; exitCode: number }>;
     // outputs
@@ -94,6 +106,8 @@ interface Active {
 interface Waiting {
     approval: PendingApproval;
     resolve: (decision: ApprovalDecision | "cancelled") => void;
+    /** an agent's request: answered with one of its own options */
+    choose?: (optionId: string) => void;
 }
 
 export class ChatEngine {
@@ -151,13 +165,14 @@ export class ChatEngine {
         this.deps.onSummaries(await this.deps.store.save(conversation));
     }
 
-    async create(model: string, provider?: string): Promise<Conversation> {
+    async create(model: string, provider?: string, cwd?: string): Promise<Conversation> {
         const now = Date.now();
         const conversation: Conversation = {
             id: newId(),
             title: "New chat",
             model,
             ...(provider ? { provider } : {}),
+            ...(cwd ? { cwd } : {}),
             createdAt: now,
             updatedAt: now,
             messages: [],
@@ -193,12 +208,20 @@ export class ChatEngine {
         const provider =
             conversation.provider ??
             (!conversation.model && settings.defaultProvider ? settings.defaultProvider : this.deps.providerOf(model));
-        const capabilities = provider ? this.deps.capabilities(model, provider) : undefined;
-        if (!provider || !capabilities) throw new Error(`${model} is not available. Pick a model from Models.`);
-        validateAttachments(attachments, { vision: capabilities.includes("vision") });
-        this.deps.clientFor(provider); // throws when the provider is not reachable
+        const agent = provider ? this.deps.agentConnection(provider) : undefined;
+        let capabilities: string[] | undefined;
+        if (agent) {
+            if (!conversation.cwd) throw new Error(`Choose a folder for ${agent.label} to work in first.`);
+            // whether the agent takes images is its answer once the session opens
+            validateAttachments(attachments, { vision: true });
+        } else {
+            capabilities = provider ? this.deps.capabilities(model, provider) : undefined;
+            if (!provider || !capabilities) throw new Error(`${model} is not available. Pick a model from Models.`);
+            validateAttachments(attachments, { vision: capabilities.includes("vision") });
+            this.deps.clientFor(provider); // throws when the provider is not reachable
+        }
 
-        const user: ChatMessage = {
+        const user: UserMessage = {
             id: newId(),
             role: "user",
             content,
@@ -218,7 +241,10 @@ export class ChatEngine {
 
         const reasoning = opts.reasoning ?? this.deps.settings().reasoning;
         const abort = new AbortController();
-        const done = this.reply(conversation, abort.signal, capabilities.includes("thinking") ? reasoningToThink(reasoning) : false).finally(() => {
+        const replying = agent
+            ? this.agentReply(conversation, agent, user, abort.signal)
+            : this.reply(conversation, abort.signal, capabilities!.includes("thinking") ? reasoningToThink(reasoning) : false);
+        const done = replying.finally(() => {
             this.active.delete(conversationId);
             this.publishActive();
         });
@@ -240,6 +266,11 @@ export class ChatEngine {
             const i = conversation.messages.findIndex((m) => m.id === messageId);
             if (i < 0 || conversation.messages[i]!.role !== "user") throw new Error("That message is not in this chat.");
             conversation.messages = conversation.messages.slice(0, i);
+            // an agent remembers what was erased; its next turn starts a fresh session
+            if (conversation.sessionId) {
+                delete conversation.sessionId;
+                this.deps.agents.forget(conversationId);
+            }
             conversation.updatedAt = Date.now();
             this.deps.onSummaries(await this.deps.store.save(conversation));
             // other windows showing this chat still hold the erased messages
@@ -267,9 +298,16 @@ export class ChatEngine {
         await active.done.catch((err) => console.debug("[ai] stopped reply ended with:", String(err)));
     }
 
-    resolveApproval(id: string, decision: ApprovalDecision): void {
+    resolveApproval(id: string, decision: ApprovalDecision, optionId?: string): void {
         const w = this.waiting.get(id);
         if (!w) throw new Error("That request is no longer waiting for approval.");
+        if (w.choose) {
+            if (typeof optionId !== "string" || !w.approval.options?.some((o) => o.id === optionId)) {
+                throw new Error("Choose one of the answers the agent offered.");
+            }
+            w.choose(optionId);
+            return;
+        }
         if (!["once", "always", "deny"].includes(decision)) throw new Error(`Unknown decision ${JSON.stringify(decision)}`);
         const builtin = w.approval.builtin;
         if (decision === "always" && builtin && !BUILTIN_APPROVAL[builtin].remember) {
@@ -381,6 +419,256 @@ export class ChatEngine {
                 this.emitMessage(conversation.id, current);
             }
             await save().catch((saveErr) => console.error("[ai] saving the failed reply failed:", String(saveErr)));
+        }
+    }
+
+    /**
+     * One prompt turn on a coding agent. The agent runs its own tools; what
+     * it reports becomes rounds the chain already reads: text after tool
+     * calls starts a new round, so the reply reads in the order it happened.
+     * Permission requests wait in the approvals list like any action.
+     */
+    private async agentReply(conversation: Conversation, connection: Connection, user: UserMessage, signal: AbortSignal): Promise<void> {
+        const { deps } = this;
+        const label = connection.label;
+        // the user's stop, or the turn's own failure (a reply that grew too
+        // large): either cancels the agent's turn
+        const turn = new AbortController();
+        const onStop = () => turn.abort();
+        signal.addEventListener("abort", onStop, { once: true });
+        let failure: Error | null = null;
+        const fail = (err: unknown) => {
+            failure ??= err instanceof Error ? err : new Error(String(err));
+            turn.abort();
+        };
+
+        const save = async () => {
+            conversation.updatedAt = Date.now();
+            deps.onSummaries(await deps.store.save(conversation));
+        };
+        const hadHistory = conversation.messages.length > 1;
+        let round = this.startAssistant(conversation);
+        const first = round;
+        this.emitMessage(conversation.id, round);
+        const calls = new Map<string, { record: ToolCallRecord; round: AssistantMessage }>();
+        let recorded = 0;
+        let unrecorded = 0;
+
+        // text streams as deltas; structural changes as whole messages, coalesced
+        let deltaTimer: ReturnType<typeof setTimeout> | null = null;
+        const flushDelta = () => {
+            if (deltaTimer) clearTimeout(deltaTimer);
+            deltaTimer = null;
+            deps.onDelta({
+                seq: ++this.seq,
+                conversationId: conversation.id,
+                messageId: round.id,
+                content: round.content,
+                ...(round.thinking ? { thinking: round.thinking } : {}),
+            });
+        };
+        const dirty = new Set<AssistantMessage>();
+        let messageTimer: ReturnType<typeof setTimeout> | null = null;
+        const flushMessages = () => {
+            if (messageTimer) clearTimeout(messageTimer);
+            messageTimer = null;
+            for (const m of dirty) this.emitMessage(conversation.id, m);
+            dirty.clear();
+        };
+        const changed = (m: AssistantMessage, now = false) => {
+            dirty.add(m);
+            if (now) flushMessages();
+            else messageTimer ??= setTimeout(flushMessages, AGENT_MESSAGE_INTERVAL_MS);
+        };
+
+        const nextRoundForText = () => {
+            if (!round.toolCalls?.length || conversation.messages.length >= MAX_MESSAGES) return;
+            flushDelta();
+            round.status = "done";
+            changed(round, true);
+            round = this.startAssistant(conversation);
+            changed(round, true);
+            save().catch((err) => console.error("[ai] saving an agent round failed:", String(err)));
+        };
+
+        const trackCall = (update: Record<string, unknown>, force: boolean): { record: ToolCallRecord; round: AssistantMessage } | undefined => {
+            const agentId = typeof update.toolCallId === "string" ? update.toolCallId : "";
+            const known = calls.get(agentId);
+            if (known) {
+                applyToolUpdate(known.record, update);
+                return known;
+            }
+            if (!force && recorded >= MAX_AGENT_TOOL_CALLS) {
+                unrecorded++;
+                return undefined;
+            }
+            const record = toolRecordFrom(update);
+            if (!record) return undefined;
+            // agents number calls per session; the chat needs ids unique across chats
+            record.id = newId();
+            recorded++;
+            flushDelta();
+            (round.toolCalls ??= []).push(record);
+            const entry = { record, round };
+            calls.set(agentId, entry);
+            return entry;
+        };
+
+        const onUpdate = (update: Record<string, unknown>) => {
+            if (turn.signal.aborted) return;
+            try {
+                switch (update.sessionUpdate) {
+                    case "agent_message_chunk":
+                    case "agent_thought_chunk": {
+                        const text = contentText(update.content);
+                        if (!text) return;
+                        nextRoundForText();
+                        if (update.sessionUpdate === "agent_message_chunk") round.content += text;
+                        else round.thinking = (round.thinking ?? "") + text;
+                        if (round.content.length + (round.thinking?.length ?? 0) > MAX_REPLY_CHARS) {
+                            throw new Error(`The reply passed ${MAX_REPLY_CHARS} characters and was stopped.`);
+                        }
+                        deltaTimer ??= setTimeout(flushDelta, DELTA_INTERVAL_MS);
+                        return;
+                    }
+                    case "tool_call":
+                    case "tool_call_update": {
+                        const entry = trackCall(update, false);
+                        if (entry) changed(entry.round, update.sessionUpdate === "tool_call");
+                        return;
+                    }
+                    case "plan":
+                        // one plan per turn, kept where the turn starts
+                        first.plan = planFrom(update);
+                        changed(first);
+                        return;
+                    default:
+                        // user_message_chunk (replays), usage, session info: nothing to show
+                        return;
+                }
+            } catch (err) {
+                // never thrown into the protocol reader: the turn is cancelled instead
+                fail(err);
+            }
+        };
+
+        const requestPermission = async (toolCall: Record<string, unknown>, options: AgentPermissionOption[]): Promise<string | null> => {
+            if (turn.signal.aborted) return null;
+            const entry = trackCall(toolCall, true);
+            if (!entry) return null;
+            const { record } = entry;
+            record.status = "awaiting-approval";
+            flushDelta();
+            changed(entry.round, true);
+            save().catch((err) => console.error("[ai] saving a permission request failed:", String(err)));
+            const answer = await new Promise<string | "cancelled">((resolve) => {
+                const approval: PendingApproval = {
+                    id: record.id,
+                    conversationId: conversation.id,
+                    messageId: entry.round.id,
+                    panelId: "",
+                    action: "",
+                    label: record.label,
+                    arguments: {},
+                    options,
+                };
+                const settle = (d: string | "cancelled") => {
+                    if (!this.waiting.delete(record.id)) return;
+                    turn.signal.removeEventListener("abort", onAbort);
+                    this.publishApprovals();
+                    resolve(d);
+                };
+                const onAbort = () => settle("cancelled");
+                this.waiting.set(record.id, {
+                    approval,
+                    // stop() cancels; an agent's request is never answered with once/always/deny
+                    resolve: () => settle("cancelled"),
+                    choose: (optionId) => settle(optionId),
+                });
+                turn.signal.addEventListener("abort", onAbort, { once: true });
+                this.publishApprovals();
+            });
+            if (answer === "cancelled") {
+                record.status = "error";
+                record.result = "Stopped before you answered.";
+                changed(entry.round, true);
+                return null;
+            }
+            const kind = options.find((o) => o.id === answer)!.kind;
+            if (kind === "reject_once" || kind === "reject_always") {
+                record.status = "denied";
+                record.decision = "deny";
+            } else {
+                record.status = "running";
+                record.decision = kind === "allow_always" ? "always" : "once";
+            }
+            changed(entry.round, true);
+            return answer;
+        };
+
+        let stopReason: StopReason | null = null;
+        try {
+            const opened = await deps.agents.openSession({
+                conversationId: conversation.id,
+                connection,
+                cwd: conversation.cwd!,
+                ...(conversation.sessionId ? { sessionId: conversation.sessionId } : {}),
+                ...(conversation.mode ? { mode: conversation.mode } : {}),
+            });
+            if (!opened.resumed && hadHistory) {
+                first.notice = `${label} started a new session here: it doesn't remember this chat's earlier messages.`;
+                changed(first, true);
+            }
+            if (conversation.sessionId !== opened.sessionId) {
+                conversation.sessionId = opened.sessionId;
+                await save();
+            }
+            const blocks = promptBlocks(user.content, user.attachments ?? [], opened.capabilities, label);
+            stopReason = await deps.agents.prompt(connection, opened.sessionId, blocks, { onUpdate, requestPermission }, turn.signal);
+        } catch (err) {
+            fail(err);
+        } finally {
+            signal.removeEventListener("abort", onStop);
+            if (deltaTimer) flushDelta();
+            flushMessages();
+        }
+
+        const endings: Partial<Record<StopReason, string>> = {
+            refusal: `${label} declined to continue.`,
+            max_tokens: `${label} ran out of room for this turn.`,
+            max_turn_requests: `${label} reached its limit of steps for this turn.`,
+        };
+        // a failure outranks the "cancelled" it caused; the user's stop is not a failure
+        const failed = failure ? (failure as Error).message : stopReason ? endings[stopReason] : undefined;
+        if (failed && !(signal.aborted && !failure)) {
+            round.status = "error";
+            round.error = failed;
+        } else {
+            round.status = signal.aborted || stopReason === "cancelled" ? "stopped" : "done";
+        }
+        // a call the agent never closed is not shown as still running
+        for (const { record } of calls.values()) {
+            if (record.status === "running" || record.status === "awaiting-approval") {
+                record.status = "error";
+                record.result = round.status === "stopped" ? "Stopped by the user." : "The agent didn't report how this ended.";
+            }
+        }
+        if (unrecorded > 0) {
+            first.notice = [first.notice, `${unrecorded} more tool calls ran but are not recorded in this chat.`].filter(Boolean).join(" ");
+            this.emitMessage(conversation.id, first);
+        }
+        for (const m of conversation.messages.slice(conversation.messages.indexOf(first))) {
+            if (m.role === "assistant") this.emitMessage(conversation.id, m);
+        }
+        try {
+            await save();
+        } catch (err) {
+            console.error("[ai] saving the agent's reply failed:", String(err));
+            throw err;
+        }
+        if (round.status === "done") {
+            const rounds = conversation.messages.slice(conversation.messages.indexOf(first)).filter((m): m is AssistantMessage => m.role === "assistant");
+            deps.onReplyFinished({ conversationId: conversation.id, title: conversation.title, model: conversation.model, text: replyText(rounds) });
         }
     }
 

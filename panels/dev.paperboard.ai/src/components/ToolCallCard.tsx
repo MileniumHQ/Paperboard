@@ -1,7 +1,8 @@
 import { createSignal, For, Match, Show, Switch } from "solid-js";
 import { PaperBadge, PaperButton, PaperCode, PaperCopyButton, PaperIcon, PaperText, type PaperBadgeVariant } from "@mileniumhq/paperui";
 import { UI_ACTION_IDS } from "../contract";
-import type { ToolCallRecord } from "../core/types";
+import { editLines } from "../core/diff";
+import type { AgentPermissionKind, AgentToolDetails, AgentToolKind, ToolCallRecord } from "../core/types";
 import { call, errorText, state } from "../lib/state";
 import { panelIcon, panelName } from "../lib/panels";
 import styles from "./ToolCallCard.module.css";
@@ -19,11 +20,76 @@ function formatValue(value: unknown): string {
     return JSON.stringify(value);
 }
 
+/** Coding agent tools by kind; search and fetch keep the web search look. */
+export const AGENT_TOOL_ICONS: Record<AgentToolKind, string> = {
+    read: "description",
+    edit: "edit_document",
+    delete: "delete",
+    move: "drive_file_move",
+    search: "travel_explore",
+    execute: "terminal",
+    think: "lightbulb",
+    fetch: "travel_explore",
+    switch_mode: "swap_horiz",
+    other: "build",
+};
+
+/** What an agent's tool does: the command, the files, the edits, what it printed. */
+export function AgentToolView(props: { details: AgentToolDetails }) {
+    return (
+        <div class={styles.agentTool}>
+            <Show when={props.details.command}>
+                <PaperCode block class={styles.request}>{props.details.command}</PaperCode>
+            </Show>
+            <Show when={props.details.locations.length > 0 && props.details.diffs.length === 0}>
+                <ul class={styles.locations}>
+                    <For each={props.details.locations}>{(l) => <li>{l}</li>}</For>
+                </ul>
+            </Show>
+            <For each={props.details.diffs}>
+                {(d) => {
+                    const view = editLines(d.oldText, d.newText);
+                    return (
+                        <figure class={styles.diff}>
+                            <figcaption>
+                                <PaperText size={1} weight={600}>{d.path}</PaperText>
+                                <Show when={d.oldText === null}>
+                                    <PaperText size={1} color="text-muted">New file</PaperText>
+                                </Show>
+                            </figcaption>
+                            <pre class={styles.diffLines}>
+                                <For each={view.lines}>
+                                    {(line) => (
+                                        <span class={styles[line.kind]}>
+                                            {line.kind === "removed" ? "- " : line.kind === "added" ? "+ " : "  "}
+                                            {line.text}
+                                            {"\n"}
+                                        </span>
+                                    )}
+                                </For>
+                            </pre>
+                            <Show when={view.hidden > 0 || d.truncated}>
+                                <PaperText size={1} color="text-muted">
+                                    {view.hidden > 0 ? `${view.hidden} more changed lines not shown.` : "The file was cut to fit the chat."}
+                                </PaperText>
+                            </Show>
+                        </figure>
+                    );
+                }}
+            </For>
+            <Show when={props.details.output}>
+                <PaperCode block class={styles.result}>{props.details.output}</PaperCode>
+            </Show>
+        </div>
+    );
+}
+
 /** The expanded content of a decided action in the reasoning chain. */
 export function ActionDetails(props: { call: ToolCallRecord }) {
     const args = () => Object.entries(props.call.arguments);
     return (
         <>
+            <Show when={props.call.agent}>{(details) => <AgentToolView details={details()} />}</Show>
             <Show when={args().length > 0}>
                 <dl class={styles.args}>
                     <For each={args()}>
@@ -57,12 +123,15 @@ export default function ToolCallApproval(props: { call: ToolCallRecord }) {
     const known = () => Boolean(record().panelId);
     const status = () => ACTION_STATUS[record().status];
     const shell = () => record().builtin === "run_shell_command";
+    const agent = () => record().agent;
+    const options = () => state.approvals.find((a) => a.id === record().id)?.options ?? [];
+    const optionVariant = (kind: AgentPermissionKind) => (kind === "allow_once" ? "primary" : kind.startsWith("reject") ? "danger" : undefined);
 
-    const answer = async (decision: "once" | "always" | "deny") => {
+    const answer = async (decision: "once" | "always" | "deny" | { optionId: string }) => {
         setBusy(true);
         setError("");
         try {
-            await call(UI_ACTION_IDS.resolveApproval, { id: record().id, decision });
+            await call(UI_ACTION_IDS.resolveApproval, { id: record().id, ...(typeof decision === "string" ? { decision } : decision) });
         } catch (err) {
             setError(errorText(err));
         } finally {
@@ -75,8 +144,35 @@ export default function ToolCallApproval(props: { call: ToolCallRecord }) {
             <section
                 class={styles.ToolCallCard}
                 classList={{ [styles.waiting!]: true }}
-                aria-label={shell() ? "Run a shell command" : `${record().label} in ${known() ? panelName(record().panelId) : "an unknown app"}`}
+                aria-label={
+                    agent() ? record().label : shell() ? "Run a shell command" : `${record().label} in ${known() ? panelName(record().panelId) : "an unknown app"}`
+                }
             >
+                <Show when={agent()}>
+                    {(details) => (
+                        <>
+                            <div class={styles.approvalHead}>
+                                <PaperIcon class={styles.appIcon}>{AGENT_TOOL_ICONS[details().kind]}</PaperIcon>
+                                <div class={styles.title}>
+                                    <PaperText size={3} weight={700} truncate>{record().label}</PaperText>
+                                    <PaperText size={2} color="text-muted" truncate>The agent asks first</PaperText>
+                                </div>
+                                <PaperBadge variant={status().variant} icon={status().icon}>{status().text}</PaperBadge>
+                            </div>
+                            <AgentToolView details={details()} />
+                            <div class={styles.actions}>
+                                <For each={options()}>
+                                    {(o) => (
+                                        <PaperButton size="small" variant={optionVariant(o.kind)} disabled={busy()} onClick={() => void answer({ optionId: o.id })}>
+                                            {o.name}
+                                        </PaperButton>
+                                    )}
+                                </For>
+                            </div>
+                        </>
+                    )}
+                </Show>
+                <Show when={!agent()}>
                 <div class={styles.approvalHead}>
                     <Switch fallback={<PaperIcon class={styles.appIcon}>help</PaperIcon>}>
                         <Match when={shell()}>
@@ -137,6 +233,7 @@ export default function ToolCallApproval(props: { call: ToolCallRecord }) {
                         Deny
                     </PaperButton>
                 </div>
+                </Show>
                 <Show when={error()}>
                     <PaperText size={2} color="danger" role="alert">{error()}</PaperText>
                 </Show>

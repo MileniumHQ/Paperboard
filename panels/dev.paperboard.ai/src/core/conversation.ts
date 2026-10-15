@@ -49,6 +49,7 @@ export function summarize(c: Conversation): ConversationSummary {
         title: c.title,
         model: c.model,
         ...(c.provider ? { provider: c.provider } : {}),
+        ...(c.cwd ? { cwd: c.cwd } : {}),
         updatedAt: c.updatedAt,
         messageCount: c.messages.length,
     };
