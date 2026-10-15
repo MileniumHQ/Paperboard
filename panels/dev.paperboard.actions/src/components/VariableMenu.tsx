@@ -1,6 +1,7 @@
 import { Show, For, createSignal, createMemo, createEffect, onMount, onCleanup } from "solid-js";
 import { PaperIcon } from "@mileniumhq/paperui";
 import { variableFieldIcon } from "../lib/variableTypes";
+import { typeDisplayName } from "../lib/typeCatalog";
 
 export interface VariableMenuItem {
     id: string;
@@ -29,27 +30,10 @@ export interface VariableMenuProps {
     onHoverItem?: (sourceBlockId: string | null) => void;
 }
 
-const TYPE_BADGE_LABELS: Record<string, string> = {
-    "discord-channel": "Channel",
-    "discord-user": "User",
-    "discord-role": "Role",
-    "discord-message": "Message",
-    "discord-embed": "Embed",
-    "discord-component": "Component",
-    "discord-interaction": "Interaction",
-    string: "Text",
-    number: "Number",
-    boolean: "True/False",
-    object: "Data",
-    any: "Any",
-    url: "URL",
-    color: "Color",
-};
-
 function badgeLabel(type?: string, typeName?: string): string {
     if (typeName) return typeName;
     if (!type) return "Var";
-    return TYPE_BADGE_LABELS[type] || type;
+    return typeDisplayName(type);
 }
 
 

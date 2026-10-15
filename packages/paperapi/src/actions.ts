@@ -9,6 +9,7 @@ import {
     isTypeCompatible,
     defineAction,
     validateActionDefinition,
+    referencedTypeInfo,
 } from "./schema";
 
 export * from "./schema";
@@ -129,6 +130,7 @@ export const actionsApi = {
                 icon: def.icon,
                 eventOnly: def.run ? undefined : true,
                 match: def.match,
+                types: referencedTypeInfo(def),
             };
 
             const handler = def.run

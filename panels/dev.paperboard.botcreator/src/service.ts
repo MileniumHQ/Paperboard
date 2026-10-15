@@ -80,28 +80,32 @@ const TOKEN_NAME = "bot-token";
 
 export const discordChannelType = defineType({
     id: "discord-channel",
-    name: "Discord Channel",
+    name: "Channel",
+    icon: "tag",
     description: "A Discord text channel reference",
     base: "string",
 });
 
 export const discordUserType = defineType({
     id: "discord-user",
-    name: "Discord User",
+    name: "User",
+    icon: "person",
     description: "A Discord user reference",
     base: "string",
 });
 
 export const discordMessageType = defineType({
     id: "discord-message",
-    name: "Discord Message",
+    name: "Message",
+    icon: "chat",
     description: "A Discord message reference",
     base: "string",
 });
 
 export const discordEmbedType = defineType({
     id: "discord-embed",
-    name: "Discord Embed",
+    name: "Embed",
+    icon: "article",
     description: "A rich Discord embed payload",
     base: "object",
 });
@@ -109,6 +113,7 @@ export const discordEmbedType = defineType({
 export const discordComponentType = defineType({
     id: "discord-component",
     name: "Component",
+    icon: "smart_button",
     description: "A button, select menu, or interaction row for a message",
     base: "object",
 });
@@ -116,20 +121,23 @@ export const discordComponentType = defineType({
 export const discordModalFieldType = defineType({
     id: "discord-modal-field",
     name: "Text Field",
+    icon: "text_fields",
     description: "A text field for a modal",
     base: "object",
 });
 
 export const discordInteractionType = defineType({
     id: "discord-interaction",
-    name: "Discord Interaction",
+    name: "Interaction",
+    icon: "reply",
     description: "A pending interaction reference (slash command, click, or modal)",
     base: "string",
 });
 
 export const discordRoleType = defineType({
     id: "discord-role",
-    name: "Discord Role",
+    name: "Role",
+    icon: "badge",
     description: "A Discord role reference",
     base: "string",
 });
@@ -137,6 +145,7 @@ export const discordRoleType = defineType({
 export const urlType = defineType({
     id: "url",
     name: "URL",
+    icon: "link",
     description: "A URL string",
     base: "string",
 });
@@ -144,6 +153,7 @@ export const urlType = defineType({
 export const colorType = defineType({
     id: "color",
     name: "Color",
+    icon: "palette",
     description: "A hex or named color string",
     base: "string",
 });

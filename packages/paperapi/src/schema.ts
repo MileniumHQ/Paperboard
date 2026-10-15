@@ -11,8 +11,11 @@ export type DataType = PrimitiveType | (string & {});
 
 export interface CustomTypeDefinition {
     id: string;
+    /** what the flow builder calls values of this type ("Channel") */
     name: string;
     description?: string;
+    /** material icon shown with variables of this type */
+    icon?: string;
     base: PrimitiveType;
     defaultField?: string;
     toString?: (value: any) => string;
@@ -130,7 +133,16 @@ export interface ActionSchema {
      * fans out to every root, as before.
      */
     match?: ActionMatchDefinition | ActionMatchDefinition[];
+    /**
+     * Stamped by the SDK at registration: every custom type this action
+     * names (inputs, output, output fields, and the fields of those types),
+     * so the flow builder learns the panel's types from the registry.
+     */
+    types?: Record<string, ActionTypeInfo>;
 }
+
+/** What a schema carries about a custom type: its definition minus code. */
+export type ActionTypeInfo = Omit<CustomTypeDefinition, "toString">;
 
 export interface ActionDefinition<
     TInputs = any,
@@ -203,6 +215,48 @@ export function defineType(def: CustomTypeDefinition): CustomTypeDefinition {
 
 export function getType(id: string): CustomTypeDefinition | undefined {
     return registeredTypes.get(id);
+}
+
+function unwrapListType(type: string): string {
+    const match = type.match(/^(?:list|array)<(.+)>$/);
+    return match ? unwrapListType(match[1]) : type;
+}
+
+function typeOf(spec: unknown): string | undefined {
+    if (typeof spec === "string") return spec;
+    if (spec && typeof spec === "object" && typeof (spec as any).type === "string") {
+        return (spec as any).type;
+    }
+    return undefined;
+}
+
+/**
+ * The registered custom types a schema names, closed over their fields, as
+ * plain data. Types the panel never defined are not invented.
+ */
+export function referencedTypeInfo(
+    schema: Pick<ActionSchema, "inputs" | "output" | "outputFields">,
+): Record<string, ActionTypeInfo> | undefined {
+    const pending: string[] = [];
+    const name = (spec: unknown) => {
+        const type = typeOf(spec);
+        if (type) pending.push(unwrapListType(type));
+    };
+    for (const spec of Object.values(schema.inputs ?? {})) name(spec);
+    name(schema.output);
+    for (const spec of Object.values(schema.outputFields ?? {})) name(spec);
+
+    const found: Record<string, ActionTypeInfo> = {};
+    while (pending.length > 0) {
+        const id = pending.pop()!;
+        if (found[id]) continue;
+        const def = registeredTypes.get(id);
+        if (!def) continue;
+        const { toString: _code, ...info } = def;
+        found[id] = info;
+        for (const field of Object.values(def.fields ?? {})) name(field);
+    }
+    return Object.keys(found).length > 0 ? found : undefined;
 }
 
 export function listTypes(): CustomTypeDefinition[] {

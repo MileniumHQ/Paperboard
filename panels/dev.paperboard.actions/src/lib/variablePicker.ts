@@ -1,7 +1,8 @@
 // Which variables a picker request may offer. A primitive expectation
 // (text, url, color, ...) interpolates into the field, so it takes any
-// variable; a typed expectation (discord-user, list<number>) filters to
-// variables the field can actually use.
+// variable; a typed expectation (a panel's user type, list<number>)
+// filters to variables the field can actually use.
+import { typeBase } from "./typeCatalog";
 
 const PRIMITIVE_EXPECTED_TYPES = new Set([
     "string",
@@ -24,10 +25,11 @@ export function isVarCompatibleWith(varType: string, expected?: string): boolean
     const expectedInner = unwrapListType(expected);
     if (expectedInner !== expected) {
         if (varType === expectedInner) return true;
-        if (expectedInner === "string" && varType.startsWith("discord-")) return true;
+        // a text-based custom type (a channel id, a player name) is text
+        if (expectedInner === "string" && typeBase(varType) === "string") return true;
         return false;
     }
-    if (expected === "string" && varType.startsWith("discord-")) return true;
+    if (expected === "string" && typeBase(varType) === "string") return true;
     return false;
 }
 

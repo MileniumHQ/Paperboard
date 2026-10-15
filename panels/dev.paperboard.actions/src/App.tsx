@@ -23,7 +23,6 @@ import {
 import {
     config as configApi,
     actions as actionsApi,
-    getType,
     type ActionInfo,
 } from "@mileniumhq/paperapi";
 import { ACTIONS_PANEL_ID } from "./panelId";
@@ -36,6 +35,7 @@ import {
     type CanvasSnapshot,
 } from "./lib/canvasDoc";
 import { variableFieldIcon } from "./lib/variableTypes";
+import { typeInfo, updateTypeCatalog } from "./lib/typeCatalog";
 import { filterPickerItems } from "./lib/variablePicker";
 import { BUILTIN_SCHEMA_ENTRIES } from "./lib/builtins";
 import {
@@ -181,7 +181,7 @@ export default function App() {
         const outType =
             typeof action.output === "string" ? action.output : action.output?.type;
         if (outType) {
-            const def = getType(outType);
+            const def = typeInfo(outType);
             if (def?.fields && Object.keys(def.fields).length > 0) {
                 const map: TriggerFieldMap = {};
                 for (const [fieldId, f] of Object.entries(def.fields)) {
@@ -281,7 +281,7 @@ export default function App() {
                         })();
             if (fieldTypes) {
                 for (const [fieldId, field] of Object.entries(fieldTypes)) {
-                    const def = getType(field.type);
+                    const def = typeInfo(field.type);
                     available.push({
                         id: fieldId,
                         label:
@@ -778,6 +778,7 @@ export default function App() {
                 try {
                     const acts = await actionsApi.list();
                     if (disposed) return;
+                    updateTypeCatalog(acts.flatMap((act) => (act.schema ? [act.schema] : [])));
                     // Merge into the current canvas after the request, so
                     // edits made while listing cannot be overwritten.
                     const merged = mergeActionSchemas(blocks, [...acts, ...BUILTIN_SCHEMA_ENTRIES]);

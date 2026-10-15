@@ -65,6 +65,7 @@ import { gamerulesFor } from "../core/gamerules";
 export const playerType = defineType({
     id: "player",
     name: "Player",
+    icon: "person",
     description: "Minecraft player username",
     base: "string",
 });
@@ -72,6 +73,7 @@ export const playerType = defineType({
 export const messageType = defineType({
     id: "message",
     name: "Chat Message",
+    icon: "chat",
     description: "In-game chat message object",
     base: "object",
     defaultField: "content",
@@ -86,6 +88,7 @@ export const messageType = defineType({
 export const commandType = defineType({
     id: "command",
     name: "Console Command",
+    icon: "terminal",
     description: "Minecraft console command string",
     base: "string",
 });

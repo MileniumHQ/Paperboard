@@ -76,7 +76,7 @@ const service = definePanelService({
                         <td><PaperCode>types</PaperCode></td>
                         <td><PaperCode>CustomTypeDefinition[]</PaperCode></td>
                         <td><PaperCode>undefined</PaperCode></td>
-                        <td>Custom data type definitions registered for action input/output validation.</td>
+                        <td>Custom data types your actions name. Each type's <PaperCode>name</PaperCode>, <PaperCode>icon</PaperCode> and <PaperCode>base</PaperCode> travel with the actions that use it, so the Actions editor labels and draws those values, and offers a text-based type wherever text fits.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>categories</PaperCode></td>

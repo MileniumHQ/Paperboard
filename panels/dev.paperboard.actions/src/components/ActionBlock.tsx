@@ -12,6 +12,7 @@ import type { CanvasBlock } from "../lib/tree";
 import { plainTextFromClipboard, sanitizeNumberText } from "../lib/textInput";
 import { parseVariableToken } from "../lib/variableTypes";
 import { isArrayInputType, innerTypeOf, isTypedOnlyInput, expectedTypeOf } from "../lib/inputTypes";
+import { typeDisplayName } from "../lib/typeCatalog";
 import {
     appendVariableChip,
     commitEditableDom,
@@ -89,33 +90,6 @@ interface TemplateToken {
 function formatFallbackLabel(key: string): string {
     if (!key) return "";
     return key.charAt(0).toUpperCase() + key.slice(1);
-}
-
-const FRIENDLY_TYPE_NAMES: Record<string, string> = {
-    string: "Text",
-    number: "Number",
-    boolean: "Boolean",
-    object: "Object",
-    any: "Any",
-    url: "URL",
-    color: "Color",
-    "discord-channel": "Channel",
-    "discord-user": "User",
-    "discord-message": "Message",
-    "discord-embed": "Embed",
-    "discord-component": "Component",
-    "discord-role": "Role",
-    "discord-interaction": "Interaction",
-};
-
-function friendlyTypeName(t?: string): string {
-    if (!t) return "Any";
-    if (isArrayInputType(t)) {
-        const inner = innerTypeOf(t);
-        if (inner === "array") return "Any[]";
-        return `${FRIENDLY_TYPE_NAMES[inner] || inner.charAt(0).toUpperCase() + inner.slice(1)}[]`;
-    }
-    return FRIENDLY_TYPE_NAMES[t] || t.charAt(0).toUpperCase() + t.slice(1);
 }
 
 function parseTemplateTokens(
@@ -1291,7 +1265,7 @@ export default function ActionBlock(props: ActionBlockProps) {
                                                 key,
                                                 label: def?.label || formatFallbackLabel(key),
                                             },
-                                            def?.typeName || friendlyTypeName(def?.type),
+                                            def?.typeName || typeDisplayName(def?.type),
                                         )}
                                     </div>
                                 );
