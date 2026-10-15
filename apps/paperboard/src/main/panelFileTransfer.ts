@@ -6,6 +6,7 @@
 // No Electron imports: Electron main and the browser-mode host share it,
 // each passing the daemon endpoint lookup (panelFileEndpoint.ts).
 import * as fs from "fs";
+import { randomUUID } from "crypto";
 import * as http from "http";
 import * as https from "https";
 import * as path from "path";
@@ -181,17 +182,25 @@ export async function writePanelFile(
 /** stream the panel file to dest; the chosen path changes only on success */
 async function saveTo(endpoint: DaemonEndpoint, req: PanelFileTransferRequest, dest: string): Promise<number> {
     const { size, body, received } = await readPanelFile(endpoint, req);
-    const part = `${dest}.paperboard-part`;
+    const part = `${dest}.paperboard-part-${randomUUID()}`;
+    let fd: number | undefined;
+    let created = false;
     try {
-        await pipeline(body, fs.createWriteStream(part));
+        fd = fs.openSync(part, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_NOFOLLOW, 0o600);
+        created = true;
+        const out = fs.createWriteStream(part, { fd, autoClose: true });
+        fd = undefined; // the stream owns the exclusively opened descriptor
+        await pipeline(body, out);
         if (Number.isFinite(size) && received() !== size) {
             throw new PanelFileTransferError("unreachable", "The transfer ended before the whole file arrived");
         }
         fs.renameSync(part, dest);
         return received();
     } catch (err) {
+        body.destroy();
+        if (fd !== undefined) fs.closeSync(fd);
         try {
-            fs.rmSync(part, { force: true });
+            if (created) fs.rmSync(part, { force: true });
         } catch (cleanupErr) {
             logger.warn("[panel-files] could not remove the partial save:", cleanupErr);
         }

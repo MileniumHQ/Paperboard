@@ -162,6 +162,21 @@ describe("export", () => {
         expect(fs.existsSync(`${dest}.paperboard-part`)).toBe(false);
     });
 
+    it("does not follow a pre-planted staging symlink", async () => {
+        seed(PANEL, "safe-export.txt", "export bytes");
+        const dest = path.join(localDir, "safe-export.txt");
+        const victim = path.join(localDir, "unrelated.txt");
+        fs.writeFileSync(victim, "keep me");
+        fs.symlinkSync(victim, `${dest}.paperboard-part`);
+        const before = fs.readdirSync(localDir).sort();
+        const result = await runPanelExport(ref("safe-export.txt"), pickers({ save: dest }));
+        expect(result.status).toBe("exported");
+        expect(fs.readFileSync(victim, "utf8")).toBe("keep me");
+        expect(fs.readFileSync(dest, "utf8")).toBe("export bytes");
+        expect(fs.lstatSync(`${dest}.paperboard-part`).isSymbolicLink()).toBe(true);
+        expect(fs.readdirSync(localDir).sort()).toEqual([...before, path.basename(dest)].sort());
+    });
+
     it("writes nothing when the user cancels", async () => {
         seed(PANEL, "c.txt", "cancel me");
         const result = await runPanelExport(ref("c.txt", { suggestedName: "named.txt" }), pickers({ save: null }));
@@ -195,7 +210,7 @@ describe("export", () => {
             });
             expect(result.status).toBe("failed");
             expect(fs.readFileSync(dest, "utf8")).toBe("previous");
-            expect(fs.existsSync(`${dest}.paperboard-part`)).toBe(false);
+            expect(fs.readdirSync(localDir).filter((name) => name.startsWith("keep.bin."))).toEqual([]);
         } finally {
             await new Promise<void>((resolve) => broken.close(() => resolve()));
         }
