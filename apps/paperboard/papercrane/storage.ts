@@ -163,6 +163,15 @@ export function panelFilesDirName(id: string | undefined | null): string {
     return id.replace(/[^a-zA-Z0-9_.-]/g, "_") || "default";
 }
 
+function isMissingPathError(error: unknown): boolean {
+    const code = (error as NodeJS.ErrnoException).code;
+    return code === "ENOENT";
+}
+
+function isSameEntry(a: fs.BigIntStats, b: fs.BigIntStats): boolean {
+    return a.dev === b.dev && a.ino === b.ino;
+}
+
 // Resolve a relative path inside an isolated dir, rejecting traversal and links.
 // Call again immediately before filesystem use after any asynchronous work.
 export function resolveSecureTargetPath(
@@ -185,25 +194,25 @@ export function resolveSecureTargetPath(
     // The files root is daemon-owned; OS aliases above it (e.g. /var on
     // macOS) are allowed, but the root, panel home and every existing path
     // component below it must be real entries, including dangling links.
+    // Entries are compared by identity, never by path text: a case-insensitive
+    // or normalizing filesystem (APFS, NTFS) reports the stored spelling.
     let rootStat: fs.Stats;
     try { rootStat = fs.lstatSync(baseDir); }
     catch (error) {
-        if ((error as NodeJS.ErrnoException).code === "ENOENT") return resolved;
+        if (isMissingPathError(error)) return resolved;
         throw error;
     }
     if (rootStat.isSymbolicLink()) throw new Error("Access denied: symbolic link at storage root");
-    const canonicalRoot = fs.realpathSync(baseDir);
     let current = baseDir;
     for (const segment of ["", ...path.relative(baseDir, resolved).split(path.sep)]) {
         if (segment) current = path.join(current, segment);
-        let stat: fs.Stats;
-        try { stat = fs.lstatSync(current); }
+        let stat: fs.BigIntStats;
+        try { stat = fs.lstatSync(current, { bigint: true }); }
         catch (error) {
-            if ((error as NodeJS.ErrnoException).code === "ENOENT") break;
+            if (isMissingPathError(error)) break;
             throw error;
         }
-        const expected = path.join(canonicalRoot, path.relative(baseDir, current));
-        if (stat.isSymbolicLink() || fs.realpathSync(current) !== expected) {
+        if (stat.isSymbolicLink() || !isSameEntry(stat, fs.statSync(fs.realpathSync(current), { bigint: true }))) {
             throw new Error(`Access denied: symbolic link in storage path for ${cleanAppId}`);
         }
     }

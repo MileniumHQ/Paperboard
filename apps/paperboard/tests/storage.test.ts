@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
+import { describe, it, expect, beforeEach, afterEach, spyOn } from "bun:test";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
@@ -121,6 +121,29 @@ describe("resolveSecureTargetPath", () => {
     it("sanitizes unsafe characters in appId", () => {
         const resolved = resolveSecureTargetPath(baseDir, "x.txt", "../../evil");
         expect(resolved.startsWith(path.resolve(baseDir) + path.sep)).toBe(true);
+    });
+});
+
+describe("resolveSecureTargetPath on a real directory", () => {
+    it("rejects a symlinked component but accepts the same entry under another spelling", () => {
+        const files = path.join(tmp, "files");
+        fs.mkdirSync(path.join(files, "app", "UPPER"), { recursive: true });
+        fs.writeFileSync(path.join(files, "app", "UPPER", "a.txt"), "x");
+        fs.symlinkSync(tmp, path.join(files, "app", "link"), "dir");
+        expect(() => resolveSecureTargetPath(files, "link/a.txt", "app")).toThrow(/symbolic link/);
+
+        // A case-insensitive or normalizing filesystem (APFS, NTFS) answers
+        // `upper` with the stored spelling `UPPER`. Linux cannot make that
+        // happen, so realpath reports the same directory spelled differently
+        // (an extra "/."); the entry is identical, only its text differs.
+        const real = fs.realpathSync;
+        const respelled = spyOn(fs, "realpathSync").mockImplementation(((target: fs.PathLike) => {
+            const resolved = real(target);
+            return resolved.startsWith(files) ? resolved.replace(files, `${files}/.`) : resolved;
+        }) as typeof fs.realpathSync);
+        try {
+            expect(resolveSecureTargetPath(files, "UPPER/a.txt", "app")).toBe(path.join(files, "app", "UPPER", "a.txt"));
+        } finally { respelled.mockRestore(); }
     });
 });
 
