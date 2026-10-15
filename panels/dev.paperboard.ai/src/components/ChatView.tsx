@@ -14,6 +14,7 @@ import {
     openConversation,
     openError,
     renameOpen,
+    setOpenMode,
     setOpenModel,
     state,
     subscribeChatEvents,
@@ -153,6 +154,7 @@ export default function ChatView() {
         setError("");
         try {
             await call(UI_ACTION_IDS.setAgentMode, { id, mode });
+            if (conversation()?.id === id) setOpenMode(mode);
         } catch (err) {
             setError(errorText(err));
         } finally {
@@ -164,6 +166,7 @@ export default function ChatView() {
         const mode = confirmingNoSandbox();
         if (!id || !mode) throw new Error("This chat is gone.");
         await call(UI_ACTION_IDS.setAgentMode, { id, mode });
+        if (conversation()?.id === id) setOpenMode(mode);
     };
     // the menu item that opened the dialog is gone once it closes: focus goes back to the picker
     const closeNoSandbox = () => {
