@@ -16,16 +16,17 @@ export interface LibrarySection {
 
 export const UNCATEGORIZED_SECTION = "General";
 
-// Internal registry entries stay callable through the API, they just never
-// become placeable blocks. `__` is the protocol's reserved namespace (state
+// Internal and deprecated registry entries stay callable through the API,
+// they just never become new placeable blocks. `__` is the protocol's reserved namespace (state
 // hydration and friends), kept filtered as a safety net for services that
 // register by bare name without a schema.
 export function isLibraryVisible(entry: {
     action?: string;
     trigger?: string;
-    schema?: { internal?: boolean } | null;
+    schema?: { internal?: boolean; deprecated?: string } | null;
 }): boolean {
     if (entry.schema?.internal === true) return false;
+    if (entry.schema?.deprecated) return false;
     const id = entry.action || entry.trigger || "";
     return !id.startsWith("__");
 }

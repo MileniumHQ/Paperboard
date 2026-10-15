@@ -120,6 +120,7 @@ export const actionsApi = {
                 name: def.name,
                 description: def.description || "",
                 internal: def.internal,
+                deprecated: def.deprecated,
                 template: def.template || def.writtenOut,
                 writtenOut: def.writtenOut || def.template,
                 category: def.category,

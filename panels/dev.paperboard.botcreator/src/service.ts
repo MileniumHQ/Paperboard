@@ -1539,10 +1539,11 @@ export const actions = [
         // TODO(remove after v0.2): kept so saved flows with this step keep
         // running for one release; the bot now acknowledges automatically
         id: "defer-interaction",
-        name: "Defer Interaction (no longer needed)",
+        name: "Defer Interaction",
         category: "Interactions",
-        description:
-            "No longer needed: the bot acknowledges every interaction automatically. Remove this step; it goes away in the next release",
+        description: "Shows that the bot is thinking about a slash command",
+        deprecated:
+            "No longer needed: the bot acknowledges every interaction automatically. Remove this step; it stops working after v0.2.",
         template: "Defer interaction {interactionId}",
         inputs: {
             interactionId: INPUTS.interaction,

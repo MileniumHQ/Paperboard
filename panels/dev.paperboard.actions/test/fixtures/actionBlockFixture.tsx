@@ -277,6 +277,25 @@ async function run(): Promise<void> {
     out.checks.anchorPointerDownCloseCalls = closeCalls;
     document.body.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
     out.checks.outsidePointerDownCloseCalls = closeCalls;
+
+    // a deprecated action still renders, with its message as a note
+    const deprecatedRoot = document.createElement("div");
+    document.body.appendChild(deprecatedRoot);
+    mountAction(deprecatedRoot, {
+        ...schemaOf("text-join"),
+        deprecated: "Remove this step; it goes away after v0.2.",
+    });
+    await tick();
+    const note = deprecatedRoot.querySelector('[role="note"]');
+    // what assistive tech reads: the decorative icon ligature is hidden
+    out.checks.deprecatedNoteText = note
+        ? [...note.children]
+              .filter((child) => child.getAttribute("aria-hidden") !== "true")
+              .map((child) => child.textContent)
+              .join("")
+        : null;
+    out.checks.deprecatedNoteVisible = note ? (note as HTMLElement).offsetHeight > 0 : false;
+    out.checks.currentActionHasNote = plainRoot.querySelector('[role="note"]') !== null;
 }
 
 function finish(): void {

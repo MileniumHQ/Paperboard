@@ -114,6 +114,12 @@ export interface ActionSchema {
      * control-plane RPCs a panel's own UI needs, never flow blocks.
      */
     internal?: boolean;
+    /**
+     * The action is on its way out: it still runs, but the Actions library
+     * stops offering it and every block already placed shows this message,
+     * which says what to do instead and when the action goes away.
+     */
+    deprecated?: string;
     template?: string;
     writtenOut?: string;
     category?: ActionCategory;

@@ -110,6 +110,16 @@ describe("buildLibrarySections", () => {
         expect(sections[0].actions.map((a: any) => a.action)).toEqual(["visible"]);
     });
 
+    test("a deprecated action is no longer offered", () => {
+        const old = {
+            panelId: "p",
+            action: "old",
+            schema: { id: "old", name: "Old", description: "", deprecated: "Use New instead" },
+        };
+        const sections = buildLibrarySections([], [old, action("new", "Chat")]);
+        expect(sections.flatMap((s: any) => s.actions.map((a: any) => a.action))).toEqual(["new"]);
+    });
+
     test("an explicit internal:false entry stays visible", () => {
         const sections = buildLibrarySections(
             [],

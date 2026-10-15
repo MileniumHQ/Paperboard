@@ -310,6 +310,14 @@ body,
     min-width: calc(var(--paper-uigap) * 22);
 }
 
+.actionDeprecated {
+    display: flex;
+    align-items: center;
+    gap: var(--paper-uigap-half);
+    margin-top: var(--paper-uigap-onefourth);
+    color: var(--paper-warning-deep);
+}
+
 .actionMultilineRow {
     width: 100%;
     margin-top: var(--paper-uigap-onefourth);

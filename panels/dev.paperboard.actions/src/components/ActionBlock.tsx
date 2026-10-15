@@ -1225,6 +1225,15 @@ export default function ActionBlock(props: ActionBlockProps) {
                 </span>
             </PaperFlex>
 
+            <Show when={(props.action as ActionSchema).deprecated}>
+                {(message) => (
+                    <div class="actionDeprecated" role="note">
+                        <PaperIcon aria-hidden="true">warning</PaperIcon>
+                        <PaperText size={2}>{message()}</PaperText>
+                    </div>
+                )}
+            </Show>
+
             <Show when={multilineKeys().length > 0}>
                 <For each={multilineKeys()}>
                     {({ key, label }) => (

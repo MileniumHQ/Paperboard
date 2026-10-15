@@ -231,6 +231,13 @@ describe("action editable field behavior", () => {
                 checks.outsidePointerDownCloseCalls,
                 "pointerdown outside the menu did not close it",
             ).toBe(1);
+
+            expect(
+                checks.deprecatedNoteText,
+                "a deprecated block must say what to do instead",
+            ).toBe("Remove this step; it goes away after v0.2.");
+            expect(checks.deprecatedNoteVisible, "the deprecation note is not visible").toBe(true);
+            expect(checks.currentActionHasNote, "a current action must not show a note").toBe(false);
         },
         60_000,
     );

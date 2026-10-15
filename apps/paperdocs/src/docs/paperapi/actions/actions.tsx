@@ -116,6 +116,23 @@ await actionsApi.call("dev.example.runtime", "install", { version: "1.2.0" }, {
 });`}
             </PaperCode>
 
+            <PaperText preset="subheader" id="deprecated">Retiring an action</PaperText>
+            <PaperText preset="body">
+                Set deprecated on an action definition to a message saying what to use instead and
+                when the action goes away. The action keeps running for flows that already use it,
+                the Actions library stops offering it, and every block already placed shows the
+                message. Pair it with a TODO(remove after vX) marker and remove the action in that
+                release.
+            </PaperText>
+            <PaperCode block language="tsx">
+{`defineAction({
+    id: "defer-interaction",
+    name: "Defer Interaction",
+    description: "Shows that the bot is thinking about a slash command",
+    deprecated: "No longer needed: interactions are acknowledged automatically. Remove this step; it stops working after v0.2.",
+    run: async (ctx, inputs) => { /* still works meanwhile */ },
+});`}
+            </PaperCode>
             <PaperText preset="subheader" id="recipes">Recipes</PaperText>
             <PaperText preset="body">
                 Define typed trigger events that start automation flows in Paperboard.

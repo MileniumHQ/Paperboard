@@ -100,6 +100,7 @@ describe("registered schemas carry the panel's types", () => {
                 id: "close-ticket",
                 name: "Close Ticket",
                 description: "Closes tickets",
+                deprecated: "Use Archive Ticket instead",
                 inputs: { tickets: { type: "list<test-ticket>", label: "Tickets" } },
                 output: { type: "boolean" },
                 run: () => true,
@@ -112,6 +113,8 @@ describe("registered schemas carry the panel's types", () => {
         LAST().receive({ type: "response", id: frame.id, result: { success: true } });
         await registering;
 
+        // the deprecation travels too: the library hides it, placed blocks warn
+        expect(frame.params.schema.deprecated).toBe("Use Archive Ticket instead");
         expect(frame.params.schema.types).toEqual({
             "test-ticket": {
                 id: "test-ticket",
