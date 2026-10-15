@@ -200,6 +200,41 @@ test("service hydration waits for initialization and rejects failed initializati
     } finally { release(); disposeBridge?.(); api.closeTransport("local"); await f.close(); }
 });
 
+test("a service with beforeBackup tells the daemon so and answers its request", async () => {
+    const f = await fixture();
+    const api = await import("../../../packages/paperapi/src/index");
+    const sent: any[] = [];
+    const savedSend = process.send;
+    const listenersBefore = new Set(process.listeners("message"));
+    let answer: "ok" | "fail" = "ok";
+    try {
+        await api.initPaperApi({ port: f.port, token: "test-host", computerId: "local" });
+        process.send = ((message: any) => { sent.push(message); return true; }) as typeof process.send;
+        const service = api.definePanelService({ id: "panel.backedup", state: {}, beforeBackup: async () => {
+            if (answer === "fail") throw new Error("could not save");
+        } });
+        await service.ready;
+        expect(sent).toContainEqual({ type: "paperboard:service-ready", panelId: "panel.backedup", beforeBackup: true });
+        const asked = async (requestId: string) => {
+            process.emit("message" as any, { type: "paperboard:before-backup", requestId } as any);
+            const deadline = Date.now() + 2000;
+            while (!sent.some((m) => m.requestId === requestId)) {
+                if (Date.now() > deadline) throw new Error("no answer");
+                await Bun.sleep(5);
+            }
+            return sent.find((m) => m.requestId === requestId);
+        };
+        expect(await asked("r1")).toEqual({ type: "paperboard:before-backup-done", requestId: "r1" });
+        answer = "fail";
+        expect(await asked("r2")).toEqual({ type: "paperboard:before-backup-done", requestId: "r2", error: "could not save" });
+    } finally {
+        process.send = savedSend;
+        for (const listener of process.listeners("message")) if (!listenersBefore.has(listener)) process.off("message", listener);
+        api.closeTransport("local");
+        await f.close();
+    }
+});
+
 test("a remote-served panel's credential only relays to its computer and never leaves this one", async () => {
     const remote = await fixture(undefined, { tls: true });
     const local = await fixture(remote);

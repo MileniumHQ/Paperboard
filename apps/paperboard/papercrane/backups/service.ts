@@ -285,13 +285,26 @@ export class BackupService {
             const id = newBackupId();
             const archive = path.join(this.workDir, `${id}.pbbackup`);
             try {
-                const { size, sha256, panelVersion } = await this.engine.withPanelOperation(panelId, () =>
-                    this.engine.withServicePaused(panelId, async () => {
+                const { size, sha256, panelVersion } = await this.engine.withPanelOperation(panelId, async () => {
+                    // a service that takes part gets ready first (a game
+                    // server stops writing its world). When that fails the
+                    // service is still stopped and started again below, which
+                    // undoes a half-done preparation, and nothing is copied.
+                    let notReady: unknown = null;
+                    try {
+                        await this.engine.prepareServiceForBackup(panelId);
+                    } catch (err) {
+                        notReady = err;
+                    }
+                    return this.engine.withServicePaused(panelId, async () => {
+                        if (notReady !== null) {
+                            throw conflict(`The panel could not get ready for a backup: ${notReady instanceof Error ? notReady.message : String(notReady)}`);
+                        }
                         const panelVersion = this.engine.installedPanelVersion(panelId);
                         const made = await createPanelArchive(this.engine.getAppDataDir(), this.engine.panelDataEntries(panelId), archive);
                         return { ...made, panelVersion };
-                    }),
-                );
+                    });
+                });
                 const record: BackupRecord = {
                     format: 1,
                     id,

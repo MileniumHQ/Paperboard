@@ -1178,6 +1178,12 @@ export class PaperCraneEngine {
         }
     }
 
+    /** asks the panel's running service to get ready for a backup of its
+     * data, when it takes part; see PanelServicesManager.prepareForBackup */
+    public prepareServiceForBackup(panelId: string): Promise<boolean> {
+        return this.services.prepareForBackup(requirePanelId(panelId));
+    }
+
     /** runs fn (a backup copying the panel's data) with the panel's service
      * stopped, so the copy is not taken mid-write, then starts the service
      * again if it was running and waits for it to be ready. A service that

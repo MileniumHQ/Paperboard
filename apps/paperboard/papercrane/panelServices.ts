@@ -1,6 +1,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import * as cp from "child_process";
+import * as crypto from "crypto";
 import { logger } from "./logger";
 import { getPaperboardDir } from "./paths";
 import { validatePanelManifest } from "./storage";
@@ -18,6 +19,10 @@ interface RunningService {
     stopped: boolean;
     crashCount: number;
     startedAt: number;
+    /** the service said, when it became ready, that it gets ready for backups */
+    beforeBackup?: boolean;
+    /** the one backup it is getting ready for now */
+    backupPrepare?: { requestId: string; settle: (error: Error | null) => void };
 }
 
 // How to spawn a panel service on this host. Node, Bun and Electron-as-node
@@ -123,8 +128,16 @@ export class PanelServicesManager {
         }, 20_000);
         entry.readyTimer.unref?.();
         child.on("message", (message: any) => {
+            if (message?.type === "paperboard:before-backup-done") {
+                const pending = entry.backupPrepare;
+                if (pending && message.requestId === pending.requestId) {
+                    pending.settle(message.error ? new Error(String(message.error).slice(0, 500)) : null);
+                }
+                return;
+            }
             if (message?.type !== "paperboard:service-ready" || message.panelId !== id || entry.stopped) return;
             clearTimeout(entry.readyTimer);
+            entry.beforeBackup = message.beforeBackup === true;
             entry.state = "ready";
             resolveReady();
         });
@@ -133,6 +146,7 @@ export class PanelServicesManager {
         child.on("error", (err) => { entry.state = "failed"; rejectReady(err); logger.error(`[services] ${id} process error`, err); });
         child.once("close", (code) => {
             clearTimeout(entry.readyTimer);
+            entry.backupPrepare?.settle(new Error(`Service ${id} exited while getting ready for a backup`));
             resolveExit();
             rejectReady(new Error(`Service ${id} exited before readiness (code ${code})`));
             if (entry.stopped || this.services.get(id) !== entry) return;
@@ -148,6 +162,40 @@ export class PanelServicesManager {
             }, Math.min(10_000, 1000 * 2 ** (crashes - 1)));
             entry.restartTimer.unref?.();
         });
+        return true;
+    }
+    /**
+     * Asks a ready service that handles it (its definition has beforeBackup)
+     * to get ready for a copy of its data: a game server writes its world
+     * out and stops writing. Resolves false when the service does not take
+     * part, rejects when it failed or did not answer in time.
+     */
+    public async prepareForBackup(id: string, timeoutMs = 150_000): Promise<boolean> {
+        const entry = this.services.get(requirePanelId(id));
+        if (!entry || entry.stopped || entry.state !== "ready" || !entry.beforeBackup) return false;
+        if (entry.backupPrepare) throw new Error(`Service ${id} is already getting ready for a backup`);
+        const requestId = crypto.randomUUID();
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        try {
+            await new Promise<void>((resolve, reject) => {
+                let settled = false;
+                const settle = (error: Error | null) => {
+                    if (settled) return;
+                    settled = true;
+                    if (error) reject(error);
+                    else resolve();
+                };
+                entry.backupPrepare = { requestId, settle };
+                timer = setTimeout(() => settle(new Error(`Service ${id} did not get ready for the backup within ${Math.round(timeoutMs / 1000)} s`)), timeoutMs);
+                timer.unref?.();
+                entry.process.send({ type: "paperboard:before-backup", requestId }, (err) => { if (err) settle(err); });
+            });
+        } finally {
+            clearTimeout(timer);
+            // set inside the promise above, which narrowing does not see
+            const current = entry.backupPrepare as RunningService["backupPrepare"];
+            if (current?.requestId === requestId) entry.backupPrepare = undefined;
+        }
         return true;
     }
     public async waitUntilReady(id: string): Promise<void> {

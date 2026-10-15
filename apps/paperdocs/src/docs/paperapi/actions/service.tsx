@@ -96,6 +96,12 @@ const service = definePanelService({
                         <td><PaperCode>undefined</PaperCode></td>
                         <td>Lifecycle callback executed after action registration completes.</td>
                     </tr>
+                    <tr>
+                        <td><PaperCode>beforeBackup</PaperCode></td>
+                        <td><PaperCode>(ctx: ServiceContext) =&gt; void | Promise&lt;void&gt;</PaperCode></td>
+                        <td><PaperCode>undefined</PaperCode></td>
+                        <td>Gets the service ready for a backup of its panel's data, while it still runs. The service is then stopped, the data copied, and the service started again, so undo the preparation when it starts. Throwing refuses the backup. See Backups.</td>
+                    </tr>
                 </tbody>
             </PaperTable>
 

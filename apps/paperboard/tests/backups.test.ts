@@ -43,7 +43,15 @@ function panelFixture(version = "0.2.0") {
 const mode = fs.readFileSync(${JSON.stringify(path.join(filesDir, "mode.txt"))}, 'utf8');
 if (mode === 'broken') process.exit(3);
 fs.appendFileSync('seen', mode + '\\n');
-process.send({ type: 'paperboard:service-ready', panelId: ${JSON.stringify(ID)} });
+// with a prepare.txt the service takes part in backups: "ok" or "fail"
+const prepare = ${JSON.stringify(path.join(filesDir, "prepare.txt"))};
+process.on('message', (message) => {
+    if (message?.type !== 'paperboard:before-backup') return;
+    const answer = fs.readFileSync(prepare, 'utf8');
+    fs.appendFileSync('seen', 'prepare:' + answer + '\\n');
+    process.send({ type: 'paperboard:before-backup-done', requestId: message.requestId, ...(answer === 'ok' ? {} : { error: 'the world would not save' }) });
+});
+process.send({ type: 'paperboard:service-ready', panelId: ${JSON.stringify(ID)}, beforeBackup: fs.existsSync(prepare) });
 setInterval(() => {}, 1000);`,
     );
     fs.mkdirSync(filesDir, { recursive: true });
@@ -71,7 +79,8 @@ setInterval(() => {}, 1000);`,
         config: JSON.parse(fs.readFileSync(path.join(root, "configs", `${ID}.json`), "utf8")),
     });
     const seen = () => fs.readFileSync(path.join(dir, "seen"), "utf8").trim().split("\n");
-    return { root, dir, engine, services, call, writeData, readData, seen };
+    const setPrepare = (answer: "ok" | "fail") => fs.writeFileSync(path.join(filesDir, "prepare.txt"), answer);
+    return { root, dir, engine, services, call, writeData, readData, seen, setPrepare };
 }
 
 test("SigV4 signing matches AWS's published GetObject example", () => {
@@ -187,6 +196,36 @@ describe("backups on this computer", () => {
         const restored = await f.call("backup:restore", { panelId: ID, backupId: made.result.id }, ID);
         expect(restored.code).toBe("CONFLICT");
         expect(f.readData()).toEqual({ mode: "old", config: { n: 2 } });
+    });
+});
+
+describe("a service that takes part in backups", () => {
+    test("is asked to get ready before its data is copied", async () => {
+        const f = panelFixture();
+        f.writeData("first", { n: 1 });
+        f.setPrepare("ok");
+        expect(f.services.startService(ID)).toBe(true);
+        await f.services.waitUntilReady(ID);
+        await f.call("backup:panel-destination-set", { panelId: ID, destinationId: "local" });
+        const made = await f.call("backup:create", { panelId: ID }, ID);
+        expect(made.error).toBeUndefined();
+        // asked while running, then stopped for the copy and started again
+        expect(f.seen()).toEqual(["first", "prepare:ok", "first"]);
+    });
+
+    test("that cannot get ready refuses the backup and is started again", async () => {
+        const f = panelFixture();
+        f.writeData("first", { n: 1 });
+        f.setPrepare("fail");
+        expect(f.services.startService(ID)).toBe(true);
+        await f.services.waitUntilReady(ID);
+        await f.call("backup:panel-destination-set", { panelId: ID, destinationId: "local" });
+        const made = await f.call("backup:create", { panelId: ID }, ID);
+        expect(made.code).toBe("CONFLICT");
+        expect(made.error).toContain("the world would not save");
+        // the restart undoes whatever the half-done preparation left
+        expect(f.seen()).toEqual(["first", "prepare:fail", "first"]);
+        expect((await f.call("backup:list", { panelId: ID }, ID)).result.backups).toEqual([]);
     });
 });
 

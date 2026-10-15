@@ -66,6 +66,15 @@ export interface DefinePanelServiceOptions<
         Record<string, (ctx: ServiceContext<TState>) => WidgetChoice[] | Promise<WidgetChoice[]>>
     >;
     onInit?: (ctx: ServiceContext<TState>) => void | Promise<void>;
+    /**
+     * Gets the service ready for a backup of its panel's data, which starts
+     * once this resolves: the service is then stopped, the data copied, and
+     * the service started again. Use it to write out what is in memory and
+     * to stop a process the service runs from writing (a game server's
+     * save-off); undo that when the service starts again. Throwing refuses
+     * the backup. Without it the service is simply stopped for the copy.
+     */
+    beforeBackup?: (ctx: ServiceContext<TState>) => void | Promise<void>;
 }
 
 export function definePanelService<
@@ -200,7 +209,22 @@ export function definePanelService<
     const ready = Promise.all(registrations).then(async () => {
         await options.onInit?.(ctx);
         if (typeof process !== "undefined" && typeof process.send === "function") {
-            process.send({ type: "paperboard:service-ready", panelId });
+            const beforeBackup = options.beforeBackup;
+            if (beforeBackup) {
+                // the daemon asks once per backup and waits for the answer
+                process.on("message", (message: any) => {
+                    if (message?.type !== "paperboard:before-backup" || typeof message.requestId !== "string") return;
+                    void (async () => beforeBackup(ctx))().then(
+                        () => process.send?.({ type: "paperboard:before-backup-done", requestId: message.requestId }),
+                        (err) => process.send?.({
+                            type: "paperboard:before-backup-done",
+                            requestId: message.requestId,
+                            error: err instanceof Error ? err.message : String(err),
+                        }),
+                    );
+                });
+            }
+            process.send({ type: "paperboard:service-ready", panelId, beforeBackup: Boolean(beforeBackup) });
         }
     });
     void ready.catch((err) => console.error(`[Service:${panelId}] initialization failed:`, err));
