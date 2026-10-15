@@ -24,7 +24,6 @@ describe("model listing", () => {
                 errors = e;
             },
             onPulls: () => {},
-            onDownloaded: () => {},
         });
         const models = await manager.refresh();
         expect(models.map((m) => [m.provider, m.name])).toEqual([["api-0000000b", "local:7b"]]);

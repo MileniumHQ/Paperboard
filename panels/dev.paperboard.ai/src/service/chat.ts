@@ -2,6 +2,7 @@
 // stop and ask the user before any action runs. A denied, failed or
 // interrupted call is handed back to the model as what it is.
 
+import type { MemoryMessage } from "../core/askMemory";
 import {
     MAX_MESSAGES,
     MAX_TOOL_ROUNDS,
@@ -870,7 +871,7 @@ export class ChatEngine {
  */
 export async function askOnce(
     api: ChatClient,
-    request: { model: string; prompt: string; system?: string; contextLength: number; forceCpu?: boolean },
+    request: { model: string; prompt: string; system?: string; history?: readonly MemoryMessage[]; contextLength: number; forceCpu?: boolean },
     deadlineMs: number,
 ): Promise<string> {
     const abort = new AbortController();
@@ -882,6 +883,7 @@ export async function askOnce(
                 model: request.model,
                 messages: [
                     ...(request.system?.trim() ? [{ role: "system" as const, content: request.system }] : []),
+                    ...(request.history ?? []),
                     { role: "user" as const, content: request.prompt },
                 ],
                 options: inferenceOptions(request.contextLength, request.forceCpu ?? false),

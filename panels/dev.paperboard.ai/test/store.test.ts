@@ -100,19 +100,16 @@ describe("model manager", () => {
     let fake: FakeOllama;
     let models: InstalledModel[];
     let pulls: PullProgress[];
-    let downloaded: string[];
     let manager: ModelManager;
 
     beforeEach(() => {
         fake = startFakeOllama();
         models = [];
         pulls = [];
-        downloaded = [];
         manager = new ModelManager({
             clients: () => new Map([["ollama", new OllamaClient(fake.url)]]),
             onModels: (m) => (models = m),
             onPulls: (p) => (pulls = p),
-            onDownloaded: (m) => downloaded.push(m),
         });
     });
     afterEach(() => fake.stop());
@@ -137,17 +134,16 @@ describe("model manager", () => {
         expect(manager.architecture("tooly:latest")).toEqual({ layers: 32, kvHeads: 8, headDim: 128 });
     });
 
-    it("downloads, refreshes the list, and fires once on success", async () => {
+    it("downloads and refreshes the list", async () => {
         await manager.pull("small");
         expect(fake.pulls).toEqual(["small:latest"]);
-        expect(downloaded).toEqual(["small:latest"]);
         expect(models.map((m) => m.name)).toContain("small:latest");
         expect(pulls).toEqual([]);
     });
 
-    it("a failed download rejects and never fires the trigger", async () => {
+    it("a failed download rejects and lists nothing new", async () => {
         await expect(manager.pull("broken:1b")).rejects.toThrow(/file does not exist/);
-        expect(downloaded).toEqual([]);
+        expect(models.map((m) => m.name)).not.toContain("broken:1b");
         expect(pulls).toEqual([]);
     });
 
@@ -166,7 +162,7 @@ describe("model manager", () => {
         while (pulls.length === 0) await new Promise((r) => setTimeout(r, 5));
         expect(manager.cancel("slow")).toBe(true);
         await expect(pull).rejects.toThrow(/cancelled/);
-        expect(downloaded).toEqual([]);
+        expect(models.map((m) => m.name)).not.toContain("slow:latest");
         fake.releasePulls();
     });
 

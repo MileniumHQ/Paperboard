@@ -69,11 +69,17 @@ export function buildMarketingFlows(registry: ActionInfo[], icons: Record<string
         welcomeChannel, send("member-channel", welcomeChannel, "Welcome <@{{userId:User:person}}>! {{username:Username:person}} just joined our community."),
     ]);
 
-    const smokeAnswer = ask("model-test", "Give one practical Minecraft building tip in one sentence.", "{{string:Model:download_done}}");
-    const shortTip = truncate("model-tip", smokeAnswer, 400);
-    const modelChannel = channel("model-channel");
-    const model = block("model-downloaded", AI, "model-downloaded", { model: "" }, [smokeAnswer, shortTip, modelChannel,
-        send("model-report", modelChannel, `Local model {{string:Model:download_done}} is ready. Test answer: ${ref(shortTip)}`),
+    const chatAnswer = block("chat-answer", AI, "ask", {
+        prompt: "{{author:Username:person}} says: {{content:Message:chat}}", model: "", personality: "no-nonsense",
+        instructions: "You are Lantern Town's helper on a Minecraft server at play.example.com. Keep answers under three sentences.",
+        memory: "{{channelId:Channel:tag}}",
+    });
+    const chatShort = truncate("chat-short", chatAnswer, 1600);
+    const chat = block("chat-message", BOT, "on-message", {}, [
+        block("chat-filter", "builtin.logic", "if", { left: "{{content:Message:chat}}", operator: "starts-with", right: "!ask " }, [
+            chatAnswer, chatShort,
+            block("chat-reply", BOT, "send-message", { channel: "{{channelId:Channel:tag}}", reply: "{{messageId:Message:chat}}", content: ref(chatShort) }),
+        ]),
     ]);
 
     const tipAnswer = ask("question-answer", "Answer this Minecraft question briefly: {{content:Message:chat}}");
@@ -121,7 +127,7 @@ export function buildMarketingFlows(registry: ActionInfo[], icons: Record<string
             block("guide-reaction", BOT, "add-reaction", { channel: "{{channelId:Channel:tag}}", message: "{{messageId:Message:chat}}", emoji: "✅" }),
         ]),
     ]);
-    return { startup, joined, button, member, model, question, leaving, botReady, gameNight, helpDesk };
+    return { startup, joined, button, member, chat, question, leaving, botReady, gameNight, helpDesk };
 }
 
 /** Editorial fixture validation, not a substitute for a service boundary. */

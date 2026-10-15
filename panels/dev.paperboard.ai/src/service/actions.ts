@@ -1,4 +1,5 @@
 import { actionsApi, defineAction, MAX_WIDGET_OPTION_VALUE_LENGTH, type ActionDefinition } from "@mileniumhq/paperapi";
+import { MAX_MEMORY_KEY_CHARS } from "../core/askMemory";
 import { ACTION_IDS, PANEL_ID, TRIGGER_IDS, UI_ACTION_IDS, WIDGET_ACTION_IDS } from "../contract";
 import { isPromptStyle, MAX_USER_MESSAGE_CHARS, PROMPT_STYLES, PROMPT_STYLE_DESCRIPTIONS, PROMPT_STYLE_LABELS } from "../core/conversation";
 import { isReasoningLevel } from "../core/reasoning";
@@ -34,6 +35,9 @@ const personalityOptions = PROMPT_STYLES.map((style) => ({
     description: PROMPT_STYLE_DESCRIPTIONS[style],
 }));
 
+const MAX_PROMPT_CHARS = 32_000;
+const MAX_INSTRUCTIONS_CHARS = 8_000;
+
 export function publicActions(app: AiApp): ActionDefinition[] {
     const models = modelOptions(app);
     const modelInput = (label = "Model") => ({
@@ -49,10 +53,10 @@ export function publicActions(app: AiApp): ActionDefinition[] {
             name: "Ask AI",
             category: "AI",
             description:
-                "Asks a local model and returns its answer. The model gets no actions here, since nobody is present to approve them. Fails if the answer takes longer than 28 seconds.",
+                "Asks a model and returns its answer. Give a memory key to continue a conversation: calls with the same key (a channel, a player, a ticket) see the earlier questions and answers. The model gets no actions here, since nobody is present to approve them. Fails if the answer takes longer than 28 seconds.",
             template: "Ask AI {prompt}",
             inputs: {
-                prompt: { type: "string", label: "Prompt", required: true, placeholder: "Prompt" },
+                prompt: { type: "string", label: "Prompt", required: true, placeholder: "Prompt", maxLength: MAX_PROMPT_CHARS, multiline: true },
                 model: {
                     type: "string",
                     label: "Model",
@@ -66,81 +70,65 @@ export function publicActions(app: AiApp): ActionDefinition[] {
                     default: "standard",
                     options: personalityOptions,
                 },
+                instructions: {
+                    type: "string",
+                    label: "Instructions",
+                    description: "Who the AI is and how it answers here, added to the personality.",
+                    placeholder: "You are the helper for our server. Answer in two sentences.",
+                    maxLength: MAX_INSTRUCTIONS_CHARS,
+                    multiline: true,
+                },
+                memory: {
+                    type: "string",
+                    label: "Memory key",
+                    description: "Calls with the same key continue one conversation. Leave empty to ask without memory.",
+                    placeholder: "No memory",
+                    maxLength: MAX_MEMORY_KEY_CHARS,
+                },
             },
             output: { type: "string", label: "Answer" },
             icon: "smart_toy",
-            run: async (_ctx, inputs: { prompt?: string; model?: string; personality?: string }) => {
+            run: async (_ctx, inputs: { prompt?: string; model?: string; personality?: string; instructions?: string; memory?: string }) => {
                 await app.ready;
+                if (inputs?.personality !== undefined && inputs.personality !== "" && !isPromptStyle(inputs.personality)) {
+                    throw new Error(`Unknown personality ${JSON.stringify(inputs.personality)}.`);
+                }
                 return app.ask(
-                    str(inputs?.prompt, "prompt", 32_000),
+                    str(inputs?.prompt, "prompt", MAX_PROMPT_CHARS),
                     optStr(inputs?.model, "model"),
-                    undefined,
+                    optStr(inputs?.instructions, "instructions", MAX_INSTRUCTIONS_CHARS),
                     isPromptStyle(inputs?.personality) ? inputs.personality : undefined,
+                    optStr(inputs?.memory, "memory", MAX_MEMORY_KEY_CHARS),
                 );
+            },
+        }),
+        defineAction({
+            id: ACTION_IDS.forgetMemory,
+            name: "Forget Memory",
+            category: "AI",
+            description: "Clears what Ask AI remembers for a memory key, so the next ask with it starts a new conversation. Returns whether there was anything to forget.",
+            template: "Forget AI memory {memory}",
+            inputs: { memory: { type: "string", label: "Memory key", required: true, maxLength: MAX_MEMORY_KEY_CHARS } },
+            output: { type: "boolean", label: "Forgot" },
+            icon: "history_toggle_off",
+            run: async (_ctx, inputs: { memory?: string }) => {
+                await app.ready;
+                return app.forgetMemory(str(inputs?.memory, "memory", MAX_MEMORY_KEY_CHARS));
             },
         }),
         defineAction({
             id: ACTION_IDS.listModels,
             name: "List Models",
             category: "AI",
-            description: "Returns the names of the models downloaded in the AI panel, one per line",
+            description: "Returns the models Ask AI can use, across every provider in the AI panel.",
             template: "List AI models",
             inputs: {},
-            output: { type: "string", label: "Models" },
+            output: { type: "list<string>", label: "Models" },
             icon: "list",
             run: async () => {
                 await app.ready;
-                app.runtime.requireApi();
-                return (await app.models.refresh()).map((m) => m.name).join("\n");
+                return app.flowModels();
             },
-        }),
-        defineAction({
-            id: ACTION_IDS.downloadModel,
-            name: "Download Model",
-            category: "AI",
-            description:
-                "Starts downloading a model from the Ollama library. Returns once the download has started; When Model Downloaded fires when it finishes.",
-            template: "Download AI model {model}",
-            inputs: { model: { type: "string", label: "Model", required: true, placeholder: "Model ID" } },
-            output: { type: "string", label: "Model" },
-            icon: "download",
-            run: async (_ctx, inputs: { model?: string }) => {
-                await app.ready;
-                const model = str(inputs?.model, "model");
-                app.runtime.requireApi();
-                // the download outlives this call; its failure is logged and
-                // shown in the panel, and the trigger only fires on success
-                void app.models.pull(model).catch((err) => console.error(`[ai] download of ${model} failed:`, String(err)));
-                return model;
-            },
-        }),
-        defineAction({
-            id: ACTION_IDS.deleteModel,
-            name: "Delete Model",
-            category: "AI",
-            description: "Deletes a downloaded model and frees its disk space",
-            template: "Delete AI model {model}",
-            inputs: { model: { type: "string", label: "Model", required: true, placeholder: "qwen3:8b", options: models } },
-            output: { type: "string", label: "Model" },
-            icon: "delete",
-            run: async (_ctx, inputs: { model?: string }) => {
-                await app.ready;
-                const model = str(inputs?.model, "model");
-                await app.models.delete(model);
-                return model;
-            },
-        }),
-        defineAction({
-            id: TRIGGER_IDS.modelDownloaded,
-            name: "When Model Downloaded",
-            category: "AI",
-            description: "Fires when a model finishes downloading. Leave the model as (any) to fire for every model.",
-            template: "When AI model {model} finishes downloading",
-            inputs: { model: modelInput() },
-            // the payload is the model name itself
-            match: { field: "$", input: "model" },
-            output: { type: "string", label: "Model" },
-            icon: "download_done",
         }),
         defineAction({
             id: TRIGGER_IDS.replyFinished,

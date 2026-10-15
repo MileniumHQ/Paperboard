@@ -53,35 +53,44 @@ describe("Ask AI schema", () => {
         ).toEqual(["a:1", "b:1"]);
     });
 
-    it("has no instructions input and labels the prompt plainly", () => {
+    it("takes instructions and a memory key, and labels the prompt plainly", () => {
         const ask = findAction(fakeApp([]), "ask");
-        expect("system" in ask.inputs).toBe(false);
         expect(ask.inputs.prompt.label).toBe("Prompt");
+        expect(ask.inputs.instructions).toMatchObject({ type: "string", multiline: true });
+        expect(ask.inputs.memory).toMatchObject({ type: "string", label: "Memory key", maxLength: 200 });
     });
 
-    it("uses \"Model ID\" as the download input placeholder", () => {
-        const download = findAction(fakeApp([]), "download-model");
-        expect(download.inputs.model.label).toBe("Model");
-        expect(download.inputs.model.placeholder).toBe("Model ID");
+    it("passes every input through to the app", async () => {
+        const calls: unknown[][] = [];
+        const app = { ...fakeApp([]), ask: async (...args: unknown[]) => (calls.push(args), "ok") };
+        await findAction(app, "ask").run({}, { prompt: "hi", model: "a:1", personality: "no-nonsense", instructions: "Be brief.", memory: "room-1" });
+        expect(calls).toEqual([["hi", "a:1", "Be brief.", "no-nonsense", "room-1"]]);
     });
 
-    it("offers the installed models on delete", () => {
-        const del = findAction(fakeApp(["qwen3:8b", "llama3:2b"]), "delete-model");
-        expect(del.inputs.model.options.map((o: any) => o.value)).toEqual([
-            "qwen3:8b",
-            "llama3:2b",
-        ]);
+    it("refuses a personality it doesn't have", async () => {
+        const app = { ...fakeApp([]), ask: async () => "ok" };
+        await expect(findAction(app, "ask").run({}, { prompt: "hi", personality: "pirate" })).rejects.toThrow('Unknown personality "pirate".');
+    });
+});
+
+describe("flow model management", () => {
+    it("lists models as a list of names and forgets by key", async () => {
+        const app = { ...fakeApp([]), flowModels: async () => ["a:1", "b:1"], forgetMemory: async (key: string) => key === "room-1" };
+        const list = findAction(app, "list-models");
+        expect(list.output.type).toBe("list<string>");
+        expect(await list.run({}, {})).toEqual(["a:1", "b:1"]);
+        expect(await findAction(app, "forget-memory").run({}, { memory: "room-1" })).toBe(true);
+    });
+
+    it("no longer downloads or deletes models from flows", () => {
+        const ids = publicActions(fakeApp([])).map((a) => a.id);
+        expect(ids).not.toContain("download-model");
+        expect(ids).not.toContain("delete-model");
+        expect(ids).not.toContain("model-downloaded");
     });
 });
 
 describe("AI trigger filters", () => {
-    it("filters downloaded-model events on the payload itself", () => {
-        const trigger = findAction(fakeApp(["qwen3:8b"]), "model-downloaded");
-        expect(trigger.match).toEqual({ field: "$", input: "model" });
-        expect(trigger.inputs.model.allowEmpty).toBe(true);
-        expect(trigger.inputs.model.options.map((o: any) => o.value)).toEqual(["qwen3:8b"]);
-    });
-
     it("filters finished-reply events on the payload's model", () => {
         const trigger = findAction(fakeApp(["qwen3:8b"]), "reply-finished");
         expect(trigger.match).toEqual({ field: "model", input: "model" });

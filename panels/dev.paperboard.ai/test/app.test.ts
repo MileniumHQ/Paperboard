@@ -518,3 +518,127 @@ describe("coding agent connections", () => {
         }
     });
 });
+
+// Ask AI for flows: memory keys carry a conversation between calls, on disk.
+describe("Ask AI memory", () => {
+    const enc = new TextEncoder();
+    const bodies: { messages: { role: string; content: string }[] }[] = [];
+    let fail = false;
+    const endpoint = Bun.serve({
+        hostname: "127.0.0.1",
+        port: 0,
+        async fetch(req) {
+            const url = new URL(req.url);
+            if (url.pathname === "/v1/models") return Response.json({ data: [{ id: "local:7b" }] });
+            if (url.pathname === "/v1/chat/completions") {
+                if (fail) return new Response("model crashed", { status: 500 });
+                bodies.push(await req.json());
+                const answer = `answer ${bodies.length}`;
+                return new Response(
+                    `data: ${JSON.stringify({ choices: [{ delta: { content: answer } }] })}\n\ndata: [DONE]\n\n`,
+                    { headers: { "Content-Type": "text/event-stream" } },
+                );
+            }
+            return new Response("not found", { status: 404 });
+        },
+    });
+    afterAll(() => endpoint.stop(true));
+    const memoryFile = () => path.join(filesDir, "ask-memory.json");
+
+    async function withApp(run: (app: InstanceType<typeof AiApp>) => Promise<void>) {
+        savedConfig = {
+            version: 2,
+            settings: { defaultModel: "local:7b", defaultProvider: "api-0000000b" },
+            connections: [{ id: "api-0000000b", kind: "openai-compatible", label: "Local", baseUrl: `http://127.0.0.1:${endpoint.port}` }],
+        };
+        const app = new AiApp(new HangingHost(), { readyTimeoutMs: 100 });
+        const ctx = makeCtx();
+        await app.init(ctx as any);
+        try {
+            const start = Date.now();
+            while (ctx.state.models.length === 0) {
+                if (Date.now() - start > 3000) throw new Error("the endpoint's models never listed");
+                await new Promise((r) => setTimeout(r, 10));
+            }
+            await run(app);
+        } finally {
+            savedConfig = null;
+            await app.stopRuntime().catch((err) => console.debug("[ai] test teardown:", String(err)));
+        }
+    }
+    const turns = (i: number) => bodies[i]!.messages.filter((m) => m.role !== "system").map((m) => m.content);
+
+    it("continues a conversation per key, across a restart, until it is forgotten", async () => {
+        bodies.length = 0;
+        fs.rmSync(memoryFile(), { force: true });
+        try {
+            await withApp(async (app) => {
+                expect(await app.ask("hi", undefined, undefined, undefined, "room-1")).toBe("answer 1");
+                await app.ask("and you?", undefined, undefined, undefined, "room-1");
+                expect(turns(1)).toEqual(["hi", "answer 1", "and you?"]);
+                await app.ask("other", undefined, undefined, undefined, "room-2");
+                expect(turns(2)).toEqual(["other"]);
+                await app.ask("no memory");
+                expect(turns(3)).toEqual(["no memory"]);
+            });
+            await withApp(async (app) => {
+                await app.ask("still there?", undefined, undefined, undefined, "room-1");
+                expect(turns(4)).toEqual(["hi", "answer 1", "and you?", "answer 2", "still there?"]);
+                expect(await app.forgetMemory("room-1")).toBe(true);
+                expect(await app.forgetMemory("room-1")).toBe(false);
+                await app.ask("fresh", undefined, undefined, undefined, "room-1");
+                expect(turns(5)).toEqual(["fresh"]);
+            });
+        } finally {
+            fs.rmSync(memoryFile(), { force: true });
+        }
+    });
+
+    it("puts the caller's instructions in the system prompt", async () => {
+        bodies.length = 0;
+        await withApp(async (app) => {
+            await app.ask("hi", undefined, "You are Mochi.");
+            expect(bodies[0]!.messages[0]!.role).toBe("system");
+            expect(bodies[0]!.messages[0]!.content.endsWith("You are Mochi.")).toBe(true);
+        });
+    });
+
+    it("remembers nothing from a failed ask", async () => {
+        bodies.length = 0;
+        fs.rmSync(memoryFile(), { force: true });
+        try {
+            await withApp(async (app) => {
+                fail = true;
+                await expect(app.ask("lost", undefined, undefined, undefined, "room-3")).rejects.toThrow("model crashed");
+                fail = false;
+                await app.ask("next", undefined, undefined, undefined, "room-3");
+                expect(turns(0)).toEqual(["next"]);
+            });
+        } finally {
+            fail = false;
+            fs.rmSync(memoryFile(), { force: true });
+        }
+    });
+
+    it("refuses memory, without overwriting it, when the memory file is unreadable", async () => {
+        bodies.length = 0;
+        fs.writeFileSync(memoryFile(), "{not json");
+        try {
+            await withApp(async (app) => {
+                await expect(app.ask("hi", undefined, undefined, undefined, "room-4")).rejects.toThrow("memory file could not be read");
+                await expect(app.forgetMemory("room-4")).rejects.toThrow("memory file could not be read");
+                // asking without memory still works
+                expect(await app.ask("hi")).toBe("answer 1");
+            });
+            expect(fs.readFileSync(memoryFile(), "utf8")).toBe("{not json");
+        } finally {
+            fs.rmSync(memoryFile(), { force: true });
+        }
+    });
+
+    it("lists the models a flow can ask", async () => {
+        await withApp(async (app) => {
+            expect(await app.flowModels()).toEqual(["local:7b"]);
+        });
+    });
+});

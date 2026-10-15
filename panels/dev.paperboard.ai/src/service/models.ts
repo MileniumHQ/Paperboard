@@ -18,7 +18,6 @@ export interface ModelDeps {
     /** every listing, plus why a connection could not be listed (unavailable, not empty) */
     onModels: (models: InstalledModel[], errors: Record<string, string>) => void;
     onPulls: (pulls: PullProgress[]) => void;
-    onDownloaded: (model: string) => void;
 }
 
 /** Ollama names models "name:tag"; a bare name means ":latest". */
@@ -181,7 +180,6 @@ export class ModelManager {
             this.pulls.delete(model);
             this.publishPulls();
             await this.refresh();
-            this.deps.onDownloaded(model);
         } catch (err) {
             const cancelled = abort.signal.aborted;
             this.pulls.delete(model);

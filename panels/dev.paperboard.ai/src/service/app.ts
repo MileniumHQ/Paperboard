@@ -1,6 +1,8 @@
 // The AI service: owns the Ollama runtime, models, conversations and the
 // approval gate, and mirrors them into panel state for the UI.
 
+import { memoryKey } from "../core/askMemory";
+import { AskMemory } from "./askMemory";
 import { createHash, randomBytes } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
@@ -135,6 +137,7 @@ function clampSettings(input: Partial<Settings> | undefined): Settings {
 export class AiApp {
     private ctx!: Ctx;
     private filesDir = "";
+    private memory!: AskMemory;
     private configLoaded = false;
     private stored: StoredConfig = {};
     private configQueue: Promise<unknown> = Promise.resolve();
@@ -167,7 +170,6 @@ export class AiApp {
                 );
             },
             onPulls: (pulls) => this.ctx.setState({ pulls }),
-            onDownloaded: (model) => this.ctx.emitTrigger(TRIGGER_IDS.modelDownloaded, model),
         });
     }
 
@@ -493,6 +495,8 @@ export class AiApp {
             await fs.promises.mkdir(path.join(this.filesDir, dir), { recursive: true });
         }
         this.store = new ConversationStore(this.filesDir);
+        this.memory = new AskMemory(this.filesDir);
+        await this.memory.load();
         const host = this.host;
         this.agents = new AgentHub({
             host: {
@@ -1014,7 +1018,12 @@ export class AiApp {
 
     // ─── public actions ────────────────────────────────────────────────────
 
-    async ask(prompt: string, model?: string, system?: string, personality?: PromptStyle): Promise<string> {
+    /**
+     * One answer from a model, for flows. With a memory key, the key's
+     * earlier exchanges go first and this one is kept once answered; a failed
+     * ask remembers nothing.
+     */
+    async ask(prompt: string, model?: string, system?: string, personality?: PromptStyle, memory?: string): Promise<string> {
         const chosen = model?.trim() ? this.normalizeModelRef(model) : this.ctx.state.settings.defaultModel;
         if (!prompt?.trim()) throw new Error("Ask AI needs a prompt.");
         if (!chosen) throw new Error("No model given and no default model is set in the AI panel.");
@@ -1022,17 +1031,32 @@ export class AiApp {
         if (!provider || !this.models.capabilities(chosen, provider)) throw new Error(`${chosen} is not installed in the AI panel.`);
         const agent = this.connections.find((c) => c.id === provider && c.kind === "agent");
         if (agent) throw new Error(`${agent.label} is a coding agent; it answers in the AI panel's chats, not in flows.`);
-        return askOnce(
+        const key = memory?.trim() ? memoryKey(memory) : undefined;
+        const answer = await askOnce(
             this.chatClientFor(provider),
             {
                 model: chosen,
                 prompt,
                 system: askSystemPrompt(personality ?? "standard", chosen, system),
+                ...(key ? { history: this.memory.history(key) } : {}),
                 contextLength: this.ctx.state.settings.contextLength,
                 forceCpu: this.ctx.state.settings.forceCpu,
             },
             ASK_DEADLINE_MS,
         );
+        if (key) await this.memory.add(key, prompt, answer);
+        return answer;
+    }
+
+    /** Clears what Ask AI remembers for a key; false when it remembered nothing. */
+    forgetMemory(key: unknown): Promise<boolean> {
+        return this.memory.forget(memoryKey(key));
+    }
+
+    /** Every model a flow can ask, across connections; coding agents answer only in chats. */
+    async flowModels(): Promise<string[]> {
+        const models = await this.models.refresh();
+        return [...new Set(models.filter((m) => !m.capabilities.includes("agent")).map((m) => m.name))];
     }
 
     private chatClientFor(providerId: string) {

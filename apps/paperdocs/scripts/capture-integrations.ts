@@ -90,13 +90,13 @@ try {
     const tallCloseup = await tallCapture.context.newPage();
     const captures = [
         { name: "actions-overview.png", flows: [flows.gameNight, flows.helpDesk], shell: false, overview: true },
-        { name: "actions.png", flows: [flows.model, flows.botReady], shell: true },
+        { name: "actions.png", flows: [flows.chat, flows.botReady], shell: true },
         { name: "gameserver-actions.png", flows: [flows.joined], shell: false },
         { name: "botcreator-actions.png", flows: [flows.button], shell: false },
         { name: "ai-actions.png", flows: [flows.question], shell: false },
         { name: "actions-game-flow.png", flows: [flows.startup], shell: false },
         { name: "actions-discord-flow.png", flows: [flows.member], shell: false },
-        { name: "actions-ai-flow.png", flows: [flows.model], shell: false },
+        { name: "actions-ai-flow.png", flows: [flows.chat], shell: false },
     ];
     const detail = await context.newPage();
     for (const shot of captures) {

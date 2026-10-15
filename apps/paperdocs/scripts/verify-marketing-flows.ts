@@ -59,9 +59,11 @@ export async function verifyMarketingFlows(flows: ReturnType<typeof buildMarketi
         assert.deepEqual(button.map(entry => entry.action), ["player-count", "list-players", "respond-to-interaction"]);
         assert.match(String(button.at(-1)!.inputs.content), /Dinnerbone, jeb_/);
         await run("member", { userId: demoUser, username: "Dinnerbone", guildId: "124800000000000050", guildName: "Lantern Town" });
-        const model = await run("model", "qwen2.5:0.5b"); assert.equal(model.find(entry => entry.action === "ask")!.inputs.model, "qwen2.5:0.5b");
-        assert.match(String(model.at(-1)!.inputs.content), /qwen2.5:0.5b/);
         const payload = { content: "!tip how do I keep mobs away?", channelId: demoChannel, messageId: demoMessage, authorId: demoUser, author: "Dinnerbone" };
+        const chat = await run("chat", { ...payload, content: "!ask where is the nether portal?" });
+        const asked = chat.find(entry => entry.action === "ask")!.inputs;
+        assert.equal(asked.memory, demoChannel, "Each channel keeps its own conversation"); assert.match(String(asked.prompt), /Dinnerbone says/);
+        assert.equal(chat.at(-1)!.inputs.reply, demoMessage);
         const question = await run("question", payload); assert.equal(question.at(-1)!.inputs.reply, demoMessage);
         assert.equal((await run("question", { ...payload, content: "ordinary conversation" })).length, 0, "Non-command chat must not invoke inference or reply");
         await run("leaving", "Dinnerbone");

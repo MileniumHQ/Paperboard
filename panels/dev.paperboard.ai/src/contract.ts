@@ -17,9 +17,8 @@ export const OLLAMA_PACKAGE = OLLAMA_PROVIDER.runtime!.packageId;
 /** Public actions: flow blocks other panels can call. */
 export const ACTION_IDS = {
     ask: "ask",
+    forgetMemory: "forget-memory",
     listModels: "list-models",
-    downloadModel: "download-model",
-    deleteModel: "delete-model",
 } as const;
 
 /** Control plane for this panel's own UI (internal, never flow blocks). */
@@ -68,7 +67,6 @@ export const WIDGET_IDS = {
 } as const;
 
 export const TRIGGER_IDS = {
-    modelDownloaded: "model-downloaded",
     replyFinished: "reply-finished",
 } as const;
 
