@@ -1,7 +1,7 @@
 // shell-only IPC; data operations flow through daemon.
 // Every handler below validates event.senderFrame.url via shellGuard:
 // panel:// origins get a typed PANEL_IPC_REFUSED, never an answer.
-import { type IpcMain, type IpcMainInvokeEvent, BrowserWindow, app, clipboard, dialog, shell } from "electron";
+import { type IpcMain, type IpcMainInvokeEvent, BrowserWindow, app, clipboard, dialog, nativeTheme, shell } from "electron";
 import { broadcastAppSettings, syncTitleBarOverlays, applyNativeTheme, applyRunOnStartup } from "../appSettings";
 import * as fs from "fs";
 import * as path from "path";
@@ -14,6 +14,7 @@ import { runPanelImport, runPanelExport, type PanelFileTransferDeps } from "../p
 import { poolEndpoint } from "../panelFileEndpoint";
 import type { FileTypeFilter } from "../../shared/fileTransfer";
 import { paperboardGoogleClient, signInToGoogleDrive } from "../googleOAuth";
+import { googleSignInPage } from "../googleSignInPage";
 import connectionPool from "./papercrane/ConnectionPool";
 
 // native dialogs, modal to the window whose panel asked
@@ -113,7 +114,10 @@ export default function registerShellIpc(ipcMain: IpcMain) {
         const google = paperboardGoogleClient(import.meta.env);
         if (!google) throw new Error("This build of Paperboard has no Google sign-in. Use a release build to connect Google Drive.");
         const client = connectionPool.getClient(computerId);
-        const refreshToken = await signInToGoogleDrive(google, { openExternal: (url) => shell.openExternal(url) });
+        const refreshToken = await signInToGoogleDrive(google, {
+            openExternal: (url) => shell.openExternal(url),
+            page: (outcome) => googleSignInPage(outcome, nativeTheme.shouldUseDarkColors),
+        });
         return client.call("backup:destination-add", { destination: { kind: "gdrive", label, ...google, refreshToken } }, 120_000);
     });
 

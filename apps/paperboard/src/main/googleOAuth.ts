@@ -43,6 +43,8 @@ export interface GoogleSignInDeps {
     openExternal: (url: string) => Promise<void>;
     endpoints?: GoogleOAuthEndpoints;
     timeoutMs?: number;
+    /** the page the browser lands on afterwards; a bare one by default */
+    page?: (outcome: "connected" | "not-connected") => string;
 }
 
 const base64url = (buf: Buffer) => buf.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
@@ -74,7 +76,9 @@ export async function signInToGoogleDrive(
         const code = url.searchParams.get("code");
         const error = url.searchParams.get("error");
         res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(
-            PAGE(code ? "Google Drive is connected. You can close this tab and go back to Paperboard." : "Google Drive was not connected. You can close this tab."),
+            deps.page
+                ? deps.page(code ? "connected" : "not-connected")
+                : PAGE(code ? "Google Drive is connected. You can close this tab and go back to Paperboard." : "Google Drive was not connected. You can close this tab."),
         );
         finish(code ? { code } : { error: error === "access_denied" ? "Google access was not allowed" : `Google sign-in failed: ${error ?? "no code"}` });
     });

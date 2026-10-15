@@ -47,17 +47,20 @@ test("the loopback sign-in exchanges the returned code with its PKCE verifier fo
     expect(refresh).toBe("refresh-1");
 });
 
-test("a refused consent fails the sign-in and frees it for another try", async () => {
+test("a refused consent fails the sign-in, shows the not-connected page, and frees it for another try", async () => {
     const tokenUrl = await tokenServer({ code: "never", challenge: () => "" });
+    const pages: string[] = [];
     const deps = (error: string) => ({
         endpoints: { authUrl: "https://accounts.example/auth", tokenUrl },
+        page: (outcome: string) => `page:${outcome}`,
         openExternal: async (raw: string) => {
             const auth = new URL(raw);
-            await fetch(`${auth.searchParams.get("redirect_uri")}?error=${error}&state=${auth.searchParams.get("state")}`);
+            pages.push(await (await fetch(`${auth.searchParams.get("redirect_uri")}?error=${error}&state=${auth.searchParams.get("state")}`)).text());
         },
     });
     await expect(signInToGoogleDrive({ clientId: "c", clientSecret: "s" }, deps("access_denied"))).rejects.toThrow("not allowed");
     await expect(signInToGoogleDrive({ clientId: "c", clientSecret: "s" }, deps("server_error"))).rejects.toThrow("server_error");
+    expect(pages).toEqual(["page:not-connected", "page:not-connected"]);
 });
 
 test("Paperboard's Google client comes from the build, and a build without both halves has none", () => {
