@@ -3,6 +3,7 @@ import { PaperButton, PaperFlex, PaperModal, PaperSelector, PaperSelectorItem, P
 import { backupApi, backupLocationLabel, backupLocationsApi, type BackupLocation } from "@mileniumhq/paperapi";
 import { loadUsage, usageText, type UsageState } from "./locationUsage";
 import { LocationLogo } from "./providers";
+import { createOpenings } from "../../lib/openings";
 
 export type BackupLocationChoice = { status: "chosen"; location: BackupLocation } | { status: "canceled" } | { status: "failed"; message: string };
 
@@ -16,18 +17,25 @@ const BackupLocationChooser: Component<{ computerId: string; computerName: strin
     const [selected, setSelected] = createSignal("");
     const [error, setError] = createSignal("");
     const [saving, setSaving] = createSignal(false);
-    let done = false;
-    const finish = (choice: BackupLocationChoice) => {
-        if (done) return;
-        done = true;
-        props.onDone(choice);
+    // a load or save started in one opening must not finish a later one
+    const openings = createOpenings();
+    let opening = 0;
+    const finish = (choice: BackupLocationChoice, token = opening) => {
+        if (openings.answer(token)) props.onDone(choice);
+    };
+    // the window cannot be dismissed while the choice is being saved: the
+    // computer would keep a choice the panel was told was canceled
+    const dismiss = () => {
+        if (!saving()) finish({ status: "canceled" });
     };
 
     const load = async () => {
+        const token = opening;
         setError("");
         setLocations(null);
         try {
             const [list, status] = await Promise.all([backupLocationsApi.list(props.computerId), backupApi.status(props.panelId, props.computerId)]);
+            if (!openings.isCurrent(token)) return;
             setLocations(list);
             setSelected(status.location?.id ?? list[0]?.id ?? "");
             for (const location of list) {
@@ -35,27 +43,28 @@ const BackupLocationChooser: Component<{ computerId: string; computerName: strin
                 void loadUsage(location.id, props.computerId).then((state) => setUsage((prev) => ({ ...prev, [location.id]: state })));
             }
         } catch (err) {
-            setError(`Backup locations could not be loaded: ${(err as Error)?.message ?? err}`);
+            if (openings.isCurrent(token)) setError(`Backup locations could not be loaded: ${(err as Error)?.message ?? err}`);
         }
     };
     createEffect(on(() => props.open, (open) => {
         if (!open) return;
-        done = false;
+        opening = openings.open();
         setSaving(false);
         void load();
     }));
 
     const choose = async () => {
+        const token = opening;
         setSaving(true);
         setError("");
         try {
             const status = await backupLocationsApi.setForPanel(props.panelId, selected(), props.computerId);
             if (!status.location) throw new Error("The computer did not keep the choice");
-            finish({ status: "chosen", location: status.location });
+            finish({ status: "chosen", location: status.location }, token);
         } catch (err) {
-            setError((err as Error)?.message ?? String(err));
+            if (openings.isCurrent(token)) setError((err as Error)?.message ?? String(err));
         } finally {
-            setSaving(false);
+            if (openings.isCurrent(token)) setSaving(false);
         }
     };
 
@@ -64,10 +73,10 @@ const BackupLocationChooser: Component<{ computerId: string; computerName: strin
             open={props.open}
             title="Where should backups go?"
             size="small"
-            onClose={() => finish({ status: "canceled" })}
+            onClose={dismiss}
             footer={
                 <PaperFlex direction="row" justify="flex-end" gap="half" fullWidth>
-                    <PaperButton variant="text" disabled={saving()} onClick={() => finish({ status: "canceled" })}>Cancel</PaperButton>
+                    <PaperButton variant="text" disabled={saving()} onClick={dismiss}>Cancel</PaperButton>
                     <Show when={error() && !locations()} fallback={
                         <PaperButton disabled={saving() || !selected()} onClick={() => void choose()}>{saving() ? "Saving..." : "Use this location"}</PaperButton>
                     }>
