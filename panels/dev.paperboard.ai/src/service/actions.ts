@@ -275,6 +275,7 @@ export function uiActions(app: AiApp): ActionDefinition[] {
                     ...(isPromptStyle(i.promptStyle) ? { promptStyle: i.promptStyle } : {}),
                     ...(typeof i.customPromptEnabled === "boolean" ? { customPromptEnabled: i.customPromptEnabled } : {}),
                     ...(typeof i.customSystemPrompt === "string" ? { customSystemPrompt: i.customSystemPrompt } : {}),
+                    ...(typeof i.noSandboxWarning === "boolean" ? { noSandboxWarning: i.noSandboxWarning } : {}),
                 }),
             ),
         ),

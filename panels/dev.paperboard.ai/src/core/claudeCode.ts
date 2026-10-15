@@ -5,6 +5,7 @@
 // Nothing here runs a process: service/claudeCode.ts does.
 
 import { commandsFrom, MAX_AGENT_MODELS, type AcpContentBlock } from "./acp";
+import { CLAUDE_NO_SANDBOX_MODE } from "./permissionMode";
 import type { AgentCommand, AgentMode, AgentModel, AgentPermissionOption, AgentToolKind } from "./types";
 
 export const CLAUDE_CODE_ID = "claude-code";
@@ -31,6 +32,8 @@ export function claudeArgs(session: { id: string; resume: boolean } | null, mode
         "--include-partial-messages",
         "--permission-prompt-tool",
         "stdio",
+        // lets a chat switch to No sandbox (bypassPermissions) later; it is not on until then
+        "--allow-dangerously-skip-permissions",
         ...(session ? [session.resume ? "--resume" : "--session-id", session.id] : []),
         ...(mode ? ["--permission-mode", mode] : []),
     ];
@@ -41,6 +44,7 @@ export const CLAUDE_MODES: readonly AgentMode[] = [
     { id: "default", name: "Ask", description: "Asks before editing files or running commands." },
     { id: "acceptEdits", name: "Accept edits", description: "Edits files without asking; still asks before running commands." },
     { id: "plan", name: "Plan", description: "Reads and plans without changing anything." },
+    CLAUDE_NO_SANDBOX_MODE,
 ];
 
 export function isClaudeMode(v: unknown): v is string {

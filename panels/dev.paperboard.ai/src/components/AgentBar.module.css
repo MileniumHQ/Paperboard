@@ -14,10 +14,6 @@
     min-width: 0;
 }
 
-.mode {
-    min-width: 160px;
-}
-
 .create {
     display: flex;
     align-items: flex-end;

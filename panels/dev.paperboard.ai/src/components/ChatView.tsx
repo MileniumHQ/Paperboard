@@ -24,6 +24,8 @@ import { createChatSelection } from "../lib/selection";
 import { AssistantTurn, UserMessage } from "./MessageView";
 import ModelsModal from "./ModelsModal";
 import AgentBar from "./AgentBar";
+import ModeSelect from "./ModeSelect";
+import { LOCAL_MODES } from "../core/permissionMode";
 import SettingsTab from "./SettingsTab";
 import styles from "./ChatView.module.css";
 
@@ -128,6 +130,8 @@ export default function ChatView() {
         const via = installed()?.provider ?? chatProvider();
         return state.connections.find((c) => c.id === via && c.kind === "agent");
     };
+    // a local model's chat has a mode once it can run actions or commands
+    const localTools = () => Boolean(installed()?.capabilities.includes("tools")) && (state.settings.shellCommands || state.settings.panelActions);
     const summary = () => state.conversations.find((s) => s.id === conversation()?.id);
     const lastProject = () => (state.lastProject && state.projects.includes(state.lastProject) ? state.lastProject : undefined);
     const project = () => (conversation() ? summary()?.project ?? conversation()?.project : draftProject() ?? lastProject());
@@ -353,7 +357,14 @@ export default function ChatView() {
                 </Show>
                 <Composer
                     toolbar={
-                        <Show when={agentConnection()}>
+                        <Show
+                            when={agentConnection()}
+                            fallback={
+                                <Show when={localTools()}>
+                                    <ModeSelect conversationId={conversation()?.id} modes={LOCAL_MODES} mode={conversation()?.mode} actor="The AI" onError={setError} />
+                                </Show>
+                            }
+                        >
                             {(agent) => (
                                 <AgentBar
                                     connection={agent()}

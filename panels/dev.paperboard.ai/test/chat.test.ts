@@ -77,6 +77,7 @@ function engine(): ChatEngine {
             },
             forget: () => {},
         },
+        agentMode: () => undefined,
     });
 }
 
@@ -103,7 +104,7 @@ beforeEach(async () => {
     capabilities = { "tooly:latest": ["completion", "tools"], "plain:latest": ["completion"] };
     actionResult = async () => ({ kicked: true });
     // panel actions on and built-ins off, unless a test says otherwise
-    settings = { defaultModel: "tooly:latest", contextLength: 4096, reasoning: "off", panelActions: true, shellCommands: false, forceCpu: false, promptStyle: "quirky", customPromptEnabled: false, customSystemPrompt: null };
+    settings = { defaultModel: "tooly:latest", contextLength: 4096, reasoning: "off", panelActions: true, shellCommands: false, forceCpu: false, promptStyle: "quirky", customPromptEnabled: false, customSystemPrompt: null, noSandboxWarning: true };
     commands = [];
 });
 
@@ -479,6 +480,36 @@ describe("built-in tools", () => {
         expect(commands).toEqual(["echo hello", "echo hello"]);
         expect(allowed.size).toBe(0);
         expect(fake.chatRequests[1].messages.at(-1).content).toContain("Exit code: 0");
+    });
+
+    it("No sandbox runs actions and commands without asking or remembering them", async () => {
+        settings = { ...settings, shellCommands: true };
+        fake.script = [
+            { toolCalls: [{ name: "run_shell_command", arguments: { command: "echo hello" } }] },
+            { toolCalls: [{ name: "gameserver__start-server", arguments: {} }] },
+            { content: "Done." },
+        ];
+        const chat = engine();
+        const c = await chat.create("tooly:latest");
+        await chat.setMode(c.id, "no-sandbox");
+        await (await chat.send(c.id, "go")).done;
+        expect(approvals).toEqual([]);
+        expect(commands).toEqual(["echo hello"]);
+        expect(calls.map((x) => x.action)).toEqual(["start-server"]);
+        expect(allowed.size).toBe(0);
+    });
+
+    it("turning No sandbox on runs the call already waiting", async () => {
+        settings = { ...settings, shellCommands: true };
+        fake.script = [{ toolCalls: [{ name: "run_shell_command", arguments: { command: "echo hello" } }] }, { content: "Done." }];
+        const chat = engine();
+        const c = await chat.create("tooly:latest");
+        const { done } = await chat.send(c.id, "go");
+        await until(() => approvals.length === 1);
+        await chat.setMode(c.id, "no-sandbox");
+        await done;
+        expect(commands).toEqual(["echo hello"]);
+        expect((await store.get(c.id)).mode).toBe("no-sandbox");
     });
 });
 

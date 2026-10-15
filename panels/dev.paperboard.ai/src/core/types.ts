@@ -97,6 +97,8 @@ export interface Settings {
     customPromptEnabled: boolean;
     /** null until first enabled; empty while enabled is allowed, but enabling the toggle again refills it from the generated prompt. */
     customSystemPrompt: string | null;
+    /** ask before a chat turns on No sandbox; off once the user picks "Do not show again" */
+    noSandboxWarning: boolean;
 }
 
 export type PromptStyle = "no-nonsense" | "standard" | "quirky" | "over-the-top";
@@ -409,6 +411,7 @@ export const DEFAULT_SETTINGS: Settings = {
     promptStyle: "standard",
     customPromptEnabled: false,
     customSystemPrompt: null,
+    noSandboxWarning: true,
 };
 
 export function initialState(): AiState {

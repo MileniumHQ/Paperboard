@@ -231,7 +231,15 @@ describe("Claude Code bridge", () => {
         expect(infos.c1?.mode).toBe("plan");
         await hub.setMode(c, "c1", "acceptEdits");
         expect(infos.c1?.mode).toBe("acceptEdits");
-        await expect(hub.setMode(c, "c1", "bypassPermissions")).rejects.toThrow('no mode "bypassPermissions"');
+        await expect(hub.setMode(c, "c1", "dontAsk")).rejects.toThrow('no mode "dontAsk"');
+    });
+
+    it("switches a running chat to No sandbox, Claude Code's bypassPermissions", async () => {
+        // Claude Code refuses bypassPermissions mid-session unless its process was launched to allow it
+        await open("c1");
+        expect(infos.c1?.modes.find((m) => m.id === "bypassPermissions")?.name).toBe("No sandbox");
+        await hub.setMode(c, "c1", "bypassPermissions");
+        expect(infos.c1?.mode).toBe("bypassPermissions");
     });
 
     it("runs a bounded number of chats at once, stopping the one idle longest", async () => {

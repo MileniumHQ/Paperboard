@@ -8,8 +8,6 @@ import {
     PaperIcon,
     PaperInput,
     PaperModal,
-    PaperSelectMenu,
-    PaperSelectMenuItem,
     PaperSelector,
     PaperSelectorItem,
     PaperText,
@@ -17,6 +15,7 @@ import {
 import { UI_ACTION_IDS } from "../contract";
 import type { Connection } from "../core/providers";
 import { call, errorText, state } from "../lib/state";
+import ModeSelect from "./ModeSelect";
 import styles from "./AgentBar.module.css";
 
 export interface AgentBarProps {
@@ -48,9 +47,6 @@ export default function AgentBar(props: AgentBarProps) {
             setBusy(false);
         }
     };
-
-    const setMode = (modeId: string) =>
-        act(() => call(UI_ACTION_IDS.setAgentMode, { id: props.conversationId, mode: modeId }));
 
     return (
         <div class={styles.bar}>
@@ -87,23 +83,14 @@ export default function AgentBar(props: AgentBarProps) {
                     <PaperIcon>folder</PaperIcon> {props.project ?? "Choose a project"}
                 </PaperButton>
                 <Show when={(session()?.modes.length ?? 0) > 0}>
-                    <div class={styles.mode}>
-                        <PaperSelectMenu
-                            name="agent-mode"
-                            aria-label="Agent mode"
-                            value={mode()}
-                            disabled={busy() || !props.conversationId}
-                            onValueChange={(v) => void setMode(String(v))}
-                        >
-                            <For each={session()?.modes}>
-                                {(m) => (
-                                    <PaperSelectMenuItem value={m.id} description={m.description}>
-                                        {m.name}
-                                    </PaperSelectMenuItem>
-                                )}
-                            </For>
-                        </PaperSelectMenu>
-                    </div>
+                    <ModeSelect
+                        conversationId={props.conversationId}
+                        modes={session()?.modes ?? []}
+                        mode={mode()}
+                        disabled={busy()}
+                        actor={props.connection.label}
+                        onError={props.onError}
+                    />
                 </Show>
             </div>
             <ProjectModal

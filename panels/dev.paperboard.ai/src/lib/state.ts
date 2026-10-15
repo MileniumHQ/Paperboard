@@ -142,6 +142,10 @@ export function renameOpen(title: string): void {
     if (conversation.current) setConversation("current", "title", title);
 }
 
+export function setOpenMode(mode: string): void {
+    if (conversation.current) setConversation("current", "mode", mode);
+}
+
 export function setOpenModel(model: string, provider?: string): void {
     if (!conversation.current) return;
     setConversation("current", "model", model);

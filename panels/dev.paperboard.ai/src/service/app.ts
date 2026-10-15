@@ -41,6 +41,7 @@ import { AgentHub, type AgentProcessHost } from "./agents";
 import { findExecutable, type Launch } from "./executable";
 import type { ModelClient } from "./provider";
 import { isReasoningLevel } from "../core/reasoning";
+import { LOCAL_MODES } from "../core/permissionMode";
 import { quickAskModel } from "../core/widgets";
 import { MAX_AGENT_MODELS } from "../core/acp";
 import type { RegistryAction } from "../core/tools";
@@ -135,6 +136,7 @@ function clampSettings(input: Partial<Settings> | undefined): Settings {
         promptStyle: isPromptStyle(s.promptStyle) ? s.promptStyle : DEFAULT_SETTINGS.promptStyle,
         customPromptEnabled: typeof s.customPromptEnabled === "boolean" ? s.customPromptEnabled : false,
         customSystemPrompt: typeof s.customSystemPrompt === "string" ? s.customSystemPrompt : null,
+        noSandboxWarning: typeof s.noSandboxWarning === "boolean" ? s.noSandboxWarning : DEFAULT_SETTINGS.noSandboxWarning,
     };
 }
 
@@ -563,6 +565,7 @@ export class AiApp {
             agentConnection: (providerId) => this.connections.find((c) => c.id === providerId && c.kind === "agent"),
             projectPath: (project) => this.projects.path(project),
             agents: this.agents,
+            agentMode: (conversationId) => this.ctx.state.agentSessions[conversationId]?.mode,
             providerOf: (model) => this.models.providerOf(model),
             store: this.store,
             settings: () => this.ctx.state.settings,
@@ -783,20 +786,25 @@ export class AiApp {
         return name;
     }
 
-    /** An agent chat's mode; applied now when its session is live, else when it opens. */
+    /**
+     * A chat's mode. An agent chat's is applied now when its session is live,
+     * else when it opens; a local model's chat has Ask and No sandbox.
+     */
     async setAgentMode(id: string, modeId: unknown): Promise<void> {
         if (!isConversationId(id)) throw new Error("Unknown chat.");
-        if (typeof modeId !== "string" || !modeId) throw new Error("Choose a mode.");
+        if (typeof modeId !== "string" || !modeId || modeId.length > 200) throw new Error("Choose a mode.");
         const c = await this.store.get(id);
         const connection = c.provider ? this.connections.find((x) => x.id === c.provider && x.kind === "agent") : undefined;
-        if (!connection) throw new Error("Only agent chats have modes.");
-        const live = this.ctx.state.agentSessions[id];
-        if (live) {
-            if (!live.modes.some((m) => m.id === modeId)) throw new Error("The agent does not offer that mode.");
-            await this.agents.setMode(connection, id, modeId);
+        if (!connection) {
+            if (!LOCAL_MODES.some((m) => m.id === modeId)) throw new Error("This chat does not have that mode.");
+        } else {
+            const live = this.ctx.state.agentSessions[id];
+            if (live) {
+                if (!live.modes.some((m) => m.id === modeId)) throw new Error("The agent does not offer that mode.");
+                await this.agents.setMode(connection, id, modeId);
+            }
         }
-        c.mode = modeId;
-        this.ctx.setState({ conversations: await this.store.save(c) });
+        await this.chat.setMode(id, modeId);
     }
 
     async authenticateAgent(connectionId: unknown, methodId: unknown): Promise<void> {
@@ -842,10 +850,13 @@ export class AiApp {
         const via = this.knownProvider(provider);
         const c = await this.store.get(id);
         c.model = this.normalizeModelRef(model, via);
-        if (via !== c.provider && c.sessionId) {
-            delete c.sessionId;
+        if (via !== c.provider) {
+            // modes are the provider's own: No sandbox granted to one is not granted to the next
             delete c.mode;
-            this.agents.forget(id);
+            if (c.sessionId) {
+                delete c.sessionId;
+                this.agents.forget(id);
+            }
         }
         if (via) c.provider = via;
         else delete c.provider;
