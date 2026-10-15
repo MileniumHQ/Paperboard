@@ -109,13 +109,16 @@ export function createCanvasFollower<S extends { revision: number }>(options: {
             do {
                 again = false;
                 if (disposed || options.busy() || (!force && wanted <= options.revision())) return;
+                const forced = force;
                 force = false;
                 try {
                     const snapshot = await options.fetch();
                     // re-checked after the wait: an edit made meanwhile wins,
                     // and its save on the older revision is refused and reloads
                     if (disposed || options.busy()) return;
-                    if (snapshot.revision > options.revision()) options.show(snapshot);
+                    // a forced pull shows any other revision: after a backup
+                    // is loaded the service's revision is older than this one
+                    if (forced ? snapshot.revision !== options.revision() : snapshot.revision > options.revision()) options.show(snapshot);
                 } catch (err) {
                     if (!disposed) options.onError(`Changes from another window could not be loaded: ${err instanceof Error ? err.message : String(err)}`);
                     return;
@@ -138,7 +141,7 @@ export function createCanvasFollower<S extends { revision: number }>(options: {
         idle(): Promise<void> {
             return pull();
         },
-        /** Pull the service's canvas now (after a refused save). */
+        /** Pull the service's canvas now (after a refused save or a loaded backup). */
         reload(): Promise<void> {
             force = true;
             return pull();

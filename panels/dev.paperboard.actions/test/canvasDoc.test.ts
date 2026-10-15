@@ -13,6 +13,7 @@ function owner(stored: unknown = null) {
     const applied: CanvasDocument[] = [];
     let failApply = false;
     let failRead = false;
+    let clock = 0;
     const doc = createCanvasDocument({
         read: async () => {
             if (failRead) throw new Error("disk unreadable");
@@ -27,6 +28,7 @@ function owner(stored: unknown = null) {
             applied.push(c);
         },
         onChanged: (c) => changes.push(c),
+        now: () => clock,
     });
     return {
         doc,
@@ -35,6 +37,8 @@ function owner(stored: unknown = null) {
         disk: () => disk,
         failApply: (v: boolean) => (failApply = v),
         failRead: (v: boolean) => (failRead = v),
+        setDisk: (d: unknown) => (disk = d),
+        setClock: (t: number) => (clock = t),
     };
 }
 
@@ -99,6 +103,24 @@ describe("the canvas document", () => {
         expect(o.disk().notes[0].text).toBe("precious");
         o.failRead(false);
         expect(await o.doc.get()).toMatchObject({ revision: 4, canvas: { notes: [{ text: "precious" }] } });
+    });
+
+    it("never reissues a revision a window may hold after a backup brings back an older one", async () => {
+        const o = owner();
+        await o.doc.load();
+        o.setClock(1_000);
+        const backup = structuredClone(o.disk() ?? { ...emptyCanvas(), revision: 0 });
+        o.setClock(2_000);
+        const held = (await o.doc.save({ canvas: note("later"), baseRevision: 0, clientId: "w2" })).revision;
+        // the backup is loaded: the service starts again on the old document
+        o.setDisk(backup);
+        await o.doc.load();
+        o.setClock(3_000);
+        const next = (await o.doc.save({ canvas: note("after restore"), baseRevision: 0, clientId: "w1" })).revision;
+        expect(next).toBeGreaterThan(held);
+        // the window still on the revision from before the restore is refused
+        await expect(o.doc.save({ canvas: note("stale"), baseRevision: held, clientId: "w2" })).rejects.toThrow();
+        expect(o.disk().notes[0].text).toBe("after restore");
     });
 });
 
@@ -186,6 +208,15 @@ describe("a window following other windows", () => {
         await first;
         expect(w.fetches()).toBe(2);
         expect(w.shown).toEqual([1, 5]);
+    });
+
+    it("shows an older canvas when it reloads after a backup was loaded", async () => {
+        const w = window(() => 3);
+        w.setRevision(9);
+        await w.follower.changed({ revision: 3, clientId: "other" });
+        expect(w.shown).toEqual([]);
+        await w.follower.reload();
+        expect(w.shown).toEqual([3]);
     });
 
     it("reloads after a refused save even without a newer announcement", async () => {

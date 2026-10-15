@@ -59,7 +59,10 @@ export function createCanvasDocument(deps: {
     /** activates the saved flows; a throw means saved, not applied */
     apply: (canvas: CanvasDocument) => Promise<void>;
     onChanged: (change: { revision: number; clientId: string }) => void;
+    /** the clock revisions are drawn from; tests pass a fixed one */
+    now?: () => number;
 }) {
+    const now = deps.now ?? Date.now;
     let current: CanvasSnapshot = { revision: 0, canvas: emptyCanvas() };
     // unreadable is not empty: until the stored canvas is read, nothing may
     // be written over it
@@ -112,7 +115,11 @@ export function createCanvasDocument(deps: {
                 if (loadError) throw new Error(loadError);
                 if (input.baseRevision !== current.revision) throw new CanvasConflictError(current.revision);
                 const canvas = deps.validate(input.canvas);
-                const revision = current.revision + 1;
+                // a revision is never issued twice: loading a backup brings
+                // back an older revision, and windows may still hold the
+                // newer ones issued since. Drawing from the clock puts every
+                // later save past all of them.
+                const revision = Math.max(current.revision + 1, Math.floor(now()));
                 await deps.write({ ...canvas, revision });
                 current = { revision, canvas };
                 let applyError: string | undefined;
