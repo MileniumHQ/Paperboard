@@ -289,8 +289,17 @@ export const savedCommands = new SavedCommands({
     },
     onExit: (procId, callback) => processApi.onExit(procId, callback),
     kill: (procId) => processApi.kill(procId),
+    exists: (procId) => processApi.exists(procId),
     publish: (view) => savedCommandsCtx?.setState(view),
 });
+
+// the daemon stops this service with SIGTERM: the runs it started are its to
+// end, not to leave running unwatched with their deadline lost
+for (const signal of ["SIGTERM", "SIGINT"] as const) {
+    process.once(signal, () => {
+        savedCommands.dispose().finally(() => process.exit(0));
+    });
+}
 
 // pure, exported for tests: every trashed scrollback is named after the
 // live file, never in its place

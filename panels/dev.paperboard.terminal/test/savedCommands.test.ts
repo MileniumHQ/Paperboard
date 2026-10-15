@@ -22,6 +22,7 @@ interface Harness {
     exit(procId: string, code?: number): void;
     exitListeners: Map<string, (code?: number) => void>;
     failSave: { on: boolean };
+    alive: Set<string>;
 }
 
 const live: SavedCommands[] = [];
@@ -31,7 +32,13 @@ function harness(opts: {
     startFails?: boolean;
     timeoutMs?: number;
     graceMs?: number;
+    /** children the daemon already has (a restarted service finds them) */
+    alive?: Set<string>;
+    now?: () => number;
+    /** runs before each save; may delay or reject it */
+    beforeSave?: (doc: SavedCommandsDoc) => Promise<void>;
 } = {}): Harness {
+    const alive = opts.alive ?? new Set<string>();
     const saved: SavedCommandsDoc[] = [];
     const started: { procId: string; command: string }[] = [];
     const killed: string[] = [];
@@ -42,12 +49,14 @@ function harness(opts: {
     const store = new SavedCommands({
         load: opts.load ?? (async () => null),
         save: async (doc) => {
+            await opts.beforeSave?.(doc);
             if (failSave.on) throw new Error("disk full");
             saved.push(structuredClone(doc));
         },
         start: async (procId, command) => {
             if (opts.startFails) throw new Error("spawn refused");
             started.push({ procId, command });
+            alive.add(procId);
         },
         onExit: (procId, cb) => {
             exitListeners.set(procId, cb);
@@ -55,9 +64,12 @@ function harness(opts: {
         },
         kill: async (procId) => {
             killed.push(procId);
+            alive.delete(procId);
         },
+        exists: async (procId) => alive.has(procId),
         publish: (view) => views.push(view),
         newId: () => `cmd_t${++n}`,
+        now: opts.now,
         timeoutMs: opts.timeoutMs,
         graceMs: opts.graceMs,
     });
@@ -70,6 +82,7 @@ function harness(opts: {
         views,
         exitListeners,
         failSave,
+        alive,
         exit: (procId, code) => exitListeners.get(procId)?.(code),
     };
 }
@@ -237,5 +250,145 @@ describe("a failed press's error", () => {
         expect(runErrorStands(pressedFrom, lastView(h).commandRuns[id])).toBe(true);
         h.exit(h.started[0].procId, 0);
         expect(runErrorStands(pressedFrom, lastView(h).commandRuns[id])).toBe(false);
+    });
+});
+
+describe("concurrent changes to the list", () => {
+    it("a failed add does not take a concurrent add down with it", async () => {
+        let release!: () => void;
+        const firstSave = new Promise<void>((resolve) => { release = resolve; });
+        let saves = 0;
+        const h = harness({
+            beforeSave: async () => {
+                // the first save (add A) hangs, then fails; the second must wait its turn
+                if (saves++ === 0) {
+                    await firstSave;
+                    throw new Error("disk full");
+                }
+            },
+        });
+        await h.store.init();
+        const a = h.store.add("A", "echo a");
+        const b = h.store.add("B", "echo b");
+        release();
+        await expect(a).rejects.toThrow("not saved");
+        const idB = await b;
+        expect(h.store.choices()).toEqual([{ value: idB, label: "B" }]);
+        expect(h.saved.at(-1)?.commands.map((c) => c.id)).toEqual([idB]);
+    });
+
+    it("a failed remove keeps the run that settled meanwhile", async () => {
+        let release!: () => void;
+        const held = new Promise<void>((resolve) => { release = resolve; });
+        let hold = false;
+        const h = harness({
+            beforeSave: async () => {
+                if (hold) {
+                    hold = false;
+                    await held;
+                    throw new Error("disk full");
+                }
+            },
+        });
+        await h.store.init();
+        const keep = await h.store.add("Keep", "echo keep");
+        const drop = await h.store.add("Drop", "echo drop");
+        await h.store.run(keep);
+        hold = true;
+        const removing = h.store.remove(drop);
+        h.exit(h.started[0].procId, 0);
+        release();
+        await expect(removing).rejects.toThrow("not removed");
+        expect(h.store.view().commandRuns[keep]).toMatchObject({ state: "exited", exitCode: 0 });
+        expect(h.store.view().savedCommands.map((c) => c.id)).toEqual([keep, drop]);
+    });
+});
+
+describe("runs across a service restart", () => {
+    const record = { commandId: "cmd_a1", procId: "pinned_cmd_a1_xyz", startedAt: 1_000 };
+    const doc = () => ({
+        version: 1,
+        commands: [{ id: "cmd_a1", label: "Build", command: "make" }],
+        lastRuns: {},
+        running: [record],
+    });
+
+    it("records an accepted run in the file and drops it once the run ends", async () => {
+        const h = harness();
+        await h.store.init();
+        const id = await h.store.add("Build", "make");
+        await h.store.run(id);
+        expect(h.saved.at(-1)?.running).toEqual([{ commandId: id, procId: h.started[0].procId, startedAt: expect.any(Number) }]);
+        h.exit(h.started[0].procId, 0);
+        await new Promise((r) => setTimeout(r, 5));
+        expect(h.saved.at(-1)?.running).toEqual([]);
+    });
+
+    it("stops a run it cannot record instead of leaving it unwatched", async () => {
+        const h = harness();
+        await h.store.init();
+        const id = await h.store.add("Build", "make");
+        h.failSave.on = true;
+        await expect(h.store.run(id)).rejects.toThrow("could not be recorded");
+        expect(h.killed).toEqual([h.started[0].procId]);
+        expect(h.store.liveCount()).toBe(0);
+        expect(h.store.view().commandRuns[id]).toBeUndefined();
+    });
+
+    it("takes back a child the daemon still has and reports its real exit", async () => {
+        const h = harness({ load: async () => doc(), alive: new Set([record.procId]), now: () => 2_000, timeoutMs: 60_000 });
+        await h.store.init();
+        expect(h.store.view().commandRuns.cmd_a1).toEqual({ state: "running", startedAt: 1_000 });
+        expect(h.store.liveCount()).toBe(1);
+        h.exit(record.procId, 7);
+        expect(h.store.view().commandRuns.cmd_a1).toMatchObject({ state: "exited", exitCode: 7 });
+        expect(h.store.liveCount()).toBe(0);
+    });
+
+    it("keeps the deadline the run had left, not a fresh one", async () => {
+        // started 1 s ago of a 100 ms allowance: due immediately
+        const h = harness({ load: async () => doc(), alive: new Set([record.procId]), now: () => 2_000, timeoutMs: 100, graceMs: 5_000 });
+        await h.store.init();
+        await new Promise((r) => setTimeout(r, 30));
+        expect(h.killed).toEqual([record.procId]);
+        h.exit(record.procId, 0);
+        expect(h.store.view().commandRuns.cmd_a1).toMatchObject({ state: "timed-out" });
+    });
+
+    it("says a run that ended unseen is unknown, not a success", async () => {
+        const h = harness({ load: async () => doc(), alive: new Set(), now: () => 2_000 });
+        await h.store.init();
+        const run = h.store.view().commandRuns.cmd_a1;
+        expect(run).toMatchObject({ state: "failed" });
+        expect((run as { error: string }).error).toContain("did not see");
+        expect(h.store.liveCount()).toBe(0);
+        expect(h.saved.at(-1)?.running).toEqual([]);
+    });
+
+    it("stops a leftover child whose command was removed", async () => {
+        const gone = { ...doc(), commands: [], running: [record] };
+        const h = harness({ load: async () => gone, alive: new Set([record.procId]) });
+        await h.store.init();
+        expect(h.killed).toEqual([record.procId]);
+        expect(h.store.liveCount()).toBe(0);
+    });
+
+    it("dispose ends every run it owns, waits for the kill and records it", async () => {
+        const h = harness();
+        await h.store.init();
+        const id = await h.store.add("Build", "make");
+        await h.store.run(id);
+        const procId = h.started[0].procId;
+        await h.store.dispose();
+        expect(h.killed).toEqual([procId]);
+        expect(h.alive.has(procId)).toBe(false);
+        expect(h.saved.at(-1)?.running).toEqual([]);
+        expect(h.saved.at(-1)?.lastRuns[id]).toMatchObject({ state: "failed", error: "Stopped when the service stopped" });
+    });
+
+    it("the service stops its runs when the daemon sends SIGTERM", async () => {
+        await import("../src/service");
+        // only its source can be inspected: delivering the signal would exit the test runner
+        expect(process.listeners("SIGTERM").some((listener) => String(listener).includes("savedCommands.dispose()"))).toBe(true);
     });
 });
