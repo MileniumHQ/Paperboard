@@ -39,6 +39,7 @@ import {
 } from "../lib/functions";
 import { PaperModal, PaperSelectMenu, PaperSelectMenuItem } from "@mileniumhq/paperui";
 import { ACTIONS_PANEL_ID } from "../panelId";
+import { loadLibraryLists } from "../lib/libraryLoad";
 import {
     buildLibrarySections,
     type LibrarySection,
@@ -123,16 +124,21 @@ export default function ActionLibrary(props: ActionLibraryProps) {
         setCreateOpen(false);
     };
 
+    // a failed read keeps what was last loaded and says so, with Retry;
+    // only the latest read lands, so a slow earlier one can't overwrite it
+    const [loadError, setLoadError] = createSignal("");
+    let loadRequest = 0;
     const loadLibrary = async () => {
-        try {
-            const panelsList = await panelsApi.list().catch(() => []);
-            setInstalledPanels(panelsList);
-
-            const acts = await actionsApi.list().catch(() => []);
-            setRegisteredActions(acts);
-        } catch (err) {
-            console.error("[ActionLibrary] Failed to load library:", err);
+        const mine = ++loadRequest;
+        const result = await loadLibraryLists({ panels: () => panelsApi.list(), actions: () => actionsApi.list() });
+        if (mine !== loadRequest) return;
+        if (result.kind === "failed") {
+            setLoadError(result.message);
+            return;
         }
+        setInstalledPanels(result.panels);
+        setRegisteredActions(result.actions);
+        setLoadError("");
     };
 
     onMount(() => {
@@ -142,6 +148,7 @@ export default function ActionLibrary(props: ActionLibraryProps) {
         });
         onCleanup(() => {
             unsub?.();
+            loadRequest++;
         });
     });
 
@@ -493,6 +500,14 @@ export default function ActionLibrary(props: ActionLibraryProps) {
                     </div>
 
                     <div class="library-content">
+                        <Show when={loadError()}>
+                            <div class="library-error" role="alert">
+                                <PaperText size={2}>Couldn't load the panels' blocks: {loadError()}</PaperText>
+                                <PaperButton size="tiny" onClick={() => void loadLibrary()}>
+                                    Retry
+                                </PaperButton>
+                            </div>
+                        </Show>
                         <div class="library-header">
                             <PaperFlex direction="column" gap="half" fullWidth>
                                 <div class="library-header-top-row">
