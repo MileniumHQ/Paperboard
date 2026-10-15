@@ -6,7 +6,7 @@
 // descriptions) never ask. `web_search` is no longer offered; it stays a
 // recorded kind so chats that searched still render their steps.
 
-import { APP_ACTION_TOOLS, FIND_APP_ACTIONS, MAX_ACTION_QUERY_CHARS } from "./appActions";
+import { FIND_APP_ACTIONS, MAX_ACTION_QUERY_CHARS } from "./appActions";
 import {
     isProjectTool,
     PROJECT_TOOL_DEFINITIONS,
@@ -46,7 +46,6 @@ const SHELL: OllamaTool = {
             required: ["command"],
         },
     },
-    find_app_actions: APP_ACTION_TOOLS[0]!,
 };
 
 const PROJECT_SHELL: OllamaTool = {
