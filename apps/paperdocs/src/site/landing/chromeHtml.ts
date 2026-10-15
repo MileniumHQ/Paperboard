@@ -1,4 +1,4 @@
-import { DOCS_LINKS, LEARN_LINKS, SITE_LINKS } from "../links";
+import { DOCS_LINKS, FOOTER_SITE_LINKS, LEARN_LINKS, SITE_LINKS } from "../links";
 
 // Static HTML fragments for the landing's custom-element hosts. BgOverlay,
 // StyledText, and PaperButton are still custom elements upgraded by the plain
@@ -73,6 +73,6 @@ export const footerDocsHtml = DOCS_LINKS.map((link) =>
     footerLink(link.label, link.href),
 ).join("");
 
-export const footerSiteHtml = SITE_LINKS.map((link) =>
+export const footerSiteHtml = FOOTER_SITE_LINKS.map((link) =>
     footerLink(link.label, link.href),
 ).join("");

@@ -11,6 +11,8 @@ export const LEARN_LINKS = LEARN_PANELS.map(panel => ({
     label: panel.name, href: `/${panel.slug}`, image: panel.icon, description: panel.summary,
 }));
 export const SITE_LINKS = nav.site;
+/** the footer's Site column: the top bar's links plus the legal pages */
+export const FOOTER_SITE_LINKS = [...nav.site, ...nav.legal];
 export const DOWNLOAD = nav.download;
 
 export const DOCS_LINKS = Object.entries(metaSections).map(([key, meta]) => ({

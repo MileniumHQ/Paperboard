@@ -18,6 +18,12 @@
             "href": "/contact"
         }
     ],
+    "legal": [
+        {
+            "label": "Privacy",
+            "href": "/privacy"
+        }
+    ],
     "download": {
         "label": "Download",
         "href": "/downloads"

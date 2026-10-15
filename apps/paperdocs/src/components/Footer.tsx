@@ -1,7 +1,7 @@
 import { PaperText } from "@mileniumhq/paperui";
 import { For } from "solid-js";
 import { withBase } from "../utils/base";
-import { DOCS_LINKS, LEARN_LINKS, SITE_LINKS } from "../site/links";
+import { DOCS_LINKS, FOOTER_SITE_LINKS, LEARN_LINKS } from "../site/links";
 import styles from "./footer.module.css";
 
 interface FooterLink {
@@ -71,7 +71,7 @@ export function Footer() {
             <div class={styles.inner}>
                 <LinkColumn heading="Learn" links={ABOUT_LINKS} />
                 <LinkColumn heading="Docs" links={DOCS_LINKS} />
-                <LinkColumn heading="Site" links={SITE_LINKS} />
+                <LinkColumn heading="Site" links={FOOTER_SITE_LINKS} />
             </div>
             <div class={styles.bottom}>
                 <PaperText size={2} class={styles.copyright}>

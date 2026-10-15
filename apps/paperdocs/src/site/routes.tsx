@@ -3,6 +3,7 @@ import { BlogIndex } from "./pages/BlogIndex";
 import { BlogPost } from "./pages/BlogPost";
 import { Contact } from "./pages/Contact";
 import { Downloads } from "./pages/Downloads";
+import { Privacy } from "./pages/Privacy";
 import { BLOG_POSTS } from "./blog";
 
 export interface SiteRoute {
@@ -47,5 +48,12 @@ export const SITE_ROUTES: SiteRoute[] = [
         description:
             "Contact the Paperboard team about privacy requests, panels, security, or anything else.",
         component: Contact,
+    },
+    {
+        path: "/privacy/",
+        title: "Privacy | Paperboard",
+        description:
+            "What leaves your computers when you use Paperboard and Origami, and where it goes.",
+        component: Privacy,
     },
 ];
