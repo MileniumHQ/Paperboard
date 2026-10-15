@@ -897,6 +897,8 @@ function serialize<T>(interaction: object, op: () => Promise<T>): Promise<T> {
 // with an invisible update, or a deferral replaced to change visibility.
 // Their answers arrive as new messages.
 const answersAsNewMessage = new WeakSet<object>();
+// A follow-up used as Respond's answer is edited through the webhook by id.
+const answerMessageIds = new WeakMap<object, string>();
 
 function acknowledgesWithUpdate(interaction: RepliableInteraction): boolean {
     if (interaction.isMessageComponent?.()) return true;
@@ -942,6 +944,11 @@ export class InteractionOps {
         ephemeral: boolean,
         asNewMessage: boolean,
     ): Promise<{ messageId: () => Promise<string> }> {
+        const answerId = answerMessageIds.get(interaction);
+        if (!asNewMessage && answerId) {
+            const edited = await interaction.webhook.editMessage(answerId, body);
+            return { messageId: async () => edited.id };
+        }
         const flags = ephemeral ? MessageFlags.Ephemeral : undefined;
         if (!interaction.deferred && !interaction.replied) {
             await interaction.reply({ ...body, flags });
@@ -949,12 +956,14 @@ export class InteractionOps {
         }
         if (answersAsNewMessage.has(interaction) || (interaction.replied && asNewMessage)) {
             const sent = await interaction.followUp({ ...body, flags });
+            if (!asNewMessage) answerMessageIds.set(interaction, sent.id);
             return { messageId: async () => sent.id };
         }
         if (!interaction.replied && Boolean(interaction.ephemeral) !== ephemeral) {
             await interaction.deleteReply();
             answersAsNewMessage.add(interaction);
             const sent = await interaction.followUp({ ...body, flags });
+            if (!asNewMessage) answerMessageIds.set(interaction, sent.id);
             return { messageId: async () => sent.id };
         }
         const edited = await interaction.editReply(body);

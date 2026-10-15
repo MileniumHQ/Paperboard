@@ -693,14 +693,15 @@ describe("automatic acknowledgement", () => {
     it("a private answer after a public auto-defer replaces the thinking message", async () => {
         const { InteractionOps, autoAcknowledge } = await import("../src/discordOps");
         const { interaction, calls } = slashCommand("private");
+        interaction.webhook = { editMessage: async (id: string) => { calls.push(`editMessage:${id}`); return { id }; } };
         rememberInteraction(interaction);
         await autoAcknowledge(interaction);
         const ops = new InteractionOps(takeInteraction);
         await ops.respond("private", { content: "secret", ephemeral: true });
         expect(calls).toEqual(["deferReply", "deleteReply", "followUp"]);
-        // the thinking message is gone: answering again sends, never edits it
+        // Respond edits the answer that replaced the deferral, never duplicates it.
         await ops.respond("private", { content: "again", ephemeral: true });
-        expect(calls.at(-1)).toBe("followUp");
+        expect(calls.at(-1)).toBe("editMessage:message");
     });
 
     it("a racing answer and auto-ack never both claim the first response", async () => {
@@ -735,11 +736,14 @@ describe("automatic acknowledgement", () => {
                 return { id: "m" };
             },
         };
+        click.webhook = { editMessage: async (id: string) => { calls.push(`editMessage:${id}`); return { id }; } };
         rememberInteraction(click);
         await autoAcknowledge(click);
         await new InteractionOps(takeInteraction).respond("click", { content: "clicked" });
         // editReply would overwrite the message holding the button
         expect(calls).toEqual(["deferUpdate", "followUp"]);
+        await new InteractionOps(takeInteraction).respond("click", { content: "clicked again" });
+        expect(calls).toEqual(["deferUpdate", "followUp", "editMessage:m"]);
     });
 
     it("Show Modal works first and refuses once the interaction was answered", async () => {
