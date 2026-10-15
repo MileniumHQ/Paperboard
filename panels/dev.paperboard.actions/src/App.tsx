@@ -9,7 +9,7 @@ import ActionLibrary from "./components/ActionLibrary";
 import VariableMenu from "./components/VariableMenu";
 import ActionDropdownMenu from "./components/ActionDropdownMenu";
 import CanvasFileMenu, { type CanvasNotice } from "./components/CanvasFileMenu";
-import { addFlowFile } from "./lib/flowFile";
+import { addFlowFile, revealScroll, REVEAL_MARGIN } from "./lib/flowFile";
 import {
     PaperContextMenu,
     PaperContextMenuItem,
@@ -686,16 +686,25 @@ export default function App() {
     const [fileNotice, setFileNotice] = createSignal<CanvasNotice | null>(null);
     // an imported flow file goes beside what is on the canvas, with new ids
     const addFile = (file: CanvasDocument) => {
+        const had = new Set<string>([...blocks.map((b) => b.id), ...notes.map((n) => n.id)]);
+        // the open Library covers the canvas's left edge
+        const library = containerRef?.querySelector(".library-sidebar")?.getBoundingClientRect();
+        const covered = library && containerRef ? Math.max(0, Math.round(library.right - containerRef.getBoundingClientRect().left)) : 0;
         const merged = addFlowFile(
             { flows: unwrap(blocks), notes: unwrap(notes), functions: functions() },
             file,
             (kind) => `${kind}_${crypto.randomUUID()}`,
+            covered ? covered + REVEAL_MARGIN : 0,
         );
         setFunctions(merged.functions);
         setBlocks(reconcile(merged.flows, { key: "id" }));
         setNotes(reconcile(merged.notes as CanvasNote[], { key: "id" }));
         saveFlows();
         void refreshBlockSchemas();
+        // the import lands below everything, often off screen: scroll to it
+        const added = [...merged.flows, ...(merged.notes as CanvasNote[])].filter((i) => !had.has(i.id));
+        const target = revealScroll(added, covered);
+        if (target && containerRef) containerRef.scrollTo(target);
     };
 
     const handleCreateFunction = (name: string, params: { name: string; type: string }[]) => {

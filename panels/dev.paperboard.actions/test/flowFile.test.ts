@@ -1,7 +1,7 @@
 // Flow files: exporting and importing must round-trip, and importing adds
 // beside what is there with new ids, its chips and function calls following.
 import { describe, test, expect } from "bun:test";
-import { addFlowFile, flowFileText, parseFlowFile } from "../src/lib/flowFile";
+import { addFlowFile, flowFileText, parseFlowFile, revealScroll, REVEAL_MARGIN } from "../src/lib/flowFile";
 import { buildCallSchema, buildTriggerSchema, type FunctionDef } from "../src/lib/functions";
 import type { CanvasBlock } from "../src/lib/tree";
 import type { CanvasDocument } from "../src/lib/canvasDoc";
@@ -77,4 +77,25 @@ describe("flow files", () => {
         expect(() => parseFlowFile(JSON.stringify({ format: "paperboard.actions.flows", version: 1, flows: [{ id: "x" }] }))).toThrow("damaged flow");
         expect(() => parseFlowFile(JSON.stringify({ format: "paperboard.actions.flows", version: 1 }))).toThrow("empty");
     });
+});
+
+describe("revealing an import", () => {
+    test("scrolls its top-left corner clear of the open Library", () => {
+        const items = [{ pos: { x: 500, y: 900 } }, { pos: { x: 420, y: 1000 } }];
+        expect(revealScroll(items, 300)).toEqual({ left: 420 - 300 - REVEAL_MARGIN, top: 900 - REVEAL_MARGIN });
+    });
+
+    test("never asks for a scroll before the canvas's start, and nothing added is no scroll", () => {
+        expect(revealScroll([{ pos: { x: 10, y: 5 } }], 300)).toEqual({ left: 0, top: 0 });
+        expect(revealScroll([], 300)).toBeNull();
+    });
+});
+
+test("an import that would sit under the open Library moves right of it, keeping its layout", () => {
+    const merged = addFlowFile(canvas(), canvas(), counter(), 340);
+    const added = merged.flows.slice(2);
+    expect(added.map((b) => b.pos.x)).toEqual([350, 640]);
+    expect(merged.notes[1].pos.x).toBe(340);
+    // already clear of it: left where the file put it
+    expect(addFlowFile(canvas(), canvas(), counter(), 0).flows[2].pos.x).toBe(10);
 });

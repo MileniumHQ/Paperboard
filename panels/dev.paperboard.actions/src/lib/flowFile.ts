@@ -78,12 +78,14 @@ function lowestEdge(items: { pos: { x: number; y: number } }[]): number | null {
 
 /**
  * The canvas with the file's flows, notes and functions added below what is
- * already there. `newId` makes one fresh id; tests pass a counter.
+ * already there, and no further left than `minX` (clear of the open
+ * Library). `newId` makes one fresh id; tests pass a counter.
  */
 export function addFlowFile(
     canvas: CanvasDocument,
     file: CanvasDocument,
     newId: (kind: "block" | "note" | "fn") => string,
+    minX = 0,
 ): CanvasDocument {
     const blockIds = new Map<string, string>();
     walkBlocks(file.flows, (b) => {
@@ -125,6 +127,8 @@ export function addFlowFile(
     const bottom = lowestEdge(top);
     const fileTop = incoming.length ? Math.min(...incoming.map((i) => i.pos.y)) : 0;
     const dy = bottom === null ? 0 : bottom + IMPORT_GAP - fileTop;
+    const fileLeft = incoming.length ? Math.min(...incoming.map((i) => i.pos.x)) : minX;
+    const dx = Math.max(0, minX - fileLeft);
 
     const moved = walkBlocks(file.flows, (b) => {
         const actionId = String(b.action?.id ?? "");
@@ -137,13 +141,28 @@ export function addFlowFile(
             action = buildTriggerSchema(fnById.get(fnIds.get(triggerFn)!)!);
         }
         return { ...b, id: blockIds.get(b.id)!, action, values: rewrite(b.values ?? {}) as Record<string, any> };
-    }).map((b): CanvasBlock => ({ ...b, pos: { x: b.pos.x, y: b.pos.y + dy } }));
+    }).map((b): CanvasBlock => ({ ...b, pos: { x: b.pos.x + dx, y: b.pos.y + dy } }));
 
-    const notes = (file.notes as Note[]).map((n) => ({ ...n, id: newId("note"), pos: { x: n.pos.x, y: n.pos.y + dy } }));
+    const notes = (file.notes as Note[]).map((n) => ({ ...n, id: newId("note"), pos: { x: n.pos.x + dx, y: n.pos.y + dy } }));
 
     return {
         flows: [...canvas.flows, ...moved],
         notes: [...canvas.notes, ...notes],
         functions: [...canvas.functions, ...functions],
     };
+}
+
+/** room left around imported items when the canvas scrolls to them */
+export const REVEAL_MARGIN = 40;
+
+/**
+ * Where to scroll the canvas so the top-left of `items` shows just clear of
+ * the left `covered` pixels (the open Library). Null when there are none.
+ * The browser clamps a scroll past either edge.
+ */
+export function revealScroll(items: readonly { pos: { x: number; y: number } }[], covered: number): { left: number; top: number } | null {
+    if (!items.length) return null;
+    const x = Math.min(...items.map((i) => i.pos.x));
+    const y = Math.min(...items.map((i) => i.pos.y));
+    return { left: Math.max(0, x - covered - REVEAL_MARGIN), top: Math.max(0, y - REVEAL_MARGIN) };
 }
