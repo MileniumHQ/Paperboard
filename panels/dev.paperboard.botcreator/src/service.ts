@@ -22,11 +22,16 @@ import {
     AUTO_ACK_DELAY_MS,
     autoAcknowledge,
     buildButtonComponent,
+    buildComponentRow,
+    buildModalField,
+    buildModalPayload,
+    buildSelectMenuComponent,
     componentClickPayload,
+    modalSubmitPayload,
     resolveGuild,
     resolveMember,
     type DiscordEmbedData,
-    type DiscordComponentData,
+    type DiscordButtonData,
 } from "./discordOps";
 import {
     definePanelService,
@@ -104,14 +109,21 @@ export const discordEmbedType = defineType({
 export const discordComponentType = defineType({
     id: "discord-component",
     name: "Component",
-    description: "A Discord message component (a button) payload",
+    description: "A button, select menu, or interaction row for a message",
+    base: "object",
+});
+
+export const discordModalFieldType = defineType({
+    id: "discord-modal-field",
+    name: "Text Field",
+    description: "A text field for a modal",
     base: "object",
 });
 
 export const discordInteractionType = defineType({
     id: "discord-interaction",
     name: "Discord Interaction",
-    description: "A pending slash-command interaction reference",
+    description: "A pending interaction reference (slash command, click, or modal)",
     base: "string",
 });
 
@@ -142,6 +154,7 @@ export const customTypes = [
     discordMessageType,
     discordEmbedType,
     discordComponentType,
+    discordModalFieldType,
     discordInteractionType,
     discordRoleType,
     urlType,
@@ -627,11 +640,17 @@ function attachListeners(bot: Client, ctx: ServiceContext<any>) {
 
     bot.on("interactionCreate", (interaction) => {
         if (!ownsSession()) return;
-        // buttons first: clicks route through the parameterized
+        // button clicks and menu picks route through the parameterized
         // interaction-triggered event by custom id
-        if (interaction.isMessageComponent() && interaction.isButton()) {
+        if (interaction.isButton() || interaction.isAnySelectMenu()) {
             rememberInteraction(interaction);
             ctx.emitTrigger("interaction-triggered", componentClickPayload(interaction));
+            return;
+        }
+        // submitted modals route by modal id the same way
+        if (interaction.isModalSubmit()) {
+            rememberInteraction(interaction);
+            ctx.emitTrigger("modal-submitted", modalSubmitPayload(interaction));
             return;
         }
         if (!interaction.isChatInputCommand()) return;
@@ -1542,7 +1561,7 @@ export const actions = [
         name: "Respond to Interaction",
         category: "Interactions",
         description:
-            "Answers a slash command or button click. Responding again edits the answer",
+            "Answers a slash command, button, select menu, or modal. Responding again edits the answer",
         template: "Respond to interaction {interactionId} with {content}",
         inputs: {
             interactionId: INPUTS.interaction,
@@ -1608,7 +1627,8 @@ export const actions = [
         id: "create-button",
         name: "Create Button",
         category: "Interactions",
-        description: "Builds a button for a message's component row",
+        description:
+            "Builds a button for a Components field. Loose buttons share a row, five at most; use Create Interaction Row to arrange them yourself",
         template: "Create button {label}",
         inputs: {
             label: {
@@ -1656,8 +1676,149 @@ export const actions = [
             label: "Button",
         },
         icon: "smart_button",
-        run: async (_ctx, inputs: DiscordComponentData) =>
+        run: async (_ctx, inputs: DiscordButtonData) =>
             buildButtonComponent(inputs || {}),
+    }),
+
+    defineAction({
+        id: "create-select-menu",
+        name: "Create Select Menu",
+        category: "Interactions",
+        description:
+            "Builds a dropdown for a Components field. It fills a row of its own; picks fire When an Interaction is Triggered",
+        template: "Create select menu {customId} with {options}",
+        inputs: {
+            customId: {
+                type: "string",
+                label: "Interaction ID",
+                placeholder: "Interaction ID",
+                required: true,
+            },
+            options: {
+                type: "string",
+                label: "Options",
+                placeholder: "Options, comma separated",
+            },
+            menu: {
+                type: "string",
+                label: "Pick from",
+                placeholder: "Menu kind",
+                default: "text",
+                options: [
+                    { label: "The options listed", value: "text" },
+                    { label: "Users", value: "user" },
+                    { label: "Roles", value: "role" },
+                    { label: "Channels", value: "channel" },
+                ],
+            },
+            placeholder: {
+                type: "string",
+                label: "Placeholder",
+                placeholder: "Placeholder",
+            },
+            minValues: { type: "number", label: "Minimum picks", placeholder: "Count" },
+            maxValues: { type: "number", label: "Maximum picks", placeholder: "Count" },
+            disabled: { type: "boolean", label: "Disabled", default: false },
+        },
+        output: {
+            type: "discord-component",
+            label: "Select Menu",
+        },
+        icon: "arrow_drop_down_circle",
+        run: async (_ctx, inputs: Parameters<typeof buildSelectMenuComponent>[0]) =>
+            buildSelectMenuComponent(inputs || {}),
+    }),
+
+    defineAction({
+        id: "create-interaction-row",
+        name: "Create Interaction Row",
+        category: "Interactions",
+        description:
+            "Groups up to five buttons, or one select menu, into one row. Components before or after it go on their own rows",
+        template: "Create interaction row with {components}",
+        inputs: {
+            components: { ...INPUTS.components, required: true },
+        },
+        output: {
+            type: "discord-component",
+            label: "Interaction Row",
+        },
+        icon: "view_week",
+        run: async (_ctx, inputs: { components?: unknown }) =>
+            buildComponentRow(inputs?.components),
+    }),
+
+    defineAction({
+        id: "create-text-field",
+        name: "Create Text Field",
+        category: "Interactions",
+        description:
+            "Builds a question for Show Modal. Answers arrive in order as Field 1 to Field 5 of When a Modal is Submitted",
+        template: "Create text field {label}",
+        inputs: {
+            label: { type: "string", label: "Label", placeholder: "Question", required: true },
+            style: {
+                type: "string",
+                label: "Style",
+                placeholder: "Field style",
+                default: "short",
+                options: [
+                    { label: "One line", value: "short" },
+                    { label: "Paragraph", value: "paragraph" },
+                ],
+            },
+            placeholder: { type: "string", label: "Placeholder", placeholder: "Placeholder" },
+            value: { type: "string", label: "Prefilled answer", placeholder: "Answer" },
+            required: { type: "boolean", label: "Required", default: true },
+            minLength: { type: "number", label: "Minimum length", placeholder: "Characters" },
+            maxLength: { type: "number", label: "Maximum length", placeholder: "Characters" },
+        },
+        output: {
+            type: "discord-modal-field",
+            label: "Text Field",
+        },
+        icon: "text_fields",
+        run: async (_ctx, inputs: Parameters<typeof buildModalField>[0]) =>
+            buildModalField(inputs || {}),
+    }),
+
+    defineAction({
+        id: "show-modal",
+        name: "Show Modal",
+        category: "Interactions",
+        description:
+            "Opens a form for the user who used a slash command, button, or select menu. It must be the first answer; the reply arrives through When a Modal is Submitted",
+        template: "Show modal {title} for {interactionId}",
+        inputs: {
+            interactionId: INPUTS.interaction,
+            title: { type: "string", label: "Title", placeholder: "Title", required: true },
+            modalId: {
+                type: "string",
+                label: "Modal ID",
+                placeholder: "Modal ID",
+                required: true,
+            },
+            fields: {
+                type: "list<discord-modal-field>",
+                label: "Fields",
+                placeholder: "Text Field",
+                typeName: "Text Field",
+                required: true,
+            },
+        },
+        output: {
+            type: "boolean",
+            label: "Success",
+        },
+        icon: "dynamic_form",
+        run: async (
+            _ctx,
+            inputs: { interactionId: string; title?: string; modalId?: string; fields?: unknown },
+        ) => {
+            const modal = buildModalPayload(inputs);
+            const ops = new InteractionOps(takeInteraction);
+            return ops.showModal(inputs.interactionId, modal);
+        },
     }),
 
     defineAction({
@@ -2367,12 +2528,12 @@ export const staticTriggers = [
         icon: "error",
     }),
 
-    // Buttons only in v1; other component kinds come later
     defineAction({
         id: "interaction-triggered",
         name: "When an Interaction is Triggered",
         category: discordCategory("Interactions"),
-        description: "Fires when a user clicks a button this bot sent",
+        description:
+            "Fires when a user clicks a button or picks from a select menu this bot sent",
         template: "When interaction {customId} is triggered",
         inputs: {
             customId: {
@@ -2404,8 +2565,56 @@ export const staticTriggers = [
                 label: "Message",
                 typeName: "Message",
             },
+            value: { type: "string", label: "Picked", typeName: "Text" },
+            values: { type: "list<string>", label: "All picks", typeName: "Text[]" },
         },
         icon: "touch_app",
+    }),
+
+    defineAction({
+        id: "modal-submitted",
+        name: "When a Modal is Submitted",
+        category: discordCategory("Interactions"),
+        description:
+            "Fires when a user submits a modal opened by Show Modal. Field 1 is the first text field's answer, and so on",
+        template: "When modal {modalId} is submitted",
+        inputs: {
+            modalId: {
+                type: "string",
+                label: "Modal ID",
+                placeholder: "Modal ID",
+                required: true,
+            },
+        },
+        match: { field: "modalId", input: "modalId" },
+        output: { type: "object", label: "Modal Data" },
+        outputFields: {
+            modalId: { type: "string", label: "Modal ID", typeName: "Text" },
+            interactionId: {
+                type: "discord-interaction",
+                label: "Interaction",
+                typeName: "Interaction",
+            },
+            userId: { type: "discord-user", label: "User", typeName: "User" },
+            username: { type: "string", label: "Username", typeName: "Text" },
+            channelId: {
+                type: "discord-channel",
+                label: "Channel",
+                typeName: "Channel",
+            },
+            guildId: { type: "string", label: "Server ID", typeName: "Text" },
+            messageId: {
+                type: "discord-message",
+                label: "Message",
+                typeName: "Message",
+            },
+            field1: { type: "string", label: "Field 1", typeName: "Text" },
+            field2: { type: "string", label: "Field 2", typeName: "Text" },
+            field3: { type: "string", label: "Field 3", typeName: "Text" },
+            field4: { type: "string", label: "Field 4", typeName: "Text" },
+            field5: { type: "string", label: "Field 5", typeName: "Text" },
+        },
+        icon: "dynamic_form",
     }),
 
     defineAction({

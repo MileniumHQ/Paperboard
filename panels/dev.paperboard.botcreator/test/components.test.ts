@@ -1,14 +1,20 @@
-// Component buttons and the parameterized interaction trigger (bun test,
-// hermetic): Create Button validates Discord's hard limits up front, Send
-// Message accepts a single row of at most five buttons, and the click
-// trigger routes by custom id through the generic match rule.
+// Message components and the parameterized interaction triggers (bun test,
+// hermetic): the builders validate Discord's hard limits up front, the
+// Components field lays buttons, select menus and Interaction Rows out into
+// rows, and clicks and modal submits route by id through the match rule.
 import { describe, expect, it } from "bun:test";
 import {
     buildButtonComponent,
-    normalizeComponents,
+    buildComponentRow,
+    buildModalField,
+    buildModalPayload,
+    buildSelectMenuComponent,
+    componentsToActionRows,
+    layoutComponentRows,
     componentClickPayload,
-    type DiscordComponentData,
+    modalSubmitPayload,
 } from "../src/discordOps";
+import { ComponentType, TextInputStyle } from "discord.js";
 import { staticTriggers, actions } from "../src/service";
 import { INPUTS } from "../src/discordOps";
 import { validateActionDefinition } from "@mileniumhq/paperapi";
@@ -61,7 +67,12 @@ describe("buildButtonComponent", () => {
             style: "primary",
             customId: "roll-dice",
         });
-        expect(component).toEqual({ label: "Roll", style: "primary", customId: "roll-dice" });
+        expect(component).toEqual({
+            kind: "button",
+            label: "Roll",
+            style: "primary",
+            customId: "roll-dice",
+        });
     });
 
     it("default style is primary; whitespace is trimmed", () => {
@@ -97,24 +108,163 @@ describe("buildButtonComponent", () => {
     });
 });
 
-describe("normalizeComponents", () => {
-    it("wraps a single component and passes lists through", () => {
-        const button = buildButtonComponent({ label: "B", customId: "b" });
-        expect(normalizeComponents(button)).toHaveLength(1);
-        expect(normalizeComponents([button, button])).toHaveLength(2);
-        expect(normalizeComponents(undefined)).toEqual([]);
+const button = (id: string) => buildButtonComponent({ label: id, customId: id });
+const menu = (id: string) => buildSelectMenuComponent({ customId: id, options: "Red, Green" });
+const ids = (rows: { customId?: string }[][]) => rows.map((row) => row.map((c) => c.customId));
+
+describe("component row layout", () => {
+    it("wraps a single component and lays nothing out for an empty field", () => {
+        expect(ids(layoutComponentRows(button("a")))).toEqual([["a"]]);
+        expect(layoutComponentRows(undefined)).toEqual([]);
     });
 
-    it("refuses non-component values instead of sending garbage", () => {
-        expect(() => normalizeComponents("button" as unknown)).toThrow(/Create Button/);
-        expect(() => normalizeComponents([null])).toThrow(/Create Button/);
+    it("loose buttons share a row and start a new one past five", () => {
+        const six = ["1", "2", "3", "4", "5", "6"].map(button);
+        expect(ids(layoutComponentRows(six))).toEqual([["1", "2", "3", "4", "5"], ["6"]]);
     });
 
-    it("enforces Discord's five-per-row cap loudly", () => {
-        const buttons = Array.from({ length: 6 }, (_, i) =>
-            buildButtonComponent({ label: `B${i}`, customId: `id-${i}` }),
-        );
-        expect(() => normalizeComponents(buttons as unknown as DiscordComponentData)).toThrow(/at most 5/);
+    it("an Interaction Row keeps its own row; loose components around it get new rows", () => {
+        const row = buildComponentRow([button("r1"), button("r2")]);
+        const rows = layoutComponentRows([button("a"), row, button("b"), button("c")]);
+        expect(ids(rows)).toEqual([["a"], ["r1", "r2"], ["b", "c"]]);
+    });
+
+    it("a loose select menu takes a whole row", () => {
+        const rows = layoutComponentRows([button("a"), menu("pick"), button("b")]);
+        expect(ids(rows)).toEqual([["a"], ["pick"], ["b"]]);
+    });
+
+    it("refuses a sixth row, duplicate ids, and values that are not components", () => {
+        const rows = ["1", "2", "3", "4", "5", "6"].map(menu);
+        expect(() => layoutComponentRows(rows)).toThrow(/at most 5 rows/);
+        expect(() => layoutComponentRows([button("a"), button("a")])).toThrow(/unique/);
+        expect(() => layoutComponentRows("button" as unknown)).toThrow(/Create Button/);
+        expect(() => layoutComponentRows([null])).toThrow(/Create Button/);
+    });
+
+    it("emits Discord action rows with each component's API type", () => {
+        const rows = componentsToActionRows([button("a"), menu("pick")]);
+        expect(rows.map((r) => r.type)).toEqual([ComponentType.ActionRow, ComponentType.ActionRow]);
+        expect(rows[0].components[0]).toMatchObject({ type: ComponentType.Button, custom_id: "a" });
+        expect(rows[1].components[0]).toMatchObject({
+            type: ComponentType.StringSelect,
+            custom_id: "pick",
+            options: [
+                { label: "Red", value: "Red" },
+                { label: "Green", value: "Green" },
+            ],
+        });
+    });
+});
+
+describe("Interaction Row", () => {
+    it("holds one to five buttons or exactly one select menu", () => {
+        expect(buildComponentRow([button("a"), button("b")]).components).toHaveLength(2);
+        expect(buildComponentRow(menu("pick")).components).toHaveLength(1);
+        expect(() => buildComponentRow([])).toThrow(/at least one/);
+        expect(() => buildComponentRow(["1", "2", "3", "4", "5", "6"].map(button))).toThrow(/at most 5/);
+        expect(() => buildComponentRow([menu("pick"), button("a")])).toThrow(/whole row/);
+    });
+
+    it("cannot hold another row", () => {
+        const inner = buildComponentRow([button("a")]);
+        expect(() => buildComponentRow([inner])).toThrow(/another Interaction Row/);
+    });
+});
+
+describe("Create Select Menu", () => {
+    it("takes comma-separated or listed options", () => {
+        expect(menu("pick").options).toEqual(["Red", "Green"]);
+        expect(
+            buildSelectMenuComponent({ customId: "x", options: ["A", " B "] }).options,
+        ).toEqual(["A", "B"]);
+    });
+
+    it("user, role and channel menus need no options", () => {
+        const users = buildSelectMenuComponent({ customId: "who", menu: "user" });
+        expect(componentsToActionRows(users)[0].components[0]).toMatchObject({
+            type: ComponentType.UserSelect,
+            custom_id: "who",
+        });
+    });
+
+    it("enforces Discord's limits", () => {
+        expect(() => buildSelectMenuComponent({ options: "A" })).toThrow(/Interaction ID/);
+        expect(() => buildSelectMenuComponent({ customId: "x" })).toThrow(/at least one option/);
+        expect(() =>
+            buildSelectMenuComponent({ customId: "x", options: Array.from({ length: 26 }, (_, i) => `o${i}`) }),
+        ).toThrow(/at most 25/);
+        expect(() => buildSelectMenuComponent({ customId: "x", options: "A, A" })).toThrow(/unique/);
+        expect(() =>
+            buildSelectMenuComponent({ customId: "x", options: "A, B", minValues: 2, maxValues: 1 }),
+        ).toThrow(/Minimum picks/);
+        expect(() =>
+            buildSelectMenuComponent({ customId: "x", options: "A", maxValues: 2 }),
+        ).toThrow(/more than the 1 options/);
+        expect(() => buildSelectMenuComponent({ customId: "x", menu: "emoji" })).toThrow(/Unknown menu kind/);
+    });
+});
+
+describe("modals", () => {
+    it("numbers fields in order so answers arrive as Field 1, Field 2…", () => {
+        const modal = buildModalPayload({
+            modalId: "apply",
+            title: "Apply",
+            fields: [
+                buildModalField({ label: "Name" }),
+                buildModalField({ label: "Why?", style: "paragraph", required: false, maxLength: 500 }),
+            ],
+        });
+        expect(modal.custom_id).toBe("apply");
+        expect(modal.components.map((row) => row.components[0])).toEqual([
+            { type: ComponentType.TextInput, custom_id: "field1", label: "Name", style: TextInputStyle.Short, required: true },
+            {
+                type: ComponentType.TextInput,
+                custom_id: "field2",
+                label: "Why?",
+                style: TextInputStyle.Paragraph,
+                required: false,
+                max_length: 500,
+            },
+        ]);
+    });
+
+    it("enforces Discord's modal limits", () => {
+        const field = buildModalField({ label: "Q" });
+        expect(() => buildModalPayload({ title: "T", fields: [field] })).toThrow(/Interaction ID/);
+        expect(() => buildModalPayload({ modalId: "m", fields: [field] })).toThrow(/title/);
+        expect(() => buildModalPayload({ modalId: "m", title: "T" })).toThrow(/at least one/);
+        expect(() =>
+            buildModalPayload({ modalId: "m", title: "T", fields: Array(6).fill(field) }),
+        ).toThrow(/at most 5/);
+        expect(() => buildModalPayload({ modalId: "m", title: "T", fields: [button("a")] })).toThrow(/Create Text Field/);
+        expect(() => buildModalPayload({ modalId: "m", title: "T", fields: ["text"] })).toThrow(/Create Text Field/);
+        expect(() => buildModalField({ label: "x".repeat(46) })).toThrow(/45/);
+        expect(() => buildModalField({ label: "Q", minLength: 10, maxLength: 5 })).toThrow(/Minimum length/);
+    });
+
+    it("a submit carries each field's answer by position", () => {
+        const answers = new Map([
+            ["field1", { value: "Amy" }],
+            ["field2", { value: "Because" }],
+        ]);
+        const payload = modalSubmitPayload({
+            customId: "apply",
+            id: "inter_9",
+            user: { id: "u1", username: "amy" },
+            channelId: "c1",
+            guildId: "g1",
+            message: null,
+            fields: { fields: answers },
+        } as any);
+        expect(payload).toMatchObject({
+            modalId: "apply",
+            interactionId: "inter_9",
+            messageId: "",
+            field1: "Amy",
+            field2: "Because",
+            field3: "",
+        });
     });
 });
 
@@ -127,6 +277,7 @@ describe("componentClickPayload", () => {
             channelId: "c1",
             guildId: "g1",
             message: { id: "m1" },
+            isAnySelectMenu: () => false,
         } as unknown as Parameters<typeof componentClickPayload>[0];
         expect(componentClickPayload(interaction)).toEqual({
             customId: "roll-dice",
@@ -136,7 +287,32 @@ describe("componentClickPayload", () => {
             channelId: "c1",
             guildId: "g1",
             messageId: "m1",
+            values: [],
+            value: "",
         });
+    });
+
+    it("carries a select menu's picks", () => {
+        const pick = {
+            customId: "colour",
+            id: "inter_2",
+            user: { id: "u1", username: "amy" },
+            channelId: "c1",
+            guildId: "g1",
+            message: { id: "m1" },
+            isAnySelectMenu: () => true,
+            values: ["Red", "Green"],
+        } as unknown as Parameters<typeof componentClickPayload>[0];
+        expect(componentClickPayload(pick)).toMatchObject({ values: ["Red", "Green"], value: "Red" });
+    });
+});
+
+describe("the modal trigger", () => {
+    const trigger = staticTriggers.find((t: any) => t.id === "modal-submitted");
+
+    it("routes by modal id through the schema match", () => {
+        expect((trigger as any).match).toEqual({ field: "modalId", input: "modalId" });
+        expect(() => validateActionDefinition(trigger as any)).not.toThrow();
     });
 });
 
@@ -158,7 +334,7 @@ describe("the interaction trigger", () => {
 });
 
 describe("interaction responses carry buttons", () => {
-    const button = { label: "Roll", style: "primary", customId: "roll-dice" };
+    const rollButton = { label: "Roll", style: "primary", customId: "roll-dice" };
 
     function fakeInteraction() {
         const calls: Record<string, unknown[]> = {};
@@ -186,7 +362,7 @@ describe("interaction responses carry buttons", () => {
         const { InteractionOps } = await import("../src/discordOps");
         const { interaction, calls } = fakeInteraction();
         const ops = new InteractionOps(() => interaction);
-        await ops.respond("inter_1", { content: "Pick one", components: [button] });
+        await ops.respond("inter_1", { content: "Pick one", components: [rollButton] });
         const body = calls.reply[0] as any;
         expect(body.content).toBe("Pick one");
         expect(body.components).toHaveLength(1);
@@ -197,7 +373,7 @@ describe("interaction responses carry buttons", () => {
         const { interaction, calls } = fakeInteraction();
         interaction.replied = true; // a follow-up comes after the answer
         const ops = new InteractionOps(() => interaction);
-        await ops.followUp("inter_1", { content: "More", components: [button] });
+        await ops.followUp("inter_1", { content: "More", components: [rollButton] });
         const body = calls.followUp[0] as any;
         expect(body.components).toHaveLength(1);
     });

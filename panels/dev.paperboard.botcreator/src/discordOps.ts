@@ -4,14 +4,15 @@
 // resolution, embed/component payload building, and the Discord
 // not-text-based errors live here once, not per action.
 import {
-    ActionRowBuilder,
     ButtonBuilder,
     ButtonStyle,
     Client,
+    ComponentType,
     EmbedBuilder,
     MessageFlags,
-    type ButtonInteraction,
+    TextInputStyle,
     type MessageComponentInteraction,
+    type ModalSubmitInteraction,
     type ColorResolvable,
     type RepliableInteraction,
     type Guild,
@@ -81,11 +82,14 @@ export function normalizeEmbeds(input: unknown): DiscordEmbedData[] {
     return [];
 }
 
-// ─── button components ──────────────────────────────────────────────────────
+// ─── message components ─────────────────────────────────────────────────────
 
-// The payload the flow passes around is a plain object (the custom id the
-// author chose travels inside it); send time turns it into a Discord button.
-export interface DiscordComponentData {
+// The payloads the flow passes around are plain objects tagged by kind (the
+// custom id the author chose travels inside them); send time lays them out
+// into Discord action rows. A message holds at most five rows; a row holds
+// up to five buttons or exactly one select menu.
+export interface DiscordButtonData {
+    kind?: "button";
     label?: string;
     style?: string;
     customId?: string;
@@ -93,6 +97,34 @@ export interface DiscordComponentData {
     emoji?: string;
     disabled?: boolean;
 }
+
+export const SELECT_MENU_KINDS = ["text", "user", "role", "channel"] as const;
+export type SelectMenuKind = (typeof SELECT_MENU_KINDS)[number];
+
+export interface DiscordSelectMenuData {
+    kind: "select";
+    menu: SelectMenuKind;
+    customId: string;
+    placeholder?: string;
+    options?: string[];
+    minValues?: number;
+    maxValues?: number;
+    disabled?: boolean;
+}
+
+export interface DiscordComponentRowData {
+    kind: "row";
+    components: (DiscordButtonData | DiscordSelectMenuData)[];
+}
+
+export type DiscordComponentData =
+    | DiscordButtonData
+    | DiscordSelectMenuData
+    | DiscordComponentRowData;
+
+export const MAX_COMPONENT_ROWS = 5;
+export const MAX_BUTTONS_PER_ROW = 5;
+export const MAX_SELECT_OPTIONS = 25;
 
 export const BUTTON_STYLES = [
     "primary",
@@ -102,9 +134,22 @@ export const BUTTON_STYLES = [
     "link",
 ] as const;
 
+function checkCustomId(customId: string, what: string): string {
+    const trimmed = customId.trim();
+    if (!trimmed) {
+        throw new Error(`${what} needs an Interaction ID so flows can react to it`);
+    }
+    if (trimmed.length > 100) {
+        throw new Error(
+            `The interaction id "${trimmed}" exceeds Discord's 100-character limit`,
+        );
+    }
+    return trimmed;
+}
+
 export function buildButtonComponent(
-    inputs: DiscordComponentData,
-): DiscordComponentData {
+    inputs: DiscordButtonData,
+): DiscordButtonData {
     const style = (inputs.style || "primary").toLowerCase();
     if (!(BUTTON_STYLES as readonly string[]).includes(style)) {
         throw new Error(
@@ -121,74 +166,258 @@ export function buildButtonComponent(
                 `The link button "${label}" needs a URL instead of an interaction id`,
             );
         }
-        return { ...inputs, label, style };
+        return { ...inputs, kind: "button", label, style };
     }
-    const customId = (inputs.customId || "").trim();
-    if (!customId) {
-        throw new Error(
-            `The "${style}" button "${label}" needs an Interaction ID so flows can react to its clicks`,
-        );
-    }
-    if (customId.length > 100) {
-        throw new Error(
-            `The interaction id "${customId}" exceeds Discord's 100-character limit`,
-        );
-    }
-    return { ...inputs, label, style, customId };
+    const customId = checkCustomId(
+        inputs.customId || "",
+        `The "${style}" button "${label}"`,
+    );
+    return { ...inputs, kind: "button", label, style, customId };
 }
 
-// One hardcoded action row for v1: Discord caps a row at five buttons, so
-// beyond that the send fails loudly instead of silently splitting rows.
-export function normalizeComponents(input: unknown): DiscordComponentData[] {
+// Text options arrive either as a list value or as typed text separated by
+// commas ("Red, Green, Blue"); each option's label is also its value.
+export function parseSelectOptions(input: unknown): string[] {
+    const raw = Array.isArray(input)
+        ? input.map((item) => String(item ?? ""))
+        : typeof input === "string"
+            ? input.split(",")
+            : [];
+    return raw.map((option) => option.trim()).filter(Boolean);
+}
+
+function optionalCount(value: unknown, name: string): number | undefined {
+    if (value === undefined || value === null || value === "") return undefined;
+    const n = Number(value);
+    if (!Number.isInteger(n) || n < 0 || n > MAX_SELECT_OPTIONS) {
+        throw new Error(`${name} must be a whole number from 0 to ${MAX_SELECT_OPTIONS}`);
+    }
+    return n;
+}
+
+export function buildSelectMenuComponent(inputs: {
+    menu?: string;
+    customId?: string;
+    placeholder?: string;
+    options?: unknown;
+    minValues?: unknown;
+    maxValues?: unknown;
+    disabled?: boolean;
+}): DiscordSelectMenuData {
+    const menu = (inputs.menu || "text").toLowerCase();
+    if (!(SELECT_MENU_KINDS as readonly string[]).includes(menu)) {
+        throw new Error(
+            `Unknown menu kind "${inputs.menu}"; use one of: ${SELECT_MENU_KINDS.join(", ")}`,
+        );
+    }
+    const customId = checkCustomId(inputs.customId || "", "A select menu");
+    const placeholder = (inputs.placeholder || "").trim();
+    if (placeholder.length > 150) {
+        throw new Error("A select menu placeholder holds at most 150 characters");
+    }
+    const minValues = optionalCount(inputs.minValues, "Minimum picks");
+    const maxValues = optionalCount(inputs.maxValues, "Maximum picks");
+    if (maxValues === 0) {
+        throw new Error("Maximum picks must be at least 1");
+    }
+    if (minValues !== undefined && maxValues !== undefined && minValues > maxValues) {
+        throw new Error("Minimum picks cannot be more than maximum picks");
+    }
+    const data: DiscordSelectMenuData = {
+        kind: "select",
+        menu: menu as SelectMenuKind,
+        customId,
+        ...(placeholder ? { placeholder } : {}),
+        ...(minValues !== undefined ? { minValues } : {}),
+        ...(maxValues !== undefined ? { maxValues } : {}),
+        ...(inputs.disabled ? { disabled: true } : {}),
+    };
+    if (menu !== "text") return data;
+
+    const options = parseSelectOptions(inputs.options);
+    if (options.length === 0) {
+        throw new Error("A text select menu needs at least one option");
+    }
+    if (options.length > MAX_SELECT_OPTIONS) {
+        throw new Error(
+            `A select menu holds at most ${MAX_SELECT_OPTIONS} options (got ${options.length})`,
+        );
+    }
+    const tooLong = options.find((option) => option.length > 100);
+    if (tooLong) {
+        throw new Error(`The option "${tooLong.slice(0, 40)}…" exceeds Discord's 100-character limit`);
+    }
+    if (new Set(options).size !== options.length) {
+        throw new Error("Select menu options must be unique");
+    }
+    if (maxValues !== undefined && maxValues > options.length) {
+        throw new Error(
+            `Maximum picks (${maxValues}) is more than the ${options.length} options`,
+        );
+    }
+    return { ...data, options };
+}
+
+function componentItem(item: unknown): DiscordComponentData {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+        throw new Error(
+            "Components must be values created by the Create Button, Create Select Menu, or Create Interaction Row actions",
+        );
+    }
+    return item as DiscordComponentData;
+}
+
+function isRow(item: DiscordComponentData): item is DiscordComponentRowData {
+    return item.kind === "row";
+}
+
+function isSelect(item: DiscordComponentData): item is DiscordSelectMenuData {
+    return item.kind === "select";
+}
+
+/**
+ * The Interaction Row block: an explicit row the author arranged. It holds
+ * one to five buttons or exactly one select menu, never another row.
+ */
+export function buildComponentRow(input: unknown): DiscordComponentRowData {
     const raw = Array.isArray(input) ? input : input ? [input] : [];
-    const components: DiscordComponentData[] = [];
-    for (const item of raw) {
-        if (!item || typeof item !== "object") {
-            throw new Error(
-                "Components must be values created by the Create Button action",
-            );
-        }
-        components.push(item as DiscordComponentData);
+    const components = raw.map(componentItem);
+    if (components.some(isRow)) {
+        throw new Error("An Interaction Row cannot contain another Interaction Row");
     }
-    if (components.length > 5) {
+    const items = components as (DiscordButtonData | DiscordSelectMenuData)[];
+    if (items.length === 0) {
+        throw new Error("An Interaction Row needs at least one button or select menu");
+    }
+    const selects = items.filter(isSelect).length;
+    if (selects > 0 && items.length > 1) {
         throw new Error(
-            `A message holds at most 5 buttons in one row (got ${components.length})`,
+            "A select menu fills its whole row; put buttons in a separate Interaction Row",
         );
     }
-    return components;
+    if (items.length > MAX_BUTTONS_PER_ROW) {
+        throw new Error(
+            `An Interaction Row holds at most ${MAX_BUTTONS_PER_ROW} buttons (got ${items.length})`,
+        );
+    }
+    return { kind: "row", components: items };
 }
 
-export function componentsToActionRow(components: DiscordComponentData[]) {
-    if (components.length === 0) return null;
-    const row = new ActionRowBuilder<ButtonBuilder>();
-    for (const component of components) {
-        const button = new ButtonBuilder().setLabel(component.label ?? "");
-        if (component.disabled) button.setDisabled(true);
-        if (component.emoji) {
-            try {
-                button.setEmoji(component.emoji);
-            } catch (err) {
+/**
+ * Lays the Components field out into rows, in order: an Interaction Row
+ * stays one row; loose buttons share a row until it holds five or a row or
+ * select menu interrupts them; a loose select menu takes a row of its own.
+ * Result: (button | select)[][] — one inner array per Discord action row.
+ */
+export function layoutComponentRows(
+    input: unknown,
+): (DiscordButtonData | DiscordSelectMenuData)[][] {
+    const raw = Array.isArray(input) ? input : input ? [input] : [];
+    const rows: (DiscordButtonData | DiscordSelectMenuData)[][] = [];
+    let loose: DiscordButtonData[] = [];
+    const flush = () => {
+        if (loose.length > 0) rows.push(loose);
+        loose = [];
+    };
+    for (const entry of raw) {
+        const item = componentItem(entry);
+        if (isRow(item)) {
+            flush();
+            // re-check: a row value may come from anywhere a variable can
+            rows.push(buildComponentRow(item.components).components);
+        } else if (isSelect(item)) {
+            flush();
+            rows.push([item]);
+        } else {
+            if (loose.length === MAX_BUTTONS_PER_ROW) flush();
+            loose.push(item);
+        }
+    }
+    flush();
+    if (rows.length > MAX_COMPONENT_ROWS) {
+        throw new Error(
+            `A message holds at most ${MAX_COMPONENT_ROWS} rows of components (this one needs ${rows.length})`,
+        );
+    }
+    const seen = new Set<string>();
+    for (const row of rows) {
+        for (const component of row) {
+            const id = component.customId?.trim();
+            if (!id || (component.kind !== "select" && component.style === "link")) continue;
+            if (seen.has(id)) {
                 throw new Error(
-                    `Emoji "${component.emoji}" could not be used on button "${component.label}"`,
+                    `Two components in one message share the Interaction ID "${id}"; Discord needs each to be unique`,
                 );
             }
+            seen.add(id);
         }
-        if (component.style === "link") {
-            button.setStyle(ButtonStyle.Link).setURL(component.url ?? "");
-        } else {
-            const styleMap: Record<string, ButtonStyle> = {
-                primary: ButtonStyle.Primary,
-                secondary: ButtonStyle.Secondary,
-                success: ButtonStyle.Success,
-                danger: ButtonStyle.Danger,
-            };
-            button
-                .setStyle(styleMap[component.style || "primary"])
-                .setCustomId(component.customId ?? "");
-        }
-        row.addComponents(button);
     }
-    return row;
+    return rows;
+}
+
+function buttonToApi(component: DiscordButtonData) {
+    const button = new ButtonBuilder().setLabel(component.label ?? "");
+    if (component.disabled) button.setDisabled(true);
+    if (component.emoji) {
+        try {
+            button.setEmoji(component.emoji);
+        } catch (err) {
+            throw new Error(
+                `Emoji "${component.emoji}" could not be used on button "${component.label}": ${errorToMessage(err)}`,
+            );
+        }
+    }
+    if (component.style === "link") {
+        button.setStyle(ButtonStyle.Link).setURL(component.url ?? "");
+    } else {
+        const styleMap: Record<string, ButtonStyle> = {
+            primary: ButtonStyle.Primary,
+            secondary: ButtonStyle.Secondary,
+            success: ButtonStyle.Success,
+            danger: ButtonStyle.Danger,
+        };
+        button
+            .setStyle(styleMap[component.style || "primary"])
+            .setCustomId(component.customId ?? "");
+    }
+    return button.toJSON();
+}
+
+function selectToApi(component: DiscordSelectMenuData) {
+    const base = {
+        custom_id: component.customId,
+        ...(component.placeholder ? { placeholder: component.placeholder } : {}),
+        ...(component.minValues !== undefined ? { min_values: component.minValues } : {}),
+        ...(component.maxValues !== undefined ? { max_values: component.maxValues } : {}),
+        ...(component.disabled ? { disabled: true } : {}),
+    };
+    switch (component.menu) {
+        case "user":
+            return { ...base, type: ComponentType.UserSelect };
+        case "role":
+            return { ...base, type: ComponentType.RoleSelect };
+        case "channel":
+            return { ...base, type: ComponentType.ChannelSelect };
+        default:
+            return {
+                ...base,
+                type: ComponentType.StringSelect,
+                options: (component.options ?? []).map((option) => ({
+                    label: option,
+                    value: option,
+                })),
+            };
+    }
+}
+
+/** Discord API action rows for the Components field, or none when empty. */
+export function componentsToActionRows(input: unknown) {
+    return layoutComponentRows(input).map((row) => ({
+        type: ComponentType.ActionRow,
+        components: row.map((component) =>
+            isSelect(component) ? selectToApi(component) : buttonToApi(component),
+        ),
+    }));
 }
 
 // The one message-payload builder: send, reply, respond, and follow-up all
@@ -200,11 +429,127 @@ export interface MessagePayloadInput {
 }
 
 export function buildMessagePayload(input: MessagePayloadInput) {
-    const row = componentsToActionRow(normalizeComponents(input.components));
+    const rows = componentsToActionRows(input.components);
     return {
         content: input.content ?? "",
         embeds: normalizeEmbeds(input.embeds).map((data) => buildDiscordEmbed(data)),
-        ...(row ? { components: [row] } : {}),
+        ...(rows.length > 0 ? { components: rows } : {}),
+    };
+}
+
+// ─── modals ─────────────────────────────────────────────────────────────────
+
+export const MAX_MODAL_FIELDS = 5;
+
+export interface DiscordModalFieldData {
+    kind: "text-field";
+    label: string;
+    style: "short" | "paragraph";
+    placeholder?: string;
+    required: boolean;
+    value?: string;
+    minLength?: number;
+    maxLength?: number;
+}
+
+function optionalLength(value: unknown, name: string): number | undefined {
+    if (value === undefined || value === null || value === "") return undefined;
+    const n = Number(value);
+    if (!Number.isInteger(n) || n < 0 || n > 4000) {
+        throw new Error(`${name} must be a whole number from 0 to 4000`);
+    }
+    return n;
+}
+
+export function buildModalField(inputs: {
+    label?: string;
+    style?: string;
+    placeholder?: string;
+    required?: boolean;
+    value?: string;
+    minLength?: unknown;
+    maxLength?: unknown;
+}): DiscordModalFieldData {
+    const label = (inputs.label || "").trim();
+    if (!label || label.length > 45) {
+        throw new Error("A text field needs a label of up to 45 characters");
+    }
+    const style = (inputs.style || "short").toLowerCase();
+    if (style !== "short" && style !== "paragraph") {
+        throw new Error(`Unknown text field style "${inputs.style}"; use short or paragraph`);
+    }
+    const placeholder = (inputs.placeholder || "").trim();
+    if (placeholder.length > 100) {
+        throw new Error("A text field placeholder holds at most 100 characters");
+    }
+    const minLength = optionalLength(inputs.minLength, "Minimum length");
+    const maxLength = optionalLength(inputs.maxLength, "Maximum length");
+    if (maxLength === 0) throw new Error("Maximum length must be at least 1");
+    if (minLength !== undefined && maxLength !== undefined && minLength > maxLength) {
+        throw new Error("Minimum length cannot be more than maximum length");
+    }
+    return {
+        kind: "text-field",
+        label,
+        style,
+        required: inputs.required !== false,
+        ...(placeholder ? { placeholder } : {}),
+        ...(inputs.value ? { value: inputs.value } : {}),
+        ...(minLength !== undefined ? { minLength } : {}),
+        ...(maxLength !== undefined ? { maxLength } : {}),
+    };
+}
+
+/** A field's answer arrives under this id: Field 1 is "field1", and so on. */
+export function modalFieldId(index: number): string {
+    return `field${index + 1}`;
+}
+
+export function buildModalPayload(input: {
+    modalId?: string;
+    title?: string;
+    fields?: unknown;
+}) {
+    const customId = checkCustomId(input.modalId || "", "A modal");
+    const title = (input.title || "").trim();
+    if (!title || title.length > 45) {
+        throw new Error("A modal needs a title of up to 45 characters");
+    }
+    const raw = Array.isArray(input.fields) ? input.fields : input.fields ? [input.fields] : [];
+    if (raw.length === 0) {
+        throw new Error("A modal needs at least one text field");
+    }
+    if (raw.length > MAX_MODAL_FIELDS) {
+        throw new Error(`A modal holds at most ${MAX_MODAL_FIELDS} text fields (got ${raw.length})`);
+    }
+    const fields = raw.map((item) => {
+        if (!item || typeof item !== "object" || (item as { kind?: unknown }).kind !== "text-field") {
+            throw new Error("Modal fields must be values created by the Create Text Field action");
+        }
+        return item as DiscordModalFieldData;
+    });
+    return {
+        custom_id: customId,
+        title,
+        components: fields.map((field, index) => ({
+            type: ComponentType.ActionRow,
+            components: [
+                {
+                    type: ComponentType.TextInput,
+                    custom_id: modalFieldId(index),
+                    label: field.label,
+                    style:
+                        field.style === "paragraph"
+                            ? TextInputStyle.Paragraph
+                            : TextInputStyle.Short,
+                    required: field.required,
+                    ...(field.placeholder ? { placeholder: field.placeholder } : {}),
+                    ...(field.value ? { value: field.value } : {}),
+                    ...(field.minLength !== undefined ? { min_length: field.minLength } : {}),
+                    ...(field.maxLength !== undefined ? { max_length: field.maxLength } : {}),
+                },
+            ],
+        })),
     };
 }
 
@@ -216,11 +561,16 @@ export interface ComponentClickData {
     channelId: string;
     guildId: string;
     messageId: string;
+    /** what a select menu's user picked; empty for a button click */
+    values: string[];
+    /** the first pick, for single-choice menus; empty for a button click */
+    value: string;
 }
 
 export function componentClickPayload(
-    interaction: ButtonInteraction,
+    interaction: MessageComponentInteraction,
 ): ComponentClickData {
+    const values = interaction.isAnySelectMenu() ? [...interaction.values] : [];
     return {
         customId: interaction.customId,
         interactionId: interaction.id,
@@ -229,6 +579,47 @@ export function componentClickPayload(
         channelId: interaction.channelId ?? "",
         guildId: interaction.guildId ?? "",
         messageId: interaction.message.id,
+        values,
+        value: values[0] ?? "",
+    };
+}
+
+export interface ModalSubmitData {
+    modalId: string;
+    interactionId: string;
+    userId: string;
+    username: string;
+    channelId: string;
+    guildId: string;
+    /** the message whose button opened the modal; empty for a slash command */
+    messageId: string;
+    field1: string;
+    field2: string;
+    field3: string;
+    field4: string;
+    field5: string;
+}
+
+export function modalSubmitPayload(interaction: ModalSubmitInteraction): ModalSubmitData {
+    const answer = (index: number): string => {
+        const field = interaction.fields.fields.get(modalFieldId(index)) as
+            | { value?: unknown }
+            | undefined;
+        return typeof field?.value === "string" ? field.value : "";
+    };
+    return {
+        modalId: interaction.customId,
+        interactionId: interaction.id,
+        userId: interaction.user.id,
+        username: interaction.user.username,
+        channelId: interaction.channelId ?? "",
+        guildId: interaction.guildId ?? "",
+        messageId: interaction.message?.id ?? "",
+        field1: answer(0),
+        field2: answer(1),
+        field3: answer(2),
+        field4: answer(3),
+        field5: answer(4),
     };
 }
 
@@ -329,7 +720,7 @@ export const INPUTS = {
     components: {
         type: "list<discord-component>",
         label: "Components",
-        placeholder: "Button",
+        placeholder: "Component",
         typeName: "Component",
     },
     ephemeral: { type: "boolean", label: "Only visible to the user", default: false },
@@ -413,11 +804,11 @@ export class MessageOps {
         const embeds = normalizeEmbeds(payload.embeds);
         const components = payload.components === undefined
             ? message.components
-            : componentsToActionRow(normalizeComponents(payload.components));
+            : componentsToActionRows(payload.components);
         await message.edit({
             content: payload.content ?? message.content,
             embeds: embeds.length > 0 ? embeds.map((data) => buildDiscordEmbed(data)) : message.embeds,
-            ...(components ? { components: [components] } : {}),
+            ...(components.length > 0 ? { components } : {}),
         });
         return message.id;
     }
@@ -643,6 +1034,30 @@ export class InteractionOps {
         return serialize(interaction, async () => {
             const sent = await this.deliver(interaction, body, Boolean(payload.ephemeral), true);
             return sent.messageId();
+        });
+    }
+
+    /** Opens a modal; only possible as the very first answer. */
+    async showModal(
+        interactionId: string,
+        modal: ReturnType<typeof buildModalPayload>,
+    ): Promise<boolean> {
+        const interaction = this.take(interactionId.trim()) as RepliableInteraction & {
+            showModal?: (modal: unknown) => Promise<unknown>;
+        };
+        if (typeof interaction.showModal !== "function") {
+            throw new Error(
+                "A modal can only answer a slash command, a button, or a select menu — not another modal",
+            );
+        }
+        return serialize(interaction, async () => {
+            if (interaction.deferred || interaction.replied) {
+                throw new Error(
+                    "Show Modal must be the first answer to an interaction, within 2.5 seconds. Move it before any Respond or slow step.",
+                );
+            }
+            await interaction.showModal!(modal);
+            return true;
         });
     }
 }

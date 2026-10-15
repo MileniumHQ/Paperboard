@@ -741,6 +741,26 @@ describe("automatic acknowledgement", () => {
         // editReply would overwrite the message holding the button
         expect(calls).toEqual(["deferUpdate", "followUp"]);
     });
+
+    it("Show Modal works first and refuses once the interaction was answered", async () => {
+        const { InteractionOps, autoAcknowledge, buildModalPayload, buildModalField } =
+            await import("../src/discordOps");
+        const modal = buildModalPayload({
+            modalId: "feedback",
+            title: "Feedback",
+            fields: [buildModalField({ label: "Your idea" })],
+        });
+        const first = slashCommand("first");
+        rememberInteraction(first.interaction);
+        const ops = new InteractionOps(takeInteraction);
+        expect(await ops.showModal("first", modal)).toBe(true);
+        expect(first.calls).toEqual(["showModal"]);
+
+        const late = slashCommand("late");
+        rememberInteraction(late.interaction);
+        await autoAcknowledge(late.interaction);
+        await expect(ops.showModal("late", modal)).rejects.toThrow(/first answer/);
+    });
 });
 
 describe("server explorer helpers", () => {
