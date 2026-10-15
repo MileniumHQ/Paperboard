@@ -156,6 +156,21 @@ describe("AiApp connections", () => {
         }
     }
 
+    it("asks for a chat's model capabilities on the chat's own connection", async () => {
+        await withApp(async (app) => {
+            const a = await app.addConnection({ kind: "openai-compatible", baseUrl: "http://127.0.0.1:1" });
+            const conversation = await app.newConversation("shared", a.id);
+            const asked: unknown[][] = [];
+            app.models.capabilities = (...args: Parameters<typeof app.models.capabilities>) => {
+                asked.push(args);
+                return undefined;
+            };
+            await expect(app.chat.send(conversation.id, "hi")).rejects.toThrow(/not available/);
+            // the same name on another connection may differ (vision, tools)
+            expect(asked).toEqual([["shared", a.id]]);
+        });
+    });
+
     it("keeps each endpoint's key under its own vault name, and drops it when the URL changes", async () => {
         secrets.clear();
         await withApp(async (app, ctx) => {

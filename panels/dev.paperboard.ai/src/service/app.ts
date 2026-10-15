@@ -385,7 +385,7 @@ export class AiApp {
             providerOf: (model) => this.models.providerOf(model),
             store: this.store,
             settings: () => this.ctx.state.settings,
-            capabilities: (model) => this.models.capabilities(model),
+            capabilities: (model, provider) => this.models.capabilities(model, provider),
             listActions: () => actionsApi.list() as Promise<RegistryAction[]>,
             panelNames: () => this.panelNames(),
             callAction: (panelId, action, args) => actionsApi.call(panelId, action, args),
