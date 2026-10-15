@@ -1,12 +1,12 @@
 import { createEffect, createSignal, For, Show } from "solid-js";
 import {
     PaperButton,
-    PaperCard,
     PaperFlex,
     PaperIcon,
     PaperModal,
     PaperPageHeader,
     PaperQuote,
+    PaperSectionHeader,
     PaperSelectMenu,
     PaperSelectMenuItem,
     PaperSettingItem,
@@ -190,7 +190,7 @@ export default function Backups(props: { active: boolean }) {
                 </PaperSettingItem>
                 <PaperSettingItem
                     title="Routine Backups"
-                    description="This computer backs up the server on a schedule, even with Paperboard closed. A running server pauses saving during the copy."
+                    description="Backs up the server on a schedule, even with Paperboard closed. A running server pauses saving during the copy."
                 >
                     <PaperToggle
                         checked={schedule() !== null}
@@ -242,39 +242,37 @@ export default function Backups(props: { active: boolean }) {
                 </Show>
             </PaperSettingList>
 
-            <PaperCard>
-                <PaperFlex direction="column" gap="half" padding="full">
-                    <PaperText preset="subheader">Saved Backups</PaperText>
-                    <Show when={backups()} fallback={<Show when={!loadError()}><PaperText size={2} color="text-subtle">Loading backups…</PaperText></Show>}>
-                        {(list) => (
-                            <Show
-                                when={list().length > 0}
-                                fallback={
-                                    <PaperText size={2} color="text-subtle">
-                                        {status()?.location ? "No backups here yet." : "Choose where backups go, then back up the server."}
-                                    </PaperText>
-                                }
-                            >
-                                <PaperSettingList autoHeight>
-                                    <For each={list()}>
-                                        {(record) => (
-                                            <PaperSettingItem title={recordTitle(record)} description={recordDetail(record)}>
-                                                <PaperFlex direction="row" gap="half">
-                                                    <PaperButton size="small" disabled={busy() !== null} onClick={() => ask("restore", record)}>Restore</PaperButton>
-                                                    <PaperButton size="small" icon variant="text" title="Delete backup" aria-label="Delete backup"
-                                                        disabled={busy() !== null} onClick={() => ask("delete", record)}>
-                                                        <PaperIcon>delete</PaperIcon>
-                                                    </PaperButton>
-                                                </PaperFlex>
-                                            </PaperSettingItem>
-                                        )}
-                                    </For>
-                                </PaperSettingList>
-                            </Show>
-                        )}
-                    </Show>
-                </PaperFlex>
-            </PaperCard>
+            <PaperFlex direction="column" gap="half" fullWidth>
+                <PaperSectionHeader icon="history" title="Saved Backups" count={backups()?.length || undefined} />
+                <Show when={backups()} fallback={<Show when={!loadError()}><PaperText size={2} color="text-subtle">Loading backups…</PaperText></Show>}>
+                    {(list) => (
+                        <Show
+                            when={list().length > 0}
+                            fallback={
+                                <PaperText size={2} color="text-subtle">
+                                    {status()?.location ? "No backups here yet." : "Choose where backups go, then back up the server."}
+                                </PaperText>
+                            }
+                        >
+                            <PaperSettingList autoHeight>
+                                <For each={list()}>
+                                    {(record) => (
+                                        <PaperSettingItem title={recordTitle(record)} description={recordDetail(record)}>
+                                            <PaperFlex direction="row" gap="half">
+                                                <PaperButton size="small" disabled={busy() !== null} onClick={() => ask("restore", record)}>Restore</PaperButton>
+                                                <PaperButton size="small" icon variant="text" title="Delete backup" aria-label="Delete backup"
+                                                    disabled={busy() !== null} onClick={() => ask("delete", record)}>
+                                                    <PaperIcon>delete</PaperIcon>
+                                                </PaperButton>
+                                            </PaperFlex>
+                                        </PaperSettingItem>
+                                    )}
+                                </For>
+                            </PaperSettingList>
+                        </Show>
+                    )}
+                </Show>
+            </PaperFlex>
 
             <PaperModal
                 open={confirmOpen()}
