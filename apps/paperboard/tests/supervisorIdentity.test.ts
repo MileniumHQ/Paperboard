@@ -4,7 +4,7 @@
 // workloads under the substituted name, out of reach of kill and uninstall
 // (the AI panel's dev.paperboard.ai.ollama hit exactly this).
 import { describe, it, expect, afterEach } from "bun:test";
-import { spawn, type ChildProcess } from "node:child_process";
+import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import * as fs from "node:fs";
 import * as net from "node:net";
 import * as os from "node:os";
@@ -23,20 +23,73 @@ import { PaperCraneEngine } from "../papercrane/engine";
 const MAIN = path.join(import.meta.dir, "..", "papercrane", "main.ts");
 const children: ChildProcess[] = [];
 const cleanup: (() => void)[] = [];
+// the supervised workloads (`bun -e setInterval`), which outlive a SIGKILLed supervisor
+const WORKLOAD_SOURCE = "setInterval(() => {}, 1000)";
+const workloadPids: number[] = [];
 
-afterEach(() => {
+function pidAlive(pid: number): boolean {
+    try {
+        process.kill(pid, 0);
+        return true;
+    } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ESRCH") return false;
+        throw error;
+    }
+}
+
+// only ever signal a pid that is still this test's workload, never a reused one
+function isTestWorkload(pid: number): boolean {
+    try {
+        return execFileSync("ps", ["-p", String(pid), "-o", "args="], { encoding: "utf8" }).includes(WORKLOAD_SOURCE);
+    } catch {
+        return false; // ps exits non-zero when the pid is gone
+    }
+}
+
+async function waitGone(pid: number, ms: number): Promise<boolean> {
+    const deadline = Date.now() + ms;
+    while (pidAlive(pid)) {
+        if (Date.now() > deadline) return false;
+        await new Promise((r) => setTimeout(r, 25));
+    }
+    return true;
+}
+
+afterEach(async () => {
     for (const fn of cleanup.splice(0)) fn();
-    for (const child of children.splice(0)) if (child.exitCode === null) child.kill("SIGKILL");
+    // SIGTERM lets the supervisor stop its workload; SIGKILL cannot
+    const supervisors = children.splice(0);
+    for (const child of supervisors) if (child.exitCode === null && child.signalCode === null) child.kill("SIGTERM");
+    for (const child of supervisors) {
+        if (!(await exited(child, 3000))) {
+            child.kill("SIGKILL");
+            await exited(child);
+        }
+    }
+    const survivors: number[] = [];
+    for (const pid of workloadPids.splice(0)) {
+        if (await waitGone(pid, 2000)) continue;
+        if (isTestWorkload(pid)) process.kill(pid, "SIGKILL");
+        if (!(await waitGone(pid, 3000))) survivors.push(pid);
+    }
+    if (survivors.length) throw new Error(`supervised workloads survived teardown: ${survivors.join(", ")}`);
 });
 
 async function supervise(id: string): Promise<ChildProcess> {
     const child = spawn(process.execPath, [MAIN, "--supervise", id], { stdio: ["pipe", "ignore", "ignore"], env: process.env });
     children.push(child);
-    child.stdin!.end(JSON.stringify({ command: process.execPath, args: ["-e", "setInterval(() => {}, 1000)"] }));
+    child.stdin!.end(JSON.stringify({ command: process.execPath, args: ["-e", WORKLOAD_SOURCE] }));
     const deadline = Date.now() + 10_000;
-    while (!fs.existsSync(getSupervisorMetadataPath(id))) {
-        if (Date.now() > deadline) throw new Error(`supervisor ${id} did not start`);
-        await new Promise((r) => setTimeout(r, 25));
+    for (;;) {
+        // the metadata file can be seen mid-write; keep waiting until it parses
+        try {
+            const meta = JSON.parse(fs.readFileSync(getSupervisorMetadataPath(id), "utf8")) as { childPid?: number };
+            if (meta.childPid && meta.childPid !== child.pid) workloadPids.push(meta.childPid);
+            break;
+        } catch (error) {
+            if (Date.now() > deadline) throw new Error(`supervisor ${id} did not start: ${(error as Error).message}`);
+            await new Promise((r) => setTimeout(r, 25));
+        }
     }
     return child;
 }
