@@ -15,6 +15,7 @@ import {
     scheduleRepublishDynamicActions,
 } from "./service/actions";
 import { setPlayerNamesChangedHandler } from "./service/players";
+import { recoverPausedSaving } from "./service/saving";
 
 export * from "./service/types";
 export * from "./service/actions";
@@ -102,6 +103,19 @@ export const gameServerService = definePanelService({
             }
         } catch (err) {
             console.error("[gameserver] process-exists probe failed:", String(err));
+        }
+        // a world copy the last service left unfinished kept saving off
+        try {
+            if (await recoverPausedSaving()) {
+                console.warn("[gameserver] saving was left paused by an interrupted world copy; turned it back on");
+            }
+        } catch (err) {
+            ctx.setState({
+                serverEntries: appendCapped(ctx.state.serverEntries, {
+                    type: "error",
+                    content: `[Server] Saving may still be paused from an interrupted world copy; run save-on: ${err instanceof Error ? err.message : String(err)}`,
+                }),
+            });
         }
 
         processApi.onData(SERVER_PROC_ID, (chunk: string) =>

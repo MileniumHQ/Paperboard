@@ -26,10 +26,14 @@ import {
     PaperCard,
     PaperAvatar,
 } from "@mileniumhq/paperui";
+import { fileApi } from "@mileniumhq/paperapi";
 import { FieldControl } from "./PropertyFieldControl";
 import { readServerProperties, writeServerProperties } from "../lib/properties";
 import {
     deleteActiveWorldDirs,
+    discardWorldTransfer,
+    exportWorld,
+    importWorld,
     isWorldNameTaken,
     listWorlds,
     normalizeLevelType,
@@ -39,6 +43,10 @@ import {
     type WorldInfo,
 } from "../lib/worlds";
 import { serverStatus } from "../lib/server";
+import { PANEL_ID } from "../service/contract";
+import { WORLD_TRANSFER_DIR, worldNameFromFile } from "../core/worldArchive";
+
+const ZIP_FILTERS = [{ name: "World zips", extensions: ["zip"] }];
 
 function dimensionsLabel(info: WorldInfo): string {
     if (!info.generated) return "Not generated yet";
@@ -202,6 +210,77 @@ export default function Worlds() {
         }
     };
 
+    // download: the service zips the world, the page saves the zip, and
+    // the zip is removed again whatever the user chose
+    const [downloading, setDownloading] = createSignal(false);
+    const downloadWorld = async (name: string) => {
+        setDownloading(true);
+        setActionError("");
+        let file: string | null = null;
+        try {
+            file = (await exportWorld(name)).file;
+            await fileApi.exportFile(`${WORLD_TRANSFER_DIR}/${file}`, PANEL_ID, { suggestedName: `${name}.zip`, filters: ZIP_FILTERS });
+        } catch (err) {
+            setActionError(`The world was not downloaded: ${err instanceof Error ? err.message : String(err)}`);
+        } finally {
+            if (file) {
+                await discardWorldTransfer(file).catch((err) =>
+                    setActionError(`The world's temporary zip could not be removed: ${err instanceof Error ? err.message : String(err)}`));
+            }
+            setDownloading(false);
+        }
+    };
+
+    // upload: the page brings the zip in, the user names the world, the
+    // service unpacks it into new folders. Nothing existing is replaced,
+    // so this works with the server running.
+    const [upload, setUpload] = createSignal<{ file: string } | null>(null);
+    const [uploadName, setUploadName] = createSignal("");
+    const [uploading, setUploading] = createSignal(false);
+    const takenNames = () => (worlds() ?? []).flatMap((w) => [w.name, `${w.name}_nether`, `${w.name}_the_end`]);
+    const uploadNameValid = () => WORLD_NAME_PATTERN.test(uploadName().trim()) && !isWorldNameTaken(takenNames(), uploadName());
+
+    const chooseUpload = async () => {
+        setActionError("");
+        const file = `upload-${crypto.randomUUID()}.zip`;
+        try {
+            const result = await fileApi.importFile(`${WORLD_TRANSFER_DIR}/${file}`, PANEL_ID, { filters: ZIP_FILTERS });
+            if (result.status === "canceled") return;
+            setUploadName(worldNameFromFile(result.name, takenNames()));
+            setUpload({ file });
+        } catch (err) {
+            setActionError(`The world was not uploaded: ${err instanceof Error ? err.message : String(err)}`);
+        }
+    };
+
+    const cancelUpload = async () => {
+        const current = upload();
+        setUpload(null);
+        if (!current) return;
+        try {
+            await discardWorldTransfer(current.file);
+        } catch (err) {
+            setActionError(`The uploaded zip could not be removed: ${err instanceof Error ? err.message : String(err)}`);
+        }
+    };
+
+    const submitUpload = async () => {
+        const current = upload();
+        if (!current || !uploadNameValid() || uploading()) return;
+        setUploading(true);
+        try {
+            await importWorld(current.file, uploadName().trim());
+            setUpload(null);
+            await refresh();
+        } catch (err) {
+            // the service removed the zip; choosing again starts over
+            setUpload(null);
+            setActionError(`The world was not added: ${err instanceof Error ? err.message : String(err)}`);
+        } finally {
+            setUploading(false);
+        }
+    };
+
     const detail = () => {
         const target = selected();
         if (!target) return null;
@@ -211,6 +290,10 @@ export default function Worlds() {
     return (
         <>
                     <PaperPageHeader icon="public" title="Worlds">
+                        <PaperButton onClick={() => void chooseUpload()}>
+                            <PaperIcon>upload</PaperIcon>
+                            Upload World
+                        </PaperButton>
                         <PaperEffect variant="success">
                             <PaperButton
                                 variant="success"
@@ -304,6 +387,14 @@ export default function Worlds() {
                         <PaperButton onClick={() => setSelected(null)}>
                             Close
                         </PaperButton>
+                        <Show when={detail()?.generated}>
+                            <PaperButton
+                                disabled={downloading() || mutating()}
+                                onClick={() => { const name = detail()?.name; if (name) void downloadWorld(name); }}>
+                                <PaperIcon>download</PaperIcon>
+                                {downloading() ? "Zipping..." : "Download"}
+                            </PaperButton>
+                        </Show>
                         <PaperButton
                             variant="danger"
                             disabled={online() || mutating()}
@@ -364,6 +455,46 @@ export default function Worlds() {
                         </PaperFlex>
                     )}
                 </Show>
+            </PaperModal>
+
+            <PaperModal
+                open={upload() !== null}
+                onClose={() => { if (!uploading()) void cancelUpload(); }}
+                title="Add uploaded world"
+                size="small"
+                footer={
+                    <PaperFlex direction="row" justify="flex-end" gap="half" fullWidth>
+                        <PaperButton disabled={uploading()} onClick={() => void cancelUpload()}>
+                            Cancel
+                        </PaperButton>
+                        <PaperButton
+                            variant="success"
+                            disabled={!uploadNameValid() || uploading()}
+                            onClick={() => void submitUpload()}>
+                            {uploading() ? "Adding..." : "Add world"}
+                        </PaperButton>
+                    </PaperFlex>
+                }
+            >
+                <PaperFlex direction="column" gap="half">
+                    <PaperText size={3}>
+                        The world is added beside the others. Switch to it when the server is stopped.
+                    </PaperText>
+                    <PaperInput
+                        fullWidth
+                        label="World name"
+                        value={uploadName()}
+                        onInput={(e) => setUploadName(e.currentTarget.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter") void submitUpload(); }}
+                    />
+                    <Show when={uploadName().trim() && !uploadNameValid()}>
+                        <PaperText size={2} color="danger">
+                            {isWorldNameTaken(takenNames(), uploadName())
+                                ? "A world already has this name."
+                                : "Use letters, numbers, - and _ only."}
+                        </PaperText>
+                    </Show>
+                </PaperFlex>
             </PaperModal>
 
             <PaperModal

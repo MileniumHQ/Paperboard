@@ -37,6 +37,7 @@ import {
 } from "./worlds";
 import { loadConfigAndProperties, updatePanelConfig } from "./config";
 import { listMapRegions, renderMapTile } from "./map";
+import { discardWorldTransfer, exportWorld, importWorld } from "./worldTransfer";
 import type { MapDimension } from "../core/map";
 import { listPlayerStats } from "./playerStats";
 import { getHeadDataUrl } from "./skins";
@@ -803,6 +804,48 @@ export const panelActions: ActionDefinition[] = [
         icon: "folder",
         run: async () => {
             return listWorldDirs();
+        },
+    }),
+
+    defineAction({
+        id: ACTION_IDS.exportWorld,
+        name: "Download World",
+        category: "Worlds",
+        description: "Zips a world's folders for the page to save; saving pauses while a running server's world is copied",
+        internal: true,
+        template: "Download world {levelName}",
+        inputs: { levelName: { type: "string", label: "World", required: true } },
+        output: { type: "object", label: "Zip" },
+        run: async (ctx, inputs) => exportWorld(ctx, inputs?.levelName),
+    }),
+
+    defineAction({
+        id: ACTION_IDS.importWorld,
+        name: "Upload World",
+        category: "Worlds",
+        description: "Unpacks an uploaded world zip into new world folders",
+        internal: true,
+        template: "Upload world {file} as {levelName}",
+        inputs: {
+            file: { type: "string", label: "Zip", required: true },
+            levelName: { type: "string", label: "World", required: true },
+        },
+        output: { type: "object", label: "World" },
+        run: async (_ctx, inputs) => importWorld(inputs?.file, inputs?.levelName),
+    }),
+
+    defineAction({
+        id: ACTION_IDS.discardWorldTransfer,
+        name: "Discard World Zip",
+        category: "Worlds",
+        description: "Removes a world zip the page is done with",
+        internal: true,
+        template: "Discard world zip {file}",
+        inputs: { file: { type: "string", label: "Zip", required: true } },
+        output: { type: "boolean", label: "Done" },
+        run: async (_ctx, inputs) => {
+            await discardWorldTransfer(inputs?.file);
+            return true;
         },
     }),
 

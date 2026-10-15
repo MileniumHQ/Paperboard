@@ -23,6 +23,7 @@ import { assertSingleLine, extractStatValue, extractPosition, extractDimension, 
 import { checkLogForIssues } from "./diagnostics";
 import { onServerOnline } from "./gamerules";
 import { applyPendingRuntimeProperties } from "./runtimeProperties";
+import { observeSavingLine } from "./saving";
 import { type GameServerState, SERVER_PROC_ID, appendCapped, PANEL_ID } from "./types";
 import { TRIGGER_IDS } from "./contract";
 
@@ -304,6 +305,7 @@ export function handleProcessData(
             ctx.setState({ serverPort: portMatch[1] });
         }
 
+        observeSavingLine(clean);
         trackPlayerActivity(ctx, clean);
         const statConsumed = handleStatResponse(ctx, clean);
         const positionConsumed = handlePositionResponse(ctx, clean);
