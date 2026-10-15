@@ -57,11 +57,11 @@ export function npmCommand(pkg: string, bin: Record<string, string> | string | u
     return names.includes(unscoped) ? unscoped : names[0];
 }
 
-/** A release binary's command, when every platform ships the same plain file name. */
+/** A release binary's command, when every platform ships the same plain file name (Windows adds .exe or a .cmd shim). */
 export function binaryCommand(binary: RegistryAgent["distribution"]["binary"]): { command: string; args: string[] } | undefined {
     const entries = Object.values(binary ?? {});
     if (entries.length === 0) return undefined;
-    const names = new Set(entries.map((e) => (e.cmd ?? "").split(/[\\/]/).pop()!.replace(/\.exe$/i, "")));
+    const names = new Set(entries.map((e) => (e.cmd ?? "").split(/[\\/]/).pop()!.replace(/\.(exe|cmd)$/i, "")));
     const [command] = names;
     if (names.size !== 1 || !command || !/^[a-z][a-z0-9-]*$/.test(command)) return undefined;
     return { command, args: entries[0]!.args ?? [] };

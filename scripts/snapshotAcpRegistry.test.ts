@@ -18,6 +18,11 @@ describe("ACP registry snapshot", () => {
             command: "goose",
             args: ["acp"],
         });
+        // Cursor's Windows build is a .cmd shim beside the same command
+        expect(binaryCommand({ "linux-x86_64": { cmd: "./dist-package/cursor-agent", args: ["acp"] }, "windows-x86_64": { cmd: "./dist-package\\cursor-agent.cmd", args: ["acp"] } })).toEqual({
+            command: "cursor-agent",
+            args: ["acp"],
+        });
         expect(binaryCommand({ "darwin-aarch64": { cmd: "./pool-darwin-arm64" }, "linux-x86_64": { cmd: "./pool-linux-x64" } })).toBeUndefined();
         expect(binaryCommand({ "linux-x86_64": { cmd: "./agy_acp_server.par" } })).toBeUndefined();
         // nothing to point the user at for an install: left out

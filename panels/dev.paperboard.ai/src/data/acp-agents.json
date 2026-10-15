@@ -159,6 +159,20 @@
       }
     },
     {
+      "id": "cursor",
+      "name": "Cursor",
+      "description": "Cursor's coding agent",
+      "website": "https://cursor.com/docs/cli/acp",
+      "command": "cursor-agent",
+      "args": [
+        "acp"
+      ],
+      "install": {
+        "kind": "download",
+        "url": "https://cursor.com/docs/cli/acp"
+      }
+    },
+    {
       "id": "deepagents",
       "name": "DeepAgents",
       "description": "Batteries-included AI coding and general purpose agent powered by LangChain.",
