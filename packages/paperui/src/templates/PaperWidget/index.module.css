@@ -1,8 +1,9 @@
-/* A widget sizes itself to its tile, not the window: padding and type grow
-   a little with the tile, between fixed ends. Every part aligns to one left
-   edge, the padding, so widgets from different panels line up on Home. */
+/* A widget sizes itself to its tile, not the window: type grows a little
+   with the tile, between fixed ends, and the padding is the same at every
+   size. Every part aligns to one left edge, the padding, so widgets from
+   different panels line up on Home. */
 .PaperWidget {
-    --pad: clamp(var(--paper-uigap-threefourths), 9cqmin, var(--paper-uigap-sixfourths));
+    --pad: var(--paper-uigap);
     --gap: clamp(var(--paper-uigap-half), 4.5cqmin, var(--paper-uigap));
     position: absolute;
     inset: 0;

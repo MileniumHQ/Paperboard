@@ -1,8 +1,9 @@
 /* every built-in widget sizes itself to its tile, not the window: type
    and spacing grow a little with the tile, between fixed ends, so a
-   widget reads the same on the smallest cell and the largest */
+   widget reads the same on the smallest cell and the largest. The padding
+   is every widget's, the same at every size. */
 .root {
-    --pad: clamp(var(--paper-uigap-threefourths), 9cqmin, var(--paper-uigap-sixfourths));
+    --pad: var(--paper-uigap);
     --gap: clamp(var(--paper-uigap-half), 4.5cqmin, var(--paper-uigap));
     position: absolute;
     inset: 0;
