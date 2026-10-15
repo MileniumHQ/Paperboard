@@ -116,6 +116,28 @@ await actionsApi.call("dev.example.runtime", "install", { version: "1.2.0" }, {
 });`}
             </PaperCode>
 
+            <PaperText preset="subheader" id="input-limits">Input limits</PaperText>
+            <PaperText preset="body">
+                An input can declare limits on its value: min, max and integer for numbers,
+                maxLength for text, and maxItems for a list (min, max and maxLength then apply to each
+                item). The flow editor shows a broken limit on the block as soon as the typed value
+                breaks it, before the flow runs. A variable is only known when the flow runs, so the SDK
+                checks the call itself and refuses one that breaks a limit before run sees it. Keep
+                checks that span several inputs (a minimum above a maximum) in run.
+            </PaperText>
+            <PaperCode block language="tsx">
+{`defineAction({
+    id: "create-select-menu",
+    name: "Create Select Menu",
+    description: "Builds a dropdown",
+    inputs: {
+        options: { type: "list<string>", label: "Options", maxItems: 25, maxLength: 100 },
+        maxValues: { type: "number", label: "Maximum picks", integer: true, min: 1, max: 25 },
+    },
+    run: async (ctx, inputs) => buildMenu(inputs),
+});`}
+            </PaperCode>
+
             <PaperText preset="subheader" id="deprecated">Retiring an action</PaperText>
             <PaperText preset="body">
                 Set deprecated on an action definition to a message saying what to use instead and

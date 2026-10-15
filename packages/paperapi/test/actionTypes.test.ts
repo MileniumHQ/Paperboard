@@ -1,7 +1,8 @@
-// Panel-defined types reach the flow builder (bun test; mocks
+// What a registered action carries over the wire (bun test; mocks
 // globalThis.WebSocket). Types live in the panel's own process, so the only
 // way the Actions editor can name and draw them is the registered schema:
-// registration must carry every custom type the action names.
+// registration must carry every custom type the action names. Declared
+// input limits are enforced on the call itself, before `run`.
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 
 type Listener = (e?: any) => void;
@@ -67,7 +68,7 @@ async function waitFor(cond: () => boolean, ms = 3000): Promise<void> {
 
 import { initPaperApi, getTransport } from "../src/ipc";
 import { actionsApi } from "../src/actions";
-import { defineAction, defineType } from "../src/schema";
+import { checkActionInput, defineAction, defineType } from "../src/schema";
 
 describe("registered schemas carry the panel's types", () => {
     beforeEach(() => {
@@ -125,5 +126,97 @@ describe("registered schemas carry the panel's types", () => {
             },
             "test-guild": { id: "test-guild", name: "Guild", icon: "groups", base: "string" },
         });
+    });
+});
+
+describe("declared input limits", () => {
+    beforeEach(() => {
+        MockWebSocket.instances = [];
+        (globalThis as any).WebSocket = MockWebSocket;
+    });
+
+    afterEach(() => {
+        getTransport("local").close();
+        (globalThis as any).WebSocket = undefined;
+    });
+
+    test("name the input and the broken limit; unknown and empty values break none", () => {
+        const picks = { type: "number", label: "Picks", min: 1, max: 25, integer: true };
+        expect(checkActionInput(picks, 30)).toBe('"Picks" must be at most 25');
+        expect(checkActionInput(picks, "2.5")).toBe('"Picks" must be a whole number');
+        expect(checkActionInput(picks, "lots")).toBe('"Picks" must be a number');
+        expect(checkActionInput(picks, "")).toBeUndefined();
+        expect(checkActionInput(picks, "{{x}}", (v) => String(v).includes("{{"))).toBeUndefined();
+
+        const options = { type: "list<string>", label: "Options", maxItems: 2, maxLength: 3 };
+        expect(checkActionInput(options, ["a", "b", "c"])).toBe('"Options" holds at most 2 items (it has 3)');
+        expect(checkActionInput(options, ["a", "long"])).toBe(
+            'Item 2 of "Options" holds at most 3 characters (it has 4)',
+        );
+        // a variable item may hold many items: only known items count
+        expect(
+            checkActionInput(options, ["a", "{{x}}"], (v) => String(v).includes("{{")),
+        ).toBeUndefined();
+    });
+
+    test("a definition with an impossible limit is refused", async () => {
+        await expect(
+            actionsApi.register(
+                defineAction({
+                    id: "bad-limits",
+                    name: "Bad",
+                    description: "",
+                    inputs: { n: { type: "number", label: "N", min: 5, max: 1 } },
+                    run: () => null,
+                }),
+                undefined,
+                "test.panel",
+            ),
+        ).rejects.toThrow(/min above its max/);
+    });
+
+    test("a call that breaks a limit is refused before run sees it", async () => {
+        const connecting = initPaperApi({ port: 4321, token: "tok" });
+        await waitFor(() => MockWebSocket.instances.length > 0);
+        LAST().open();
+        await connecting;
+
+        const seen: unknown[] = [];
+        const registering = actionsApi.register(
+            defineAction({
+                id: "set-title",
+                name: "Set Title",
+                description: "Sets a title",
+                inputs: { title: { type: "string", label: "Title", maxLength: 5 } },
+                run: (_ctx, inputs) => {
+                    seen.push(inputs.title);
+                    return true;
+                },
+            }),
+            undefined,
+            "test.panel",
+        );
+        await waitFor(() => LAST().frames().some((f) => f.action === "actions:register"));
+        const frame = LAST().frames().find((f) => f.action === "actions:register")!;
+        LAST().receive({ type: "response", id: frame.id, result: { success: true } });
+        await registering;
+        expect(frame.params.schema.inputs.title.maxLength).toBe(5);
+
+        const reply = async (callId: string, title: string) => {
+            LAST().receive({
+                type: "action_call",
+                callId,
+                panelId: "test.panel",
+                action: "set-title",
+                args: [{ title }],
+            });
+            await waitFor(() => LAST().frames().some((f) => f.callId === callId));
+            return LAST().frames().find((f) => f.callId === callId);
+        };
+        expect((await reply("c1", "Too long")).error).toBe(
+            '"Title" holds at most 5 characters (it has 8)',
+        );
+        expect((await reply("c2", "Short")).result).toBe(true);
+        expect(seen).toEqual(["Short"]);
     });
 });

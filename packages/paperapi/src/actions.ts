@@ -9,6 +9,7 @@ import {
     isTypeCompatible,
     defineAction,
     validateActionDefinition,
+    assertActionInputs,
     referencedTypeInfo,
 } from "./schema";
 
@@ -108,12 +109,16 @@ export const actionsApi = {
             );
         }
 
+        // a broken definition is refused before anything touches the wire
+        if (typeof actionOrName === "object" && actionOrName !== null) {
+            validateActionDefinition(actionOrName as ActionDefinition);
+        }
+
         const transport = getTransport();
         await transport.ensureConnected();
 
         if (typeof actionOrName === "object" && actionOrName !== null) {
             const def = actionOrName as ActionDefinition;
-            validateActionDefinition(def);
             const actionName = def.id;
             const schema: ActionSchema = {
                 id: def.id,
@@ -135,7 +140,10 @@ export const actionsApi = {
             };
 
             const handler = def.run
-                ? (inputs: any) => def.run!({ panelId: pid }, inputs)
+                ? (inputs: any) => {
+                      assertActionInputs(def.inputs, inputs);
+                      return def.run!({ panelId: pid }, inputs);
+                  }
                 : () => {
                       throw new Error(
                           `Action "${actionName}" fires as an event and is not callable`,

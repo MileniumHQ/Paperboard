@@ -51,6 +51,19 @@ export interface ActionParamDefinition {
     multiline?: boolean;
     /** display name for the type badge; defaults to the raw type id */
     typeName?: string;
+    /**
+     * Limits on the value (on each item of a list). The flow editor shows a
+     * broken limit on the block before the flow runs, and the SDK refuses a
+     * call that breaks one before `run` sees it; see `checkActionInput`.
+     */
+    min?: number;
+    max?: number;
+    /** a whole number */
+    integer?: boolean;
+    /** characters of text */
+    maxLength?: number;
+    /** items in a list */
+    maxItems?: number;
 }
 
 export interface ActionOutputDefinition {
@@ -187,6 +200,10 @@ export function validateActionDefinition(def: ActionDefinition): void {
             `${label} declares match rules but is callable; matching routes events, and a callable action is not an event source`,
         );
     }
+    for (const [key, input] of Object.entries(def.inputs || {})) {
+        const problem = describeLimitProblem(input);
+        if (problem) throw new Error(`${label} input "${key}" ${problem}`);
+    }
     for (const rule of matches) {
         if (typeof rule.field !== "string" || !rule.field.trim()) {
             throw new Error(`${label} declares a match rule without a payload field`);
@@ -198,6 +215,23 @@ export function validateActionDefinition(def: ActionDefinition): void {
             );
         }
     }
+}
+
+function describeLimitProblem(input: ActionParamDefinition): string | undefined {
+    for (const name of ["min", "max"] as const) {
+        const v = input[name];
+        if (v !== undefined && !Number.isFinite(v)) return `declares a ${name} that is not a number`;
+    }
+    for (const name of ["maxLength", "maxItems"] as const) {
+        const v = input[name];
+        if (v !== undefined && !(Number.isInteger(v) && v >= 0)) {
+            return `declares a ${name} that is not a whole number`;
+        }
+    }
+    if (input.min !== undefined && input.max !== undefined && input.min > input.max) {
+        return "declares a min above its max";
+    }
+    return undefined;
 }
 
 export function normalizeMatchRules(
@@ -320,4 +354,75 @@ export function defineAction<TInputs = any, TOutput = any>(
         def.template = def.writtenOut;
     }
     return def;
+}
+
+type InputLimits = Pick<
+    ActionParamDefinition,
+    "type" | "label" | "min" | "max" | "integer" | "maxLength" | "maxItems"
+>;
+
+function isListType(type: unknown): boolean {
+    return typeof type === "string" && /^(?:list|array)<.+>$/.test(type);
+}
+
+function isBlankValue(value: unknown): boolean {
+    return value === undefined || value === null || value === "";
+}
+
+function checkOne(def: InputLimits, value: unknown, name: string): string | undefined {
+    const numeric = def.min !== undefined || def.max !== undefined || def.integer;
+    if (numeric) {
+        const n = typeof value === "number" ? value : Number(value);
+        if (typeof value === "boolean" || String(value).trim() === "" || !Number.isFinite(n)) {
+            return `${name} must be a number`;
+        }
+        if (def.integer && !Number.isInteger(n)) return `${name} must be a whole number`;
+        if (def.min !== undefined && n < def.min) return `${name} must be at least ${def.min}`;
+        if (def.max !== undefined && n > def.max) return `${name} must be at most ${def.max}`;
+    }
+    if (def.maxLength !== undefined && typeof value === "string" && value.length > def.maxLength) {
+        return `${name} holds at most ${def.maxLength} characters (it has ${value.length})`;
+    }
+    return undefined;
+}
+
+/**
+ * The first limit this value breaks, as a sentence naming the input, or
+ * undefined. An empty value breaks none (`required` is the editor's own
+ * check). `isUnknown` marks values that are only known when the flow runs
+ * (the editor's variable references): they are skipped, and a list counts
+ * only its known items.
+ */
+export function checkActionInput(
+    def: InputLimits,
+    value: unknown,
+    isUnknown: (value: unknown) => boolean = () => false,
+): string | undefined {
+    if (isBlankValue(value) || isUnknown(value)) return undefined;
+    const name = `"${def.label || "This input"}"`;
+    if (isListType(def.type) && Array.isArray(value)) {
+        const known = value.filter((item) => !isBlankValue(item) && !isUnknown(item));
+        if (def.maxItems !== undefined && known.length > def.maxItems) {
+            return `${name} holds at most ${def.maxItems} items (it has ${known.length})`;
+        }
+        for (let i = 0; i < value.length; i++) {
+            const item = value[i];
+            if (isBlankValue(item) || isUnknown(item)) continue;
+            const problem = checkOne(def, item, `Item ${i + 1} of ${name}`);
+            if (problem) return problem;
+        }
+        return undefined;
+    }
+    return checkOne(def, value, name);
+}
+
+/** Refuses a call whose inputs break a declared limit. */
+export function assertActionInputs(
+    inputs: Record<string, ActionParamDefinition> | undefined,
+    values: Record<string, unknown> | undefined,
+): void {
+    for (const [key, def] of Object.entries(inputs || {})) {
+        const problem = checkActionInput(def, values?.[key]);
+        if (problem) throw new Error(problem);
+    }
 }
