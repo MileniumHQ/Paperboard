@@ -6,7 +6,7 @@ import * as crypto from "crypto";
 import { panelFilesDirName } from "../storage";
 import { logger } from "../logger";
 import { assertSecureUrl, expectOk, httpRequest, type HttpRequestInit } from "./http";
-import { MAX_LISTED_BACKUPS, newestFirst, parseBackupRecord, type BackupRecord, type BackupStore, type BackupUsage } from "./types";
+import { backupArchiveDownloadCap, BACKUP_ARCHIVE_MAX_BYTES, MAX_LISTED_BACKUPS, newestFirst, parseBackupRecord, type BackupRecord, type BackupStore, type BackupUsage } from "./types";
 
 export interface S3Settings {
     /** https://s3.<region>.amazonaws.com, https://<account>.r2.cloudflarestorage.com */
@@ -26,7 +26,6 @@ export interface S3Credentials {
 
 const EMPTY_SHA256 = crypto.createHash("sha256").update("").digest("hex");
 const LIST_PAGES_MAX = 50;
-const ARCHIVE_MAX_BYTES = 5 * 1024 * 1024 * 1024;
 
 // RFC 3986 encoding, as SigV4 canonicalization requires
 export function s3Encode(value: string, keepSlash = false): string {
@@ -202,7 +201,7 @@ export class S3BackupStore implements BackupStore {
     }
 
     async put(record: BackupRecord, archivePath: string): Promise<void> {
-        if (record.size > ARCHIVE_MAX_BYTES) throw new Error("S3 accepts at most 5 GiB in one upload");
+        if (record.size > BACKUP_ARCHIVE_MAX_BYTES) throw new Error("S3 accepts at most 5 GiB in one upload");
         const keys = this.keys(record);
         expectOk(
             await this.send("PUT", this.objectUrl(keys.archive), {
@@ -225,8 +224,9 @@ export class S3BackupStore implements BackupStore {
     }
 
     async get(record: BackupRecord, destPath: string): Promise<void> {
+        const maxFileBytes = backupArchiveDownloadCap(record.size);
         expectOk(
-            await this.send("GET", this.objectUrl(this.keys(record).archive), { toFile: destPath, maxFileBytes: record.size, timeoutMs: 120_000 }),
+            await this.send("GET", this.objectUrl(this.keys(record).archive), { toFile: destPath, maxFileBytes, timeoutMs: 120_000 }),
             "Downloading the backup",
         );
     }

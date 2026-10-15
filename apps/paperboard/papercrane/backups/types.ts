@@ -37,6 +37,17 @@ export interface BackupStore {
     remove(record: BackupRecord): Promise<void>;
 }
 
+// Daemon policy, never supplied by remote metadata or a store.
+export const BACKUP_ARCHIVE_MAX_BYTES = 5 * 1024 * 1024 * 1024;
+export const BACKUP_TRANSFER_TIMEOUT_MS = 10 * 60_000;
+
+export function backupArchiveDownloadCap(size: number): number {
+    if (!Number.isSafeInteger(size) || size < 0 || size > BACKUP_ARCHIVE_MAX_BYTES) {
+        throw new Error(`Backup archive exceeds the ${BACKUP_ARCHIVE_MAX_BYTES} byte limit`);
+    }
+    return Math.min(size, BACKUP_ARCHIVE_MAX_BYTES);
+}
+
 export const MAX_LISTED_BACKUPS = 500;
 export const BACKUP_LABEL_MAX = 100;
 export const BACKUP_ID_RE = /^\d{8}-\d{6}-[0-9a-f]{6}$/;
@@ -56,7 +67,7 @@ export function parseBackupRecord(raw: unknown): BackupRecord | null {
     if (typeof r.id !== "string" || !BACKUP_ID_RE.test(r.id)) return null;
     if (!isPanelId(r.panelId)) return null;
     if (typeof r.createdAt !== "string" || Number.isNaN(Date.parse(r.createdAt))) return null;
-    if (typeof r.size !== "number" || !Number.isSafeInteger(r.size) || r.size < 0) return null;
+    if (typeof r.size !== "number" || !Number.isSafeInteger(r.size) || r.size < 0 || r.size > BACKUP_ARCHIVE_MAX_BYTES) return null;
     if (typeof r.sha256 !== "string" || !SHA256_RE.test(r.sha256)) return null;
     if (r.panelVersion !== null && (typeof r.panelVersion !== "string" || r.panelVersion.length > 64)) return null;
     if (r.label !== null && (typeof r.label !== "string" || r.label.length > BACKUP_LABEL_MAX)) return null;

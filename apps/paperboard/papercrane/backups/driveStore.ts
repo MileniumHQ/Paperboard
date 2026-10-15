@@ -6,7 +6,7 @@
 import * as crypto from "crypto";
 import { logger } from "../logger";
 import { assertSecureUrl, expectOk, httpRequest } from "./http";
-import { MAX_LISTED_BACKUPS, newestFirst, parseBackupRecord, type BackupRecord, type BackupStore, type BackupUsage } from "./types";
+import { backupArchiveDownloadCap, MAX_LISTED_BACKUPS, newestFirst, parseBackupRecord, type BackupRecord, type BackupStore, type BackupUsage } from "./types";
 
 export interface DriveEndpoints {
     tokenUrl: string;
@@ -198,9 +198,10 @@ export class DriveBackupStore implements BackupStore {
     }
 
     async get(record: BackupRecord, destPath: string): Promise<void> {
+        const maxFileBytes = backupArchiveDownloadCap(record.size);
         const id = await this.fileId(record);
         expectOk(
-            await this.api(`/files/${encodeURIComponent(id)}?alt=media`, { toFile: destPath, maxFileBytes: record.size, timeoutMs: 120_000 }),
+            await this.api(`/files/${encodeURIComponent(id)}?alt=media`, { toFile: destPath, maxFileBytes, timeoutMs: 120_000 }),
             "Downloading the backup from Google Drive",
         );
     }
