@@ -172,7 +172,7 @@ class AgentProcess implements AgentRunner {
 
     /** starting, running or mid-turn: replacing it would start a second process under the same id */
     get busy(): boolean {
-        return this.running || this.starting !== null || this.turns.size > 0;
+        return this.exited !== null || this.starting !== null || this.turns.size > 0;
     }
 
     hasTurns(): boolean {
@@ -284,6 +284,7 @@ class AgentProcess implements AgentRunner {
 
     private onExit(peer: JsonRpcPeer, code: number | undefined): void {
         if (this.peer !== peer) return;
+        this.exited = null;
         const expected = this.stopping;
         const reason = new Error(
             expected ? `${this.connection.label} was stopped.` : `${this.connection.label} stopped unexpectedly${code !== undefined ? ` (exit code ${code})` : ""}.`,
@@ -542,7 +543,7 @@ class AgentProcess implements AgentRunner {
     async stop(): Promise<void> {
         this.clearIdle();
         const exited = this.exited;
-        if (!this.running || !exited) {
+        if (!exited) {
             this.peer = null;
             this.init = null;
             return;

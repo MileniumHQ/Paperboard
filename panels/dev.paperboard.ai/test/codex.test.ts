@@ -133,6 +133,12 @@ describe("Codex bridge", () => {
         expect(host.starts).toHaveLength(1);
     });
 
+    it("kills a protocol-broken child and settles an accepted turn", async () => {
+        const opened = await open("c1");
+        await expect(send(opened.sessionId, "malformed")).rejects.toThrow();
+        await until(() => host.children.size === 0);
+    });
+
     it("asks the chat before a file change, and keeps the edit's diff with its result", async () => {
         const opened = await open("c1");
         const asked: unknown[] = [];

@@ -99,6 +99,9 @@ async function prompt(id, { sessionId, prompt: blocks }) {
             // ignores cancel too
             cancelled.add("deaf");
             return;
+        case "malformed":
+            process.stdout.write("not-json\n");
+            return;
         case "crash":
             process.stderr.write("boom: the agent fell over\n");
             process.exit(3);

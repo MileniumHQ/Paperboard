@@ -123,6 +123,7 @@ async function turn(threadId, turnId, input) {
         return;
     }
     if (word === "deaf") return;
+    if (word === "malformed") return process.stdout.write("not-json\n");
     if (word === "crash") {
         process.stderr.write("boom: codex fell over\n");
         process.exit(3);

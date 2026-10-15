@@ -121,7 +121,7 @@ export class CodexAgent implements AgentRunner {
     }
 
     get busy(): boolean {
-        return this.running || this.starting !== null || this.turns.size > 0 || this.opening.size > 0;
+        return this.exited !== null || this.starting !== null || this.turns.size > 0 || this.opening.size > 0;
     }
 
     hasTurns(): boolean {
@@ -226,6 +226,7 @@ export class CodexAgent implements AgentRunner {
 
     private onExit(peer: JsonRpcPeer, code: number | undefined): void {
         if (this.peer !== peer) return;
+        this.exited = null;
         const expected = this.stopping;
         const said = this.stderr.text();
         const reason = new Error(
@@ -524,7 +525,7 @@ export class CodexAgent implements AgentRunner {
     async stop(): Promise<void> {
         this.clearIdle();
         const exited = this.exited;
-        if (!this.running || !exited) return;
+        if (!exited) return;
         this.stopping = true;
         await this.kill({ exited, off: () => {} });
     }

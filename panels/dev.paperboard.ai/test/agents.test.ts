@@ -150,6 +150,13 @@ describe("agent hub", () => {
         expect(infos.c1).toBeNull();
     });
 
+    it("kills a protocol-broken child and settles its pending prompt", async () => {
+        const c = connection();
+        await hub.openSession({ conversationId: "c1", connection: c, cwd: "/w" });
+        await expect(hub.prompt(c, "s1", text("malformed"), collect().handlers, new AbortController().signal)).rejects.toThrow();
+        await until(() => host.children.size === 0);
+    });
+
     it("reports a crash with what the agent printed, and starts fresh next time", async () => {
         const c = connection();
         await hub.openSession({ conversationId: "c1", connection: c, cwd: "/w" });
