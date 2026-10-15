@@ -31,6 +31,12 @@ describe("PaperCraneEngine path containment", () => {
         expect(fs.statSync(home).isDirectory()).toBe(true);
     });
 
+    it("reports a path below an existing file as absent instead of failing", async () => {
+        await engine.writeFile("a/file.txt", "x", "srv");
+        expect(await engine.fileExists("a/file.txt/level.dat", "srv")).toBe(false);
+        expect(await engine.readFile("a/file.txt/level.dat", "srv")).toBeNull();
+    });
+
     it("rejects traversal", async () => {
         await expect(engine.writeFile("../../escape.txt", "x", "srv")).rejects.toThrow();
         expect(() => engine.getFilePath("../other", "srv")).toThrow();

@@ -163,9 +163,10 @@ export function panelFilesDirName(id: string | undefined | null): string {
     return id.replace(/[^a-zA-Z0-9_.-]/g, "_") || "default";
 }
 
+// A component below an existing file is as absent as a missing one
 function isMissingPathError(error: unknown): boolean {
     const code = (error as NodeJS.ErrnoException).code;
-    return code === "ENOENT";
+    return code === "ENOENT" || code === "ENOTDIR";
 }
 
 function isSameEntry(a: fs.BigIntStats, b: fs.BigIntStats): boolean {
