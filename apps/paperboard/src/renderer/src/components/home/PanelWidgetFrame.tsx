@@ -1,6 +1,6 @@
 import { PaperButton, PaperText } from "@mileniumhq/paperui";
 import { type Component, createEffect, createMemo, createSignal, on, onCleanup, onMount, Show } from "solid-js";
-import type { WidgetSize } from "@mileniumhq/paperapi";
+import type { WidgetOptionValues, WidgetSize } from "@mileniumhq/paperapi";
 import { panelUrl } from "../../lib/shell";
 import type { LoadQueue } from "../../lib/loadQueue";
 import styles from "./Home.module.css";
@@ -22,6 +22,8 @@ export interface PanelWidgetFrameProps {
     /** a tile's item id, or a gallery preview's own id */
     instanceId: string;
     size: WidgetSize;
+    /** what was chosen in the gallery; read once, when the frame loads */
+    options?: WidgetOptionValues;
     /** the panel runs a service, so readiness includes its hydration */
     service: boolean;
     /** changes when the panel is updated or restarted; the frame loads again */
@@ -128,6 +130,7 @@ const PanelWidgetFrame: Component<PanelWidgetFrameProps> = (props) => {
                             instanceId: props.instanceId,
                             size: props.size,
                             visible: props.visible,
+                            options: props.options ?? {},
                         },
                     });
                 }}

@@ -7,7 +7,13 @@
     "service": "./dist/service.js",
     "widgets": [
         { "id": "clock", "name": "Clock", "description": "The time, ticking only while you can see it", "sizes": ["2x1", "2x2", "4x1"] },
-        { "id": "counter", "name": "Counter", "description": "A number the panel's service keeps", "sizes": ["1x1", "2x1"] },
+        {
+            "id": "counter",
+            "name": "Counter",
+            "description": "A number the panel's service keeps",
+            "sizes": ["1x1", "2x1"],
+            "options": [{ "id": "step", "label": "Counts by" }]
+        },
         { "id": "status", "name": "Service status", "description": "Uptime, with a button that opens the panel", "sizes": ["4x1", "2x2"] }
     ]
 }

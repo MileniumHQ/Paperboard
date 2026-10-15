@@ -10,7 +10,7 @@ import {
     Show,
     untrack,
 } from "solid-js";
-import { config, parseWidgetSize, type PanelItem, type WidgetSize } from "@mileniumhq/paperapi";
+import { config, parseWidgetSize, type PanelItem, type WidgetOptionValues, type WidgetSize } from "@mileniumhq/paperapi";
 import { logToMain, type ComputerInfo } from "../../lib/shell";
 import {
     canPlace,
@@ -58,7 +58,7 @@ type DragSource =
     | { kind: "move"; itemId: string };
 
 /** What a widget is drawn from: a placed item, or a gallery entry being dragged. */
-type WidgetRef = Pick<LibraryEntry, "computerId" | "source"> & { widgetId: string; panelId?: string };
+type WidgetRef = Pick<LibraryEntry, "computerId" | "source"> & { widgetId: string; panelId?: string; options?: WidgetOptionValues };
 
 interface DragState {
     source: DragSource;
@@ -405,7 +405,14 @@ const HomeView: Component<HomeViewProps> = (props) => {
         const base = { id, computerId: entry.computerId, widgetId: entry.widget.id, size: `${p.w}x${p.h}`, x: p.x, y: p.y };
         commit([
             ...items(),
-            entry.source === "builtin" ? { ...base, source: "builtin" } : { ...base, source: "panel", panelId: entry.panelId },
+            entry.source === "builtin"
+                ? { ...base, source: "builtin" }
+                : {
+                      ...base,
+                      source: "panel",
+                      panelId: entry.panelId,
+                      ...(entry.options && Object.keys(entry.options).length > 0 ? { options: entry.options } : {}),
+                  },
         ]);
         setSelectedId(id);
     };
@@ -610,6 +617,7 @@ const HomeView: Component<HomeViewProps> = (props) => {
                 widgetId={from.widgetId}
                 instanceId={instanceId}
                 size={size()}
+                options={from.options}
                 service={frameFacts(from.computerId, panelId).service}
                 revision={frameFacts(from.computerId, panelId).revision}
                 visible={visible()}

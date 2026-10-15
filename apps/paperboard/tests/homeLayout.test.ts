@@ -36,6 +36,14 @@ describe("parseHomeLayout", () => {
         expect(parseHomeLayout(JSON.parse(JSON.stringify(serializeHomeLayout(items))))).toEqual(items);
     });
 
+    it("keeps what was chosen for a panel widget, and only for one", () => {
+        const chosen = item({ widgetId: "counter", size: "1x1", options: { step: "5" } } as Partial<HomeItem>);
+        expect(parseHomeLayout(JSON.parse(JSON.stringify(serializeHomeLayout([chosen]))))).toEqual([chosen]);
+        expect(() => parseHomeLayout({ version: 2, items: [{ ...item({}), options: { step: 5 } }] })).toThrow(/malformed/);
+        const builtin = { id: "c", computerId: "local", source: "builtin", widgetId: "memory", size: "2x2", x: 0, y: 0 };
+        expect(() => parseHomeLayout({ version: 2, items: [{ ...builtin, options: { step: "5" } }] })).toThrow(/malformed/);
+    });
+
     it("throws on a damaged layout instead of returning an empty one to overwrite", () => {
         expect(() => parseHomeLayout({ version: 99, items: [] })).toThrow(/version/);
         expect(() => parseHomeLayout({ version: 2, items: [{ id: "a" }] })).toThrow(/malformed/);

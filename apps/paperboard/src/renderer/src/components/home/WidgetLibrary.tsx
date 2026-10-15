@@ -1,7 +1,24 @@
-import { PaperButton, PaperCard, PaperChip, PaperIcon, PaperList, PaperListItem, PaperText } from "@mileniumhq/paperui";
+import {
+    PaperButton,
+    PaperCard,
+    PaperChip,
+    PaperIcon,
+    PaperList,
+    PaperListItem,
+    PaperSelectMenu,
+    PaperSelectMenuItem,
+    PaperText,
+} from "@mileniumhq/paperui";
 import { type Component, createMemo, createSignal, For, type JSX, onCleanup, onMount, Show } from "solid-js";
-import { parseWidgetSize, type PanelItem, type WidgetDeclaration } from "@mileniumhq/paperapi";
-import { type ComputerInfo, panelUrl } from "../../lib/shell";
+import {
+    getWidgetChoices,
+    parseWidgetSize,
+    type PanelItem,
+    type WidgetChoice,
+    type WidgetDeclaration,
+    type WidgetOptionValues,
+} from "@mileniumhq/paperapi";
+import { type ComputerInfo, logToMain, panelUrl } from "../../lib/shell";
 import type { LoadQueue } from "../../lib/loadQueue";
 import { BUILTIN_WIDGETS, BuiltinView, builtinWidget } from "./builtins";
 import PanelWidgetFrame, { type FrameFacts } from "./PanelWidgetFrame";
@@ -14,7 +31,11 @@ export type LibraryEntry = {
     size: string;
     /** where it comes from, as people know it: "Paperboard" or the panel's name */
     sourceName: string;
-} & ({ source: "builtin" } | { source: "panel"; panelId: string });
+} & (
+    | { source: "builtin" }
+    /** `options` is what the gallery's dropdowns say, when the widget declares options */
+    | { source: "panel"; panelId: string; options?: WidgetOptionValues }
+);
 
 export function sizeLabel(size: string): string {
     return size.replace("x", "×");
@@ -253,7 +274,58 @@ const WidgetCard: Component<WidgetLibraryProps & { widget: WidgetDeclaration; en
     const parsed = () => parseWidgetSize(size()) ?? { w: 1, h: 1 };
     const tallest = () => Math.max(...props.widget.sizes.map((s) => parseWidgetSize(s)?.h ?? 1));
     const widest = () => Math.max(...props.widget.sizes.map((s) => parseWidgetSize(s)?.w ?? 1));
-    const entry = () => props.entryAt(size());
+    // what the widget's options offer comes from the panel's service, asked
+    // when the card appears; until every option has a value there is nothing to add
+    const declared = () => props.widget.options ?? [];
+    const [choices, setChoices] = createSignal<
+        { kind: "loading" } | { kind: "ready"; lists: Record<string, WidgetChoice[]> } | { kind: "failed"; message: string }
+    >({ kind: "loading" });
+    const [chosen, setChosen] = createSignal<WidgetOptionValues>({});
+    let request = 0;
+    const loadChoices = async () => {
+        const from = props.entryAt(size());
+        if (from.source !== "panel" || declared().length === 0) return;
+        const mine = ++request;
+        setChoices({ kind: "loading" });
+        try {
+            const offered = await Promise.all(
+                declared().map((option) => getWidgetChoices(from.computerId, from.panelId, props.widget.id, option.id)),
+            );
+            if (mine !== request) return;
+            const lists: Record<string, WidgetChoice[]> = {};
+            const next: WidgetOptionValues = {};
+            declared().forEach((option, index) => {
+                lists[option.id] = offered[index];
+                // what was picked stays picked while it is still offered
+                const kept = offered[index].find((choice) => choice.value === chosen()[option.id]) ?? offered[index][0];
+                if (kept) next[option.id] = kept.value;
+            });
+            setChosen(next);
+            setChoices({ kind: "ready", lists });
+        } catch (err) {
+            if (mine !== request) return;
+            logToMain("warn", `Couldn't load choices for widget ${props.widget.id}:`, err);
+            setChoices({ kind: "failed", message: err instanceof Error ? err.message : String(err) });
+        }
+    };
+    onMount(() => void loadChoices());
+    onCleanup(() => { request++; });
+    const listOf = (optionId: string) => {
+        const state = choices();
+        return state.kind === "ready" ? (state.lists[optionId] ?? []) : [];
+    };
+    /** the chosen values once every declared option has one; null until then */
+    const options = createMemo<WidgetOptionValues | null>(() => {
+        if (declared().length === 0) return {};
+        const values = chosen();
+        return choices().kind === "ready" && declared().every((option) => values[option.id]) ? values : null;
+    });
+    const unavailable = () => props.full || options() === null;
+    const entry = (): LibraryEntry => {
+        const at = props.entryAt(size());
+        const values = options();
+        return at.source === "panel" && values && Object.keys(values).length > 0 ? { ...at, options: values } : at;
+    };
     const previewCell = () => Math.min(PREVIEW_CELL, PREVIEW_WIDTH / widest());
     const scale = () => previewCell() / props.cell;
     const real = () => ({ w: parsed().w * props.cell - props.inset * 2, h: parsed().h * props.cell - props.inset * 2 });
@@ -283,10 +355,10 @@ const WidgetCard: Component<WidgetLibraryProps & { widget: WidgetDeclaration; en
                     type="button"
                     class={styles.preview}
                     style={{ width: `${real().w * scale()}px`, height: `${real().h * scale()}px` }}
-                    disabled={props.full}
+                    disabled={unavailable()}
                     aria-label={`Add ${props.widget.name}, ${sizeLabel(size())}`}
                     onPointerDown={(e) => {
-                        if (e.button === 0 && !props.full) props.onStartDrag(entry(), e);
+                        if (e.button === 0 && !unavailable()) props.onStartDrag(entry(), e);
                     }}
                     onKeyDown={(e) => {
                         if (e.key === "Enter" || e.key === " ") {
@@ -304,13 +376,17 @@ const WidgetCard: Component<WidgetLibraryProps & { widget: WidgetDeclaration; en
                             <Show
                                 when={builtin()}
                                 fallback={
-                                    <Show when={entry().source === "panel" ? (entry() as Extract<LibraryEntry, { source: "panel" }>) : null}>
-                                        {(panelEntry) => (
+                                    // a frame is given its options once, so another choice is another frame
+                                    <Show when={options() ? JSON.stringify(options()) : null} keyed>
+                                        {(_chosen) => {
+                                            const panelEntry = () => entry() as Extract<LibraryEntry, { source: "panel" }>;
+                                            return (
                                             <PanelWidgetFrame
                                                 computerId={panelEntry().computerId}
                                                 panelId={panelEntry().panelId}
                                                 widgetId={props.widget.id}
                                                 instanceId={previewId}
+                                                options={panelEntry().options}
                                                 service={props.frameFacts(panelEntry().computerId, panelEntry().panelId).service}
                                                 revision={props.frameFacts(panelEntry().computerId, panelEntry().panelId).revision}
                                                 size={parsed()}
@@ -318,7 +394,8 @@ const WidgetCard: Component<WidgetLibraryProps & { widget: WidgetDeclaration; en
                                                 label={`${props.widget.name} preview`}
                                                 queue={props.queue}
                                             />
-                                        )}
+                                            );
+                                        }}
                                     </Show>
                                 }
                             >
@@ -372,6 +449,37 @@ const WidgetCard: Component<WidgetLibraryProps & { widget: WidgetDeclaration; en
                             );
                         }}
                     </For>
+                </div>
+            </Show>
+            <For each={declared()}>
+                {(option) => (
+                    <div class={styles.optionRow} role="group" aria-label={option.label}>
+                        <PaperText size={1} color="text-subtle">{option.label}</PaperText>
+                        <PaperSelectMenu
+                            name={`${previewId}-${option.id}`}
+                            fullWidth
+                            value={chosen()[option.id]}
+                            onValueChange={(value) => setChosen((previous) => ({ ...previous, [option.id]: String(value) }))}
+                            disabled={listOf(option.id).length === 0}
+                            placeholder={choices().kind === "loading" ? "Loading…" : "Nothing to choose yet"}
+                        >
+                            <For each={listOf(option.id)}>
+                                {(choice) => <PaperSelectMenuItem value={choice.value}>{choice.label}</PaperSelectMenuItem>}
+                            </For>
+                        </PaperSelectMenu>
+                    </div>
+                )}
+            </For>
+            <Show when={declared().length > 0 && choices().kind !== "loading" && options() === null}>
+                <div class={styles.optionNote} role={choices().kind === "failed" ? "alert" : "status"}>
+                    <PaperText size={1} color="text-subtle">
+                        {choices().kind === "failed"
+                            ? `Couldn't load this widget's choices: ${(choices() as { message: string }).message}`
+                            : `There is nothing to choose yet. Set this up in ${props.entryAt(size()).sourceName}, then check again.`}
+                    </PaperText>
+                    <PaperButton size="tiny" variant="text" onClick={() => void loadChoices()}>
+                        {choices().kind === "failed" ? "Retry" : "Check again"}
+                    </PaperButton>
                 </div>
             </Show>
         </PaperCard>

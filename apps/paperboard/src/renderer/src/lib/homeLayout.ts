@@ -4,7 +4,7 @@
 // rearranged, so Home looks the same on every window. Pure functions:
 // HomeView owns the signals, this owns the rules.
 
-import { parseWidgetSize, WIDGET_MAX_WIDTH, isWidgetId, type WidgetSize } from "@mileniumhq/paperapi";
+import { parseWidgetOptionValues, parseWidgetSize, WIDGET_MAX_WIDTH, isWidgetId, type WidgetOptionValues, type WidgetSize } from "@mileniumhq/paperapi";
 
 export const HOME_LAYOUT_ID = "shell-home-layout";
 /** Home spans every computer, so its layout is this machine's, never a remote's. */
@@ -33,7 +33,11 @@ interface HomeItemBase {
 }
 
 /** A widget Paperboard draws itself, or one a panel serves. */
-export type HomeItem = HomeItemBase & ({ source: "builtin" } | { source: "panel"; panelId: string });
+export type HomeItem = HomeItemBase & (
+    | { source: "builtin" }
+    /** `options` is what was chosen in the gallery, when the widget declares options */
+    | { source: "panel"; panelId: string; options?: WidgetOptionValues }
+);
 
 export interface HomeLayoutDoc {
     version: typeof HOME_LAYOUT_VERSION;
@@ -97,7 +101,10 @@ export function parseHomeLayout(raw: unknown): HomeItem[] {
             parseWidgetSize(item.size) !== null &&
             Number.isInteger(item.x) && Number.isInteger(item.y) &&
             (!legacy || (Number.isInteger(item.column) && (item.column as number) >= 0));
-        if (!ok) throw new Error(`Home layout item ${index} is malformed`);
+        const options = item?.source === "panel" ? parseWidgetOptionValues(item.options) : {};
+        if (!ok || !options || (item.source === "builtin" && item.options !== undefined)) {
+            throw new Error(`Home layout item ${index} is malformed`);
+        }
         const base = {
             id: item.id as string,
             computerId: item.computerId as string,
@@ -108,7 +115,12 @@ export function parseHomeLayout(raw: unknown): HomeItem[] {
         };
         return item.source === "builtin"
             ? { ...base, source: "builtin" as const }
-            : { ...base, source: "panel" as const, panelId: item.panelId as string };
+            : {
+                  ...base,
+                  source: "panel" as const,
+                  panelId: item.panelId as string,
+                  ...(Object.keys(options).length > 0 ? { options } : {}),
+              };
     });
     const ids = new Set(items.map((item) => item.id));
     if (ids.size !== items.length) throw new Error("Home layout repeats an item id");

@@ -48,15 +48,18 @@ defineWidgets({
         return () => { off(); stop(); };
     },
 
-    counter: (root) => {
-        el(root, `<span class="big" aria-live="polite">0</span><button type="button">+1</button>`, "counter");
+    counter: (root, widget) => {
+        // chosen in the gallery; a step the service stopped offering is refused by it, and shown
+        const step = Number(widget.options.step ?? 1);
+        el(root, `<span class="big" aria-live="polite">0</span><button type="button"></button>`, "counter");
+        root.querySelector("button")!.textContent = `+${step}`;
         const bridge = createPanelBridge<DemoState>({ panelId: PANEL_ID, defaultState: { count: 0, startedAt: Date.now() } });
         const value = root.querySelector<HTMLSpanElement>(".big")!;
         const show = () => { value.textContent = String(bridge.getState().count); };
         const off = bridge.onStateChange(show);
         show();
         root.querySelector("button")!.addEventListener("click", () => {
-            bridge.call("increment").catch((err) => { value.textContent = "!"; value.title = err instanceof Error ? err.message : String(err); });
+            bridge.call("increment", step).catch((err) => { value.textContent = "!"; value.title = err instanceof Error ? err.message : String(err); });
         });
         return () => { off(); bridge.dispose(); };
     },
