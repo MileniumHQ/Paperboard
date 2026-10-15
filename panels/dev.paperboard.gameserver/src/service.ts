@@ -15,7 +15,7 @@ import {
     scheduleRepublishDynamicActions,
 } from "./service/actions";
 import { setPlayerNamesChangedHandler } from "./service/players";
-import { recoverPausedSaving } from "./service/saving";
+import { pauseSavingForBackup, recoverPausedSaving } from "./service/saving";
 
 export * from "./service/types";
 export * from "./service/actions";
@@ -123,6 +123,8 @@ export const gameServerService = definePanelService({
         );
         processApi.onExit(SERVER_PROC_ID, () => handleProcessExit(ctx));
     },
+    // a backup copies the server folder; the world must not change under it
+    beforeBackup: (ctx) => pauseSavingForBackup(ctx),
 });
 
 export default gameServerService;

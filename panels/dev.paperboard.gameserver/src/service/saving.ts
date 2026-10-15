@@ -6,7 +6,9 @@ import { PANEL_ID, SERVER_PROC_ID, type GameServerState } from "./types";
 // switched off (save-off), everything in memory is written out
 // (save-all flush), the copy is made, and saving is switched back on.
 // A marker file records the pause, so a service that died mid-copy turns
-// saving back on when it starts and finds the server still running.
+// saving back on when it starts and finds the server still running. A
+// backup of the whole server uses that on purpose: Paperboard stops this
+// service for the copy, and the service that starts after it ends the pause.
 
 const PAUSED_MARKER = ".paperboard-saving-paused";
 const FLUSH_TIMEOUT_MS = 120_000;
@@ -68,14 +70,41 @@ export async function withSavingPaused<T>(ctx: ServiceContext<GameServerState>, 
     if (pausing) throw new Error("Saving is already paused for another copy");
     pausing = true;
     try {
-        await fileApi.write(PAUSED_MARKER, new Date().toISOString(), PANEL_ID);
         try {
-            await send("save-off", savingOff, COMMAND_TIMEOUT_MS, "that saving is paused");
-            await send("save-all flush", flushed, FLUSH_TIMEOUT_MS, "that the world is saved");
+            await pauseSaving();
             return await work();
         } finally {
             await resumeSaving();
         }
+    } finally {
+        pausing = false;
+    }
+}
+
+/** the marker first, so a pause is never left without one */
+async function pauseSaving(): Promise<void> {
+    await fileApi.write(PAUSED_MARKER, new Date().toISOString(), PANEL_ID);
+    await send("save-off", savingOff, COMMAND_TIMEOUT_MS, "that saving is paused");
+    await send("save-all flush", flushed, FLUSH_TIMEOUT_MS, "that the world is saved");
+}
+
+/**
+ * The service's beforeBackup: a running server writes its world out and
+ * stops saving. Saving stays off while Paperboard stops this service and
+ * copies the server folder; the service that starts after the copy finds
+ * the marker and turns saving back on (recoverPausedSaving). When the
+ * server cannot pause, saving is turned back on and the backup refused.
+ */
+export async function pauseSavingForBackup(ctx: ServiceContext<GameServerState>): Promise<void> {
+    if (ctx.state.serverStatus === "offline") return;
+    if (ctx.state.serverStatus !== "online") throw new Error("The server is starting or stopping; back it up when it has finished");
+    if (pausing) throw new Error("A world download is copying the world; back up when it has finished");
+    pausing = true;
+    try {
+        await pauseSaving();
+    } catch (err) {
+        await resumeSaving();
+        throw err;
     } finally {
         pausing = false;
     }

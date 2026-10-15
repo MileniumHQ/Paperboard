@@ -13,6 +13,7 @@ const inRoot = (path: string) => nodePath.join(root, ...path.split("/"));
 const written: string[] = [];
 let running = true;
 let confirmations: Record<string, string> = {};
+let failOn: string | null = null;
 
 const filesFake = {
         getPath: async (path: string) => inRoot(path),
@@ -33,6 +34,7 @@ mock.module("@mileniumhq/paperapi", () => ({
         write: async (_id: string, text: string) => {
             const command = text.trim();
             written.push(command);
+            if (command === failOn) throw new Error("the server's console is gone");
             const reply = confirmations[command];
             if (reply) queueMicrotask(() => saving.observeSavingLine(reply));
         },
@@ -62,6 +64,7 @@ beforeEach(() => {
     fs.writeFileSync(inRoot("server.properties"), "level-name=world\n");
     written.length = 0;
     running = true;
+    failOn = null;
     confirmations = {
         "save-off": "[12:00:00 INFO]: Automatic saving is now disabled",
         "save-all flush": "[12:00:01 INFO]: Saved the game",
@@ -114,6 +117,28 @@ describe("world download and upload", () => {
         expect(written).toEqual(["save-on"]);
         expect(fs.existsSync(inRoot(".paperboard-saving-paused"))).toBe(false);
         expect(await saving.recoverPausedSaving()).toBe(false);
+    });
+
+    it("a backup leaves saving paused for the service that starts after it", async () => {
+        await saving.pauseSavingForBackup(online);
+        expect(written).toEqual(["save-off", "save-all flush"]);
+        expect(fs.existsSync(inRoot(".paperboard-saving-paused"))).toBe(true);
+        // the service Paperboard starts again after the copy
+        expect(await saving.recoverPausedSaving()).toBe(true);
+        expect(written).toEqual(["save-off", "save-all flush", "save-on"]);
+    });
+
+    it("a server that cannot save turns saving back on and refuses the backup", async () => {
+        failOn = "save-all flush";
+        await expect(saving.pauseSavingForBackup(online)).rejects.toThrow("console is gone");
+        expect(written).toEqual(["save-off", "save-all flush", "save-on"]);
+        expect(fs.existsSync(inRoot(".paperboard-saving-paused"))).toBe(false);
+    });
+
+    it("an offline server needs nothing, and one starting refuses", async () => {
+        await saving.pauseSavingForBackup(offline);
+        expect(written).toEqual([]);
+        await expect(saving.pauseSavingForBackup({ state: { serverStatus: "starting" } } as any)).rejects.toThrow("starting or stopping");
     });
 
     it("refuses a zip that reaches outside its world, writing nothing", async () => {
