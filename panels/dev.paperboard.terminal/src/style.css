@@ -10,3 +10,25 @@
     background-color: transparent !important;
     overflow-y: auto !important;
 }
+
+/* saved commands (SavedCommands.tsx) */
+.saved-command-row {
+    padding: var(--paper-uigap-half) var(--paper-uigap);
+    border-radius: var(--paper-border-radius-half);
+    background: var(--paper-surface-element);
+}
+
+.saved-command-label {
+    font-weight: var(--paper-weight-semibold);
+}
+
+.run-status {
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+.run-status.tone-success { color: var(--paper-success); }
+.run-status.tone-danger { color: var(--paper-danger); }
+.run-status.tone-warning { color: var(--paper-warning); }
+.run-status.tone-idle,
+.run-status.tone-running { color: var(--paper-text-subtle); }

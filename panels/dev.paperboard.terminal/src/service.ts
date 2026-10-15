@@ -9,6 +9,7 @@ import {
     type ServiceContext,
 } from "@mileniumhq/paperapi";
 import { SCROLLBACK_CHARS, applyScrollbackCap, readWholeLines } from "./lib/scrollback";
+import { SavedCommands, type CommandRun, type SavedCommand } from "./lib/savedCommands";
 
 // pass PANEL_ID explicitly, ambient scope resolves to last-imported panel
 const PANEL_ID = "dev.paperboard.terminal";
@@ -24,6 +25,10 @@ export interface TerminalServiceState {
     tabs: TerminalTab[];
     tabCount: number;
     activeTabId: string;
+    // saved commands and the last observed outcome of each
+    savedCommands: SavedCommand[];
+    commandRuns: Record<string, CommandRun>;
+    savedCommandsError: string;
 }
 
 type Ctx = ServiceContext<TerminalServiceState>;
@@ -266,6 +271,26 @@ export async function trashScrollback(id: string): Promise<void> {
     }
 }
 
+const SAVED_COMMANDS_FILE = "saved-commands.json";
+
+// publishes into whichever service context is live; null until onInit
+let savedCommandsCtx: Ctx | null = null;
+
+export const savedCommands = new SavedCommands({
+    load: () => config.get(PANEL_ID, SAVED_COMMANDS_FILE),
+    save: (doc) => config.set(doc, PANEL_ID, SAVED_COMMANDS_FILE),
+    // user-saved text through the platform one-shot shell, argv form: the
+    // command is one argument, never spliced into another shell string
+    start: async (procId, command) => {
+        const shell = resolveOneShotShell();
+        const res = await processApi.start({ id: procId, command: shell.command, args: [...shell.baseArgs, command] });
+        if (!res?.success) throw new Error("the daemon did not start the process");
+    },
+    onExit: (procId, callback) => processApi.onExit(procId, callback),
+    kill: (procId) => processApi.kill(procId),
+    publish: (view) => savedCommandsCtx?.setState(view),
+});
+
 // pure, exported for tests: every trashed scrollback is named after the
 // live file, never in its place
 export function trashScrollbackName(id: string, ts = Date.now()): string {
@@ -496,6 +521,65 @@ const actions = [
             }
         },
     }),
+
+    defineAction({
+        id: "list-saved-commands",
+        name: "List Saved Commands",
+        category: "Saved commands",
+        description: "Lists the commands saved in the Terminal panel",
+        template: "List saved commands",
+        inputs: {},
+        output: { type: "object", label: "Commands" },
+        icon: "bookmarks",
+        run: async () => savedCommands.view().savedCommands,
+    }),
+
+    defineAction({
+        id: "save-command",
+        name: "Save Command",
+        category: "Saved commands",
+        description: "Saves a shell command to run later from the panel or Home",
+        template: "Save command {command} as {label}",
+        inputs: {
+            label: { type: "string", label: "Name", placeholder: "Name" },
+            command: { type: "string", label: "Command", placeholder: "Command", required: true },
+        },
+        output: { type: "string", label: "Command ID" },
+        icon: "bookmark_add",
+        run: async (_ctx: Ctx, inputs: { label?: string; command?: string }) =>
+            savedCommands.add(inputs?.label, inputs?.command),
+    }),
+
+    defineAction({
+        id: "remove-saved-command",
+        name: "Remove Saved Command",
+        category: "Saved commands",
+        description: "Removes a saved command; widgets that run it show it as gone",
+        template: "Remove saved command {id}",
+        inputs: {
+            id: { type: "string", label: "Command ID", placeholder: "Command ID", required: true },
+        },
+        output: { type: "boolean", label: "Success" },
+        icon: "bookmark_remove",
+        run: async (_ctx: Ctx, inputs: { id?: string }) => {
+            await savedCommands.remove(inputs?.id);
+            return true;
+        },
+    }),
+
+    defineAction({
+        id: "run-saved-command",
+        name: "Run Saved Command",
+        category: "Saved commands",
+        description: "Starts a saved command; its exit status arrives when the process exits",
+        template: "Run saved command {id}",
+        inputs: {
+            id: { type: "string", label: "Command ID", placeholder: "Command ID", required: true },
+        },
+        output: { type: "object", label: "Run" },
+        icon: "play_arrow",
+        run: async (_ctx: Ctx, inputs: { id?: string }) => savedCommands.run(inputs?.id),
+    }),
 ];
 
 // event actions fire as events and start flows; they are not callable
@@ -517,15 +601,22 @@ export const terminalService = definePanelService({
         tabs: [] as TerminalTab[],
         tabCount: 0,
         activeTabId: "",
+        savedCommands: [] as SavedCommand[],
+        commandRuns: {} as Record<string, CommandRun>,
+        savedCommandsError: "",
     },
     categories: [
         { name: "Sessions", icon: "terminal", order: 1 },
         { name: "Input", icon: "keyboard", order: 2 },
         { name: "Output", icon: "output", order: 3 },
-        { name: "Events", icon: "bolt", order: 4 },
+        { name: "Saved commands", icon: "bookmarks", order: 4 },
+        { name: "Events", icon: "bolt", order: 5 },
     ],
     actions: [...actions, ...eventActions],
     async onInit(ctx: Ctx) {
+        savedCommandsCtx = ctx;
+        await savedCommands.init();
+
         try {
             const saved = await config.get<any>(PANEL_ID, "tabs.json");
             if (saved?.tabs && Array.isArray(saved.tabs)) {

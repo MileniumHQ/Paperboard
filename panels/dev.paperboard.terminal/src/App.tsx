@@ -22,6 +22,8 @@ import "./style.css";
 import TerminalComponent, { copySelection, pasteClipboard } from "./Terminal";
 import { actions as actionsApi, createPanelBridge } from "@mileniumhq/paperapi";
 import { onMount } from "solid-js";
+import SavedCommandsModal from "./SavedCommands";
+import type { CommandRun, SavedCommand } from "./lib/savedCommands";
 
 const TERMINAL_PANEL_ID = "dev.paperboard.terminal";
 
@@ -30,9 +32,17 @@ export interface TerminalTab {
     label: string;
 }
 
-const bridge = createPanelBridge<{ tabs: TerminalTab[]; activeTabId: string }>({
+interface TerminalBridgeState {
+    tabs: TerminalTab[];
+    activeTabId: string;
+    savedCommands: SavedCommand[];
+    commandRuns: Record<string, CommandRun>;
+    savedCommandsError: string;
+}
+
+const bridge = createPanelBridge<TerminalBridgeState>({
     panelId: TERMINAL_PANEL_ID,
-    defaultState: { tabs: [], activeTabId: "" },
+    defaultState: { tabs: [], activeTabId: "", savedCommands: [], commandRuns: {}, savedCommandsError: "" },
 });
 
 export default function App() {
@@ -52,7 +62,21 @@ export default function App() {
     const applyTabs = (next: unknown) => {
         if (Array.isArray(next)) setMirror("tabs", reconcile(next as TerminalTab[], { key: "id" }));
     };
-    bridge.onStateChange((patch) => applyTabs(patch.tabs));
+    const [saved, setSaved] = createStore<Pick<TerminalBridgeState, "savedCommands" | "commandRuns" | "savedCommandsError">>({
+        savedCommands: [],
+        commandRuns: {},
+        savedCommandsError: "",
+    });
+    const [isSavedOpen, setIsSavedOpen] = createSignal(false);
+    const applySaved = (full: TerminalBridgeState) => {
+        setSaved("savedCommands", reconcile(full.savedCommands ?? [], { key: "id" }));
+        setSaved("commandRuns", reconcile(full.commandRuns ?? {}));
+        setSaved("savedCommandsError", full.savedCommandsError ?? "");
+    };
+    bridge.onStateChange((patch, full) => {
+        applyTabs(patch.tabs);
+        applySaved(full);
+    });
 
     const hydrate = async () => {
         setHydration("loading");
@@ -220,6 +244,16 @@ export default function App() {
                         }}>
                         <PaperIcon>add</PaperIcon>
                     </PaperButton>
+                    <PaperButton size="tiny"
+                        icon
+                        onClick={() => setIsSavedOpen(true)}
+                        title="Saved commands"
+                        aria-label="Saved commands"
+                        style={{
+                            "margin-left": getVarCss("uigap-half"),
+                        }}>
+                        <PaperIcon>bookmarks</PaperIcon>
+                    </PaperButton>
                 </PaperList>
                 </Show>
 
@@ -312,6 +346,14 @@ export default function App() {
                     Paste
                 </PaperContextMenuItem>
             </PaperContextMenu>
+
+            <SavedCommandsModal
+                open={isSavedOpen()}
+                onClose={() => setIsSavedOpen(false)}
+                commands={saved.savedCommands}
+                runs={saved.commandRuns}
+                loadError={saved.savedCommandsError}
+            />
 
             <PaperModal
                 open={isRenameOpen()}
