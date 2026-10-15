@@ -404,6 +404,9 @@ export function MotdEditor(props: { open: boolean; onClose: () => void }) {
                         onBlur={() => setFocused(false)}
                         style={{
                             ...listBox(),
+                            padding: `${getVarCss("uigap-onefourth")} ${getVarCss("uigap-half")}`,
+                            border: `${getVarCss("border-width")} solid ${getVarCss("border")}`,
+                            "border-radius": getVarCss("border-radius-half"),
                             "min-height": `calc(2em * ${getVarCss("leading-normal")})`,
                             "overflow-x": "auto",
                             outline: focused() ? getVarCss("focus-ring") : "none",

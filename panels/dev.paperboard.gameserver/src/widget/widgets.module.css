@@ -37,7 +37,7 @@
     font-family: var(--paper-font-family-code);
 }
 
-/* the game's own dark list box, on the body's left edge */
+/* the MOTD, on the body's left edge */
 .motd {
     flex-shrink: 0;
 }

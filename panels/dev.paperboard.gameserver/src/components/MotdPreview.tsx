@@ -4,9 +4,7 @@ import { createEffect, createSignal, For, onCleanup, Show } from "solid-js";
 import { getVarCss } from "@mileniumhq/paperui";
 import { MOTD_COLOR_HEX, parseMotd, type MotdStyle } from "../core/motd";
 
-// paper-literal-ok: Minecraft's own list colours, not theme colours. The
-// Multiplayer list is dark in every theme, so the MOTD is shown that way
-const LIST_BACKGROUND = "#000000";
+// paper-literal-ok: Minecraft's own text colour, not a theme colour
 const LIST_GRAY = "#AAAAAA";
 const OBFUSCATED_GLYPHS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 const OBFUSCATED_FRAME_MS = 80;
@@ -23,10 +21,8 @@ function scramble(text: string): string {
     return out;
 }
 
+// the text sits on the panel's own surface, not the game's black list box
 export const listBox = () => ({
-    background: LIST_BACKGROUND,
-    padding: `${getVarCss("uigap-onefourth")} ${getVarCss("uigap-half")}`,
-    "border-radius": getVarCss("border-radius-half"),
     "font-family": getVarCss("font-family-code"),
     "line-height": getVarCss("leading-normal"),
     "white-space": "pre",
