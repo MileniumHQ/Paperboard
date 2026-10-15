@@ -4,6 +4,7 @@
 // every other agent sends, so a chat reads the same whichever agent replies.
 // Nothing here runs a process: service/codex.ts does.
 
+import { effortsFrom, withEfforts } from "./reasoning";
 import { NO_SANDBOX_MODE, NO_SANDBOX_MODE_ID } from "./permissionMode";
 import { MAX_AGENT_MODELS, type AcpContentBlock } from "./acp";
 import type { AgentMode, AgentModel, AgentPermissionOption, AgentToolKind } from "./types";
@@ -87,6 +88,10 @@ export function codexModelsFrom(response: unknown): { models: AgentModel[]; next
             id: m.id as string,
             name: (str(m.displayName) || (m.id as string)).slice(0, 200),
             ...(str(m.description) ? { description: (m.description as string).slice(0, 500) } : {}),
+            ...withEfforts(
+                effortsFrom((Array.isArray(m.supportedReasoningEfforts) ? m.supportedReasoningEfforts : []).map((e) => (isObject(e) ? e.reasoningEffort : undefined))),
+                m.defaultReasoningEffort,
+            ),
         }));
     const next = str(response.nextCursor);
     return { models, ...(next ? { next } : {}) };

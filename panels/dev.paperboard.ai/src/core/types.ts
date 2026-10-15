@@ -53,6 +53,9 @@ export interface InstalledModel {
     /** what the model is called when its id is not a name (an agent's "opus" is "Opus 5.5") */
     label?: string;
     description?: string;
+    /** an agent model's effort levels and default (AgentModel) */
+    efforts?: string[];
+    defaultEffort?: string;
     /** the connection that serves it ("ollama" or an endpoint id) */
     provider: string;
     sizeBytes: number;
@@ -235,6 +238,8 @@ export interface Conversation {
     sessionId?: string;
     /** the mode the user picked: an agent's own mode ids, or Local AI's (LOCAL_MODES) */
     mode?: string;
+    /** an agent chat's effort level, one its model offers; sent with every turn */
+    effort?: string;
     createdAt: number;
     updatedAt: number;
     messages: ChatMessage[];
@@ -339,6 +344,10 @@ export interface AgentModel {
     id: string;
     name: string;
     description?: string;
+    /** the effort levels the agent offers for this model, in its order (core/reasoning.ts) */
+    efforts?: string[];
+    /** the level the agent runs at when none is picked, when it says */
+    defaultEffort?: string;
 }
 
 export interface AgentSessionInfo {

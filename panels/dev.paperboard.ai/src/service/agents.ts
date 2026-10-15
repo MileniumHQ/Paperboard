@@ -83,6 +83,8 @@ export interface SessionRequest {
     mode?: string;
     /** the chat's model, applied when the agent offers it */
     model?: string;
+    /** the chat's effort level, one the model offers; applied from the next turn */
+    effort?: string;
 }
 
 export interface OpenedSession {

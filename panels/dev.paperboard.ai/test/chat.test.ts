@@ -48,6 +48,7 @@ function engine(): ChatEngine {
         store,
         settings: () => settings,
         capabilities: (m) => capabilities[m],
+        efforts: () => undefined,
         listActions: async () => {
             listed++;
             return actionRegistry;

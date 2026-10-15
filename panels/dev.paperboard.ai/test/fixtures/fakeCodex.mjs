@@ -16,7 +16,16 @@ const threadsFile = path.join(dir, "threads.txt");
 const known = () => (fs.existsSync(threadsFile) ? fs.readFileSync(threadsFile, "utf8").split("\n") : []);
 
 const MODELS = [
-    { id: "gpt-test", model: "gpt-test", displayName: "GPT-Test", description: "The default", hidden: false, isDefault: true },
+    {
+        id: "gpt-test",
+        model: "gpt-test",
+        displayName: "GPT-Test",
+        description: "The default",
+        hidden: false,
+        isDefault: true,
+        supportedReasoningEfforts: ["low", "medium", "high", "xhigh", "max", "ultra"].map((reasoningEffort) => ({ reasoningEffort, description: "" })),
+        defaultReasoningEffort: "medium",
+    },
     { id: "gpt-secret", model: "gpt-secret", displayName: "Hidden", description: "", hidden: true, isDefault: false },
     { id: "gpt-mini", model: "gpt-mini", displayName: "GPT-Mini", description: "Fast", hidden: false, isDefault: false },
 ];
@@ -69,6 +78,10 @@ async function turn(threadId, turnId, input) {
     }
     if (word === "model") {
         message(threadId, turnId, "m-1", [state.model ?? "none"]);
+        return complete(threadId, turnId);
+    }
+    if (word === "effort") {
+        message(threadId, turnId, "m-1", [state.effort ?? "none"]);
         return complete(threadId, turnId);
     }
     if (word === "policy") {
@@ -153,6 +166,7 @@ function onRequest(m) {
             const state = threads.get(p.threadId);
             if (!state) return fail(m.id, "thread not found");
             if (p.model) state.model = p.model;
+            if (p.effort) state.effort = p.effort;
             if (p.approvalPolicy) state.approvalPolicy = p.approvalPolicy;
             if (p.sandboxPolicy) state.sandbox = p.sandboxPolicy;
             const turnId = randomUUID();

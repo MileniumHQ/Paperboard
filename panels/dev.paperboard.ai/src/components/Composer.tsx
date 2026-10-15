@@ -9,7 +9,7 @@ import {
     useContextMenuState,
 } from "@mileniumhq/paperui";
 import { MAX_ATTACHMENTS } from "../core/attachments";
-import { REASONING_LABELS, REASONING_LEVELS, type ReasoningLevel } from "../core/reasoning";
+import { effortLabel, REASONING_LABELS, REASONING_LEVELS, type ReasoningLevel } from "../core/reasoning";
 import { commandSuggestions } from "../core/agents";
 import type { AgentCommand, AgentMode, Attachment } from "../core/types";
 import { attachmentsFromFiles } from "../lib/attachments";
@@ -38,6 +38,9 @@ export interface ComposerProps {
     placeholder?: string;
     /** shown above the message box (a coding agent's project) */
     toolbar?: JSX.Element;
+    /** a coding agent model's own thinking levels, shown instead of Local AI's; none picked runs the agent's default */
+    efforts?: { levels: string[]; current: string | undefined };
+    onEffortChange?: (level: string) => void;
     /** a coding agent chat's permission modes, picked next to the reasoning level */
     modes?: { modes: AgentMode[]; current: AgentMode | undefined };
     modeDisabled?: boolean;
@@ -59,6 +62,11 @@ export default function Composer(props: ComposerProps) {
     let input: HTMLTextAreaElement | undefined;
     let reasoningButton: HTMLButtonElement | undefined;
     let modeButton: HTMLButtonElement | undefined;
+    const levelName = () => {
+        if (!props.efforts) return REASONING_LABELS[props.reasoning];
+        const current = props.efforts.current;
+        return current ? effortLabel(current) : "Default";
+    };
     let picker: HTMLInputElement | undefined;
 
     const suggestions = () => commandSuggestions(text(), props.commands ?? []);
@@ -207,7 +215,7 @@ export default function Composer(props: ComposerProps) {
                         <span class={styles.modelName}>{props.model || "Select Model"}</span>
                     </button>
 
-                    <Show when={props.canThink}>
+                    <Show when={props.efforts || props.canThink}>
                         <button
                             ref={reasoningButton}
                             type="button"
@@ -215,10 +223,10 @@ export default function Composer(props: ComposerProps) {
                             disabled={props.disabled}
                             aria-haspopup="menu"
                             aria-expanded={reasoningMenu.isOpen()}
-                            aria-label={`Reasoning: ${REASONING_LABELS[props.reasoning]}`}
+                            aria-label={`Reasoning: ${levelName()}`}
                             onClick={() => reasoningMenu.openBelow(reasoningButton!)}
                         >
-                            <span>{REASONING_LABELS[props.reasoning]}</span>
+                            <span>{levelName()}</span>
                             <PaperIcon class={styles.pickerChevron}>expand_more</PaperIcon>
                         </button>
                     </Show>
@@ -304,20 +312,42 @@ export default function Composer(props: ComposerProps) {
                 placement={reasoningMenu.placement()}
                 onClose={reasoningMenu.close}
             >
-                <For each={REASONING_LEVELS}>
-                    {(level) => (
-                        <PaperContextMenuItem
-                            value={level}
-                            icon={props.reasoning === level ? "check" : undefined}
-                            onClick={() => {
-                                props.onReasoningChange(level);
-                                reasoningMenu.close();
-                            }}
-                        >
-                            {REASONING_LABELS[level]}
-                        </PaperContextMenuItem>
+                <Show
+                    when={props.efforts}
+                    fallback={
+                        <For each={REASONING_LEVELS}>
+                            {(level) => (
+                                <PaperContextMenuItem
+                                    value={level}
+                                    icon={props.reasoning === level ? "check" : undefined}
+                                    onClick={() => {
+                                        props.onReasoningChange(level);
+                                        reasoningMenu.close();
+                                    }}
+                                >
+                                    {REASONING_LABELS[level]}
+                                </PaperContextMenuItem>
+                            )}
+                        </For>
+                    }
+                >
+                    {(efforts) => (
+                        <For each={efforts().levels}>
+                            {(level) => (
+                                <PaperContextMenuItem
+                                    value={level}
+                                    icon={efforts().current === level ? "check" : undefined}
+                                    onClick={() => {
+                                        props.onEffortChange?.(level);
+                                        reasoningMenu.close();
+                                    }}
+                                >
+                                    {effortLabel(level)}
+                                </PaperContextMenuItem>
+                            )}
+                        </For>
                     )}
-                </For>
+                </Show>
             </PaperContextMenu>
 
             <PaperContextMenu

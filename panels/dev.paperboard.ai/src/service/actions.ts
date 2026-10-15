@@ -266,6 +266,7 @@ export function uiActions(app: AiApp): ActionDefinition[] {
                 return { messageId };
             }),
         ),
+        ui(UI_ACTION_IDS.setChatEffort, "Set thinking level", (i) => ready(() => app.chat.setEffort(str(i.id, "id", 64), str(i.effort, "effort", 16)))),
         ui(UI_ACTION_IDS.stopGeneration, "Stop reply", (i) => ready(() => app.chat.stop(str(i.id, "id", 64)))),
         ui(UI_ACTION_IDS.resolveApproval, "Answer approval", (i) =>
             ready(() =>

@@ -67,7 +67,7 @@ const logged = (name: string) =>
               .map((l) => JSON.parse(l))
         : [];
 const requests = (method: string) => logged("requests.log").filter((r: { method: string }) => r.method === method);
-const open = (conversationId: string, extra: { sessionId?: string; mode?: string; model?: string } = {}) => hub.openSession({ conversationId, connection: c, cwd: project, ...extra });
+const open = (conversationId: string, extra: { sessionId?: string; mode?: string; model?: string; effort?: string } = {}) => hub.openSession({ conversationId, connection: c, cwd: project, ...extra });
 const send = (sessionId: string, t: string, turn = collect(), signal = new AbortController().signal) => hub.prompt(c, sessionId, text(t), turn.handlers, signal);
 
 async function until(cond: () => boolean, ms = 3000): Promise<void> {
@@ -196,6 +196,18 @@ describe("Codex bridge", () => {
         await expect(hub.setMode(c, "c1", "yolo")).rejects.toThrow('no mode "yolo"');
     });
 
+    it("sends the chat's thinking level with every turn, and a changed one from the next", async () => {
+        const opened = await open("c1", { model: "gpt-test", effort: "xhigh" });
+        const turn = collect();
+        await send(opened.sessionId, "effort", turn);
+        expect(turn.text()).toBe("xhigh");
+        expect(requests("turn/start")[0].params.effort).toBe("xhigh");
+        await open("c1", { model: "gpt-test", effort: "low" });
+        const again = collect();
+        await send(opened.sessionId, "effort", again);
+        expect(again.text()).toBe("low");
+    });
+
     it("runs No sandbox with nothing asked and nothing fenced", async () => {
         const opened = await open("c1", { mode: "no-sandbox" });
         expect(requests("thread/start")[0].params).toMatchObject({ approvalPolicy: "never", sandbox: "danger-full-access" });
@@ -287,7 +299,13 @@ describe("Codex bridge", () => {
         const told: unknown[] = [];
         hub = new AgentHub({ ...makeHubDeps(), onModels: (_id, models) => told.push(models) });
         const offered = [
-            { id: "gpt-test", name: "GPT-Test", description: "The default" },
+            {
+                id: "gpt-test",
+                name: "GPT-Test",
+                description: "The default",
+                efforts: ["low", "medium", "high", "xhigh", "max", "ultra"],
+                defaultEffort: "medium",
+            },
             { id: "gpt-mini", name: "GPT-Mini", description: "Fast" },
         ];
         expect(await hub.models(c)).toEqual(offered);

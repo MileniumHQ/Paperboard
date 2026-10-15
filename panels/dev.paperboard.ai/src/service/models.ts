@@ -57,6 +57,12 @@ export class ModelManager {
         return this.find(model, provider)?.capabilities;
     }
 
+    /** an agent model's effort levels and default, as the agent listed them */
+    efforts(model: string, provider?: string): { efforts?: string[]; defaultEffort?: string } | undefined {
+        const m = this.find(model, provider);
+        return m ? { ...(m.efforts ? { efforts: m.efforts } : {}), ...(m.defaultEffort ? { defaultEffort: m.defaultEffort } : {}) } : undefined;
+    }
+
     architecture(model: string, provider?: string): ModelArchitecture | null {
         return this.find(model, provider)?.architecture ?? null;
     }
@@ -125,6 +131,7 @@ export class ModelManager {
                     modifiedAt: tag.modified_at,
                     ...(tag.label ? { label: tag.label } : {}),
                     ...(tag.description ? { description: tag.description } : {}),
+                    ...(tag.efforts ? { efforts: tag.efforts, ...(tag.defaultEffort ? { defaultEffort: tag.defaultEffort } : {}) } : {}),
                     ...(architecture ? { architecture } : {}),
                 });
             }

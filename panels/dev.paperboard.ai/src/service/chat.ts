@@ -27,7 +27,7 @@ import { applyToolUpdate, contentText, planFrom, promptBlocks, toolRecordFrom } 
 import { replyText } from "../core/chain";
 import { isProjectTool } from "../core/projectTools";
 import { validateAttachments } from "../core/attachments";
-import { reasoningToThink, type ReasoningLevel } from "../core/reasoning";
+import { chatEffort, reasoningToThink, type ReasoningLevel } from "../core/reasoning";
 import { autoAllowOption, isNoSandboxMode } from "../core/permissionMode";
 import {
     APP_ACTION_TOOLS,
@@ -69,6 +69,8 @@ import type { ChatClient } from "./provider";
 import { ProjectFiles, type PreparedChange } from "./projectFiles";
 import type { ConversationStore } from "./store";
 
+const withEffort = (effort: string | undefined) => (effort ? { effort } : {});
+
 export const MAX_ACTIVE_REPLIES = 3;
 export const MAX_CALLS_PER_ROUND = 8;
 export const MAX_REPLY_CHARS = 200_000;
@@ -88,6 +90,8 @@ export interface ChatDeps {
     store: ConversationStore;
     settings: () => Settings;
     capabilities: (model: string, provider?: string) => string[] | undefined;
+    /** an agent model's effort levels and default, as listed */
+    efforts: (model: string, provider?: string) => { efforts?: string[]; defaultEffort?: string } | undefined;
     listActions: () => Promise<RegistryAction[]>;
     panelNames: () => Promise<Record<string, string>>;
     callAction: (panelId: string, action: string, args: Record<string, unknown>) => Promise<unknown>;
@@ -200,6 +204,23 @@ export class ChatEngine {
                 if (allow) w.choose(allow);
             }
         }
+    }
+
+    /**
+     * Sets an agent chat's effort level, one its model offers; the agent gets
+     * it with the chat's next turn. A replying chat changes on the reply's
+     * working copy, so the reply's next save keeps it.
+     */
+    async setEffort(conversationId: string, effort: string): Promise<void> {
+        const conversation = this.active.get(conversationId)?.conversation ?? (await this.deps.store.get(conversationId));
+        const provider = conversation.provider ?? (conversation.model ? this.deps.providerOf(conversation.model) : undefined);
+        const agent = provider ? this.deps.agentConnection(provider) : undefined;
+        if (!agent) throw new Error("Only a coding agent's chat has its own thinking level.");
+        if (!this.deps.efforts(conversation.model, provider)?.efforts?.includes(effort)) {
+            throw new Error(`${agent.label} doesn't offer that thinking level for this model.`);
+        }
+        conversation.effort = effort;
+        this.deps.onSummaries(await this.deps.store.save(conversation));
     }
 
     async create(model: string, provider?: string, project?: string): Promise<Conversation> {
@@ -674,6 +695,8 @@ export class ChatEngine {
                 ...(conversation.sessionId ? { sessionId: conversation.sessionId } : {}),
                 ...(conversation.mode ? { mode: conversation.mode } : {}),
                 ...(conversation.model ? { model: conversation.model } : {}),
+                // a level the chat's model no longer offers gives way to its default
+                ...withEffort(chatEffort(deps.efforts(conversation.model, connection.id), conversation.effort)),
             });
             if (!opened.resumed && hadHistory) {
                 first.notice = `${label} started a new session here: it doesn't remember this chat's earlier messages.`;

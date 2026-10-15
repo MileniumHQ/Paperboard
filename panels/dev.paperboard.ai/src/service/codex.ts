@@ -63,6 +63,8 @@ interface Thread {
     model?: string;
     /** the mode changed since the thread's last turn */
     modeChanged: boolean;
+    /** the chat's effort level; sent with every turn */
+    effort?: string;
 }
 
 interface Turn {
@@ -348,6 +350,7 @@ export class CodexAgent implements AgentRunner {
         const live = this.threads.get(request.conversationId);
         if (live && live.cwd === request.cwd) {
             live.model = this.offered(request.model) ?? live.model;
+            live.effort = request.effort;
             return { sessionId: live.threadId, resumed: true, capabilities: CAPABILITIES };
         }
         if (live) this.forget(request.conversationId);
@@ -371,7 +374,7 @@ export class CodexAgent implements AgentRunner {
         if (!resumed) result = await peer.request("thread/start", settings);
         const thread = isObject(result) && isObject(result.thread) ? result.thread : {};
         if (typeof thread.id !== "string" || !thread.id) throw new Error(`${this.label} did not start a thread.`);
-        this.track(request.conversationId, { threadId: thread.id, cwd: request.cwd, mode, ...(model ? { model } : {}), modeChanged: false });
+        this.track(request.conversationId, { threadId: thread.id, cwd: request.cwd, mode, ...(model ? { model } : {}), ...(request.effort ? { effort: request.effort } : {}), modeChanged: false });
         this.patchInfo(request.conversationId, { modes: [...CODEX_MODES], mode, commands: [] });
         this.scheduleIdle();
         return { sessionId: thread.id, resumed, capabilities: CAPABILITIES };
@@ -421,6 +424,7 @@ export class CodexAgent implements AgentRunner {
                 threadId: thread.threadId,
                 input: codexInput(blocks),
                 ...(thread.model ? { model: thread.model } : {}),
+                ...(thread.effort ? { effort: thread.effort } : {}),
                 ...(thread.modeChanged ? { approvalPolicy: policy.approvalPolicy, sandboxPolicy: policy.sandboxPolicy } : {}),
             });
             thread.modeChanged = false;

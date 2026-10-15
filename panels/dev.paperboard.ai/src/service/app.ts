@@ -41,7 +41,7 @@ import {
 import { AgentHub, type AgentProcessHost } from "./agents";
 import { findExecutable, type Launch } from "./executable";
 import type { ModelClient } from "./provider";
-import { isReasoningLevel } from "../core/reasoning";
+import { effortsFrom, isReasoningLevel, withEfforts } from "../core/reasoning";
 import { quickAskTarget } from "../core/widgets";
 import {
     addFavorite,
@@ -259,7 +259,10 @@ export class AiApp {
     private savedAgentModels(connectionId: string): AgentModel[] | undefined {
         const saved = this.stored.agentModels?.[connectionId];
         if (!Array.isArray(saved)) return undefined;
-        return saved.filter((m) => typeof m?.id === "string" && typeof m.name === "string").slice(0, MAX_AGENT_MODELS);
+        return saved
+            .filter((m) => typeof m?.id === "string" && typeof m.name === "string")
+            .slice(0, MAX_AGENT_MODELS)
+            .map(({ efforts, defaultEffort, ...m }) => ({ ...m, ...withEfforts(effortsFrom(efforts), defaultEffort) }));
     }
 
     /** An agent told its models (opening a session, or listing): saved, then listed. */
@@ -285,7 +288,13 @@ export class AiApp {
                 await this.resolveAgent(connection);
                 const models = this.savedAgentModels(connection.id) ?? (await this.agents.models(connection));
                 if (models.length === 0) return [{ name: agentModelName(connection), size: 0 }];
-                return models.map((m) => ({ name: m.id, size: 0, label: m.name, ...(m.description ? { description: m.description } : {}) }));
+                return models.map((m) => ({
+                    name: m.id,
+                    size: 0,
+                    label: m.name,
+                    ...(m.description ? { description: m.description } : {}),
+                    ...withEfforts(m.efforts, m.defaultEffort),
+                }));
             },
             show: async () => ({ capabilities: ["agent"] }),
             chat: async () => {
@@ -587,6 +596,7 @@ export class AiApp {
             store: this.store,
             settings: () => this.ctx.state.settings,
             capabilities: (model, provider) => this.models.capabilities(model, provider),
+            efforts: (model, provider) => this.models.efforts(model, provider),
             listActions: () => actionsApi.list() as Promise<RegistryAction[]>,
             panelNames: () => this.panelNames(),
             callAction: (panelId, action, args) => actionsApi.call(panelId, action, args),

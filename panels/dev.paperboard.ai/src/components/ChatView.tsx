@@ -4,6 +4,7 @@ import { actionsApi } from "@mileniumhq/paperapi";
 import { UI_ACTION_IDS } from "../contract";
 import { modePicker } from "../core/agents";
 import { localModePicker } from "../core/projectTools";
+import { chatEffort } from "../core/reasoning";
 import { connectionLabel, OLLAMA_PROVIDER, OLLAMA_PROVIDER_ID, unlistedModelReason } from "../core/providers";
 import type { ReasoningLevel } from "../core/reasoning";
 import type { Attachment, Conversation } from "../core/types";
@@ -14,6 +15,7 @@ import {
     openConversation,
     openError,
     renameOpen,
+    setOpenEffort,
     setOpenMode,
     setOpenModel,
     state,
@@ -143,6 +145,24 @@ export default function ChatView() {
         return localConnection() && acts ? localModePicker(c.mode, Boolean(project())) : undefined;
     };
     const [confirmingNoSandbox, setConfirmingNoSandbox] = createSignal<string>();
+    // an agent model's own thinking levels; a draft's pick is saved once the chat is
+    const [draftEffort, setDraftEffort] = createSignal<string>();
+    const efforts = () => {
+        const m = agentConnection() ? installed() : undefined;
+        if (!m?.efforts) return undefined;
+        return { levels: m.efforts, current: chatEffort(m, conversation() ? conversation()!.effort : draftEffort()) };
+    };
+    const changeEffort = async (effort: string) => {
+        const id = conversation()?.id;
+        if (!id) return setDraftEffort(effort);
+        setError("");
+        try {
+            await call(UI_ACTION_IDS.setChatEffort, { id, effort });
+            if (conversation()?.id === id) setOpenEffort(effort);
+        } catch (err) {
+            setError(errorText(err));
+        }
+    };
     const changeMode = async (mode: string) => {
         const id = conversation()?.id;
         if (!id) return;
@@ -251,6 +271,12 @@ export default function ChatView() {
                 id = c.id;
                 const chosen = draftProject();
                 setDraftProject(undefined);
+                const effort = draftEffort();
+                setDraftEffort(undefined);
+                if (effort && agentConnection()) {
+                    await call(UI_ACTION_IDS.setChatEffort, { id, effort });
+                    setOpenEffort(effort);
+                }
                 if ((agentConnection() || localConnection()) && chosen && chosen !== c.project) await call(UI_ACTION_IDS.setConversationProject, { id, project: chosen });
             }
             scroll.stick();
@@ -418,6 +444,8 @@ export default function ChatView() {
                     disabledReason={disabledReason()}
                     generating={generating()}
                     canThink={Boolean(installed()?.capabilities.includes("thinking"))}
+                    efforts={efforts()}
+                    onEffortChange={(effort) => void changeEffort(effort)}
                     model={modelName()}
                     agent={agentConnection()?.agent}
                     modelReady={Boolean(installed())}

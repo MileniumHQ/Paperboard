@@ -4,6 +4,7 @@
 // every other agent sends, so a chat reads the same whichever agent replies.
 // Nothing here runs a process: service/claudeCode.ts does.
 
+import { effortsFrom, withEfforts } from "./reasoning";
 import { commandsFrom, MAX_AGENT_MODELS, type AcpContentBlock } from "./acp";
 import { CLAUDE_NO_SANDBOX_MODE } from "./permissionMode";
 import type { AgentCommand, AgentMode, AgentModel, AgentPermissionOption, AgentToolKind } from "./types";
@@ -74,6 +75,7 @@ export function claudeInitFrom(response: unknown): ClaudeInit {
             id: m.value as string,
             name: (str(m.displayName) || (m.value as string)).slice(0, 200),
             ...(str(m.description) ? { description: (m.description as string).slice(0, 500) } : {}),
+            ...withEfforts(m.supportsEffort === true ? effortsFrom(m.supportedEffortLevels) : undefined),
         }));
     const mode = str(response.current_permission_mode);
     const version = str(response.claude_code_version)?.slice(0, 50);

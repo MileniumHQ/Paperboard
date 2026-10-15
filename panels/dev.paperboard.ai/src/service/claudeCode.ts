@@ -70,6 +70,8 @@ class ClaudeProcess {
     lastUsed = Date.now();
     /** the model this process was switched to (it starts on Claude Code's default) */
     model: string | null = null;
+    /** the effort level set over control (none: Claude Code's own default) */
+    effort: string | null = null;
 
     constructor(
         private readonly owner: ClaudeCodeAgent,
@@ -431,6 +433,16 @@ export class ClaudeCodeAgent implements AgentRunner {
         process.model = model;
     }
 
+    /**
+     * Sets the process's effort level, live (Claude Code's apply_flag_settings);
+     * the chat's level is checked against its model's when the message is sent.
+     */
+    private async applyEffort(process: ClaudeProcess, effort: string | undefined): Promise<void> {
+        if (!effort || process.effort === effort) return;
+        await process.request("apply_flag_settings", { settings: { effortLevel: effort } });
+        process.effort = effort;
+    }
+
     /** The models Claude Code offers; the first ask starts it once without a session. */
     models(): Promise<AgentModel[]> {
         if (this.modelList) return Promise.resolve(this.modelList);
@@ -461,6 +473,7 @@ export class ClaudeCodeAgent implements AgentRunner {
         const live = this.live(request.conversationId);
         if (live && live.cwd === request.cwd) {
             await this.applyModel(live, request.model);
+            await this.applyEffort(live, request.effort);
             return { sessionId: live.sessionId!, resumed: true, capabilities: CAPABILITIES };
         }
         if (live) await live.stop();
@@ -481,6 +494,7 @@ export class ClaudeCodeAgent implements AgentRunner {
         started ??= await this.startIn(launch, { id: randomUUID(), resume: false }, request.conversationId, request.cwd, mode);
         this.patchInfo(request.conversationId, { modes: [...CLAUDE_MODES], mode: started.init.mode ?? mode ?? "default", commands: started.init.commands });
         await this.applyModel(started.process, request.model);
+        await this.applyEffort(started.process, request.effort);
         return { sessionId: started.process.sessionId!, resumed, capabilities: CAPABILITIES };
     }
 

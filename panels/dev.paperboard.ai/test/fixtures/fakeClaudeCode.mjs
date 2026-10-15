@@ -24,8 +24,15 @@ if (flag("--session-id")) fs.appendFileSync(sessionsFile, `${sessionId}\n`);
 
 let nextRequest = 1;
 let model = "default";
+let effort = "default";
 const MODELS = [
-    { value: "default", displayName: "Default (recommended)", description: "Opus · Best for everyday tasks" },
+    {
+        value: "default",
+        displayName: "Default (recommended)",
+        description: "Opus · Best for everyday tasks",
+        supportsEffort: true,
+        supportedEffortLevels: ["low", "medium", "high", "xhigh", "max"],
+    },
     { value: "haiku", displayName: "Haiku", description: "Fastest" },
 ];
 const pending = new Map();
@@ -55,6 +62,10 @@ async function onUser(message) {
     }
     if (word === "model") {
         text("m1", [model]);
+        return result({});
+    }
+    if (word === "effort") {
+        text("m1", [effort]);
         return result({});
     }
     if (word === "echo") {
@@ -109,6 +120,11 @@ readline.createInterface({ input: process.stdin }).on("line", (line) => {
         if (m.request.subtype === "set_model") {
             if (!MODELS.some((x) => x.value === m.request.model)) return send({ type: "control_response", response: { subtype: "error", request_id: m.request_id, error: `Model '${m.request.model}' not found` } });
             model = m.request.model;
+            return ok();
+        }
+        if (m.request.subtype === "apply_flag_settings") {
+            // the real one ignores a level it doesn't know, and says nothing
+            if (typeof m.request.settings?.effortLevel === "string") effort = m.request.settings.effortLevel;
             return ok();
         }
         if (m.request.subtype === "interrupt") {

@@ -13,7 +13,7 @@ export interface ChatClient {
 }
 
 /** A listed model; an agent's also carries the name and description it gives it. */
-export type ListedModel = TagEntry & { label?: string; description?: string };
+export type ListedModel = TagEntry & { label?: string; description?: string; efforts?: string[]; defaultEffort?: string };
 
 export interface ModelClient extends ChatClient {
     tags(): Promise<ListedModel[]>;

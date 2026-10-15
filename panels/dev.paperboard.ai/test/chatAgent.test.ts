@@ -6,7 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import { ChatEngine } from "../src/service/chat";
 import { ConversationStore } from "../src/service/store";
-import { AgentHub } from "../src/service/agents";
+import { AgentHub, type SessionRequest } from "../src/service/agents";
 import type { Connection } from "../src/core/providers";
 import type { AgentSessionInfo, AssistantMessage, PendingApproval, Settings } from "../src/core/types";
 import { DEFAULT_SETTINGS } from "../src/core/types";
@@ -24,7 +24,10 @@ let finished: { text: string }[];
 let infos: Record<string, AgentSessionInfo | null>;
 const settings: Settings = { ...DEFAULT_SETTINGS };
 
-function engine(): ChatEngine {
+/** the fake agent's model, as an agent that lists thinking levels would list it */
+const FAKE_EFFORTS = { efforts: ["low", "high"], defaultEffort: "low" };
+
+function engine(agents: Pick<AgentHub, "openSession" | "prompt" | "forget"> = hub): ChatEngine {
     return new ChatEngine({
         ownPanelId: "dev.paperboard.ai",
         clientFor: () => {
@@ -34,6 +37,7 @@ function engine(): ChatEngine {
         store,
         settings: () => settings,
         capabilities: () => undefined,
+        efforts: (model) => (model === "Fake" ? FAKE_EFFORTS : undefined),
         listActions: async () => [],
         panelNames: async () => ({}),
         callAction: async () => undefined,
@@ -50,7 +54,7 @@ function engine(): ChatEngine {
         onReplyFinished: (p) => finished.push(p),
         agentConnection: (id) => (id === AGENT_CONNECTION.id ? AGENT_CONNECTION : undefined),
         projectPath: async (project) => (project === "work" ? dir : Promise.reject(new Error(`The project "${project}" no longer exists.`))),
-        agents: hub,
+        agents,
         agentMode: (id) => infos[id]?.mode,
     });
 }
@@ -97,6 +101,27 @@ describe("agent chats", () => {
         const c = await chat.create("Fake", AGENT_CONNECTION.id);
         await expect(chat.send(c.id, "hello")).rejects.toThrow("Choose a project for Fake to work in first.");
         expect(host.starts).toHaveLength(0);
+    });
+
+    it("keeps the chat's thinking level and opens every turn with it", async () => {
+        const opened: SessionRequest[] = [];
+        const chat = engine({
+            openSession: (request) => {
+                opened.push(request);
+                return hub.openSession(request);
+            },
+            prompt: (...a) => hub.prompt(...a),
+            forget: (...a) => hub.forget(...a),
+        });
+        const c = await chat.create("Fake", AGENT_CONNECTION.id, "work");
+        // none picked: the model's default
+        await (await chat.send(c.id, "hello")).done;
+        expect(opened[0]!.effort).toBe("low");
+        await expect(chat.setEffort(c.id, "ultra")).rejects.toThrow("doesn't offer that thinking level");
+        await chat.setEffort(c.id, "high");
+        expect((await store.get(c.id)).effort).toBe("high");
+        await (await chat.send(c.id, "hello")).done;
+        expect(opened[1]!.effort).toBe("high");
     });
 
     it("streams the agent's reply into the chat and keeps its session", async () => {

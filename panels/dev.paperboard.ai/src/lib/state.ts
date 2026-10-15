@@ -146,6 +146,10 @@ export function setOpenMode(mode: string): void {
     if (conversation.current) setConversation("current", "mode", mode);
 }
 
+export function setOpenEffort(effort: string): void {
+    if (conversation.current) setConversation("current", "effort", effort);
+}
+
 export function setOpenModel(model: string, provider?: string): void {
     if (!conversation.current) return;
     setConversation("current", "model", model);

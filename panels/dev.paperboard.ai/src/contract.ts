@@ -36,6 +36,7 @@ export const UI_ACTION_IDS = {
     setConversationProject: "ui-set-conversation-project",
     createProject: "ui-create-project",
     setAgentMode: "ui-set-agent-mode",
+    setChatEffort: "ui-set-chat-effort",
     pullModel: "ui-pull-model",
     cancelPull: "ui-cancel-pull",
     deleteModel: "ui-delete-model",

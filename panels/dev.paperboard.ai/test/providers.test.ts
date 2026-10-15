@@ -1,3 +1,4 @@
+import { chatEffort, effortsFrom, MAX_EFFORTS, withEfforts } from "../src/core/reasoning";
 import { describe, expect, it } from "bun:test";
 import { apiKeySecretName, connectionLabel, credentialsAllowed, definitionOf, endpointLabel, normalizeBaseUrl, unlistedModelReason } from "../src/core/providers";
 import { LOCAL_MODES, localModePicker } from "../src/core/projectTools";
@@ -187,5 +188,24 @@ describe("Local AI mode picker", () => {
     it("offers Accept edits only in a project, where there are files to edit", () => {
         expect(localModePicker(undefined, false).modes.map((m) => m.id)).toEqual(["ask", "no-sandbox"]);
         expect(localModePicker("accept-edits", false).current?.id).toBe("ask");
+    });
+});
+
+describe("agent thinking levels", () => {
+    it("keeps an agent's own levels, bounded, and a default only when it is one of them", () => {
+        expect(effortsFrom(["low", "high", "low", "Bad Level", 3, "ultra"])).toEqual(["low", "high", "ultra"]);
+        expect(effortsFrom([])).toBeUndefined();
+        expect(effortsFrom(Array.from({ length: 20 }, (_, i) => `l${"x".repeat(i % 5)}${String.fromCharCode(97 + i)}`))).toHaveLength(MAX_EFFORTS);
+        expect(withEfforts(["low", "high"], "medium")).toEqual({ efforts: ["low", "high"] });
+        expect(withEfforts(undefined, "low")).toEqual({});
+    });
+
+    it("runs a chat at its pick while the model offers it, else at the model's default", () => {
+        const model = { efforts: ["low", "medium", "max"], defaultEffort: "medium" };
+        expect(chatEffort(model, "max")).toBe("max");
+        expect(chatEffort(model, "ultra")).toBe("medium");
+        expect(chatEffort(model, undefined)).toBe("medium");
+        expect(chatEffort({ efforts: ["low"] }, undefined)).toBeUndefined();
+        expect(chatEffort({}, "low")).toBeUndefined();
     });
 });

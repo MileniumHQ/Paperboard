@@ -64,7 +64,8 @@ const starts = () =>
         .trim()
         .split("\n")
         .map((l) => JSON.parse(l) as { flags: string[]; cwd: string });
-const open = (conversationId: string, extra: { sessionId?: string; mode?: string; model?: string } = {}) => hub.openSession({ conversationId, connection: c, cwd: dir, ...extra });
+const open = (conversationId: string, extra: { sessionId?: string; mode?: string; model?: string; effort?: string } = {}) =>
+    hub.openSession({ conversationId, connection: c, cwd: dir, ...extra });
 
 async function until(cond: () => boolean, ms = 3000): Promise<void> {
     const start = Date.now();
@@ -204,7 +205,12 @@ describe("Claude Code bridge", () => {
         const told: unknown[] = [];
         hub = new AgentHub({ ...makeHubDeps(), onModels: (id, models) => told.push(models) });
         const offered = [
-            { id: "default", name: "Default (recommended)", description: "Opus · Best for everyday tasks" },
+            {
+                id: "default",
+                name: "Default (recommended)",
+                description: "Opus · Best for everyday tasks",
+                efforts: ["low", "medium", "high", "xhigh", "max"],
+            },
             { id: "haiku", name: "Haiku", description: "Fastest" },
         ];
         expect(await hub.models(c)).toEqual(offered);
@@ -223,6 +229,19 @@ describe("Claude Code bridge", () => {
         // a chat made before models were listed names the agent, which is not a model
         await open("c1", { model: "Claude Code" });
         expect(told).toHaveLength(1);
+    });
+
+    it("sets the chat's thinking level live, on the running session", async () => {
+        const opened = await open("c1", { effort: "max" });
+        const turn = collect();
+        await hub.prompt(c, opened.sessionId, text("effort"), turn.handlers, new AbortController().signal);
+        expect(turn.text()).toBe("max");
+        await open("c1", { effort: "low" });
+        const again = collect();
+        await hub.prompt(c, opened.sessionId, text("effort"), again.handlers, new AbortController().signal);
+        expect(again.text()).toBe("low");
+        // switched on the same process, not by starting another
+        expect(starts()).toHaveLength(1);
     });
 
     it("applies and switches the chat's permission mode", async () => {
