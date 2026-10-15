@@ -14,6 +14,7 @@ export default function PaperInputDoc() {
             <PaperText preset="body">
                 PaperInput renders a text field with optional leading icons and built-in validation states.
                 Reach for PaperInput when gathering user text, searching lists, or configuring numeric properties.
+                Set label to name the field in a notch of its top border.
                 Set multiline to render a textarea instead, keeping every other prop unchanged.
                 The field displays custom focus rings, error outlines, and compact dimension variants.
             </PaperText>
@@ -61,6 +62,12 @@ export function Example() {
                         </tr>
                     </thead>
                     <tbody>
+                        <tr>
+                            <td><PaperCode>label</PaperCode></td>
+                            <td><PaperCode>string</PaperCode></td>
+                            <td><PaperCode>undefined</PaperCode></td>
+                            <td>The field's name, shown in a notch of the top border. It labels the field for assistive technology.</td>
+                        </tr>
                         <tr>
                             <td><PaperCode>icon</PaperCode></td>
                             <td><PaperCode>JSX.Element | string</PaperCode></td>
@@ -118,6 +125,35 @@ export function Example() {
                     </tbody>
                 </PaperTable>
 
+            <PaperText preset="subheader" id="labels">Labels</PaperText>
+            <PaperText preset="body">
+                Pass label to name a field in a form. The name sits in a gap of the top border and stays visible while the user types, unlike a placeholder.
+                PaperInput renders a real label element tied to the field, so the label is the field's accessible name. Keep placeholder for an example value.
+                A labelled field keeps the id you pass, and generates one when you pass none.
+            </PaperText>
+            <PaperCode block language="tsx">
+{`import { PaperCard, PaperFlex, PaperInput } from "@mileniumhq/paperui";
+
+export function Example() {
+    return (
+        <PaperCard padding="double" surface="front">
+            <PaperFlex direction="column" gap="full">
+                <PaperInput label="Bucket" placeholder="my-backups" fullWidth />
+                <PaperInput label="Region" placeholder="us-east-1" compact />
+                <PaperInput label="Notes" multiline rows={3} fullWidth />
+            </PaperFlex>
+        </PaperCard>
+    );
+}`}
+            </PaperCode>
+            <PaperCard padding="double" surface="front">
+                <PaperFlex direction="column" gap="full">
+                    <PaperInput label="Bucket" placeholder="my-backups" fullWidth />
+                    <PaperInput label="Region" placeholder="us-east-1" compact />
+                    <PaperInput label="Notes" multiline rows={3} fullWidth />
+                </PaperFlex>
+            </PaperCard>
+
             <PaperText preset="subheader" id="multiline">Multiline</PaperText>
             <PaperText preset="body">
                 Set multiline to collect text that spans more than one line.
@@ -150,7 +186,8 @@ export function Example() {
             <PaperText preset="subheader" id="behavior">Behavior</PaperText>
             <PaperText preset="body">
                 When validation fails, data-invalid is set to true and aria-invalid is added to the native field element.
-                Focus states project an outer focus ring using var(--paper-primary).
+                A focused field grows an underline in var(--paper-primary). A labelled field instead draws its whole border and its label in var(--paper-primary).
+                A labelled field adds half a label line of space above itself, so the label does not overlap the content above it.
                 A multiline field fills the width of its parent, because a textarea has no natural single-line width to fit.
                 Attributes that only exist on an input, such as type, min, max, step, pattern and size, have no effect in multiline mode.
             </PaperText>
