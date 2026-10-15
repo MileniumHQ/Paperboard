@@ -489,6 +489,45 @@ function badGateway(res: http.ServerResponse): void {
     res.end("Destination must stay under /dav/ on this server");
 }
 
+function entryId(p: string): string | null {
+    try {
+        const st = fs.statSync(p, { bigint: true });
+        return `${st.dev}:${st.ino}`;
+    } catch (err) {
+        if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
+        throw err;
+    }
+}
+
+/** ids of a path and each ancestor, compared by identity so case variants and links cannot disguise a match */
+function ancestryIds(p: string): Set<string> {
+    const ids = new Set<string>();
+    for (let cur = p; ; cur = path.dirname(cur)) {
+        const id = entryId(cur);
+        if (id) ids.add(id);
+        if (path.dirname(cur) === cur) return ids;
+    }
+}
+
+/**
+ * How a COPY/MOVE destination relates to its source, by file identity:
+ * "same-entry" is the source itself under the same or a case-variant name,
+ * "contained" is the source's ancestor or a path inside it. A different name
+ * for the same inode (a hard link) is an ordinary destination.
+ */
+export function davOverlap(source: string, dest: string, destExists: boolean): "same-entry" | "contained" | "none" {
+    const sourceId = entryId(source);
+    if (!sourceId) return "none";
+    const destId = destExists ? entryId(dest) : null;
+    if (destId === sourceId) {
+        const sameParent = entryId(path.dirname(source)) === entryId(path.dirname(dest));
+        if (sameParent && path.basename(source).toLowerCase() === path.basename(dest).toLowerCase()) return "same-entry";
+    }
+    if (destId && destId !== sourceId && ancestryIds(path.dirname(source)).has(destId)) return "contained";
+    if (ancestryIds(path.dirname(dest)).has(sourceId)) return "contained";
+    return "none";
+}
+
 function destRel(req: http.IncomingMessage, res: http.ServerResponse): string | null {
     const raw = req.headers.destination;
     if (typeof raw !== "string" || !raw) {
@@ -708,8 +747,32 @@ export async function handleDavRequest(
             res.end("Destination parent missing");
             return;
         }
+        let caseOnlyRename = false;
         try {
-            if (destExists) fs.rmSync(dest, { recursive: true, force: true });
+            // the overwrite below deletes dest first: when dest is the source
+            // (same path, or a case variant on a case-insensitive filesystem),
+            // contains it, or lies inside it, that would delete the source
+            const overlap = davOverlap(target, dest, destExists);
+            if (overlap === "contained") {
+                res.writeHead(403, { "Content-Type": "text/plain" });
+                res.end("Destination overlaps the source");
+                return;
+            }
+            // a case-only MOVE is a real rename, not an overwrite: it deletes nothing
+            caseOnlyRename = overlap === "same-entry" && method === "MOVE" && path.basename(dest) !== path.basename(target);
+            if (overlap === "same-entry" && !caseOnlyRename) {
+                res.writeHead(403, { "Content-Type": "text/plain" });
+                res.end("Destination is the source");
+                return;
+            }
+        } catch (err) {
+            logger.warn(`[WebDAV] ${method} overlap check failed:`, (err as Error)?.message ?? err);
+            res.writeHead(500, { "Content-Type": "text/plain" });
+            res.end(`${method} failed`);
+            return;
+        }
+        try {
+            if (destExists && !caseOnlyRename) fs.rmSync(dest, { recursive: true, force: true });
             if (method === "COPY") {
                 fs.cpSync(target, dest, { recursive: true });
                 res.writeHead(destExists ? 204 : 201);

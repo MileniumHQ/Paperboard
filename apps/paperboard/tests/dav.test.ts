@@ -172,6 +172,40 @@ describe("WebDAV files", () => {
         expect(fs.existsSync(path.join(tmp, "files", "note2.txt"))).toBe(false);
     });
 
+    it("refuses a MOVE or COPY whose destination is the source, its ancestor, or inside it", async () => {
+        const sess = await mintSession();
+        const auth = basic(sess.user, sess.pass);
+        fs.mkdirSync(path.join(tmp, "files", "same", "inner"), { recursive: true });
+        fs.writeFileSync(path.join(tmp, "files", "same", "self.txt"), "keep me");
+        fs.writeFileSync(path.join(tmp, "files", "same", "inner", "deep.txt"), "keep me too");
+        const dav = (p: string) => `${base}/dav/files/${p}`;
+        for (const [method, from, to] of [
+            ["MOVE", "same/self.txt", "same/self.txt"],
+            ["COPY", "same/self.txt", "same/self.txt"],
+            ["MOVE", "same", "same/inner"],
+            ["COPY", "same", "same/inner"],
+            ["MOVE", "same/inner", "same"],
+        ] as const) {
+            const res = await fetch(dav(from), { method, headers: { Authorization: auth, Destination: dav(to) } });
+            expect(`${method} ${from} -> ${to}: ${res.status}`).toBe(`${method} ${from} -> ${to}: 403`);
+        }
+        expect(fs.readFileSync(path.join(tmp, "files", "same", "self.txt"), "utf8")).toBe("keep me");
+        expect(fs.readFileSync(path.join(tmp, "files", "same", "inner", "deep.txt"), "utf8")).toBe("keep me too");
+    });
+
+    it("still overwrites a different destination that is a hard link to the source", async () => {
+        const sess = await mintSession();
+        const auth = basic(sess.user, sess.pass);
+        fs.writeFileSync(path.join(tmp, "files", "orig.txt"), "linked");
+        fs.linkSync(path.join(tmp, "files", "orig.txt"), path.join(tmp, "files", "alias.txt"));
+        const res = await fetch(`${base}/dav/files/orig.txt`, {
+            method: "MOVE",
+            headers: { Authorization: auth, Destination: `${base}/dav/files/alias.txt` },
+        });
+        expect(res.status).toBe(204);
+        expect(fs.readFileSync(path.join(tmp, "files", "alias.txt"), "utf8")).toBe("linked");
+    });
+
     it("refuses locks honestly instead of minting ones it never stores", async () => {
         const sess = await mintSession();
         const auth = basic(sess.user, sess.pass);
