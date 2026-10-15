@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { startFakeOllama, type FakeOllama } from "./fakeOllama";
 import { OllamaClient } from "../src/service/ollamaClient";
 import { listLoaded, MAX_LOADED_MODELS, unloadAndConfirm } from "../src/service/loaded";
-import { featuredLoaded, loadedDetail, QUICK_ASK_DEFAULT_MODEL, quickAskBlocker, quickAskModel, quickAskModelChoices } from "../src/core/widgets";
+import { featuredLoaded, loadedDetail, QUICK_ASK_DEFAULT_MODEL, quickAskBlocker, quickAskModel, quickAskModelChoices, quickAskTarget } from "../src/core/widgets";
 import { initialState, type AiState, type InstalledModel } from "../src/core/types";
 
 const GB = 1024 ** 3;
@@ -73,18 +73,39 @@ function ready(patch: Partial<AiState> = {}): AiState {
 }
 
 describe("Quick ask's Model option", () => {
-    it("offers the default first, then each downloaded model, and asks the one chosen", () => {
-        const s = ready();
+    // the choices used to be every downloaded model; they are the favorites now
+    it("offers the default first, then each favorite, and asks the one chosen", () => {
+        const s = ready({ favorites: [{ provider: "ollama", model: "qwen3:8b" }] });
         expect(quickAskModelChoices(s)[0]).toEqual({ value: QUICK_ASK_DEFAULT_MODEL, label: "Default model" });
-        expect(quickAskModelChoices(s).slice(1).map((c) => c.value)).toEqual(s.models.map((m) => m.name));
+        expect(quickAskModelChoices(s).slice(1)).toEqual([{ value: "ollama|qwen3:8b", label: "qwen3:8b · Ollama" }]);
+        expect(quickAskModel(s, "ollama|qwen3:8b")).toBe("qwen3:8b");
+        expect(quickAskBlocker(s, "ollama|qwen3:8b")).toBeNull();
         expect(quickAskModel(s, QUICK_ASK_DEFAULT_MODEL)).toBe(quickAskModel(s));
         expect(quickAskModel(s, "other:1b")).toBe("other:1b");
         expect(quickAskBlocker(s, "gone:1b")).toEqual({ text: "gone:1b is not downloaded", recovery: "open" });
     });
 
     it("leaves coding agents out, since a widget can't pick their folder", () => {
-        const s = ready({ models: [model("qwen3:8b"), { name: "Codex", provider: "agent-0123abcd", sizeBytes: 0, capabilities: ["agent"] }] });
-        expect(quickAskModelChoices(s).slice(1).map((c) => c.value)).toEqual(["qwen3:8b"]);
+        const agent = { id: "agent-0123abcd", kind: "agent" as const, label: "Codex", agent: "codex" };
+        const s = ready({
+            connections: [...ready().connections, agent],
+            models: [model("qwen3:8b"), { name: "gpt-5", provider: agent.id, sizeBytes: 0, capabilities: ["agent"] }],
+            favorites: [{ provider: "ollama", model: "qwen3:8b" }, { provider: agent.id, model: "gpt-5" }],
+        });
+        expect(quickAskModelChoices(s).slice(1).map((c) => c.value)).toEqual(["ollama|qwen3:8b"]);
+    });
+
+    it("runs a favorite on its own provider, even when another lists the same name", () => {
+        const endpoint = { id: "api-0000000a", kind: "openai-compatible" as const, label: "Local", baseUrl: "http://127.0.0.1:1" };
+        const s = ready({
+            connections: [...ready().connections, endpoint],
+            runtime: { status: "stopped", compute: [] },
+            models: [model("qwen3:8b"), { ...model("qwen3:8b"), provider: endpoint.id }],
+        });
+        expect(quickAskTarget(s, "api-0000000a|qwen3:8b")).toEqual({ model: "qwen3:8b", provider: endpoint.id });
+        // the endpoint needs no local runtime, though Ollama lists the name too
+        expect(quickAskBlocker(s, "api-0000000a|qwen3:8b")).toBeNull();
+        expect(quickAskBlocker(s, "api-0000000f|qwen3:8b")).toEqual({ text: "qwen3:8b's provider was removed", recovery: "open" });
     });
 });
 

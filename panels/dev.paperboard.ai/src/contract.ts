@@ -51,6 +51,7 @@ export const UI_ACTION_IDS = {
     resolveApproval: "ui-resolve-approval",
     revokePermission: "ui-revoke-permission",
     updateSettings: "ui-update-settings",
+    setFavorite: "ui-set-favorite",
     takeOpenRequest: "ui-take-open-request",
 } as const;
 

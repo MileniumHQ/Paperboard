@@ -18,6 +18,7 @@ import { UI_ACTION_IDS } from "../contract";
 import type { Connection } from "../core/providers";
 import { call, errorText, state } from "../lib/state";
 import AgentLogo from "./AgentLogo";
+import { FavoritesPane } from "./Favorites";
 import ModelBrowser from "./ModelBrowser";
 import OllamaRuntimeCard from "./OllamaRuntimeCard";
 import { EndpointForm } from "./ProviderForms";
@@ -27,6 +28,8 @@ import styles from "./ModelsModal.module.css";
 
 /** The sidebar entry that adds a provider; never a connection id. */
 export const ADD_PROVIDER_PANE = "add";
+/** The sidebar entry listing hearted models, above every provider; never a connection id. */
+export const FAVORITES_PANE = "favorites";
 
 export interface ModelsModalProps {
     open: boolean;
@@ -49,24 +52,33 @@ export function connectionStatus(c: Connection): string {
 
 export default function ModelsModal(props: ModelsModalProps) {
     const [pane, setPane] = createSignal(ADD_PROVIDER_PANE);
+    // with favorites, they are the first thing the picker shows
+    const firstPane = () => (state.favorites.length > 0 ? FAVORITES_PANE : (state.connections[0]?.id ?? ADD_PROVIDER_PANE));
     createEffect(
         on(
             () => props.open,
             (open) => {
-                if (open) setPane(props.initialPane ?? state.connections[0]?.id ?? ADD_PROVIDER_PANE);
+                if (open) setPane(props.initialPane ?? firstPane());
             },
         ),
     );
     const current = () => state.connections.find((c) => c.id === pane());
     // a removed provider's pane falls back to the first one left
     createEffect(() => {
-        if (pane() !== ADD_PROVIDER_PANE && !current()) setPane(state.connections[0]?.id ?? ADD_PROVIDER_PANE);
+        if (pane() !== ADD_PROVIDER_PANE && pane() !== FAVORITES_PANE && !current()) setPane(firstPane());
     });
 
     return (
         <PaperModal open={props.open} onClose={props.onClose} title="Models" size="large" noPadding>
             <PaperPanel class={styles.panel}>
                 <PaperMenu name="model-provider" spacing="half" role="navigation" aria-label="Providers" value={pane()} onValueChange={(value) => setPane(String(value))}>
+                    <PaperMenuItem
+                        value={FAVORITES_PANE}
+                        icon="favorite"
+                        description={`${state.favorites.length} model${state.favorites.length === 1 ? "" : "s"}`}
+                    >
+                        Favorites
+                    </PaperMenuItem>
                     <For each={state.connections}>
                         {(c) => (
                             <PaperMenuItem value={c.id} icon={c.kind === "agent" ? <AgentLogo agent={c.agent} /> : c.kind === "ollama" ? "memory" : "cloud"} description={connectionStatus(c)}>
@@ -79,6 +91,9 @@ export default function ModelsModal(props: ModelsModalProps) {
                     </PaperMenuItem>
                 </PaperMenu>
                 <PaperInterfaceGroup value={pane()}>
+                    <PaperInterfaceItem value={FAVORITES_PANE}>
+                        <FavoritesPane onPick={props.onPick} />
+                    </PaperInterfaceItem>
                     <For each={state.connections}>
                         {(c) => (
                             <PaperInterfaceItem value={c.id}>

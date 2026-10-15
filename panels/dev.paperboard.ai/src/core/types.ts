@@ -2,6 +2,7 @@
 
 import type { ReasoningLevel } from "./reasoning";
 import type { Connection } from "./providers";
+import type { FavoriteModel } from "./favorites";
 
 export type RuntimeStatus =
     | "checking" // service booting, not yet looked
@@ -388,6 +389,8 @@ export interface AiState {
     lastProject?: string;
     /** "panelId:action" keys the user allowed always */
     alwaysAllowed: string[];
+    /** hearted models, any connection; the choices outside chat */
+    favorites: FavoriteModel[];
     settings: Settings;
     /** conversation history could not be read; writes are refused */
     storageError?: string;
@@ -428,6 +431,7 @@ export function initialState(): AiState {
         projects: [],
         projectsTruncated: false,
         alwaysAllowed: [],
+        favorites: [],
         settings: { ...DEFAULT_SETTINGS },
         openRequest: null,
     };
