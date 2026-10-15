@@ -86,7 +86,7 @@ export interface Settings {
     contextLength: number;
     /** reasoning level used for models that can think */
     reasoning: ReasoningLevel;
-    /** describe other panels' actions to the model (experimental) */
+    /** let the model search other panels' actions and ask to run them */
     panelActions: boolean;
     /** the built-in shell command tool, approved per run */
     shellCommands: boolean;
@@ -129,9 +129,9 @@ export type ToolCallStatus = "awaiting-approval" | "running" | "done" | "denied"
 /** the file tools a Local AI chat is offered in a project (core/projectTools.ts) */
 export type ProjectToolName = "read_file" | "list_directory" | "search_files" | "write_file" | "edit_file";
 /** every built-in kind a chat may have recorded; web_search is no longer offered */
-export type BuiltinTool = "web_search" | "run_shell_command" | ProjectToolName;
+export type BuiltinTool = "web_search" | "run_shell_command" | "find_app_actions" | ProjectToolName;
 /** the built-ins a model can be offered */
-export type OfferedBuiltin = "run_shell_command" | ProjectToolName;
+export type OfferedBuiltin = "run_shell_command" | "find_app_actions" | ProjectToolName;
 
 /** What an agent says a tool call does (ACP ToolKind); picks its icon. */
 export type AgentToolKind = "read" | "edit" | "delete" | "move" | "search" | "execute" | "think" | "fetch" | "switch_mode" | "other";

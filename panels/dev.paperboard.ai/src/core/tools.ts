@@ -1,5 +1,6 @@
-// Turns the Paperboard action registry into Ollama tool definitions, and a
-// model's tool call back into the panel action it names.
+// The Paperboard action registry as the model sees it: which actions are
+// callable, how a call's arguments are checked, and how results come back.
+// appActions.ts offers them through two fixed search and call tools.
 
 /** The slice of actionsApi.list() entries this module reads. */
 export interface RegistryAction {
@@ -45,44 +46,16 @@ interface JsonSchemaProperty {
     enum?: unknown[];
 }
 
+/** the tools offered to the model in one round */
+export interface ToolSet {
+    tools: OllamaTool[];
+}
+
 export interface ToolTarget {
     panelId: string;
     action: string;
     label: string;
     inputs: Record<string, RegistryInput>;
-}
-
-export interface ToolSet {
-    tools: OllamaTool[];
-    /** tool function name → the action it calls */
-    targets: Map<string, ToolTarget>;
-}
-
-const MAX_NAME = 64;
-
-function slug(value: string): string {
-    return value.replace(/[^a-zA-Z0-9_-]+/g, "_").replace(/^_+|_+$/g, "") || "x";
-}
-
-/** "dev.paperboard.gameserver" + "start-server" → "gameserver__start-server" */
-export function toolName(panelId: string, action: string): string {
-    const panel = slug(panelId.split(".").pop() ?? panelId);
-    return `${panel}__${slug(action)}`.slice(0, MAX_NAME);
-}
-
-function jsonType(type: string): JsonSchemaProperty["type"] {
-    if (type === "number") return "number";
-    if (type === "boolean") return "boolean";
-    if (type === "object") return "object";
-    // string, file (a path), any, and panel-defined types travel as text
-    return "string";
-}
-
-function describeInput(input: RegistryInput): string {
-    const parts = [input.label, input.description].filter((p): p is string => Boolean(p && p.trim()));
-    if (input.placeholder) parts.push(`e.g. ${input.placeholder}`);
-    if (input.typeName && !["string", "number", "boolean"].includes(input.type)) parts.push(`(${input.typeName})`);
-    return parts.join(". ");
 }
 
 // Panels whose actions are never offered as tools. The terminal's actions
@@ -96,54 +69,6 @@ export function isCallableAction(entry: RegistryAction, ownPanelId: string): boo
     const s = entry.schema;
     if (!s) return false; // bare handlers have no contract to describe
     return !s.internal && !s.eventOnly;
-}
-
-/**
- * Every callable action of every other panel, as tools. Names are stable
- * for a given registry (sorted, collisions suffixed).
- */
-export function buildToolSet(
-    registry: RegistryAction[],
-    ownPanelId: string,
-    panelNames: Record<string, string> = {},
-): ToolSet {
-    const callable = registry
-        .filter((e) => isCallableAction(e, ownPanelId))
-        .sort((a, b) => `${a.panelId}:${a.action}`.localeCompare(`${b.panelId}:${b.action}`));
-    const tools: OllamaTool[] = [];
-    const targets = new Map<string, ToolTarget>();
-    for (const entry of callable) {
-        const schema = entry.schema!;
-        let name = toolName(entry.panelId, entry.action);
-        for (let n = 2; targets.has(name); n++) {
-            const suffix = `_${n}`;
-            name = `${toolName(entry.panelId, entry.action).slice(0, MAX_NAME - suffix.length)}${suffix}`;
-        }
-        const inputs = schema.inputs ?? {};
-        const properties: Record<string, JsonSchemaProperty> = {};
-        const required: string[] = [];
-        for (const [key, input] of Object.entries(inputs)) {
-            const prop: JsonSchemaProperty = { type: jsonType(input.type) };
-            const description = describeInput(input);
-            if (description) prop.description = description;
-            const values = input.options?.map((o) => o.value).filter((v) => ["string", "number", "boolean"].includes(typeof v));
-            if (values && values.length > 0) prop.enum = values;
-            properties[key] = prop;
-            if (input.required === true) required.push(key);
-        }
-        const label = schema.name || entry.action;
-        const app = panelNames[entry.panelId] ?? entry.panelId;
-        tools.push({
-            type: "function",
-            function: {
-                name,
-                description: [`${app}: ${label}.`, schema.description].filter(Boolean).join(" "),
-                parameters: { type: "object", properties, required },
-            },
-        });
-        targets.set(name, { panelId: entry.panelId, action: entry.action, label, inputs });
-    }
-    return { tools, targets };
 }
 
 export class ToolArgumentError extends Error {}

@@ -90,13 +90,14 @@ const BUILTIN_ICONS: Record<BuiltinTool, string> = {
     search_files: AGENT_TOOL_ICONS.search,
     write_file: AGENT_TOOL_ICONS.edit,
     edit_file: AGENT_TOOL_ICONS.edit,
+    find_app_actions: "manage_search",
 };
 
 /** What a built-in step shows after its label: the query, the command, or the file. */
 function builtinSubject(call: ToolCallRecord): string {
     const a = call.arguments;
     const value =
-        call.builtin === "web_search" ? a.query : call.builtin === "run_shell_command" ? a.command : call.builtin === "search_files" ? a.text ?? a.pattern : a.path;
+        call.builtin === "web_search" || call.builtin === "find_app_actions" ? a.query : call.builtin === "run_shell_command" ? a.command : call.builtin === "search_files" ? a.text ?? a.pattern : a.path;
     return typeof value === "string" ? value : "";
 }
 

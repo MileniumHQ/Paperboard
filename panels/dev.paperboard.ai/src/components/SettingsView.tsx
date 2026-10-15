@@ -69,7 +69,7 @@ export default function SettingsView() {
             <PaperSettingList autoHeight>
                 <PaperSettingItem
                     title="Shell commands"
-                    description="Lets the model run commands on this computer. You approve every command before it runs; there is no always-allow."
+                    description="Lets the model run commands on this computer. You approve every command before it runs."
                 >
                     <PaperToggle
                         name="shellCommands"
@@ -80,7 +80,7 @@ export default function SettingsView() {
                 </PaperSettingItem>
                 <PaperSettingItem
                     title="App actions"
-                    description="Tells the model about your other panels' actions so it can ask to use them. Each use still needs your approval. Experimental."
+                    description="Lets the model look up your other panels' actions and ask to run them. Each action asks for your approval unless you chose Always allow for it."
                 >
                     <PaperToggle
                         name="panelActions"
@@ -89,38 +89,47 @@ export default function SettingsView() {
                         onChange={(on) => void save({ panelActions: on })}
                     />
                 </PaperSettingItem>
-                <PaperSettingItem
-                    title="Context length"
-                    description="How much of a chat the model reads at once. Longer contexts remember more but need more memory, which the fit ratings include."
-                >
-                    <PaperSelectMenu
-                        name="contextLength"
-                        aria-label="Context length"
-                        value={String(state.settings.contextLength)}
-                        onValueChange={(value) =>
-                            void save({ contextLength: Number(value) })
-                        }
-                    >
-                        {CONTEXTS.map((n) => (
-                            <PaperSelectMenuItem
-                                value={String(n)}
-                            >{`${n / 1024}K tokens`}</PaperSelectMenuItem>
-                        ))}
-                    </PaperSelectMenu>
-                </PaperSettingItem>
-                <Show when={state.connections.some((c) => c.kind === "ollama")}>
-                    <PaperSettingItem
-                        title="Force CPU"
-                        description="Runs models on the processor instead of a graphics card. Replies are slower, but it avoids graphics memory problems."
-                    >
-                        <PaperToggle
-                            name="forceCpu"
-                            aria-label="Force CPU"
-                            checked={state.settings.forceCpu}
-                            onChange={(on) => void save({ forceCpu: on })}
-                        />
-                    </PaperSettingItem>
-                </Show>
+            </PaperSettingList>
+
+            <Show when={state.connections.some((c) => c.kind === "ollama")}>
+                <section class={styles.Group} aria-label="Local AI">
+                    <PaperText as="h2" preset="subtitle" class={styles.GroupTitle}>Local AI</PaperText>
+                    <PaperSettingList autoHeight>
+                        <PaperSettingItem
+                            title="Context length"
+                            description="How much of a chat the model reads at once. Longer contexts remember more but need more memory, which the fit ratings include."
+                        >
+                            <PaperSelectMenu
+                                name="contextLength"
+                                aria-label="Context length"
+                                value={String(state.settings.contextLength)}
+                                onValueChange={(value) =>
+                                    void save({ contextLength: Number(value) })
+                                }
+                            >
+                                {CONTEXTS.map((n) => (
+                                    <PaperSelectMenuItem
+                                        value={String(n)}
+                                    >{`${n / 1024}K tokens`}</PaperSelectMenuItem>
+                                ))}
+                            </PaperSelectMenu>
+                        </PaperSettingItem>
+                        <PaperSettingItem
+                            title="Force CPU"
+                            description="Runs models on the processor instead of a graphics card. Replies are slower, but it avoids graphics memory problems."
+                        >
+                            <PaperToggle
+                                name="forceCpu"
+                                aria-label="Force CPU"
+                                checked={state.settings.forceCpu}
+                                onChange={(on) => void save({ forceCpu: on })}
+                            />
+                        </PaperSettingItem>
+                    </PaperSettingList>
+                </section>
+            </Show>
+
+            <PaperSettingList autoHeight>
                 <PaperSettingItem
                     title="Delete all chats"
                     description="Removes every chat and its messages from this computer. This cannot be undone."

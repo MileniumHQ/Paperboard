@@ -1,10 +1,12 @@
-// The panel's own tools: shell commands and, in a project, file tools. They
-// are offered ahead of other panels' actions and render as their own steps
-// in the thread. A shell command asks every time and can never be allowed
-// always; file changes ask unless the chat's mode accepts edits; reads
-// never ask. `web_search` is no longer offered; it stays a recorded kind so
-// chats that searched still render their steps.
+// The panel's own tools: shell commands, the app-action search and, in a
+// project, file tools. They are offered ahead of other panels' actions and
+// render as their own steps in the thread. A shell command asks every time and
+// can never be allowed always; file changes ask unless the chat's mode accepts
+// edits; reads and the app-action search (which only reads action
+// descriptions) never ask. `web_search` is no longer offered; it stays a
+// recorded kind so chats that searched still render their steps.
 
+import { APP_ACTION_TOOLS, FIND_APP_ACTIONS, MAX_ACTION_QUERY_CHARS } from "./appActions";
 import {
     isProjectTool,
     PROJECT_TOOL_DEFINITIONS,
@@ -20,11 +22,13 @@ import type { BuiltinTool, OfferedBuiltin } from "./types";
 export const BUILTIN_LABELS: Record<BuiltinTool, string> = {
     web_search: "Searched the web",
     run_shell_command: "Ran shell command",
+    find_app_actions: "Looked up app actions",
     ...PROJECT_TOOL_LABELS,
 };
 
 /** Whether a built-in call waits for the user, in a chat's mode. None can be allowed always. */
 export function builtinAsks(tool: OfferedBuiltin, mode: string | undefined): boolean {
+    if (tool === FIND_APP_ACTIONS) return false;
     return isProjectTool(tool) ? projectToolAsks(tool, mode) : true;
 }
 
@@ -42,6 +46,7 @@ const SHELL: OllamaTool = {
             required: ["command"],
         },
     },
+    find_app_actions: APP_ACTION_TOOLS[0]!,
 };
 
 const PROJECT_SHELL: OllamaTool = {
@@ -54,7 +59,7 @@ const PROJECT_SHELL: OllamaTool = {
 };
 
 export function isBuiltinTool(name: string): name is OfferedBuiltin {
-    return name === "run_shell_command" || isProjectTool(name);
+    return name === "run_shell_command" || name === FIND_APP_ACTIONS || isProjectTool(name);
 }
 
 /** Enabled built-ins, in priority order; file tools only for a chat working in a project. */
@@ -83,6 +88,13 @@ export function builtinArguments(tool: OfferedBuiltin, raw: unknown): Record<str
         } catch {
             throw new BuiltinArgumentError("arguments must be a JSON object");
         }
+    }
+    if (tool === FIND_APP_ACTIONS) {
+        // an empty query is allowed: it lists actions in id order
+        const query = args && typeof args === "object" ? (args as Record<string, unknown>).query : undefined;
+        if (typeof query !== "string") throw new BuiltinArgumentError('missing required argument "query"');
+        if (query.length > MAX_ACTION_QUERY_CHARS) throw new BuiltinArgumentError(`"query" is limited to ${MAX_ACTION_QUERY_CHARS} characters`);
+        return { query: query.trim() };
     }
     const value = args && typeof args === "object" ? (args as Record<string, unknown>).command : undefined;
     if (typeof value !== "string" || !value.trim()) throw new BuiltinArgumentError('missing required argument "command"');
