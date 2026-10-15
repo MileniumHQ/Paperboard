@@ -1,5 +1,6 @@
 import { type Component } from "solid-js";
 import {
+    PaperIcon,
     PaperList,
     PaperListItem,
     PaperFlex,
@@ -8,6 +9,7 @@ import {
 import styles from "./ComputerHeader.module.css";
 import libraryIcon from "../../assets/PanelLibrary.png";
 import type { ComputerItem } from "../../App";
+import { BACKUPS_TAB } from "../../lib/shellTabs";
 
 export interface ComputerHeaderProps {
     computer?: ComputerItem;
@@ -183,6 +185,23 @@ const ComputerHeader: Component<ComputerHeaderProps> = (props) => {
                     }
                 >
                     Panel Library
+                </PaperListItem>
+
+                <PaperListItem
+                    value={BACKUPS_TAB}
+                    icon={
+                        <PaperIcon
+                            zeroHeight
+                            style={{
+                                "font-size": getVarCss("icon-size-large"),
+                                color: getVarCss("primary"),
+                            }}
+                        >
+                            backup
+                        </PaperIcon>
+                    }
+                >
+                    Backups
                 </PaperListItem>
             </PaperList>
         </PaperFlex>

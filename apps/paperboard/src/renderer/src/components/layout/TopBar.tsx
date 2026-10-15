@@ -2,11 +2,10 @@ import { type Component, createSignal, onMount, onCleanup, Show } from "solid-js
 import { PaperText, PaperButton, PaperIcon, getVarCss } from "@mileniumhq/paperui";
 import { shellApi, logToMain, isBrowserShell } from "../../lib/shell";
 import { versionLabel as formatVersionLabel } from "../../lib/versionLabel";
+import { isShellTab } from "../../lib/shellTabs";
 import type { AppUpdateState } from "../../../../shared/appUpdate";
 import { leftReserve, rightReserve, type OverlayLike } from "./titlebarInsets";
 
-// Tabs that have no panel files dir — the folder button opens .paperboard/ for these
-const NON_PANEL_TABS = new Set(["landing", "library", "settings"]);
 
 const TopBar: Component<{
     updateState: AppUpdateState;
@@ -52,7 +51,8 @@ const TopBar: Component<{
         // Local: panel's files dir (or .paperboard/ when no panel tab).
         // Remote: same, over WebDAV (root when no panel tab).
         const tab = props.getSelectedTab();
-        const panelId = NON_PANEL_TABS.has(tab) ? undefined : tab;
+        // shell pages have no panel files dir: the folder button opens .paperboard/
+        const panelId = isShellTab(tab) ? undefined : tab;
         shellApi
             .openPanelFolder(computerId, panelId)
             .then((ok) => {

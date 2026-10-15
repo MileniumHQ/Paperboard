@@ -1,6 +1,7 @@
 import { createSignal } from "solid-js";
 import { panelsApi, type PanelItem } from "@mileniumhq/paperapi";
 import { logToMain } from "../lib/shell";
+import { isShellTab } from "../lib/shellTabs";
 
 // placeholder divs render per opened key (PanelView), so the list itself
 // must be bounded: most-recent-first, oldest dropped past the cap.
@@ -35,7 +36,7 @@ export function usePanels() {
             ...prev,
             [compId]: tab,
         }));
-        if (tab !== "landing" && tab !== "library" && tab !== "settings") {
+        if (!isShellTab(tab)) {
             const key = `${compId}::${tab}`;
             setOpenedPanels((prev) => {
                 // Selecting an already-open panel must NOT rebuild the list:

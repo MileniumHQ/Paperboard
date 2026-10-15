@@ -35,6 +35,8 @@ import LandingView from "./components/computer/LandingView";
 import ComputerSetupWizard from "./components/wizard/ComputerSetupWizard";
 import ComputerHeader from "./components/computer/ComputerHeader";
 import ComputerSettings from "./components/computer/ComputerSettings";
+import BackupsPage from "./components/backups/BackupsPage";
+import { BACKUPS_TAB, isShellTab } from "./lib/shellTabs";
 import ConnectionLostOverlay from "./components/computer/ConnectionLostOverlay";
 import OfflineComputerModal from "./components/computer/OfflineComputerModal";
 import ComputerRail from "./components/computer/ComputerRail";
@@ -746,6 +748,31 @@ const App: Component = () => {
                                 }}
                             </For>
 
+                            <For each={computers()}>
+                                {(comp) => {
+                                    const isVisible = () =>
+                                        activeComputerId() === comp.id &&
+                                        getSelectedTab(comp.id) === BACKUPS_TAB;
+                                    return (
+                                        <Show when={isVisible()}>
+                                            <PaperFlex
+                                                direction="column"
+                                                fullHeight
+                                                style={{
+                                                    flex: 1,
+                                                    "overflow-y": "auto",
+                                                }}
+                                            >
+                                                <BackupsPage
+                                                    computerId={comp.id}
+                                                    computerName={comp.name || "This Computer"}
+                                                />
+                                            </PaperFlex>
+                                        </Show>
+                                    );
+                                }}
+                            </For>
+
                             <PaperFlex
                                 direction="column"
                                 fullHeight
@@ -757,24 +784,16 @@ const App: Component = () => {
                                     // visibility, not display, for the same
                                     // reason as the library layer: never tear
                                     // down a live panel iframe on a tab switch
-                                    visibility:
-                                        getSelectedTab(activeComputerId()) !==
-                                            "landing" &&
-                                        getSelectedTab(activeComputerId()) !==
-                                            "library" &&
-                                        getSelectedTab(activeComputerId()) !==
-                                            "settings"
-                                            ? "visible"
-                                            : "hidden",
-                                    "pointer-events":
-                                        getSelectedTab(activeComputerId()) !==
-                                            "landing" &&
-                                        getSelectedTab(activeComputerId()) !==
-                                            "library" &&
-                                        getSelectedTab(activeComputerId()) !==
-                                            "settings"
-                                            ? "auto"
-                                            : "none",
+                                    visibility: isShellTab(
+                                        getSelectedTab(activeComputerId()),
+                                    )
+                                        ? "hidden"
+                                        : "visible",
+                                    "pointer-events": isShellTab(
+                                        getSelectedTab(activeComputerId()),
+                                    )
+                                        ? "none"
+                                        : "auto",
                                 }}
                             >
                                 <PanelView

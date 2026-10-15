@@ -11,7 +11,6 @@ import {
 } from "@mileniumhq/paperui";
 import type { ComputerItem } from "../../App";
 import { formatOsVersion } from "./ComputerHeader";
-import BackupLocationsSettings from "../backups/BackupLocationsSettings";
 
 export interface ComputerSettingsProps {
     computer?: ComputerItem;
@@ -73,10 +72,6 @@ const ComputerSettings: Component<ComputerSettingsProps> = (props) => {
                         {formatOsVersion(props.computer)}
                     </PaperText>
                 </PaperSettingItem>
-
-                <Show when={props.computer?.id} keyed>
-                    {(id) => <BackupLocationsSettings computerId={id} />}
-                </Show>
 
                 <Show when={!isLocal()}>
                     <PaperSettingItem

@@ -2,10 +2,9 @@ import { type Component, createSignal, For, onMount, Show } from "solid-js";
 import { PaperButton, PaperFlex, PaperModal, PaperSelector, PaperSelectorItem, PaperText } from "@mileniumhq/paperui";
 import { backupApi, backupLocationsApi, type BackupLocation } from "@mileniumhq/paperapi";
 import { loadUsage, usageText, type UsageState } from "./locationUsage";
+import { LocationLogo } from "./providers";
 
 export type BackupLocationChoice = { status: "chosen"; location: BackupLocation } | { status: "canceled" } | { status: "failed"; message: string };
-
-const ICONS: Record<BackupLocation["kind"], string> = { local: "computer", s3: "cloud", gdrive: "add_to_drive" };
 
 // The window a panel opens with backupApi.chooseLocation: the computer's
 // backup locations with how much space each has, and which one this
@@ -78,7 +77,7 @@ const BackupLocationChooser: Component<{ computerId: string; panelId: string; on
                         <PaperSelector name="backup-location" value={selected()} onValueChange={(value) => setSelected(String(value))}>
                             <For each={list()}>
                                 {(location) => (
-                                    <PaperSelectorItem value={location.id} icon={ICONS[location.kind]} description={`${location.detail}. ${usageText(usage()[location.id] ?? { kind: "loading" })}`}>
+                                    <PaperSelectorItem value={location.id} icon={<LocationLogo kind={location.kind} />} description={`${location.detail}. ${usageText(usage()[location.id] ?? { kind: "loading" })}`}>
                                         {location.label}
                                     </PaperSelectorItem>
                                 )}
@@ -86,7 +85,7 @@ const BackupLocationChooser: Component<{ computerId: string; panelId: string; on
                         </PaperSelector>
                     )}
                 </Show>
-                <PaperText size={2} color="text-subtle">Add an S3 bucket or Google Drive in this computer's settings.</PaperText>
+                <PaperText size={2} color="text-subtle">Add an S3 bucket or Google Drive on this computer's Backups page.</PaperText>
                 <Show when={error()}>
                     <PaperText size={2} color="danger">{error()}</PaperText>
                 </Show>
