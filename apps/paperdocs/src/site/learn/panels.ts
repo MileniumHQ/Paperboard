@@ -94,9 +94,9 @@ export const LEARN_PANELS: LearnPanel[] = [
             {
                 title: "Respond to AI events",
                 description:
-                    "Test a model when its download finishes. Ask for a building tip and send the model name and answer to Discord.",
+                    "Ask a chosen model for a building tip and send its answer to Discord.",
                 image: "/screens/actions-ai-flow.png",
-                alt: "Newly downloaded model selected for an AI test and its shortened answer posted to Discord",
+                alt: "Ask AI with a chosen model and post its shortened answer to Discord",
             },
         ],
     },
@@ -115,9 +115,9 @@ export const LEARN_PANELS: LearnPanel[] = [
             {
                 title: "Build its behavior",
                 description:
-                    "Use Actions to acknowledge a Discord button, read Minecraft's player count and player list, and reply to the person who clicked.",
+                    "Use Actions to handle a Discord button, read Minecraft's player count and player list, and reply to the person who clicked.",
                 image: "/screens/botcreator-actions.png",
-                alt: "Discord status button deferred while Minecraft player count and player list are read, then answered privately",
+                alt: "Discord status button reading the Minecraft player count and player list, then answering privately",
             },
             {
                 title: "Create commands",
