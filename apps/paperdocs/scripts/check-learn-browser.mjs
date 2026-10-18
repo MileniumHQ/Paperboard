@@ -17,6 +17,17 @@ function luminance(color) {
     return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
 
+// The stage choreography runs on scroll progress with the showcase hold
+// removed (public/js/flight.js), so stage progress s sits at s + hold
+// viewports of scroll. Scrolling by raw viewports stopped short of the stage
+// once the hold was added.
+const scrollToStage = (target, s) => target.evaluate((s) => {
+    const hold = document.querySelector(".showcase-hold");
+    const showcase = document.querySelector(".showcase-section");
+    const held = hold && showcase ? Math.max(0, hold.offsetHeight - showcase.offsetHeight) / innerHeight : 0;
+    scrollTo(0, innerHeight * (s + held));
+}, s);
+
 // Check the distributed static documents, not a Vite SPA fallback. The Worker
 // routing has its own tests; this loopback server owns and tears down its sockets.
 const dist = resolve(fileURLToPath(new URL("../dist/", import.meta.url)));
@@ -303,7 +314,7 @@ try {
         }));
         assert.equal(progress.height, 48, `Carousel indicator must keep its height at ${width} × ${height}`);
         assert.ok(progress.dots.every(dot => dot.height === 12 && Math.abs(dot.width - (dot.active ? 58 : 12)) < 0.5), `Carousel dots must not shrink at ${width} × ${height}`);
-        await page.evaluate(() => window.scrollTo(0, innerHeight * 2));
+        await scrollToStage(page, 2);
         await page.waitForFunction(() =>
             window.__aioStage.companions.every((entry) => entry.obj.visible),
         );
@@ -369,7 +380,7 @@ try {
             return y > safeArea.top && y < safeArea.bottom;
         })), `Models need space between navigation and copy at ${width} × ${height}`);
         for (const fraction of [1.55, 1.7, 1.85, 1.92, 2]) {
-            await page.evaluate(s => scrollTo(0, innerHeight * s), fraction);
+            await scrollToStage(page, fraction);
             await page.waitForTimeout(80);
             assert.ok(await page.evaluate(() => {
                 const stage = window.__aioStage;
@@ -382,7 +393,7 @@ try {
     // Change orientation while the stage is visible, without navigating away.
     for (const [width, height] of [[844, 390], [390, 844], [768, 1024], [1024, 768]]) {
         await page.setViewportSize({ width, height });
-        await page.evaluate(() => scrollTo(0, innerHeight * 2));
+        await scrollToStage(page, 2);
         await page.waitForFunction(() => window.__aioStage.companions.every(entry => entry.obj.visible));
         const points = await page.evaluate(() => {
             const stage = window.__aioStage;
@@ -432,7 +443,7 @@ try {
         assert.equal(copy.opacity, '1', `Showcase copy must stay visible at ${fraction}vh`);
         assert.ok(copy.top >= 0 && copy.bottom <= 900, `Showcase copy must stay on screen at ${fraction}vh`);
     }
-    await page.evaluate(() => scrollTo(0, innerHeight * 2));
+    await scrollToStage(page, 2);
     await page.waitForFunction(() => window.__aioStage?.companions.length === 4);
     await page.waitForTimeout(800);
     const settledRenders = await page.evaluate(() => window.__aioStage.renders);
