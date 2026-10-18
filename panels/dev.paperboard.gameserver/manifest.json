@@ -55,6 +55,16 @@
                 "light": "./store/4-light.png",
                 "dark": "./store/4-dark.png",
                 "alt": "Plugins and mods"
+            },
+            {
+                "light": "./store/5-light.png",
+                "dark": "./store/5-dark.png",
+                "alt": "Install a modpack"
+            },
+            {
+                "light": "./store/6-light.png",
+                "dark": "./store/6-dark.png",
+                "alt": "Back up on a schedule"
             }
         ],
         "services": [
