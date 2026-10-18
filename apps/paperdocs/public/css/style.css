@@ -1350,6 +1350,15 @@ body {
     background: rgba(255, 255, 255, 0.22);
 }
 
+.site-footer__social,
+.site-footer__milenium-link {
+    /* The marks are 14px tall; padding gives each a ~32px touch target
+       while the negative margin keeps the row's visual spacing (the 18px
+       gap is split between neighbours, so targets never overlap). */
+    padding: 9px;
+    margin: -9px;
+}
+
 .site-footer__social {
     display: inline-flex;
     align-items: center;

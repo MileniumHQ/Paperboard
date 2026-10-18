@@ -543,6 +543,14 @@ try {
         })), "Mobile menu links need light ink on the smoked glass panel");
         await page.keyboard.press("Escape");
         assert.notEqual(await page.locator("#site-mobile-menu").getAttribute("hidden"), null);
+        // The footer's 14px social marks carry padded touch targets.
+        assert.ok(
+            await page.locator(".site-footer__social, .site-footer__milenium-link").evaluateAll(links => links.every(link => {
+                const box = link.getBoundingClientRect();
+                return box.width >= 24 && box.height >= 24;
+            })),
+            "Footer icon links need at least a 24px touch target",
+        );
         console.log(`verified mobile ${slug}: layout and navigation dismissal`);
     }
     for (const path of ["/", "/game-server/"]) {
