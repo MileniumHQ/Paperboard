@@ -62,8 +62,10 @@ const SLIDES = [
     },
 ];
 
-// The preview card is min(1100px, 94vw, 86vh) wide.
-const SLIDE_SIZES = "(max-width: 1170px) 94vw, 1100px";
+// The preview card is at most 1100px and 94vw wide, or 58vw beside its copy
+// (see .showcase-section in style.css); short screens make it smaller still.
+const SLIDE_SIZES =
+    "(min-aspect-ratio: 5/4) and (min-width: 760px) 58vw, (max-width: 1170px) 94vw, 1100px";
 
 const PLAY_ICONS = [
     "/pictures/ai.png",
@@ -286,8 +288,16 @@ export function Landing() {
 
             <main class="page-layout">
                 <section class="hero-section">
-                    <MarketingHeading level={1} text="Do more with your computer." size={90} />
-                    <p class="hero-sub">Paperboard is an all-in-one toolkit for self-hosting.</p>
+                    <MarketingHeading
+                        level={1}
+                        text="Do more with your computer."
+                        lines={["Do more with", "your computer."]}
+                        size={90}
+                    />
+                    <p class="hero-sub">
+                        Paperboard is an <span class="nowrap">all-in-one</span> toolkit for{" "}
+                        <span class="nowrap">self-hosting.</span>
+                    </p>
                     <DownloadCta />
                 </section>
 
@@ -295,54 +305,64 @@ export function Landing() {
                     read before the stage transition takes over. */}
                 <div class="showcase-hold">
                     <section class="showcase-section">
-                        <div class="preview-card screenshot-card">
-                            <div class="card-image-frame">
-                                <div class="card-slides-track">
-                                    <For each={SLIDES}>
-                                        {(slide, index) => (
-                                            <div
-                                                class="card-slide"
-                                                data-slide-title={slide.title}
-                                                data-slide-description={slide.description}
-                                            >
-                                                {/* The first slide is the page's
-                                                    largest paint; the rest are
-                                                    clipped by the frame and load
-                                                    once the page has (dots-bar.js). */}
-                                                <Screenshot
-                                                    src={slide.src}
-                                                    alt={slide.alt}
-                                                    class="card-slide-image"
-                                                    sizes={SLIDE_SIZES}
-                                                    priority={index() === 0}
-                                                />
-                                            </div>
-                                        )}
-                                    </For>
+                        {/* Card and dots stay one column so the dots follow the
+                            card in every layout; on wide, short screens the
+                            copy sits beside them instead of below. */}
+                        <div class="showcase-media">
+                            <div class="preview-card screenshot-card">
+                                <div class="card-image-frame">
+                                    <div class="card-slides-track">
+                                        <For each={SLIDES}>
+                                            {(slide, index) => (
+                                                <div
+                                                    class="card-slide"
+                                                    data-slide-title={slide.title}
+                                                    data-slide-description={slide.description}
+                                                >
+                                                    {/* The first slide is the page's
+                                                        largest paint; the rest are
+                                                        clipped by the frame and load
+                                                        once the page has (dots-bar.js). */}
+                                                    <Screenshot
+                                                        src={slide.src}
+                                                        alt={slide.alt}
+                                                        class="card-slide-image"
+                                                        sizes={SLIDE_SIZES}
+                                                        priority={index() === 0}
+                                                    />
+                                                </div>
+                                            )}
+                                        </For>
+                                    </div>
+                                </div>
+                                <div class="card-caption">
+                                    <span class="caption-title">Game Server</span>
+                                    <span class="caption-separator" aria-hidden="true">
+                                        ·
+                                    </span>
+                                    <span class="caption-desc">Host and manage your Minecraft server.</span>
                                 </div>
                             </div>
-                            <div class="card-caption">
-                                <span class="caption-title">Game Server</span>
-                                <span class="caption-separator" aria-hidden="true">
-                                    ·
-                                </span>
-                                <span class="caption-desc">Host and manage your Minecraft server.</span>
-                            </div>
-                        </div>
 
-                        <div class="dots-bar">
-                            <div class="card-texture-layer" innerHTML={CARD_NOISE_FILTER} />
-                            <For each={SLIDES}>
-                                {(_, index) => (
-                                    <button class="dot" aria-label={`Slide ${index() + 1}`}>
-                                        <div class="dot-progress" />
-                                    </button>
-                                )}
-                            </For>
+                            <div class="dots-bar">
+                                <div class="card-texture-layer" innerHTML={CARD_NOISE_FILTER} />
+                                <For each={SLIDES}>
+                                    {(_, index) => (
+                                        <button class="dot" aria-label={`Slide ${index() + 1}`}>
+                                            <div class="dot-progress" />
+                                        </button>
+                                    )}
+                                </For>
+                            </div>
                         </div>
 
                         <div class="showcase-content">
-                            <MarketingHeading level={2} text="Your local-first tool for everything." size={54} />
+                            <MarketingHeading
+                                level={2}
+                                text="Your local-first tool for everything."
+                                lines={["Your local-first", "tool for everything."]}
+                                size={54}
+                            />
                             <p>
                                 Paperboard has various apps (called panels) that simplify a variety of
                                 local tasks into simple, clean interfaces that run entirely on your
@@ -356,7 +376,12 @@ export function Landing() {
 
                 <section class="stage-section">
                     <div class="stage-copy">
-                        <MarketingHeading level={2} text="Paperboard runs anywhere." size={54} />
+                        <MarketingHeading
+                            level={2}
+                            text="Paperboard runs anywhere."
+                            lines={["Paperboard", "runs anywhere."]}
+                            size={54}
+                        />
                         <p>
                             Paperboard is 100% compatible with macOS, Windows, and Linux on x86, and
                             macOS and Linux on ARM. You can run Paperboard on a VPS, an old laptop, or a Raspberry
@@ -370,7 +395,12 @@ export function Landing() {
                 <section class="cta-section">
                     <div class="cta-shell">
                         <div class="cta-copy">
-                            <MarketingHeading level={2} text="Devs: We're Open!" size={54} />
+                            <MarketingHeading
+                                level={2}
+                                text="Devs: We're Open!"
+                                lines={["Devs:", "We're Open!"]}
+                                size={54}
+                            />
                             <p>
                                 Paperboard's APIs are completely documented and MIT licensed, so
                                 developers can create their own panels with ease. Just run a command
@@ -394,7 +424,12 @@ export function Landing() {
 
                 <section class="outro-section" data-play-field>
                     <div class="outro-copy">
-                        <MarketingHeading level={2} text="All this and more." size={72} />
+                        <MarketingHeading
+                            level={2}
+                            text="All this and more."
+                            lines={["All this", "and more."]}
+                            size={72}
+                        />
                         <DownloadCta />
                     </div>
                     <For each={PLAY_ICONS}>

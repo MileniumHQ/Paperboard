@@ -15,7 +15,10 @@ import { hullFromAlpha, worldHull, contactBetween, containsPoint } from "./icon-
     const MAX_TILT = 0.5;
     const EDGE_INSET = 78;
     const MAX_SPEED = 1800;
-    const CANDIDATES = 32;
+    // Enough samples that the best one finds a free gap even when the bands
+    // around the copy are tight (phones); overlapping picks get pushed apart
+    // by the collision pass, sometimes into the copy.
+    const CANDIDATES = 128;
     const reduceMotion =
         typeof window.matchMedia === "function" &&
         window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -73,23 +76,41 @@ import { hullFromAlpha, worldHull, contactBetween, containsPoint } from "./icon-
         );
     }
 
-    // Bands around a central exclusion, themselves inset from the section
-    // edges so icons do not spawn hugging the frame.
+    // Bands around the heading and download button's real box, themselves
+    // inset from the section edges so icons do not spawn hugging the frame.
+    // A fixed fraction of the field missed the copy on phones and landscape
+    // screens, where the icons landed on the heading.
+    // The copy block spans the section; what icons must clear is the drawn
+    // heading lines and the download call to action inside it.
+    const copyParts = [...field.querySelectorAll(".outro-copy .styled-text-host, .outro-copy .download-cta")];
+    function copyBox() {
+        const rects = copyParts.map((el) => el.getBoundingClientRect()).filter((r) => r.width && r.height);
+        if (!rects.length) return null;
+        const left = Math.min(...rects.map((r) => r.left));
+        const top = Math.min(...rects.map((r) => r.top));
+        const right = Math.max(...rects.map((r) => r.right));
+        const bottom = Math.max(...rects.map((r) => r.bottom));
+        return { left, top, width: right - left, height: bottom - top };
+    }
     function bands() {
-        const exW = W * 0.62;
-        const exH = H * 0.4;
-        const exX = (W - exW) / 2;
-        const exY = (H - exH) / 2;
+        const inset = Math.min(EDGE_INSET, W * 0.05, H * 0.05);
+        const fieldRect = field.getBoundingClientRect();
+        const copy = copyBox();
+        const margin = 20;
+        const exX = copy ? Math.max(0, copy.left - fieldRect.left - margin) : W * 0.19;
+        const exY = copy ? Math.max(0, copy.top - fieldRect.top - margin) : H * 0.3;
+        const exW = copy ? Math.min(W - exX, copy.width + margin * 2) : W * 0.62;
+        const exH = copy ? Math.min(H - exY, copy.height + margin * 2) : H * 0.4;
         return [
-            { x: EDGE_INSET, y: EDGE_INSET, w: W - EDGE_INSET * 2, h: exY - EDGE_INSET },
+            { x: inset, y: inset, w: W - inset * 2, h: exY - inset },
             {
-                x: EDGE_INSET,
+                x: inset,
                 y: exY + exH,
-                w: W - EDGE_INSET * 2,
-                h: H - EDGE_INSET - (exY + exH),
+                w: W - inset * 2,
+                h: H - inset - (exY + exH),
             },
-            { x: EDGE_INSET, y: exY, w: exX - EDGE_INSET, h: exH },
-            { x: exX + exW, y: exY, w: W - EDGE_INSET - (exX + exW), h: exH },
+            { x: inset, y: exY, w: exX - inset, h: exH },
+            { x: exX + exW, y: exY, w: W - inset - (exX + exW), h: exH },
         ].filter((band) => band.w >= SIZE && band.h >= SIZE);
     }
 

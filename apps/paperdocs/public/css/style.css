@@ -2,6 +2,13 @@
     --paper-site-accent: var(--paper-primary);
     --bg-top: color-mix(in srgb, var(--paper-site-accent) 50%, var(--paper-on-color));
     --bg-bottom: var(--paper-site-accent);
+    --bg-deep: color-mix(in srgb, var(--paper-site-accent) 68%, var(--paper-marketing-ink));
+    /* Body copy for every landing section: one readable size that follows the
+       width, never the height, so short laptops do not shrink it. */
+    --site-copy-size: clamp(16px, 0.35vw + 14px, 19px);
+    --site-copy-ink: color-mix(in srgb, var(--paper-on-color) 90%, transparent);
+    /* Room the fixed topbar takes from the top of every full-screen section. */
+    --site-topbar-room: 80px;
     --bg-noise-opacity: 0.4;
     --paper-front-blue: var(--paper-site-accent);
     --paper-back-blue: color-mix(in srgb, var(--paper-site-accent) 78%, var(--paper-marketing-ink));
@@ -36,18 +43,30 @@ body { margin: 0; }
 .site-footer :where(div, nav, a, img, span) { box-sizing: border-box; }
 .page-layout :where(h1, h2, p, figure), .learn-page :where(h1, h2, p, figure) { margin: 0; }
 
+/* One gradient down the whole page: light behind the hero, the brand blue
+   through the middle, deepening toward the footer. It scrolls with the page
+   because a fixed background is ignored on iOS and creased on desktop, where
+   every screen repeated the hero's light band. html carries the deepest stop
+   so overscroll past either end never flashes white. */
 body,
 html {
     width: 100%;
     min-height: 100%;
     font-family: "Nunito", sans-serif;
+}
+
+html {
+    background: var(--bg-deep);
+}
+
+body {
     background: linear-gradient(
         180deg,
-        var(--bg-top) 0%,
-        var(--bg-bottom) 40%,
-        color-mix(in srgb, var(--paper-site-accent) 65%, var(--paper-marketing-ink)) 100%
+        var(--bg-top) 0,
+        var(--bg-bottom) 110vh,
+        color-mix(in srgb, var(--paper-site-accent) 88%, var(--paper-marketing-ink)) 60%,
+        var(--bg-deep) 100%
     );
-    background-attachment: fixed;
 }
 
 html {
@@ -443,6 +462,8 @@ body {
     }
 }
 
+/* Centred in the space between the topbar and the card peeking up from below
+   (card-scroll.js peeks min(120px, 14vh)). */
 .hero-section {
     position: relative;
     width: 100vw;
@@ -451,7 +472,8 @@ body {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 28px;
+    gap: clamp(16px, 3.2vh, 28px);
+    padding: var(--site-topbar-room) 20px min(120px, 14vh);
     z-index: 10;
 }
 
@@ -462,7 +484,13 @@ body {
     height: calc(100vh + 45vh);
 }
 
+/* Stacked on portrait screens; on wide, short screens the copy sits beside
+   the card, which is sized from the height left after the topbar, caption and
+   dots, so the whole showcase fits one screen in every shape. */
 .showcase-section {
+    --showcase-gap: clamp(10px, 2vh, 20px);
+    /* Height of everything stacked with the card that is not the image. */
+    --showcase-reserve: calc(var(--site-topbar-room) + 300px);
     position: sticky;
     top: 0;
     width: 100vw;
@@ -471,9 +499,68 @@ body {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: clamp(12px, 2vh, 20px);
-    padding: clamp(12px, 2.5vh, 24px) 24px;
+    gap: var(--showcase-gap);
+    padding: var(--site-topbar-room) 24px clamp(12px, 2.5vh, 24px);
     z-index: 20;
+}
+
+.showcase-media {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--showcase-gap);
+}
+
+/* Short portrait phones: a smaller card and copy, so the whole showcase
+   still reads on one screen. */
+@media (max-height: 700px) and (max-aspect-ratio: 5/4) {
+    .showcase-section {
+        --site-topbar-room: 72px;
+        --showcase-reserve: calc(var(--site-topbar-room) + 410px);
+        --showcase-gap: 6px;
+        justify-content: safe center;
+        --site-copy-size: 15px;
+    }
+
+    .showcase-content p {
+        line-height: 1.5;
+    }
+
+    /* Below about 640px tall the copy cannot fit beside a legible card; keep
+       the card legible and let the last lines run past the fold. */
+    .showcase-section .preview-card {
+        width: max(200px, min(94vw, (100svh - var(--showcase-reserve)) * 4 / 3));
+    }
+}
+
+@media (min-aspect-ratio: 5/4) and (min-width: 760px) {
+    .showcase-section {
+        --showcase-reserve: calc(var(--site-topbar-room) + 150px);
+        flex-direction: row;
+        gap: clamp(28px, 4.5vw, 80px);
+        padding-inline: clamp(24px, 5vw, 96px);
+    }
+
+    .showcase-section .preview-card {
+        width: min(1100px, 58vw, (100svh - var(--showcase-reserve)) * 4 / 3);
+    }
+
+    /* The card keeps its computed width; only the copy gives way. */
+    .showcase-section .showcase-media {
+        flex: none;
+    }
+
+    .showcase-section .showcase-content {
+        flex: 0 1 34rem;
+        min-width: 0;
+        align-items: flex-start;
+        text-align: left;
+        padding: 0;
+    }
+
+    .showcase-content .marketing-heading-lines {
+        justify-content: flex-start;
+    }
 }
 
 /* One surface and solid offset layer for every marketing screenshot card. */
@@ -509,7 +596,8 @@ body {
     border-radius: inherit;
 }
 .preview-card {
-    width: min(1100px, 94vw, 86vh);
+    width: min(1100px, 94vw, (100svh - var(--showcase-reserve, 380px)) * 4 / 3);
+    max-width: 100%;
     padding: 0;
     transform-origin: center;
     cursor: pointer;
@@ -548,13 +636,15 @@ body {
 .card-caption {
     width: 100%;
     position: relative;
-    padding: 14px 14px 18px;
+    padding: 12px 16px 16px;
     border-radius: 0 0 12px 12px;
     background: var(--paper-card-face);
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: center;
-    gap: 10px;
+    gap: 2px 10px;
+    text-align: center;
     font-size: 14px;
     font-weight: 600;
     color: color-mix(in srgb, var(--paper-on-color) 85%, transparent);
@@ -576,6 +666,26 @@ body {
 .caption-title {
     font-weight: 800;
     color: var(--paper-on-color);
+    white-space: nowrap;
+}
+
+/* On a narrow card the title sits over its description instead of wrapping
+   beside it. */
+@media (max-width: 520px) {
+    .card-caption {
+        flex-direction: column;
+        padding: 10px 12px 12px;
+        font-size: 13px;
+    }
+
+    /* The section already pads the screen edge. */
+    .showcase-section .showcase-content {
+        padding-inline: 0;
+    }
+
+    .caption-separator {
+        display: none;
+    }
 }
 
 .caption-separator {
@@ -680,7 +790,8 @@ body {
 }
 
 .showcase-content {
-    max-width: 680px;
+    width: 100%;
+    max-width: 720px;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -692,12 +803,15 @@ body {
     z-index: 10;
 }
 
-.showcase-content p {
-    margin-top: 0;
-    font-size: clamp(14px, 1.8vh, 16px);
-    line-height: 1.55;
-    color: rgba(255, 255, 255, 0.88);
+.showcase-content p,
+.stage-copy p,
+.cta-copy p {
+    max-width: 62ch;
+    font-size: var(--site-copy-size);
+    line-height: 1.6;
+    color: var(--site-copy-ink);
     font-weight: 500;
+    text-wrap: pretty;
 }
 
 .stage-section {
@@ -743,12 +857,9 @@ body {
     color: #ffffff;
 }
 
-.stage-copy p {
-    max-width: 620px;
-    font-size: clamp(14px, 2vh, 17px);
-    line-height: 1.55;
-    color: rgba(255, 255, 255, 0.88);
-    font-weight: 500;
+.stage-copy {
+    width: 100%;
+    max-width: 760px;
 }
 
 .stage-dash {
@@ -815,14 +926,19 @@ body {
     visibility: hidden;
 }
 
+.nowrap {
+    white-space: nowrap;
+}
+
 .hero-sub {
     max-width: 44ch;
     margin: 0;
-    font-size: clamp(16px, 2.2vh, 20px);
-    line-height: 1.55;
+    font-size: clamp(17px, 0.6vw + 14px, 22px);
+    line-height: 1.5;
     font-weight: 600;
-    color: rgba(255, 255, 255, 0.92);
+    color: var(--site-copy-ink);
     text-align: center;
+    text-wrap: balance;
 }
 
 .download-cta {
@@ -834,16 +950,18 @@ body {
 
 .download-note {
     margin: 0;
-    font-size: 14px;
+    font-size: 15px;
     line-height: 1.5;
     color: rgba(255, 255, 255, 0.82);
     text-align: center;
 }
 
 .download-note a {
+    display: inline-block;
+    padding: 6px 4px;
     color: inherit;
     text-decoration: underline;
-    text-underline-offset: 2px;
+    text-underline-offset: 3px;
 }
 
 .chart-section {
@@ -1143,10 +1261,10 @@ body {
 }
 
 .cta-shell {
-    width: min(1380px, 100%);
+    width: min(1320px, 100%);
     display: grid;
-    grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.6fr);
-    gap: clamp(28px, 5vw, 72px);
+    grid-template-columns: minmax(20rem, 0.85fr) minmax(0, 1.4fr);
+    gap: clamp(32px, 5vw, 80px);
     align-items: center;
 }
 
@@ -1167,13 +1285,7 @@ body {
     transform: none;
 }
 
-.cta-copy p {
-    max-width: 46ch;
-    font-size: clamp(14px, 2vh, 17px);
-    font-weight: 500;
-    line-height: 1.6;
-    color: rgba(255, 255, 255, 0.88);
-}
+
 
 .cta-actions {
     display: flex;
@@ -1199,32 +1311,58 @@ body {
     border-radius: 4px;
 }
 
-@media (max-width: 860px) {
+.cta-copy .marketing-heading-lines {
+    justify-content: flex-start;
+}
+
+@media (max-width: 960px) {
     .cta-shell {
-        grid-template-columns: 1fr;
+        grid-template-columns: minmax(0, 1fr);
+        justify-items: center;
+    }
+
+    .cta-copy {
+        max-width: 640px;
+        align-items: center;
+        text-align: center;
+    }
+
+    .cta-copy .marketing-heading-lines,
+    .cta-actions {
+        justify-content: center;
     }
 }
 
 .outro-section {
     position: relative;
     width: 100vw;
-    min-height: 100vh;
+    min-height: max(100vh, 560px);
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 0 24px;
+    padding: 140px 24px;
     overflow: hidden;
     z-index: 20;
 }
 
 .outro-copy {
     position: relative;
+    width: 100%;
+    max-width: 960px;
     z-index: 2;
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 28px;
+}
+
+/* Seven icons share the bands above and below the copy on narrow screens;
+   give those bands room for the icons to settle without nudging into it. */
+@media (max-width: 520px) {
+    .outro-section {
+        padding-block: 220px;
+    }
 }
 
 /* Same size, scattered static around the CTA; hidden toy: drag one to toss it. */
@@ -1409,11 +1547,14 @@ body {
     }
 }
 
-@media (max-width: 480px) {
+@media (max-width: 340px) {
     .site-footer__inner {
         grid-template-columns: minmax(0, 1fr);
         gap: 28px;
     }
+}
+
+@media (max-width: 480px) {
 
     .site-footer__bottom {
         justify-content: flex-start;
@@ -1422,25 +1563,9 @@ body {
 
 @media (max-width: 700px) {
     .hero-section {
-        gap: 18px;
-        padding: 0 18px;
+        padding-inline: 18px;
     }
 
-    .hero-sub {
-        font-size: 16px;
-    }
-
-    /* The styled-text SVG carries internal padding, so a left-aligned heading
-       reads as indented next to its paragraph. Center the pair on phones. */
-    .chart-intro,
-    .cta-copy {
-        align-items: center;
-        text-align: center;
-    }
-
-    .cta-actions {
-        justify-content: center;
-    }
 }
 
 .sr-only {
@@ -1478,7 +1603,20 @@ body {
     position: absolute; width: 1px; height: 1px; overflow: hidden;
     clip-path: inset(50%); white-space: nowrap;
 }
-.marketing-heading .styled-text-host { display: flex; line-height: 0; width: 100%; max-width: 100%; justify-content: center; }
+/* A heading is its own size container: every line is set at one size, the
+   design size or smaller where the longest line must fit the width or the
+   screen is short, and lines sit on one row when they fit. */
+.marketing-heading { container-type: inline-size; }
+.marketing-heading-lines {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    column-gap: 0.26em;
+    width: 100%;
+    font-size: min(var(--heading-size), var(--heading-fit), 11svh);
+    line-height: 0;
+}
+.marketing-heading .styled-text-host { display: flex; max-width: 100%; }
 .marketing-heading styled-text { vertical-align: top; }
 
-.showcase-content, .cta-copy { text-align: center; align-items: center; }
+

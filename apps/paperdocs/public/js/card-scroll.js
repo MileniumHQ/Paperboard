@@ -18,12 +18,17 @@
             const cardTopInSection = card.offsetTop;
             // The card rests poking out of the hero's bottom edge, inviting the
             // scroll down; it settles into the showcase as you scroll. No scale,
-            // so the rounded corners never appear to morph.
-            const peekAmount = 120;
+            // so the rounded corners never appear to morph. Short screens peek
+            // less, so the card never reaches the hero's download button.
+            const peekAmount = Math.min(120, targetY * 0.14);
             const startOffset = -(cardTopInSection + peekAmount);
+            // Where the showcase sets the card beside its copy, it still peeks
+            // from the middle under the centred hero and slides over as it lands.
+            const startShift =
+                showcase.offsetWidth / 2 - (card.offsetLeft + card.offsetWidth / 2);
 
-            const currentOffset = startOffset * (1 - progress);
-            card.style.transform = `translate3d(0, ${currentOffset.toFixed(2)}px, 0)`;
+            const rest = 1 - progress;
+            card.style.transform = `translate3d(${(startShift * rest).toFixed(2)}px, ${(startOffset * rest).toFixed(2)}px, 0)`;
         }
 
         // Scroll stays native: the card follows the user's scroll, it

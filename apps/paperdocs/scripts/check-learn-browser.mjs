@@ -526,6 +526,39 @@ try {
     await page.waitForFunction(previous => document.querySelectorAll(".play-icon")[1].getAttribute("style") !== previous, before);
     await page.mouse.up();
     console.log("verified actual artwork loads and dragging an icon pushes its neighbour");
+    // Every screen shape: the held showcase keeps card and copy apart and on
+    // screen (pinning the card used to collapse its column under the copy),
+    // a wrapped heading keeps one type size, and the outro's scattered icons
+    // clear the heading and download button.
+    const overlaps = (a, b) => a.left < b.right - 1 && b.left < a.right - 1 && a.top < b.bottom - 1 && b.top < a.bottom - 1;
+    for (const [width, height] of [[2560, 1080], [1440, 900], [1280, 720], [820, 1180], [844, 390], [390, 844], [360, 640]]) {
+        const shapePage = await browser.newPage({ viewport: { width, height } });
+        try {
+            await shapePage.goto(`${origin}/`);
+            await shapePage.evaluate(() => document.fonts.ready);
+            for (const fraction of [1, 1.3]) {
+                await shapePage.evaluate((f) => scrollTo(0, innerHeight * f), fraction);
+                await shapePage.waitForTimeout(250);
+                const held = await shapePage.evaluate(() => {
+                    const box = (sel) => document.querySelector(sel).getBoundingClientRect().toJSON();
+                    return { card: box(".preview-card"), copy: box(".showcase-content"), heading: box(".showcase-content .marketing-heading-lines"), pinned: document.querySelector(".preview-card").classList.contains("pinned") };
+                });
+                assert.ok(held.pinned, `The card is held at ${width} × ${height}`);
+                assert.ok(!overlaps(held.card, held.copy), `Showcase card and copy must not overlap at ${width} × ${height} (${fraction}vh)`);
+                assert.ok(held.card.top >= 0 && held.heading.top >= held.card.top, `The showcase must start on screen at ${width} × ${height}`);
+            }
+            const lineSizes = await shapePage.locator(".hero-section styled-text").evaluateAll(elements => elements.map(element => Math.round(element.shadowRoot.querySelector("svg").getBoundingClientRect().height)));
+            assert.equal(new Set(lineSizes).size, 1, `Hero heading lines share one size at ${width} × ${height}: ${lineSizes}`);
+            await shapePage.locator("[data-play-field]").scrollIntoViewIfNeeded();
+            await shapePage.waitForFunction(() => [...document.querySelectorAll(".play-icon")].every(icon => icon.style.transform.includes("translate3d")));
+            const outro = await shapePage.evaluate(() => ({
+                copy: [...document.querySelectorAll(".outro-copy .styled-text-host, .outro-copy .download-cta")].map(element => element.getBoundingClientRect().toJSON()),
+                icons: [...document.querySelectorAll(".play-icon")].map(element => element.getBoundingClientRect().toJSON()),
+            }));
+            assert.ok(outro.icons.every(icon => outro.copy.every(copy => !overlaps(icon, copy))), `Outro icons must clear the heading and download at ${width} × ${height}`);
+        } finally { await shapePage.close(); }
+    }
+    console.log("verified the showcase, heading lines and outro icons across seven screen shapes");
     await page.setViewportSize({ width: 390, height: 844 });
     for (const slug of ["actions", "game-server", "bot-creator", "ai"]) {
         await page.goto(`${origin}/${slug}/`);

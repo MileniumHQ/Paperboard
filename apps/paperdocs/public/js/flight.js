@@ -119,12 +119,15 @@
                 card.style.width = `${r.width.toFixed(1)}px`;
                 card.classList.add("pinned");
                 // Taking the card out of flow drops its box and the flex gap
-                // that followed it; reserve both so the dots bar does not move.
+                // that followed it; reserve both so the dots bar does not move,
+                // and keep the column as wide so copy beside it stays put.
                 if (dotsBar) {
-                    const gap = showcaseEl
-                        ? parseFloat(getComputedStyle(showcaseEl).rowGap) || 0
+                    const column = dotsBar.parentElement;
+                    const gap = column
+                        ? parseFloat(getComputedStyle(column).rowGap) || 0
                         : 0;
                     dotsBar.style.marginTop = `${(r.height + gap).toFixed(1)}px`;
+                    if (column) column.style.minWidth = `${r.width.toFixed(1)}px`;
                 }
             } else if (!wantPin && pinned) {
                 card.classList.remove("pinned");
@@ -132,7 +135,10 @@
                 card.style.top = "";
                 card.style.left = "";
                 card.style.width = "";
-                if (dotsBar) dotsBar.style.marginTop = "";
+                if (dotsBar) {
+                    dotsBar.style.marginTop = "";
+                    if (dotsBar.parentElement) dotsBar.parentElement.style.minWidth = "";
+                }
             }
             if (s >= 1 && card.classList.contains("pinned")) {
                 card.style.transform = "";

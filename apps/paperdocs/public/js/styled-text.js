@@ -86,6 +86,17 @@ svg {
     height: auto;
     overflow: visible;
 }
+
+/* Fluid headings size every line of a heading from one font size the page
+   sets (the svg box is the font box, 1.364em of Nunito), so wrapped lines
+   keep a single type size instead of each shrinking to its own width. */
+:host([fluid]) {
+    max-width: 100%;
+}
+
+:host([fluid]) svg {
+    height: 1.364em;
+}
 `;
 
     class StyledTextElement extends HTMLElement {
