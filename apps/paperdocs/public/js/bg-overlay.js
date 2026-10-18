@@ -1,14 +1,39 @@
 (() => {
-    let assetsPromise = null;
-    function loadAssets() {
-        if (!assetsPromise) {
-            assetsPromise = Promise.all([
-                fetch('/html/bg-overlay.html').then((r) => r.text()),
-                fetch('/css/bg-overlay.css').then((r) => r.text()),
-            ]).then(([html, css]) => `<style>${css}</style>${html}`);
-        }
-        return assetsPromise;
-    }
+    // Shipped inline so the overlay renders as soon as it upgrades.
+    const STYLES = `:host {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    mix-blend-mode: overlay;
+    opacity: var(--bg-noise-opacity, 0.4);
+    z-index: 1;
+    display: block;
+}
+
+svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+`;
+    const MARKUP = `<svg>
+    <defs>
+        <filter id="bg-mono-noise" x="0%" y="0%" width="100%" height="100%">
+            <feTurbulence
+                type="fractalNoise"
+                baseFrequency="1.3"
+                numOctaves="3"
+                stitchTiles="stitch"
+            />
+            <feColorMatrix type="saturate" values="0" />
+        </filter>
+    </defs>
+    <rect width="100%" height="100%" filter="url(#bg-mono-noise)" />
+</svg>
+`;
+    const TEMPLATE = `<style>${STYLES}</style>${MARKUP}`;
 
     class BgOverlayElement extends HTMLElement {
         static get observedAttributes() {
@@ -20,51 +45,18 @@
             this.attachShadow({ mode: 'open' });
         }
 
-        async connectedCallback() {
-            await this.render();
+        connectedCallback() {
+            this.render();
         }
 
         attributeChangedCallback() {
             this.render();
         }
 
-        async render() {
-            const template = await loadAssets();
-            this.shadowRoot.innerHTML = template;
+        render() {
+            this.shadowRoot.innerHTML = TEMPLATE;
         }
     }
 
     customElements.define('bg-overlay', BgOverlayElement);
-
-    function upgradeBgOverlayTags(root = document) {
-        root.querySelectorAll('BgOverlay, bgoverlay').forEach((el) => {
-            const replacement = document.createElement('bg-overlay');
-            for (const attr of el.attributes) {
-                replacement.setAttribute(attr.name, attr.value);
-            }
-            replacement.textContent = el.textContent;
-            el.replaceWith(replacement);
-        });
-    }
-
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', () => upgradeBgOverlayTags());
-    } else {
-        upgradeBgOverlayTags();
-    }
-
-    const bgObserver = new MutationObserver((mutations) => {
-        for (const mutation of mutations) {
-            for (const node of mutation.addedNodes) {
-                if (node.nodeType === 1) {
-                    if (node.tagName === 'BGOVERLAY') {
-                        upgradeBgOverlayTags(node.parentNode || document);
-                    } else if (node.querySelectorAll) {
-                        upgradeBgOverlayTags(node);
-                    }
-                }
-            }
-        }
-    });
-    bgObserver.observe(document.body, { childList: true, subtree: true });
 })();

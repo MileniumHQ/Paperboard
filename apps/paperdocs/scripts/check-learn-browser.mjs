@@ -585,6 +585,42 @@ try {
     }
     await page.setViewportSize({ width: 1440, height: 1080 });
     console.log("verified learn screenshots: vertical tilt, hover facing the camera, and full-screen open/dismiss");
+    // The decorative headings and buttons render as the parser creates them.
+    // When they waited on fetched templates, every heading sat blank (its
+    // label already hidden) for a round trip on a slow connection, then
+    // popped in and pushed the page down. Slow every subresource down and
+    // watch each frame from the first paint.
+    const slowPage = await browser.newPage({ viewport: { width: 390, height: 844 } });
+    try {
+        await slowPage.route("**/*", async (route) => {
+            if (route.request().resourceType() !== "document") await new Promise((resolve) => setTimeout(resolve, 250));
+            await route.continue();
+        });
+        await slowPage.addInitScript(() => {
+            window.__blankHeadings = [];
+            const sample = () => {
+                const main = document.querySelector("main");
+                if (main && main.getBoundingClientRect().height > 0) {
+                    for (const heading of document.querySelectorAll(".marketing-heading")) {
+                        if (heading.getBoundingClientRect().height < 1) window.__blankHeadings.push(heading.textContent.trim());
+                    }
+                }
+                requestAnimationFrame(sample);
+            };
+            requestAnimationFrame(sample);
+        });
+        for (const path of ["/", "/game-server/"]) {
+            const templateFetches = [];
+            const onRequest = (request) => { if (/\/html\/|\/css\/(styled-text|paper-button|bg-overlay)\.css/.test(request.url())) templateFetches.push(request.url()); };
+            slowPage.on("request", onRequest);
+            await slowPage.goto(`${origin}${path}`, { waitUntil: "load" });
+            await slowPage.waitForTimeout(400);
+            slowPage.off("request", onRequest);
+            assert.deepEqual(await slowPage.evaluate(() => [...new Set(window.__blankHeadings)]), [], `No heading on ${path} may paint blank before its effect renders`);
+            assert.deepEqual(templateFetches, [], `Decorative elements on ${path} must not fetch their templates`);
+        }
+    } finally { await slowPage.close(); }
+    console.log("verified headings and buttons never paint blank on a slow connection");
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.goto(`${origin}/actions/`);
     assert.equal(await page.locator(".is-pending").count(), 0);

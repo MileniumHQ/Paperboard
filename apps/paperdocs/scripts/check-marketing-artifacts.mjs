@@ -30,8 +30,21 @@ assert.ok(
     "the docs pages must not carry the marketing disclaimers",
 );
 
+// The decorative heading, button, and overlay elements must be defined in
+// the head, so they render as the parser creates them instead of painting
+// their fallbacks first and swapping in after the body has loaded.
+const ELEMENT_SCRIPTS = ["/js/bg-overlay.js", "/js/styled-text.js", "/js/paper-button.js"];
+function assertElementsInHead(name, raw) {
+    const head = raw.slice(0, raw.indexOf("<body"));
+    for (const script of ELEMENT_SCRIPTS) {
+        assert.ok(head.includes(`<script src="${script}"></script>`), `${name} must define ${script} in its head`);
+    }
+}
+assertElementsInHead("the landing", await read("index.html"));
+
 for (const slug of ["actions", "game-server", "bot-creator", "ai"]) {
     const raw = await read(`${slug}/index.html`);
+    assertElementsInHead(slug, raw);
     const html = flatten(raw);
     assert.ok(raw.includes('class="learn-page"'), `${slug} must render its marketing page`);
     assert.equal((html.match(/<h1\b/g) || []).length, 1, `${slug} needs one semantic headline`);

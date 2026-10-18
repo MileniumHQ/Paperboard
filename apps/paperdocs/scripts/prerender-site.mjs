@@ -51,12 +51,16 @@ function landingDocument(page, path) {
         <link rel="stylesheet" href="/site.css" />
         <link rel="stylesheet" href="/css/style.css" />
         ${page.learn ? '<link rel="stylesheet" href="/css/learn.css" />' : ""}
-    </head>
-    <body>
-${stripSsrArtifacts(page.html)}
+        <!-- The decorative elements are defined before the body is parsed, so
+             each heading, button, and overlay renders as the parser creates it.
+             Defined after the content, the page first painted their plain
+             fallbacks and then swapped them in, shifting everything below. -->
         <script src="/js/bg-overlay.js"></script>
         <script src="/js/styled-text.js"></script>
         <script src="/js/paper-button.js"></script>
+    </head>
+    <body>
+${stripSsrArtifacts(page.html)}
         <script src="/js/topbar.js"></script>
         <script src="/js/download-button.js"></script>
         ${page.learn ? '<script src="/js/learn-reveal.js"></script>\n        <script src="/js/learn-lightbox.js"></script>' : `<script src="/js/card-scroll.js"></script>

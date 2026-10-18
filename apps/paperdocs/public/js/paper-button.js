@@ -1,14 +1,217 @@
 (() => {
-    let assetsPromise = null;
-    function loadAssets() {
-        if (!assetsPromise) {
-            assetsPromise = Promise.all([
-                fetch('/html/paper-button.html').then((r) => r.text()),
-                fetch('/css/paper-button.css').then((r) => r.text()),
-            ]);
-        }
-        return assetsPromise;
+    // The template and its styles ship inside this script so a button
+    // renders the moment it upgrades instead of after a network round trip.
+    const TEMPLATE = `<div class="PaperEffect {{variantClass}} {{disabledClass}}">
+    <{{tag}} {{hrefAttr}} {{targetAttr}} {{relAttr}} {{disabledAttr}} class="PaperButton {{sizeClass}}">
+        <slot></slot>
+    </{{tag}}>
+</div>
+`;
+    const STYLES = `:host {
+    display: inline-flex;
+    position: relative;
+    z-index: 10;
+}
+
+.PaperEffect {
+    --transition-color: var(--paper-button-deep, #0f63c8);
+    --transform-size: 5px;
+    --hover-offset: -2px;
+    margin-bottom: var(--transform-size);
+    margin-right: var(--transform-size);
+    display: inline-flex;
+    width: fit-content;
+    cursor: pointer;
+    border-radius: var(--paper-border-radius, 12px);
+    position: relative;
+    isolation: isolate;
+    transition: box-shadow 0.2s, transform 0.2s;
+}
+
+.PaperEffect::before {
+    content: '';
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    border-radius: var(--paper-border-radius, 12px);
+    left: 0;
+    top: 0;
+    background: var(--transition-color);
+    transition: transform 0.2s, background 0.2s;
+    transform: translate3d(var(--transform-size), var(--transform-size), 0);
+    z-index: -1;
+}
+
+.PaperEffect:hover:not(:active) {
+    transform: translate3d(var(--hover-offset), var(--hover-offset), 0);
+}
+
+.PaperEffect:hover:not(:active)::before {
+    transform: translate3d(
+        calc(var(--transform-size) - var(--hover-offset)),
+        calc(var(--transform-size) - var(--hover-offset)),
+        0
+    );
+}
+
+.PaperEffect:active {
+    transform: translate3d(var(--transform-size), var(--transform-size), 0);
+}
+
+.PaperEffect:active::before {
+    transform: translate3d(0, 0, 0);
+}
+
+.PaperEffect > .PaperButton:active {
+    transform: none !important;
+}
+
+.PaperEffect:hover:not(:active) .PaperButton {
+    filter: brightness(1.08);
+}
+
+.PaperButton {
+    font-family: 'Nunito', sans-serif;
+    --foreground: var(--paper-button-face, #ffffff);
+    background-color: var(--foreground);
+    background-image: var(--paper-button-noise, none);
+    background-blend-mode: soft-light;
+    background-size: 140px 140px;
+    color: var(--paper-button-ink, #0f63c8);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.2),
+        inset 0 -2px 0 rgba(0, 0, 0, 0.12);
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    border: none;
+    border-radius: var(--paper-border-radius, 12px);
+    cursor: pointer;
+    outline: none;
+    width: fit-content;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    white-space: nowrap;
+    text-decoration: none;
+    transition: opacity 0.2s, background 0.2s, filter 0.2s;
+}
+
+/* The host page can tighten a medium button (the topbar's icon-only
+   Download on narrow phones) through these inherited properties. */
+.PaperButton.size-medium {
+    padding: var(--paper-button-padding, 12px 28px);
+    font-size: 18px;
+    gap: var(--paper-button-gap, 10px);
+}
+
+.PaperButton.size-large {
+    padding: 19px 46px;
+    font-size: 24px;
+    gap: 14px;
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.25),
+        inset 0 -2px 0 rgba(0, 0, 0, 0.12),
+        0 16px 34px -14px color-mix(in srgb, var(--paper-site-accent) 24%, var(--paper-marketing-ink));
+}
+
+/* pressed flush: the lift reads only while the button is not held down */
+.PaperEffect:active .PaperButton {
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.2),
+        inset 0 -2px 0 rgba(0, 0, 0, 0.12);
+}
+
+.PaperButton:focus-visible {
+    outline: 2px solid #ffffff;
+    outline-offset: 2px;
+}
+
+.PaperEffect.variant-blue,
+.PaperEffect.variant-brand {
+    --transition-color: var(--paper-button-deep, #0f63c8);
+}
+.PaperEffect.variant-blue .PaperButton,
+.PaperEffect.variant-brand .PaperButton {
+    --foreground: var(--paper-button-face, #ffffff);
+}
+
+/* GitHub: ink-black paper with an even darker offset layer */
+.PaperEffect.variant-black {
+    --transition-color: color-mix(in srgb, var(--paper-marketing-ink) 24%, black);
+}
+
+.PaperEffect.variant-black .PaperButton {
+    --foreground: color-mix(in srgb, var(--paper-marketing-ink) 60%, black);
+    color: var(--paper-on-color);
+    font-family: "SUSE Mono", ui-monospace, monospace;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+}
+
+.PaperEffect.variant-green {
+    --transition-color: var(--paper-back-green, #0b720b);
+}
+.PaperEffect.variant-green .PaperButton {
+    --foreground: var(--paper-front-green, #0d9d0d);
+}
+
+.PaperEffect.variant-yellow {
+    --transition-color: var(--paper-back-yellow, #a17e0d);
+}
+.PaperEffect.variant-yellow .PaperButton {
+    --foreground: var(--paper-front-yellow, #d7a51d);
+}
+
+.PaperEffect.variant-red {
+    --transition-color: var(--paper-back-red, #ae1414);
+}
+.PaperEffect.variant-red .PaperButton {
+    --foreground: var(--paper-front-red, #e73648);
+}
+
+.PaperEffect.disabled,
+.PaperButton:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+::slotted(img),
+::slotted(svg) {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+    display: inline-block;
+    vertical-align: middle;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .PaperEffect,
+    .PaperEffect::before {
+        transition: none;
     }
+
+    .PaperEffect:hover:not(:active),
+    .PaperEffect:active {
+        transform: none;
+    }
+
+    .PaperEffect:hover:not(:active)::before,
+    .PaperEffect:active::before {
+        transform: translate3d(var(--transform-size), var(--transform-size), 0);
+    }
+}
+
+/* The hero/outro CTAs are the only large buttons; on phones they should not
+   dwarf the styled headline above them. */
+@media (max-width: 600px) {
+    .PaperButton.size-large {
+        padding: 12px 26px;
+        font-size: 18px;
+    }
+}
+`;
 
     class PaperButtonElement extends HTMLElement {
         static get observedAttributes() {
@@ -20,16 +223,17 @@
             this.attachShadow({ mode: 'open' });
         }
 
-        async connectedCallback() {
-            await this.render();
+        connectedCallback() {
+            this.render();
         }
 
         attributeChangedCallback() {
             this.render();
         }
 
-        async render() {
-            const [rawHtml, css] = await loadAssets();
+        render() {
+            const rawHtml = TEMPLATE;
+            const css = STYLES;
             const variant = this.getAttribute('variant') || 'brand';
             const size = this.getAttribute('size') || 'medium';
             const disabled = this.hasAttribute('disabled');
@@ -61,36 +265,4 @@
     }
 
     customElements.define('paper-button', PaperButtonElement);
-
-    function upgradePaperButtonTags(root = document) {
-        root.querySelectorAll('PaperButton, paperbutton').forEach((el) => {
-            const replacement = document.createElement('paper-button');
-            for (const attr of el.attributes) {
-                replacement.setAttribute(attr.name, attr.value);
-            }
-            replacement.innerHTML = el.innerHTML;
-            el.replaceWith(replacement);
-        });
-    }
-
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', () => upgradePaperButtonTags());
-    } else {
-        upgradePaperButtonTags();
-    }
-
-    const paperBtnObserver = new MutationObserver((mutations) => {
-        for (const mutation of mutations) {
-            for (const node of mutation.addedNodes) {
-                if (node.nodeType === 1) {
-                    if (node.tagName === 'PAPERBUTTON') {
-                        upgradePaperButtonTags(node.parentNode || document);
-                    } else if (node.querySelectorAll) {
-                        upgradePaperButtonTags(node);
-                    }
-                }
-            }
-        }
-    });
-    paperBtnObserver.observe(document.body, { childList: true, subtree: true });
 })();
