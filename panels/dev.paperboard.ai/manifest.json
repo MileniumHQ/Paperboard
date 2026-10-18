@@ -33,22 +33,22 @@
             {
                 "light": "./store/1-light.png",
                 "dark": "./store/1-dark.png",
-                "alt": "Search the web from a chat"
+                "alt": "Chat with your own models"
             },
             {
                 "light": "./store/2-light.png",
                 "dark": "./store/2-dark.png",
-                "alt": "Pick a local model"
+                "alt": "Bring your coding agents"
             },
             {
                 "light": "./store/3-light.png",
                 "dark": "./store/3-dark.png",
-                "alt": "Chat with thinking models"
+                "alt": "Connect any OpenAI-compatible server"
             },
             {
                 "light": "./store/4-light.png",
                 "dark": "./store/4-dark.png",
-                "alt": "Approve tool use before it runs"
+                "alt": "Approve commands before they run"
             }
         ],
         "services": [
