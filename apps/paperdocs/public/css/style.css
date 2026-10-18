@@ -496,6 +496,12 @@ body {
     transform: translate3d(14px, 16px, 0);
     pointer-events: none;
 }
+/* Responsive images wrap their <img> in a <picture> only to offer WebP
+   copies; the wrapper takes no box, so every img rule keeps applying. */
+.marketing-picture {
+    display: contents;
+}
+
 .marketing-screenshot {
     display: block;
     width: 100%;

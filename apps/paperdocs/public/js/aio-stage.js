@@ -230,7 +230,7 @@ function init() {
     document.addEventListener("paperboard:slide", onSlide);
     const activeIndex = [...document.querySelectorAll('.dots-bar .dot')].findIndex(dot => dot.classList.contains('active'));
     const initialSlide = document.querySelectorAll('.card-slide-image')[Math.max(0, activeIndex)];
-    if (initialSlide) setScreen(initialSlide.getAttribute("src"));
+    if (initialSlide) setScreen(initialSlide.currentSrc || initialSlide.getAttribute("src"));
 
     // Hover: a pointer move queues one raycast; the render loop eases the
     // hit machine toward the camera and lets the rest fall back.

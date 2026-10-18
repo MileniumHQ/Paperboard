@@ -50,7 +50,9 @@
         function announce(newIndex) {
             const slide = track ? track.children[newIndex] : null;
             const image = slide?.querySelector('img');
-            const src = image?.getAttribute('src');
+            // The copy the browser chose for the card (a WebP), so the stage
+            // textures reuse it instead of downloading the PNG again.
+            const src = image?.currentSrc || image?.getAttribute('src');
             if (!src) return;
             document.dispatchEvent(
                 new CustomEvent('paperboard:slide', {
@@ -114,6 +116,16 @@
                 transitionTo(nextIndex);
             }
         }
+
+        // Only the first slide loads with the page; the rest are lazy so they
+        // do not compete with it. The frame clips them, so a browser would
+        // never fetch them on its own; start them once the page has loaded so
+        // every slide is ready before the carousel reaches it.
+        const loadSlides = () => {
+            for (const image of track.querySelectorAll('img[loading="lazy"]')) image.loading = 'eager';
+        };
+        if (document.readyState === 'complete') loadSlides();
+        else window.addEventListener('load', loadSlides, { once: true });
 
         dots.forEach((dot, i) => {
             dot.addEventListener('click', () => {

@@ -1,14 +1,20 @@
 import { For, Show } from "solid-js";
 import { MarketingChrome, DownloadCta } from "../landing/Landing";
 import { MarketingHeading } from "../landing/MarketingHeading";
-import { Screenshot } from "../landing/Screenshot";
+import { Icon, Screenshot } from "../landing/Screenshot";
 import { withBase } from "../../utils/base";
 import { LEARN_PANELS, type LearnPanel } from "./panels";
+
+// Slot widths for the screenshot variants (learn.css): the hero is
+// min(1040px, 100%) of the padded column; features share a two-column row on
+// wide screens and take the full column at 760px and below.
+const HERO_SIZES = "(max-width: 1112px) calc(100vw - 48px), 1040px";
+const FEATURE_SIZES = "(max-width: 760px) calc(100vw - 48px), 560px";
 
 // Each screenshot links to its image file, so it still opens without
 // JavaScript; public/js/learn-lightbox.js upgrades the link to open the image
 // full screen in the page's one <dialog>.
-function ZoomableScreenshot(props: { src: string; alt: string; eager?: boolean }) {
+function ZoomableScreenshot(props: { src: string; alt: string; sizes: string; priority?: boolean }) {
     return (
         <a
             class="learn-shot-link"
@@ -16,7 +22,7 @@ function ZoomableScreenshot(props: { src: string; alt: string; eager?: boolean }
             aria-label={`View full size: ${props.alt}`}
             data-lightbox
         >
-            <Screenshot src={props.src} alt={props.alt} eager={props.eager} />
+            <Screenshot src={props.src} alt={props.alt} sizes={props.sizes} priority={props.priority} />
         </a>
     );
 }
@@ -28,14 +34,19 @@ export function LearnPage(props: { panel: LearnPanel }) {
                 <main class="learn-main">
                     <section class="learn-hero">
                         <div class="learn-identity">
-                            <img src={props.panel.icon} width="44" height="44" alt="" />
+                            <Icon src={props.panel.icon} size={44} />
                             <span>{props.panel.name}</span>
                         </div>
                         <MarketingHeading level={1} text={props.panel.headline} size={76} />
                         <p class="learn-intro">{props.panel.description}</p>
                         <DownloadCta />
                         <figure class="learn-hero-shot screenshot-card">
-                            <ZoomableScreenshot src={props.panel.image} alt={props.panel.alt} eager />
+                            <ZoomableScreenshot
+                                src={props.panel.image}
+                                alt={props.panel.alt}
+                                sizes={HERO_SIZES}
+                                priority
+                            />
                         </figure>
                     </section>
                     <div class="learn-features">
@@ -46,7 +57,11 @@ export function LearnPage(props: { panel: LearnPanel }) {
                                     data-reveal
                                 >
                                     <figure class="learn-feature-shot screenshot-card">
-                                        <ZoomableScreenshot src={feature.image} alt={feature.alt} />
+                                        <ZoomableScreenshot
+                                            src={feature.image}
+                                            alt={feature.alt}
+                                            sizes={FEATURE_SIZES}
+                                        />
                                     </figure>
                                     <div class="learn-feature-copy">
                                         <MarketingHeading
@@ -74,7 +89,7 @@ export function LearnPage(props: { panel: LearnPanel }) {
                             >
                                 {(panel) => (
                                     <a href={`/${panel.slug}/`}>
-                                        <img src={panel.icon} width="28" height="28" alt="" />
+                                        <Icon src={panel.icon} size={28} lazy />
                                         {panel.name}
                                         <span aria-hidden="true">↗</span>
                                     </a>

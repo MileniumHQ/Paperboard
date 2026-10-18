@@ -42,9 +42,39 @@ function assertElementsInHead(name, raw) {
 }
 assertElementsInHead("the landing", await read("index.html"));
 
+// Images reserve their box before they load (no layout shift), only the one
+// largest above-the-fold screenshot is fetched eagerly at high priority, and
+// every responsive copy a page offers is in the build.
+async function assertImages(name, raw) {
+    // The lightbox <img> has no source until a screenshot opens in it.
+    const images = (raw.match(/<img\b[^>]*>/g) || []).filter((img) => /\ssrc="/.test(img));
+    assert.ok(images.length > 0, `${name} renders images`);
+    for (const img of images) {
+        assert.match(img, /\swidth="\d+"/, `${name}: every image declares its width: ${img}`);
+        assert.match(img, /\sheight="\d+"/, `${name}: every image declares its height: ${img}`);
+    }
+    const priority = images.filter((img) => img.includes('fetchpriority="high"'));
+    assert.equal(priority.length, 1, `${name} prioritizes exactly one image`);
+    assert.ok(!priority[0].includes('loading="lazy"'), `${name}'s priority image is not lazy`);
+    const screenshots = images.filter((img) => img.includes("marketing-screenshot"));
+    assert.ok(
+        screenshots.filter((img) => !img.includes('loading="lazy"')).length === 1,
+        `${name} loads only its first screenshot eagerly`,
+    );
+    for (const match of raw.matchAll(/\ssrcset="([^"]+)"/g)) {
+        for (const candidate of match[1].split(",")) {
+            const url = candidate.trim().split(/\s+/)[0];
+            assert.ok(url.startsWith("/img/") && url.endsWith(".webp"), `${name}: srcset offers WebP copies (${url})`);
+            await readFile(new URL(`.${url}`, dist));
+        }
+    }
+}
+await assertImages("the landing", await read("index.html"));
+
 for (const slug of ["actions", "game-server", "bot-creator", "ai"]) {
     const raw = await read(`${slug}/index.html`);
     assertElementsInHead(slug, raw);
+    await assertImages(slug, raw);
     const html = flatten(raw);
     assert.ok(raw.includes('class="learn-page"'), `${slug} must render its marketing page`);
     assert.equal((html.match(/<h1\b/g) || []).length, 1, `${slug} needs one semantic headline`);

@@ -1,5 +1,6 @@
 import { siteMetadata } from "./site-metadata.mjs";
 import { withDownloadWarningAssets } from './download-warning-assets.mjs';
+import { referencedVariants, writeMarketingImages } from "./marketing-images.mjs";
 import { existsSync } from "node:fs";
 import { cp, mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
@@ -193,6 +194,7 @@ function assertRendered(path, html, landing) {
     }
 }
 
+const imageVariants = [];
 for (const path of paths) {
     const page = render(path);
     assertRendered(path, page.html, page.landing || page.learn);
@@ -215,9 +217,20 @@ for (const path of paths) {
     }
     const file = join(dist, path, "index.html");
     await mkdir(dirname(file), { recursive: true });
-    await writeFile(file, withDownloadWarningAssets(documentFor(page, path)));
+    const html = withDownloadWarningAssets(documentFor(page, path));
+    imageVariants.push(...referencedVariants(html));
+    await writeFile(file, html);
     console.log(`prerendered ${path}`);
 }
+
+// The responsive image copies the pages just referenced.
+const images = await writeMarketingImages({
+    publicDir: join(root, "public"),
+    dist,
+    cacheDir: join(root, "node_modules", ".cache", "paperdocs-images"),
+    urls: imageVariants,
+});
+console.log(`images: ${images.variants} responsive variants (${images.encoded} encoded)`);
 
 // One 404 document sitewide, served by the Worker with a 404 status.
 const notFound = renderNotFound();

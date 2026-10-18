@@ -1,4 +1,5 @@
 import { DOCS_LINKS, FOOTER_SITE_LINKS, LEARN_LINKS, SITE_LINKS } from "../links";
+import { iconHtml } from "./images";
 
 // Static HTML fragments for the landing's custom-element hosts. BgOverlay,
 // StyledText, and PaperButton are still custom elements upgraded by the plain
@@ -19,7 +20,7 @@ function dropdownItems(links: { label: string; href: string; image: string; desc
         .map(
             (link) =>
                 `<a class="site-topbar__item" role="menuitem" href="${escapeHtml(link.href)}">` +
-                `<img class="site-topbar__item-icon" src="${escapeHtml(link.image)}" alt="" />` +
+                iconHtml({ src: link.image, size: 34, class: "site-topbar__item-icon" }) +
                 `<span class="site-topbar__item-text"><strong>${escapeHtml(link.label)}</strong><small>${escapeHtml(link.description)}</small></span>` +
                 `</a>`,
         )

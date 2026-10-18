@@ -37,6 +37,7 @@ const mime = {
     ".js": "text/javascript",
     ".mjs": "text/javascript",
     ".png": "image/png",
+    ".webp": "image/webp",
     ".svg": "image/svg+xml",
     ".woff2": "font/woff2",
 };

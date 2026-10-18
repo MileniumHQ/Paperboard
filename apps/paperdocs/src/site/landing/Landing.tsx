@@ -1,8 +1,7 @@
 import { For, type ParentProps } from "solid-js";
 import { MarketingHeading } from "./MarketingHeading";
 import { styledText } from "./TextEffect";
-import { Screenshot } from "./Screenshot";
-import { withBase } from "../../utils/base";
+import { Icon, Screenshot } from "./Screenshot";
 import {
     docsDropdownHtml,
     footerDocsHtml,
@@ -62,6 +61,9 @@ const SLIDES = [
         description: "Your computer’s terminal, inside Paperboard.",
     },
 ];
+
+// The preview card is min(1100px, 94vw, 86vh) wide.
+const SLIDE_SIZES = "(max-width: 1170px) 94vw, 1100px";
 
 const PLAY_ICONS = [
     "/pictures/ai.png",
@@ -130,7 +132,7 @@ export function Topbar() {
         <header class="site-topbar">
             <div class="site-topbar__bar">
                 <a class="site-topbar__brand" href="/">
-                    <img class="site-topbar__logo" src={withBase("/paperboard.png")} alt="" />
+                    <Icon class="site-topbar__logo" src="/paperboard.png" size={36} />
                     <span class="site-topbar__name paper-wordmark">
                         <span class="paper-wordmark-label">Paperboard</span>
                         <span
@@ -297,17 +299,22 @@ export function Landing() {
                             <div class="card-image-frame">
                                 <div class="card-slides-track">
                                     <For each={SLIDES}>
-                                        {(slide) => (
+                                        {(slide, index) => (
                                             <div
                                                 class="card-slide"
                                                 data-slide-title={slide.title}
                                                 data-slide-description={slide.description}
                                             >
+                                                {/* The first slide is the page's
+                                                    largest paint; the rest are
+                                                    clipped by the frame and load
+                                                    once the page has (dots-bar.js). */}
                                                 <Screenshot
                                                     src={slide.src}
                                                     alt={slide.alt}
                                                     class="card-slide-image"
-                                                    eager
+                                                    sizes={SLIDE_SIZES}
+                                                    priority={index() === 0}
                                                 />
                                             </div>
                                         )}
@@ -375,10 +382,11 @@ export function Landing() {
                             </div>
                         </div>
                         <div class="cta-card screenshot-card">
-                            <img
+                            <Screenshot
                                 class="cta-image"
-                                src={withBase("/screens/paperconsole-docs.png")}
+                                src="/screens/paperconsole-docs.png"
                                 alt="The PaperConsole documentation page in PaperDocs"
+                                sizes="(max-width: 900px) 92vw, 60vw"
                             />
                         </div>
                     </div>
@@ -390,9 +398,7 @@ export function Landing() {
                         <DownloadCta />
                     </div>
                     <For each={PLAY_ICONS}>
-                        {(src) => (
-                            <img class="play-icon" src={withBase(src)} alt="" draggable="false" />
-                        )}
+                        {(src) => <Icon class="play-icon" src={src} size={84} draggable={false} />}
                     </For>
                 </section>
             </main>
