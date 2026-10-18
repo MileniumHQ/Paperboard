@@ -261,14 +261,24 @@ html:has(.learn-lightbox[open]) body {
     position: relative;
     z-index: 2;
 }
-.learn-page [data-reveal] {
-    transition:
-        opacity 0.7s ease,
-        translate 0.7s ease;
+/* Sections rise in as they scroll into view. The reveal is tied to scroll
+   position, not to a script noticing the section: content is never hidden
+   waiting on JavaScript, a section already on screen is already shown, and
+   browsers without scroll-driven animations simply show everything. */
+@media (prefers-reduced-motion: no-preference) {
+    @supports (animation-timeline: view()) {
+        .learn-page [data-reveal] {
+            animation: learn-reveal linear both;
+            animation-timeline: view();
+            animation-range: entry 0% entry 35%;
+        }
+    }
 }
-.learn-page [data-reveal].is-pending {
-    opacity: 0;
-    translate: 0 26px;
+@keyframes learn-reveal {
+    from {
+        opacity: 0;
+        translate: 0 26px;
+    }
 }
 @media (max-width: 760px) {
     .learn-main {
@@ -296,13 +306,6 @@ html:has(.learn-lightbox[open]) body {
     }
 }
 @media (prefers-reduced-motion: reduce) {
-    .learn-page [data-reveal] {
-        transition: none;
-    }
-    .learn-page [data-reveal].is-pending {
-        opacity: 1;
-        translate: none;
-    }
     .learn-hero-shot,
     .learn-hero-shot:hover,
     .learn-hero-shot:focus-within,

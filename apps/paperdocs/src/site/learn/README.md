@@ -23,9 +23,10 @@ flow through the authenticated SDK, and check rendered flow bounds for overlap
 and clipping. Put PNGs in `public/screens/` and give every feature a useful alt.
 
 `LearnPage`, `MarketingChrome`, `DownloadCta`, and `Screenshot` are shared Solid
-components. The SSR build produces static pages; `learn-reveal.js` adds ordinary
-scroll reveals with an observer that disconnects on page exit. Content is visible
-without JavaScript and under reduced motion. Landing-only scroll choreography
+components. The SSR build produces static pages; sections reveal with a
+scroll-driven CSS animation (`learn.css`), so no script ever hides content.
+Content is visible without JavaScript, under reduced motion, and in browsers
+without scroll-driven animations. Landing-only scroll choreography
 is not loaded on learn pages.
 
 Run `bun run gate paperdocs paperui` and `bun run test:browser` in this app.

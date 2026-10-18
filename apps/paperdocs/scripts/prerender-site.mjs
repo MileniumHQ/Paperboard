@@ -37,7 +37,8 @@ function isDocsPath(path) {
 }
 
 // Marketing pages share the landing document shell. Learn pages load only
-// the shared chrome scripts and scroll reveals; the main landing additionally
+// the shared chrome scripts and the screenshot lightbox (their scroll reveals
+// are CSS); the main landing additionally
 // gets carousel, stage and drag effects.
 function landingDocument(page, path) {
     return `<!doctype html>
@@ -64,7 +65,7 @@ function landingDocument(page, path) {
 ${stripSsrArtifacts(page.html)}
         <script src="/js/topbar.js"></script>
         <script src="/js/download-button.js"></script>
-        ${page.learn ? '<script src="/js/learn-reveal.js"></script>\n        <script src="/js/learn-lightbox.js"></script>' : `<script src="/js/card-scroll.js"></script>
+        ${page.learn ? '<script src="/js/learn-lightbox.js"></script>' : `<script src="/js/card-scroll.js"></script>
         <script src="/js/dots-bar.js"></script>
         <script src="/js/all-in-one.js"></script>
         <script src="/js/flight.js"></script>

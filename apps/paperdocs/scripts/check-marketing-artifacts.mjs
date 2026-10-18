@@ -53,7 +53,7 @@ for (const slug of ["actions", "game-server", "bot-creator", "ai"]) {
         `${slug} omits editorial labels`,
     );
     assert.ok(html.includes('href="/css/learn.css"'), `${slug} needs its styles`);
-    assert.ok(html.includes('src="/js/learn-reveal.js"'), `${slug} needs ordinary scroll reveals`);
+    assert.ok(!html.includes("learn-reveal.js"), `${slug} must not hide content behind a reveal script`);
     assert.ok(html.includes('src="/js/learn-lightbox.js"'), `${slug} needs full-screen screenshots`);
     assert.ok(!html.includes('src="/js/card-scroll.js"'), `${slug} must not capture scrolling`);
     assert.ok(

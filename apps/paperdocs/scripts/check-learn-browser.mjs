@@ -196,7 +196,10 @@ try {
             `The button back layer on ${slug} must sit darker than the page field`,
         );
         assert.equal(await page.locator(".learn-feature").count(), slug === "game-server" ? 4 : 3);
-        assert.ok((await page.locator(".is-pending").count()) > 0);
+        // Reveals are scroll-driven CSS: the hero is shown on arrival, a
+        // section below the fold waits for the reader to scroll to it.
+        assert.equal(await page.locator(".learn-hero").evaluate(element => getComputedStyle(element).opacity), "1");
+        assert.notEqual(await page.locator(".learn-outro").evaluate(element => getComputedStyle(element).opacity), "1");
         await page.locator(".learn-feature").first().scrollIntoViewIfNeeded();
         await page.waitForFunction(
             () => getComputedStyle(document.querySelector(".learn-feature")).opacity === "1",
@@ -639,7 +642,10 @@ try {
     console.log("verified marketing pages download each font face once");
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.goto(`${origin}/actions/`);
-    assert.equal(await page.locator(".is-pending").count(), 0);
+    assert.ok(
+        await page.locator("[data-reveal]").evaluateAll(elements => elements.every(element => getComputedStyle(element).animationName === "none" && getComputedStyle(element).opacity === "1")),
+        "Reduced motion shows every section without a reveal",
+    );
     await page.locator(".learn-hero-shot .learn-shot-link").click();
     await page.locator(".learn-lightbox").waitFor();
     await page.getByRole("button", { name: "Close" }).click();
@@ -664,13 +670,15 @@ try {
         "Paperboard",
         "Without JavaScript the wordmark must fall back to a single plain label",
     );
+    // The reveal is scroll-driven CSS, so without JavaScript a section still
+    // appears once the reader scrolls to it.
+    await staticPage.locator(".learn-feature").first().scrollIntoViewIfNeeded();
+    await staticPage.waitForTimeout(300);
     assert.equal(
-        await staticPage
-            .locator(".learn-feature")
-            .first()
-            .evaluate((element) => getComputedStyle(element).opacity),
+        await staticPage.locator(".learn-feature").first().evaluate((element) => getComputedStyle(element).opacity),
         "1",
     );
+    await staticPage.close();
     assert.deepEqual(failures, []);
     await checkDownloads(browser, origin);
     await checkBlog(browser, origin, dist);
