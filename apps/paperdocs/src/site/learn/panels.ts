@@ -37,7 +37,7 @@ export const LEARN_PANELS: LearnPanel[] = [
             {
                 title: "Choose your server",
                 description:
-                    "Pick Vanilla, Paper, or Fabric. Paperboard downloads the server and Java for you.",
+                    "Pick Vanilla, Paper, Fabric, NeoForge, or Forge. Paperboard downloads the server and Java for you.",
                 image: "/screens/gameserver-setup.png",
                 alt: "Choose Minecraft server software and version",
             },

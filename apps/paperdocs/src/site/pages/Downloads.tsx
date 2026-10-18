@@ -8,7 +8,7 @@ export function Downloads() {
             <PaperPageHeader
                 icon="download"
                 title="Downloads"
-                subtitle="Paperboard is in alpha. Some features may be buggy or incomplete. Windows and macOS builds are unsigned; your operating system may warn you when you open them."
+                subtitle="Paperboard is in beta. Some features may be buggy or incomplete. Windows and macOS builds are unsigned; your operating system may warn you when you open them."
             />
             <div class={styles.postBody}>
                 <PaperMarkdown text={text} />

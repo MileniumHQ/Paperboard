@@ -39,7 +39,7 @@ export const SITE_ROUTES: SiteRoute[] = [
         path: "/downloads/",
         title: "Downloads | Paperboard",
         description:
-            "Download Paperboard for Windows, macOS, and Linux. Pre-release alpha builds.",
+            "Download Paperboard for Windows, macOS, and Linux. Pre-release beta builds.",
         component: Downloads,
     },
     {

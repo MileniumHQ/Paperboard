@@ -351,8 +351,8 @@ export function Landing() {
                     <div class="stage-copy">
                         <MarketingHeading level={2} text="Paperboard runs anywhere." size={54} />
                         <p>
-                            Paperboard is 100% compatible with macOS, Windows, and Linux on both x86
-                            and ARM. You can run Paperboard on a VPS, an old laptop, or a Raspberry
+                            Paperboard is 100% compatible with macOS, Windows, and Linux on x86, and
+                            macOS and Linux on ARM. You can run Paperboard on a VPS, an old laptop, or a Raspberry
                             Pi and control it as if it were running locally on your primary desktop.
                         </p>
                     </div>
