@@ -621,6 +621,22 @@ try {
         }
     } finally { await slowPage.close(); }
     console.log("verified headings and buttons never paint blank on a slow connection");
+    // PaperUI's site.css owns the font faces. The marketing stylesheet used to
+    // declare the same families again from /fonts/, so the page downloaded
+    // Nunito twice under two URLs.
+    for (const path of ["/", "/game-server/"]) {
+        const fontPage = await browser.newPage({ viewport: { width: 390, height: 844 } });
+        try {
+            const fonts = [];
+            fontPage.on("request", (request) => { if (request.resourceType() === "font") fonts.push(new URL(request.url()).pathname); });
+            await fontPage.goto(`${origin}${path}`, { waitUntil: "load" });
+            await fontPage.evaluate(() => document.fonts.ready);
+            const nunito = fonts.filter((font) => /\/Nunito[-.]/.test(font));
+            assert.equal(nunito.length, 1, `${path} must download Nunito once (${fonts.join(", ")})`);
+            assert.ok(fonts.every((font) => font.startsWith("/assets/")), `${path} fonts come from PaperUI's build (${fonts.join(", ")})`);
+        } finally { await fontPage.close(); }
+    }
+    console.log("verified marketing pages download each font face once");
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.goto(`${origin}/actions/`);
     assert.equal(await page.locator(".is-pending").count(), 0);

@@ -1,7 +1,7 @@
 import { siteMetadata } from "./site-metadata.mjs";
 import { withDownloadWarningAssets } from './download-warning-assets.mjs';
 import { existsSync } from "node:fs";
-import { cp, mkdir, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -49,6 +49,7 @@ function landingDocument(page, path) {
         ${siteMetadata(page, path)}
         <link rel="manifest" href="${isDocsPath(path) ? '/docs.webmanifest' : '/site.webmanifest'}" />
         <link rel="stylesheet" href="/site.css" />
+        <link rel="preload" href="${marketingFont}" as="font" type="font/woff2" crossorigin />
         <link rel="stylesheet" href="/css/style.css" />
         ${page.learn ? '<link rel="stylesheet" href="/css/learn.css" />' : ""}
         <!-- The decorative elements are defined before the body is parsed, so
@@ -162,6 +163,19 @@ await cp(join(ssr, "assets"), join(dist, "assets"), {
     force: true,
 });
 await cp(join(ssr, "site.css"), join(dist, "site.css"), { force: true });
+
+// Every marketing heading, label, and button is set in PaperUI's Nunito, so
+// the marketing documents preload that one face instead of discovering it
+// only after both stylesheets have been parsed.
+const marketingFonts = (await readdir(join(dist, "assets"))).filter((name) =>
+    /^Nunito-[\w-]+\.woff2$/.test(name),
+);
+if (marketingFonts.length !== 1) {
+    throw new Error(
+        `paperdocs: expected one Nunito face in the build, found ${marketingFonts.length}`,
+    );
+}
+const marketingFont = `/assets/${marketingFonts[0]}`;
 
 // Every page is its own static document. A build that drops one is a failure,
 // not a silently missing route.

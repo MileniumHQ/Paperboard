@@ -1,5 +1,3 @@
-@import "./fonts.css";
-
 :root {
     --paper-site-accent: var(--paper-primary);
     --bg-top: color-mix(in srgb, var(--paper-site-accent) 50%, var(--paper-on-color));
