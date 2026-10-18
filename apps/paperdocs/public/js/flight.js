@@ -5,6 +5,7 @@
     const V = () => window.innerHeight || 1;
     const lerp = (a, b, t) => a + (b - a) * t;
     const canvas = document.getElementById("aio-stage");
+    const stageFixed = document.querySelector(".stage-fixed");
     const card = document.querySelector(".preview-card");
     const frame = document.querySelector(".card-image-frame");
     const showcaseEl = document.querySelector(".showcase-section");
@@ -89,6 +90,13 @@
         if (notice) notice.hidden = stageFade <= 0;
         if (canvas) {
             canvas.style.opacity = String(stageFade);
+        }
+        // Past its own section the lineup leaves with the page instead of
+        // staying pinned while the copy scrolls up through it: on a phone the
+        // models sit directly above the copy, so a fixed scene overlapped the
+        // text until it had faded out.
+        if (stageFixed) {
+            stageFixed.style.transform = s > 2 ? `translate3d(0, ${(-(s - 2) * vh).toFixed(1)}px, 0)` : "";
         }
 
         // card held with fixed positioning while it fades.

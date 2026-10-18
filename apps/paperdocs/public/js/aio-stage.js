@@ -236,6 +236,9 @@ function init() {
     // hit machine toward the camera and lets the rest fall back.
     const raycaster = new THREE.Raycaster();
     const pointer = new THREE.Vector2(-10, -10);
+    // Client coordinates of the last move; mapped onto the canvas at raycast
+    // time, since the canvas scrolls away with its section (flight.js).
+    const pointerClient = { x: 0, y: 0 };
     let pointerInside = false;
     let pointerDirty = false;
     const hoverables = [];
@@ -255,8 +258,8 @@ function init() {
     function onPointerMove(e) {
         const s = window.__flight.progress();
         if (s <= 1 || s >= 2.8) return;
-        pointer.x = (e.clientX / (window.innerWidth || 1)) * 2 - 1;
-        pointer.y = -(e.clientY / (window.innerHeight || 1)) * 2 + 1;
+        pointerClient.x = e.clientX;
+        pointerClient.y = e.clientY;
         pointerInside = true;
         pointerDirty = true;
         wake();
@@ -401,6 +404,9 @@ function init() {
                     for (const m of entry.meshes) meshes.push(m);
                 }
                 if (meshes.length) {
+                    const rect = canvas.getBoundingClientRect();
+                    pointer.x = ((pointerClient.x - rect.left) / (rect.width || 1)) * 2 - 1;
+                    pointer.y = -((pointerClient.y - rect.top) / (rect.height || 1)) * 2 + 1;
                     raycaster.setFromCamera(pointer, camera);
                     const hits = raycaster.intersectObjects(meshes, false);
                     if (hits.length) hits[0].object.userData.hoverEntry.target = 1;

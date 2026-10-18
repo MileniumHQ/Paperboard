@@ -417,6 +417,28 @@ try {
         }
     }
     console.log("verified compact left device group and right battlestation across nine viewport sizes, live orientation changes, transition and hover");
+    // Past its section the lineup scrolls away with the page. Pinned, it sat
+    // over the "runs anywhere" copy on phones as the copy scrolled up into it.
+    await page.setViewportSize({ width: 390, height: 844 });
+    for (const s of [2.15, 2.3, 2.45]) {
+        await scrollToStage(page, s);
+        await page.waitForTimeout(150);
+        const { modelsBottom, copyTop } = await page.evaluate(() => {
+            const stage = window.__aioStage;
+            const rect = document.querySelector("#aio-stage").getBoundingClientRect();
+            let bottom = -Infinity;
+            for (const obj of [stage.group, ...stage.companions.filter(entry => entry.obj.visible).map(entry => entry.obj)]) {
+                const box = new stage.THREE.Box3().setFromObject(obj);
+                for (const x of [box.min.x, box.max.x]) for (const y of [box.min.y, box.max.y]) for (const z of [box.min.z, box.max.z]) {
+                    const point = new stage.THREE.Vector3(x, y, z).project(stage.camera);
+                    bottom = Math.max(bottom, rect.top + (1 - point.y) * rect.height / 2);
+                }
+            }
+            return { modelsBottom: bottom, copyTop: document.querySelector(".stage-copy").getBoundingClientRect().top };
+        });
+        assert.ok(modelsBottom < copyTop, `The lineup must stay above its copy at stage ${s} (${Math.round(modelsBottom)} >= ${Math.round(copyTop)})`);
+    }
+    console.log("verified the device lineup leaves with its section instead of covering the copy");
     // Exercise real hover input and prove the renderer sleeps both when hidden
     // and when the visible scene has settled, then wakes for a hover turn.
     await page.setViewportSize({ width: 1440, height: 900 });
