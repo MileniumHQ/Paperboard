@@ -37,6 +37,15 @@ No window opens. Paperboard serves the app at `http://paperboard.localhost:<port
 - Works in Chromium-based browsers and Firefox, which resolve `*.localhost` to your own machine. Safari may not.
 - The desktop-only parts don't exist here: no auto-update pass (updates apply on the next windowed launch) and no title-bar integration.
 
+### Skipping tutorials
+Paperboard shows its own tutorial the first time it opens, and each panel's the first time you open that panel. `--no-tutorial` stops any of them opening by themselves, which keeps dev runs and agent-driven sessions free of surprise dialogs:
+```zsh
+bun scripts/launch.ts dev -- --no-tutorial              # windowed, from source
+bun scripts/launch.ts dev -- --browser --no-tutorial    # browser mode, from source
+Paperboard --no-tutorial                                # an installed build
+```
+Tutorials still open by hand (**Show Tutorial** on a panel's right-click menu, **Show tutorial** in App Settings), and nothing is recorded as seen until you finish one.
+
 ### Compiling
 Compiling for all platforms for GitHub Releases is done on Linux x64. However, you can still compile it yourself.
 

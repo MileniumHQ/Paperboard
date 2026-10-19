@@ -18,6 +18,7 @@ import {
 import {
     computersApi,
     logToMain,
+    shellApi,
     panelUrl,
     readPanelListingFile,
     type ComputerInfo as ComputerItem,
@@ -81,8 +82,8 @@ const App: Component = () => {
     } = usePanels();
     const [isSetupOpen, setIsSetupOpen] = createSignal<boolean>(false);
     // which first-open tutorials were shown; null until the record loads,
-    // and it stays null if it can't be read, so an unreadable record never
-    // replays every tutorial
+    // and it stays null if it can't be read or --no-tutorial is set, so
+    // nothing opens by itself (an unreadable record never replays them all)
     const [seenTutorials, setSeenTutorials] = createSignal<SeenTutorials | null>(null);
     const [openTutorial, setOpenTutorial] = createSignal<"app" | { compId: string; panel: PanelItem } | null>(null);
     const panelContextMenu = useContextMenuState();
@@ -239,6 +240,7 @@ const App: Component = () => {
 
     onMount(async () => {
         try {
+            if (!(await shellApi.getLaunchOptions()).firstOpenTutorials) return;
             setSeenTutorials(await loadSeenTutorials());
         } catch (err) {
             logToMain("error", "Couldn't read which tutorials were shown; first-open tutorials are off until restart:", err);
@@ -273,6 +275,8 @@ const App: Component = () => {
             setSeenTutorials((seen) => seen && withSeen(seen, which));
             setOpenTutorial(null);
         });
+        // a null record stays null: finishing a tutorial opened by hand
+        // doesn't turn first-open tutorials back on under --no-tutorial
         markTutorialSeen(which).then((stored) => setSeenTutorials((seen) => seen && stored), (err) =>
             logToMain("error", `Couldn't record that the ${name} tutorial was shown; it will show again next launch:`, err));
     };

@@ -31,6 +31,7 @@ import { readPanelFileForBrowser, statPanelFileForBrowser, writePanelFileFromBro
 import { poolEndpoint } from "./panelFileEndpoint";
 import { startBrowserHost, type BrowserHost } from "./browserHost";
 import { createShellInvokeHandlers, SHARED_SHELL_INVOKE_CHANNELS } from "./communication/shellHandlers";
+import { launchOptionsFromArgv } from "../shared/launchOptions";
 import { applySavedAppSettings } from "./communication/shelldata";
 import { addShellPushSink } from "./communication/shellPush";
 import { keepAliveWithoutWindows, secondLaunchAction } from "./instancePolicy";
@@ -267,6 +268,7 @@ function ensureBrowserHost(): Promise<BrowserHost> {
     browserHostStarting ??= (async () => {
         const shared = createShellInvokeHandlers({
             appVersion: () => app.getVersion(),
+            launchOptions: () => launchOptionsFromArgv(process.argv),
             openPath: (dir) => shell.openPath(dir),
         });
         const invoke: Record<string, (args: unknown) => unknown> = {};

@@ -16,6 +16,7 @@ import type { FileTypeFilter } from "../../shared/fileTransfer";
 import { paperboardGoogleClient, signInToGoogleDrive } from "../googleOAuth";
 import { googleSignInPage } from "../googleSignInPage";
 import connectionPool from "./papercrane/ConnectionPool";
+import { launchOptionsFromArgv } from "../../shared/launchOptions";
 
 // native dialogs, modal to the window whose panel asked
 function nativeFileDialogs(event: IpcMainInvokeEvent): PanelFileTransferDeps {
@@ -79,6 +80,7 @@ export default function registerShellIpc(ipcMain: IpcMain) {
     // handlers the browser-mode bridge serves (shellHandlers.ts)
     const shared = createShellInvokeHandlers({
         appVersion: () => app.getVersion(),
+        launchOptions: () => launchOptionsFromArgv(process.argv),
         openPath: (dir) => shell.openPath(dir),
     });
     for (const channel of SHARED_SHELL_INVOKE_CHANNELS) {

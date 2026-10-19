@@ -1,5 +1,6 @@
 // Privileged shell-only IPC; panels speak PaperCrane directly over WebSocket.
 import { createBrowserBridge, type ShellIpc } from "./browserBridge";
+import type { LaunchOptions } from "../../../shared/launchOptions";
 
 export interface ComputerInfo {
     id: string;
@@ -151,6 +152,8 @@ export const shellApi = {
         }),
     getAppVersion: (): Promise<string> =>
         requireIpc().invoke<string>("app-version"),
+    getLaunchOptions: (): Promise<LaunchOptions> =>
+        requireIpc().invoke<LaunchOptions>("launch-options"),
 };
 // Main applies side effects of freshly persisted settings (theme, title bars, login item)
 export function notifyAppSettingsChanged(): void {

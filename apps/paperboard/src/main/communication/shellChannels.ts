@@ -14,6 +14,7 @@ export const SHELL_INVOKE_CHANNELS = [
     "open-panel-folder",
     "panel-listing-file",
     "app-version",
+    "launch-options",
     "app-update-state",
     "open-update-download",
     "panel-file-export",
