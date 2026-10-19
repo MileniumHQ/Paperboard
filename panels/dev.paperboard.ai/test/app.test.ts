@@ -572,6 +572,25 @@ describe("coding agent connections", () => {
         }, saved);
     });
 
+    it("saves a Claude Code chat's mode before its session opens, and refuses one Claude Code doesn't offer", async () => {
+        await withApp(
+            async (app) => {
+                const c = await app.newConversation("opus", "agent-0000cc01");
+                await app.setAgentMode(c.id, "plan");
+                expect((await app.getConversation(c.id)).conversation.mode).toBe("plan");
+                await expect(app.setAgentMode(c.id, "yolo")).rejects.toThrow("Claude Code does not offer that mode.");
+                expect((await app.getConversation(c.id)).conversation.mode).toBe("plan");
+                // nothing started: the mode is applied when the session opens
+                expect(host.agents.starts).toHaveLength(0);
+            },
+            {
+                version: 2,
+                connections: [{ id: "agent-0000cc01", kind: "agent", label: "Claude Code", agent: "claude-code" }],
+                agentModels: { "agent-0000cc01": [{ id: "opus", name: "Opus" }] },
+            },
+        );
+    });
+
     it("explains how to install an agent that isn't on this computer", async () => {
         await withApp(async (app, ctx) => {
             const added = await app.addConnection({ kind: "agent", agent: "cline" });

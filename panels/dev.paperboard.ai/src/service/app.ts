@@ -22,7 +22,7 @@ import {
     type ServiceContext,
 } from "@mileniumhq/paperapi";
 import { agentProcId, EVENTS, OLLAMA_PACKAGE, OLLAMA_PROC_ID, PANEL_ID, TRIGGER_IDS } from "../contract";
-import { AGENT_REGISTRY, agentLaunch, agentModelName, CUSTOM_AGENT_ID, installHint, registryAgent, validateCustomAgent } from "../core/agents";
+import { AGENT_REGISTRY, agentLaunch, agentModelName, bridgeModes, CUSTOM_AGENT_ID, installHint, registryAgent, validateCustomAgent } from "../core/agents";
 import { askSystemPrompt, isConversationId, isPromptStyle, MAX_CUSTOM_PROMPT_CHARS, MAX_USER_MESSAGE_CHARS } from "../core/conversation";
 import {
     apiKeySecretName,
@@ -918,6 +918,8 @@ export class AiApp {
         if (live) {
             if (!live.modes.some((m) => m.id === modeId)) throw new Error("The agent does not offer that mode.");
             await this.agents.setMode(connection, id, modeId);
+        } else if (bridgeModes(connection.agent)?.some((m) => m.id === modeId) === false) {
+            throw new Error(`${connection.label} does not offer that mode.`);
         }
         await this.chat.setMode(id, modeId);
     }

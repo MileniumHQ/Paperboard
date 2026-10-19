@@ -2,7 +2,7 @@ import { chatEffort, effortsFrom, MAX_EFFORTS, withEfforts } from "../src/core/r
 import { describe, expect, it } from "bun:test";
 import { apiKeySecretName, connectionLabel, credentialsAllowed, definitionOf, endpointLabel, normalizeBaseUrl, unlistedModelReason } from "../src/core/providers";
 import { LOCAL_MODES, localModePicker } from "../src/core/projectTools";
-import { checkCommandShape, commandSuggestions, MAX_AGENT_ARGS, modePicker, splitArgs, validateCustomAgent } from "../src/core/agents";
+import { bridgeModes, checkCommandShape, commandSuggestions, MAX_AGENT_ARGS, modePicker, splitArgs, validateCustomAgent } from "../src/core/agents";
 import { providerClients } from "../src/service/provider";
 import { REASONING_LEVELS, isReasoningLevel, reasoningToThink } from "../src/core/reasoning";
 import { compactCount, groupTurns, isRoundEmpty, isThinkingLive, replyText, turnStats } from "../src/core/chain";
@@ -164,6 +164,18 @@ describe("custom agents", () => {
         expect(modePicker({ modes, mode: "acceptEdits", commands: [] }, "plan")?.current?.name).toBe("Accept edits");
         expect(modePicker({ modes, commands: [] }, "plan")?.current?.name).toBe("Plan");
         expect(modePicker({ modes, commands: [] }, "gone")?.current).toBeUndefined();
+    });
+
+    it("offers a bridged agent's modes before its session opens, on the chat's saved mode", () => {
+        // Claude Code's and Codex's modes are the bridge's own; a new chat can pick one before its first message
+        for (const agent of ["claude-code", "codex"]) {
+            const known = bridgeModes(agent)!;
+            expect(modePicker(undefined, "plan", known)?.current?.name).toBe("Plan");
+            expect(modePicker(undefined, undefined, known)).toEqual({ modes: [...known], current: undefined });
+            // the live session still wins once it reports
+            expect(modePicker({ modes: [...known], mode: "acceptEdits", commands: [] }, "plan", known)?.current?.name).toBe("Accept edits");
+        }
+        expect(bridgeModes("qwen-code")).toBeUndefined();
     });
 });
 

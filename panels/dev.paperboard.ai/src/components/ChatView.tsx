@@ -2,7 +2,7 @@ import { createEffect, createMemo, createSignal, Index, Match, on, onCleanup, on
 import { PaperButton, PaperEmptyState, PaperIcon, PaperPage, PaperText } from "@mileniumhq/paperui";
 import { actionsApi } from "@mileniumhq/paperapi";
 import { UI_ACTION_IDS } from "../contract";
-import { modePicker } from "../core/agents";
+import { bridgeModes, modePicker } from "../core/agents";
 import { localModePicker } from "../core/projectTools";
 import { chatEffort } from "../core/reasoning";
 import { connectionLabel, OLLAMA_PROVIDER, OLLAMA_PROVIDER_ID, unlistedModelReason } from "../core/providers";
@@ -134,12 +134,15 @@ export default function ChatView() {
     const project = () =>
         conversation() ? summary()?.project ?? conversation()?.project : draftProject() ?? (agentConnection() ? lastProject() : undefined);
     const generating = () => Boolean(conversation() && state.generating.includes(conversation()!.id));
-    // an agent chat's permission mode, once its live session lists modes; a
-    // Local AI chat's once it works in a project, where its file tools are offered
+    // an agent chat's permission mode: its live session's, or the bridge's own
+    // before one opens (a draft's pick is saved once the chat is); a Local AI
+    // chat's once it works in a project, where its file tools are offered
+    const [draftMode, setDraftMode] = createSignal<string>();
     const modes = () => {
         const c = conversation();
-        if (!c) return undefined;
-        if (agentConnection()) return modePicker(state.agentSessions[c.id], c.mode);
+        const agent = agentConnection();
+        if (!c) return agent ? modePicker(undefined, draftMode(), bridgeModes(agent.agent)) : undefined;
+        if (agent) return modePicker(state.agentSessions[c.id], c.mode, bridgeModes(agent.agent));
         // a local chat has a mode once its model can change something
         const acts = Boolean(project()) || state.settings.shellCommands || state.settings.panelActions;
         return localConnection() && acts ? localModePicker(c.mode, Boolean(project())) : undefined;
@@ -165,11 +168,11 @@ export default function ChatView() {
     };
     const changeMode = async (mode: string) => {
         const id = conversation()?.id;
-        if (!id) return;
         if (isNoSandboxMode(mode) && state.settings.noSandboxWarning) {
             setConfirmingNoSandbox(mode);
             return;
         }
+        if (!id) return setDraftMode(mode);
         setModeBusy(true);
         setError("");
         try {
@@ -184,7 +187,11 @@ export default function ChatView() {
     const turnOnNoSandbox = async () => {
         const id = conversation()?.id;
         const mode = confirmingNoSandbox();
-        if (!id || !mode) throw new Error("This chat is gone.");
+        if (!mode) throw new Error("This chat is gone.");
+        if (!id) {
+            setDraftMode(mode);
+            return;
+        }
         await call(UI_ACTION_IDS.setAgentMode, { id, mode });
         if (conversation()?.id === id) setOpenMode(mode);
     };
@@ -249,6 +256,7 @@ export default function ChatView() {
         setError("");
         setSettingsOpen(false);
         setDraftProject(undefined);
+        setDraftMode(undefined);
         selection.newChat();
     };
 
@@ -273,6 +281,12 @@ export default function ChatView() {
                 setDraftProject(undefined);
                 const effort = draftEffort();
                 setDraftEffort(undefined);
+                const mode = draftMode();
+                setDraftMode(undefined);
+                if (mode && modes()?.modes.some((m) => m.id === mode)) {
+                    await call(UI_ACTION_IDS.setAgentMode, { id, mode });
+                    setOpenMode(mode);
+                }
                 if (effort && agentConnection()) {
                     await call(UI_ACTION_IDS.setChatEffort, { id, effort });
                     setOpenEffort(effort);

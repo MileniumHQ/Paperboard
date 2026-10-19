@@ -7,8 +7,8 @@
 // install it.
 
 import snapshot from "../data/acp-agents.json";
-import { CLAUDE_CODE_ID } from "./claudeCode";
-import { CODEX_ID } from "./codex";
+import { CLAUDE_CODE_ID, CLAUDE_MODES } from "./claudeCode";
+import { CODEX_ID, CODEX_MODES } from "./codex";
 import type { Connection } from "./providers";
 import type { AgentCommand, AgentMode, AgentSessionInfo } from "./types";
 
@@ -151,15 +151,28 @@ export function commandSuggestions(text: string, commands: readonly AgentCommand
     return commands.filter((c) => c.name.startsWith(typed[1]!)).slice(0, MAX_SUGGESTIONS);
 }
 
-/** The composer's mode picker in an agent chat: absent until the live
- *  session lists modes; the session's mode wins over the one saved with the chat. */
+/** The modes a bridged agent always offers, known before any session opens;
+ *  an ACP agent lists its own only per session (undefined). */
+export function bridgeModes(agent: string | undefined): readonly AgentMode[] | undefined {
+    if (agent === CLAUDE_CODE_ID) return CLAUDE_MODES;
+    if (agent === CODEX_ID) return CODEX_MODES;
+    return undefined;
+}
+
+/** The composer's mode picker in an agent chat: the live session's modes, or
+ *  the bridge's own before one opens (an ACP agent's is absent until then);
+ *  the session's mode wins over the one saved with the chat. */
 export function modePicker(
     session: AgentSessionInfo | undefined,
     saved: string | undefined,
+    known?: readonly AgentMode[],
 ): { modes: AgentMode[]; current: AgentMode | undefined } | undefined {
-    if (!session || session.modes.length === 0) return undefined;
-    const id = session.mode ?? saved;
-    return { modes: session.modes, current: session.modes.find((m) => m.id === id) };
+    if (session && session.modes.length > 0) {
+        const id = session.mode ?? saved;
+        return { modes: session.modes, current: session.modes.find((m) => m.id === id) };
+    }
+    if (!known?.length) return undefined;
+    return { modes: [...known], current: known.find((m) => m.id === saved) };
 }
 
 /** Arguments as typed in the custom agent form: separated by spaces, nothing unquoted. */
