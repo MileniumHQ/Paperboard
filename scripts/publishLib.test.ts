@@ -17,6 +17,7 @@ import {
     isValidFileSegment,
     isValidVersionSegment,
     KV_PACKAGES_BINDING,
+    npmPublishEnv,
     kvKeyFor,
     legacyDownloadRedirect,
     mergeVersionRecord,
@@ -334,3 +335,17 @@ it("Linux x64 build input matches electron-builder while release name stays cano
     expect(paperboardArtifacts("linux-x64", "0.1.0")).toEqual({ buildFile: "paperboard-0.1.0-linux-x86_64.AppImage", releaseFile: "paperboard-linux-x64.AppImage" });
 });
 
+
+describe("npmPublishEnv", () => {
+    it("passes the one-time code to npm through the environment", () => {
+        expect(npmPublishEnv(" 123456 ")).toEqual({ NPM_CONFIG_OTP: "123456" });
+    });
+    it("leaves npm to its browser sign-in when the code is blank", () => {
+        expect(npmPublishEnv("  ")).toEqual({});
+    });
+    it("refuses anything that is not a 6 to 8 digit code", () => {
+        expect(() => npmPublishEnv("12345")).toThrow();
+        expect(() => npmPublishEnv("12345a")).toThrow();
+        expect(() => npmPublishEnv("123456789")).toThrow();
+    });
+});

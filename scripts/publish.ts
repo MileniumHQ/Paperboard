@@ -46,6 +46,8 @@ import {
     GH_REPO,
     KV_PACKAGES_BINDING,
     PAPERDL_R2_BUCKET,
+    NPM_OTP_PATTERN,
+    npmPublishEnv,
     assetFileName,
     paperboardArtifacts,
     buildCraneIndex,
@@ -130,11 +132,14 @@ const mb = (bytes: number) => (bytes / 1024 / 1024).toFixed(1);
 // and output matter. argv arrays only — never a shell string.
 async function sh(
     cmd: string[],
-    opts: { cwd?: string; quiet?: boolean } = {},
+    opts: { cwd?: string; quiet?: boolean; interactive?: boolean; env?: Record<string, string> } = {},
 ): Promise<string> {
     const quiet = opts.quiet ?? false;
     const proc = Bun.spawn(cmd, {
         cwd: opts.cwd ?? HERE,
+        // interactive commands (npm's sign-in) need the terminal's stdin
+        stdin: opts.interactive ? "inherit" : "ignore",
+        env: opts.env ? { ...process.env, ...opts.env } : process.env,
         stdout: quiet ? "pipe" : "inherit",
         stderr: quiet ? "pipe" : "inherit",
     });
@@ -1043,7 +1048,7 @@ async function flowPublishPackages(): Promise<void> {
     }
     if (!(await cmdOk(["npm", "whoami"]))) {
         p.log.warn("npm: not logged in — opening `npm login`…");
-        await sh(["npm", "login"], { quiet: false });
+        await sh(["npm", "login"], { quiet: false, interactive: true });
         if (!(await cmdOk(["npm", "whoami"]))) {
             fail("npm login did not complete. Aborting before anything publishes.");
         }
@@ -1051,7 +1056,22 @@ async function flowPublishPackages(): Promise<void> {
 
     const pubBar = bar(picked.length);
     for (const x of picked) {
-        await sh(["npm", "publish"], { cwd: x.dir, quiet: false });
+        // asked per package, right before it publishes: a code lasts ~30 s
+        const otp = checkCancel(
+            await p.text({
+                message: `npm one-time code for ${x.name} (blank to sign in through the browser)`,
+                validate: (v) =>
+                    !v || !v.trim() || NPM_OTP_PATTERN.test(v.trim())
+                        ? undefined
+                        : "Enter the 6-digit code from your authenticator app",
+            }),
+        ) as string;
+        await sh(["npm", "publish"], {
+            cwd: x.dir,
+            quiet: false,
+            interactive: true,
+            env: npmPublishEnv(otp ?? ""),
+        });
         pubBar.increment(1, { task: x.name });
     }
     pubBar.stop();
