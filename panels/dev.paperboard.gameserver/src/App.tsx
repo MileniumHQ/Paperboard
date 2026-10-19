@@ -3,7 +3,7 @@ import {
     PaperPanel,
     PaperMenu,
     PaperMenuItem,
-    PaperMenuSection,
+    PaperText,
     PaperInterfaceGroup,
     PaperInterfaceItem,
 } from "@mileniumhq/paperui";
@@ -33,6 +33,7 @@ import Backups from "./components/Backups";
 import type { PaperFileReveal } from "@mileniumhq/paperui";
 import "@mileniumhq/paperui/style.css";
 import "@mileniumhq/paperui/panel.css";
+import styles from "./App.module.css";
 
 export default function App() {
     const [configured, setConfigured] = createSignal<boolean | null>(null);
@@ -104,73 +105,77 @@ export default function App() {
                         <PaperMenuItem value="overview" icon="dashboard">
                             Overview
                         </PaperMenuItem>
-                        <PaperMenuSection title="Play" collapsible={false}>
-                            <PaperMenuItem value="chat" icon="chat">
-                                Chat
+                        <PaperText as="div" preset="section" class={styles.menuLabel}>
+                            Play
+                        </PaperText>
+                        <PaperMenuItem value="chat" icon="chat">
+                            Chat
+                        </PaperMenuItem>
+                        <Show when={showPlayers()}>
+                            <PaperMenuItem value="players" icon="group">
+                                Players
                             </PaperMenuItem>
-                            <Show when={showPlayers()}>
-                                <PaperMenuItem value="players" icon="group">
-                                    Players
-                                </PaperMenuItem>
-                            </Show>
-                            <Show when={showMap()}>
-                                <PaperMenuItem value="map" icon="map">
-                                    Map
-                                </PaperMenuItem>
-                            </Show>
-                        </PaperMenuSection>
-                        <PaperMenuSection title="World" collapsible={false}>
-                            <Show when={showWorlds()}>
-                                <PaperMenuItem value="worlds" icon="public">
-                                    Worlds
-                                </PaperMenuItem>
-                            </Show>
-                            <PaperMenuItem value="gamerules" icon="list_alt_check">
-                                Game Rules
+                        </Show>
+                        <Show when={showMap()}>
+                            <PaperMenuItem value="map" icon="map">
+                                Map
                             </PaperMenuItem>
-                            <Show when={showDatapacks()}>
-                                <PaperMenuItem value="datapacks" icon="dataset">
-                                    Datapacks
-                                </PaperMenuItem>
-                            </Show>
-                        </PaperMenuSection>
-                        <PaperMenuSection title="Software" collapsible={false}>
-                            <PaperMenuItem value="versions" icon="deployed_code">
-                                Versions
+                        </Show>
+                        <PaperText as="div" preset="section" class={styles.menuLabel}>
+                            World
+                        </PaperText>
+                        <Show when={showWorlds()}>
+                            <PaperMenuItem value="worlds" icon="public">
+                                Worlds
                             </PaperMenuItem>
-                            <Show when={hasLoaderTab()}>
-                                <PaperMenuItem value="loader" icon="settings_applications">
-                                    Loader
-                                </PaperMenuItem>
-                            </Show>
-                            <Show when={hasPluginTab()}>
-                                <PaperMenuItem value="plugins" icon="extension">
-                                    {pluginKind()}
-                                </PaperMenuItem>
-                            </Show>
-                            <Show when={hasModpackTab()}>
-                                <PaperMenuItem value="modpacks" icon="package_2">
-                                    Modpacks
-                                </PaperMenuItem>
-                            </Show>
-                        </PaperMenuSection>
-                        <PaperMenuSection title="Server" collapsible={false}>
-                            <PaperMenuItem value="options" icon="tune">
-                                Options
+                        </Show>
+                        <PaperMenuItem value="gamerules" icon="list_alt_check">
+                            Game Rules
+                        </PaperMenuItem>
+                        <Show when={showDatapacks()}>
+                            <PaperMenuItem value="datapacks" icon="dataset">
+                                Datapacks
                             </PaperMenuItem>
-                            <PaperMenuItem value="files" icon="folder">
-                                Files
+                        </Show>
+                        <PaperText as="div" preset="section" class={styles.menuLabel}>
+                            Software
+                        </PaperText>
+                        <PaperMenuItem value="versions" icon="deployed_code">
+                            Versions
+                        </PaperMenuItem>
+                        <Show when={hasLoaderTab()}>
+                            <PaperMenuItem value="loader" icon="settings_applications">
+                                Loader
                             </PaperMenuItem>
-                            <PaperMenuItem value="logs" icon="description">
-                                Logs
+                        </Show>
+                        <Show when={hasPluginTab()}>
+                            <PaperMenuItem value="plugins" icon="extension">
+                                {pluginKind()}
                             </PaperMenuItem>
-                            <PaperMenuItem value="backups" icon="backup">
-                                Backups
+                        </Show>
+                        <Show when={hasModpackTab()}>
+                            <PaperMenuItem value="modpacks" icon="package_2">
+                                Modpacks
                             </PaperMenuItem>
-                            <PaperMenuItem value="advanced" icon="settings">
-                                Advanced
-                            </PaperMenuItem>
-                        </PaperMenuSection>
+                        </Show>
+                        <PaperText as="div" preset="section" class={styles.menuLabel}>
+                            Server
+                        </PaperText>
+                        <PaperMenuItem value="options" icon="tune">
+                            Options
+                        </PaperMenuItem>
+                        <PaperMenuItem value="files" icon="folder">
+                            Files
+                        </PaperMenuItem>
+                        <PaperMenuItem value="logs" icon="description">
+                            Logs
+                        </PaperMenuItem>
+                        <PaperMenuItem value="backups" icon="backup">
+                            Backups
+                        </PaperMenuItem>
+                        <PaperMenuItem value="advanced" icon="settings">
+                            Advanced
+                        </PaperMenuItem>
                     </PaperMenu>
 
                     <PaperInterfaceGroup value={activeTab()}>

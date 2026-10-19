@@ -1,0 +1,4 @@
+/* group labels sit flush with the item text, with a gap above each group */
+.menuLabel {
+    padding: var(--paper-uigap-threefourths) var(--paper-uigap-threefourths) var(--paper-uigap-onefourth);
+}
