@@ -83,7 +83,7 @@ const App: Component = () => {
     // loads, and it stays null if it can't be read, so an unreadable record
     // never replays every tutorial
     const [seenTutorials, setSeenTutorials] = createSignal<string[] | null>(null);
-    const [tutorialPanel, setTutorialPanel] = createSignal<PanelItem | null>(null);
+    const [tutorialPanel, setTutorialPanel] = createSignal<{ compId: string; panel: PanelItem } | null>(null);
     const panelContextMenu = useContextMenuState();
     const [contextMenuPanel, setContextMenuPanel] = createSignal<{
         compId: string;
@@ -249,11 +249,11 @@ const App: Component = () => {
         const tab = getSelectedTab(compId);
         if (!tab || isShellTab(tab) || seen.includes(tab)) return;
         const panel = panelsByComputer()[compId]?.find((p) => p.id === tab);
-        if (panel?.tutorial?.length) setTutorialPanel(panel);
+        if (panel?.tutorial?.length) setTutorialPanel({ compId, panel });
     });
 
     const finishTutorial = () => {
-        const panel = tutorialPanel();
+        const panel = tutorialPanel()?.panel;
         if (!panel) return;
         // seen before closed, or the first-open effect reopens it; this
         // session stops offering it whether or not the record saves
@@ -269,7 +269,7 @@ const App: Component = () => {
         const target = contextMenuPanel();
         if (!target) return;
         panelContextMenu.close();
-        setTutorialPanel(target.panel);
+        setTutorialPanel(target);
     };
 
     onMount(async () => {
@@ -899,9 +899,12 @@ const App: Component = () => {
 
             <PanelTutorial
                 panel={(() => {
-                    const panel = tutorialPanel();
-                    return panel?.tutorial ? { name: panel.name, tutorial: panel.tutorial } : null;
+                    const open = tutorialPanel();
+                    return open?.panel.tutorial
+                        ? { computerId: open.compId, id: open.panel.id, name: open.panel.name, tutorial: open.panel.tutorial }
+                        : null;
                 })()}
+                theme={appSettings().darkMode}
                 onDone={finishTutorial}
             />
 
