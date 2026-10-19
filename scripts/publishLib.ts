@@ -405,17 +405,3 @@ export function storeUploadParts(
         : undefined;
     return { ...(about !== undefined ? { about } : {}), files };
 }
-
-// npm two-factor code for `npm publish`. Passed through the environment
-// (NPM_CONFIG_OTP), not argv, so it never shows in a process list. Blank
-// means no code: npm falls back to its own browser sign-in.
-export const NPM_OTP_PATTERN = /^\d{6,8}$/;
-
-export function npmPublishEnv(otp: string): Record<string, string> {
-    const code = otp.trim();
-    if (!code) return {};
-    if (!NPM_OTP_PATTERN.test(code)) {
-        throw new Error("npm one-time code must be 6 to 8 digits");
-    }
-    return { NPM_CONFIG_OTP: code };
-}

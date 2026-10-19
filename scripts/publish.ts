@@ -46,8 +46,6 @@ import {
     GH_REPO,
     KV_PACKAGES_BINDING,
     PAPERDL_R2_BUCKET,
-    NPM_OTP_PATTERN,
-    npmPublishEnv,
     assetFileName,
     paperboardArtifacts,
     buildCraneIndex,
@@ -132,14 +130,13 @@ const mb = (bytes: number) => (bytes / 1024 / 1024).toFixed(1);
 // and output matter. argv arrays only — never a shell string.
 async function sh(
     cmd: string[],
-    opts: { cwd?: string; quiet?: boolean; interactive?: boolean; env?: Record<string, string> } = {},
+    opts: { cwd?: string; quiet?: boolean; interactive?: boolean } = {},
 ): Promise<string> {
     const quiet = opts.quiet ?? false;
     const proc = Bun.spawn(cmd, {
         cwd: opts.cwd ?? HERE,
         // interactive commands (npm's sign-in) need the terminal's stdin
         stdin: opts.interactive ? "inherit" : "ignore",
-        env: opts.env ? { ...process.env, ...opts.env } : process.env,
         stdout: quiet ? "pipe" : "inherit",
         stderr: quiet ? "pipe" : "inherit",
     });
@@ -1054,27 +1051,14 @@ async function flowPublishPackages(): Promise<void> {
         }
     }
 
-    const pubBar = bar(picked.length);
+    // npm signs in through the browser (passkey) for each publish: it
+    // prints a link and waits, so it gets the terminal and no progress bar
+    // is drawn over the link
+    p.log.info("npm will show a sign-in link for each package. Open it and approve with your passkey.");
     for (const x of picked) {
-        // asked per package, right before it publishes: a code lasts ~30 s
-        const otp = checkCancel(
-            await p.text({
-                message: `npm one-time code for ${x.name} (blank to sign in through the browser)`,
-                validate: (v) =>
-                    !v || !v.trim() || NPM_OTP_PATTERN.test(v.trim())
-                        ? undefined
-                        : "Enter the 6-digit code from your authenticator app",
-            }),
-        ) as string;
-        await sh(["npm", "publish"], {
-            cwd: x.dir,
-            quiet: false,
-            interactive: true,
-            env: npmPublishEnv(otp ?? ""),
-        });
-        pubBar.increment(1, { task: x.name });
+        p.log.step(`Publishing ${x.name} v${x.version}…`);
+        await sh(["npm", "publish"], { cwd: x.dir, quiet: false, interactive: true });
     }
-    pubBar.stop();
 
     p.log.success("Published:");
     printTable(
