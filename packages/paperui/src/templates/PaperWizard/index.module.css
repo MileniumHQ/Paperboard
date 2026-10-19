@@ -7,21 +7,6 @@
     background: var(--paper-surface-raised);
 }
 
-.wizardProgress {
-    position: absolute;
-    top: calc((var(--paper-thickest-border-width) / 1.5) * -1);
-    left: 0;
-    width: 100%;
-    height: var(--paper-thickest-border-width);
-    overflow: hidden;
-}
-
-.progressBar {
-    height: 100%;
-    background: var(--paper-primary);
-    transition: width var(--paper-medium-transition) ease;
-}
-
 .wizardSteps {
     height: 100%;
     width: 100%;
@@ -35,11 +20,48 @@
     position: relative;
     display: flex;
     padding: var(--paper-uigap);
-    background: var(--paper-surface);
     border-top: var(--paper-border-width) solid var(--paper-border);
     justify-content: space-between;
     align-items: center;
     transition: transform var(--paper-medium-transition);
+}
+
+/* The back and next slots share the leftover width equally so the dots stay
+   centered whether or not a back button is showing. */
+.wizardOptions > div:first-child,
+.wizardOptions > div:last-child {
+    flex: 1;
+    display: flex;
+}
+
+.wizardOptions > div:last-child {
+    justify-content: flex-end;
+}
+
+.wizardDots {
+    display: flex;
+    align-items: center;
+    gap: var(--paper-uigap-half);
+}
+
+.wizardDot {
+    width: var(--paper-uigap-half);
+    height: var(--paper-uigap-half);
+    border-radius: var(--paper-border-radius-pill);
+    background: var(--paper-border-strong);
+    transition:
+        width var(--paper-medium-transition) var(--paper-ease-emphasized),
+        background-color var(--paper-medium-transition);
+}
+
+.dotDone {
+    background: var(--paper-primary);
+    opacity: var(--paper-opacity-muted);
+}
+
+.dotCurrent {
+    width: var(--paper-uigap-sixfourths);
+    background: var(--paper-primary);
 }
 
 .PaperWizardStep {

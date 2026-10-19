@@ -8,6 +8,7 @@ import {
     type JSX,
     createSignal,
     Show,
+    For,
     createContext,
     useContext,
     createEffect,
@@ -153,8 +154,7 @@ export function PaperWizard(props: ParentProps<PaperWizardProps>) {
     const className = () =>
         [styles.PaperWizard, local.class].filter(Boolean).join(" ");
 
-    const progressPercentage = () =>
-        Math.min(100, Math.round(((currentStep() + 1) / totalSteps()) * 100));
+    const stepNumbers = () => Array.from({ length: totalSteps() }, (_, i) => i);
 
     // The finish glow light takes the button's color so the two never
     // disagree; a text variant has no surface to light, so it goes colorless.
@@ -177,14 +177,6 @@ export function PaperWizard(props: ParentProps<PaperWizardProps>) {
                         [styles.optionsHidden]: !optionsShown(),
                     }}
                 >
-                    <Show when={local.showProgress ?? true}>
-                        <div class={styles.wizardProgress}>
-                            <div
-                                class={styles.progressBar}
-                                style={{ width: `${progressPercentage()}%` }}
-                            ></div>
-                        </div>
-                    </Show>
                     <div>
                         <Show when={!local.hideBack && !isFirstStep()}>
                             <PaperEffect colorless disabled={!optionsShown()}>
@@ -199,6 +191,29 @@ export function PaperWizard(props: ParentProps<PaperWizardProps>) {
                             </PaperEffect>
                         </Show>
                     </div>
+
+                    <Show when={local.showProgress ?? true}>
+                        <div
+                            class={styles.wizardDots}
+                            role="progressbar"
+                            aria-valuemin={1}
+                            aria-valuemax={totalSteps()}
+                            aria-valuenow={currentStep() + 1}
+                            aria-valuetext={`Step ${currentStep() + 1} of ${totalSteps()}`}
+                        >
+                            <For each={stepNumbers()}>
+                                {(i) => (
+                                    <span
+                                        class={styles.wizardDot}
+                                        classList={{
+                                            [styles.dotDone]: i < currentStep(),
+                                            [styles.dotCurrent]: i === currentStep(),
+                                        }}
+                                    />
+                                )}
+                            </For>
+                        </div>
+                    </Show>
 
                     <div>
                         <PaperEffect

@@ -13,7 +13,7 @@ export default function PaperWizardDoc() {
         <PaperFlex direction="column" gap="double" fullWidth>
             <PaperText preset="header">PaperWizard</PaperText>
             <PaperText preset="body">
-                PaperWizard orchestrates multi-step guided workflows with integrated step validation and linear progress indicators.
+                PaperWizard orchestrates multi-step guided workflows with integrated step validation and step progress dots.
                 Reach for PaperWizard when building initial panel setup assistants, installation flows, or complex form questionnaires.
                 The wizard coordinates data harvesting across steps and dispatches completion events.
             </PaperText>
@@ -89,7 +89,7 @@ export function Example() {
                             <td><PaperCode>showProgress</PaperCode></td>
                             <td><PaperCode>boolean</PaperCode></td>
                             <td><PaperCode>true</PaperCode></td>
-                            <td>Displays the linear progress bar along the bottom action row.</td>
+                            <td>Displays one dot per step in the middle of the bottom action row.</td>
                         </tr>
                         <tr>
                             <td><PaperCode>finishLabel</PaperCode></td>
