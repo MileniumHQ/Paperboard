@@ -34,10 +34,11 @@
         }
     ],
     "tutorial": [
-        {"icon": "dns", "title": "No terminal needed", "body": "Paperboard downloads the server and the software it needs. Pick a Minecraft version and play."},
-        {"icon": "extension", "title": "Plugins by name", "body": "Search for a plugin to install it, and update them all to their latest version in one click."},
-        {"icon": "swap_horiz", "title": "Switch loaders any time", "body": "Paper, Fabric, NeoForge and Forge are all supported, and you can switch between them whenever you like."},
-        {"icon": "backup", "title": "Backups that keep worlds safe", "body": "Back up to this computer, Google Drive or S3. A running server pauses saving during the copy so the world isn't torn."}
+        {"image": {"light": "./tutorial/1-light.webp", "dark": "./tutorial/1-dark.webp", "alt": "A running Paper server with its live console"}, "title": "No terminal needed", "body": "Paperboard downloads the server and everything it needs. Pick a Minecraft version and play."},
+        {"image": {"light": "./tutorial/2-light.webp", "dark": "./tutorial/2-dark.webp", "alt": "A live map of the Overworld"}, "title": "A live world map", "body": "Explore your world from above while people play."},
+        {"image": {"light": "./tutorial/3-light.webp", "dark": "./tutorial/3-dark.webp", "alt": "The players list with one player's stats and permissions"}, "title": "Know your players", "body": "See everyone who's played and their stats, and make someone an operator or whitelist them in a click."},
+        {"image": {"light": "./tutorial/4-light.webp", "dark": "./tutorial/4-dark.webp", "alt": "Searching Modrinth plugins like VeinMiner and Simple Voice Chat"}, "title": "Plugins by name", "body": "Search for a plugin to install it, and update them all to their latest version in one click."},
+        {"image": {"light": "./tutorial/5-light.webp", "dark": "./tutorial/5-dark.webp", "alt": "Backup settings with a routine daily backup"}, "title": "Backups that keep worlds safe", "body": "Back up to this computer, Google Drive or S3. A running server pauses saving during the copy so the world isn't torn."}
     ],
     "store": {
         "about": "./store/about.md",

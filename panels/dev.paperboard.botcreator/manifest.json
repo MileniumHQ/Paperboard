@@ -27,10 +27,10 @@
         }
     ],
     "tutorial": [
-        {"icon": "smart_toy", "title": "A bot without code", "body": "All it takes is a Discord bot token. Build what the bot does in the Actions panel."},
-        {"icon": "touch_app", "title": "More than text", "body": "Buttons, slash commands, select menus, pop-up forms, reactions and roles all work here."},
-        {"icon": "verified", "title": "Never \"This interaction failed\"", "body": "The panel acknowledges every interaction for you, so Discord never shows your users that error."},
-        {"icon": "group_add", "title": "Invite it anywhere", "body": "See every server your bot is in, with its roles and members, and make invite links without leaving the app."}
+        {"image": {"light": "./tutorial/1-light.webp", "dark": "./tutorial/1-dark.webp", "alt": "A bot's health card: connected, 42 ms latency, 14 servers"}, "title": "Your bot at a glance", "body": "All it takes is a Discord bot token. Then see whether it's connected, how fast it answers and how busy it is."},
+        {"image": {"light": "./tutorial/2-light.webp", "dark": "./tutorial/2-dark.webp", "alt": "Cards for the servers the bot is in, with members, channels and roles"}, "title": "Every server it's in", "body": "See each server's members, channels and roles, and make invite links without leaving the app."},
+        {"image": {"light": "./tutorial/3-light.webp", "dark": "./tutorial/3-dark.webp", "alt": "The slash commands this bot registers with Discord"}, "title": "Slash commands", "body": "Create slash commands for every server or just one, and decide what they do in the Actions panel."},
+        {"image": {"light": "./tutorial/4-light.webp", "dark": "./tutorial/4-dark.webp", "alt": "A ticket flow in Actions with a select menu and a pop-up form"}, "title": "Never \"This interaction failed\"", "body": "Build menus and pop-up forms in Actions. The panel answers every interaction for you, so Discord never shows that error."}
     ],
     "store": {
         "about": "./store/about.md",

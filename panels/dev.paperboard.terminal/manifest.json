@@ -17,10 +17,9 @@
         }
     ],
     "tutorial": [
-        {"icon": "terminal", "title": "Tabs keep running", "body": "A terminal tab stays alive until you close it. Start a long job, switch panels or close the window, and it keeps going."},
-        {"icon": "content_paste", "title": "Copy and paste with a right click", "body": "No hidden shortcuts to memorize: right click inside a tab to copy and paste."},
-        {"icon": "devices", "title": "Pick up on another computer", "body": "Sessions live in the daemon, so a tab you start on one computer can be opened from any other computer you've connected."},
-        {"icon": "bookmark", "title": "Save the commands you repeat", "body": "Save a command once and launch it from the tab bar, or pin it to Home to run it in one click."}
+        {"image": {"light": "./tutorial/1-light.webp", "dark": "./tutorial/1-dark.webp", "alt": "Three terminal tabs: system info, a git log and the weather"}, "title": "Tabs keep running", "body": "Each tab stays alive until you close it. Start a long job, switch panels or close the window, and it keeps going."},
+        {"image": {"light": "./tutorial/2-light.webp", "dark": "./tutorial/2-dark.webp", "alt": "The Saved commands menu with Disk usage, Repo status, Weather and Update system"}, "title": "Save the commands you repeat", "body": "Save a command once and run it from the tab bar, or pin it to Home to run it in one click."},
+        {"image": {"light": "./tutorial/3-light.webp", "dark": "./tutorial/3-dark.webp", "alt": "A weather forecast drawn in a terminal tab"}, "title": "Bring any tool", "body": "If it runs in a terminal it runs here, colors and all. Even the weather forecast."}
     ],
     "store": {
         "about": "./store/about.md",

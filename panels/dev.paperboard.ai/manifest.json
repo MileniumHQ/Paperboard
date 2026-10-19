@@ -28,10 +28,10 @@
         }
     ],
     "tutorial": [
-        {"icon": "lock", "title": "Your chats stay home", "body": "Local models run on this computer, so nothing you type or upload is sent to the cloud."},
-        {"icon": "attach_file", "title": "Drop in files", "body": "On models that support it, drag in images, text or code and ask about them."},
-        {"icon": "code", "title": "Bring a coding agent", "body": "Claude Code, Codex, Cursor and more can work in a project you pick, and you approve what they do before it runs."},
-        {"icon": "hub", "title": "Every model in one list", "body": "Connect any OpenAI-compatible endpoint and its models sit right next to your local ones."}
+        {"image": {"light": "./tutorial/1-light.webp", "dark": "./tutorial/1-dark.webp", "alt": "A chat answering with a Docker Compose file for Jellyfin"}, "title": "Your chats stay home", "body": "Local models run on this computer, so nothing you type or upload is sent to the cloud."},
+        {"image": {"light": "./tutorial/2-light.webp", "dark": "./tutorial/2-dark.webp", "alt": "Choosing coding agents: Codex, Claude Code and OpenCode"}, "title": "Bring a coding agent", "body": "Claude Code, Codex, OpenCode and more can work in a project you pick."},
+        {"image": {"light": "./tutorial/3-light.webp", "dark": "./tutorial/3-dark.webp", "alt": "A connected home server listing its models"}, "title": "Every model in one list", "body": "Connect any OpenAI-compatible server and its models sit right next to your local ones."},
+        {"image": {"light": "./tutorial/4-light.webp", "dark": "./tutorial/4-dark.webp", "alt": "A shell command waiting for approval, with Allow once and Deny"}, "title": "Nothing runs without you", "body": "When the AI wants to run a command, it asks every time. Allow it once or deny it."}
     ],
     "store": {
         "about": "./store/about.md",

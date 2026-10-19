@@ -33,10 +33,10 @@
         }
     ],
     "tutorial": [
-        {"icon": "account_tree", "title": "Snap blocks together", "body": "Drag action blocks into trigger blocks to build a flow. Every panel you install can add its own blocks."},
-        {"icon": "bolt", "title": "No save button", "body": "Everything you build is applied right away and saved as you go, so you can test it any time and come back later."},
-        {"icon": "casino", "title": "Blocks out of the box", "body": "Random numbers, timestamp comparisons and HTTP requests are ready to use before you install a single panel."},
-        {"icon": "home", "title": "Run from Home", "body": "Pin a Run button to Home to start a flow without opening this panel, and keep an eye on its recent runs."}
+        {"image": {"light": "./tutorial/1-light.webp", "dark": "./tutorial/1-dark.webp", "alt": "A flow that greets players when they join the Minecraft server"}, "title": "Snap blocks together", "body": "Drag action blocks into a trigger to build a flow. Everything you build is saved as you go."},
+        {"image": {"light": "./tutorial/2-light.webp", "dark": "./tutorial/2-dark.webp", "alt": "The Bot Creator section of the block library, with 63 blocks"}, "title": "Every panel brings blocks", "body": "Install a panel and its blocks show up in the library. Bot Creator alone adds 63."},
+        {"image": {"light": "./tutorial/3-light.webp", "dark": "./tutorial/3-dark.webp", "alt": "A flow that runs a shell command, has the AI summarize it and sends the answer as a Discord DM"}, "title": "Mix panels in one flow", "body": "Run a command, have your AI summarize it, then DM the answer on Discord, all in one flow."},
+        {"image": {"light": "./tutorial/4-light.webp", "dark": "./tutorial/4-dark.webp", "alt": "The menu beside Run with Export, Import, Create Backup and Load Backup"}, "title": "Share and back up", "body": "The menu beside Run exports and imports flows and backs up your whole canvas."}
     ],
     "store": {
         "about": "./store/about.md",
