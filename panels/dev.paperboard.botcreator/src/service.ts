@@ -394,6 +394,8 @@ function unrefTimer(timer: ReturnType<typeof setTimeout>): void {
  * flow answered after AUTO_ACK_DELAY_MS, the bot acknowledges so Discord
  * does not show "interaction failed". Flows never need a Defer step.
  */
+const LATE_INTERACTION_MS = 1_500;
+
 export function rememberInteraction(interaction: RepliableInteraction): void {
     const key = interaction.id;
     if (pendingInteractions.has(key)) dropEntry(key);
@@ -403,11 +405,19 @@ export function rememberInteraction(interaction: RepliableInteraction): void {
         if (oldestKey !== undefined) dropEntry(oldestKey);
     }
 
+    // Discord's 3-second window starts when it creates the interaction, not
+    // when the bot receives it; a late arrival cannot be answered in time
+    const lateByMs = Date.now() - interaction.createdTimestamp;
+    if (lateByMs > LATE_INTERACTION_MS) {
+        console.warn(
+            `[DiscordService] interaction ${key} arrived ${lateByMs} ms after Discord created it; Discord expires it at 3000 ms`,
+        );
+    }
     const timer = setTimeout(() => dropEntry(key), INTERACTION_TTL_MS);
     const ackTimer = setTimeout(() => {
         autoAcknowledge(interaction).catch((err: unknown) =>
             console.error(
-                "[DiscordService] automatic acknowledgement failed:",
+                `[DiscordService] automatic acknowledgement failed ${Date.now() - interaction.createdTimestamp} ms after Discord created the interaction:`,
                 errorToMessage(err),
             ),
         );
@@ -778,6 +788,11 @@ function attachListeners(bot: Client, ctx: ServiceContext<any>) {
     bot.on("shardDisconnect", (event) =>
         markGatewayDown("shardDisconnect", event),
     );
+    // a resume replays what the dropped connection missed; interactions in
+    // that replay are already past Discord's answer window
+    bot.on("shardResume", (_shardId, replayed) => {
+        if (replayed > 0) console.warn(`[DiscordService] gateway resumed and replayed ${replayed} missed events`);
+    });
 
     // fatal: the token was reset/revoked — destroy immediately and record
     bot.on("invalidated", () => {
