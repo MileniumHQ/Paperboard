@@ -52,6 +52,14 @@ describe("shipped model catalog", () => {
         }
     });
 
+    it("holds only chat models: no embedding or decision models, tagged or not", () => {
+        for (const m of catalog.models) {
+            expect(m.capabilities).not.toContain("embedding");
+            expect(m.capabilities).not.toContain("decision");
+            expect(m.description).not.toMatch(/\bdecision model\b/i);
+        }
+    });
+
     it("every maker logo the catalog names is bundled", () => {
         const dir = path.join(import.meta.dir, "..", "src", "assets", "makers");
         for (const maker of Object.values(catalog.makers)) {
@@ -69,10 +77,9 @@ describe("shipped model catalog", () => {
         const downloads = searchCatalog(catalog, { sort: "downloads" });
         expect(downloads[0]!.pulls).toBeGreaterThanOrEqual(downloads[1]!.pulls);
 
+        // newest keeps the library's newest-first file order
         const newest = searchCatalog(catalog, { sort: "newest" });
-        for (let i = 0; i < 10; i++) {
-            expect((newest[i]!.updatedAt ?? "") >= (newest[i + 1]!.updatedAt ?? "")).toBe(true);
-        }
+        expect(newest.map((m) => m.name)).toEqual(catalog.models.map((m) => m.name));
 
         // newest is the default order
         expect(searchCatalog(catalog, {})).toEqual(newest);

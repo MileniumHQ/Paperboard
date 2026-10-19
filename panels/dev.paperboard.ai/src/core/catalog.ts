@@ -1,8 +1,9 @@
 // The shipped model catalog (src/data/models.json): local Ollama library
 // models with their makers, capabilities and per-tag download sizes.
-// Cloud-only models are not in it; the file is curated by hand. Each entry
-// also carries the library's "updated" date so the default sort can weigh
-// recency against downloads.
+// Cloud-only, MLX-only, embedding and decision (classify/score) models are
+// not in it. Models are stored in the library's newest-first order, which is
+// the default sort: the library's "updated" date moves whenever an old model
+// is re-pushed, so it is not a release date.
 
 export interface CatalogTag {
     tag: string; // "8b", "latest"
@@ -15,8 +16,6 @@ export interface CatalogModel {
     maker: string;
     description: string;
     capabilities: string[]; // tools, vision, thinking, audio
-    /** the library's "updated" date (YYYY-MM-DD), when the scrape saw one */
-    updatedAt?: string;
     pulls: number;
     tags: CatalogTag[];
 }
@@ -44,9 +43,6 @@ export function parseCatalog(raw: unknown): Catalog {
     for (const m of data.models) {
         if (!NAME_RE.test(m.name)) throw new Error(`model catalog: bad name ${JSON.stringify(m.name)}`);
         if (!data.makers[m.maker]) throw new Error(`model catalog: ${m.name} has unknown maker ${m.maker}`);
-        if (m.updatedAt !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(m.updatedAt)) {
-            throw new Error(`model catalog: ${m.name} has malformed updatedAt`);
-        }
         if (!Array.isArray(m.tags) || m.tags.length === 0) throw new Error(`model catalog: ${m.name} has no tags`);
         for (const t of m.tags) {
             if (!TAG_RE.test(t.tag) || !(t.bytes > 0) || !(t.context > 0)) {
@@ -78,8 +74,7 @@ export function searchCatalog(catalog: Catalog, query: CatalogQuery): CatalogMod
     });
     const byDownloads = (a: CatalogModel, b: CatalogModel) => b.pulls - a.pulls || a.name.localeCompare(b.name);
     if (query.sort === "downloads") return [...list].sort(byDownloads);
-    // an unknown date is not "new"; it sorts behind everything dated
-    return [...list].sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? "") || byDownloads(a, b));
+    return list; // the file is already newest first
 }
 
 /** "qwen3" + "8b" → "qwen3:8b"; the "latest" tag is Ollama's default name. */
