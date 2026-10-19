@@ -1,7 +1,7 @@
 // The shipped model catalog (src/data/models.json): local Ollama library
 // models with their makers, capabilities and per-tag download sizes.
-// Cloud-only, MLX-only, embedding and decision (classify/score) models are
-// not in it. Models are stored in the library's newest-first order, which is
+// Only models you can chat with: cloud-only, MLX-only, embedding, decision
+// and safety-classifier (guard, fact-check) models are not in it. Models are stored in the library's newest-first order, which is
 // the default sort: the library's "updated" date moves whenever an old model
 // is re-pushed, so it is not a release date.
 

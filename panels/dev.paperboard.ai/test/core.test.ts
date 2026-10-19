@@ -52,8 +52,11 @@ describe("shipped model catalog", () => {
         }
     });
 
-    it("holds only chat models: no embedding or decision models, tagged or not", () => {
+    it("holds only chat models: no embedding, decision or safety-classifier models", () => {
+        // these answer with a verdict ("safe"/"unsafe", "Yes"/"No"), not a conversation
+        const classifiers = ["llama-guard3", "shieldgemma", "granite3-guardian", "granite4.1-guardian", "gpt-oss-safeguard", "bespoke-minicheck"];
         for (const m of catalog.models) {
+            expect(classifiers).not.toContain(m.name);
             expect(m.capabilities).not.toContain("embedding");
             expect(m.capabilities).not.toContain("decision");
             expect(m.description).not.toMatch(/\bdecision model\b/i);

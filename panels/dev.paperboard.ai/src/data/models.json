@@ -457,23 +457,6 @@
       ]
     },
     {
-      "name": "granite4.1-guardian",
-      "maker": "ibm",
-      "description": "Granite Guardian 4.1 is a specialized safety and judging model from IBM Research that evaluates whether LLM prompts and responses meet specified harm criteria.",
-      "capabilities": [
-        "thinking",
-        "tools"
-      ],
-      "pulls": 39800,
-      "tags": [
-        {
-          "tag": "8b",
-          "bytes": 6900000000,
-          "context": 131072
-        }
-      ]
-    },
-    {
       "name": "mistral-medium-3.5",
       "maker": "mistral",
       "description": "Mistral Medium 3.5 is the first flagship model of Mistral AI that merged instruction-following, reasoning, and coding in a single set of 128B weights.",
@@ -1007,28 +990,6 @@
           "tag": "671b",
           "bytes": 1300000000000,
           "context": 163840
-        }
-      ]
-    },
-    {
-      "name": "gpt-oss-safeguard",
-      "maker": "openai",
-      "description": "gpt-oss-safeguard-20b and gpt-oss-safeguard-120b are safety reasoning models built-upon gpt-oss",
-      "capabilities": [
-        "thinking",
-        "tools"
-      ],
-      "pulls": 167200,
-      "tags": [
-        {
-          "tag": "20b",
-          "bytes": 14000000000,
-          "context": 131072
-        },
-        {
-          "tag": "120b",
-          "bytes": 65000000000,
-          "context": 131072
         }
       ]
     },
@@ -2094,25 +2055,6 @@
       ]
     },
     {
-      "name": "granite3-guardian",
-      "maker": "ibm",
-      "description": "The IBM Granite Guardian 3.0 2B and 8B models are designed to detect risks in prompts and/or responses.",
-      "capabilities": [],
-      "pulls": 348300,
-      "tags": [
-        {
-          "tag": "2b",
-          "bytes": 2700000000,
-          "context": 8192
-        },
-        {
-          "tag": "8b",
-          "bytes": 5800000000,
-          "context": 8192
-        }
-      ]
-    },
-    {
       "name": "aya-expanse",
       "maker": "cohere",
       "description": "Cohere For AI's language models trained to perform well across 23 different languages.",
@@ -2187,49 +2129,6 @@
         {
           "tag": "70b",
           "bytes": 43000000000,
-          "context": 131072
-        }
-      ]
-    },
-    {
-      "name": "shieldgemma",
-      "maker": "google",
-      "description": "ShieldGemma is set of instruction tuned models for evaluating the safety of text prompt input and text output responses against a set of defined safety policies.",
-      "capabilities": [],
-      "pulls": 971700,
-      "tags": [
-        {
-          "tag": "2b",
-          "bytes": 1700000000,
-          "context": 8192
-        },
-        {
-          "tag": "9b",
-          "bytes": 5800000000,
-          "context": 8192
-        },
-        {
-          "tag": "27b",
-          "bytes": 17000000000,
-          "context": 8192
-        }
-      ]
-    },
-    {
-      "name": "llama-guard3",
-      "maker": "meta",
-      "description": "Llama Guard 3 is a series of models fine-tuned for content safety classification of LLM inputs and responses.",
-      "capabilities": [],
-      "pulls": 1100000,
-      "tags": [
-        {
-          "tag": "1b",
-          "bytes": 1600000000,
-          "context": 131072
-        },
-        {
-          "tag": "8b",
-          "bytes": 4900000000,
           "context": 131072
         }
       ]
@@ -2368,20 +2267,6 @@
         {
           "tag": "72b",
           "bytes": 47000000000,
-          "context": 32768
-        }
-      ]
-    },
-    {
-      "name": "bespoke-minicheck",
-      "maker": "community",
-      "description": "A state-of-the-art fact-checking model developed by Bespoke Labs.",
-      "capabilities": [],
-      "pulls": 545700,
-      "tags": [
-        {
-          "tag": "7b",
-          "bytes": 4700000000,
           "context": 32768
         }
       ]
