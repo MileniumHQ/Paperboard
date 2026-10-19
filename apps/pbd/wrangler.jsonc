@@ -1,0 +1,12 @@
+{
+    "$schema": "node_modules/wrangler/config-schema.json",
+    // pbd.lc short links: each KV key is a path ("/" for the bare domain,
+    // "/beta2", ...) and its value is the https URL it forwards to.
+    // Add one with `bunx wrangler kv key put --remote --binding LINKS "/name" "https://..."`.
+    "name": "pbd",
+    "main": "src/index.ts",
+    "account_id": "355f97d9a981bff4cd52aa362ae577c7",
+    "compatibility_date": "2026-08-18",
+    "routes": [{ "pattern": "pbd.lc/*", "zone_name": "pbd.lc" }],
+    "kv_namespaces": [{ "binding": "LINKS", "id": "be46058a095743f7b801a367a3f96c3d" }]
+}

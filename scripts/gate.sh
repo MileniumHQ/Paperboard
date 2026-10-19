@@ -17,6 +17,7 @@
 #     paperdocs      docs site: tests, build
 #     origami        registry worker: typecheck, tests, silent-catches
 #     origami-library  library UI: tests, build, silent-catches
+#     pbd            pbd.lc short-link worker: typecheck, tests, silent-catches
 #     scripts        root dev/publish scripts: tests, silent-catches
 #     actions ai botcreator gameserver terminal   first-party panels
 #   e.g. `bun run gate terminal`, `bun run gate paperapi paperui`
@@ -54,7 +55,7 @@ run_in() {
 # Every selectable target. The *-build names are prerequisites, not
 # user-facing: they exist so a filtered run can pull in the shared library
 # artifact a consumer needs without running that library's whole suite.
-KNOWN_TARGETS="packages paperapi paperui create-panel paperapi-build paperui-build create-panel-build paperboard paperdocs origami origami-library scripts actions ai botcreator gameserver terminal"
+KNOWN_TARGETS="packages paperapi paperui create-panel paperapi-build paperui-build create-panel-build paperboard paperdocs origami origami-library pbd scripts actions ai botcreator gameserver terminal"
 
 # Prerequisites per target, expanded transitively. A panel (and any app that
 # bundles the SDK/design system) needs paperapi/paperui dist present; the
@@ -177,6 +178,11 @@ gstep create-panel "create-panel silent-catches" run_in "$ROOT/packages/create-p
 gstep origami "origami typecheck" run_in "$ROOT/apps/origami" bun run typecheck
 gstep origami "origami tests" run_in "$ROOT/apps/origami" bun run test
 gstep origami "origami silent-catches" run_in "$ROOT/apps/origami" bash "$CATCH" src test
+
+# ── pbd.lc short-link worker ─────────────────────────────────────────────────
+gstep pbd "pbd typecheck" run_in "$ROOT/apps/pbd" bun run typecheck
+gstep pbd "pbd tests" run_in "$ROOT/apps/pbd" bun run test
+gstep pbd "pbd silent-catches" run_in "$ROOT/apps/pbd" bash "$CATCH" src test
 
 # ── the panel library division of origami: browser-logic suite and the
 # production build that static assets serve (typecheck rides origami's) ──────

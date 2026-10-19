@@ -1,0 +1,21 @@
+{
+    "name": "pbd",
+    "version": "0.1.0",
+    "module": "src/index.ts",
+    "type": "module",
+    "private": true,
+    "scripts": {
+        "dev": "wrangler dev",
+        "deploy": "wrangler deploy",
+        "typecheck": "tsc --noEmit",
+        "test": "bun test ./test"
+    },
+    "devDependencies": {
+        "@cloudflare/workers-types": "^5.20261005.1",
+        "@types/bun": "latest",
+        "wrangler": "^4.147.0"
+    },
+    "peerDependencies": {
+        "typescript": "^5"
+    }
+}
