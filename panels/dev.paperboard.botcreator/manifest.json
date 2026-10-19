@@ -26,6 +26,12 @@
             ]
         }
     ],
+    "tutorial": [
+        {"icon": "smart_toy", "title": "A bot without code", "body": "All it takes is a Discord bot token. Build what the bot does in the Actions panel."},
+        {"icon": "touch_app", "title": "More than text", "body": "Buttons, slash commands, select menus, pop-up forms, reactions and roles all work here."},
+        {"icon": "verified", "title": "Never \"This interaction failed\"", "body": "The panel acknowledges every interaction for you, so Discord never shows your users that error."},
+        {"icon": "group_add", "title": "Invite it anywhere", "body": "See every server your bot is in, with its roles and members, and make invite links without leaving the app."}
+    ],
     "store": {
         "about": "./store/about.md",
         "screenshots": [

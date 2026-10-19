@@ -27,6 +27,12 @@
             "sizes": ["2x1"]
         }
     ],
+    "tutorial": [
+        {"icon": "lock", "title": "Your chats stay home", "body": "Local models run on this computer, so nothing you type or upload is sent to the cloud."},
+        {"icon": "attach_file", "title": "Drop in files", "body": "On models that support it, drag in images, text or code and ask about them."},
+        {"icon": "code", "title": "Bring a coding agent", "body": "Claude Code, Codex, Cursor and more can work in a project you pick, and you approve what they do before it runs."},
+        {"icon": "hub", "title": "Every model in one list", "body": "Connect any OpenAI-compatible endpoint and its models sit right next to your local ones."}
+    ],
     "store": {
         "about": "./store/about.md",
         "screenshots": [

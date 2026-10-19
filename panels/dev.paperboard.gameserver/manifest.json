@@ -33,6 +33,12 @@
             "sizes": ["4x1"]
         }
     ],
+    "tutorial": [
+        {"icon": "dns", "title": "No terminal needed", "body": "Paperboard downloads the server and the software it needs. Pick a Minecraft version and play."},
+        {"icon": "extension", "title": "Plugins by name", "body": "Search for a plugin to install it, and update them all to their latest version in one click."},
+        {"icon": "swap_horiz", "title": "Switch loaders any time", "body": "Paper, Fabric, NeoForge and Forge are all supported, and you can switch between them whenever you like."},
+        {"icon": "backup", "title": "Backups that keep worlds safe", "body": "Back up to this computer, Google Drive or S3. A running server pauses saving during the copy so the world isn't torn."}
+    ],
     "store": {
         "about": "./store/about.md",
         "screenshots": [
