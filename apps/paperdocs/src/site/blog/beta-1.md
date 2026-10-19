@@ -2,7 +2,7 @@
 title: Beta 1 is now available!
 date: 2026-10-05
 author: pxlkt
-image: /pictures/blog/beta-1/hero.png
+image: /pictures/blog/beta-1/hero.jpg
 summary: Paperboard's first beta is out for YOU to download (🎉🎉🎉), here's what it can do!
 ---
 

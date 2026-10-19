@@ -2,7 +2,7 @@
 title: Beta 1.1 Patch Notes
 date: 2026-10-07
 author: pxlkt
-image: /pictures/blog/beta-1-1/hero.png
+image: /pictures/blog/beta-1-1/hero.jpg
 summary: A round of bug fixes and polish across Paperboard and every panel.
 ---
 
