@@ -28,3 +28,11 @@ worker-configuration.d.ts
 
 # internal security ledger: tracked privately, never in this repo
 known-vulnerabilities.md
+
+# local AI agent state (sessions, worktrees, per-user settings)
+.claude/
+.codex/
+.cursor/
+.t3/
+.aider*
+CLAUDE.local.md
