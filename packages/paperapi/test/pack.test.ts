@@ -89,3 +89,18 @@ describe("packPanel tutorial", () => {
         expect(() => packPanel({ targetDir: dir, autoBuild: false })).toThrow(/body/);
     });
 });
+describe("packPanel tutorial images", () => {
+    const tutorial = [{ title: "Hi", body: "There", image: { light: "./tutorial/1.webp", alt: "A panel" } }];
+
+    it("refuses a tutorial whose picture is not in dist", () => {
+        const dir = writeManifest({ version: "0.1.0", tutorial });
+        expect(() => packPanel({ targetDir: dir, autoBuild: false })).toThrow(/tutorial\/1\.webp/);
+    });
+
+    it("packs a tutorial whose picture is in dist", () => {
+        const dir = writeManifest({ version: "0.1.0", tutorial });
+        fs.mkdirSync(path.join(dir, "dist", "tutorial"));
+        fs.writeFileSync(path.join(dir, "dist", "tutorial", "1.webp"), "x");
+        expect(packPanel({ targetDir: dir, autoBuild: false }).version).toBe("0.1.0");
+    });
+});

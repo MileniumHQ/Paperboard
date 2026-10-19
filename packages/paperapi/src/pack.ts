@@ -5,7 +5,7 @@ import { spawnSync } from "child_process";
 import * as tar from "tar";
 import { requirePanelId } from "./panelIdentity";
 import { WIDGET_ENTRY, validateWidgetDeclarations } from "./widgetManifest";
-import { validateTutorialDeclaration } from "./tutorialManifest";
+import { tutorialImagePaths, validateTutorialDeclaration } from "./tutorialManifest";
 
 export interface PackOptions {
     targetDir?: string;
@@ -49,7 +49,7 @@ export function packPanel(options: PackOptions = {}): PackResult {
     // the daemon refuses a manifest whose widgets break the rules, so the
     // packer refuses it first instead of releasing a panel nobody can list
     const widgets = validateWidgetDeclarations(manifest.widgets);
-    validateTutorialDeclaration(manifest.tutorial);
+    const tutorial = validateTutorialDeclaration(manifest.tutorial);
     const version = manifest.version;
     const base = manifest.base || "./dist/index.html";
     const baseAbsolutePath = path.resolve(panelDir, base);
@@ -83,6 +83,13 @@ export function packPanel(options: PackOptions = {}): PackResult {
     // that page would ship tiles that can never load
     if (widgets.length > 0 && !fs.existsSync(path.join(panelDir, "dist", WIDGET_ENTRY))) {
         throw new Error(`manifest declares widgets but dist/${WIDGET_ENTRY} does not exist; build it before packing`);
+    }
+
+    // tutorial pictures ship in dist/, the folder the archive carries
+    for (const image of tutorialImagePaths(tutorial)) {
+        if (!fs.existsSync(path.join(panelDir, "dist", image))) {
+            throw new Error(`manifest tutorial shows ${image} but dist/${image.replace(/^\.\//, "")} does not exist; build it before packing`);
+        }
     }
 
     const outDir = options.outputDir
