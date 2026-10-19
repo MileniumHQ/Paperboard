@@ -1,4 +1,4 @@
-import { type Component, createSignal, createEffect, onMount, onCleanup, For, Show } from "solid-js";
+import { type Component, batch, createSignal, createEffect, onMount, onCleanup, For, Show } from "solid-js";
 import {
     PaperProvider,
     PaperFlex,
@@ -26,6 +26,8 @@ import AppSettings from "./components/settings/AppSettings";
 import PanelView from "./components/panels/PanelView";
 import LibraryFrame from "./components/panels/LibraryFrame";
 import PanelContextMenu from "./components/panels/PanelContextMenu";
+import PanelTutorial from "./components/panels/PanelTutorial";
+import { loadSeenTutorials, markTutorialSeen, withSeenTutorial } from "./lib/panelTutorials";
 import LibraryContextMenu from "./components/panels/LibraryContextMenu";
 import type { RestartState } from "./components/panels/PanelView";
 import UninstallPanelModal, {
@@ -77,6 +79,11 @@ const App: Component = () => {
         refreshPanelsForComputer,
     } = usePanels();
     const [isSetupOpen, setIsSetupOpen] = createSignal<boolean>(false);
+    // panel ids whose first-open tutorial was shown; null until the record
+    // loads, and it stays null if it can't be read, so an unreadable record
+    // never replays every tutorial
+    const [seenTutorials, setSeenTutorials] = createSignal<string[] | null>(null);
+    const [tutorialPanel, setTutorialPanel] = createSignal<PanelItem | null>(null);
     const panelContextMenu = useContextMenuState();
     const [contextMenuPanel, setContextMenuPanel] = createSignal<{
         compId: string;
@@ -228,6 +235,42 @@ const App: Component = () => {
             void refreshPanelsForComputer(id);
         }
     });
+
+    onMount(() => {
+        loadSeenTutorials().then(setSeenTutorials, (err) =>
+            logToMain("error", "Couldn't read which panel tutorials were shown; first-open tutorials are off until restart:", err));
+    });
+
+    // the first time a panel with a tutorial is the open tab, show it
+    createEffect(() => {
+        const seen = seenTutorials();
+        if (!seen || tutorialPanel() || railMode() !== "computer") return;
+        const compId = activeComputerId();
+        const tab = getSelectedTab(compId);
+        if (!tab || isShellTab(tab) || seen.includes(tab)) return;
+        const panel = panelsByComputer()[compId]?.find((p) => p.id === tab);
+        if (panel?.tutorial?.length) setTutorialPanel(panel);
+    });
+
+    const finishTutorial = () => {
+        const panel = tutorialPanel();
+        if (!panel) return;
+        // seen before closed, or the first-open effect reopens it; this
+        // session stops offering it whether or not the record saves
+        batch(() => {
+            setSeenTutorials((seen) => seen && withSeenTutorial(seen, panel.id));
+            setTutorialPanel(null);
+        });
+        markTutorialSeen(panel.id).then(setSeenTutorials, (err) =>
+            logToMain("error", `Couldn't record that the ${panel.name} tutorial was shown; it will show again next launch:`, err));
+    };
+
+    const handleShowTutorial = () => {
+        const target = contextMenuPanel();
+        if (!target) return;
+        panelContextMenu.close();
+        setTutorialPanel(target.panel);
+    };
 
     onMount(async () => {
         // Restores the active computer over privileged IPC
@@ -851,6 +894,15 @@ const App: Component = () => {
                 }}
                 onRestart={handleRestartPanel}
                 onUninstall={handleRequestUninstall}
+                onShowTutorial={contextMenuPanel()?.panel.tutorial?.length ? handleShowTutorial : undefined}
+            />
+
+            <PanelTutorial
+                panel={(() => {
+                    const panel = tutorialPanel();
+                    return panel?.tutorial ? { name: panel.name, tutorial: panel.tutorial } : null;
+                })()}
+                onDone={finishTutorial}
             />
 
             <ComputerContextMenu
