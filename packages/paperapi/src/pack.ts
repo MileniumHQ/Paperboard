@@ -5,6 +5,7 @@ import { spawnSync } from "child_process";
 import * as tar from "tar";
 import { requirePanelId } from "./panelIdentity";
 import { WIDGET_ENTRY, validateWidgetDeclarations } from "./widgetManifest";
+import { validateTutorialDeclaration } from "./tutorialManifest";
 
 export interface PackOptions {
     targetDir?: string;
@@ -48,6 +49,7 @@ export function packPanel(options: PackOptions = {}): PackResult {
     // the daemon refuses a manifest whose widgets break the rules, so the
     // packer refuses it first instead of releasing a panel nobody can list
     const widgets = validateWidgetDeclarations(manifest.widgets);
+    validateTutorialDeclaration(manifest.tutorial);
     const version = manifest.version;
     const base = manifest.base || "./dist/index.html";
     const baseAbsolutePath = path.resolve(panelDir, base);

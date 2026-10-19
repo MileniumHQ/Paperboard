@@ -22,6 +22,7 @@ export * from "./channels";
 export * from "./protocol";
 export * from "./shell";
 export * from "./widgetManifest";
+export * from "./tutorialManifest";
 export { defineWidgets, type WidgetContext, type WidgetMount } from "./widget";
 export { getWidgetChoices } from "./widgetChoices";
 

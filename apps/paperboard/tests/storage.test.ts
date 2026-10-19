@@ -158,6 +158,12 @@ describe("validatePanelManifest", () => {
         expect((manifest as any).extra).toBeUndefined();
     });
 
+    it("keeps a valid tutorial and refuses a broken one", () => {
+        const tutorial = [{ icon: "terminal", title: "Tabs stay open", body: "The shell keeps running." }];
+        expect(validatePanelManifest({ name: "T", tutorial }, "com.example.t").tutorial).toEqual(tutorial);
+        expect(() => validatePanelManifest({ name: "T", tutorial: [{ title: "x" }] }, "com.example.t")).toThrow(/tutorial/);
+    });
+
     it("accepts a valid manifest and fills fallback id", () => {
         const m = validatePanelManifest({ name: "Terminal" }, "com.example.terminal");
         expect(m.id).toBe("com.example.terminal");

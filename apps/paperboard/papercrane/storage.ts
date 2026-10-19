@@ -4,6 +4,7 @@ import * as path from "path";
 import * as crypto from "crypto";
 import { requirePanelId } from "../../../packages/paperapi/src/panelIdentity";
 import { validateWidgetDeclarations } from "../../../packages/paperapi/src/widgetManifest";
+import { validateTutorialDeclaration } from "../../../packages/paperapi/src/tutorialManifest";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { PAPERBOARD_USER_AGENT } from "./userAgent";
@@ -317,6 +318,13 @@ export function validatePanelManifest(
         if (widgets.length > 0) manifest.widgets = widgets;
     } catch (err) {
         throw new Error(`Invalid widgets in manifest for ${id}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+
+    try {
+        const tutorial = validateTutorialDeclaration(record.tutorial);
+        if (tutorial.length > 0) manifest.tutorial = tutorial;
+    } catch (err) {
+        throw new Error(`Invalid tutorial in manifest for ${id}: ${err instanceof Error ? err.message : String(err)}`);
     }
 
     // NOTE: the `permissions` array and the `network` egress declaration

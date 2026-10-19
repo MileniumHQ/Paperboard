@@ -83,3 +83,9 @@ describe("packPanel widgets", () => {
         expect(packPanel({ targetDir: dir, autoBuild: false }).version).toBe("0.1.0");
     });
 });
+describe("packPanel tutorial", () => {
+    it("refuses a tutorial the daemon would refuse", () => {
+        const dir = writeManifest({ version: "0.1.0", tutorial: [{ title: "Hi" }] });
+        expect(() => packPanel({ targetDir: dir, autoBuild: false })).toThrow(/body/);
+    });
+});

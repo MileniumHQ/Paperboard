@@ -1,4 +1,5 @@
 import type { WidgetDeclaration } from "./widgetManifest";
+import type { TutorialStep } from "./tutorialManifest";
 import { parseStoreListing, type StoreListing } from "./storeListing";
 
 // Panel library merge: the registry's newest release and the installed
@@ -34,6 +35,8 @@ export interface PanelItem {
     store?: StoreListing;
     /** widgets the installed manifest declares, already validated by the daemon */
     widgets?: WidgetDeclaration[];
+    /** the installed manifest's first-open tutorial, already validated by the daemon */
+    tutorial?: TutorialStep[];
     /** the installed manifest's service entry; absent when the panel runs no service */
     service?: string;
 }
@@ -119,6 +122,7 @@ export function mergeRegistryWithInstalled(
             // what runs here comes from the installed manifest, registry or not
             ...(localPanel?.widgets ? { widgets: localPanel.widgets } : {}),
             ...(localPanel?.service ? { service: localPanel.service } : {}),
+            ...(localPanel?.tutorial ? { tutorial: localPanel.tutorial } : {}),
         });
     }
 
