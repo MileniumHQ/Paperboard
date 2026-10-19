@@ -22,13 +22,15 @@ import { errorToMessage } from "./types";
 
 // ─── embeds ─────────────────────────────────────────────────────────────────
 
+// A flow passes either the flat inputs or Create Embed's output, which is
+// Discord's own shape: footer {text}, image {url}, color as a number.
 export interface DiscordEmbedData {
     title?: string;
     description?: string;
-    color?: string;
+    color?: string | number;
     url?: string;
-    footer?: string;
-    image?: string;
+    footer?: string | { text?: string };
+    image?: string | { url?: string };
 }
 
 export function buildDiscordEmbed(data: DiscordEmbedData) {
@@ -49,10 +51,12 @@ export function buildDiscordEmbed(data: DiscordEmbedData) {
             console.error("[DiscordService] embed url rejected:", err);
         }
     }
-    if (data.footer) embed.setFooter({ text: data.footer });
-    if (data.image) {
+    const footer = typeof data.footer === "object" ? data.footer?.text : data.footer;
+    if (footer) embed.setFooter({ text: footer });
+    const image = typeof data.image === "object" ? data.image?.url : data.image;
+    if (image) {
         try {
-            embed.setImage(data.image);
+            embed.setImage(image);
         } catch (err) {
             console.error("[DiscordService] embed image rejected:", err);
         }

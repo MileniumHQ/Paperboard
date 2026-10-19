@@ -10,6 +10,7 @@ import {
     buildComponentRow,
     buildModalField,
     buildModalPayload,
+    buildMessagePayload,
     buildSelectMenuComponent,
     componentsToActionRows,
     layoutComponentRows,
@@ -63,6 +64,25 @@ describe("unified message-writing actions", () => {
     it("bulk delete is named purge", () => {
         expect(actions.find((a: any) => a.id === "purge-messages")).toBeDefined();
         expect(actions.find((a: any) => a.id === "bulk-delete-messages")).toBeUndefined();
+    });
+});
+
+describe("Create Embed into a message", () => {
+    // Create Embed hands flows Discord's own embed shape (footer {text},
+    // image {url}, color as a number); every writing action must take it back
+    it("keeps the footer, image and color Create Embed produced", async () => {
+        const createEmbed = actions.find((a: any) => a.id === "create-embed") as any;
+        const embed = await createEmbed.run({}, {
+            title: "The Goblin Vault",
+            color: "#d4a017",
+            footer: "Gold is kept per player",
+            image: "https://example.com/chest.png",
+        });
+        const [sent] = buildMessagePayload({ embeds: [embed] }).embeds.map((e) => e.toJSON());
+        expect(sent.title).toBe("The Goblin Vault");
+        expect(sent.color).toBe(0xd4a017);
+        expect(sent.footer).toEqual({ text: "Gold is kept per player" });
+        expect(sent.image).toEqual({ url: "https://example.com/chest.png" });
     });
 });
 
