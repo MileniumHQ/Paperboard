@@ -26,8 +26,9 @@ import AppSettings from "./components/settings/AppSettings";
 import PanelView from "./components/panels/PanelView";
 import LibraryFrame from "./components/panels/LibraryFrame";
 import PanelContextMenu from "./components/panels/PanelContextMenu";
-import PanelTutorial from "./components/panels/PanelTutorial";
-import { loadSeenTutorials, markTutorialSeen, withSeenTutorial } from "./lib/panelTutorials";
+import TutorialDialog, { type OpenTutorial } from "./components/layout/TutorialDialog";
+import { APP_TUTORIAL } from "./lib/appTutorial";
+import { type SeenTutorials, loadSeenTutorials, markTutorialSeen, withSeen } from "./lib/panelTutorials";
 import LibraryContextMenu from "./components/panels/LibraryContextMenu";
 import type { RestartState } from "./components/panels/PanelView";
 import UninstallPanelModal, {
@@ -79,11 +80,11 @@ const App: Component = () => {
         refreshPanelsForComputer,
     } = usePanels();
     const [isSetupOpen, setIsSetupOpen] = createSignal<boolean>(false);
-    // panel ids whose first-open tutorial was shown; null until the record
-    // loads, and it stays null if it can't be read, so an unreadable record
-    // never replays every tutorial
-    const [seenTutorials, setSeenTutorials] = createSignal<string[] | null>(null);
-    const [tutorialPanel, setTutorialPanel] = createSignal<{ compId: string; panel: PanelItem } | null>(null);
+    // which first-open tutorials were shown; null until the record loads,
+    // and it stays null if it can't be read, so an unreadable record never
+    // replays every tutorial
+    const [seenTutorials, setSeenTutorials] = createSignal<SeenTutorials | null>(null);
+    const [openTutorial, setOpenTutorial] = createSignal<"app" | { compId: string; panel: PanelItem } | null>(null);
     const panelContextMenu = useContextMenuState();
     const [contextMenuPanel, setContextMenuPanel] = createSignal<{
         compId: string;
@@ -236,40 +237,60 @@ const App: Component = () => {
         }
     });
 
-    onMount(() => {
-        loadSeenTutorials().then(setSeenTutorials, (err) =>
-            logToMain("error", "Couldn't read which panel tutorials were shown; first-open tutorials are off until restart:", err));
+    onMount(async () => {
+        try {
+            setSeenTutorials(await loadSeenTutorials());
+        } catch (err) {
+            logToMain("error", "Couldn't read which tutorials were shown; first-open tutorials are off until restart:", err);
+        }
     });
 
-    // the first time a panel with a tutorial is the open tab, show it
+    // Paperboard's own tutorial the first time the app opens, then each
+    // panel's the first time it is the open tab
     createEffect(() => {
         const seen = seenTutorials();
-        if (!seen || tutorialPanel() || railMode() !== "computer") return;
+        if (!seen || openTutorial() || isSetupOpen()) return;
+        if (!seen.app) {
+            setOpenTutorial("app");
+            return;
+        }
+        if (railMode() !== "computer") return;
         const compId = activeComputerId();
         const tab = getSelectedTab(compId);
-        if (!tab || isShellTab(tab) || seen.includes(tab)) return;
+        if (!tab || isShellTab(tab) || seen.panels.includes(tab)) return;
         const panel = panelsByComputer()[compId]?.find((p) => p.id === tab);
-        if (panel?.tutorial?.length) setTutorialPanel({ compId, panel });
+        if (panel?.tutorial?.length) setOpenTutorial({ compId, panel });
     });
 
     const finishTutorial = () => {
-        const panel = tutorialPanel()?.panel;
-        if (!panel) return;
+        const open = openTutorial();
+        if (!open) return;
+        const which = open === "app" ? "app" : { panelId: open.panel.id };
+        const name = open === "app" ? "Paperboard" : open.panel.name;
         // seen before closed, or the first-open effect reopens it; this
         // session stops offering it whether or not the record saves
         batch(() => {
-            setSeenTutorials((seen) => seen && withSeenTutorial(seen, panel.id));
-            setTutorialPanel(null);
+            setSeenTutorials((seen) => seen && withSeen(seen, which));
+            setOpenTutorial(null);
         });
-        markTutorialSeen(panel.id).then(setSeenTutorials, (err) =>
-            logToMain("error", `Couldn't record that the ${panel.name} tutorial was shown; it will show again next launch:`, err));
+        markTutorialSeen(which).then((stored) => setSeenTutorials((seen) => seen && stored), (err) =>
+            logToMain("error", `Couldn't record that the ${name} tutorial was shown; it will show again next launch:`, err));
     };
 
     const handleShowTutorial = () => {
         const target = contextMenuPanel();
         if (!target) return;
         panelContextMenu.close();
-        setTutorialPanel(target);
+        setOpenTutorial(target);
+    };
+
+    const tutorialDialog = (): OpenTutorial | null => {
+        const open = openTutorial();
+        if (open === "app") return { name: "Paperboard", steps: APP_TUTORIAL, imageSrc: (path) => path };
+        if (!open) return null;
+        const { compId, panel } = open;
+        if (!panel.tutorial) return null;
+        return { name: panel.name, steps: panel.tutorial, imageSrc: (path) => panelUrl(compId, panel.id, path) };
     };
 
     onMount(async () => {
@@ -531,6 +552,7 @@ const App: Component = () => {
                                 <AppSettings
                                     settings={appSettings()}
                                     onChange={handleAppSettingsChange}
+                                    onShowTutorial={() => setOpenTutorial("app")}
                                 />
                             </PaperFlex>
                         }
@@ -897,13 +919,8 @@ const App: Component = () => {
                 onShowTutorial={contextMenuPanel()?.panel.tutorial?.length ? handleShowTutorial : undefined}
             />
 
-            <PanelTutorial
-                panel={(() => {
-                    const open = tutorialPanel();
-                    return open?.panel.tutorial
-                        ? { computerId: open.compId, id: open.panel.id, name: open.panel.name, tutorial: open.panel.tutorial }
-                        : null;
-                })()}
+            <TutorialDialog
+                tutorial={tutorialDialog()}
                 theme={appSettings().darkMode}
                 onDone={finishTutorial}
             />

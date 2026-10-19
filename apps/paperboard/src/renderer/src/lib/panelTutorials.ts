@@ -1,6 +1,7 @@
-// Which panels' first-open tutorials this machine has already shown. One
-// shell document on the local computer, keyed by panel id: a tutorial is
-// about the panel, so seeing it on one computer counts for every computer.
+// Which first-open tutorials this machine has already shown: Paperboard's
+// own, and each panel's by panel id. One shell document on the local
+// computer: a tutorial is about the panel, so seeing it on one computer
+// counts for every computer.
 
 import { config, isPanelId } from "@mileniumhq/paperapi";
 
@@ -14,6 +15,13 @@ export interface PanelTutorialsDoc {
     version: typeof PANEL_TUTORIALS_VERSION;
     /** panel ids, oldest first */
     seen: string[];
+    /** Paperboard's own tutorial, shown the first time the app opens */
+    app?: boolean;
+}
+
+export interface SeenTutorials {
+    panels: string[];
+    app: boolean;
 }
 
 /**
@@ -21,8 +29,8 @@ export interface PanelTutorialsDoc {
  * else that doesn't parse throws, so a damaged document is reported instead
  * of being treated as empty and every tutorial shown again.
  */
-export function parsePanelTutorials(raw: unknown): string[] {
-    if (raw === null || raw === undefined) return [];
+export function parsePanelTutorials(raw: unknown): SeenTutorials {
+    if (raw === null || raw === undefined) return { panels: [], app: false };
     if (typeof raw !== "object" || Array.isArray(raw)) throw new Error("Panel tutorial record is not an object");
     const doc = raw as Record<string, unknown>;
     if (doc.version !== PANEL_TUTORIALS_VERSION) {
@@ -31,7 +39,10 @@ export function parsePanelTutorials(raw: unknown): string[] {
     if (!Array.isArray(doc.seen) || !doc.seen.every(isPanelId)) {
         throw new Error("Panel tutorial record lists something that is not a panel id");
     }
-    return doc.seen.slice(-MAX_SEEN_TUTORIALS);
+    if (doc.app !== undefined && typeof doc.app !== "boolean") {
+        throw new Error("Panel tutorial record's app flag is not true or false");
+    }
+    return { panels: doc.seen.slice(-MAX_SEEN_TUTORIALS), app: doc.app === true };
 }
 
 /** `seen` with `panelId` added as the newest, bounded to MAX_SEEN_TUTORIALS. */
@@ -39,7 +50,14 @@ export function withSeenTutorial(seen: string[], panelId: string): string[] {
     return [...seen.filter((id) => id !== panelId), panelId].slice(-MAX_SEEN_TUTORIALS);
 }
 
-export async function loadSeenTutorials(): Promise<string[]> {
+/** `seen` with one more tutorial recorded: a panel's by id, or Paperboard's own with "app". */
+export function withSeen(seen: SeenTutorials, which: { panelId: string } | "app"): SeenTutorials {
+    return which === "app"
+        ? { ...seen, app: true }
+        : { ...seen, panels: withSeenTutorial(seen.panels, which.panelId) };
+}
+
+export async function loadSeenTutorials(): Promise<SeenTutorials> {
     return parsePanelTutorials(await config.get(PANEL_TUTORIALS_ID, undefined, PANEL_TUTORIALS_COMPUTER));
 }
 
@@ -48,9 +66,9 @@ export async function loadSeenTutorials(): Promise<string[]> {
  * record isn't overwritten by this one's stale copy; a read failure refuses
  * the write rather than replacing an unreadable record.
  */
-export async function markTutorialSeen(panelId: string): Promise<string[]> {
-    const seen = withSeenTutorial(await loadSeenTutorials(), panelId);
-    const doc: PanelTutorialsDoc = { version: PANEL_TUTORIALS_VERSION, seen };
+export async function markTutorialSeen(which: { panelId: string } | "app"): Promise<SeenTutorials> {
+    const next = withSeen(await loadSeenTutorials(), which);
+    const doc: PanelTutorialsDoc = { version: PANEL_TUTORIALS_VERSION, seen: next.panels, ...(next.app ? { app: true } : {}) };
     await config.set(doc, PANEL_TUTORIALS_ID, undefined, PANEL_TUTORIALS_COMPUTER);
-    return seen;
+    return next;
 }

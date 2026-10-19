@@ -9,12 +9,19 @@ import {
     getVarCss,
 } from "@mileniumhq/paperui";
 import type { TutorialImage, TutorialStep } from "@mileniumhq/paperapi";
-import { panelUrl } from "../../lib/shell";
 import type { AppSettingsData } from "../settings/AppSettings";
 
-export interface PanelTutorialProps {
-    /** the panel whose tutorial is open, on the computer it was opened on; null when none is */
-    panel: { computerId: string; id: string; name: string; tutorial: TutorialStep[] } | null;
+export interface OpenTutorial {
+    /** what the tutorial welcomes you to: Paperboard, or a panel's name */
+    name: string;
+    steps: TutorialStep[];
+    /** where a step's picture loads from: a panel's build, or the shell's own assets */
+    imageSrc: (path: string) => string;
+}
+
+export interface TutorialDialogProps {
+    /** null when no tutorial is open */
+    tutorial: OpenTutorial | null;
     theme: AppSettingsData["darkMode"];
     /** finished or dismissed: either way it has been shown */
     onDone: () => void;
@@ -23,7 +30,7 @@ export interface PanelTutorialProps {
 const isDark = (theme: AppSettingsData["darkMode"]) =>
     theme === "system" ? window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? true : theme === "dark";
 
-// A picture of the panel, from the panel's own build. One that won't load
+// A step's picture. One that won't load
 // says so in its alt text rather than leaving an empty frame.
 const StepImage: Component<{ src: string; image: TutorialImage }> = (props) => {
     const [failed, setFailed] = createSignal(false);
@@ -50,26 +57,26 @@ const StepImage: Component<{ src: string; image: TutorialImage }> = (props) => {
     );
 };
 
-// A panel's first-open tutorial: the steps its manifest declares, clicked
-// through in the same wizard dialog that connects a computer.
-const PanelTutorial: Component<PanelTutorialProps> = (props) => (
+// A first-open tutorial, Paperboard's own or the steps a panel's manifest
+// declares, clicked through in the same wizard dialog that connects a computer.
+const TutorialDialog: Component<TutorialDialogProps> = (props) => (
     <PaperModal
-        open={props.panel !== null}
-        aria-label={`Welcome to ${props.panel?.name ?? "this panel"}`}
+        open={props.tutorial !== null}
+        aria-label={`Welcome to ${props.tutorial?.name ?? "Paperboard"}`}
         onClose={props.onDone}
         noHeader
         noPadding
         size="large"
     >
-        <Show when={props.panel} keyed>
-            {(panel) => (
+        <Show when={props.tutorial} keyed>
+            {(tutorial) => (
                 <PaperWizard
                     onComplete={props.onDone}
                     finishLabel="Get started"
                     finishVariant="success"
                     style={{ width: "100%", height: "var(--paperboard-wizard-height)" }}
                 >
-                    <For each={panel.tutorial}>
+                    <For each={tutorial.steps}>
                         {(step, index) => (
                             <PaperWizardStep index={index()}>
                                 <PaperFlex direction={step.image ? "row" : "column"} center fullWidth fullHeight padding="full" gap="full">
@@ -77,7 +84,7 @@ const PanelTutorial: Component<PanelTutorialProps> = (props) => (
                                         {(image) => (
                                             <StepImage
                                                 image={image()}
-                                                src={panelUrl(panel.computerId, panel.id, (isDark(props.theme) && image().dark) || image().light)}
+                                                src={tutorial.imageSrc((isDark(props.theme) && image().dark) || image().light)}
                                             />
                                         )}
                                     </Show>
@@ -106,4 +113,4 @@ const PanelTutorial: Component<PanelTutorialProps> = (props) => (
     </PaperModal>
 );
 
-export default PanelTutorial;
+export default TutorialDialog;

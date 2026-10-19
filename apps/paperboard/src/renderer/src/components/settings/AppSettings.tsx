@@ -48,6 +48,8 @@ const LICENSE_TEXTS: Record<LicenseKind, string> = {
 export default function AppSettings(props: {
     settings: AppSettingsData;
     onChange: (next: AppSettingsData) => void;
+    /** reopens Paperboard's own tutorial */
+    onShowTutorial: () => void;
 }) {
     const [license, setLicense] = createSignal<LicenseKind | null>(null);
 
@@ -107,6 +109,16 @@ export default function AppSettings(props: {
                         name="runOnStartup"
                         checked={props.settings.runOnStartup}
                     />
+                </PaperSettingItem>
+
+                <PaperSettingItem
+                    title="Tutorial"
+                    description="Walk through what Paperboard can do again."
+                >
+                    <PaperButton onClick={props.onShowTutorial}>
+                        <PaperIcon>school</PaperIcon>
+                        Show tutorial
+                    </PaperButton>
                 </PaperSettingItem>
 
                 {/* browser mode has no updater window to restart into */}
