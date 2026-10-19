@@ -31,7 +31,7 @@ export const APP_TUTORIAL: TutorialStep[] = [
     },
     {
         title: "Find more panels",
-        body: "Open the Panel Library to install more. Every archive is hashed, so you get exactly the bytes we host.",
+        body: "Open the Panel Library to install more.",
         image: { light: libraryLight, dark: libraryDark, alt: "The Panel Library" },
     },
     {
