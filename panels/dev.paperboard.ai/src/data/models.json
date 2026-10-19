@@ -79,6 +79,10 @@
       "name": "TII",
       "icon": "tii"
     },
+    "bigcode": {
+      "name": "BigCode",
+      "icon": null
+    },
     "lg": {
       "name": "LG AI Research",
       "icon": "lg"
@@ -956,6 +960,22 @@
           "tag": "14b",
           "bytes": 9100000000,
           "context": 262144
+        }
+      ]
+    },
+    {
+      "name": "deepseek-ocr",
+      "maker": "deepseek",
+      "description": "DeepSeek-OCR is a vision-language model that can perform token-efficient OCR.",
+      "capabilities": [
+        "vision"
+      ],
+      "pulls": 557900,
+      "tags": [
+        {
+          "tag": "3b",
+          "bytes": 6700000000,
+          "context": 8192
         }
       ]
     },
@@ -3010,6 +3030,11 @@
       "pulls": 3300000,
       "tags": [
         {
+          "tag": "2b",
+          "bytes": 1600000000,
+          "context": 8192
+        },
+        {
           "tag": "7b",
           "bytes": 5000000000,
           "context": 8192
@@ -3042,6 +3067,30 @@
         {
           "tag": "7b",
           "bytes": 4200000000,
+          "context": 16384
+        },
+        {
+          "tag": "15b",
+          "bytes": 9100000000,
+          "context": 16384
+        }
+      ]
+    },
+    {
+      "name": "starcoder2",
+      "maker": "bigcode",
+      "description": "StarCoder2 is the next generation of transparently trained open code LLMs that comes in three sizes: 3B, 7B and 15B parameters.",
+      "capabilities": [],
+      "pulls": 3000000,
+      "tags": [
+        {
+          "tag": "3b",
+          "bytes": 1700000000,
+          "context": 16384
+        },
+        {
+          "tag": "7b",
+          "bytes": 4000000000,
           "context": 16384
         },
         {
@@ -3086,6 +3135,20 @@
           "tag": "12b",
           "bytes": 7000000000,
           "context": 4096
+        }
+      ]
+    },
+    {
+      "name": "duckdb-nsql",
+      "maker": "community",
+      "description": "7B parameter text-to-SQL model made by MotherDuck and Numbers Station.",
+      "capabilities": [],
+      "pulls": 542900,
+      "tags": [
+        {
+          "tag": "7b",
+          "bytes": 3800000000,
+          "context": 16384
         }
       ]
     },
@@ -3625,6 +3688,39 @@
       ]
     },
     {
+      "name": "yarn-mistral",
+      "maker": "nous",
+      "description": "An extension of Mistral to support context windows of 64K or 128K.",
+      "capabilities": [],
+      "pulls": 928900,
+      "tags": [
+        {
+          "tag": "7b",
+          "bytes": 4100000000,
+          "context": 32768
+        }
+      ]
+    },
+    {
+      "name": "yarn-llama2",
+      "maker": "nous",
+      "description": "An extension of Llama 2 that supports a context of up to 128k tokens.",
+      "capabilities": [],
+      "pulls": 1000000,
+      "tags": [
+        {
+          "tag": "7b",
+          "bytes": 3800000000,
+          "context": 65536
+        },
+        {
+          "tag": "13b",
+          "bytes": 7400000000,
+          "context": 65536
+        }
+      ]
+    },
+    {
       "name": "xwinlm",
       "maker": "community",
       "description": "Conversational model based on Llama 2 that performs competitively on various benchmarks.",
@@ -3729,6 +3825,54 @@
           "tag": "7b",
           "bytes": 4100000000,
           "context": 32768
+        }
+      ]
+    },
+    {
+      "name": "starcoder",
+      "maker": "bigcode",
+      "description": "StarCoder is a code generation model trained on 80+ programming languages.",
+      "capabilities": [],
+      "pulls": 1700000,
+      "tags": [
+        {
+          "tag": "1b",
+          "bytes": 726000000,
+          "context": 8192
+        },
+        {
+          "tag": "3b",
+          "bytes": 1800000000,
+          "context": 8192
+        },
+        {
+          "tag": "7b",
+          "bytes": 4300000000,
+          "context": 8192
+        },
+        {
+          "tag": "15b",
+          "bytes": 9000000000,
+          "context": 8192
+        }
+      ]
+    },
+    {
+      "name": "sqlcoder",
+      "maker": "community",
+      "description": "SQLCoder is a code completion model fined-tuned on StarCoder for SQL generation tasks",
+      "capabilities": [],
+      "pulls": 2100000,
+      "tags": [
+        {
+          "tag": "7b",
+          "bytes": 4100000000,
+          "context": 32768
+        },
+        {
+          "tag": "15b",
+          "bytes": 9000000000,
+          "context": 8192
         }
       ]
     },

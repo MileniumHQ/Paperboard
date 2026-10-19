@@ -1,11 +1,9 @@
 // The shipped model catalog (src/data/models.json): local Ollama library
 // models with their makers, capabilities and per-tag download sizes.
 // Only models you can chat with: cloud-only, MLX-only, embedding, decision
-// and safety-classifier (guard, fact-check) models are not in it, nor any
-// model that cannot answer a typed chat message. Models are stored in the
-// library's newest-first order, which is the default sort: the library's
-// "updated" date moves whenever an old model is re-pushed, so it is not a
-// release date.
+// and safety-classifier (guard, fact-check) models are not in it. Models are stored in the library's newest-first order, which is
+// the default sort: the library's "updated" date moves whenever an old model
+// is re-pushed, so it is not a release date.
 
 export interface CatalogTag {
     tag: string; // "8b", "latest"

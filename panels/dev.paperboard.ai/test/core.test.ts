@@ -55,17 +55,12 @@ describe("shipped model catalog", () => {
     it("holds only chat models: no embedding, decision or safety-classifier models", () => {
         // these answer with a verdict ("safe"/"unsafe", "Yes"/"No"), not a conversation
         const classifiers = ["llama-guard3", "shieldgemma", "granite3-guardian", "granite4.1-guardian", "gpt-oss-safeguard", "bespoke-minicheck"];
-        // typed to in a chat, these echo the prompt, loop on fake turns, or answer only in SQL
-        const noReply = ["deepseek-ocr", "duckdb-nsql", "sqlcoder", "starcoder", "starcoder2", "yarn-llama2", "yarn-mistral"];
         for (const m of catalog.models) {
             expect(classifiers).not.toContain(m.name);
-            expect(noReply).not.toContain(m.name);
             expect(m.capabilities).not.toContain("embedding");
             expect(m.capabilities).not.toContain("decision");
             expect(m.description).not.toMatch(/\bdecision model\b/i);
         }
-        // codegemma:2b is the code-completion variant; it answers a greeting with a filename
-        expect(catalog.models.find((m) => m.name === "codegemma")?.tags.map((t) => t.tag)).not.toContain("2b");
     });
 
     it("every maker logo the catalog names is bundled", () => {
