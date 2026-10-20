@@ -10,6 +10,9 @@ import { leftReserve, rightReserve, type OverlayLike } from "./titlebarInsets";
 const TopBar: Component<{
     updateState: AppUpdateState;
     onOpenUpdate: () => void;
+    // runtime package updates waiting for panels to stop
+    packageUpdatesWaiting: number;
+    onOpenPackageUpdates: () => void;
     getComputerId: () => string;
     getSelectedTab: () => string;
 }> = (props) => {
@@ -118,6 +121,14 @@ const TopBar: Component<{
                     onClick={handleFolder}>
                     <PaperIcon>folder_open</PaperIcon>
                 </PaperButton>
+                <Show when={props.packageUpdatesWaiting > 0}>
+                    <PaperButton
+                        size="tiny"
+                        title="Package updates are waiting for panels to stop"
+                        onClick={props.onOpenPackageUpdates}>
+                        {props.packageUpdatesWaiting === 1 ? "1 update waiting" : `${props.packageUpdatesWaiting} updates waiting`}
+                    </PaperButton>
+                </Show>
                 <Show when={props.updateState.status === "ready"}>
                     <PaperButton
                         size="tiny"

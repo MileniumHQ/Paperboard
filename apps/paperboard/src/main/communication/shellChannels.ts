@@ -16,6 +16,7 @@ export const SHELL_INVOKE_CHANNELS = [
     "app-version",
     "launch-options",
     "app-update-state",
+    "package-updates",
     "open-update-download",
     "panel-file-export",
     "panel-file-import",
@@ -36,6 +37,7 @@ export const SHELL_ON_CHANNELS = [
     "pong",
     "updater-progress",
     "app-update-state",
+    "package-updates-changed",
     "computers-changed",
     "discovery-changed",
 ] as const;

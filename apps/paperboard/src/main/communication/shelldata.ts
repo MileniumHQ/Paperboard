@@ -8,6 +8,7 @@ import * as path from "path";
 import { getLocalDir } from "../../../papercrane/paths";
 import { logger } from "../../../papercrane/logger";
 import { getAppUpdateState } from "../appUpdateSession";
+import { collectPackageUpdates } from "../packageUpdates";
 import { assertShellFrame, isRefusedFrame } from "./shellGuard";
 import { createShellInvokeHandlers, SHARED_SHELL_INVOKE_CHANNELS } from "./shellHandlers";
 import { runPanelImport, runPanelExport, type PanelFileTransferDeps } from "../panelFileTransfer";
@@ -133,6 +134,10 @@ export default function registerShellIpc(ipcMain: IpcMain) {
         );
     });
 
+    ipcMain.handle("package-updates", (event) => {
+        assertShellFrame(event, "package-updates");
+        return collectPackageUpdates();
+    });
     ipcMain.handle("app-update-state", (event) => {
         assertShellFrame(event, "app-update-state");
         return getAppUpdateState();

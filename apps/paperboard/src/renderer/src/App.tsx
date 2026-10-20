@@ -47,6 +47,8 @@ import ComputerContextMenu from "./components/computer/ComputerContextMenu";
 import HomeView from "./components/home/HomeView";
 import AppUpdateModal from "./components/layout/AppUpdateModal";
 import { useAppUpdate } from "./hooks/useAppUpdate";
+import { usePackageUpdates } from "./hooks/usePackageUpdates";
+import PackageUpdateModal from "./components/layout/PackageUpdateModal";
 import TopBar from "./components/layout/TopBar";
 import { useAppSettings } from "./hooks/useAppSettings";
 import { useComputers } from "./hooks/useComputers";
@@ -55,6 +57,7 @@ import { usePanels } from "./hooks/usePanels";
 export type { ComputerItem };
 const App: Component = () => {
     const appUpdate = useAppUpdate();
+    const packageUpdates = usePackageUpdates();
     const {
         computers,
         activeComputerId,
@@ -511,6 +514,8 @@ const App: Component = () => {
                 <TopBar
                     updateState={appUpdate.state()}
                     onOpenUpdate={() => appUpdate.setOpen(true)}
+                    packageUpdatesWaiting={packageUpdates.state().notices.length}
+                    onOpenPackageUpdates={() => packageUpdates.setOpen(true)}
                     getComputerId={activeComputerId}
                     getSelectedTab={() => getSelectedTab(activeComputerId())}
                 />
@@ -874,6 +879,13 @@ const App: Component = () => {
             </PaperFlex>
 
             <AppUpdateModal state={appUpdate.state()} open={appUpdate.open()} onClose={() => appUpdate.setOpen(false)} />
+            <PackageUpdateModal
+                state={packageUpdates.state()}
+                error={packageUpdates.error()}
+                open={packageUpdates.open()}
+                onClose={() => packageUpdates.setOpen(false)}
+                onRefresh={() => void packageUpdates.refresh()}
+            />
 
             <OfflineComputerModal
                 open={!!offlineTarget()}
