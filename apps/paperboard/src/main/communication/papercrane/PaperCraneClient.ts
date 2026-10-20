@@ -88,6 +88,20 @@ export interface TargetStatus {
 }
 
 const DEFAULT_RPC_TIMEOUT_MS = 30_000;
+export const PACKAGE_DOWNLOAD_TIMEOUT_MS = 45 * 60_000;
+
+// a staged update waits for the processes still running the installed release
+export interface PackageUpdateWait {
+    name: string;
+    version: string;
+    blockedBy: Array<{ processId: string; owner: string | null }>;
+    error?: string;
+}
+
+export interface PackageDownloadOutcome {
+    path: string;
+    waiting?: PackageUpdateWait;
+}
 // a daemon closes a socket that has not authenticated within its handshake
 // window (10s), so the token is verified as part of connecting
 const AUTH_TIMEOUT_MS = 10_000;
@@ -650,14 +664,28 @@ export class PaperCraneClient extends EventEmitter {
         downloadId: string,
         onProgress: (payload: ProgressPayload) => void,
         expectedSha256?: string,
-    ): Promise<string> {
+    ): Promise<PackageDownloadOutcome> {
         this.progressListeners.set(downloadId, onProgress);
         try {
-            const res = await this.call<{ path: string }>("package:download", { packageName, downloadId, sha256: expectedSha256 });
-            return res.path;
+            // the daemon bounds the download itself (30 min lifetime, 45 s
+            // idle) and then extracts; the RPC outlives both, never the 30 s
+            // default a 1.4 GB runtime cannot meet
+            const res = await this.call<PackageDownloadOutcome>(
+                "package:download",
+                { packageName, downloadId, sha256: expectedSha256 },
+                PACKAGE_DOWNLOAD_TIMEOUT_MS,
+            );
+            return res.waiting ? { path: res.path, waiting: res.waiting } : { path: res.path };
         } finally {
             this.progressListeners.delete(downloadId);
         }
+    }
+
+    /** Runtime package updates staged on this computer and not installed yet. */
+    public async pendingPackageUpdates(): Promise<PackageUpdateWait[]> {
+        const res = await this.call<{ updates?: PackageUpdateWait[] }>("package:pending");
+        if (!Array.isArray(res?.updates)) throw new Error("Daemon returned no package update list");
+        return res.updates;
     }
 
     public async listPanels(): Promise<PanelManifest[]> {

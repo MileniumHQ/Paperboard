@@ -14,6 +14,8 @@ import { readStateFileSync, writeFileAtomicSync } from "../../papercrane/storage
 import { getLocalDir } from "../../papercrane/paths";
 import { logger, getLogger } from "../../papercrane/logger";
 import { fetchRegistryJson } from "../../../../packages/paperapi/src/config";
+import { PACKAGE_DOWNLOAD_TIMEOUT_MS } from "./communication/papercrane/PaperCraneClient";
+import { announcePackageUpdates } from "./packageUpdates";
 
 // registry override policy shared with the daemon: env override honored only
 // outside production (dev/preview here) or with --allow-registry-override
@@ -165,6 +167,8 @@ export async function runUpdateOrchestrator(
             recordRunOutcome(failures);
         } finally {
             orchestratorRunning = false;
+            // staged runtime updates may now wait for panels to stop
+            announcePackageUpdates();
         }
     }
 }
@@ -303,6 +307,9 @@ async function runOrchestratorInner(
     }
 
     let failures = unavailableComputers;
+    // verified and staged, installed by the daemon once the panels running
+    // the current release stop: accepted, neither failed nor done
+    let waiting = 0;
 
     for (let i = 0; i < tasks.length; i++) {
         const task = tasks[i];
@@ -326,7 +333,7 @@ async function runOrchestratorInner(
                             `Install refused for package "${task.id}": update task carries no sha256 checksum`,
                         );
                     }
-                    await withTimeout(
+                    const outcome = await withTimeout(
                         driver.downloadPackage(
                             task.id!,
                             `updater-${task.id}`,
@@ -338,8 +345,9 @@ async function runOrchestratorInner(
                             },
                             task.sha256,
                         ),
-                        TASK_TIMEOUT_MS,
+                        PACKAGE_DOWNLOAD_TIMEOUT_MS,
                     );
+                    if (outcome.waiting) waiting++;
                     break;
                 }
                 case "ext_crane": {
@@ -392,6 +400,7 @@ async function runOrchestratorInner(
         }
     }
 
-    sendProgress(win, 100, failures > 0 ? `Done (${failures} failed)` : "Done!", failures > 0);
+    const waitingNote = waiting > 0 ? `, ${waiting} waiting for panels to stop` : "";
+    sendProgress(win, 100, failures > 0 ? `Done (${failures} failed${waitingNote})` : `Done!${waiting > 0 ? ` (${waiting} waiting for panels to stop)` : ""}`, failures > 0);
     return failures;
 }

@@ -1,4 +1,5 @@
 import { PanelManifest } from "../../../../papercrane/types";
+import type { PackageDownloadOutcome } from "../papercrane/PaperCraneClient";
 
 export interface ProgressPayload {
     stage: "starting" | "checking" | "downloading" | "verifying" | "extracting" | "completed" | "error";
@@ -47,7 +48,7 @@ export interface ComputerDriver {
         downloadId: string,
         onProgress: ProgressCallback,
         expectedSha256?: string,
-    ): Promise<string>;
+    ): Promise<PackageDownloadOutcome>;
 
     updateCrane(
         version: string,

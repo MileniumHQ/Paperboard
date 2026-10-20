@@ -3,7 +3,7 @@ import {
     ProgressCallback,
     SystemInfo,
 } from "./ComputerDriver";
-import { PaperCraneClient } from "../papercrane/PaperCraneClient";
+import { PaperCraneClient, type PackageDownloadOutcome } from "../papercrane/PaperCraneClient";
 import { PanelManifest } from "../../../../papercrane/types";
 
 export class RemoteComputerDriver implements ComputerDriver {
@@ -30,7 +30,7 @@ export class RemoteComputerDriver implements ComputerDriver {
         downloadId: string,
         onProgress: ProgressCallback,
         expectedSha256?: string,
-    ): Promise<string> {
+    ): Promise<PackageDownloadOutcome> {
         return this.client.downloadPackage(packageName, downloadId, onProgress, expectedSha256);
     }
 
