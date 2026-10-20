@@ -209,6 +209,12 @@ export const RPC_ROUTES: Record<string, WsRoute> = {
         action: "package:getIndex",
         unwrap: (r) => r.index,
     },
+    "package-pending": {
+        // runtime updates staged on this computer that the caller's own
+        // processes hold back; the daemon installs each once they stop
+        action: "package:pending",
+        unwrap: (r) => r.updates ?? [],
+    },
     "package-get-path": {
         // Bare-string invoke: invoke("package-get-path", packageName)
         action: "package:getPath",

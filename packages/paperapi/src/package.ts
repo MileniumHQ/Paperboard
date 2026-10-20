@@ -16,6 +16,15 @@ export interface InstalledPackageRecord {
     [key: string]: unknown;
 }
 
+// a runtime update that is downloaded and verified but waits for the
+// caller's processes still running the installed release
+export interface PendingPackageUpdate {
+    name: string;
+    version: string;
+    blockedBy: Array<{ processId: string; owner: string | null }>;
+    error?: string;
+}
+
 // system tool and runtime packages
 export const packageApi = {
     download: async (
@@ -53,6 +62,13 @@ export const packageApi = {
 
     getPath: (packageName: string): Promise<string> =>
         invoke<string>("package-get-path", packageName),
+
+    /**
+     * Updates the caller's own processes hold back. Stop those processes and
+     * the daemon installs the update; starting one again picks it up.
+     */
+    pendingUpdates: (): Promise<PendingPackageUpdate[]> =>
+        invoke<PendingPackageUpdate[]>("package-pending"),
 };
 
 export const packages = packageApi;
