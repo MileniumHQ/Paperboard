@@ -19,6 +19,7 @@ import {
     processApi,
     secretsApi,
     systemApi,
+    type PendingPackageUpdate,
     type ServiceContext,
 } from "@mileniumhq/paperapi";
 import { agentProcId, EVENTS, OLLAMA_PACKAGE, OLLAMA_PROC_ID, PANEL_ID, TRIGGER_IDS } from "../contract";
@@ -118,6 +119,8 @@ const LEGACY_API_KEY_SECRET = "openai-api-key";
 
 const MAX_ALWAYS_ALLOWED = 500;
 const MAX_SPEEDS = 100;
+// how often the service looks for an Ollama update waiting on it
+const UPDATE_CHECK_MS = 2 * 60_000;
 // under the 30 s default action-call timeout, so flows get a real error
 export const ASK_DEADLINE_MS = 28_000;
 
@@ -173,12 +176,16 @@ export class AiApp {
     chat!: ChatEngine;
     agents!: AgentHub;
     private resolveReady!: () => void;
+    private updateTimer: ReturnType<typeof setTimeout> | undefined;
+    private updateWatchClosed = false;
+    private readonly updateCheckMs: number;
     readonly ready = new Promise<void>((resolve) => (this.resolveReady = resolve));
 
     constructor(
         private readonly host: ProcessHost & Partial<AgentProcessHost> = processHost,
-        options: { readyTimeoutMs?: number; findAgent?: (command: string, args: readonly string[]) => Promise<Launch | null> } = {},
+        options: { readyTimeoutMs?: number; updateCheckMs?: number; findAgent?: (command: string, args: readonly string[]) => Promise<Launch | null> } = {},
     ) {
+        this.updateCheckMs = options.updateCheckMs ?? UPDATE_CHECK_MS;
         this.findAgent = options.findAgent ?? ((command, args) => findExecutable(command, args));
         this.runtime = new OllamaRuntime({
             procId: OLLAMA_PROC_ID,
@@ -637,6 +644,49 @@ export class AiApp {
             // adding it means installing or only starting
             void this.checkInstalled().catch((err) => console.error("[ai] Ollama package check failed:", String(err)));
         }
+        this.scheduleUpdateCheck();
+    }
+
+    // ─── Ollama updates ────────────────────────────────────────────────────
+
+    // Paperboard downloads a new Ollama while it runs, but installs it only
+    // once Ollama stops. Ollama only serves models and holds no work of its
+    // own, so when it is idle the panel restarts it onto the new release
+    // instead of asking the user to.
+    private scheduleUpdateCheck(): void {
+        if (this.updateWatchClosed) return;
+        clearTimeout(this.updateTimer);
+        this.updateTimer = setTimeout(() => {
+            void this.restartForUpdate()
+                .catch((err) => console.error("[ai] restarting Local AI for its update failed:", String(err)))
+                .finally(() => this.scheduleUpdateCheck());
+        }, this.updateCheckMs);
+        this.updateTimer.unref?.();
+    }
+
+    /** Restarts an idle Ollama when an update waits for it; true when it did. */
+    async restartForUpdate(): Promise<boolean> {
+        let pending: PendingPackageUpdate[];
+        try {
+            pending = await packageApi.pendingUpdates();
+        } catch (err) {
+            // an older daemon has no such list; nothing waits there
+            console.warn("[ai] could not check for a waiting Local AI update:", String(err));
+            return false;
+        }
+        const update = pending.find(
+            (u) => u.name === OLLAMA_PACKAGE && !u.error && u.blockedBy.some((b) => b.processId === OLLAMA_PROC_ID),
+        );
+        if (!update) return false;
+        const state = this.ctx.state;
+        // idle: running, and no reply or model download in flight
+        if (state.runtime.status !== "ready" || state.generating.length > 0 || state.pulls.length > 0) return false;
+        console.info(`[ai] restarting Local AI to install Ollama ${update.version}`);
+        await this.runtime.stop();
+        // the daemon installs the update as Ollama exits, and starting it
+        // again waits for that
+        await this.startRuntime();
+        return true;
     }
 
     // ─── settings & permissions (the panel's config document) ────────────
@@ -1249,6 +1299,8 @@ export class AiApp {
     }
 
     async shutdown(): Promise<void> {
+        this.updateWatchClosed = true;
+        clearTimeout(this.updateTimer);
         await this.chat?.stopAll();
         this.models.cancelAll();
         await this.agents?.stopAll();

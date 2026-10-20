@@ -23,6 +23,7 @@ let savedConfig: unknown = null;
 // mutable so the install test can control the package check and the download
 let packageInstalled = true;
 let downloadImpl: () => Promise<void> = async () => {};
+let pendingUpdates: unknown[] = [];
 
 mock.module("@mileniumhq/paperapi", () => ({
     config: { get: async () => savedConfig, set: async (value: unknown, _panelId: string) => { savedConfig = structuredClone(value); return true; } },
@@ -41,6 +42,7 @@ mock.module("@mileniumhq/paperapi", () => ({
         isInstalled: async () => packageInstalled,
         getPath: async () => "/fake/ollama",
         download: () => downloadImpl(),
+        pendingUpdates: async () => pendingUpdates,
     },
     panelsApi: { list: async () => [] },
     actionsApi: {
@@ -906,5 +908,44 @@ describe("favorite models", () => {
             await expect(app.ask("hi", "api-0000dead|shared:1")).rejects.toThrow("was removed");
             await expect(app.ask("hi", `${B}|only-first:1`)).rejects.toThrow("only-first:1 is not installed");
         });
+    });
+});
+
+// Paperboard installs a downloaded Ollama update only once Ollama stops; the
+// panel restarts an idle Ollama onto it, and never one that is busy
+describe("AiApp Ollama updates", () => {
+    it("restarts an idle Ollama when an update waits for it, and leaves a busy one running", async () => {
+        const app = new AiApp(new HangingHost(), { readyTimeoutMs: 150, updateCheckMs: 60_000 });
+        const ctx = makeCtx();
+        const calls: string[] = [];
+        (app.runtime as any).stop = async () => { calls.push("stop"); };
+        (app.runtime as any).start = async () => { calls.push("start"); };
+        try {
+            await app.init(ctx as any);
+            const waiting = { name: "ollama", version: "0.41.0", blockedBy: [{ processId: "dev.paperboard.ai.ollama", owner: "dev.paperboard.ai" }] };
+            ctx.setState({ runtime: { ...ctx.state.runtime, status: "ready" } });
+            calls.length = 0;
+
+            pendingUpdates = [];
+            expect(await app.restartForUpdate()).toBe(false);
+
+            pendingUpdates = [waiting];
+            ctx.setState({ generating: ["c1"] });
+            expect(await app.restartForUpdate()).toBe(false);
+            expect(calls).toEqual([]);
+
+            ctx.setState({ generating: [] });
+            expect(await app.restartForUpdate()).toBe(true);
+            expect(calls).toEqual(["stop", "start"]);
+
+            // a failed install keeps the old release; restarting gains nothing
+            calls.length = 0;
+            pendingUpdates = [{ ...waiting, blockedBy: [], error: "rename failed" }];
+            expect(await app.restartForUpdate()).toBe(false);
+            expect(calls).toEqual([]);
+        } finally {
+            pendingUpdates = [];
+            await app.shutdown();
+        }
     });
 });
