@@ -536,6 +536,9 @@ export function startPaperCraneServer(
                 // this instance owns the port now: safe to sweep interrupted
                 // artifacts (never before — see sweepStartupOrphans)
                 engine.sweepStartupOrphans();
+                // staged runtime updates nothing runs from any more (the
+                // previous run's workloads are gone) install now
+                void engine.applyReadyStagedPackages();
 
                 // announce over mDNS (loopback skips inside)
                 if (options.advertise !== false) {

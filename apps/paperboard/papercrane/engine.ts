@@ -45,6 +45,32 @@ export interface ExpectedPanelRelease {
     sha256?: string;
 }
 
+// a verified runtime release kept beside the installed one until the
+// workloads running from the installed one have stopped
+export interface StagedPackage {
+    name: string;
+    version: string;
+    sha256: string;
+}
+
+// a package update that is downloaded and verified but not yet installed:
+// either it waits for the listed workloads (owner null: the host), or its
+// swap failed and the previous release was rolled back in place
+export interface PackageUpdateWait {
+    name: string;
+    version: string;
+    blockedBy: Array<{ processId: string; owner: string | null }>;
+    error?: string;
+}
+
+// a package install either completed, or it is staged and waits
+export interface PackageInstallOutcome {
+    path: string;
+    waiting?: PackageUpdateWait;
+}
+
+const MAX_STAGED_PACKAGES = 64;
+
 // bounded payloads: file reads refuse past 16 MiB (larger blobs stream via
 // file:download), config payloads past 1 MiB serialized
 export const FILE_READ_MAX_BYTES = 16 * 1024 * 1024;
@@ -61,6 +87,17 @@ export class PaperCraneEngine {
     private clients = new Map<string, SupervisedProcessClient>();
     private operations = new Set<string>();
     private services: PanelServicesManager;
+    // the command each live workload runs, which says which runtime package
+    // it holds. Missing or null means unknown, which blocks every swap.
+    private clientCommands = new Map<string, string | null>();
+    private stagedPackages = new Map<string, StagedPackage>();
+    private swapFailures = new Map<string, { version: string; error: string }>();
+    private swaps = new Map<string, Promise<void>>();
+    // packages whose directory is being renamed right now
+    private swapping = new Set<string>();
+    // supervisors that outlived the previous daemon are users too: no swap
+    // decides before they are adopted
+    private recovery: Promise<void> = Promise.resolve();
 
     // registryUrl and releaseKey are fixed in production; tests point them
     // at a loopback registry signed with a fixture key
@@ -103,6 +140,39 @@ export class PaperCraneEngine {
             const owners = JSON.parse(fs.readFileSync(ownersFile, "utf8"));
             this.clientOwners = new Map(Object.entries(owners) as [string, string | null][]);
         }
+        this.loadStagedPackages();
+    }
+
+    // read-only: a second daemon constructed in a port race may load these
+    // too, but only the instance that owns the port swaps or sweeps
+    private loadStagedPackages(): void {
+        let entries: string[];
+        try {
+            entries = fs.readdirSync(this.packagesDir);
+        } catch (err) {
+            logger.warn("[engine] could not list staged package updates:", err);
+            return;
+        }
+        for (const entry of entries) {
+            const match = /^\.staged-(.+)\.json$/.exec(entry);
+            if (!match || this.stagedPackages.size >= MAX_STAGED_PACKAGES) continue;
+            try {
+                const record = JSON.parse(fs.readFileSync(path.join(this.packagesDir, entry), "utf8"));
+                const name = match[1]!;
+                if (
+                    record?.name !== name || sanitizeId(name) !== name ||
+                    typeof record.version !== "string" || !record.version ||
+                    typeof record.sha256 !== "string" || !/^[a-f0-9]{64}$/i.test(record.sha256) ||
+                    !this.findBinDir(this.stagedDir(name), 4)
+                ) {
+                    logger.warn(`[engine] staged package record ${entry} does not describe a staged release; ignoring it`);
+                    continue;
+                }
+                this.stagedPackages.set(name, { name, version: record.version, sha256: record.sha256 });
+            } catch (err) {
+                logger.warn(`[engine] staged package record ${entry} is unreadable; ignoring it:`, err);
+            }
+        }
     }
 
     // Removes interrupted download/install artifacts (*.tmp-*, *.staging-*).
@@ -128,6 +198,43 @@ export class PaperCraneEngine {
                     }
                 }
             } catch (err) { logger.debug("[engine.ts] op failed:", err) }
+        }
+        this.sweepPackageSwaps();
+    }
+
+    // a swap interrupted between its two renames leaves the previous
+    // release parked and no installed one: put it back. A parked copy beside
+    // an installed release is a finished swap's leftover. A staged directory
+    // without its record is a staging that never completed.
+    private sweepPackageSwaps(): void {
+        let entries: string[];
+        try {
+            entries = fs.readdirSync(this.packagesDir);
+        } catch (err) {
+            logger.warn("[engine] could not list packages to recover interrupted swaps:", err);
+            return;
+        }
+        for (const entry of entries) {
+            const full = path.join(this.packagesDir, entry);
+            try {
+                const parked = /^\.replaced-\d+-(.+)$/.exec(entry);
+                if (parked) {
+                    const target = path.join(this.packagesDir, parked[1]!);
+                    if (fs.existsSync(target)) {
+                        fs.rmSync(full, { recursive: true, force: true });
+                    } else {
+                        fs.renameSync(full, target);
+                        logger.warn(`[engine] restored ${parked[1]} from an interrupted update`);
+                    }
+                    continue;
+                }
+                const staged = /^\.staged-(.+?)(\.json)?$/.exec(entry);
+                if (staged && !this.stagedPackages.has(staged[1]!)) {
+                    fs.rmSync(full, { recursive: true, force: true });
+                }
+            } catch (err) {
+                logger.error(`[engine] could not recover ${entry} after an interrupted package update:`, err);
+            }
         }
     }
 
@@ -262,6 +369,7 @@ export class PaperCraneEngine {
             client = new SupervisedProcessClient(id);
             if (!(await client.connect())) return null;
             this.clients.set(id, client);
+            this.clientCommands.set(id, this.supervisorCommand(id));
         }
         return client;
     }
@@ -325,10 +433,10 @@ export class PaperCraneEngine {
         onData?: (data: string) => void,
         onExit?: (exitCode: number) => void,
     ): Promise<void> {
-        this.requireNoRuntimeReplacement();
         // platform-aware shell, don't trust $SHELL in GUI apps
         const shell =
             process.platform === "win32" ? "powershell.exe" : getDefaultShell();
+        this.requireNoRuntimeReplacement(shell);
         const resolvedCwd = this.resolveSpawnCwd(cwd);
         logger.debug(`[Paperboard Server] creating terminal ${id} (shell=${shell} cwd=${resolvedCwd})`);
 
@@ -348,10 +456,11 @@ export class PaperCraneEngine {
             this.clients,
             { onData, onExit: (code) => {
                 this.clients.delete(id);
-                this.forgetClientOwner(id);
+                this.workloadEnded(id);
                 onExit?.(code);
             } },
         );
+        this.clientCommands.set(id, shell);
     }
 
     public writeTerminal(id: string, data: string): void {
@@ -405,10 +514,19 @@ export class PaperCraneEngine {
         id: string, command: string, args: string[] = [], cwd?: string, env?: Record<string, string>,
         onData?: (data: string) => void, onStdout?: (data: string) => void, onStderr?: (data: string) => void,
     ): Promise<{ completion: Promise<{ exitCode: number }> }> {
-        this.requireNoRuntimeReplacement();
         if (!id || typeof id !== "string") {
             throw new Error("process id is required");
         }
+        // a staged update of this workload's runtime lands before it starts,
+        // when nothing else still runs from the installed release
+        const runtime = this.packageOfCommand(command);
+        if (runtime) {
+            await this.applyStagedPackage(runtime).catch((err) =>
+                // recorded in swapFailures; the rolled-back release is intact
+                logger.warn(`[engine] starting ${id} on the installed ${runtime}; its staged update failed:`, err),
+            );
+        }
+        this.requireNoRuntimeReplacement(command);
         const resolvedCwd = this.resolveSpawnCwd(cwd);
 
         let resolveExit!: (result: { exitCode: number }) => void;
@@ -430,17 +548,19 @@ export class PaperCraneEngine {
                     onStderr,
                     onExit: (exitCode: number) => {
                         this.clients.delete(id);
-                        this.forgetClientOwner(id);
+                        this.workloadEnded(id);
                         resolveExit({ exitCode });
                     },
                 },
             );
+        this.clientCommands.set(id, command);
         return { completion };
     }
 
-    private requireNoRuntimeReplacement(): void {
-        if ([...this.operations].some((key) => key.startsWith("package:"))) {
-            throw new Error("A shared runtime is being installed; wait for it to finish before starting workloads");
+    private requireNoRuntimeReplacement(command: string): void {
+        const runtime = this.packageOfCommand(command);
+        if (runtime && this.swapping.has(runtime)) {
+            throw new Error(`The shared runtime "${runtime}" is being replaced; wait for it to finish before starting workloads`);
         }
     }
 
@@ -559,7 +679,12 @@ export class PaperCraneEngine {
     // id their metadata records (the endpoint name is a digest of it, never
     // an id). A supervisor whose metadata does not belong to its file name is
     // skipped rather than adopted under the wrong id.
-    public async recoverRunningSupervisors(): Promise<void> {
+    public recoverRunningSupervisors(): Promise<void> {
+        this.recovery = this.adoptRunningSupervisors();
+        return this.recovery;
+    }
+
+    private async adoptRunningSupervisors(): Promise<void> {
         const socketsDir = getSocketsDir();
         if (!fs.existsSync(socketsDir)) return;
         let files: string[];
@@ -573,8 +698,11 @@ export class PaperCraneEngine {
             if (!file.endsWith(".json")) continue;
             const stem = file.slice(0, -".json".length);
             let id: unknown;
+            let command: unknown;
             try {
-                id = JSON.parse(await fs.promises.readFile(path.join(socketsDir, file), "utf8"))?.id;
+                const meta = JSON.parse(await fs.promises.readFile(path.join(socketsDir, file), "utf8"));
+                id = meta?.id;
+                command = meta?.config?.command;
             } catch (err) {
                 logger.warn(`[Paperboard Server] unreadable supervisor metadata ${file}; not adopting it:`, err);
                 continue;
@@ -587,8 +715,11 @@ export class PaperCraneEngine {
             const client = new SupervisedProcessClient(id, supervisorSocketPathForName(stem));
             if (await client.connect()) {
                 this.clients.set(id, client);
+                this.clientCommands.set(id, typeof command === "string" ? command : null);
                 client.on("exit", () => {
-                    if (this.clients.get(id) === client) this.clients.delete(id);
+                    if (this.clients.get(id) !== client) return;
+                    this.clients.delete(id);
+                    this.workloadEnded(id);
                 });
             } else {
                 client.destroy();
@@ -720,12 +851,171 @@ export class PaperCraneEngine {
         return findBinDir(dir, maxDepth);
     }
 
+    // ─── shared runtime replacement ─────────────────────────────────────
+
+    private stagedDir(name: string): string {
+        return path.join(this.packagesDir, `.staged-${name}`);
+    }
+
+    private stagedRecordFile(name: string): string {
+        return path.join(this.packagesDir, `.staged-${name}.json`);
+    }
+
+    // the package a command runs from, null when it is not inside one. A
+    // bare name ("java") is a PATH lookup and names no package.
+    private packageOfCommand(command: string | null | undefined): string | null {
+        if (typeof command !== "string" || !path.isAbsolute(command)) return null;
+        const rel = path.relative(this.packagesDir, path.resolve(command));
+        if (!rel || rel.startsWith("..") || path.isAbsolute(rel)) return null;
+        const name = rel.split(path.sep)[0];
+        return name && !name.startsWith(".") ? name : null;
+    }
+
+    // live workloads running from the installed release of a package. One
+    // whose command is unknown counts against every package. A binary a
+    // shell runs by hand is not seen: on Linux and macOS it keeps its open
+    // files across the swap, on Windows the rename fails and rolls back.
+    private packageUsers(name: string): Array<{ processId: string; owner: string | null }> {
+        const users: Array<{ processId: string; owner: string | null }> = [];
+        for (const id of this.clients.keys()) {
+            const command = this.clientCommands.get(id);
+            if (command == null || this.packageOfCommand(command) === name) {
+                users.push({ processId: id, owner: this.clientOwners.get(id) ?? null });
+            }
+        }
+        return users;
+    }
+
+    private packageUpdateWait(name: string): PackageUpdateWait | null {
+        const staged = this.stagedPackages.get(name);
+        if (staged) return { name, version: staged.version, blockedBy: this.packageUsers(name) };
+        const failed = this.swapFailures.get(name);
+        return failed ? { name, version: failed.version, blockedBy: [], error: failed.error } : null;
+    }
+
+    /** Package updates that are downloaded but not installed yet. */
+    public pendingPackageUpdates(): PackageUpdateWait[] {
+        const names = new Set([...this.stagedPackages.keys(), ...this.swapFailures.keys()]);
+        return [...names].map((name) => this.packageUpdateWait(name)!);
+    }
+
+    private async stagePackage(release: StagedPackage, srcDir: string): Promise<void> {
+        const name = release.name;
+        if (!this.stagedPackages.has(name) && this.stagedPackages.size >= MAX_STAGED_PACKAGES) {
+            throw new LimitError(`Too many staged package updates (max ${MAX_STAGED_PACKAGES})`);
+        }
+        // the record goes first and comes back last, so a record on disk
+        // always describes the bytes beside it
+        this.stagedPackages.delete(name);
+        fs.rmSync(this.stagedRecordFile(name), { force: true });
+        await fs.promises.rm(this.stagedDir(name), { recursive: true, force: true });
+        await fs.promises.rename(srcDir, this.stagedDir(name));
+        writeJsonAtomicSync(this.stagedRecordFile(name), release);
+        this.stagedPackages.set(name, release);
+        this.swapFailures.delete(name);
+    }
+
+    // swap in place: the previous release is parked only until the
+    // replacement is indexed, then it is gone. A failed swap rolls it back;
+    // nothing is retained after success.
+    private async swapPackage(release: StagedPackage, srcDir: string): Promise<void> {
+        const name = release.name;
+        const targetDir = path.join(this.packagesDir, name);
+        const index = this.getPackageIndex();
+        index[name] = {
+            name,
+            version: release.version,
+            sha256: release.sha256,
+            installedAt: new Date().toISOString(),
+        };
+        this.swapping.add(name);
+        try {
+            const previous = path.join(this.packagesDir, `.replaced-${Date.now()}-${name}`);
+            if (fs.existsSync(targetDir)) await fs.promises.rename(targetDir, previous);
+            try {
+                await fs.promises.rename(srcDir, targetDir);
+                writeJsonAtomicSync(path.join(this.packagesDir, "index.json"), index);
+            } catch (err) {
+                if (fs.existsSync(targetDir)) await fs.promises.rm(targetDir, { recursive: true, force: true });
+                if (fs.existsSync(previous)) await fs.promises.rename(previous, targetDir);
+                throw err;
+            }
+            await fs.promises
+                .rm(previous, { recursive: true, force: true })
+                .catch((err) => logger.warn("[engine] previous package copy could not be removed:", err));
+        } finally {
+            this.swapping.delete(name);
+        }
+        this.swapFailures.delete(name);
+    }
+
+    // installs a staged release once no workload runs from the installed
+    // one; concurrent callers share the swap in flight
+    private async applyStagedPackage(name: string): Promise<void> {
+        await this.recovery;
+        const inFlight = this.swaps.get(name);
+        if (inFlight) return inFlight;
+        const release = this.stagedPackages.get(name);
+        if (!release || this.packageUsers(name).length > 0) return;
+        const swap = (async () => {
+            try {
+                await this.swapPackage(release, this.stagedDir(name));
+                logger.info(`[package:${name}] installed the staged ${release.version}`);
+            } catch (err) {
+                // the installed release was rolled back in place and keeps
+                // working; the update is a recorded failure, never installed
+                const error = err instanceof Error ? err.message : String(err);
+                this.swapFailures.set(name, { version: release.version, error });
+                logger.error(`[package:${name}] could not install the staged ${release.version}:`, err);
+                await fs.promises
+                    .rm(this.stagedDir(name), { recursive: true, force: true })
+                    .catch((rmErr) => logger.warn(`[package:${name}] staged copy could not be removed:`, rmErr));
+                throw err;
+            } finally {
+                this.stagedPackages.delete(name);
+                fs.rmSync(this.stagedRecordFile(name), { force: true });
+            }
+        })().finally(() => this.swaps.delete(name));
+        this.swaps.set(name, swap);
+        return swap;
+    }
+
+    /** Installs every staged update no workload holds back. */
+    public async applyReadyStagedPackages(): Promise<void> {
+        await Promise.all(
+            [...this.stagedPackages.keys()].map((name) =>
+                // a failed swap is recorded in swapFailures and surfaces
+                // through pendingPackageUpdates
+                this.applyStagedPackage(name).catch((err) =>
+                    logger.debug(`[package:${name}] staged swap failed (recorded):`, err),
+                ),
+            ),
+        );
+    }
+
+    // a workload is gone: its runtime may now be free to update
+    private workloadEnded(id: string): void {
+        this.clientCommands.delete(id);
+        this.forgetClientOwner(id);
+        if (this.stagedPackages.size > 0) void this.applyReadyStagedPackages();
+    }
+
+    private supervisorCommand(id: string): string | null {
+        try {
+            const meta = JSON.parse(fs.readFileSync(path.join(getSocketsDir(), `${supervisorEndpointName(id)}.json`), "utf8"));
+            return typeof meta?.config?.command === "string" ? meta.config.command : null;
+        } catch (err) {
+            logger.warn(`[engine] supervisor metadata for ${id} is unreadable; its runtime is unknown and blocks package updates:`, err);
+            return null;
+        }
+    }
+
     public async downloadPackage(
         packageName: string,
         _downloadId: string,
         onProgress?: ProgressCallback,
         expectedSha256?: string,
-    ): Promise<string> {
+    ): Promise<PackageInstallOutcome> {
         const key = `package:${this.sanitizeIdOrThrow(packageName, "package")}`;
         if (this.operations.has(key)) throw new Error(`An operation on ${packageName} is already running`);
         if (this.operations.size >= 8) throw new LimitError("Too many concurrent installs");
@@ -734,7 +1024,7 @@ export class PaperCraneEngine {
         finally { this.operations.delete(key); }
     }
 
-    private async installPackageRelease(packageName: string, onProgress?: ProgressCallback, expectedSha256?: string): Promise<string> {
+    private async installPackageRelease(packageName: string, onProgress?: ProgressCallback, expectedSha256?: string): Promise<PackageInstallOutcome> {
         // trust boundary: same rule as installPanel — no checksum fact from
         // the anchor means no install, never proceed with sha256: undefined
         if (typeof expectedSha256 !== "string" || !/^[a-f0-9]{64}$/i.test(expectedSha256)) {
@@ -749,13 +1039,15 @@ export class PaperCraneEngine {
         const targetDir = path.join(this.packagesDir, packageName);
         if (this.getPackageIndex()[packageName]?.sha256 === expectedSha256 && this.findBinDir(targetDir, 4)) {
             onProgress?.({ stage: "completed", percent: 100, message: "Requested release is installed" });
-            return targetDir;
+            return { path: targetDir };
         }
-        // Runtimes are shared host resources. Until dependencies can be
-        // established for every supervised command (including shells), do
-        // not replace a runtime while a workload could still be using it.
-        if (fs.existsSync(targetDir) && this.clients.size > 0) {
-            throw new Error(`Stop running workloads before replacing shared runtime "${packageName}"`);
+        // already downloaded and verified, still waiting on its workloads:
+        // swap it now if they are gone, never download the same bytes again
+        if (this.stagedPackages.get(packageName)?.sha256 === expectedSha256) {
+            await this.applyStagedPackage(packageName);
+            const waiting = this.packageUpdateWait(packageName);
+            onProgress?.({ stage: "completed", percent: 100, message: waiting ? "Update waits for running workloads" : "Installed successfully" });
+            return waiting ? { path: targetDir, waiting } : { path: targetDir };
         }
         const pkgDir = `${targetDir}.staging-${Date.now()}`;
 
@@ -869,36 +1161,25 @@ export class PaperCraneEngine {
                 );
             }
 
-            const index = this.getPackageIndex();
-            index[packageName] = {
-                name: packageName,
-                version: meta.version,
-                sha256: expectedSha256,
-                installedAt: new Date().toISOString(),
-            };
-            // swap in place: the previous release is parked only until the
-            // replacement is indexed, then it is gone. A failed swap rolls
-            // it back; nothing is retained after success.
-            const previous = path.join(this.packagesDir, `.replaced-${Date.now()}-${packageName}`);
-            if (fs.existsSync(targetDir)) await fs.promises.rename(targetDir, previous);
-            try {
-                await fs.promises.rename(pkgDir, targetDir);
-                writeJsonAtomicSync(path.join(this.packagesDir, "index.json"), index);
-            } catch (err) {
-                if (fs.existsSync(targetDir)) await fs.promises.rm(targetDir, { recursive: true, force: true });
-                if (fs.existsSync(previous)) await fs.promises.rename(previous, targetDir);
-                throw err;
+            const release: StagedPackage = { name: packageName, version: meta.version, sha256: expectedSha256 };
+            // Runtimes are shared host resources: a workload running from
+            // the installed release keeps it. The verified release is staged
+            // beside it and swapped in once the last of them exits.
+            if (fs.existsSync(targetDir) && this.packageUsers(packageName).length > 0) {
+                await this.stagePackage(release, pkgDir);
+                const waiting = this.packageUpdateWait(packageName)!;
+                log(`staged ${meta.version}; waiting for ${waiting.blockedBy.length} workload(s) to stop`);
+                onProgress?.({ stage: "completed", percent: 100, message: "Update waits for running workloads" });
+                return { path: targetDir, waiting };
             }
-            await fs.promises
-                .rm(previous, { recursive: true, force: true })
-                .catch((err) => logger.warn("[engine] previous package copy could not be removed:", err));
+            await this.swapPackage(release, pkgDir);
 
             onProgress?.({
                 stage: "completed",
                 percent: 100,
                 message: "Installed successfully",
             });
-            return targetDir;
+            return { path: targetDir };
         } catch (err: any) {
             log(`FAILED: ${err?.message || err}`);
             if (fs.existsSync(pkgDir) && !this.findBinDir(pkgDir, 4)) {
@@ -1351,7 +1632,7 @@ export class PaperCraneEngine {
         }
         client.destroy();
         this.clients.delete(id);
-        this.forgetClientOwner(id);
+        this.workloadEnded(id);
     }
 
     public async getConfig(id: string, configPath?: string): Promise<any> {

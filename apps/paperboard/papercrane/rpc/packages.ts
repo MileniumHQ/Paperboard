@@ -26,7 +26,7 @@ export async function handlePackages(action: string, id: unknown, params: any, c
             // itself. A failed lookup throws — the engine never sees
             // sha256: undefined from this path.
             const sha256 = assertOptStr(params?.sha256, "sha256", 128) ?? (await resolvePackageSha256(packageName));
-            const targetDir = await engine.downloadPackage(
+            const outcome = await engine.downloadPackage(
                 packageName,
                 downloadId,
                 (progress) =>
@@ -36,7 +36,25 @@ export async function handlePackages(action: string, id: unknown, params: any, c
                     }),
                 sha256,
             );
-            reply(id, { path: targetDir });
+            // waiting: verified and staged, installed once the workloads
+            // running from the current release stop. Accepted, not completed.
+            reply(id, outcome.waiting ? { path: outcome.path, waiting: outcome.waiting } : { path: outcome.path });
+            return true;
+        }
+        case "package:pending": {
+            // the host sees every waiting update; a panel sees only the
+            // updates its own workloads hold back, and only those workloads
+            const caller = ctx.callerPanelId();
+            const updates = engine.pendingPackageUpdates();
+            if (caller === null) {
+                reply(id, { updates });
+                return true;
+            }
+            reply(id, {
+                updates: updates
+                    .map((update) => ({ ...update, blockedBy: update.blockedBy.filter((user) => user.owner === caller) }))
+                    .filter((update) => update.blockedBy.length > 0),
+            });
             return true;
         }
         default:
