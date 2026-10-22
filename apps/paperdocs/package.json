@@ -24,6 +24,6 @@
     "typescript": "^5.9.3",
     "vite": "^6.4.3",
     "vite-plugin-solid": "^2.11.14",
-    "wrangler": "^3.114.17"
+    "wrangler": "^4.147.0"
   }
 }
