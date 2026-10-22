@@ -77,6 +77,16 @@ const MAX_EVENT_SUBS = 512;
 const MAX_TUNNELS_PER_SOCKET = 32;
 export const MAX_WS_PAYLOAD = 20 * 1024 * 1024;
 const MAX_CONNECTIONS = 4096;
+const MAX_WS_BUFFERED_BYTES = 32 * 1024 * 1024;
+
+// Include the next frame in the budget: a bounded frame must not overshoot
+// the socket's cumulative queue limit. Callers own slow-consumer teardown.
+function sendBounded(socket: WebSocket, payload: string): boolean {
+    if (socket.readyState !== WebSocket.OPEN) return false;
+    if (socket.bufferedAmount + Buffer.byteLength(payload) > MAX_WS_BUFFERED_BYTES) return false;
+    socket.send(payload);
+    return true;
+}
 // pre-auth slots: this machine's own callers (shell, panel services) get a
 // budget no network peer can spend, and one network address cannot hold
 // every remote slot
@@ -272,10 +282,17 @@ export function setupWebSocketServer(
             }
         };
 
+        const forwardTunnel = (destination: WebSocket, payload: string) => {
+            if (sendBounded(destination, payload)) return;
+            // Do not wait for the slow socket's close handshake: it may not
+            // read again. Release every upstream and its heartbeat now.
+            for (const id of [...tunnels.keys()]) closeTunnel(id, { notify: false });
+            ws.close(4429, "Slow tunnel consumer");
+        };
+
         const sendEvent = (event: string, payload: any) => {
-            if (ws.bufferedAmount > 32 * 1024 * 1024) { ws.close(4429, "Slow event consumer"); return; }
-            if (ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ type: "event", event, payload }));
+            if (!sendBounded(ws, JSON.stringify({ type: "event", event, payload }))) {
+                ws.close(4429, "Slow event consumer");
             }
         };
 
@@ -287,8 +304,7 @@ export function setupWebSocketServer(
             const msg = JSON.stringify({ type: "event", event, payload });
             for (const client of recipients) {
                 if (client.readyState !== WebSocket.OPEN) continue;
-                if (client.bufferedAmount > 32 * 1024 * 1024) { client.close(4429, "Slow event consumer"); continue; }
-                client.send(msg);
+                if (!sendBounded(client, msg)) client.close(4429, "Slow event consumer");
             }
         };
 
@@ -343,7 +359,7 @@ export function setupWebSocketServer(
                 if (maybe && typeof maybe === "object" && maybe.type === "tunnel") {
                     const tunnel = tunnels.get(maybe.id);
                     if (isAuthenticated && tunnel?.ready && tunnel.socket.readyState === WebSocket.OPEN) {
-                        tunnel.socket.send(typeof maybe.payload === "string" ? maybe.payload : JSON.stringify(maybe.payload));
+                        forwardTunnel(tunnel.socket, typeof maybe.payload === "string" ? maybe.payload : JSON.stringify(maybe.payload));
                     }
                     return;
                 }
@@ -476,7 +492,7 @@ export function setupWebSocketServer(
                                 );
                             }
                             if (tunnel.ready && ws.readyState === WebSocket.OPEN) {
-                                ws.send(JSON.stringify({ type: "tunnel", id: tunnelId, payload: data.toString("utf8") }));
+                                forwardTunnel(ws, JSON.stringify({ type: "tunnel", id: tunnelId, payload: data.toString("utf8") }));
                             }
                         });
                         upstream.on("close", () => {

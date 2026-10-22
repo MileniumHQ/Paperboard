@@ -8,8 +8,13 @@ import { WebSocket, WebSocketServer } from "ws";
 import { setupWebSocketServer } from "../papercrane/ws";
 import { PaperCraneAuth } from "../papercrane/auth";
 import { PaperCraneEngine } from "../papercrane/engine";
+import { pinnableWebSocket } from "../papercrane/pinnableWebSocket";
 import { remoteTls } from "./tlsFixture";
 
+const NpmWebSocket = pinnableWebSocket();
+const { WebSocketServer: FixtureWebSocketServer } = import.meta.require(
+    path.join(path.dirname(import.meta.require.resolve("ws/package.json")), "index.js"),
+) as typeof import("ws");
 const HEARTBEAT_MS = 40;
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 async function until(predicate: () => boolean, description: string, ms = 3000): Promise<void> {
@@ -26,12 +31,13 @@ async function withTunnel(
     scoped: boolean,
     onRemote: (socket: WebSocket) => void,
     run: (fixture: { client: WebSocket; frames: any[]; local: WebSocketServer; remote: WebSocketServer }) => Promise<void>,
+    heartbeatMs = HEARTBEAT_MS,
 ): Promise<void> {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pb-tunnel-limits-"));
     const auth = new PaperCraneAuth(false, dir);
     const server = https.createServer({ key: remoteTls.key, cert: remoteTls.cert });
-    const remote = new WebSocketServer({ server });
-    const local = new WebSocketServer({ port: 0, host: "127.0.0.1" });
+    const remote = new FixtureWebSocketServer({ server });
+    const local = new FixtureWebSocketServer({ port: 0, host: "127.0.0.1" });
     let client: WebSocket | undefined;
     try {
         remote.on("connection", onRemote);
@@ -43,10 +49,10 @@ async function withTunnel(
         }] }));
         auth.injectToken("pc_tunnel_limits", "host");
         const token = scoped ? auth.issueRelayToken("com.example.fixture", "peer1") : "pc_tunnel_limits";
-        setupWebSocketServer(local, new PaperCraneEngine(dir), auth, { remotesFile, tunnelHeartbeatMs: HEARTBEAT_MS });
+        setupWebSocketServer(local, new PaperCraneEngine(dir), auth, { remotesFile, tunnelHeartbeatMs: heartbeatMs });
         if (!local.address()) await new Promise<void>((resolve) => local.once("listening", resolve));
         const frames: any[] = [];
-        client = new WebSocket(`ws://127.0.0.1:${(local.address() as AddressInfo).port}`);
+        client = new NpmWebSocket(`ws://127.0.0.1:${(local.address() as AddressInfo).port}`);
         client.on("message", (raw: Buffer) => frames.push(JSON.parse(raw.toString())));
         await new Promise<void>((resolve, reject) => {
             client!.once("open", resolve);
@@ -139,3 +145,70 @@ it("an unsolicited scope reply cannot open a tunnel before auth succeeds", async
         await until(() => frames.some((f) => f.type === "tunnel-open"), "authenticated tunnel open");
     });
 });
+
+// Use the actual TCP read side, rather than a mocked bufferedAmount. A
+// sender stays bounded too: each write waits for its callback, with at most
+// 64 MiB generated in either direction even on the defective implementation.
+async function flood(socket: WebSocket, frame: string): Promise<void> {
+    for (let n = 0; n < 64 && socket.readyState === WebSocket.OPEN; n++) {
+        const sent = await new Promise<boolean>((resolve) => socket.send(frame, (error) => resolve(!error)));
+        if (!sent) return; // observed socket failure ends this fixture workload
+    }
+}
+
+for (const direction of ["upstream-to-local", "local-to-upstream"] as const) {
+    it(`bounds ${direction} tunnel queues and tears down the upstream`, async () => {
+        let upstream: WebSocket | undefined;
+        let remoteClosed = false;
+        let startFlood: (() => Promise<void>) | undefined;
+        const chunk = "x".repeat(1024 * 1024);
+        await withTunnel(true, (socket) => {
+            upstream = socket;
+            socket.on("error", () => socket.terminate());
+            socket.once("close", () => { remoteClosed = true; });
+            socket.on("message", (raw: Buffer) => {
+                if (raw[0] !== 123) return; // the workload payload is deliberately opaque
+                const message = JSON.parse(raw.toString());
+                socket.send(JSON.stringify({ id: message.id, result: { success: true } }));
+                if (message.id === "__tunnel-scope") {
+                    if (direction === "local-to-upstream") socket.pause();
+                    else startFlood = () => flood(socket, chunk);
+                }
+            });
+        }, async ({ client, frames, local }) => {
+            await until(() => frames.some((f) => f.type === "tunnel-open"), "relay tunnel open");
+            // Exercise the narrowest principal: this socket can relay but
+            // has no authority to call local panel RPCs.
+            client.send(JSON.stringify({ id: 2, action: "panel:list" }));
+            await until(() => frames.some((f) => f.id === 2), "relay-only refusal");
+            expect(frames.find((f) => f.id === 2).error).toContain("only relays");
+            const serverSocket = [...local.clients][0]!;
+            let localCloseCode: number | undefined;
+            client.once("close", (code) => { localCloseCode = code; });
+            let pendingFlood: Promise<void> | undefined;
+            try {
+                if (direction === "upstream-to-local") {
+                    client.pause();
+                    pendingFlood = startFlood!();
+                } else {
+                    pendingFlood = flood(client, JSON.stringify({ type: "tunnel", id: "t1", payload: chunk }));
+                }
+                await until(() => serverSocket.readyState !== WebSocket.OPEN, "slow tunnel consumer closed", 4000);
+                expect(serverSocket.bufferedAmount).toBeLessThanOrEqual(32 * 1024 * 1024);
+                // Teardown is immediate, even when the destination cannot
+                // read the queued close frame. Resume only to observe it.
+                if (direction === "upstream-to-local") {
+                    await until(() => remoteClosed, "upstream teardown while client is stalled");
+                }
+                client.resume();
+                upstream!.resume();
+                await until(() => remoteClosed && localCloseCode !== undefined, "both tunnel ends closed");
+                expect(localCloseCode).toBe(4429);
+            } finally {
+                client.terminate();
+                upstream?.terminate();
+                await pendingFlood;
+            }
+        }, 15_000);
+    }, 10000);
+}
