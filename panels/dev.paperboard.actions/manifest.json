@@ -56,12 +56,6 @@
                 "dark": "./store/3-dark.png",
                 "alt": "Export, import and back up flows"
             }
-        ],
-        "credits": [
-            {
-                "name": "expr-eval",
-                "detail": "Evaluating flow expressions"
-            }
         ]
     }
 }

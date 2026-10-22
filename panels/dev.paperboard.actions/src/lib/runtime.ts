@@ -5,7 +5,7 @@ import {
     files,
     resolveOneShotShell,
 } from "@mileniumhq/paperapi";
-import { Parser as ExprParser } from "expr-eval";
+import { evaluateMathExpression } from "./mathExpression";
 import type { CanvasBlock } from "./tree";
 import { BUILTIN_DEFS } from "./builtinRegistry";
 import { ACTIONS_PANEL_ID } from "../panelId";
@@ -28,8 +28,6 @@ import {
     truncateText,
 } from "./builtinData";
 import { fetchRefusal } from "./fetchPolicy";
-
-const mathParser = new ExprParser();
 
 export interface ExecutionLog {
     id: string;
@@ -504,22 +502,15 @@ export function resolveInputs(
 }
 
 function evaluateMath(expression: string): number {
-    const text = (expression ?? "").trim();
-    if (!text) {
-        throw new Error("math-calculate: expression is empty");
-    }
-    let result: unknown;
     try {
-        result = mathParser.evaluate(text);
+        return evaluateMathExpression(expression);
     } catch (err) {
+        // Bound diagnostics too: interpolated trigger text can exceed the input limit.
+        const preview = expression.slice(0, 120) + (expression.length > 120 ? "…" : "");
         throw new Error(
-            `math-calculate: cannot parse expression "${text}": ${err instanceof Error ? err.message : String(err)}`,
+            `math-calculate: cannot parse expression "${preview}": ${err instanceof Error ? err.message : String(err)}`,
         );
     }
-    if (typeof result !== "number" || !Number.isFinite(result)) {
-        throw new Error(`math-calculate: expression "${text}" did not evaluate to a finite number`);
-    }
-    return result;
 }
 
 /**

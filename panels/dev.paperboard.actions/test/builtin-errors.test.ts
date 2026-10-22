@@ -83,4 +83,34 @@ describe("builtin failure semantics", () => {
         expect(log.status).toBe("success");
         expect(log.steps[0].result).toBe(14);
     });
+
+    it.each(["abs(-2)", "a.b"])("rejects non-arithmetic trigger text interpolated into math: %s", async (text) => {
+        const log = await executeFlow(
+            trig([step("math-calculate", { expression: "{{values.text:Text:tag}} + 3" })]) as any,
+            { values: { text } },
+        );
+        expect(log.status).toBe("error");
+        expect(log.message).toMatch(/math-calculate:/);
+        expect(log.steps[0].error).toMatch(/math-calculate:/);
+        expect(log.steps[0].result).toBeUndefined();
+    });
+
+    it("calculates with numeric trigger text after interpolation", async () => {
+        const log = await executeFlow(
+            trig([step("math-calculate", { expression: "{{values.text:Text:tag}} * 3" })]) as any,
+            { values: { text: "14" } },
+        );
+        expect(log.status).toBe("success");
+        expect(log.steps[0].result).toBe(42);
+    });
+
+    it("reports a math-calculate error for a non-finite result", async () => {
+        const log = await executeFlow(
+            trig([step("math-calculate", { expression: "1 / 0" })]) as any,
+            {},
+        );
+        expect(log.status).toBe("error");
+        expect(log.steps[0].error).toMatch(/math-calculate:.*finite number/);
+        expect(log.steps[0].result).toBeUndefined();
+    });
 });

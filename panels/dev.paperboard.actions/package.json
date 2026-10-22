@@ -13,7 +13,6 @@
     "dependencies": {
         "@mileniumhq/paperapi": "workspace:*",
         "@mileniumhq/paperui": "workspace:*",
-        "expr-eval": "^2.0.2",
         "solid-js": "^1.9.15"
     },
     "devDependencies": {
