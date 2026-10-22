@@ -2,6 +2,9 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+    /* too narrow for title and actions side by side (a phone), the actions
+       move under the title instead of squeezing it a letter per line */
+    flex-wrap: wrap;
     gap: var(--paper-uigap);
     width: 100%;
     box-sizing: border-box;
@@ -16,7 +19,7 @@
     align-items: center;
     gap: var(--paper-uigap-threefourths);
     min-width: 0;
-    flex: 1;
+    flex: 1 1 var(--paper-size-card-min);
 }
 
 .iconChip {
@@ -45,6 +48,7 @@
 
 .actions {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: var(--paper-uigap-half);
     flex-shrink: 0;
