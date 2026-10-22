@@ -239,6 +239,7 @@ export function setupWebSocketServer(
             ready: boolean;
             timer: ReturnType<typeof setTimeout>;
             heartbeat?: ReturnType<typeof setInterval>;
+            onPong?: () => void;
         }>();
 
         // one teardown shape for every tunnel exit: map removal lives
@@ -254,6 +255,7 @@ export function setupWebSocketServer(
             tunnels.delete(tunnelId);
             clearTimeout(tunnel.timer);
             clearInterval(tunnel.heartbeat);
+            if (tunnel.onPong) tunnel.socket.off("pong", tunnel.onPong);
             try {
                 tunnel.socket.terminate();
             } catch (err) {
@@ -408,10 +410,12 @@ export function setupWebSocketServer(
                         });
                         const timer = setTimeout(() => closeTunnel(tunnelId, { reason: "Remote authentication timed out" }), HANDSHAKE_TIMEOUT_MS);
                         timer.unref?.();
-                        const tunnel: { socket: WebSocket; ready: boolean; timer: ReturnType<typeof setTimeout>; heartbeat?: ReturnType<typeof setInterval> } = { socket: upstream, ready: false, timer };
+                        const tunnel: { socket: WebSocket; ready: boolean; timer: ReturnType<typeof setTimeout>; heartbeat?: ReturnType<typeof setInterval>; onPong?: () => void } = { socket: upstream, ready: false, timer };
+                        let handshake: "connecting" | "auth" | "scope" | "ready" = "connecting";
                         tunnels.set(tunnelId, tunnel);
                         const opened = () => {
-                            if (!tunnels.has(tunnelId) || ws.readyState !== WebSocket.OPEN) return;
+                            if (tunnel.ready || !tunnels.has(tunnelId) || ws.readyState !== WebSocket.OPEN) return;
+                            handshake = "ready";
                             clearTimeout(timer);
                             tunnel.ready = true;
                             // a remote that sleeps or drops off the network
@@ -419,7 +423,8 @@ export function setupWebSocketServer(
                             // pong closes the tunnel so the panel's
                             // transport reopens it instead of hanging
                             let awaitingPong = false;
-                            upstream.on("pong", () => { awaitingPong = false; });
+                            tunnel.onPong = () => { awaitingPong = false; };
+                            upstream.on("pong", tunnel.onPong);
                             tunnel.heartbeat = setInterval(() => {
                                 if (awaitingPong) {
                                     closeTunnel(tunnelId, { reason: "The remote computer stopped responding" });
@@ -432,6 +437,7 @@ export function setupWebSocketServer(
                             ws.send(JSON.stringify({ type: "tunnel-open", id: tunnelId }));
                         };
                         upstream.on("open", () => {
+                            handshake = "auth";
                             upstream.send(JSON.stringify({
                                 id: "__tunnel-auth",
                                 action: "auth:verify",
@@ -439,13 +445,15 @@ export function setupWebSocketServer(
                             }));
                         });
                         upstream.on("message", (data: any) => {
-                            if (upstream.readyState !== UpstreamWebSocket.OPEN) return;
+                            if (!tunnels.has(tunnelId) || upstream.readyState !== UpstreamWebSocket.OPEN) return;
                             try {
                                 const m = JSON.parse(data.toString("utf8"));
                                 if (m?.id === "__tunnel-auth") {
+                                    if (handshake !== "auth") return;
                                     if (m.error) {
                                         closeTunnel(tunnelId, { reason: "auth-failed" });
                                     } else if (authedPanelId) {
+                                        handshake = "scope";
                                         // The paired host GRANTS a narrower socket identity. No
                                         // host credential is delivered to the panel or its tunnel.
                                         upstream.send(JSON.stringify({ id: "__tunnel-scope", action: "auth:scope", params: { panelId: authedPanelId } }));
@@ -455,6 +463,7 @@ export function setupWebSocketServer(
                                     return;
                                 }
                                 if (m?.id === "__tunnel-scope") {
+                                    if (handshake !== "scope") return;
                                     if (m.error) closeTunnel(tunnelId, { reason: `Remote scope grant failed: ${m.error}` });
                                     else opened();
                                     return;
