@@ -4,8 +4,13 @@
 export interface LaunchOptions {
     /** false with --no-tutorial: nothing opens a tutorial by itself (dev and agent runs) */
     firstOpenTutorials: boolean;
+    /** true with --mobile: the phone layout, in a window shaped like an iPhone 16 Pro */
+    mobile: boolean;
 }
 
 export function launchOptionsFromArgv(argv: readonly string[]): LaunchOptions {
-    return { firstOpenTutorials: !argv.includes("--no-tutorial") };
+    return {
+        firstOpenTutorials: !argv.includes("--no-tutorial"),
+        mobile: argv.includes("--mobile"),
+    };
 }

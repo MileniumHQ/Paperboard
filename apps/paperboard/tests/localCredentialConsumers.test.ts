@@ -13,7 +13,7 @@ const panelId = "dev.paperboard.handshake-test";
 const forged = { port: 1, token: "pc_forged_handshake" };
 const handlers = createShellInvokeHandlers({
     appVersion: () => "0.0.0-test",
-    launchOptions: () => ({ firstOpenTutorials: false }),
+    launchOptions: () => ({ firstOpenTutorials: false, mobile: false }),
     openPath: async () => "",
 });
 let root: string;

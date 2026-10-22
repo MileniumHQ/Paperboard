@@ -1,4 +1,4 @@
-import { type Component, batch, createSignal, createEffect, onMount, onCleanup, For, Show } from "solid-js";
+import { type Component, type JSX, batch, createSignal, createEffect, onMount, onCleanup, For, Show } from "solid-js";
 import {
     PaperProvider,
     PaperFlex,
@@ -23,6 +23,7 @@ import {
     readPanelListingFile,
     type ComputerInfo as ComputerItem,
 } from "./lib/shell";
+import type { LaunchOptions } from "../../shared/launchOptions";
 import AppSettings from "./components/settings/AppSettings";
 import PanelView from "./components/panels/PanelView";
 import LibraryFrame from "./components/panels/LibraryFrame";
@@ -50,6 +51,9 @@ import { useAppUpdate } from "./hooks/useAppUpdate";
 import { usePackageUpdates } from "./hooks/usePackageUpdates";
 import PackageUpdateModal from "./components/layout/PackageUpdateModal";
 import TopBar from "./components/layout/TopBar";
+import MobilePage from "./components/layout/MobilePage";
+import { computerIcon } from "./components/computer/computerIcon";
+import libraryIcon from "./assets/PanelLibrary.png";
 import { useAppSettings } from "./hooks/useAppSettings";
 import { useComputers } from "./hooks/useComputers";
 import { usePanels } from "./hooks/usePanels";
@@ -119,8 +123,16 @@ const App: Component = () => {
     // settings, or the active computer's panels
     const [railMode, setRailMode] = createSignal<"home" | "settings" | "computer">("home");
     const showAppSettings = () => railMode() === "settings";
+    // --mobile: the phone layout. The rail and panel list fill the screen,
+    // and what's opened from them slides in over them as its own page.
+    const [mobile, setMobile] = createSignal(false);
+    const [mobilePageOpen, setMobilePageOpen] = createSignal(false);
+    const openMobilePage = () => {
+        if (mobile()) setMobilePageOpen(true);
+    };
 
     const handleRailSelect = (val: string) => {
+        setMobilePageOpen(false);
         if (val === "__home") {
             setRailMode("home");
         } else if (val === "__settings") {
@@ -135,6 +147,7 @@ const App: Component = () => {
     const openPanelFromHome = (compId: string, panelId: string) => {
         setRailMode("computer");
         setComputerTab(compId, panelId);
+        openMobilePage();
         void handleComputerSelect(compId);
     };
 
@@ -207,6 +220,8 @@ const App: Component = () => {
             setRestartState(key, null);
             if (getSelectedTab(target.compId) === target.panel.id) {
                 setComputerTab(target.compId, "landing");
+                // the phone layout's landing is the panel list underneath
+                setMobilePageOpen(false);
             }
             await refreshPanelsForComputer(target.compId);
             setIsUninstallModalOpen(false);
@@ -242,8 +257,16 @@ const App: Component = () => {
     });
 
     onMount(async () => {
+        let options: LaunchOptions;
         try {
-            if (!(await shellApi.getLaunchOptions()).firstOpenTutorials) return;
+            options = await shellApi.getLaunchOptions();
+        } catch (err) {
+            logToMain("error", "Couldn't read the launch options; first-open tutorials are off and the layout is the desktop one until restart:", err);
+            return;
+        }
+        setMobile(options.mobile);
+        if (!options.firstOpenTutorials) return;
+        try {
             setSeenTutorials(await loadSeenTutorials());
         } catch (err) {
             logToMain("error", "Couldn't read which tutorials were shown; first-open tutorials are off until restart:", err);
@@ -479,13 +502,14 @@ const App: Component = () => {
         setComputerTab(activeComputerId(), panelId);
     };
 
+    const panelIconStyle = {
+        width: getVarCss("icon-size-large"),
+        height: getVarCss("icon-size-large"),
+        "border-radius": getVarCss("border-radius-half"),
+        "object-fit": "contain" as const,
+    };
     const renderPanelIcon = (panel: PanelItem, compId: string) => {
-        const style = {
-            width: getVarCss("icon-size-large"),
-            height: getVarCss("icon-size-large"),
-            "border-radius": getVarCss("border-radius-half"),
-            "object-fit": "contain" as const,
-        };
+        const style = panelIconStyle;
         if (panel.iconUrl) {
             return <img src={panel.iconUrl} alt={panel.name} style={style} />;
         }
@@ -499,6 +523,47 @@ const App: Component = () => {
             );
         }
         return panel.icon || "dashboard";
+    };
+
+    // the mobile page's top bar: the open tab's icon and name
+    const mobilePageHeading = (): { title: string; icon: JSX.Element } => {
+        const compId = activeComputerId();
+        const tab = getSelectedTab(compId);
+        const comp = activeComputer();
+        if (tab === "library") {
+            return {
+                title: "Panel Library",
+                icon: <img src={libraryIcon} alt="" style={panelIconStyle} />,
+            };
+        }
+        if (isShellTab(tab)) {
+            return { title: comp?.name || "This Computer", icon: comp ? computerIcon(comp) : "computer" };
+        }
+        const panel = panelsByComputer()[compId]?.find((p) => p.id === tab);
+        if (!panel) return { title: tab, icon: "dashboard" };
+        return { title: panel.name, icon: renderPanelIcon(panel, compId) };
+    };
+
+    // the right-click menus a phone can't right-click for: a panel's
+    // restart/uninstall/tutorial, and the library's reload
+    const mobilePageMenu = (): { label: string; open: (e: MouseEvent) => void } | undefined => {
+        const compId = activeComputerId();
+        const tab = getSelectedTab(compId);
+        if (tab === "library") {
+            return {
+                label: "Library options",
+                open: (e) => libraryContextMenu.openBelow(e.currentTarget as HTMLElement, { align: "right" }),
+            };
+        }
+        const panel = !isShellTab(tab) && panelsByComputer()[compId]?.find((p) => p.id === tab);
+        if (!panel) return undefined;
+        return {
+            label: `${panel.name} options`,
+            open: (e) => {
+                setContextMenuPanel({ compId, panel });
+                panelContextMenu.openBelow(e.currentTarget as HTMLElement, { align: "right" });
+            },
+        };
     };
 
     return (
@@ -518,6 +583,8 @@ const App: Component = () => {
                     onOpenPackageUpdates={() => packageUpdates.setOpen(true)}
                     getComputerId={activeComputerId}
                     getSelectedTab={() => getSelectedTab(activeComputerId())}
+                    mobile={mobile()}
+                    inert={mobilePageOpen()}
                 />
                 <PaperFlex
                     direction="row"
@@ -544,6 +611,7 @@ const App: Component = () => {
                         onComputerContextMenu={handleComputerContextMenu}
                         loadFailed={computersLoadFailed()}
                         onRetryLoad={() => void refreshComputers()}
+                        inert={mobilePageOpen()}
                     />
 
                     <Show
@@ -594,8 +662,10 @@ const App: Component = () => {
                         <PaperFlex
                             direction="column"
                             background="surface-inset"
+                            inert={mobilePageOpen()}
                             style={{
-                                width: getVarCss("size-sidebar"),
+                                // the phone layout's whole screen beside the rail
+                                ...(mobile() ? { flex: 1, "min-width": 0 } : { width: getVarCss("size-sidebar") }),
                                 height: "100%",
                                 "border-right": `${getVarCss("border-width")} solid ${getVarCss("border")}`,
                                 "flex-shrink": 0,
@@ -632,6 +702,7 @@ const App: Component = () => {
                                                 onSelectTab={(tab) =>
                                                     setComputerTab(comp.id, tab)
                                                 }
+                                                onActivateTab={openMobilePage}
                                                 onLibraryContextMenu={(
                                                     e: MouseEvent,
                                                 ) =>
@@ -662,6 +733,7 @@ const App: Component = () => {
                                                     {(panel) => (
                                                         <PaperListItem
                                                             value={panel.id}
+                                                            onClick={openMobilePage}
                                                             icon={renderPanelIcon(
                                                                 panel,
                                                                 comp.id,
@@ -721,6 +793,15 @@ const App: Component = () => {
                             </For>
                         </PaperFlex>
 
+                        <MobilePage
+                            enabled={mobile()}
+                            open={mobilePageOpen()}
+                            title={mobilePageHeading().title}
+                            icon={mobilePageHeading().icon}
+                            onBack={() => setMobilePageOpen(false)}
+                            onMore={mobilePageMenu()?.open}
+                            moreLabel={mobilePageMenu()?.label}
+                        >
                         <PaperFlex
                             direction="column"
                             fullHeight
@@ -862,6 +943,7 @@ const App: Component = () => {
                                 />
                             </PaperFlex>
                         </PaperFlex>
+                        </MobilePage>
                     </PaperFlex>
                     </Show>
 
@@ -939,6 +1021,7 @@ const App: Component = () => {
                 tutorial={tutorialDialog()}
                 theme={appSettings().darkMode}
                 onDone={finishTutorial}
+                compact={mobile()}
             />
 
             <ComputerContextMenu

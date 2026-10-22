@@ -9,6 +9,14 @@
     --paperboard-wizard-height: 448px;
 }
 
+/* Phones: the setup and tutorial wizards take the whole modal, which takes
+ * the whole screen (PaperModal's own phone rule). */
+@media (max-width: 600px) {
+    :root {
+        --paperboard-wizard-height: calc(100dvh - var(--paper-uigap) - 2 * var(--paper-border-width));
+    }
+}
+
 html,
 body {
     margin: 0;

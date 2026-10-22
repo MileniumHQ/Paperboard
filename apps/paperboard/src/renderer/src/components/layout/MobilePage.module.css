@@ -1,0 +1,73 @@
+/* Over the rail and panel list, under a lost connection's overlay (z-drag),
+   which still covers a disconnected computer's page right of the rail. */
+.page {
+    position: fixed;
+    inset: 0;
+    z-index: var(--paper-z-sticky);
+    display: flex;
+    flex-direction: column;
+    background: var(--paper-surface);
+    box-shadow: var(--paper-heavy-element-shadow);
+    transition: transform var(--paper-mid-transition) var(--paper-ease-emphasized);
+    will-change: transform;
+}
+
+/* the finger moves the page, not the easing */
+.dragging {
+    transition: none;
+}
+
+.closed {
+    box-shadow: none;
+}
+
+.bar {
+    display: flex;
+    align-items: center;
+    gap: var(--paper-uigap-half);
+    flex-shrink: 0;
+    min-height: var(--paper-size-bar);
+    padding: env(safe-area-inset-top, 0px) var(--paper-uigap-half) 0;
+    background: var(--paper-surface-sunken);
+    border-bottom: var(--paper-border-width) solid var(--paper-border);
+    touch-action: none;
+}
+
+.icon {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.title {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.content {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.edge {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: var(--paper-uigap);
+    z-index: var(--paper-z-float);
+    touch-action: none;
+}
+
+/* the desktop layout: no box of its own */
+.passthrough {
+    display: contents;
+}

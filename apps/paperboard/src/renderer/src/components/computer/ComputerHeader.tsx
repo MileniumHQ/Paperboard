@@ -13,6 +13,8 @@ export interface ComputerHeaderProps {
     computer?: ComputerItem;
     selectedTab: string;
     onSelectTab: (tab: string) => void;
+    /** a tab was tapped, even the one already selected (the phone layout opens it) */
+    onActivateTab?: () => void;
     /** Opens the library's right-click menu (Reload), anchored at the event. */
     onLibraryContextMenu?: (e: MouseEvent) => void;
 }
@@ -150,6 +152,7 @@ const ComputerHeader: Component<ComputerHeaderProps> = (props) => {
             >
                 <PaperListItem
                     value="settings"
+                    onClick={() => props.onActivateTab?.()}
                     description={brandInfo().display}
                     class={styles.computerItem}
                     style={{ "--computer-os-color": brandInfo().color }}
@@ -159,6 +162,7 @@ const ComputerHeader: Component<ComputerHeaderProps> = (props) => {
 
                 <PaperListItem
                     value="library"
+                    onClick={() => props.onActivateTab?.()}
                     onContextMenu={(e: MouseEvent) => {
                         e.preventDefault();
                         e.stopPropagation();

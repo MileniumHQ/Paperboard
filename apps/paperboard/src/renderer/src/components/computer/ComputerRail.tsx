@@ -30,6 +30,8 @@ interface ComputerRailProps {
     // and the user needs a way to retry instead of a silently broken rail
     loadFailed?: boolean;
     onRetryLoad?: () => void;
+    /** the phone layout's open page covers the rail */
+    inert?: boolean;
 }
 
 // Left rail: Home ("__home"), computers, add-computer action, settings entry ("__settings")
@@ -37,6 +39,7 @@ const ComputerRail = (props: ComputerRailProps): JSX.Element => {
     return (
         <PaperRail
             class={styles.rail}
+            inert={props.inert}
             name="computer-selection"
             value={props.value}
             onValueChange={(val) => props.onSelect(String(val))}

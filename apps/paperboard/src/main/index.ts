@@ -32,6 +32,7 @@ import { poolEndpoint } from "./panelFileEndpoint";
 import { startBrowserHost, type BrowserHost } from "./browserHost";
 import { createShellInvokeHandlers, SHARED_SHELL_INVOKE_CHANNELS } from "./communication/shellHandlers";
 import { launchOptionsFromArgv } from "../shared/launchOptions";
+import { emulatePhone, mobileWindowOptions } from "./mobileMock";
 import { applySavedAppSettings } from "./communication/shelldata";
 import { addShellPushSink } from "./communication/shellPush";
 import { keepAliveWithoutWindows, secondLaunchAction } from "./instancePolicy";
@@ -85,6 +86,8 @@ function ensureDesktopTray(): void {
 // `--browser`: no windows; the shell opens in the user's browser, served by
 // browserHost.ts. `--browser-port=<n>` pins the port (default: any free one).
 const browserMode = app.commandLine.hasSwitch("browser");
+// `--mobile`: the phone layout in an iPhone-sized window (mobileMock.ts)
+const mobileMode = launchOptionsFromArgv(process.argv).mobile;
 
 if (!app.requestSingleInstanceLock()) {
     app.quit();
@@ -184,8 +187,14 @@ function createWindow(): void {
             ? WINDOW_BACKGROUND_COLORS.dark
             : WINDOW_BACKGROUND_COLORS.light,
         ...(process.platform === "linux" ? { icon } : {}),
+        ...(mobileMode ? mobileWindowOptions() : {}),
         webPreferences: commonWebPreferences(),
     });
+    if (mobileMode) {
+        emulatePhone(mainWindow.webContents).catch((err) =>
+            log.error("[Mobile] touch emulation is off; the mouse stays a mouse:", err?.message || err),
+        );
+    }
 
     mainWindowRef = mainWindow;
     mainWindow.on("closed", () => {

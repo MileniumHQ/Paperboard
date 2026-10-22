@@ -15,6 +15,9 @@ const TopBar: Component<{
     onOpenPackageUpdates: () => void;
     getComputerId: () => string;
     getSelectedTab: () => string;
+    /** the phone layout: no window to drag, no caption buttons, no folders to open */
+    mobile?: boolean;
+    inert?: boolean;
 }> = (props) => {
     const [captionReserve, setCaptionReserve] = createSignal(0);
     const [labelInset, setLabelInset] = createSignal(12);
@@ -66,19 +69,21 @@ const TopBar: Component<{
 
     return (
         <header
+            inert={props.inert}
             style={{
                 height: "var(--paperboard-titlebar-height)",
                 width: "100%",
                 display: "flex",
                 "align-items": "center",
                 "justify-content": "center",
-                "-webkit-app-region": "drag",
+                "-webkit-app-region": props.mobile ? "no-drag" : "drag",
                 "user-select": "none",
                 background: getVarCss("surface-sunken"),
                 "border-bottom": `${getVarCss("border-width")} solid ${getVarCss("border")}`,
                 position: "relative",
                 "flex-shrink": 0,
-                "z-index": getVarCss("z-chrome"),
+                // the phone layout's open page slides over the bar
+                "z-index": props.mobile ? "auto" : getVarCss("z-chrome"),
             }}
         >
             <PaperText
@@ -89,7 +94,7 @@ const TopBar: Component<{
             >
                 Paperboard
             </PaperText>
-            <Show when={versionLabel() !== null}>
+            <Show when={!props.mobile && versionLabel() !== null}>
                 <div
                     style={{
                         position: "absolute",
@@ -107,20 +112,22 @@ const TopBar: Component<{
             <div
                 style={{
                     position: "absolute",
-                    right: `calc(${getVarCss("uigap-threefourths")} + ${captionReserve()}px)`,
+                    right: `calc(${getVarCss("uigap-threefourths")} + ${props.mobile ? 0 : captionReserve()}px)`,
                     display: "flex",
                     gap: getVarCss("uigap-half"),
                     "align-items": "center",
                     "-webkit-app-region": "no-drag",
                 }}
             >
-                <PaperButton size="tiny"
-                    icon
-                    title="Open panel folder"
-                    aria-label="Open panel folder"
-                    onClick={handleFolder}>
-                    <PaperIcon>folder_open</PaperIcon>
-                </PaperButton>
+                <Show when={!props.mobile}>
+                    <PaperButton size="tiny"
+                        icon
+                        title="Open panel folder"
+                        aria-label="Open panel folder"
+                        onClick={handleFolder}>
+                        <PaperIcon>folder_open</PaperIcon>
+                    </PaperButton>
+                </Show>
                 <Show when={props.packageUpdatesWaiting > 0}>
                     <PaperButton
                         size="tiny"

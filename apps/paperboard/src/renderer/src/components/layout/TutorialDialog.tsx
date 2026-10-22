@@ -25,6 +25,8 @@ export interface TutorialDialogProps {
     theme: AppSettingsData["darkMode"];
     /** finished or dismissed: either way it has been shown */
     onDone: () => void;
+    /** the phone layout: a step's picture sits above its text, as wide as the screen */
+    compact?: boolean;
 }
 
 const isDark = (theme: AppSettingsData["darkMode"]) =>
@@ -32,11 +34,12 @@ const isDark = (theme: AppSettingsData["darkMode"]) =>
 
 // A step's picture. One that won't load
 // says so in its alt text rather than leaving an empty frame.
-const StepImage: Component<{ src: string; image: TutorialImage }> = (props) => {
+const StepImage: Component<{ src: string; image: TutorialImage; compact?: boolean }> = (props) => {
     const [failed, setFailed] = createSignal(false);
     const frame = {
-        width: "420px",
-        height: "315px",
+        ...(props.compact
+            ? { width: "100%", "max-width": getVarCss("size-panel-small"), "aspect-ratio": "4 / 3", height: "auto" }
+            : { width: "420px", height: "315px" }),
         "flex-shrink": "0",
         "border-radius": getVarCss("border-radius"),
         border: `${getVarCss("border-width")} solid ${getVarCss("border")}`,
@@ -79,11 +82,12 @@ const TutorialDialog: Component<TutorialDialogProps> = (props) => (
                     <For each={tutorial.steps}>
                         {(step, index) => (
                             <PaperWizardStep index={index()}>
-                                <PaperFlex direction={step.image ? "row" : "column"} center fullWidth fullHeight padding="full" gap="full">
+                                <PaperFlex direction={step.image && !props.compact ? "row" : "column"} center fullWidth fullHeight padding="full" gap="full">
                                     <Show when={step.image}>
                                         {(image) => (
                                             <StepImage
                                                 image={image()}
+                                                compact={props.compact}
                                                 src={tutorial.imageSrc((isDark(props.theme) && image().dark) || image().light)}
                                             />
                                         )}
