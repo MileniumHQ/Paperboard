@@ -1,6 +1,7 @@
-// Paperboard ships as one version: the app, its daemon's User-Agent, the
-// shared libraries, the registry and every first-party panel move together.
-// Only the version text changes; each file keeps its own formatting.
+// Sets the app's version family: the app, its daemon's User-Agent (and the
+// gameserver panel's, which identifies the app), the shared libraries and the
+// registry. First-party panel manifests version independently and are bumped
+// on their own. Only the version text changes; each file keeps its formatting.
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -20,12 +21,7 @@ const targets: Array<{ file: string; pattern: RegExp }> = [
   { file: "packages/paperapi/package.json", pattern: JSON_VERSION },
   { file: "packages/paperui/package.json", pattern: JSON_VERSION },
   { file: "packages/create-panel/package.json", pattern: JSON_VERSION },
-  { file: "panels/dev.paperboard.actions/manifest.json", pattern: JSON_VERSION },
-  { file: "panels/dev.paperboard.ai/manifest.json", pattern: JSON_VERSION },
-  { file: "panels/dev.paperboard.botcreator/manifest.json", pattern: JSON_VERSION },
-  { file: "panels/dev.paperboard.gameserver/manifest.json", pattern: JSON_VERSION },
   { file: "panels/dev.paperboard.gameserver/src/lib/userAgent.ts", pattern: USER_AGENT },
-  { file: "panels/dev.paperboard.terminal/manifest.json", pattern: JSON_VERSION },
 ];
 
 const versionArg = process.argv.find((a) => a.startsWith("--version="));
