@@ -1,8 +1,9 @@
 import { createSignal, onCleanup } from "solid-js";
 
-// Phone layout: an open page goes back when it is dragged to the right, like
-// iOS's back swipe. Panels are iframes that keep their own pointer events, so
-// only the page's top bar and a strip along its left edge start the drag.
+// Phone layouts: an open page goes back when it is dragged to the right, like
+// iOS's back swipe. Only the page's top bar and a strip along its left edge
+// start the drag; the page's content keeps its own horizontal gestures (and
+// in Paperboard's shell, a panel's iframe keeps all of its pointer events).
 
 /** movement before a press counts as a drag rather than a tap */
 export const SWIPE_SLOP = 8;

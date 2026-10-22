@@ -1,7 +1,8 @@
-/* Over the rail and panel list, under a lost connection's overlay (z-drag),
-   which still covers a disconnected computer's page right of the rail. */
+/* Covers its positioned container: over the list it was opened from, under
+   overlays that must stay on top (Paperboard's lost-connection overlay sits
+   at z-drag). */
 .page {
-    position: fixed;
+    position: absolute;
     inset: 0;
     z-index: var(--paper-z-sticky);
     display: flex;
@@ -10,6 +11,11 @@
     box-shadow: var(--paper-heavy-element-shadow);
     transition: transform var(--paper-mid-transition) var(--paper-ease-emphasized);
     will-change: transform;
+}
+
+/* an app shell's top-level page covers the screen */
+.page.fixed {
+    position: fixed;
 }
 
 /* the finger moves the page, not the easing */

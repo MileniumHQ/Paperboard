@@ -9,6 +9,7 @@ import {
     PaperText,
     useContextMenuState,
     getVarCss,
+    PaperSlidePage,
 } from "@mileniumhq/paperui";
 import {
     loadInstalledPanelMedia,
@@ -51,7 +52,6 @@ import { useAppUpdate } from "./hooks/useAppUpdate";
 import { usePackageUpdates } from "./hooks/usePackageUpdates";
 import PackageUpdateModal from "./components/layout/PackageUpdateModal";
 import TopBar from "./components/layout/TopBar";
-import MobilePage from "./components/layout/MobilePage";
 import { computerIcon } from "./components/computer/computerIcon";
 import libraryIcon from "./assets/PanelLibrary.png";
 import { useAppSettings } from "./hooks/useAppSettings";
@@ -800,7 +800,8 @@ const App: Component = () => {
                             </For>
                         </PaperFlex>
 
-                        <MobilePage
+                        <PaperSlidePage
+                            position="fixed"
                             enabled={mobile()}
                             open={mobilePageOpen()}
                             title={mobilePageHeading().title}
@@ -950,7 +951,7 @@ const App: Component = () => {
                                 />
                             </PaperFlex>
                         </PaperFlex>
-                        </MobilePage>
+                        </PaperSlidePage>
                     </PaperFlex>
                     </Show>
 
@@ -968,7 +969,8 @@ const App: Component = () => {
             </PaperFlex>
 
             <Show when={mobile()}>
-                <MobilePage
+                <PaperSlidePage
+                    position="fixed"
                     enabled
                     open={mobileSettingsOpen()}
                     title="Settings"
@@ -983,7 +985,7 @@ const App: Component = () => {
                             onShowTutorial={() => setOpenTutorial("app")}
                         />
                     </div>
-                </MobilePage>
+                </PaperSlidePage>
             </Show>
 
             <AppUpdateModal state={appUpdate.state()} open={appUpdate.open()} onClose={() => appUpdate.setOpen(false)} />

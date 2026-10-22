@@ -38,6 +38,7 @@ export * from "./components/PaperRange";
 export * from "./components/PaperRail";
 export * from "./components/PaperSelector";
 export * from "./components/PaperSelectMenu";
+export * from "./components/PaperSlidePage";
 export * from "./components/PaperSectionHeader";
 export * from "./components/PaperSeparator";
 export * from "./components/PaperSpacer";
@@ -67,5 +68,6 @@ export * from "./utils/ansi";
 export * from "./utils/cx";
 export * from "./utils/clipboard";
 export * from "./utils/polling";
+export * from "./utils/swipeBack";
 
 export * from "./types";
