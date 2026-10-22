@@ -7,8 +7,12 @@ describe("parseCliArgs", () => {
     it("--no-auth disables authentication (commander negation)", () => {
         expect(parseCliArgs([...base, "--no-auth"]).noAuth).toBe(true);
     });
-    it("--local disables authentication", () => {
-        expect(parseCliArgs([...base, "--local"]).noAuth).toBe(true);
+    it("rejects the misleading --local authentication bypass alias", async () => {
+        // The old assertion expected the defect: a locality flag disabled auth.
+        const child = Bun.spawn([process.execPath, "-e", 'import { parseCliArgs } from "./papercrane/index"; parseCliArgs(["bun", "papercrane", "--local"]);'], { stdout: "pipe", stderr: "pipe" });
+        const [code, err] = await Promise.all([child.exited, new Response(child.stderr).text()]);
+        expect(code).not.toBe(0);
+        expect(err).toContain("unknown option '--local'");
     });
     it("auth stays on by default", () => {
         expect(parseCliArgs([...base]).noAuth).toBeUndefined();

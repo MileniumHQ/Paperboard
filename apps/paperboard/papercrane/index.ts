@@ -12,6 +12,7 @@ import { WebSocketServer } from "ws";
 import { PaperCraneEngine } from "./engine";
 import { PaperCraneAuth } from "./auth";
 import { handleHttpRequest } from "./http";
+import { createHostAuthorityCheck } from "./hostAuthority";
 import { DavSessionStore } from "./dav";
 import { setupWebSocketServer } from "./ws";
 import { PaperCraneTui } from "./tui";
@@ -334,6 +335,9 @@ export function startPaperCraneServer(
             reject(new Error(`--no-auth only runs on a loopback host, not ${host}`));
             return;
         }
+        if (noAuth) {
+            console.warn("[Paperboard Server] WARNING: --no-auth disables authentication. Any local program can control this daemon and its data. Use only for development on a trusted, single-user machine.");
+        }
         let tlsIdentity: TlsIdentity | null = null;
         if (!loopbackOnly) {
             try {
@@ -359,9 +363,16 @@ export function startPaperCraneServer(
                 );
             });
 
+            const allowsHost = createHostAuthorityCheck(host);
+            const allowsLocalHost = createHostAuthorityCheck();
             const onRequest = (req: http.IncomingMessage, res: http.ServerResponse) => {
                 try {
-                    handleHttpRequest(engine, req, res, { auth, sessions });
+                    const encrypted = (req.socket as import("tls").TLSSocket).encrypted;
+                    handleHttpRequest(engine, req, res, {
+                        auth,
+                        sessions,
+                        allowsHost: tlsIdentity && !encrypted ? allowsLocalHost : allowsHost,
+                    });
                 } catch (err) {
                     logger.debug("[Paperboard Server] request handler threw (staying up):", err);
                     try {
@@ -378,6 +389,11 @@ export function startPaperCraneServer(
             const wss = new WebSocketServer({ noServer: true });
             for (const listener of [server, localServer]) {
                 listener?.on("upgrade", (req, socket, head) => {
+                    const check = listener === localServer ? allowsLocalHost : allowsHost;
+                    if (!check(req.headers.host)) {
+                        socket.end("HTTP/1.1 421 Misdirected Request\r\nConnection: close\r\nContent-Length: 0\r\n\r\n");
+                        return;
+                    }
                     wss.handleUpgrade(req, socket, head, (ws) => wss.emit("connection", ws, req));
                 });
             }
@@ -613,7 +629,6 @@ export function parseCliArgs(argv: string[] = process.argv): ServerOptions & { s
         .name("papercrane")
         .allowUnknownOption(false)
         .option("--no-auth", "disable authentication")
-        .option("--local", "alias for --no-auth")
         .option("--headless", "run without TUI/pairing UI")
         .option("--start-pairing", "show a pairing code at launch (otherwise press p)")
         .option("--port <number>", "listen port", (v) => Number(v))
@@ -625,7 +640,7 @@ export function parseCliArgs(argv: string[] = process.argv): ServerOptions & { s
     const opts = program.opts();
     const options: ServerOptions & { supervise?: string; panelService?: string } = {};
     // --no-auth surfaces as opts.auth === false, check both spellings
-    if (opts.auth === false || opts.noAuth || opts.local) options.noAuth = true;
+    if (opts.auth === false || opts.noAuth) options.noAuth = true;
     if (opts.headless) options.headless = true;
     if (opts.startPairing) options.startPairing = true;
     if (typeof opts.port === "number" && Number.isFinite(opts.port)) {

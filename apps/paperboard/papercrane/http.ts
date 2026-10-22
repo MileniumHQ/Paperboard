@@ -4,6 +4,9 @@ import * as path from "path";
 import { PaperCraneEngine } from "./engine";
 import { PAPERCRANE_VERSION } from "./discovery";
 
+import { createHostAuthorityCheck } from "./hostAuthority";
+import { isAllowedOrigin } from "./ws";
+
 import { lookupMime } from "./mime";
 import { buildPanelCsp } from "./panelNet";
 import { resolveLocalPanelFile } from "./panelAssets";
@@ -21,7 +24,10 @@ import { handlePanelFileRequest, PANEL_FILES_PREFIX } from "./panelFiles";
 export interface HttpContext {
     auth?: PaperCraneAuth;
     sessions?: DavSessionStore;
+    allowsHost?: (authority: string | undefined) => boolean;
 }
+
+const allowsLoopbackHost = createHostAuthorityCheck();
 
 // HTTP router for health, shutdown, and panel assets
 export function handleHttpRequest(
@@ -41,6 +47,16 @@ export function handleHttpRequest(
     } catch {
         res.writeHead(400, { "Content-Type": "text/plain" });
         res.end("Bad Request");
+        return;
+    }
+    if (!(ctx.allowsHost ?? allowsLoopbackHost)(req.headers.host)) {
+        res.writeHead(421, { "Content-Type": "text/plain" });
+        res.end("Misdirected Request");
+        return;
+    }
+    if (ctx.auth?.noAuth && req.headers.origin && !isAllowedOrigin(req.headers.origin)) {
+        res.writeHead(403, { "Content-Type": "text/plain" });
+        res.end("Forbidden Origin");
         return;
     }
     const sessions = ctx.sessions ?? new DavSessionStore();
