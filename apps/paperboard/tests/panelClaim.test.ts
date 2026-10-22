@@ -127,7 +127,7 @@ describe("panel:uninstall is claim-checked; panel:install is host-only", () => {
         );
         // the URL is not the caller's to choose: the daemon resolves it from
         // its registry, and only the caller's expectations are passed on
-        expect(f.calls).toEqual([{ op: "installPanel", args: ["x", { version: undefined, sha256: "a".repeat(64) }] }]);
+        expect(f.calls).toEqual([{ op: "installPanel", args: ["x", { version: undefined, sha256: "a".repeat(64), allowDowngrade: false }] }]);
         await handlePanels("panel:uninstall", 2, { panelId: "x" }, f.ctx as any);
         expect(f.calls[1]).toEqual({ op: "uninstallPanel", args: ["x", { deleteData: false }] });
     });
