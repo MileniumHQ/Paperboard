@@ -4,10 +4,13 @@ import {
     useContext,
     createSignal,
     splitProps,
+    onCleanup,
+    onMount,
     Show,
     type ParentProps,
     type JSX,
 } from "solid-js";
+import { usePaperPanel } from "../../contexts/panel";
 import { PaperIcon } from "../PaperIcon";
 import { PaperText } from "../PaperText";
 import {
@@ -21,6 +24,9 @@ import type { PaperSpacing } from "../../types";
 import { resolveSpacing } from "../../utils/theme";
 
 const MenuLevelContext = createContext<number>(0);
+// true for a PaperPanel's navigation menu: its entries open the panel's
+// interface page in the phone layout
+const PanelNavContext = createContext<boolean>(false);
 
 export function useMenuLevel() {
     return useContext(MenuLevelContext) ?? 0;
@@ -56,6 +62,11 @@ export function PaperMenu(props: ParentProps<PaperMenuProps>) {
     ]);
 
     const isHorizontal = () => local.direction === "horizontal" || Boolean(local.horizontal);
+    const panel = usePaperPanel();
+    // a sidebar directly in a PaperPanel; a tab strip or an embedded menu
+    // is some other surface's navigation
+    const isPanelNav = Boolean(panel?.inPanel) && !isHorizontal() && !local.embedded;
+    const isCompact = () => isPanelNav && Boolean(panel?.compact?.());
 
     const resolvedSpacing = () => {
         if (local.spacing === undefined || local.spacing === false) return undefined;
@@ -69,6 +80,7 @@ export function PaperMenu(props: ParentProps<PaperMenuProps>) {
             isHorizontal() ? styles.horizontal : "",
             local.spacing ? styles.spacing : "",
             local.embedded ? styles.embedded : "",
+            isCompact() ? styles.compact : "",
             local.class,
         ]
             .filter(Boolean)
@@ -118,16 +130,19 @@ export function PaperMenu(props: ParentProps<PaperMenuProps>) {
             onValueChange={local.onValueChange}
         >
             <MenuLevelContext.Provider value={0}>
-                <div
-                    ref={menuRef}
-                    {...rest}
-                    class={className()}
-                    classList={local.classList}
-                    style={style()}
-                    onKeyDown={handleKeyDown}
-                >
-                    {local.children}
-                </div>
+                <PanelNavContext.Provider value={isPanelNav}>
+                    <div
+                        ref={menuRef}
+                        {...rest}
+                        class={className()}
+                        classList={local.classList}
+                        style={style()}
+                        inert={isCompact() && Boolean(panel?.pageOpen?.())}
+                        onKeyDown={handleKeyDown}
+                    >
+                        {local.children}
+                    </div>
+                </PanelNavContext.Provider>
             </MenuLevelContext.Provider>
         </SelectionProvider>
     );
@@ -258,6 +273,27 @@ export function PaperMenuItem(props: ParentProps<PaperMenuItemProps>) {
 
     const { isSelected, select } = useSelectionItem(local.value, local.disabled);
     const contextLevel = useMenuLevel();
+    const panel = usePaperPanel();
+    const isPanelNav = useContext(PanelNavContext);
+    let textRef: HTMLDivElement | undefined;
+
+    // the phone layout's page bar names the open entry with its title and icon
+    // (on mount: the title is read from the rendered label)
+    onMount(() => {
+        if (!isPanelNav || !panel?.registerEntry) return;
+        const unregister = panel.registerEntry(local.value, {
+            // the title is the text block's first element; the description follows
+            title: () => textRef?.firstElementChild?.textContent?.trim() || String(local.value),
+            icon: typeof local.icon === "string" ? local.icon : undefined,
+        });
+        onCleanup(unregister);
+    });
+
+    // tapping an entry opens its page, even the entry already selected
+    const activate = () => {
+        if (local.disabled || !isPanelNav || !panel?.compact?.()) return;
+        panel.openPage?.();
+    };
     const effectiveLevel = () => local.level ?? contextLevel;
 
     const className = () =>
@@ -281,10 +317,12 @@ export function PaperMenuItem(props: ParentProps<PaperMenuItemProps>) {
             class={className()}
             classList={local.classList}
             style={style()}
+            onClick={activate}
             onKeyDown={(e) => {
                 if (!local.disabled && (e.key === "Enter" || e.key === " ")) {
                     e.preventDefault();
                     select();
+                    activate();
                 }
             }}
         >
@@ -300,7 +338,7 @@ export function PaperMenuItem(props: ParentProps<PaperMenuItemProps>) {
                 )}
             </Show>
 
-            <div class={styles.itemText}>
+            <div ref={textRef} class={styles.itemText}>
                 <PaperText class={styles.menuTitle} size={2} weight={500}>
                     {local.children}
                 </PaperText>

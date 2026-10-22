@@ -155,3 +155,15 @@
     flex-direction: column;
     width: 100%;
 }
+
+/* The phone layout: a PaperPanel's sidebar is the whole panel, and its
+   entries are full-width rows you tap to open. */
+.PaperMenu.compact {
+    width: 100%;
+    border-right: 0;
+}
+
+.PaperMenu.compact .PaperMenuItem {
+    padding-top: var(--paper-uigap-threefourths);
+    padding-bottom: var(--paper-uigap-threefourths);
+}

@@ -2,6 +2,7 @@ import styles from "./index.module.css";
 import { createContext, useContext, Show, splitProps, type JSX, type ParentProps } from "solid-js";
 import { PaperPage } from "../PaperPage";
 import { usePaperPanel } from "../../contexts/panel";
+import { PaperSlidePage } from "../../components/PaperSlidePage";
 
 const InterfaceGroupContext = createContext<() => string | number>();
 
@@ -36,11 +37,22 @@ export function PaperInterfaceGroup(props: ParentProps<PaperInterfaceGroupProps>
             .filter(Boolean)
             .join(" ");
 
+    // a phone-width PaperPanel: the group is the page its menu opens
+    const entry = () => panel?.entry?.(local.value);
+
     return (
         <InterfaceGroupContext.Provider value={() => local.value}>
-            <div {...rest} class={className()} classList={local.classList}>
-                {local.children}
-            </div>
+            <PaperSlidePage
+                enabled={Boolean(panel?.compact?.())}
+                open={Boolean(panel?.pageOpen?.())}
+                title={entry()?.title() ?? ""}
+                icon={entry()?.icon}
+                onBack={() => panel?.closePage?.()}
+            >
+                <div {...rest} class={className()} classList={local.classList}>
+                    {local.children}
+                </div>
+            </PaperSlidePage>
         </InterfaceGroupContext.Provider>
     );
 }

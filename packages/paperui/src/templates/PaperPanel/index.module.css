@@ -5,6 +5,8 @@
     display: flex;
     flex-direction: row;
     overflow: hidden;
+    /* the phone layout's interface page covers the panel */
+    position: relative;
 }
 
 .PaperPanel.column {
