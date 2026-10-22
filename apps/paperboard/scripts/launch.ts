@@ -8,7 +8,7 @@ import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { electronChildEnv } from "./launchEnv";
+import { electronChildEnv, electronViteArgs } from "./launchEnv";
 
 const appDir = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const isWindows = process.platform === "win32";
@@ -18,7 +18,7 @@ if (!existsSync(shim)) {
     process.exit(1);
 }
 
-const child = spawn(shim, process.argv.slice(2), {
+const child = spawn(shim, electronViteArgs(process.argv.slice(2)), {
     cwd: appDir,
     stdio: "inherit",
     env: electronChildEnv(process.env),

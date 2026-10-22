@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { electronChildEnv } from "../scripts/launchEnv";
+import { electronChildEnv, electronViteArgs } from "../scripts/launchEnv";
 
 describe("electron dev launcher environment", () => {
     it("strips ELECTRON_RUN_AS_NODE so Electron starts as Electron", () => {
@@ -16,5 +16,18 @@ describe("electron dev launcher environment", () => {
 
     it("leaves a clean environment alone", () => {
         expect(electronChildEnv({ HOME: "/home/x" })).toEqual({ HOME: "/home/x" });
+    });
+});
+
+describe("electron dev launcher arguments", () => {
+    it("passes Paperboard's flags to Electron, which electron-vite would reject", () => {
+        expect(electronViteArgs(["dev", "--mobile"])).toEqual(["dev", "--", "--mobile"]);
+        expect(electronViteArgs(["dev", "--mobile", "--", "--browser", "--browser-port=5871"]))
+            .toEqual(["dev", "--", "--mobile", "--browser", "--browser-port=5871"]);
+    });
+
+    it("leaves electron-vite's own arguments and an existing split alone", () => {
+        expect(electronViteArgs(["dev", "--watch"])).toEqual(["dev", "--watch"]);
+        expect(electronViteArgs(["dev", "--", "--mobile"])).toEqual(["dev", "--", "--mobile"]);
     });
 });
