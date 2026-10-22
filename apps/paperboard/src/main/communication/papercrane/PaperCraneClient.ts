@@ -10,7 +10,11 @@ import {
     DEFAULT_PORT,
 } from "../../../../papercrane";
 import { PROTOCOL_VERSION } from "../../../../papercrane/protocol";
-import { readCraneHandshake } from "../../../../papercrane/handshake";
+import {
+    readCraneHandshake, verifyDaemonProof,
+    DAEMON_CHALLENGE_HEADER, DAEMON_PROOF_TYPE,
+    type CraneHandshakeFile,
+} from "../../../../papercrane/handshake";
 import { getLocalDir } from "../../../../papercrane/paths";
 import {
     peerCertPem,
@@ -59,20 +63,52 @@ export interface PackageInstallInfo {
     installedAt?: string;
 }
 
-// same reader as every other consumer of the handshake file
-// (papercrane/handshake.ts) — validation lives there
-const readCraneJson = readCraneHandshake;
-
-async function probeAlive(port: number): Promise<boolean> {
-    try {
-        const res = await fetch(`http://127.0.0.1:${port}/health`, {
-            signal: AbortSignal.timeout(600),
-        });
-        return res.ok;
-    } catch (err) {
-        logger.debug(`[PaperCraneClient] daemon probe on ${port} failed:`, err);
-        return false;
-    }
+// Prove the peer on the very socket that will carry credentials. A proof
+// from a separate HTTP probe would leave a port-replacement race before WS.
+async function verifiedLocalSocket(creds: CraneHandshakeFile): Promise<WebSocket> {
+    const challenge = crypto.randomBytes(32).toString("hex");
+    const Socket = pinnableWebSocket();
+    const ws = new Socket(`ws://127.0.0.1:${creds.port}`, {
+        headers: { [DAEMON_CHALLENGE_HEADER]: challenge },
+        handshakeTimeout: 1500,
+        maxPayload: 16 * 1024 * 1024,
+    });
+    return new Promise((resolve, reject) => {
+        let settled = false;
+        const timer = setTimeout(() => fail(new Error("Local daemon identity proof timed out")), 1500);
+        const cleanup = () => {
+            clearTimeout(timer);
+            ws.off("message", onProof);
+            ws.off("close", closed);
+        };
+        const fail = (err: Error) => {
+            if (settled) return;
+            settled = true;
+            cleanup();
+            ws.terminate();
+            reject(err);
+        };
+        const closed = () => fail(new Error("Local daemon closed before proving its identity"));
+        const onProof = (raw: import("ws").RawData) => {
+            try {
+                const text = raw.toString();
+                if (text.length > 1024) throw new Error("Oversized local daemon identity proof");
+                const message = JSON.parse(text);
+                if (message.type !== DAEMON_PROOF_TYPE || !verifyDaemonProof(creds.token, challenge, message.proof)) {
+                    throw new Error("Local daemon identity proof mismatch");
+                }
+                settled = true;
+                cleanup();
+                ws.off("error", fail);
+                resolve(ws);
+            } catch (err) {
+                fail(err instanceof Error ? err : new Error(String(err)));
+            }
+        };
+        ws.once("message", onProof);
+        ws.once("error", fail);
+        ws.once("close", closed);
+    });
 }
 
 function isLoopback(host: string): boolean {
@@ -130,6 +166,7 @@ export class PaperCraneClient extends EventEmitter {
     private trustOnFirstUse = false;
     private embeddedServer: ServerInstance | null = null;
     private isConnected: boolean = false;
+    private localIdentityVerified = false;
     private requestIdCounter = 1;
     private pendingRequests = new Map<
         number,
@@ -183,6 +220,11 @@ export class PaperCraneClient extends EventEmitter {
 
     public getToken(): string | undefined {
         return this.token;
+    }
+
+    public getLocalCredentials(): CraneHandshakeFile | null {
+        if (!this.isConnected || !this.localIdentityVerified || !isLoopback(this.host) || !this.token) return null;
+        return { port: this.port, token: this.token };
     }
 
     public getCert(): string | undefined {
@@ -275,22 +317,27 @@ export class PaperCraneClient extends EventEmitter {
             throw new Error(error);
         }
 
-        // trust handshake only after health probe, else restart embedded
+        let localSocket: WebSocket | undefined;
         if (isLocal && !token) {
-            const stored = readCraneJson();
-            if (stored && (await probeAlive(stored.port))) {
-                this.port = stored.port;
-                this.token = stored.token;
-            } else {
+            const stored = readCraneHandshake();
+            if (stored) {
+                try {
+                    localSocket = await verifiedLocalSocket(stored);
+                    this.port = stored.port;
+                    this.token = stored.token;
+                } catch (err) {
+                    // Recovery is a freshly authenticated daemon below; never
+                    // send the stored credential to a peer that failed proof.
+                    logger.warn("[PaperCraneClient] local daemon identity unavailable; starting a fresh daemon:", err);
+                }
+            }
+            if (!localSocket) {
                 try {
                     if (this.embeddedServer?.stop) {
                         this.embeddedServer.stop();
                         this.embeddedServer = null;
                     }
-                    // reuse previous token so authorized-token store stays stable
-                    const freshToken =
-                        stored?.token ??
-                        "pc_" + crypto.randomBytes(24).toString("hex");
+                    const freshToken = "pc_" + crypto.randomBytes(24).toString("hex");
                     this.embeddedServer = await startPaperCraneServer({
                         port: 0,
                         host: "127.0.0.1",
@@ -305,25 +352,28 @@ export class PaperCraneClient extends EventEmitter {
                         this.port = this.embeddedServer.port;
                         this.token = freshToken;
                     }
-                    await new Promise((r) => setTimeout(r, 150));
+                    localSocket = await verifiedLocalSocket({ port: this.port, token: freshToken });
                 } catch (err) {
-                    console.warn(
-                        "[PaperCraneClient] failed to start embedded server:",
-                        err instanceof Error ? err.message : err,
-                    );
+                    this.embeddedServer?.stop();
+                    this.embeddedServer = null;
+                    throw new Error("Failed to start and verify the embedded daemon", { cause: err });
                 }
             }
-            if (gen !== this.generation) throw new Error("Connection attempt was superseded");
+            if (gen !== this.generation) {
+                localSocket?.terminate();
+                throw new Error("Connection attempt was superseded");
+            }
         }
 
+        this.localIdentityVerified = localSocket !== undefined;
         return new Promise((resolve, reject) => {
             const Socket = pinnableWebSocket();
-            const ws = isLocal
+            const ws = localSocket ?? (isLocal
                 ? new Socket(`ws://${host}:${this.port}`)
                 : new Socket(
                       `wss://${host}:${this.port}`,
                       cert ? pinnedTlsOptions(cert) : { rejectUnauthorized: false },
-                  );
+                  ));
             this.ws = ws;
             let settled = false;
             const current = () => gen === this.generation && this.ws === ws;
@@ -346,7 +396,7 @@ export class PaperCraneClient extends EventEmitter {
                 });
             }
 
-            ws.on("open", async () => {
+            const onOpen = async () => {
                 if (!current()) return;
                 // An open socket is not an authenticated one. Verify the
                 // credential before reporting connected: the daemon closes
@@ -379,7 +429,9 @@ export class PaperCraneClient extends EventEmitter {
                     settled = true;
                     resolve(this.getStatus());
                 }
-            });
+            };
+            ws.on("open", onOpen);
+            if (ws.readyState === WebSocket.OPEN) queueMicrotask(onOpen);
 
             ws.on("error", (err: Error) => {
                 if (!current()) return;
@@ -434,6 +486,7 @@ export class PaperCraneClient extends EventEmitter {
                 this.stopHeartbeat();
                 this.ws = null;
                 this.isConnected = false;
+                this.localIdentityVerified = false;
                 const why = reason?.toString("utf8");
                 if (CREDENTIAL_CLOSE_CODES.has(code)) {
                     this.credentialRejected = true;
@@ -531,6 +584,7 @@ export class PaperCraneClient extends EventEmitter {
     // ends the current socket without touching the owner's intent
     private closeSocket(): void {
         this.generation++;
+        this.localIdentityVerified = false;
         this.stopHeartbeat();
         if (this.reconnectTimer) {
             clearTimeout(this.reconnectTimer);
@@ -554,9 +608,7 @@ export class PaperCraneClient extends EventEmitter {
 
     // separate from disconnect so reconnects never kill long-running children
     public stopEmbeddedServer(): void {
-        try {
-            this.embeddedServer?.stop?.();
-        } catch (err) { logger.debug("[PaperCraneClient.ts] op failed:", err) }
+        this.embeddedServer?.stop();
         this.embeddedServer = null;
     }
 

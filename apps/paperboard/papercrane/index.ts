@@ -20,7 +20,11 @@ import { ensureNativeHelpersExecutable } from "./pty";
 import { advertisePaperCrane, isLoopbackHost, type AdvertisementHandle } from "./discovery";
 import { writeFileAtomicSync } from "./storage";
 import { getDisplayHost, getLinuxDistroInfo } from "./util";
-import { getLocalDir, getPaperboardDir } from "./paths";
+import { getLocalDir, getPaperboardDir, ensurePrivateDir } from "./paths";
+import {
+    craneHandshakePath, removeCraneHandshake,
+    DAEMON_CHALLENGE_HEADER, DAEMON_PROOF_TYPE, isDaemonChallenge, daemonProof,
+} from "./handshake";
 import { loadOrCreateTlsIdentity, type TlsIdentity } from "./tlsIdentity";
 import { logger } from "./logger";
 import { PanelServicesManager } from "./panelServices";
@@ -279,13 +283,11 @@ export interface ServerOptions {
 // handshake file for local clients, written on every listen. Throws: a
 // daemon whose handshake was not written is unreachable to its own host,
 // so startup fails instead of reporting a ready server nobody can find.
-function writeCraneJson(port: number, token: string | null) {
-    const file = path.join(getPaperboardDir(), "local", "crane.json");
-    if (!fs.existsSync(path.dirname(file)))
-        fs.mkdirSync(path.dirname(file), { recursive: true });
+function writeCraneJson(file: string, port: number, token: string | null, startId: string) {
+    ensurePrivateDir(path.dirname(file));
     writeFileAtomicSync(
         file,
-        JSON.stringify({ port, token }, null, 2),
+        JSON.stringify({ port, token, startId }, null, 2),
         { mode: 0o600 },
     );
 }
@@ -386,6 +388,8 @@ export function startPaperCraneServer(
                 : http.createServer(onRequest);
             const localServer = tlsIdentity ? http.createServer(onRequest) : null;
 
+            const handshakeFile = craneHandshakePath();
+            const startId = crypto.randomUUID();
             const wss = new WebSocketServer({ noServer: true });
             for (const listener of [server, localServer]) {
                 listener?.on("upgrade", (req, socket, head) => {
@@ -394,7 +398,13 @@ export function startPaperCraneServer(
                         socket.end("HTTP/1.1 421 Misdirected Request\r\nConnection: close\r\nContent-Length: 0\r\n\r\n");
                         return;
                     }
-                    wss.handleUpgrade(req, socket, head, (ws) => wss.emit("connection", ws, req));
+                    wss.handleUpgrade(req, socket, head, (ws) => {
+                        const challenge = req.headers[DAEMON_CHALLENGE_HEADER];
+                        if (staticToken && isDaemonChallenge(challenge)) {
+                            ws.send(JSON.stringify({ type: DAEMON_PROOF_TYPE, proof: daemonProof(staticToken, challenge) }));
+                        }
+                        wss.emit("connection", ws, req);
+                    });
                 });
             }
             setupWebSocketServer(wss, engine, auth, {
@@ -402,7 +412,36 @@ export function startPaperCraneServer(
                 staticToken,
             });
 
+            const removeHandshake = () => removeCraneHandshake(handshakeFile, startId);
+            const onExit = () => {
+                try {
+                    removeHandshake();
+                    auth.flushTokenStore();
+                } finally {
+                    panelServices.stopAll();
+                    engine.killAllClients();
+                }
+            };
+            const onSignal = () => {
+                removeHandshake();
+                panelServices.stopAll();
+                engine.killAllClients();
+                try {
+                    advertisement?.stop();
+                } catch (err) { logger.debug("[index.ts] advertisement stop failed:", err); }
+                removePidFile();
+                process.exit(0);
+            };
+            let stopped = false;
             const stop = () => {
+                if (stopped) return;
+                stopped = true;
+                let handshakeFailure: unknown;
+                try { removeHandshake(); }
+                catch (err) { handshakeFailure = err; }
+                process.off("exit", onExit);
+                process.off("SIGTERM", onSignal);
+                process.off("SIGINT", onSignal);
                 try {
                     auth.flushTokenStore();
                 } catch (err) { logger.debug("[index.ts] op failed:", err) }
@@ -436,6 +475,7 @@ export function startPaperCraneServer(
                         }
                     });
                 } catch (err) { logger.debug("[index.ts] op failed:", err) }
+                if (handshakeFailure) throw handshakeFailure;
             };
 
             // handle sync and async bind errors through one handler
@@ -501,7 +541,7 @@ export function startPaperCraneServer(
                 // the handshake comes first: nothing starts behind a daemon
                 // its own host cannot find
                 try {
-                    writeCraneJson(localPort, staticToken);
+                    writeCraneJson(handshakeFile, localPort, staticToken, startId);
                 } catch (err) {
                     logger.error("[Paperboard Server] could not write the crane.json handshake; not starting:", err);
                     for (const client of wss.clients) client.terminate();
@@ -515,29 +555,9 @@ export function startPaperCraneServer(
                 hasListened = true;
 
                 // children must never outlive the daemon
-                process.once("exit", () => {
-                    auth.flushTokenStore();
-                    panelServices.stopAll();
-                    engine.killAllClients();
-                });
-                process.once("SIGTERM", () => {
-                    panelServices.stopAll();
-                    engine.killAllClients();
-                    try {
-                        advertisement?.stop();
-                    } catch (err) { logger.debug("[index.ts] op failed:", err) }
-                    removePidFile();
-                    process.exit(0);
-                });
-                process.once("SIGINT", () => {
-                    panelServices.stopAll();
-                    engine.killAllClients();
-                    try {
-                        advertisement?.stop();
-                    } catch (err) { logger.debug("[index.ts] op failed:", err) }
-                    removePidFile();
-                    process.exit(0);
-                });
+                process.once("exit", onExit);
+                process.once("SIGTERM", onSignal);
+                process.once("SIGINT", onSignal);
 
                 // Start background services for installed panels
                 try {
