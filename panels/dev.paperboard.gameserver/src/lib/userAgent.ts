@@ -4,7 +4,7 @@
 // same and rejects generic agents. The version is set with the app's by
 // apps/paperboard/scripts/sync-versions.ts.
 export const PAPERBOARD_USER_AGENT =
-    "MileniumHQ/Paperboard/0.2.0 (+https://paperboard.dev)";
+    "MileniumHQ/Paperboard/0.2.1 (+https://paperboard.dev)";
 
 /** fetch with the Paperboard User-Agent unless the caller already set one. */
 export function apiFetch(
