@@ -110,6 +110,9 @@ test("a runtime update waits for the workloads running from that runtime, then i
         new PaperCraneEngine(host, undefined, base, FIXTURE_RELEASE_PUBLIC_KEY).sweepStartupOrphans();
         expect(fs.readFileSync(path.join(packages, "runtime", "bin", "version"), "utf8")).toBe("0.4.0");
 
+        // A same-version different digest is now refused by release ordering.
+        // Offer a newer release so this still exercises download integrity.
+        version = "0.5.0";
         bytes = Buffer.from("broken archive"); digest = "0".repeat(64);
         await expect(next.downloadPackage("runtime", "broken", undefined, digest)).rejects.toThrow(/SHA256/);
         expect(fs.readFileSync(path.join(next.getPackagePath("runtime"), "bin", "version"), "utf8")).toBe("0.4.0");

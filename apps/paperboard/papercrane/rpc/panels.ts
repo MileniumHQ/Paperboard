@@ -31,6 +31,7 @@ export async function handlePanels(action: string, id: unknown, params: any, ctx
                 // registry; version/sha256 are what the caller expects, and
                 // a disagreement refuses. Any downloadUrl sent is ignored.
                 const manifest = await engine.installPanel(panelId, {
+                    allowDowngrade: params?.allowDowngrade === true,
                     version: assertOptStr(params?.version, "version", 64),
                     sha256: assertOptStr(params?.sha256, "sha256", 128),
                 });

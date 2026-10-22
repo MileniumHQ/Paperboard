@@ -1,3 +1,4 @@
+import { requireHost } from "../principal";
 import type { RpcContext } from "./context";
 import { assertStr, assertOptStr } from "./params";
 import { resolvePackageSha256 } from "../packageChecksum";
@@ -18,6 +19,7 @@ export async function handlePackages(action: string, id: unknown, params: any, c
             return true;
         }
         case "package:download": {
+            if (params?.allowDowngrade === true) requireHost(ctx.callerPanelId(), action);
             const downloadId = assertStr(params?.downloadId, "downloadId", 128);
             const packageName = assertStr(params?.packageName, "packageName", 128);
             // plan-carrying callers (updater) supply their checksum fact and
@@ -35,6 +37,7 @@ export async function handlePackages(action: string, id: unknown, params: any, c
                         downloadId,
                     }),
                 sha256,
+                { allowDowngrade: params?.allowDowngrade === true },
             );
             // waiting: verified and staged, installed once the workloads
             // running from the current release stop. Accepted, not completed.

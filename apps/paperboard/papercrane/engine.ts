@@ -32,6 +32,7 @@ import { CredentialStore } from "./credentials";
 import { RpcError } from "./rpc/errors";
 import { ErrorCode } from "./protocol";
 import { resolveRegistryUrl } from "./util";
+import { requireReleaseOrder } from "./releasePolicy";
 import { requirePanelId } from "../../../packages/paperapi/src/panelIdentity";
 import { fetchRegistryRecord } from "./registryRecord";
 import { RELEASE_PUBLIC_KEY, releaseMessage, requireReleaseSignature } from "./releaseSignature";
@@ -41,6 +42,7 @@ export const REGISTRY_URL = resolveRegistryUrl();
 // what a caller expects to install (the release it showed the user or
 // planned an update to); the daemon's own registry lookup must agree
 export interface ExpectedPanelRelease {
+    allowDowngrade?: boolean;
     version?: string;
     sha256?: string;
 }
@@ -1015,16 +1017,17 @@ export class PaperCraneEngine {
         _downloadId: string,
         onProgress?: ProgressCallback,
         expectedSha256?: string,
+        options: { allowDowngrade?: boolean } = {},
     ): Promise<PackageInstallOutcome> {
         const key = `package:${this.sanitizeIdOrThrow(packageName, "package")}`;
         if (this.operations.has(key)) throw new Error(`An operation on ${packageName} is already running`);
         if (this.operations.size >= 8) throw new LimitError("Too many concurrent installs");
         this.operations.add(key);
-        try { return await this.installPackageRelease(packageName, onProgress, expectedSha256); }
+        try { return await this.installPackageRelease(packageName, onProgress, expectedSha256, options); }
         finally { this.operations.delete(key); }
     }
 
-    private async installPackageRelease(packageName: string, onProgress?: ProgressCallback, expectedSha256?: string): Promise<PackageInstallOutcome> {
+    private async installPackageRelease(packageName: string, onProgress?: ProgressCallback, expectedSha256?: string, options: { allowDowngrade?: boolean } = {}): Promise<PackageInstallOutcome> {
         // trust boundary: same rule as installPanel — no checksum fact from
         // the anchor means no install, never proceed with sha256: undefined
         if (typeof expectedSha256 !== "string" || !/^[a-f0-9]{64}$/i.test(expectedSha256)) {
@@ -1037,18 +1040,6 @@ export class PaperCraneEngine {
             logger.info(`[package:${packageName}] ${msg}`);
 
         const targetDir = path.join(this.packagesDir, packageName);
-        if (this.getPackageIndex()[packageName]?.sha256 === expectedSha256 && this.findBinDir(targetDir, 4)) {
-            onProgress?.({ stage: "completed", percent: 100, message: "Requested release is installed" });
-            return { path: targetDir };
-        }
-        // already downloaded and verified, still waiting on its workloads:
-        // swap it now if they are gone, never download the same bytes again
-        if (this.stagedPackages.get(packageName)?.sha256 === expectedSha256) {
-            await this.applyStagedPackage(packageName);
-            const waiting = this.packageUpdateWait(packageName);
-            onProgress?.({ stage: "completed", percent: 100, message: waiting ? "Update waits for running workloads" : "Installed successfully" });
-            return waiting ? { path: targetDir, waiting } : { path: targetDir };
-        }
         const pkgDir = `${targetDir}.staging-${Date.now()}`;
 
         const metaUrl = `${this.registryUrl}/package/${encodeURIComponent(packageName)}.json`;
@@ -1100,6 +1091,24 @@ export class PaperCraneEngine {
             this.releaseKey,
         );
 
+        requireReleaseOrder(
+            { version: meta.version, sha256: expectedSha256 },
+            [this.getPackageIndex()[packageName], this.stagedPackages.get(packageName)],
+            options,
+        );
+
+        if (this.getPackageIndex()[packageName]?.sha256 === expectedSha256 && this.findBinDir(targetDir, 4)) {
+            onProgress?.({ stage: "completed", percent: 100, message: "Requested release is installed" });
+            return { path: targetDir };
+        }
+        // already downloaded and verified, still waiting on its workloads:
+        // swap it now if they are gone, never download the same bytes again
+        if (this.stagedPackages.get(packageName)?.sha256 === expectedSha256) {
+            await this.applyStagedPackage(packageName);
+            const waiting = this.packageUpdateWait(packageName);
+            onProgress?.({ stage: "completed", percent: 100, message: waiting ? "Update waits for running workloads" : "Installed successfully" });
+            return waiting ? { path: targetDir, waiting } : { path: targetDir };
+        }
         // refused before any download: a layout this daemon does not know
         // would install binaries where no caller looks for them
         const layout = parsePackageLayout(downloadInfo.layout);
@@ -1306,6 +1315,11 @@ export class PaperCraneEngine {
             } catch (err: any) {
                 if (err?.message?.includes("symlinked for development")) throw err;
             }
+        }
+        if (fs.existsSync(targetDir)) {
+            const version = this.installedPanelVersion(cleanId);
+            if (!version) throw new Error(`Install refused for "${cleanId}": installed manifest has no version`);
+            requireReleaseOrder(release, [{ version }], expected);
         }
         const stagingDir = `${targetDir}.staging-${Date.now()}`;
         const tempArchive = path.join(

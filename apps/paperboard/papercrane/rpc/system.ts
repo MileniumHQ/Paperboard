@@ -11,7 +11,7 @@ import { rpcErrorCode } from "./params";
 import { forbidden } from "./errors";
 import { getGpuReport } from "../gpu";
 import { usageSampler, type UsageRoots } from "../usage";
-import { semverGt } from "../util";
+import { requireReleaseOrder } from "../releasePolicy";
 import { releaseMessage, verifyRelease } from "../releaseSignature";
 
 // self-update URL must be https or loopback http
@@ -133,7 +133,9 @@ export async function handleSystem(action: string, id: unknown, params: any, ctx
                 reply(id, null, "Refusing update: the release version is required");
                 return true;
             }
-            if (!semverGt(version, PAPERCRANE_VERSION)) {
+            try {
+                requireReleaseOrder({ version }, [{ version: PAPERCRANE_VERSION }], { requireNewer: true });
+            } catch (err) {
                 reply(id, null, `Refusing update: ${version} is not newer than the running ${PAPERCRANE_VERSION}`);
                 return true;
             }

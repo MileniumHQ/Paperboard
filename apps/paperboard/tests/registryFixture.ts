@@ -23,6 +23,8 @@ export interface FixtureRelease {
 export interface FixtureRegistry {
     url: string;
     releases: Map<string, FixtureRelease>;
+    packages: Map<string, FixtureRelease>;
+    publishPackage(name: string, version: string, contents?: string): Promise<FixtureRelease>;
     /** packs `files` (relative path → contents) and lists it as the panel's release */
     publish(id: string, version: string, files: Record<string, string>, recordOverrides?: Record<string, unknown>): Promise<FixtureRelease>;
     stop(): Promise<void>;
@@ -30,11 +32,22 @@ export interface FixtureRegistry {
 
 export async function startFixtureRegistry(workDir: string): Promise<FixtureRegistry> {
     const releases = new Map<string, FixtureRelease>();
+    const packages = new Map<string, FixtureRelease>();
     const server = Bun.serve({
         hostname: "127.0.0.1",
         port: 0,
         fetch(request) {
             const { pathname } = new URL(request.url);
+            const pkg = /^\/package\/([^/]+)\/(download\.tar\.gz)$/.exec(pathname);
+            if (pkg) {
+                const release = packages.get(decodeURIComponent(pkg[1]));
+                return release ? new Response(release.archive) : new Response("not found", { status: 404 });
+            }
+            const pkgRecord = /^\/package\/([^/]+)\.json$/.exec(pathname);
+            if (pkgRecord) {
+                const release = packages.get(decodeURIComponent(pkgRecord[1]));
+                return release ? Response.json(release.record) : new Response("not found", { status: 404 });
+            }
             const download = /^\/panel\/([^/]+)\/download$/.exec(pathname);
             if (download) {
                 const release = releases.get(decodeURIComponent(download[1]));
@@ -53,6 +66,19 @@ export async function startFixtureRegistry(workDir: string): Promise<FixtureRegi
     return {
         url,
         releases,
+        packages,
+        async publishPackage(name, version, contents = version) {
+            const release = await this.publish(`fixture-${name}`, version, { "bin/version": contents });
+            releases.delete(`fixture-${name}`);
+            const platform = `${process.platform === "win32" ? "windows" : process.platform === "darwin" ? "macos" : "linux"}-${process.arch === "arm64" ? "arm64" : "x64"}`;
+            const sha256 = release.record.sha256 as string;
+            release.record = { name, version, platforms: { [platform]: {
+                url: `${url}/package/${name}/download.tar.gz`, sha256, layout: "root",
+                signature: fixtureSign(releaseMessage.package(name, version, platform, sha256)),
+            } } };
+            packages.set(name, release);
+            return release;
+        },
         async publish(id, version, files, recordOverrides = {}) {
             const source = path.join(workDir, `release-src-${++n}`);
             fs.rmSync(source, { recursive: true, force: true });

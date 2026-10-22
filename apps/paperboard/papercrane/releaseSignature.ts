@@ -5,8 +5,9 @@
 // archives, runtime packages and daemon binaries are therefore also signed
 // offline with the Paperboard release key (ed25519), and the daemon verifies
 // that signature against the public key compiled in here before downloading
-// or activating any of them. For those three, a registry compromise without
-// the offline key installs nothing.
+// or activating any of them. This prevents a registry from authorizing
+// unsigned bytes. Signatures do not establish freshness: releasePolicy.ts
+// compares installed/staged versions, and a fresh install has no local floor.
 //
 // App updates are the exception. publish.ts signs releaseMessage.app into
 // the KV version record, but the shell installs app builds through
@@ -45,7 +46,7 @@ export const releaseMessage = {
     panel: (id: string, version: string, sha256: string) => message("panel", [id, version, sha256.toLowerCase()]),
     package: (name: string, version: string, platform: string, sha256: string) =>
         message("package", [name, version, platform, sha256.toLowerCase()]),
-    // daemon binaries are identified by sha256, app builds by the sha512 the
+    // daemon archives are identified by sha256, app builds by the sha512 the
     // electron-updater feed carries (base64, as the feed writes it)
     crane: (version: string, sha256: string) => message("crane", [version, sha256.toLowerCase()]),
     app: (version: string, file: string, sha512: string) => message("app", [version, file, sha512]),
