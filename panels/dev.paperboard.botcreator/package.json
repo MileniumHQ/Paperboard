@@ -14,7 +14,7 @@
         "@mileniumhq/paperapi": "workspace:*",
         "@mileniumhq/paperui": "workspace:*",
         "discord.js": "^14.27.0",
-        "solid-js": "^1.9.15"
+        "solid-js": "^1.9.17"
     },
     "devDependencies": {
         "typescript": "~6.0.3",
