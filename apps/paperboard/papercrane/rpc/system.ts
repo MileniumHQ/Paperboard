@@ -1,9 +1,6 @@
 import * as os from "os";
 import { computerHostname } from "../hostname";
-import * as fs from "fs";
-import { spawn } from "child_process";
 import { getDetailedOsInfo, getNetworkIp } from "../index";
-import { streamToFileWithProgress } from "../storage";
 import { PAPERCRANE_VERSION } from "../discovery";
 import { logger } from "../logger";
 import type { RpcContext } from "./context";
@@ -12,7 +9,7 @@ import { forbidden } from "./errors";
 import { getGpuReport } from "../gpu";
 import { usageSampler, type UsageRoots } from "../usage";
 import { requireReleaseOrder } from "../releasePolicy";
-import { releaseMessage, verifyRelease } from "../releaseSignature";
+import { installCraneRelease, confirmCraneUpdate } from "../craneUpdate";
 
 // self-update URL must be https or loopback http
 function isSafeUpdateUrl(rawUrl: string): boolean {
@@ -61,6 +58,7 @@ export async function handleSystem(action: string, id: unknown, params: any, ctx
         }
         case "system:info": {
             const osInfo = await getDetailedOsInfo();
+            if (ctx.callerPanelId() === null) await confirmCraneUpdate(process.execPath, PAPERCRANE_VERSION);
             reply(id, {
                 service: "papercrane",
                 version: PAPERCRANE_VERSION,
@@ -139,61 +137,15 @@ export async function handleSystem(action: string, id: unknown, params: any, ctx
                 reply(id, null, `Refusing update: ${version} is not newer than the running ${PAPERCRANE_VERSION}`);
                 return true;
             }
-            if (!verifyRelease(releaseMessage.crane(version, sha256), signature)) {
-                reply(id, null, "Refusing update: the binary is not signed by the Paperboard release key");
-                return true;
-            }
-            reply(id, { success: true, message: "Update initiated" });
-            setTimeout(async () => {
-                const tmpPath = `${process.execPath}.tmp-${Date.now()}`;
-                try {
-                    // single path for downloads: 2GB cap + stall timeout +
-                    // sha256 verification, same machinery as panels/packages
-                    await streamToFileWithProgress(
-                        downloadUrl,
-                        tmpPath,
-                        undefined,
-                        undefined,
-                        sha256,
-                    );
-                    const execPath = process.execPath;
-                    await fs.promises.chmod(tmpPath, 0o755);
-                    await fs.promises.rename(tmpPath, execPath);
-                    // relaunch detached before exiting, embedded must not respawn
-                    if (!process.versions.electron) {
-                        try {
-                            const child = spawn(
-                                execPath,
-                                process.argv.slice(1),
-                                {
-                                    detached: true,
-                                    stdio: "ignore",
-                                    env: {
-                                        ...process.env,
-                                        PAPERCRANE_RESPAWNED: "1",
-                                    },
-                                },
-                            );
-                            child.on("error", (err) =>
-                                console.error("[Paperboard Server:Update] respawn failed:", err),
-                            );
-                            child.unref();
-                            // let the replacement bind before handing off
-                            await new Promise((r) => setTimeout(r, 300));
-                        } catch (err) {
-                            console.error("[Paperboard Server:Update] respawn failed:", err);
-                        }
-                    }
-                    process.exit(0);
-                } catch (err) {
-                    console.error("[PaperCrane:Update:Error]", err);
-                    try {
-                        if (fs.existsSync(tmpPath)) await fs.promises.unlink(tmpPath);
-                    } catch (cleanupErr) {
-                        console.error("[Paperboard Server:Update] tmp cleanup failed:", cleanupErr);
-                    }
-                }
-            }, 500);
+            const outcome = await installCraneRelease({ downloadUrl, sha256, version, signature, execPath: process.execPath });
+            // Saved, not activated. Starting a replacement before this daemon
+            // releases its listener races index.ts's stale-instance takeover.
+            // A restart supervisor must observe old exit and new authenticated
+            // readiness; until that exists, keep this daemon running and retain
+            // exactly one parked executable for recovery. The next generation's
+            // authenticated system:info removes it after version confirmation.
+            reply(id, { accepted: true, status: outcome.status, restartRequired: true,
+                message: "Verified daemon replacement saved; restart the daemon to activate it" });
             return true;
         }
         default:

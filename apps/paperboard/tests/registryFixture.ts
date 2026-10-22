@@ -24,6 +24,8 @@ export interface FixtureRegistry {
     url: string;
     releases: Map<string, FixtureRelease>;
     packages: Map<string, FixtureRelease>;
+    assets: Map<string, Uint8Array>;
+    publishCrane(version: string, files: Record<string, string>): Promise<FixtureRelease>;
     publishPackage(name: string, version: string, contents?: string): Promise<FixtureRelease>;
     /** packs `files` (relative path → contents) and lists it as the panel's release */
     publish(id: string, version: string, files: Record<string, string>, recordOverrides?: Record<string, unknown>): Promise<FixtureRelease>;
@@ -33,11 +35,14 @@ export interface FixtureRegistry {
 export async function startFixtureRegistry(workDir: string): Promise<FixtureRegistry> {
     const releases = new Map<string, FixtureRelease>();
     const packages = new Map<string, FixtureRelease>();
+    const assets = new Map<string, Uint8Array>();
     const server = Bun.serve({
         hostname: "127.0.0.1",
         port: 0,
         fetch(request) {
             const { pathname } = new URL(request.url);
+            const asset = assets.get(pathname);
+            if (asset) return new Response(asset);
             const pkg = /^\/package\/([^/]+)\/(download\.tar\.gz)$/.exec(pathname);
             if (pkg) {
                 const release = packages.get(decodeURIComponent(pkg[1]));
@@ -67,6 +72,18 @@ export async function startFixtureRegistry(workDir: string): Promise<FixtureRegi
         url,
         releases,
         packages,
+        assets,
+        async publishCrane(version, files) {
+            const release = await this.publish("fixture-crane", version, files);
+            releases.delete("fixture-crane");
+            const target = `${process.platform === "darwin" ? "macos" : "linux"}-${process.arch}`;
+            const pathname = `/crane-${target}.tar.gz`;
+            const sha256 = release.record.sha256 as string;
+            release.record = { version, sha256, downloadUrl: `${url}${pathname}`,
+                signature: fixtureSign(releaseMessage.crane(version, sha256)) };
+            assets.set(pathname, release.archive);
+            return release;
+        },
         async publishPackage(name, version, contents = version) {
             const release = await this.publish(`fixture-${name}`, version, { "bin/version": contents });
             releases.delete(`fixture-${name}`);
@@ -107,6 +124,7 @@ export async function startFixtureRegistry(workDir: string): Promise<FixtureRegi
         },
         async stop() {
             await server.stop(true);
+            releases.clear(); packages.clear(); assets.clear();
         },
     };
 }
