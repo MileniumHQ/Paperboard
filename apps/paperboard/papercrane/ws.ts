@@ -590,7 +590,7 @@ export function setupWebSocketServer(
                         reply(null, "Pairing requires a new unauthenticated connection", ErrorCode.FORBIDDEN);
                         return;
                     }
-                    const result = auth.pair(params?.code, params?.clientName);
+                    const result = auth.pair(params?.code, params?.clientName, String(req?.socket?.remoteAddress ?? "unknown"));
                     if (result.success && result.token) {
                         grantIdentity(result.token, null);
                         const osInfo = await getDetailedOsInfo();

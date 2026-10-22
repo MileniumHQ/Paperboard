@@ -1,5 +1,6 @@
 import * as path from "path";
 import * as crypto from "crypto";
+import { isIP } from "node:net";
 import { EventEmitter } from "events";
 import {
     readStateFileSync,
@@ -35,10 +36,29 @@ export interface AuthorizedToken {
 const BASE_LOCKOUT_MS = 5_000;
 const ESCALATED_LOCKOUT_MS = 30_000;
 const LOCKOUT_ESCALATION_THRESHOLD = 3;
-// wrong codes one pairing session tolerates before it ends: the lockout
-// slows guessing, this caps it, so a code that stays open for days cannot
-// be walked. Starting pairing again issues a new code.
-export const MAX_PAIRING_FAILURES = 10;
+// A peer cannot spend the whole session budget, even after waiting out its
+// lockouts. The larger global cap still stops distributed guessing.
+const MAX_PAIRING_FAILURES_PER_ADDRESS = 10;
+export const MAX_PAIRING_FAILURES = 100;
+
+// Transport callers supply the actual peer address, never a message field.
+// Native IPv6 shares a /64; mapped IPv4 must retain its IPv4 identity rather
+// than putting every IPv4 caller into the same ::ffff:0:0/64 bucket.
+function pairingAddressKey(address: string): string {
+    const ip = address.split("%", 1)[0];
+    if (isIP(ip) === 4) return ip;
+    if (isIP(ip) !== 6) return "unknown";
+    const canonical = new URL(`http://[${ip}]/`).hostname.slice(1, -1);
+    const [head, tail] = canonical.split("::");
+    const left = head ? head.split(":") : [];
+    const right = tail ? tail.split(":") : [];
+    const parts = tail === undefined ? left : [...left, ...Array(8 - left.length - right.length).fill("0"), ...right];
+    const words = parts.map((part) => parseInt(part, 16));
+    if (words.slice(0, 5).every((word) => word === 0) && words[5] === 0xffff) {
+        return `${words[6] >> 8}.${words[6] & 255}.${words[7] >> 8}.${words[7] & 255}`;
+    }
+    return `${words.slice(0, 4).map((word) => word.toString(16)).join(":")}::/64`;
+}
 
 // token vault cap: refusals for NEW pairing only, never automatic eviction
 // of already-trusted credentials
@@ -58,8 +78,10 @@ export class PaperCraneAuth extends EventEmitter {
     private tokensFile: string;
     private pairingCode: string | null = null;
     private pairingActive: boolean = false;
-    private lockedUntil: number = 0;
-    private failedAttempts: number = 0;
+    // Only counted wrong guesses create entries. Thus the map has fewer
+    // than MAX_PAIRING_FAILURES entries before the global cap clears it;
+    // never evict a peer and hand it a fresh guessing budget mid-session.
+    private pairingAttempts = new Map<string, { failures: number; lockedUntil: number }>();
     private sessionFailures: number = 0;
     private authorizedTokens: Map<string, AuthorizedToken> = new Map();
     // per-token lookup index keyed by the token's SHA-256 digest. Lookup
@@ -213,8 +235,7 @@ export class PaperCraneAuth extends EventEmitter {
     public startPairing(): string {
         this.pairingCode = this.generatePairingCode();
         this.pairingActive = true;
-        this.sessionFailures = 0;
-        // restarting pairing never resets the brute-force lockout
+        this.resetPairingAttempts();
         this.emit("pairingStarted", this.pairingCode);
         return this.pairingCode;
     }
@@ -222,6 +243,7 @@ export class PaperCraneAuth extends EventEmitter {
     public cancelPairing(reason: "cancelled" | "too-many-failures" = "cancelled"): void {
         this.pairingActive = false;
         this.pairingCode = null;
+        this.resetPairingAttempts();
         this.emit("pairingCancelled", reason);
     }
 
@@ -303,6 +325,7 @@ export class PaperCraneAuth extends EventEmitter {
     }
 
     public dispose(): void {
+        this.resetPairingAttempts();
         if (this.lastSeenFlushTimer) {
             clearTimeout(this.lastSeenFlushTimer);
             this.lastSeenFlushTimer = null;
@@ -310,10 +333,16 @@ export class PaperCraneAuth extends EventEmitter {
         if (this.tokensDirty) this.saveTokens();
     }
 
-    public isLocked(): { locked: boolean; remainingSeconds: number } {
+    private resetPairingAttempts(): void {
+        this.pairingAttempts.clear();
+        this.sessionFailures = 0;
+    }
+
+    public isLocked(peerAddress = "unknown"): { locked: boolean; remainingSeconds: number } {
         const now = this.now();
-        if (now < this.lockedUntil) {
-            const remainingSeconds = Math.ceil((this.lockedUntil - now) / 1000);
+        const lockedUntil = this.pairingAttempts.get(pairingAddressKey(peerAddress))?.lockedUntil ?? 0;
+        if (now < lockedUntil) {
+            const remainingSeconds = Math.ceil((lockedUntil - now) / 1000);
             return { locked: true, remainingSeconds };
         }
         return { locked: false, remainingSeconds: 0 };
@@ -322,6 +351,7 @@ export class PaperCraneAuth extends EventEmitter {
     public pair(
         code: string,
         clientName?: string,
+        peerAddress = "unknown",
     ): {
         success: boolean;
         token?: string;
@@ -339,7 +369,15 @@ export class PaperCraneAuth extends EventEmitter {
             };
         }
 
-        const lockStatus = this.isLocked();
+        const addressKey = pairingAddressKey(peerAddress);
+        const attempt = this.pairingAttempts.get(addressKey);
+        if (attempt && attempt.failures >= MAX_PAIRING_FAILURES_PER_ADDRESS) {
+            return {
+                success: false,
+                error: "Too many wrong pairing codes from this address. Start pairing again on the server to retry.",
+            };
+        }
+        const lockStatus = this.isLocked(peerAddress);
         if (lockStatus.locked) {
             return {
                 success: false,
@@ -353,7 +391,9 @@ export class PaperCraneAuth extends EventEmitter {
         // secret in the daemon (one invariant, one implementation)
         const cleanInput = String(code ?? "").replace(/\s+/g, "").trim();
         if (!secretsMatch(cleanInput, this.pairingCode)) {
-            this.failedAttempts++;
+            const failed = attempt ?? { failures: 0, lockedUntil: 0 };
+            failed.failures++;
+            this.pairingAttempts.set(addressKey, failed);
             this.sessionFailures++;
             if (this.sessionFailures >= MAX_PAIRING_FAILURES) {
                 this.cancelPairing("too-many-failures");
@@ -364,18 +404,16 @@ export class PaperCraneAuth extends EventEmitter {
             }
             // short penalty first, long on clear brute-forcing
             const lockoutMs =
-                this.failedAttempts >= LOCKOUT_ESCALATION_THRESHOLD
+                failed.failures >= LOCKOUT_ESCALATION_THRESHOLD
                     ? ESCALATED_LOCKOUT_MS
                     : BASE_LOCKOUT_MS;
-            this.lockedUntil = this.now() + lockoutMs;
+            failed.lockedUntil = this.now() + lockoutMs;
             return {
                 success: false,
                 error: `Invalid pairing code. Pairing is locked for ${Math.round(lockoutMs / 1000)} seconds.`,
                 remainingSeconds: Math.round(lockoutMs / 1000),
             };
         }
-
-        this.failedAttempts = 0;
 
         const pairedCount = [...this.authorizedTokens.values()].filter((entry) => !entry.panelId && entry.clientName !== "host").length;
         if (pairedCount >= MAX_TOKENS) {
@@ -398,6 +436,7 @@ export class PaperCraneAuth extends EventEmitter {
 
         this.pairingActive = false;
         this.pairingCode = null;
+        this.resetPairingAttempts();
         this.emit("paired", entry);
 
         return { success: true, token };

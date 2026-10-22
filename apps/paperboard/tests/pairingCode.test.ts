@@ -7,7 +7,7 @@ import { describe, it, expect, afterEach } from "bun:test";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
-import { PaperCraneAuth, MAX_PAIRING_FAILURES } from "../papercrane/auth";
+import { PaperCraneAuth } from "../papercrane/auth";
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -52,7 +52,9 @@ describe("pairing code credential", () => {
         }
     });
 
-    it("ends the pairing session after too many wrong codes, so the code cannot be walked", () => {
+    // The former test expected a single peer to cancel the whole session.
+    // That was the availability defect: exhaust only that peer's budget.
+    it("caps a peer's guesses without cancelling another device's pairing", () => {
         let clock = 0;
         const auth = freshAuth(() => clock);
         const ended: string[] = [];
@@ -60,20 +62,14 @@ describe("pairing code credential", () => {
         try {
             const code = auth.startPairing().replace(/\s+/g, "");
             const wrong = code.split("").map((d) => (d === "0" ? "1" : "0")).join("");
-            for (let i = 1; i < MAX_PAIRING_FAILURES; i++) {
-                expect(auth.pair(wrong).error).toMatch(/Invalid pairing code/);
-                clock += 60_000; // past every lockout
+            for (let i = 0; i < 10; i++) {
+                expect(auth.pair(wrong, undefined, "192.0.2.1").error).toMatch(/Invalid pairing code/);
+                clock += 60_000;
             }
-            expect(auth.pair(wrong).error).toMatch(/Pairing has ended/);
-            expect(ended).toEqual(["too-many-failures"]);
-            expect(auth.isPairingActive()).toBe(false);
-            clock += 60_000;
-            // the walked code is dead even when guessed right
-            expect(auth.pair(code).success).toBe(false);
-            // a new session issues a fresh budget
-            clock += 60_000;
-            const next = auth.startPairing().replace(/\s+/g, "");
-            expect(auth.pair(next).success).toBe(true);
+            expect(auth.pair(wrong, undefined, "192.0.2.1").error).toMatch(/Too many wrong pairing codes from this address/);
+            expect(ended).toEqual([]);
+            expect(auth.isPairingActive()).toBe(true);
+            expect(auth.pair(code, undefined, "192.0.2.2").success).toBe(true);
         } finally {
             auth.dispose();
         }

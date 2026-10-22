@@ -39,21 +39,22 @@ describe("PaperCraneAuth pairing", () => {
         expect(auth.pair(code).success).toBe(false);
     });
 
-    it("escalates lockout after repeated wrong attempts", () => {
+    it("escalates a peer's lockout within one pairing session", () => {
         let clock = 1_000_000;
-        const now = () => clock;
-        const auth = new PaperCraneAuth(false, tmp, now);
-        auth.startPairing();
-        auth.pair("111111"); // 1st fail — 5s
-        clock += 6_000;
-        auth.cancelPairing();
-        auth.startPairing();
-        auth.pair("222222"); // 2nd fail — 5s
-        clock += 6_000;
-        auth.cancelPairing();
-        auth.startPairing();
-        const res = auth.pair("333333"); // 3rd fail — escalated
-        expect(res.remainingSeconds).toBe(30);
+        const auth = new PaperCraneAuth(false, tmp, () => clock);
+        try {
+            const code = auth.startPairing();
+            const wrong = code === "000000" ? "111111" : "000000";
+            auth.pair(wrong); // 1st fail — 5s
+            clock += 6_000;
+            auth.pair(wrong); // 2nd fail — 5s
+            clock += 6_000;
+            // Escalation belongs to this peer in this session. The former
+            // test carried failures across cancel/start, which was a defect.
+            expect(auth.pair(wrong).remainingSeconds).toBe(30);
+        } finally {
+            auth.dispose();
+        }
     });
 
     it("rejects pairing when no pairing session is active", () => {
