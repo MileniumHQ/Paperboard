@@ -6,6 +6,7 @@ import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
+import { PaperCraneEngine } from "../papercrane/engine";
 import { PaperCraneAuth } from "../papercrane/auth";
 import { PanelServicesManager } from "../papercrane/panelServices";
 import { handleSecrets } from "../papercrane/rpc/secrets";
@@ -165,22 +166,10 @@ describe("vault derives identity from the token claim", () => {
 
 describe("terminal/process id ownership", () => {
     function stubEngine() {
-        const owners = new Map<string, string | null>();
+        const engine = new PaperCraneEngine(dir);
         const writes: string[] = [];
-        return {
-            owners,
-            writes,
-            clientOwner: (id: string) => owners.get(id) ?? null,
-            setClientOwner: (id: string, owner: string | null) => {
-                owners.set(id, owner);
-            },
-            recordClientOwner: (id: string, owner: string | null) => {
-                owners.set(id, owner);
-            },
-            writeTerminal: (id: string) => {
-                writes.push(id);
-            },
-        };
+        engine.writeTerminal = (id: string) => { writes.push(id); };
+        return Object.assign(engine, { writes });
     }
 
     function termCtx(engine: any, claim: string | null) {
@@ -198,10 +187,12 @@ describe("terminal/process id ownership", () => {
         };
     }
 
-    it("claimClient records the creator claim once the workload starts", async () => {
+    it("claimClient reserves the creator during start and drops it if no workload survives", async () => {
         const engine = stubEngine();
-        await claimClient("t1", termCtx(engine, "a").ctx as any, "term:create", async () => undefined);
-        expect(engine.owners.get("t1")).toBe("a");
+        await claimClient("t1", termCtx(engine, "a").ctx as any, "term:create", async () => {
+            expect(engine.clientOwner("t1")).toBe("a");
+        });
+        expect(engine.clientOwner("t1")).toBeNull();
     });
 
     it("claimClient records nothing when the workload fails to start", async () => {
@@ -209,12 +200,12 @@ describe("terminal/process id ownership", () => {
         await expect(
             claimClient("t1", termCtx(engine, "a").ctx as any, "term:create", async () => { throw new Error("spawn failed"); }),
         ).rejects.toThrow("spawn failed");
-        expect(engine.owners.has("t1")).toBe(false);
+        expect(engine.clientOwner("t1")).toBeNull();
     });
 
     it("a scoped caller cannot touch another panel's terminal", async () => {
         const engine = stubEngine();
-        engine.owners.set("t1", "gameserver");
+        engine.setClientOwner("t1", "gameserver");
         const f = termCtx(engine, "botcreator");
         await expect(handleTerminal("term:write", 1, { id: "t1", data: "x" }, f.ctx as any)).rejects.toMatchObject({
             code: "FORBIDDEN",
@@ -224,13 +215,13 @@ describe("terminal/process id ownership", () => {
 
     it("a scoped caller cannot re-create another panel's id to take it over", async () => {
         const engine = stubEngine();
-        engine.owners.set("t1", "gameserver");
+        engine.setClientOwner("t1", "gameserver");
         let started = false;
         await expect(
             claimClient("t1", termCtx(engine, "botcreator").ctx as any, "term:create", async () => { started = true; }),
         ).rejects.toThrow(/another panel/);
         expect(started).toBe(false);
-        expect(engine.owners.get("t1")).toBe("gameserver");
+        expect(engine.clientOwner("t1")).toBe("gameserver");
     });
 
     it("no caller, master included, may plant a credential in a child env", () => {
@@ -244,7 +235,7 @@ describe("terminal/process id ownership", () => {
 
     it("owner and unclaimed ids proceed without a mismatch", () => {
         const engine = stubEngine();
-        engine.owners.set("t1", "a");
+        engine.setClientOwner("t1", "a");
         // matching claim: silent
         checkClientOwnership("t1", termCtx(engine, "a").ctx as any, "term:write");
         // unclaimed id: shared, silent

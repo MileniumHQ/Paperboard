@@ -318,11 +318,38 @@ export class PaperCraneEngine {
         }
     }
 
-    // records the creator of a workload that now exists. A workload that
-    // already exited (and was forgotten) gets no entry.
-    public recordClientOwner(id: string, owner: string | null): void {
-        if (!this.clients.has(id)) return;
-        this.setClientOwner(id, owner);
+    // A reservation exists before start exposes a client. The bounded set
+    // excludes overlapping starts (including host starts) so one failure
+    // cannot restore the ledger over a newer claim. Both outcomes release it.
+    private startingClients = new Set<string>();
+
+    public reserveClientOwner(id: string, owner: string | null): { commit(): void; undo(): void } {
+        if (this.startingClients.has(id)) throw new RpcError(ErrorCode.CONFLICT, `Process ${id} is already starting`);
+        if (this.startingClients.size >= 10_000) throw new LimitError("Too many starting workloads");
+        const had = this.clientOwners.has(id);
+        const previous = this.clientOwners.get(id) ?? null;
+        try {
+            this.setClientOwner(id, owner);
+        } catch (err) {
+            // Atomic persistence failed; do not leave an in-memory claim for
+            // a start that was never attempted.
+            if (had) this.clientOwners.set(id, previous);
+            else this.clientOwners.delete(id);
+            throw err;
+        }
+        this.startingClients.add(id);
+        return {
+            commit: () => {
+                this.startingClients.delete(id);
+                // An immediate exit may already have removed the workload.
+                if (!this.clients.has(id)) this.forgetClientOwner(id);
+            },
+            undo: () => {
+                this.startingClients.delete(id);
+                if (had) this.setClientOwner(id, previous);
+                else this.forgetClientOwner(id);
+            },
+        };
     }
 
     // drops a finished workload's ledger entry, on disk too: an entry left
@@ -331,6 +358,9 @@ export class PaperCraneEngine {
     // other panels that id) — it never grants anything — so it is logged
     // rather than thrown into the exit path that called this.
     private forgetClientOwner(id: string): void {
+        // Startup still owns this id even if its child exits immediately.
+        // commit/undo releases the reservation after start is observed.
+        if (this.startingClients.has(id)) return;
         if (!this.clientOwners.delete(id)) return;
         try {
             writeJsonAtomicSync(path.join(this.localDir, "process-owners.json"), Object.fromEntries(this.clientOwners), { mode: 0o600 });
