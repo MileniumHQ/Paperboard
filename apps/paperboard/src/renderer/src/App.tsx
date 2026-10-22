@@ -127,11 +127,17 @@ const App: Component = () => {
     // and what's opened from them slides in over them as its own page.
     const [mobile, setMobile] = createSignal(false);
     const [mobilePageOpen, setMobilePageOpen] = createSignal(false);
+    // the rail's Settings opens as a page over whatever the rail shows
+    const [mobileSettingsOpen, setMobileSettingsOpen] = createSignal(false);
     const openMobilePage = () => {
         if (mobile()) setMobilePageOpen(true);
     };
 
     const handleRailSelect = (val: string) => {
+        if (val === "__settings" && mobile()) {
+            setMobileSettingsOpen(true);
+            return;
+        }
         setMobilePageOpen(false);
         if (val === "__home") {
             setRailMode("home");
@@ -574,6 +580,7 @@ const App: Component = () => {
         >
             <PaperFlex
                 direction="column"
+                inert={mobileSettingsOpen()}
                 style={{ width: "100vw", height: "100vh", overflow: "hidden" }}
             >
                 <TopBar
@@ -959,6 +966,25 @@ const App: Component = () => {
                     />
                 </PaperFlex>
             </PaperFlex>
+
+            <Show when={mobile()}>
+                <MobilePage
+                    enabled
+                    open={mobileSettingsOpen()}
+                    title="Settings"
+                    icon="settings"
+                    onBack={() => setMobileSettingsOpen(false)}
+                >
+                    <div style={{ flex: 1, "min-height": 0, "overflow-y": "auto" }}>
+                        <AppSettings
+                            compact
+                            settings={appSettings()}
+                            onChange={handleAppSettingsChange}
+                            onShowTutorial={() => setOpenTutorial("app")}
+                        />
+                    </div>
+                </MobilePage>
+            </Show>
 
             <AppUpdateModal state={appUpdate.state()} open={appUpdate.open()} onClose={() => appUpdate.setOpen(false)} />
             <PackageUpdateModal
