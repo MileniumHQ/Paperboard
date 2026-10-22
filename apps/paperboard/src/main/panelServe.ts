@@ -8,7 +8,6 @@ import { STATUS_CODES } from "http";
 import connectionPool from "./communication/papercrane/ConnectionPool";
 import { logger } from "../../papercrane/logger";
 import { getPanelsDir } from "../../papercrane/paths";
-import { readCraneHandshake } from "../../papercrane/handshake";
 import { sanitizeId } from "../../papercrane/storage";
 import { lookupMime } from "../../papercrane/mime";
 import {
@@ -50,14 +49,16 @@ const injectCraneCreds = async (
     comp: string,
     panelId?: string,
 ): Promise<string> => {
-    const creds = readCraneHandshake();
     if (!panelId) throw new Error("Panel credential injection requires an explicit panel id");
-    const granted = await connectionPool.getClient("local").call<{ token: string }>(
+    const client = connectionPool.getClient("local");
+    const granted = await client.call<{ token: string }>(
         "auth:panel-token",
         comp === "local" ? { panelId } : { panelId, relayTo: comp },
     );
     const scoped = granted?.token;
     if (typeof scoped !== "string" || !scoped) throw new Error("Daemon did not issue a panel credential");
+    const creds = client.getLocalCredentials();
+    if (!creds) throw new Error("CRANE_NOT_READY");
     const payload = buildCraneCredentialPayload(creds, comp, panelId, scoped);
     const bootstrap = `<script>window.__PAPERBOARD_CRANE=${payload};</script>`;
     if (/<head[^>]*>/i.test(html)) {

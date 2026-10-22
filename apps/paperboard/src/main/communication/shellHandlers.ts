@@ -10,7 +10,6 @@ import discovery from "./discovery";
 import { getPaperboardDir, getFilesDir, ensureDir } from "../../../papercrane/paths";
 import { sanitizeId } from "../../../papercrane/storage";
 import { logger } from "../../../papercrane/logger";
-import { readCraneHandshake } from "../../../papercrane/handshake";
 import { openRemoteFolder } from "../remoteFolder";
 import { servePanelAsset } from "../panelServe";
 import type { LaunchOptions } from "../../shared/launchOptions";
@@ -69,9 +68,9 @@ export function createShellInvokeHandlers(
     deps: ShellHandlerDeps,
 ): Record<SharedShellInvokeChannel, ShellInvokeHandler> {
     return {
-        // throws retryable CRANE_NOT_READY until embedded daemon is up
+        // throws retryable CRANE_NOT_READY until the local daemon is verified
         "crane-credentials": () => {
-            const creds = readCraneHandshake();
+            const creds = connectionPool.getClient("local").getLocalCredentials();
             if (!creds) throw new Error("CRANE_NOT_READY");
             return { ...creds, computerId: "local" };
         },

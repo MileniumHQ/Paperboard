@@ -67,9 +67,7 @@ export interface CraneCreds {
 // identity is a granted fact, never parsed from a URL after the fact.
 //
 // The payload lands inside a <script> block in served HTML, so `<` is
-// escaped: today every field is URL/hostname/token-shaped and cannot break
-// out, but a tampered crane.json (see readCraneCreds) must not become a
-// script breakout either.
+// escaped so credential data cannot become executable HTML markup.
 export function buildCraneCredentialPayload(
     creds: CraneCreds | null,
     computerId: string,
