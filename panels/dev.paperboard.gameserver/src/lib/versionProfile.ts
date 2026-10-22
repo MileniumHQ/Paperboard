@@ -546,8 +546,8 @@ export const VERSION_OVERRIDES: readonly VersionOverride[] = [
     { at: "1.13", patch: { levelTypeOptions: LEGACY_MID_LEVEL_TYPES } },
     // 1.16: buffet/default_1_1/customized removed from level-type
     { at: "1.16", patch: { levelTypeOptions: LEGACY_LEVEL_TYPES } },
-    // Java 16 from 1.17 (21w19a); 1.16.5 stays Java 8
-    { at: "1.17", patch: { javaPackage: "java-16" } },
+    // Run 1.17 (21w19a) on maintained Java 17; 1.16.5 stays Java 8
+    { at: "1.17", patch: { javaPackage: "java-17" } },
     // 1.18 (21w37a): build range -64..320, modern chunk palette, Java 17
     {
         at: "1.18",

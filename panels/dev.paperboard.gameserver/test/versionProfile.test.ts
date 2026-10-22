@@ -246,7 +246,7 @@ describe("sparse version overrides", () => {
         ]);
 
         const at171 = resolveFacts("vanilla", "1.17.1");
-        expect(at171.javaPackage).toBe("java-16");
+        expect(at171.javaPackage).toBe("java-17");
         expect(at171.levelTypeOptions.map((o) => o.value)).toEqual([
             "default",
             "flat",
