@@ -12,10 +12,13 @@ export class FakeProcesses {
     private listeners = { stdout: new Map<string, Set<Listener<string>>>(), stderr: new Map<string, Set<Listener<string>>>(), exit: new Map<string, Set<Listener<number | undefined>>>() };
     /** what kill does to a child: by default it exits at once */
     exitOnKill = true;
+    /** what the child does once started, when a test plays it */
+    onStart: ((o: StartOptions) => void | Promise<void>) | null = null;
 
     start = async (o: StartOptions) => {
         this.started.push(o);
         this.alive.add(o.id);
+        await this.onStart?.(o);
         return { id: o.id };
     };
     kill = async (id: string, signal?: string) => {

@@ -1,29 +1,32 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import { createServer, type Server } from "node:http";
-import type { AddressInfo } from "node:net";
+import net, { type AddressInfo } from "node:net";
 import os from "node:os";
 import path from "node:path";
 import type { ComputerState } from "../src/contract";
-import { COMPUTER_PROC_ID, Computer, type ComputerHost, type Support } from "../src/service/computer";
-import { GUEST_FILES, GUEST_VERSION, updateCommand } from "../src/service/guest";
+import { COMPUTER_PROC_ID, Computer, NET_PROC_ID, type ComputerHost, type StartOptions, type Support } from "../src/service/computer";
+import { GUEST_FILES, GUEST_PORT, GUEST_VERSION, META_DATA, updateCommand } from "../src/service/guest";
 import { FakeProcesses, until } from "./fakeHost";
 
 const dirs: string[] = [];
 const servers: Server[] = [];
+const sockets: net.Server[] = [];
 afterEach(() => {
     for (const d of dirs.splice(0)) fs.rmSync(d, { recursive: true, force: true });
     for (const s of servers.splice(0)) {
         s.closeAllConnections();
         s.close();
     }
+    for (const s of sockets.splice(0)) s.close();
 });
 
-function make(o: { support?: Support; download?: ComputerHost["download"]; dir?: string; secret?: string; controlLeaseMs?: number } = {}) {
+function make(o: { support?: Support; download?: ComputerHost["download"]; dir?: string; secret?: string; controlLeaseMs?: number; bootMs?: number } = {}) {
     const dir = o.dir ?? fs.mkdtempSync(path.join(os.tmpdir(), "ai-computer-"));
     if (!o.dir) dirs.push(dir);
     const procs = new FakeProcesses();
     const downloads: string[] = [];
+    let secret = o.secret ?? null;
     const host: ComputerHost = {
         ...procs,
         start: procs.start,
@@ -38,20 +41,21 @@ function make(o: { support?: Support; download?: ComputerHost["download"]; dir?:
                 downloads.push(d.url);
                 throw new Error("checksum mismatch");
             }),
-        getSecret: async () => o.secret ?? null,
-        setSecret: async () => {},
+        getSecret: async () => secret,
+        setSecret: async (_, v) => void (secret = v),
     };
     const states: ComputerState[] = [];
     const computer = new Computer({
         host,
         dir,
         storagePath: "computer",
-        support: () => o.support ?? { ok: true, qemu: "/usr/bin/qemu-system-x86_64", qemuImg: "/usr/bin/qemu-img" },
+        support: () => o.support ?? { ok: true, qemu: "/usr/bin/qemu-system-x86_64", qemuImg: "/usr/bin/qemu-img", passt: "/usr/bin/passt" },
         onState: (s) => states.push(s),
         controlLeaseMs: o.controlLeaseMs,
+        bootMs: o.bootMs,
         healthPollMs: 20,
     });
-    return { computer, states, dir, procs, downloads };
+    return { computer, states, dir, procs, downloads, secret: () => secret };
 }
 
 describe("the agent's computer", () => {
@@ -94,7 +98,7 @@ describe("the agent's computer", () => {
 });
 
 /** A guest agent that records calls; a call to `hold` waits until released. */
-async function fakeGuest(token: string, o: { version?: string | null; shell?: string } = {}) {
+async function fakeGuest(token: string, o: { version?: string | null; shell?: string | ((command: string) => string); port?: number } = {}) {
     let version = o.version === undefined ? GUEST_VERSION : o.version;
     const calls: { tool: string; args: Record<string, unknown> }[] = [];
     const held: (() => void)[] = [];
@@ -108,7 +112,7 @@ async function fakeGuest(token: string, o: { version?: string | null; shell?: st
             const call = JSON.parse(data);
             calls.push(call);
             if (call.tool === "shell") {
-                const text = o.shell ?? "exit 0\nupdated";
+                const text = typeof o.shell === "function" ? o.shell(String(call.args.command)) : (o.shell ?? "exit 0\nupdated");
                 // the agent restarts on the files it was sent
                 if (text.startsWith("exit 0")) setTimeout(() => (version = GUEST_VERSION), 50);
                 return reply({ text });
@@ -119,7 +123,7 @@ async function fakeGuest(token: string, o: { version?: string | null; shell?: st
         });
     });
     servers.push(server);
-    await new Promise<void>((ok) => server.listen(0, "127.0.0.1", ok));
+    await new Promise<void>((ok) => server.listen(o.port ?? 0, "127.0.0.1", ok));
     return { port: (server.address() as AddressInfo).port, calls, held };
 }
 
@@ -127,7 +131,7 @@ async function fakeGuest(token: string, o: { version?: string | null; shell?: st
 async function found(guest: Awaited<ReturnType<typeof fakeGuest>>, o: { controlLeaseMs?: number } = {}) {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ai-computer-"));
     dirs.push(dir);
-    fs.writeFileSync(path.join(dir, "computer.json"), JSON.stringify({ version: 1, installed: true, budget: { memoryGb: 4, diskGb: 32 }, port: guest.port }));
+    fs.writeFileSync(path.join(dir, "computer.json"), JSON.stringify({ version: 2, installed: true, budget: { memoryGb: 4, diskGb: 32 }, port: guest.port }));
     const m = make({ dir, secret: "t0ken", ...o });
     m.procs.alive.add(COMPUTER_PROC_ID);
     await m.computer.init();
@@ -259,5 +263,133 @@ print(ns["_version"]())`;
         const r = Bun.spawnSync(["python3", "-I", "-c", script, path.join(dir, "agent.py")]);
         expect(r.stderr.toString()).toBe("");
         expect(r.stdout.toString().trim()).toBe(GUEST_VERSION);
+    });
+});
+
+/**
+ * Plays QEMU and passt from their argv: a setup boot (QEMU's own network) gets a guest that gives the agent
+ * sudo after `sudoAfter` refusals and powers off when asked; a passt boot gets a guest on passt's forward,
+ * and passt a real listening socket.
+ */
+function playVm({ procs, secret }: { procs: FakeProcesses; secret: () => string | null }, o: { sudoAfter?: number; sudoNever?: boolean } = {}) {
+    const boots: { net: string; args: string[]; seed: Record<string, string> | null; shell: string[] }[] = [];
+    let refusals = o.sudoAfter ?? 0;
+    procs.onStart = async (s: StartOptions) => {
+        if (s.id === NET_PROC_ID) {
+            const server = net.createServer();
+            sockets.push(server);
+            await new Promise<void>((ok) => server.listen(s.args[s.args.indexOf("--socket") + 1]!, ok));
+            return;
+        }
+        const netdev = s.args[s.args.indexOf("-netdev") + 1]!;
+        const disk = s.args.find((a) => a.includes("file.driver=vvfat"))?.match(/file\.dir=([^,]+)/)?.[1];
+        const boot = {
+            net: netdev.split(",")[0]!,
+            args: s.args,
+            seed: disk ? Object.fromEntries(fs.readdirSync(disk).map((f) => [f, fs.readFileSync(path.join(disk, f), "utf8")])) : null,
+            shell: [] as string[],
+        };
+        boots.push(boot);
+        if (boot.net === "user") {
+            const port = Number(netdev.match(/hostfwd=tcp:127\.0\.0\.1:(\d+)-/)![1]);
+            await fakeGuest(secret()!, {
+                port,
+                shell: (command) => {
+                    boot.shell.push(command);
+                    if (command === "sudo -n true") return o.sudoNever || refusals-- > 0 ? "exit 1\nsudo: a password is required" : "exit 0\n";
+                    if (command === "sudo -n systemctl poweroff") setTimeout(() => procs.exit(COMPUTER_PROC_ID, 0), 20);
+                    return "exit 0\n";
+                },
+            });
+        } else {
+            const passt = procs.started.findLast((p) => p.id === NET_PROC_ID)!;
+            const port = Number(passt.args[passt.args.indexOf("-t") + 1]!.match(/^127\.0\.0\.1\/(\d+):/)![1]);
+            await fakeGuest(secret()!, { port });
+        }
+    };
+    return boots;
+}
+
+describe("the computer's network and sudo", () => {
+    const record = (dir: string) => JSON.parse(fs.readFileSync(path.join(dir, "computer.json"), "utf8"));
+    const v1 = () => {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ai-computer-"));
+        dirs.push(dir);
+        fs.writeFileSync(path.join(dir, "computer.json"), JSON.stringify({ version: 1, installed: true, budget: { memoryGb: 4, diskGb: 32 }, port: 1 }));
+        return dir;
+    };
+
+    test("setup ends its seed boot by powering off once the agent has sudo, and is ready only behind passt", async () => {
+        const m = make({
+            secret: "t0ken",
+            download: async () => {},
+        });
+        const boots = playVm(m);
+        await m.computer.init();
+        await m.computer.install({ memoryGb: 4, diskGb: 32 });
+        expect(m.computer.state).toMatchObject({ phase: "ready", installed: true, error: null });
+        expect(boots.map((b) => b.net)).toEqual(["user", "stream"]);
+        expect(boots[0]!.args.some((a) => a.startsWith("type=1,serial=ds=nocloud;s=http://10.0.2.2:"))).toBe(true);
+        expect(boots[0]!.shell).toEqual(["sudo -n true", "sudo -n systemctl poweroff"]);
+        expect(boots[1]!.args.some((a) => a.startsWith("type=1,serial="))).toBe(false); // the seed isn't offered past setup
+        expect(record(m.dir)).toMatchObject({ version: 2, installed: true });
+        // never ready on the network that reaches this machine's loopback
+        expect(m.states.findIndex((s) => s.phase === "ready")).toBe(m.states.length - 1);
+    });
+
+    test("passt forwards only the agent's port from loopback and gives the guest no address for the host", async () => {
+        const m = make({ dir: v1(), secret: "t0ken" });
+        playVm(m);
+        await m.computer.init();
+        const passt = m.procs.started.find((p) => p.id === NET_PROC_ID)!;
+        const port = record(m.dir).port;
+        expect(passt.args).toEqual(expect.arrayContaining(["--no-map-gw", "--one-off", "-u", "none", "-t", `127.0.0.1/${port}:${GUEST_PORT}`]));
+        const qemu = m.procs.started.findLast((p) => p.id === COMPUTER_PROC_ID)!;
+        expect(qemu.args).toContain(`stream,id=n0,server=off,addr.type=unix,addr.path=${path.join(m.dir, "net.sock")}`);
+    });
+
+    test("a computer from before sudo is migrated once: a seed disk gives the agent sudo, it powers off, then boots behind passt", async () => {
+        const dir = v1();
+        const m = make({ dir, secret: "t0ken" });
+        m.procs.alive.add(COMPUTER_PROC_ID); // still running from before: not reattached, it restarts into the migration
+        const boots = playVm(m, { sudoAfter: 2 }); // cloud-init is still giving it sudo when the agent first answers
+        await m.computer.init();
+        expect(m.procs.killed[0]).toEqual({ id: COMPUTER_PROC_ID, signal: "SIGTERM" });
+        expect(m.computer.state).toMatchObject({ phase: "ready", error: null });
+        expect(boots.map((b) => b.net)).toEqual(["user", "stream"]);
+        const seed = boots[0]!.seed!;
+        expect(seed["meta-data"]).not.toBe(META_DATA); // a new instance id, so cloud-init runs again
+        expect(seed["user-data"]).toContain("agent ALL=(ALL) NOPASSWD:ALL");
+        expect(seed["user-data"]).toContain("[systemctl, disable, --now, nftables]");
+        expect(boots[0]!.shell).toEqual(["sudo -n true", "sudo -n true", "sudo -n true", "sudo -n systemctl poweroff"]);
+        expect(record(dir).version).toBe(2);
+        expect(fs.existsSync(path.join(dir, "seed-sudo"))).toBe(false);
+    });
+
+    test("a migration that doesn't give sudo fails, stops the VM, and stays to be run again", async () => {
+        const dir = v1();
+        const m = make({ dir, secret: "t0ken", bootMs: 200 });
+        playVm(m, { sudoNever: true });
+        await expect(m.computer.init()).rejects.toThrow(/didn't get sudo: exit 1\nsudo: a password is required/);
+        expect(m.computer.state.phase).toBe("failed");
+        expect(m.procs.alive.size).toBe(0);
+        expect(record(dir).version).toBe(1);
+    });
+
+    test("passt going away stops the computer and says so; stopping stops the VM and then its network", async () => {
+        const m = make({ dir: v1(), secret: "t0ken" });
+        playVm(m);
+        await m.computer.init();
+        m.procs.exit(NET_PROC_ID, 1);
+        await until(() => m.computer.state.phase === "failed");
+        expect(m.computer.state.error).toMatch(/stopped unexpectedly.*its network \(passt\) stopped \(exit 1\)/);
+        expect(m.procs.alive.size).toBe(0);
+
+        await m.computer.start();
+        expect(m.computer.state.phase).toBe("ready");
+        m.procs.killed.length = 0;
+        await m.computer.stop();
+        expect(m.procs.killed.map((k) => k.id)).toEqual([COMPUTER_PROC_ID, NET_PROC_ID]);
+        expect(m.procs.alive.size).toBe(0);
     });
 });

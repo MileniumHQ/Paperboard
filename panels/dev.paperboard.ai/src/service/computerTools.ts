@@ -27,7 +27,7 @@ export const COMPUTER_TOOLS: ToolSpec[] = [
     {
         name: "shell",
         description:
-            "Run a bash command on your computer (Debian 13, user `agent`, no sudo) and get its output. " +
+            "Run a bash command on your computer (Debian 13, user `agent`, with passwordless sudo) and get its output. " +
             "Prefer this over opening apps: files, downloads (curl), text processing, scripts and anything a CLI can do. " +
             "Default timeout 60 s, max 600.",
         inputSchema: {

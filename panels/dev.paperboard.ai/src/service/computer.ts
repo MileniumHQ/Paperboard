@@ -3,9 +3,14 @@
 // QEMU is a daemon-supervised child (processApi), so its lifetime is observed
 // through the daemon, not guessed: start waits for the guest agent to answer
 // /health, stop waits for the exit event. The guest agent listens on a
-// loopback port QEMU forwards and wants a bearer token, kept in the vault.
+// loopback port forwarded to it and wants a bearer token, kept in the vault.
 // The record (installed, budget, port) lets a restarted service find a VM
 // that outlived it instead of starting a second one on the same disk.
+//
+// The agent has sudo in its computer, so what keeps it from this machine is
+// outside the VM: its network is passt (another daemon child, one per boot),
+// which gives the guest no address for the host's loopback. Only a setup boot
+// uses QEMU's own network, to reach its seed there; it ends by powering off.
 
 import { randomBytes } from "node:crypto";
 import fs from "node:fs";
@@ -25,18 +30,26 @@ import {
 } from "../contract";
 import type { ToolResult } from "./computerMcp";
 import { which } from "./which";
-import { BASE_IMAGE, BROWSER_DEB, GUEST_FILES, GUEST_PORT, GUEST_VERSION, META_DATA, updateCommand, userData } from "./guest";
+import { BASE_IMAGE, BROWSER_DEB, GUEST_FILES, GUEST_PORT, GUEST_VERSION, META_DATA, SUDO_MIGRATION, updateCommand, userData } from "./guest";
 import { ConsoleReader, SEED_PARTS, freshSteps, progress, reach, setStep } from "./setupProgress";
 
 export const COMPUTER_PROC_ID = `${PANEL_ID}.computer`;
+export const NET_PROC_ID = `${PANEL_ID}.net`;
 export const TOKEN_SECRET = "computer-token";
 const RECORD_FILE = "computer.json";
+const RECORD_VERSION = 2; // 2: the agent has sudo and the computer's network is passt
 const DISK_FILE = "disk.qcow2";
+const NET_SOCKET = "net.sock";
+const SUDO_SEED_DIR = "seed-sudo";
+/** where the guest sends DNS: passt passes queries to it on to the host's resolver, which may be on loopback */
+const DNS_ADDRESS = "169.254.1.1";
 
 const FIRST_BOOT_MS = 25 * 60_000; // packages and the browser install on first boot
 const BOOT_MS = 3 * 60_000;
 const HEALTH_POLL_MS = 2_000;
 const UPDATE_MS = 2 * 60_000; // an outdated guest agent restarts its session on the new files
+const POWEROFF_MS = 2 * 60_000;
+const NET_READY_MS = 5_000;
 const STOP_GRACE_MS = 2_000; // the daemon gives the whole service 3 s to stop
 const CALL_TIMEOUT_MS = 11 * 60_000; // a little past the guest's longest shell command
 const MAX_CALLS = 4;
@@ -72,10 +85,15 @@ export interface ComputerHost {
     setSecret(name: string, value: string): Promise<void>;
 }
 
-export type Support = { ok: true; qemu: string; qemuImg: string } | { ok: false; reason: string };
+export type Support = { ok: true; qemu: string; qemuImg: string; passt: string } | { ok: false; reason: string };
+type Supported = Extract<Support, { ok: true }>;
+
+/** How a boot is networked: a setup boot reaches its seed on the host's loopback; every other goes through passt. */
+export type BootNet = { kind: "setup"; seedUrl: string | null; seedDisk: string | null } | { kind: "passt"; socket: string };
 
 interface ComputerRecord {
-    version: 1;
+    /** 1: set up before the agent had sudo, behind a firewall in the guest */
+    version: 1 | typeof RECORD_VERSION;
     installed: boolean;
     budget: ComputerBudget | null;
     /** the loopback port of the running VM, so a restarted service can find it */
@@ -97,12 +115,13 @@ export interface ComputerDeps {
     firstBootMs?: number;
     bootMs?: number;
     healthPollMs?: number;
+    poweroffMs?: number;
     controlLeaseMs?: number;
 }
 
 export class Computer {
     state: ComputerState = { phase: "none", installed: false, budget: null, steps: [], error: null, userControl: false };
-    private record: ComputerRecord = { version: 1, installed: false, budget: null, port: null };
+    private record: ComputerRecord = { version: RECORD_VERSION, installed: false, budget: null, port: null };
     private token: string | null = null;
     private busy: Promise<unknown> = Promise.resolve();
     private exitWaiters = new Set<(code?: number) => void>();
@@ -111,6 +130,11 @@ export class Computer {
     private stderrTail = "";
     private running = false; // QEMU is up, as far as the daemon has told us
     private stopping = false;
+    private netWaiters = new Set<(code?: number) => void>();
+    private offNet: (() => void)[] = [];
+    private netTail = "";
+    private netRunning = false;
+    private netStopping = false;
     private abort: AbortController | null = null;
     private calls = 0;
     private callQueue: (() => void)[] = [];
@@ -129,6 +153,12 @@ export class Computer {
         this.offStderr = this.deps.host.onStderr(COMPUTER_PROC_ID, (data) => {
             this.stderrTail = (this.stderrTail + data).slice(-2000);
         });
+        this.offNet = [
+            this.deps.host.onExit(NET_PROC_ID, (code) => this.onNetExited(code)),
+            this.deps.host.onStderr(NET_PROC_ID, (data) => {
+                this.netTail = (this.netTail + data).slice(-2000);
+            }),
+        ];
         const support = this.support();
         if (!this.record.installed) {
             this.set({ phase: support.ok ? "none" : "unsupported", budget: null, steps: [], error: support.ok ? null : support.reason });
@@ -139,8 +169,8 @@ export class Computer {
             this.set({ phase: "unsupported", error: support.reason });
             return;
         }
-        // a VM the last service generation left running is found, not doubled
-        if ((await this.deps.host.exists(COMPUTER_PROC_ID)) && this.record.port) {
+        // a VM the last service generation left running is found, not doubled; one from before sudo restarts into it
+        if (this.record.version === RECORD_VERSION && this.record.port && (await this.deps.host.exists(COMPUTER_PROC_ID))) {
             this.running = true;
             this.token = await this.deps.host.getSecret(TOKEN_SECRET);
             const found = this.token ? await this.health(this.record.port) : null;
@@ -158,8 +188,8 @@ export class Computer {
                     if (this.abort === abort) this.abort = null;
                 }
             }
-            await this.kill();
         }
+        await this.kill();
         await this.start();
     }
 
@@ -197,6 +227,7 @@ export class Computer {
         await this.kill();
         this.offExit?.();
         this.offStderr?.();
+        for (const off of this.offNet.splice(0)) off();
     }
 
     // ------------------------------------------------------------- tools
@@ -335,7 +366,7 @@ export class Computer {
         }
         await this.kill();
         this.set({ phase: "installing", budget, steps: freshSteps(), error: null });
-        this.record = { version: 1, installed: false, budget, port: null };
+        this.record = { version: RECORD_VERSION, installed: false, budget, port: null };
         this.writeRecord();
         const abort = (this.abort = new AbortController());
         let seed: Server | null = null;
@@ -369,7 +400,7 @@ export class Computer {
                 if (part) this.reach(part);
             });
             seed = seeded.server;
-            await this.boot(support.qemu, budget, seeded.url);
+            await this.boot(support, budget, { kind: "setup", seedUrl: seeded.url, seedDisk: null });
             // and what its console shows: the boot's milestones, and apt's progress through the packages
             const reader = new ConsoleReader();
             stopReading = tailFile(path.join(this.deps.dir, "console.log"), (text) => {
@@ -378,10 +409,13 @@ export class Computer {
                     else this.progress(sign.progress, sign.percent);
                 }
             });
-            const found = await this.waitHealthy(this.deps.firstBootMs ?? FIRST_BOOT_MS, abort.signal);
-            this.step("install", "done", 100);
+            await this.waitHealthy(this.deps.firstBootMs ?? FIRST_BOOT_MS, abort.signal);
+            await this.endSetupBoot(abort.signal);
             this.record = { ...this.record, installed: true };
             this.writeRecord();
+            await this.boot(support, budget, null);
+            const found = await this.waitHealthy(this.deps.bootMs ?? BOOT_MS, abort.signal);
+            this.step("install", "done", 100);
             await this.becomeReady(found, abort.signal);
         } catch (e) {
             const message = e instanceof Error ? e.message : String(e);
@@ -447,8 +481,10 @@ export class Computer {
         }
         this.set({ phase: "starting", error: null });
         const abort = (this.abort = new AbortController());
+        const budget = this.record.budget ?? { memoryGb: 4, diskGb: 32 };
         try {
-            await this.boot(support.qemu, this.record.budget ?? { memoryGb: 4, diskGb: 32 }, null);
+            if (this.record.version !== RECORD_VERSION) await this.migrateToSudo(support, budget, abort.signal);
+            await this.boot(support, budget, null);
             const found = await this.waitHealthy(this.deps.bootMs ?? BOOT_MS, abort.signal);
             await this.becomeReady(found, abort.signal);
         } catch (e) {
@@ -460,14 +496,86 @@ export class Computer {
         }
     }
 
-    private async boot(qemu: string, budget: ComputerBudget, seedUrl: string | null) {
+    /** Boot the VM: a setup boot on QEMU's own network, any other (setup null) through a passt of its own. */
+    private async boot(support: Supported, budget: ComputerBudget, setup: Extract<BootNet, { kind: "setup" }> | null) {
         const port = await freePort();
         this.record = { ...this.record, port };
         this.writeRecord();
         this.stderrTail = "";
+        const net: BootNet = setup ?? { kind: "passt", socket: await this.startNet(support.passt, port) };
         this.running = true;
         this.stopping = false;
-        await this.deps.host.start({ id: COMPUTER_PROC_ID, command: qemu, args: qemuArgs(this.deps.dir, budget, port, seedUrl) });
+        await this.deps.host.start({ id: COMPUTER_PROC_ID, command: support.qemu, args: qemuArgs(this.deps.dir, budget, port, net) });
+    }
+
+    /** Start passt for a boot and wait (bounded) until it listens for QEMU; returns its socket. */
+    private async startNet(passt: string, port: number): Promise<string> {
+        const socket = path.join(this.deps.dir, NET_SOCKET);
+        if (Buffer.byteLength(socket) > 107) throw new Error(`the computer's folder is too deep for its network's socket: ${socket}`);
+        fs.rmSync(socket, { force: true }); // left by a passt that kill() has seen stopped
+        this.netTail = "";
+        this.netRunning = true;
+        this.netStopping = false;
+        await this.deps.host.start({ id: NET_PROC_ID, command: passt, args: passtArgs(socket, port) });
+        const deadline = Date.now() + NET_READY_MS;
+        while (!listening(socket)) {
+            if (!this.netRunning) throw new Error(`the computer's network (passt) didn't start${this.netTail ? `: ${this.netTail.trim().slice(-300)}` : ""}`);
+            if (Date.now() > deadline) throw new Error("the computer's network (passt) didn't start listening");
+            await new Promise((ok) => setTimeout(ok, 20));
+        }
+        return socket;
+    }
+
+    /**
+     * A computer set up before the agent had sudo boots once on a seed disk that gives it sudo and
+     * retires its firewall, and powers off; only then is it the current version.
+     */
+    private async migrateToSudo(support: Supported, budget: ComputerBudget, signal: AbortSignal) {
+        const seedDisk = path.join(this.deps.dir, SUDO_SEED_DIR);
+        fs.rmSync(seedDisk, { recursive: true, force: true });
+        fs.mkdirSync(seedDisk);
+        fs.writeFileSync(path.join(seedDisk, "meta-data"), SUDO_MIGRATION.metaData);
+        fs.writeFileSync(path.join(seedDisk, "user-data"), SUDO_MIGRATION.userData);
+        await this.boot(support, budget, { kind: "setup", seedUrl: null, seedDisk });
+        await this.waitHealthy(this.deps.bootMs ?? BOOT_MS, signal);
+        await this.endSetupBoot(signal);
+        fs.rmSync(seedDisk, { recursive: true, force: true });
+        this.record = { ...this.record, version: RECORD_VERSION };
+        this.writeRecord();
+    }
+
+    /**
+     * End a setup boot: once the agent has sudo (cloud-init may still be giving it), the guest powers itself
+     * off and the exit is observed. Its network reaches the host's loopback, so it's never ready on it.
+     */
+    private async endSetupBoot(signal: AbortSignal) {
+        const deadline = Date.now() + (this.deps.bootMs ?? BOOT_MS);
+        for (;;) {
+            if (signal.aborted) throw new Error("stopped");
+            if (!this.running) throw new Error(`the computer shut down during setup${this.stderrTail ? `: ${this.stderrTail.trim().slice(-300)}` : ""}`);
+            // an agent restarting while cloud-init runs doesn't answer for a moment: that's not yet, too
+            const r = await this.guestShell("sudo -n true", 30, signal).catch((e: Error) => e.message);
+            if (r.startsWith("exit 0")) break;
+            if (Date.now() > deadline) throw new Error(`the agent didn't get sudo: ${r.trim().slice(0, 300)}`);
+            await sleep(this.deps.healthPollMs ?? HEALTH_POLL_MS, signal);
+        }
+        const gone = new Promise<void>((ok) => this.exitWaiters.add(() => ok()));
+        // the answer may not get out before the guest goes down: the observed exit is what counts
+        const asked = await this.guestShell("sudo -n systemctl poweroff", 30, signal).catch((e: Error) => e.message);
+        if (!(await within(gone, this.deps.poweroffMs ?? POWEROFF_MS))) throw new Error(`the computer didn't power off after setup (${asked.trim().slice(0, 200)})`);
+    }
+
+    /** A shell command the service runs on the guest; resolves to its output (from "exit N"). */
+    private async guestShell(command: string, timeout: number, signal: AbortSignal): Promise<string> {
+        const r = await fetch(`http://127.0.0.1:${this.record.port}/call`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${this.token}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ tool: "shell", args: { command, timeout } }),
+            signal: AbortSignal.any([signal, AbortSignal.timeout((timeout + 30) * 1000)]),
+        });
+        const body = (await r.json()) as { text?: string; error?: string };
+        if (!r.ok || body.error || typeof body.text !== "string") throw new Error(body.error ?? `it answered ${r.status}`);
+        return body.text;
     }
 
     private async waitHealthy(timeoutMs: number, signal: AbortSignal, current = false): Promise<GuestHealth> {
@@ -491,16 +599,8 @@ export class Computer {
      */
     private async becomeReady(found: GuestHealth, signal: AbortSignal) {
         if (found.version !== GUEST_VERSION) {
-            const r = await fetch(`http://127.0.0.1:${this.record.port}/call`, {
-                method: "POST",
-                headers: { Authorization: `Bearer ${this.token}`, "Content-Type": "application/json" },
-                body: JSON.stringify({ tool: "shell", args: { command: updateCommand(), timeout: 60 } }),
-                signal: AbortSignal.any([signal, AbortSignal.timeout(90_000)]),
-            });
-            const body = (await r.json()) as { text?: string; error?: string };
-            if (!r.ok || body.error || !body.text?.startsWith("exit 0")) {
-                throw new Error(`couldn't update the computer's agent: ${(body.error ?? body.text ?? `it answered ${r.status}`).trim().slice(0, 300)}`);
-            }
+            const text = await this.guestShell(updateCommand(), 60, signal).catch((e: Error) => e.message);
+            if (!text.startsWith("exit 0")) throw new Error(`couldn't update the computer's agent: ${text.trim().slice(0, 300)}`);
             await this.waitHealthy(UPDATE_MS, signal, true);
         }
         this.set({ phase: "ready", error: null });
@@ -522,21 +622,51 @@ export class Computer {
         }
     }
 
-    /** Stop QEMU if it runs, and wait for the daemon to report it gone. */
+    /** Stop QEMU and then its network, each if it runs, and wait for the daemon to report them gone. */
     private async kill() {
-        if (!(await this.deps.host.exists(COMPUTER_PROC_ID))) {
-            this.running = false;
-            return;
-        }
         this.stopping = true;
-        const gone = new Promise<void>((ok) => this.exitWaiters.add(() => ok()));
-        await this.deps.host.kill(COMPUTER_PROC_ID, "SIGTERM");
-        if (!(await within(gone, STOP_GRACE_MS))) {
-            await this.deps.host.kill(COMPUTER_PROC_ID, "SIGKILL");
-            if (!(await within(gone, STOP_GRACE_MS))) throw new Error("the computer didn't stop");
+        if (await this.stopObserved(COMPUTER_PROC_ID, this.exitWaiters, "the computer")) {
+            this.record = { ...this.record, port: null };
+            this.writeRecord();
+        } else {
+            this.running = false;
+            this.stopping = false;
         }
-        this.record = { ...this.record, port: null };
-        this.writeRecord();
+        this.netStopping = true;
+        if (!(await this.stopObserved(NET_PROC_ID, this.netWaiters, "the computer's network"))) {
+            this.netRunning = false;
+            this.netStopping = false;
+        }
+    }
+
+    /** false if it wasn't running */
+    private async stopObserved(id: string, waiters: Set<(code?: number) => void>, what: string): Promise<boolean> {
+        let exited!: () => void;
+        const gone = new Promise<void>((ok) => (exited = ok));
+        waiters.add(exited); // before asking, so an exit in between isn't missed
+        try {
+            if (!(await this.deps.host.exists(id))) return false;
+            await this.deps.host.kill(id, "SIGTERM");
+            if (!(await within(gone, STOP_GRACE_MS))) {
+                await this.deps.host.kill(id, "SIGKILL");
+                if (!(await within(gone, STOP_GRACE_MS))) throw new Error(`${what} didn't stop`);
+            }
+            return true;
+        } finally {
+            waiters.delete(exited);
+        }
+    }
+
+    /** passt went away on its own: the VM can't be reached without it, so it's stopped, and the reason kept. */
+    private onNetExited(code?: number) {
+        const expected = this.netStopping || this.stopping || !this.running;
+        this.netRunning = false;
+        this.netStopping = false;
+        for (const w of this.netWaiters) w(code);
+        this.netWaiters.clear();
+        if (expected) return;
+        this.stderrTail = `its network (passt) stopped (exit ${code ?? "?"})${this.netTail ? `: ${this.netTail.trim().slice(-300)}` : ""}`;
+        this.deps.host.kill(COMPUTER_PROC_ID, "SIGTERM").catch((e: Error) => this.set({ phase: "failed", error: `the computer's network stopped, and the computer couldn't be stopped: ${e.message}` }));
     }
 
     private onExited(code?: number) {
@@ -604,10 +734,10 @@ export class Computer {
 
     private readRecord(): ComputerRecord {
         const file = path.join(this.deps.dir, RECORD_FILE);
-        if (!fs.existsSync(file)) return { version: 1, installed: false, budget: null, port: null };
+        if (!fs.existsSync(file)) return { version: RECORD_VERSION, installed: false, budget: null, port: null };
         // unreadable is not "never installed": refuse rather than set up over it
         const r = JSON.parse(fs.readFileSync(file, "utf8")) as ComputerRecord;
-        if (r.version !== 1) throw new Error(`${file} is from a newer version (${r.version})`);
+        if (r.version !== 1 && r.version !== RECORD_VERSION) throw new Error(`${file} is from a newer version (${r.version})`);
         return r;
     }
 
@@ -620,21 +750,40 @@ export class Computer {
 
 // ------------------------------------------------------------- host
 
-export function qemuArgs(dir: string, budget: ComputerBudget, port: number, seedUrl: string | null): string[] {
+export function qemuArgs(dir: string, budget: ComputerBudget, port: number, net: BootNet): string[] {
     return [
         "-machine", "q35,accel=kvm",
         "-cpu", "host",
         "-smp", String(Math.max(1, Math.min(4, os.cpus().length))),
         "-m", String(budget.memoryGb * 1024),
         "-drive", `if=virtio,file=${path.join(dir, DISK_FILE)},format=qcow2,discard=unmap`,
-        "-netdev", `user,id=n0,hostfwd=tcp:127.0.0.1:${port}-:${GUEST_PORT}`,
+        "-netdev",
+        net.kind === "passt" ? `stream,id=n0,server=off,addr.type=unix,addr.path=${net.socket}` : `user,id=n0,hostfwd=tcp:127.0.0.1:${port}-:${GUEST_PORT}`,
         "-device", "virtio-net-pci,netdev=n0",
         "-device", "virtio-balloon",
         "-display", "none",
         "-monitor", "none",
         "-serial", `file:${path.join(dir, "console.log")}`,
-        ...(seedUrl ? ["-smbios", `type=1,serial=ds=nocloud;s=${seedUrl}`] : []),
+        ...(net.kind === "setup" && net.seedUrl ? ["-smbios", `type=1,serial=ds=nocloud;s=${net.seedUrl}`] : []),
+        // cloud-init's NoCloud seed as a disk: a read-only FAT view of the folder, labelled as it looks for
+        ...(net.kind === "setup" && net.seedDisk ? ["-drive", `if=virtio,format=raw,readonly=on,file.driver=vvfat,file.dir=${net.seedDisk},file.label=cidata`] : []),
     ];
+}
+
+/**
+ * passt for one boot: the agent's port forwarded from loopback, DNS passed to the host's resolver, and no
+ * address in the guest for the host itself (--no-map-gw), so the agent never reaches this machine's loopback.
+ */
+export function passtArgs(socket: string, port: number): string[] {
+    return ["--foreground", "--one-off", "--socket", socket, "--no-map-gw", "--dns-forward", DNS_ADDRESS, "-t", `127.0.0.1/${port}:${GUEST_PORT}`, "-u", "none"];
+}
+
+/** Is a unix socket at this path listening (Linux's /proc/net/unix: flag 0x10000 is a listener)? */
+function listening(socket: string): boolean {
+    return fs
+        .readFileSync("/proc/net/unix", "utf8")
+        .split("\n")
+        .some((line) => line.endsWith(` ${socket}`) && (parseInt(line.trim().split(/\s+/)[3] ?? "0", 16) & 0x10000) !== 0);
 }
 
 /** Can this machine run the computer? Linux with KVM and QEMU, for now. */
@@ -644,12 +793,14 @@ export function hostSupport(): Support {
     const qemu = which("qemu-system-x86_64");
     const qemuImg = which("qemu-img");
     if (!qemu || !qemuImg) return { ok: false, reason: "QEMU isn't installed (qemu-system-x86_64 and qemu-img)." };
+    const passt = which("passt");
+    if (!passt) return { ok: false, reason: "passt isn't installed; it's the computer's network (the passt package)." };
     try {
         fs.accessSync("/dev/kvm", fs.constants.R_OK | fs.constants.W_OK);
     } catch (e) {
         return { ok: false, reason: `hardware virtualization isn't usable (/dev/kvm: ${(e as NodeJS.ErrnoException).code ?? e}). Is your user in the kvm group?` };
     }
-    return { ok: true, qemu, qemuImg };
+    return { ok: true, qemu, qemuImg, passt };
 }
 
 /** The first-boot seed: cloud-init's NoCloud source plus the files it fetches. Loopback only. */

@@ -3,8 +3,9 @@
 // The VM is Debian's own cloud image plus an overlay disk. cloud-init reads
 // its setup from a seed server the service runs on loopback for the length
 // of the install only (QEMU's user network shows the host's loopback to the
-// guest as 10.0.2.2); after that the guest's firewall drops everything to
-// 10.0.2.2, so the agent can reach the internet but never this machine.
+// guest as 10.0.2.2). It's the agent's own computer, so the agent has sudo:
+// no rule inside the guest can keep it from this machine. That boundary is
+// passt, outside it: every boot after setup has no route to the host's loopback.
 
 import AGENT_PY from "../../computer/guest/agent.py" with { type: "text" };
 import SESSION_SH from "../../computer/guest/session.sh" with { type: "text" };
@@ -64,7 +65,7 @@ export const BROWSER_DEB = {
 const PACKAGES = [
     "xvfb", "xdotool", "x11-utils", "python3-xlib", "python3-pil", "python3-gi", "gir1.2-atspi-2.0",
     "at-spi2-core", "dbus-daemon", "python3-websocket", "fonts-dejavu-core", "fonts-liberation2",
-    "fonts-noto-color-emoji", "mousepad", "galculator", "nftables", "curl", "ca-certificates",
+    "fonts-noto-color-emoji", "mousepad", "galculator", "curl", "ca-certificates",
 ];
 
 /**
@@ -74,16 +75,23 @@ const PACKAGES = [
 const apt = (...args: string[]) =>
     JSON.stringify(["env", "DEBIAN_FRONTEND=noninteractive", "apt-get", "-o", "APT::Status-Fd=1", "-o", "DPkg::Lock::Timeout=300", "-o", "Dpkg::Options::=--force-confold", "-y", ...args]);
 
-/** cloud-init user-data: the agent user, its display and hands, the firewall. */
-export function userData(seed: string, token: string): string {
-    return `#cloud-config
-hostname: computer
-users:
+/** The agent and its sudo, the same in setup and in the migration to it. Naming users also skips Debian's default one. */
+const AGENT_USER = `users:
   - name: agent
     shell: /bin/bash
     lock_passwd: true
 write_files:
-  - path: /etc/paperboard/token
+  - path: /etc/sudoers.d/90-paperboard-agent
+    permissions: "0440"
+    content: |
+      agent ALL=(ALL) NOPASSWD:ALL
+`;
+
+/** cloud-init user-data: the agent user, its display and hands. */
+export function userData(seed: string, token: string): string {
+    return `#cloud-config
+hostname: computer
+${AGENT_USER}  - path: /etc/paperboard/token
     permissions: "0640"
     content: ${JSON.stringify(token)}
   - path: /etc/systemd/system/paperboard-computer.service
@@ -101,16 +109,6 @@ write_files:
       RestartSec=2
       [Install]
       WantedBy=multi-user.target
-  - path: /etc/nftables.conf
-    content: |
-      flush ruleset
-      table inet paperboard {
-        chain output {
-          type filter hook output priority 0;
-          ct state established,related accept
-          ip daddr 10.0.2.2 drop
-        }
-      }
 runcmd:
   - ${apt("update")}
   - ${apt("install", ...PACKAGES)}
@@ -120,14 +118,27 @@ runcmd:
   - [curl, -fsS, -o, /tmp/helium.deb, "${seed}/helium.deb"]
   - ${apt("install", "/tmp/helium.deb")}
   - [rm, -f, /tmp/helium.deb]
-  # tells the setup's progress the browser is in (before the firewall shuts the host out)
+  # tells the setup's progress the browser is in
   - [curl, -fsS, -o, /dev/null, "${seed}/progress/browser"]
   - [chown, "root:agent", /etc/paperboard/token]
   # the agent's own computer: its hands run as it and it may update them (the VM is the boundary)
   - [chown, -R, "agent:agent", /opt/paperboard]
   - [systemctl, daemon-reload]
-  - [systemctl, enable, --now, nftables, paperboard-computer]
+  - [systemctl, enable, --now, paperboard-computer]
 `;
 }
 
 export const META_DATA = "instance-id: paperboard-computer\nlocal-hostname: computer\n";
+
+/**
+ * A computer set up before the agent had sudo: a new instance id runs cloud-init once more, which gives
+ * the agent sudo and retires the guest firewall that stood in for passt. Its seed is a disk, since that
+ * firewall drops the seed server's address.
+ */
+export const SUDO_MIGRATION = {
+    metaData: "instance-id: paperboard-computer-sudo\nlocal-hostname: computer\n",
+    userData: `#cloud-config
+${AGENT_USER}runcmd:
+  - [systemctl, disable, --now, nftables]
+`,
+} as const;
