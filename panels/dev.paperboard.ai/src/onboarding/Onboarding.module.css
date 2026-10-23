@@ -73,6 +73,8 @@
     font-family: var(--paper-font-family-rounded);
     font-size: var(--paper-text-size-3);
     line-height: 1.4;
+    /* one line tall before the first word arrives, so it grows from a line, not from nothing */
+    min-height: calc(1lh + var(--paper-uigap) * 2);
     overflow: hidden;
     transform-origin: left bottom;
     transition:
