@@ -4,7 +4,6 @@
 // sees the same agent: settings and status travel as synced state, the
 // conversation as chat-entry events plus a history call.
 
-import { randomUUID } from "node:crypto";
 import path from "node:path";
 import {
     HARNESSES,
@@ -12,18 +11,18 @@ import {
     PANEL_ID,
     EVENTS,
     type AiState,
-    type ChatEntry,
     type ComputerBudget,
     type Harness,
     type HarnessInfo,
     type Settings,
 } from "../contract";
 import { Computer, type ComputerHost, hostSupport } from "./computer";
-import { startComputerMcp, type ComputerMcp, type ToolResult } from "./computerMcp";
+import { startComputerMcp, type ComputerMcp } from "./computerMcp";
 import { Conversation, type TurnHost } from "./conversation";
 import { HARNESS_COMMANDS } from "./harness";
 import { COMPUTER_INSTRUCTIONS, COMPUTER_TOOLS } from "./computerTools";
 import { listModels, type HarnessHomes } from "./models";
+import { messagesToolset } from "./messages";
 import { toolbox, type Toolbox } from "./toolsets";
 export { which } from "./which";
 
@@ -76,7 +75,8 @@ export class AiApp {
         const root = await this.host.storageDir();
         this.ctx.setState({ settings: parseSettings(await this.host.readSettings()) });
         this.tools = toolbox([
-            { id: "computer", tools: () => COMPUTER_TOOLS, call: (name, args) => this.callTool(name, args), instructions: () => COMPUTER_INSTRUCTIONS },
+            { id: "computer", tools: () => COMPUTER_TOOLS, call: (name, args) => this.computer.callTool(name, args), instructions: () => COMPUTER_INSTRUCTIONS },
+            messagesToolset({ say: (text, replyTo) => this.conversation.say(text, replyTo) }),
         ]);
         this.mcp = await startComputerMcp(this.tools);
         this.computer = new Computer({
@@ -181,25 +181,6 @@ export class AiApp {
         else this.computer.releaseControl();
         return { userControl: this.computer.state.userControl };
     }
-
-    // ------------------------------------------------------------- the computer's hands
-
-    /** A tool call from the harness: shown in the conversation, carried out by the VM. */
-    private async callTool(name: string, args: Record<string, unknown>): Promise<ToolResult> {
-        const entry: Extract<ChatEntry, { kind: "tool" }> = {
-            id: randomUUID(),
-            at: Date.now(),
-            kind: "tool",
-            tool: name,
-            summary: summarize(name, args),
-            status: "running",
-            detail: null,
-        };
-        this.conversation.add(entry);
-        const r = await this.computer.callTool(name, args);
-        this.conversation.update({ ...entry, status: r.isError ? "failed" : "done", detail: r.text.slice(0, 600) || null });
-        return r;
-    }
 }
 
 // ------------------------------------------------------------- validation (the service owns these)
@@ -234,32 +215,4 @@ export function parseBudget(v: unknown): ComputerBudget {
 
 function harnessName(h: Harness) {
     return h === "codex" ? "Codex" : "Claude";
-}
-
-/** One line for the conversation: what the agent did with its computer. */
-export function summarize(name: string, a: Record<string, unknown>): string {
-    const where = a.mark !== undefined ? `mark ${a.mark}` : a.x !== undefined ? `${a.x},${a.y}` : "";
-    const s = (() => {
-        switch (name) {
-            case "shell":
-                return String(a.command ?? "").split("\n")[0];
-            case "open":
-                return String(a.what ?? "");
-            case "type":
-                return `“${String(a.text ?? "")}”${a.enter ? " ⏎" : ""}`;
-            case "key":
-                return String(a.keys ?? "");
-            case "click":
-            case "hover":
-            case "scroll":
-                return where;
-            case "drag":
-                return `${where} → ${a.to_mark !== undefined ? `mark ${a.to_mark}` : `${a.to_x},${a.to_y}`}`;
-            case "zoom":
-                return `${a.x},${a.y} ${a.width}×${a.height}`;
-            default:
-                return "";
-        }
-    })();
-    return s.length > 120 ? s.slice(0, 119) + "…" : s;
 }

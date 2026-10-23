@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import type { ChatEntry, ChatState, Settings } from "../src/contract";
 import { Conversation, TURN_PROC_ID } from "../src/service/conversation";
+import { messagesToolset } from "../src/service/messages";
 import { FakeProcesses, until } from "./fakeHost";
 
 const dirs: string[] = [];
@@ -65,15 +66,15 @@ describe("the conversation", () => {
         const { conv, host, states } = setup();
         conv.send("one");
         await until(() => host.started.length === 1);
-        conv.send("two");
-        conv.send("three");
+        const two = conv.send("two");
+        const three = conv.send("three");
         expect(states.at(-1)).toEqual({ busy: true, waiting: [expect.objectContaining({ text: "two" }), expect.objectContaining({ text: "three" })] });
         host.stdout(TURN_PROC_ID, `{"type":"thread.started","thread_id":"t-1"}\n` + reply("ok"));
         host.exit(TURN_PROC_ID, 0);
         await until(() => host.started.length === 2);
         const next = host.started[1]!.args;
         expect(next.slice(0, 2)).toEqual(["exec", "resume"]);
-        expect(next.slice(-2)).toEqual(["t-1", "two\n\nthree"]);
+        expect(next.slice(-2)).toEqual(["t-1", `[${two.id}] two\n\n[${three.id}] three`]);
     });
 
     test("a turn that fails says so in the conversation", async () => {
@@ -132,7 +133,7 @@ describe("the conversation", () => {
         host.stdout(TURN_PROC_ID, reply("ok"));
         host.exit(TURN_PROC_ID, 0);
         await until(() => host.started.length === 2);
-        expect(host.started[1]!.args.at(-1)).toBe("three");
+        expect(host.started[1]!.args.at(-1)).toBe(`[${three.id}] three`);
         expect(users()).toEqual(["one", "three"]);
         expect(emitted.find((e) => e.kind === "user" && e.text === "three")?.id).toBe(three.id);
     });
@@ -145,7 +146,7 @@ describe("the conversation", () => {
         conv.send("actually, stop and do this");
         expect(await conv.sendNow()).toEqual({ interrupted: true });
         await until(() => host.started.length === 2);
-        expect(host.started[1]!.args.at(-1)).toBe("actually, stop and do this");
+        expect(host.started[1]!.args.at(-1)).toMatch(/^\[\w+\] actually, stop and do this$/);
         expect(emitted.some((e) => e.kind === "error")).toBe(false);
     });
 
@@ -200,17 +201,31 @@ describe("the conversation", () => {
         const first = setup();
         first.conv.send("hi");
         await until(() => first.host.started.length === 1);
-        const tool = first.conv.add({ id: "t", at: Date.now(), kind: "tool", tool: "shell", summary: "ls", status: "running", detail: null });
-        first.conv.update({ ...tool, status: "done", detail: "a b" });
         first.host.stdout(TURN_PROC_ID, reply("done"));
         first.host.exit(TURN_PROC_ID, 0);
         await until(() => first.states.at(-1)?.busy === false);
-        fs.appendFileSync(path.join(first.dir, "transcript.jsonl"), `{"id":"torn","at":`);
+        const file = path.join(first.dir, "transcript.jsonl");
+        const hi = first.conv.history()[0]!;
+        fs.appendFileSync(file, JSON.stringify({ ...hi, text: "hi (edited)" }) + "\n" + `{"id":"torn","at":`);
 
         const second = setup({ dir: first.dir });
         const h = second.conv.history();
-        expect(h.map((e) => e.kind)).toEqual(["user", "tool", "agent"]);
-        expect(h[1]).toMatchObject({ status: "done", detail: "a b" });
+        expect(h.map((e) => e.kind)).toEqual(["user", "agent"]);
+        expect(h[0]).toMatchObject({ text: "hi (edited)" });
+    });
+
+    test("tool-call entries from older transcripts are tolerated and not part of the conversation", () => {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ai-conv-"));
+        dirs.push(dir);
+        const old = [
+            { id: "a", at: 1, kind: "user", text: "hi" },
+            { id: "t", at: 2, kind: "tool", tool: "shell", summary: "ls", status: "done", detail: "x" },
+            { id: "s", at: 3, kind: "tool", tool: "search", summary: "cats", status: "done", detail: null },
+            { id: "b", at: 4, kind: "agent", text: "hello" },
+        ];
+        fs.writeFileSync(path.join(dir, "transcript.jsonl"), old.map((e) => JSON.stringify(e)).join("\n") + "\n");
+        const { conv } = setup({ dir });
+        expect(conv.history().map((e) => e.id)).toEqual(["a", "b"]);
     });
 
     test("damage before the last line is refused, not read as an empty conversation", () => {
@@ -229,5 +244,105 @@ describe("the conversation", () => {
         conv.init();
         await until(() => host.killed.length === 1);
         expect(host.killed[0]).toEqual({ id: TURN_PROC_ID, signal: "SIGKILL" });
+    });
+});
+
+describe("texting", () => {
+    // the toolset the agent has, over this conversation
+    const texting = (conv: Conversation) => messagesToolset({ say: (t, r) => conv.say(t, r) });
+    const send = (conv: Conversation, text: string, reply_to?: string) => texting(conv).call("send_message", { text, reply_to });
+    const bubbles = (emitted: ChatEntry[]) => emitted.filter((e) => e.kind === "agent") as Extract<ChatEntry, { kind: "agent" }>[];
+
+    test("send_message adds an agent bubble at once, mid-turn, and the model can see the user's message ids", async () => {
+        const { conv, host, emitted } = setup();
+        const hi = conv.send("hi");
+        await until(() => host.started.length === 1);
+        // the harness is handed the message with its id
+        expect(host.started[0]!.args.at(-1)).toBe(`[${hi.id}] hi`);
+        expect(hi.id.length).toBeLessThanOrEqual(8);
+
+        const r = await send(conv, "hey!", hi.id);
+        expect(r.isError).toBeUndefined();
+        expect(bubbles(emitted)).toMatchObject([{ text: "hey!", replyTo: hi.id }]);
+        expect(r.text).toBe(`sent [${bubbles(emitted)[0]!.id}]`);
+        // the turn is still running: it was a bubble, not the end
+        expect(conv.history().at(-1)).toMatchObject({ kind: "agent", text: "hey!" });
+        host.exit(TURN_PROC_ID, 0);
+        await until(() => !emitted.some((e) => e.kind === "error") && conv.history().length === 2);
+    });
+
+    test("a reply_to that isn't a message is a tool error, and nothing is added", async () => {
+        const { conv, host, emitted } = setup();
+        conv.send("hi");
+        await until(() => host.started.length === 1);
+        const r = await send(conv, "hello", "nope");
+        expect(r.isError).toBe(true);
+        expect(r.text).toMatch(/no message \[nope\]/);
+        expect((await send(conv, "   ")).isError).toBe(true);
+        expect(bubbles(emitted)).toEqual([]);
+        // an error entry isn't a message to reply to either
+        host.exit(TURN_PROC_ID, 1);
+        await until(() => emitted.some((e) => e.kind === "error"));
+        expect((await send(conv, "x", emitted.find((e) => e.kind === "error")!.id)).isError).toBe(true);
+    });
+
+    test("send_message outside a turn is refused", async () => {
+        const { conv } = setup();
+        expect((await send(conv, "hello?")).isError).toBe(true);
+        expect(conv.history()).toEqual([]);
+    });
+
+    test("the model can reply to its own earlier bubble, and to the user's reply", async () => {
+        const { conv, host, emitted, states } = setup();
+        conv.send("hi");
+        await until(() => host.started.length === 1);
+        const first = (await send(conv, "one sec")).text.slice(6, -1);
+        expect((await send(conv, "done!", first)).isError).toBeUndefined();
+        host.exit(TURN_PROC_ID, 0);
+        await until(() => busy(states) === false);
+
+        // the user replies to the agent's bubble; the next turn quotes what it answers
+        conv.send("thanks", first);
+        await until(() => host.started.length === 2);
+        expect(host.started[1]!.args.at(-1)).toMatch(new RegExp(`^\\[\\w+\\] \\(replying to \\[${first}\\] “one sec”\\) thanks$`));
+        expect(emitted.find((e) => e.kind === "user" && e.text === "thanks")).toMatchObject({ replyTo: first });
+    });
+
+    test("the user's replyTo is validated by the service", () => {
+        const { conv } = setup();
+        expect(() => conv.send("hi", "ghost")).toThrow(/no message \[ghost\]/);
+        expect(conv.history()).toEqual([]);
+    });
+
+    test("text the model wrote instead of calling send_message still shows, once", async () => {
+        const { conv, host, emitted, states } = setup();
+        conv.send("hi");
+        await until(() => host.started.length === 1);
+        host.stdout(TURN_PROC_ID, reply("just plain text"));
+        host.exit(TURN_PROC_ID, 0);
+        await until(() => busy(states) === false);
+        expect(bubbles(emitted).map((b) => b.text)).toEqual(["just plain text"]);
+        expect(emitted.some((e) => e.kind === "error")).toBe(false);
+    });
+
+    test("plain output that repeats what was sent is not shown twice; something new is", async () => {
+        const { conv, host, emitted, states } = setup();
+        conv.send("hi");
+        await until(() => host.started.length === 1);
+        await send(conv, "All done, the file is ready.");
+        host.stdout(TURN_PROC_ID, reply("All done,  the file is ready.") + reply("Also: it's 3 MB."));
+        host.exit(TURN_PROC_ID, 0);
+        await until(() => busy(states) === false);
+        expect(bubbles(emitted).map((b) => b.text)).toEqual(["All done, the file is ready.", "Also: it's 3 MB."]);
+    });
+
+    test("a turn that only used send_message counts as a reply", async () => {
+        const { conv, host, emitted, states } = setup();
+        conv.send("hi");
+        await until(() => host.started.length === 1);
+        await send(conv, "hey");
+        host.exit(TURN_PROC_ID, 0);
+        await until(() => busy(states) === false);
+        expect(emitted.some((e) => e.kind === "error")).toBe(false);
     });
 });

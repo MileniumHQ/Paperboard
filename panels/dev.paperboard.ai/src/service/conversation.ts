@@ -1,12 +1,13 @@
 // The one conversation. There is no "new chat": like texting a friend, every
 // message continues the same thread (starting over is a deliberate reset).
 // Messages sent while the agent is busy wait, can be taken back, and are read
-// together on its next turn.
+// together on its next turn. The agent talks through send_message (see
+// messages.ts): each call is a bubble, added at once, mid-turn.
 //
 // A turn is the harness run as a daemon-supervised child (one at a time, id
 // TURN_PROC_ID). The transcript is an append-only JSONL file in the panel's
-// storage, compacted when it grows past a cap; an entry that changes (a tool
-// call finishing) is appended again and the latest copy wins.
+// storage, compacted when it grows past a cap; an entry that changes is
+// appended again and the latest copy wins.
 
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
@@ -24,6 +25,8 @@ const MAX_QUEUED = 20;
 const MAX_LINE = 16 * 1024 * 1024; // one event can carry a screenshot
 const TURN_MS = 30 * 60_000;
 const STOP_GRACE_MS = 2_000;
+const QUOTE_CHARS = 80;
+const SHORT_ID = 6;
 
 export interface TurnHost {
     start(o: StartOptions): Promise<unknown>;
@@ -57,6 +60,8 @@ export class Conversation {
     private running: Promise<void> | null = null;
     private stopRequested = false;
     private closed = false;
+    /** what the agent has texted in the running turn, to tell a plain-text ending from a repeat of it */
+    private sent: string[] = [];
 
     constructor(private deps: ConversationDeps) {}
 
@@ -79,14 +84,15 @@ export class Conversation {
     }
 
     /** Send a message: read now, or waiting for the running turn (then it can be taken back until it's read). */
-    send(text: string): { id: string; waiting: boolean } {
+    send(text: string, replyTo: string | null = null): { id: string; waiting: boolean } {
         const message = text.trim();
         if (!message) throw new Error("say something first");
         if (message.length > LIMITS.message) throw new Error(`messages are limited to ${LIMITS.message} characters`);
         if (!this.deps.settings()) throw new Error("finish setting up first");
         if (this.queue.length >= MAX_QUEUED) throw new Error("that's a lot of messages at once; wait for a reply");
-        const id = randomUUID();
-        this.queue.push({ id, text: message });
+        if (replyTo !== null) this.checkReplyTarget(replyTo);
+        const id = this.newId();
+        this.queue.push(replyTo === null ? { id, text: message } : { id, text: message, replyTo });
         const waiting = this.running !== null;
         this.pump();
         return { id, waiting };
@@ -127,17 +133,23 @@ export class Conversation {
         return { cleared: true };
     }
 
-    /** Record something the conversation should show (a tool call). Returns the entry to update later. */
-    add<E extends ChatEntry>(entry: E): E {
+    /**
+     * The agent's bubble, from its send_message tool: shown at once, mid-turn.
+     * Refused (the model sees why) with no text, or a replyTo that isn't a message in the conversation.
+     */
+    say(text: string, replyTo: string | null = null): { id: string } {
+        if (!this.running) throw new Error("there's no conversation going on right now");
+        const message = text.trim();
+        if (!message) throw new Error("say something first");
+        if (message.length > LIMITS.message) throw new Error(`messages are limited to ${LIMITS.message} characters`);
+        if (replyTo !== null) this.checkReplyTarget(replyTo);
+        const entry: ChatEntry = { id: this.newId(), at: Date.now(), kind: "agent", text: message, ...(replyTo === null ? {} : { replyTo }) };
+        this.sent.push(message);
         this.put(entry);
-        return entry;
+        return { id: entry.id };
     }
 
-    update(entry: ChatEntry) {
-        this.put(entry);
-    }
-
-    /** Stop the running turn; messages waiting for it are dropped with it. */
+    /** Stop the running turn; messages waiting for it are dropped with it. Not offered to the user: the agent just chats. */
     async stop() {
         this.queue = [];
         this.stopRequested = true;
@@ -159,11 +171,12 @@ export class Conversation {
         const batch = this.queue.splice(0);
         this.stopRequested = false; // a stop asked of an earlier turn doesn't silence this one
         // read now, so now they join the conversation
-        for (const m of batch) this.add({ id: m.id, at: Date.now(), kind: "user", text: m.text });
-        const message = batch.map((m) => m.text).join("\n\n");
+        for (const m of batch) this.put({ id: m.id, at: Date.now(), kind: "user", text: m.text, ...(m.replyTo ? { replyTo: m.replyTo } : {}) });
+        const message = batch.map((m) => this.forAgent(m)).join("\n\n");
+        this.sent = [];
         this.running = this.turn(message)
             .catch((e: Error) => {
-                this.add({ id: randomUUID(), at: Date.now(), kind: "error", text: e.message });
+                this.put({ id: this.newId(), at: Date.now(), kind: "error", text: e.message });
             })
             .finally(() => {
                 this.running = null;
@@ -195,16 +208,12 @@ export class Conversation {
         let buf = "";
         let stderr = "";
         const failures: string[] = [];
-        let said = false;
+        const plain: string[] = [];
         const onLine = (line: string) => {
             for (const ev of parseTurnLine(settings.harness, line)) {
                 if (ev.type === "thread") this.saveThread(settings.harness, ev.id);
-                else if (ev.type === "message") {
-                    said = true;
-                    this.add({ id: randomUUID(), at: Date.now(), kind: "agent", text: ev.text });
-                } else if (ev.type === "search") {
-                    this.add({ id: randomUUID(), at: Date.now(), kind: "tool", tool: "search", summary: ev.query, status: "done", detail: null });
-                } else failures.push(ev.message);
+                else if (ev.type === "message") plain.push(ev.text);
+                else if (ev.type === "failed") failures.push(ev.message);
             }
         };
         const exited = new Promise<number | undefined>((ok) => {
@@ -243,10 +252,19 @@ export class Conversation {
             clearTimeout(timer);
         }
         if (buf.trim()) onLine(buf);
+        // what the model wrote as plain output instead of send_message still reaches the user, unless it repeats what it texted
+        const texted = this.sent.map(squash);
+        for (const text of plain) {
+            const t = squash(text);
+            if (!t || texted.some((s) => s.includes(t))) continue;
+            texted.push(t);
+            this.sent.push(text);
+            this.put({ id: this.newId(), at: Date.now(), kind: "agent", text: text.trim() });
+        }
         if (this.stopRequested) return;
         if (failures.length) throw new Error(failures[failures.length - 1]);
         if (code !== 0) throw new Error(`the turn ended with exit ${code ?? "?"}${stderr.trim() ? `: ${lastLines(stderr)}` : ""}`);
-        if (!said) throw new Error("the turn ended without a reply");
+        if (this.sent.length === 0) throw new Error("the turn ended without a reply");
     }
 
     private async killTurn() {
@@ -270,6 +288,27 @@ export class Conversation {
         if (this.threads[harness] === id) return;
         this.threads = { ...this.threads, [harness]: id };
         atomicWrite(path.join(this.deps.dir, THREADS), JSON.stringify(this.threads));
+    }
+
+    /** A message as the agent reads it: its id first, so it can reply to it; what it answers is quoted. */
+    private forAgent(m: WaitingMessage): string {
+        const to = m.replyTo ? this.entries.find((e) => e.id === m.replyTo) : undefined;
+        const quote = to && "text" in to ? ` (replying to [${to.id}] “${to.text.length > QUOTE_CHARS ? to.text.slice(0, QUOTE_CHARS - 1) + "…" : to.text}”)` : "";
+        return `[${m.id}]${quote} ${m.text}`;
+    }
+
+    /** Replies point at what's in the conversation: the user's and the agent's own messages, nothing else. */
+    private checkReplyTarget(id: string) {
+        const to = this.entries.find((e) => e.id === id);
+        if (!to || (to.kind !== "user" && to.kind !== "agent")) throw new Error(`no message [${id}] to reply to`);
+    }
+
+    /** Short enough for the model to carry in a reply_to; unique among everything the conversation knows. */
+    private newId(): string {
+        for (;;) {
+            const id = randomUUID().replace(/-/g, "").slice(0, SHORT_ID);
+            if (!this.entries.some((e) => e.id === id) && !this.queue.some((m) => m.id === id)) return id;
+        }
     }
 
     private state() {
@@ -304,6 +343,8 @@ export class Conversation {
                 if (n >= lines.length - 2) return;
                 throw new Error(`${file} line ${n + 1} is unreadable: ${(err as Error).message}`);
             }
+            // transcripts from before the chat was only a chat hold tool-call entries: not messages, not shown
+            if (e.kind !== "user" && e.kind !== "agent" && e.kind !== "error") return;
             byId.delete(e.id); // re-insert so a changed entry keeps its newest position
             byId.set(e.id, e);
         });
@@ -314,6 +355,10 @@ export class Conversation {
 function atomicWrite(file: string, data: string) {
     fs.writeFileSync(`${file}.tmp`, data);
     fs.renameSync(`${file}.tmp`, file);
+}
+
+function squash(s: string) {
+    return s.replace(/\s+/g, " ").trim().toLowerCase();
 }
 
 function lastLines(s: string) {

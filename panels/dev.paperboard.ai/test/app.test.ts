@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { DEFAULT_STATE, type AiState, type Settings } from "../src/contract";
-import { AiApp, parseBudget, parseSettings, summarize, type AppHost } from "../src/service/app";
+import { AiApp, parseBudget, parseSettings, type AppHost } from "../src/service/app";
 import { FakeProcesses } from "./fakeHost";
 
 describe("settings and budget are validated by the service", () => {
@@ -26,11 +26,6 @@ describe("settings and budget are validated by the service", () => {
         expect(() => parseBudget(undefined)).toThrow();
     });
 
-    test("summarize keeps a tool call to one short line", () => {
-        expect(summarize("shell", { command: "ls -la\nrm x" })).toBe("ls -la");
-        expect(summarize("click", { mark: 3 })).toBe("mark 3");
-        expect(summarize("type", { text: "x".repeat(300) }).length).toBe(120);
-    });
 });
 
 describe("the service's agent", () => {

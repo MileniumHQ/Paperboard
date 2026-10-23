@@ -65,8 +65,9 @@ export const aiService = definePanelService({
         ui(UI_ACTION_IDS.detect, "Find installed agent harnesses", () => app.detect()),
         ui(UI_ACTION_IDS.models, "List a brain's models", (i) => app.models(i)),
         ui(UI_ACTION_IDS.history, "Read the conversation", (i) => app.conversation.history(Number(i.limit) || undefined)),
-        ui(UI_ACTION_IDS.send, "Send a message", (i) => app.conversation.send(String(i.text ?? ""))),
-        ui(UI_ACTION_IDS.stop, "Stop the agent", () => app.conversation.stop()),
+        ui(UI_ACTION_IDS.send, "Send a message", (i) =>
+            app.conversation.send(String(i.text ?? ""), i.replyTo === undefined || i.replyTo === null ? null : String(i.replyTo)),
+        ),
         ui(UI_ACTION_IDS.installComputer, "Set up the agent's computer", (i) => app.installComputer(i)),
         ui(UI_ACTION_IDS.startComputer, "Start the agent's computer", () => app.startComputer()),
         ui(UI_ACTION_IDS.stopComputer, "Stop the agent's computer", () => app.stopComputer()),

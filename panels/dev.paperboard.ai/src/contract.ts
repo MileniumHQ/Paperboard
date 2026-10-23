@@ -13,7 +13,6 @@ export const UI_ACTION_IDS = {
     detect: "ui-detect",
     history: "ui-history",
     send: "ui-send",
-    stop: "ui-stop",
     installComputer: "ui-install-computer",
     startComputer: "ui-start-computer",
     stopComputer: "ui-stop-computer",
@@ -33,7 +32,7 @@ export const UI_ACTION_IDS = {
 } as const;
 
 export const EVENTS = {
-    // an entry was added or changed (a tool call finishing); the whole entry
+    // an entry was added or changed; the whole entry
     entry: "chat-entry",
     // the user started over: the conversation is empty
     cleared: "chat-cleared",
@@ -140,6 +139,8 @@ export interface ChatState {
 export interface WaitingMessage {
     id: string;
     text: string;
+    /** id of the message it answers */
+    replyTo?: string;
 }
 
 export interface AiState {
@@ -150,9 +151,9 @@ export interface AiState {
 }
 
 export type ChatEntry =
-    | { id: string; at: number; kind: "user"; text: string }
-    | { id: string; at: number; kind: "agent"; text: string }
-    | { id: string; at: number; kind: "tool"; tool: string; summary: string; status: "running" | "done" | "failed"; detail: string | null }
+    // replyTo: the id of an earlier user or agent entry this bubble answers
+    | { id: string; at: number; kind: "user"; text: string; replyTo?: string }
+    | { id: string; at: number; kind: "agent"; text: string; replyTo?: string }
     | { id: string; at: number; kind: "error"; text: string };
 
 export const SETUP_STEPS: SetupStepId[] = ["image", "browser", "disk", "boot", "install"];

@@ -23,7 +23,7 @@ export default function Workspace(props: { agent: Agent }) {
 
     return (
         <>
-            <Chat agent={agent} face={face} onOpen={setSheet} />
+            <Chat agent={agent} face={face} onMenu={() => setSheet("settings")} />
             {/* one modal at a time; closing it unmounts its content, which hands back the computer */}
             <PaperModal open={sheet() !== null} onClose={close} title={sheet() ? TITLES[sheet()!] : ""} size={sheet() === "computer" ? "full" : "medium"}>
                 <Show when={sheet() === "computer"}>

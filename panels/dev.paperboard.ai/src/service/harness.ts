@@ -23,7 +23,7 @@ export function instructions(name: string, sections: string[] = []): string {
 
 You have your own computer, a Debian VM. Your tools act on it, never on the user's machine, so you can't see their files. Use them to actually do things instead of explaining how.
 
-Work quietly. The user sees your tool calls already, so don't announce or narrate steps ("let me open…", "now I'll click…", "next one"). Do the work, then reply once with what came of it. Only write mid-task when you need something from them or a long task has news worth hearing.`,
+Work quietly: the user doesn't see your tool calls, and you don't announce steps. Do the work, then text what came of it.`,
         ...sections,
     ].join("\n\n");
 }
