@@ -133,7 +133,7 @@ export default function Composer(props: {
                     }}
                 />
                 <PaperButton icon size="small" variant="text" aria-label="Attach files" title="Attach files" onClick={() => picker.click()}>
-                    attach_file
+                    add
                 </PaperButton>
                 <textarea
                     ref={field}

@@ -15,7 +15,7 @@
     align-items: flex-end;
     gap: var(--paper-uigap-half);
     min-width: 0;
-    padding: var(--paper-uigap-half) var(--paper-uigap-half) var(--paper-uigap-half) var(--paper-uigap);
+    padding: var(--paper-uigap-half);
     border: var(--paper-border-width) solid var(--paper-border);
     border-radius: var(--paper-border-radius);
     background: var(--paper-surface-sunken);
@@ -33,7 +33,8 @@
     box-sizing: border-box;
     display: block;
     margin: 0;
-    padding: 0;
+    /* one line sits in the middle of the buttons beside it */
+    padding: calc((var(--paper-control-size-small) - var(--paper-console-line-height)) / 2) 0;
     border: none;
     outline: none;
     resize: none;
