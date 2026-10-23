@@ -175,6 +175,7 @@ describe("download redirects", () => {
             "pb/latest.yml": "version: 3.0.0-alpha\n",
             "pb/latest-mac.yml": "version: 3.0.0-alpha\n",
             "pb/latest-linux.yml": "version: 3.0.0-alpha\n",
+            "pb/latest-linux-arm64.yml": "version: 3.0.0-arm64\n",
             "paperboard/index.json": JSON.stringify({ frozen: true }),
             "crane/index.json": JSON.stringify({ "linux-x64": { version: "0.1.0" } }),
         };
@@ -279,6 +280,19 @@ describe("download redirects", () => {
         expect(res.status).toBe(200);
         expect(res.headers.get("Content-Type")).toContain("text/yaml");
         expect(await res.text()).toContain("version: 3.0.0-alpha");
+    });
+
+    it("serves the Linux arm64 feed an arm64 AppImage requests, on every feed path", async () => {
+        const env = envWithDownloads();
+        for (const url of [
+            dl("/pb/latest-linux-arm64.yml"),
+            "http://localhost/paperdl/pb/latest-linux-arm64.yml",
+            "http://localhost/paperdl/paperboard/latest-linux-arm64.yml",
+        ]) {
+            const res = await get(url, env);
+            expect(res.status).toBe(200);
+            expect(await res.text()).toContain("version: 3.0.0-arm64");
+        }
     });
 
     it("500s the feed when the bucket is unconfigured", async () => {
