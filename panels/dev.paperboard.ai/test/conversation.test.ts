@@ -263,12 +263,33 @@ describe("texting", () => {
 
         const r = await send(conv, "hey!", hi.id);
         expect(r.isError).toBeUndefined();
-        expect(bubbles(emitted)).toMatchObject([{ text: "hey!", replyTo: hi.id }]);
+        // the turn answers only "hi", so quoting it would repeat the bubble right above: shown plain
+        // (this test used to expect the quote; real models pass reply_to on nearly every bubble)
+        expect(bubbles(emitted)).toMatchObject([{ text: "hey!" }]);
+        expect(bubbles(emitted)[0]!.replyTo).toBeUndefined();
         expect(r.text).toBe(`sent [${bubbles(emitted)[0]!.id}]`);
         // the turn is still running: it was a bubble, not the end
         expect(conv.history().at(-1)).toMatchObject({ kind: "agent", text: "hey!" });
         host.exit(TURN_PROC_ID, 0);
         await until(() => !emitted.some((e) => e.kind === "error") && conv.history().length === 2);
+    });
+
+    test("a reply to one of several messages, or to an earlier one, keeps its quote", async () => {
+        const { conv, host, emitted, states } = setup();
+        const first = conv.send("hi");
+        await until(() => host.started.length === 1);
+        conv.send("what's 2+2?");
+        const third = conv.send("and 3+3?");
+        host.exit(TURN_PROC_ID, 0); // the first turn ends unanswered; the other two are read together
+        await until(() => host.started.length === 2);
+        expect((await send(conv, "6", third.id)).isError).toBeUndefined();
+        expect((await send(conv, "hi back!", first.id)).isError).toBeUndefined();
+        expect(bubbles(emitted).map((b) => [b.text, b.replyTo])).toEqual([
+            ["6", third.id],
+            ["hi back!", first.id],
+        ]);
+        host.exit(TURN_PROC_ID, 0);
+        await until(() => busy(states) === false);
     });
 
     test("a reply_to that isn't a message is a tool error, and nothing is added", async () => {

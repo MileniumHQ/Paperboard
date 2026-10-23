@@ -62,6 +62,8 @@ export class Conversation {
     private closed = false;
     /** what the agent has texted in the running turn; once it has, its plain output is only a recap */
     private sent: string[] = [];
+    /** ids of the user's messages the running turn is answering */
+    private answering: string[] = [];
 
     constructor(private deps: ConversationDeps) {}
 
@@ -143,6 +145,8 @@ export class Conversation {
         if (!message) throw new Error("say something first");
         if (message.length > LIMITS.message) throw new Error(`messages are limited to ${LIMITS.message} characters`);
         if (replyTo !== null) this.checkReplyTarget(replyTo);
+        // quoting the one message this turn answers says nothing the bubble above doesn't: shown plain, as a text would be
+        if (replyTo !== null && this.answering.length === 1 && this.answering[0] === replyTo) replyTo = null;
         const entry: ChatEntry = { id: this.newId(), at: Date.now(), kind: "agent", text: message, ...(replyTo === null ? {} : { replyTo }) };
         this.sent.push(message);
         this.put(entry);
@@ -174,6 +178,7 @@ export class Conversation {
         for (const m of batch) this.put({ id: m.id, at: Date.now(), kind: "user", text: m.text, ...(m.replyTo ? { replyTo: m.replyTo } : {}) });
         const message = batch.map((m) => this.forAgent(m)).join("\n\n");
         this.sent = [];
+        this.answering = batch.map((m) => m.id);
         this.running = this.turn(message)
             .catch((e: Error) => {
                 this.put({ id: this.newId(), at: Date.now(), kind: "error", text: e.message });
