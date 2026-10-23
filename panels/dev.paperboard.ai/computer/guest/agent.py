@@ -19,6 +19,7 @@ import io
 import json
 import os
 import re
+import select
 import shlex
 import shutil
 import signal
@@ -51,6 +52,10 @@ os.environ.update({
 })
 SHELL_TIMEOUT_MAX = 600
 OUTPUT_MAX = 16_000
+# after the command itself exits, how long its output still has to arrive
+SHELL_DRAIN_SECONDS = 0.5
+SCROLL_MAX = 50
+SIZE_MAX = 8192
 MAX_MARKS = 120
 MAX_BODY = 1 << 20
 
@@ -584,7 +589,13 @@ def t_look(args):
         except Exception as e:  # noqa: BLE001 - the accessibility marks still stand
             note = (note + "\n" if note else "") + f"page-only clickables unavailable ({type(e).__name__})"
     marks = sorted(marks, key=lambda m: (m["y"] // 12, m["x"]))[:MAX_MARKS]
+    open_ids = window_ids()
     with lock:
+        # one entry per open window: a closed window's marks go with it
+        for gone in [k for k in marks_by_window if k not in open_ids]:
+            del marks_by_window[gone]
+        for gone in [k for k in docs_by_window if k not in open_ids]:
+            del docs_by_window[gone]
         marks_by_window[win["id"]] = marks
         docs_by_window[win["id"]] = doc
     listing = "\n".join(f'{i + 1}. {m["kind"]} "{m["name"]}"' if m["name"] else f'{i + 1}. {m["kind"]}' for i, m in enumerate(marks))
@@ -729,6 +740,8 @@ def t_scroll(args):
     else:
         x, y = win["x"] + win["width"] // 2, win["y"] + win["height"] // 2
     amount = int(args.get("amount", 5))
+    if not amount or abs(amount) > SCROLL_MAX:
+        raise ToolError(f"amount is 1 to {SCROLL_MAX} steps, negative to scroll up")
     xdo("mousemove", "--sync", str(x), str(y))
     xdo("click", "--repeat", str(abs(amount)), "--delay", "30", "5" if amount > 0 else "4")
     time.sleep(0.3)
@@ -737,11 +750,13 @@ def t_scroll(args):
 
 def t_place(args):
     wid = int(args["window"])
+    kw = {k: int(args[k]) for k in ("x", "y", "width", "height") if k in args}
+    if any(not 1 <= kw[k] <= SIZE_MAX for k in ("width", "height") if k in kw) or any(abs(kw[k]) > SIZE_MAX for k in ("x", "y") if k in kw):
+        raise ToolError(f"sizes are 1 to {SIZE_MAX} px, and positions within {SIZE_MAX} px of the screen")
     find_window(wid)
     d = xd()
     try:
         w = d.create_resource_object("window", wid)
-        kw = {k: int(args[k]) for k in ("x", "y", "width", "height") if k in args}
         w.configure(**kw)
         d.sync()
     finally:
@@ -798,19 +813,81 @@ def t_open(args):
     return {"text": "Started it, but no new window appeared within 15 s (it may reuse an existing window, or it isn't a windowed app)."}
 
 
+class Capped:
+    """A stream's output, keeping its start and its end: memory stays bounded however much it writes."""
+
+    def __init__(self, keep):
+        self.keep = keep
+        self.head, self.tail, self.total = bytearray(), bytearray(), 0
+
+    def add(self, chunk):
+        self.total += len(chunk)
+        room = self.keep - len(self.head)
+        if room > 0:
+            self.head += chunk[:room]
+            chunk = chunk[room:]
+        if chunk:
+            self.tail = (self.tail + chunk)[-self.keep:]
+
+    def text(self):
+        cut = self.total - len(self.head) - len(self.tail)
+        out = self.head.decode("utf-8", "replace")
+        if cut > 0:
+            out += f"\n… {cut} bytes cut …\n"
+        return out + self.tail.decode("utf-8", "replace")
+
+
 def t_shell(args):
+    """Run a command; its result once bash itself exits.
+
+    Background jobs it started keep running, as in a terminal, but the call
+    doesn't wait for them: one still holding the output is cut off from it
+    once bash has exited. On timeout the command's whole process group is
+    stopped, background jobs with it."""
     cmd = str(args["command"])
-    timeout = min(int(args.get("timeout", 60)), SHELL_TIMEOUT_MAX)
+    timeout = max(1, min(int(args.get("timeout", 60)), SHELL_TIMEOUT_MAX))
+    proc = subprocess.Popen(["bash", "-lc", cmd], stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                            cwd=HOME, start_new_session=True)
+    streams = {proc.stdout.fileno(): Capped(OUTPUT_MAX // 2), proc.stderr.fileno(): Capped(OUTPUT_MAX // 4)}
+    out, err = streams.values()
+    open_fds = set(streams)
+    deadline = time.monotonic() + timeout
+    drain_until = None  # set once bash exits: what's already written still arrives
+    timed_out = False
     try:
-        r = subprocess.run(["bash", "-lc", cmd], capture_output=True, text=True, timeout=timeout,
-                           cwd=HOME)
-    except subprocess.TimeoutExpired as e:
-        out = (e.stdout or b"").decode("utf-8", "replace") if isinstance(e.stdout, bytes) else (e.stdout or "")
-        return {"text": f"Timed out after {timeout}s.\n{out[-OUTPUT_MAX:]}"}
-    out = (r.stdout + ("\n[stderr]\n" + r.stderr if r.stderr.strip() else ""))
-    if len(out) > OUTPUT_MAX:
-        out = out[:OUTPUT_MAX // 2] + f"\n… {len(out) - OUTPUT_MAX} characters cut …\n" + out[-OUTPUT_MAX // 2:]
-    return {"text": f"exit {r.returncode}\n{out}"}
+        while open_fds:
+            now = time.monotonic()
+            if drain_until is None and proc.poll() is not None:
+                drain_until = now + SHELL_DRAIN_SECONDS
+            if drain_until is not None and now >= drain_until:
+                break
+            if drain_until is None and now >= deadline:
+                timed_out = True
+                break
+            ready, _, _ = select.select(list(open_fds), [], [], min(0.1, (drain_until or deadline) - now))
+            for fd in ready:
+                chunk = os.read(fd, 65536)
+                if chunk:
+                    streams[fd].add(chunk)
+                else:
+                    open_fds.discard(fd)
+        if timed_out:
+            try:
+                os.killpg(proc.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass  # it exited just now
+        proc.wait()
+    finally:
+        proc.stdout.close()
+        proc.stderr.close()
+    text = out.text()
+    if err.total:
+        text += "\n[stderr]\n" + err.text()
+    if timed_out:
+        return {"text": f"Timed out after {timeout}s; it was stopped.\n{text}"}
+    if open_fds:
+        text += "\n[a background job still held the output; it keeps running, but its later output isn't shown. Redirect it to a file to keep it.]"
+    return {"text": f"exit {proc.returncode}\n{text}"}
 
 
 # ---------------------------------------------------------------- tool servers (MCP over stdio)
