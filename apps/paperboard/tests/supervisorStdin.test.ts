@@ -1,19 +1,23 @@
 // A supervised child's stdin: a pipe by default (stdin frames write to it),
 // or empty and closed with `stdin: "ignore"`, for programs that read their
 // stdin to the end before they run (`opencode run` does, and otherwise
-// waits forever). Real supervisor processes, as in supervisorIdentity.test.ts.
+// waits forever). Real supervisor processes, as in supervisorIdentity.test.ts,
+// and the in-process supervisor the Electron app uses.
 import { describe, it, expect, afterEach } from "bun:test";
 import { spawn, type ChildProcess } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { EmbeddedSupervisor } from "../papercrane/embeddedSupervisor";
 import { getSupervisorMetadataPath } from "../papercrane/supervisor";
 
 const MAIN = path.join(import.meta.dir, "..", "papercrane", "main.ts");
 const supervisors: ChildProcess[] = [];
 const dirs: string[] = [];
+const embedded: EmbeddedSupervisor[] = [];
 
 afterEach(async () => {
+    for (const workload of embedded.splice(0)) workload.kill("SIGKILL");
     // SIGTERM lets each supervisor stop its workload before it exits
     for (const child of supervisors.splice(0)) {
         if (child.exitCode === null && child.signalCode === null) child.kill("SIGTERM");
@@ -36,12 +40,17 @@ function exited(child: ChildProcess, ms: number): Promise<boolean> {
     });
 }
 
+/** A program that writes `marker` once its stdin ends, then exits. */
+function readerSource(marker: string): string {
+    return `process.stdin.resume(); process.stdin.on("end", () => { require("fs").writeFileSync(${JSON.stringify(marker)}, "eof"); process.exit(0); });`;
+}
+
 /** Supervise a child that writes `marker` once its stdin ends, then exits. */
 async function superviseReader(id: string, stdin: "pipe" | "ignore" | undefined) {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "supervisor-stdin-"));
     dirs.push(dir);
     const marker = path.join(dir, "eof");
-    const source = `process.stdin.resume(); process.stdin.on("end", () => { require("fs").writeFileSync(${JSON.stringify(marker)}, "eof"); process.exit(0); });`;
+    const source = readerSource(marker);
     const child = spawn(process.execPath, [MAIN, "--supervise", id], { stdio: ["pipe", "ignore", "ignore"], env: process.env });
     supervisors.push(child);
     child.stdin!.end(JSON.stringify({ command: process.execPath, args: ["-e", source], ...(stdin ? { stdin } : {}) }));
@@ -72,5 +81,31 @@ describe("a supervised child's stdin", () => {
         const { child, marker } = await superviseReader("dev.test.stdin.pipe", undefined);
         expect(await appears(marker, 1500)).toBe(false);
         expect(child.exitCode).toBeNull();
+    }, 30_000);
+});
+
+describe("an embedded (in-process) supervised child's stdin", () => {
+    async function embeddedReader(id: string, stdin: "pipe" | "ignore" | undefined) {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), "supervisor-stdin-"));
+        dirs.push(dir);
+        const marker = path.join(dir, "eof");
+        const workload = new EmbeddedSupervisor(id, {
+            id,
+            type: "child_process",
+            command: process.execPath,
+            args: ["-e", readerSource(marker)],
+            ...(stdin ? { stdin } : {}),
+        });
+        embedded.push(workload);
+        expect(await workload.connect()).toBe(true);
+        return marker;
+    }
+
+    it('with stdin "ignore" is closed from the start', async () => {
+        expect(await appears(await embeddedReader("dev.test.stdin.embedded.ignore", "ignore"), 8000)).toBe(true);
+    }, 30_000);
+
+    it("by default stays an open pipe", async () => {
+        expect(await appears(await embeddedReader("dev.test.stdin.embedded.pipe", undefined), 1500)).toBe(false);
     }, 30_000);
 });
