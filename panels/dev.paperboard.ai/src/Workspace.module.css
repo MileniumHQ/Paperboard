@@ -1,0 +1,39 @@
+/* the modal's body has no padding: the sidebar and the page meet its edges */
+.layout {
+    display: flex;
+    height: 75vh;
+    min-height: 0;
+}
+
+.sidebar {
+    flex: none;
+}
+
+.page {
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+}
+
+.padded {
+    padding: var(--paper-uigap-double);
+}
+
+/* phones: the menu becomes a strip above the page */
+@media (max-width: 600px) {
+    .layout {
+        flex-direction: column;
+    }
+
+    .sidebar.sidebar {
+        width: 100%;
+        height: auto;
+        flex-direction: row;
+        overflow-x: auto;
+        border-right: 0;
+        border-bottom: var(--paper-border-width) solid var(--paper-border);
+    }
+}

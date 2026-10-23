@@ -2,8 +2,8 @@
 .view {
     display: flex;
     flex-direction: column;
-    /* the modal sizes to its content; a window needs room to be seen */
-    height: 70vh;
+    /* fills the modal's page edge to edge */
+    height: 100%;
     min-height: 0;
     background: var(--paper-surface-app);
 }
