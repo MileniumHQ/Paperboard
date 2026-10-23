@@ -14,6 +14,7 @@ the targets marks can't reach.
 """
 
 import base64
+import hashlib
 import io
 import json
 import os
@@ -28,7 +29,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from PIL import Image, ImageDraw, ImageFont
 from Xlib import X, display as xdisplay
-from Xlib.error import XError
+from Xlib.error import ConnectionClosedError, DisplayError, XError
 
 PORT = int(os.environ.get("AGENT_PORT", "7070"))
 TOKEN = open(os.environ.get("AGENT_TOKEN_FILE", "/etc/paperboard/token")).read().strip()
@@ -110,7 +111,11 @@ def find_window(wid):
 
 
 def raise_window(wid):
-    """Bring a window to the front, unless it's already there (restacking would bury its open menus)."""
+    """Bring a window to the front and give it the keyboard.
+
+    A window already on top isn't restacked (that would bury its open menus),
+    but it still gets focus: with no window manager, focus stays wherever it
+    was last put, so keys would otherwise go to the previous window."""
     d = xd()
     try:
         top = None
@@ -121,11 +126,11 @@ def raise_window(wid):
                 continue
             if a.map_state == X.IsViewable and not a.override_redirect:
                 top = c.id
-        if top == wid:
-            return
         w = d.create_resource_object("window", wid)
-        w.configure(stack_mode=X.Above)
-        w.set_input_focus(X.RevertToParent, X.CurrentTime)
+        if top != wid:
+            w.configure(stack_mode=X.Above)
+        if d.get_input_focus().focus != w:
+            w.set_input_focus(X.RevertToParent, X.CurrentTime)
         d.sync()
     finally:
         d.close()
@@ -769,10 +774,147 @@ def t_shell(args):
     return {"text": f"exit {r.returncode}\n{out}"}
 
 
+# ---------------------------------------------------------------- the user's view
+#
+# The panel shows each window in a tab the user can watch and drive. These
+# are the user's tools, not the agent's: the service never offers them over
+# MCP. Frames come from X Composite, so a window reads right even while
+# another one covers it; the redirect lasts as long as the connection that
+# asked for it, so one connection is kept for the life of the agent.
+
+VIEW_MAX_EVENTS = 64
+VIEW_MAX_TEXT = 2000
+VIEW_BUTTONS = {1, 2, 3}
+view_lock = threading.Lock()
+view_display = None
+
+
+def _view():
+    global view_display
+    if view_display is None:
+        d = xd()
+        if not d.has_extension("Composite"):
+            d.close()
+            raise ToolError("this display can't show windows on their own (no Composite extension)")
+        d.screen().root.composite_redirect_subwindows(1)  # automatic: the server still draws the screen
+        d.sync()
+        view_display = d
+    return view_display
+
+
+def _drop_view():
+    global view_display
+    if view_display is not None:
+        try:
+            view_display.close()
+        except Exception as e:  # noqa: BLE001 - a dead connection is what's being dropped
+            sys.stderr.write(f"agent: closing the view connection: {e}\n")
+    view_display = None
+
+
+def _window_image(d, w):
+    g = w.get_geometry()
+    pix = w.composite_name_window_pixmap()
+    try:
+        raw = pix.get_image(0, 0, g.width, g.height, X.ZPixmap, 0xFFFFFFFF)
+    finally:
+        pix.free()
+    return g, Image.frombytes("RGB", (g.width, g.height), raw.data, "raw", "BGRX")
+
+
+def t_view_windows(args):
+    return {"windows": [{k: w[k] for k in ("id", "title", "app", "width", "height")} for w in list_windows()]}
+
+
+def t_view_frame(args):
+    """One window as the user sees it, its open menus drawn over it. Unchanged since `since`: just says so."""
+    wid = int(args["window"])
+    if wid not in window_ids():
+        raise ToolError("that window is closed")
+    quality = max(30, min(90, int(args.get("quality", 72))))
+    with view_lock:
+        try:
+            d = _view()
+            g, img = _window_image(d, d.create_resource_object("window", wid))
+            for c in d.screen().root.query_tree().children:  # bottom to top
+                try:
+                    a, cg = c.get_attributes(), c.get_geometry()
+                    if a.map_state != X.IsViewable or not a.override_redirect:
+                        continue
+                    if cg.x >= g.x + g.width or cg.y >= g.y + g.height or cg.x + cg.width <= g.x or cg.y + cg.height <= g.y:
+                        continue
+                    _, pop = _window_image(d, c)
+                except XError:
+                    continue  # a menu that closed while it was being read
+                img.paste(pop, (cg.x - g.x, cg.y - g.y))
+        except (XError, ConnectionClosedError) as e:
+            _drop_view()  # the next frame reconnects (and redirects again, after an X restart)
+            raise ToolError(f"couldn't read the window: {e}")
+    digest = hashlib.blake2b(img.tobytes(), digest_size=12).hexdigest()
+    if args.get("since") == digest:
+        return {"same": True, "hash": digest}
+    buf = io.BytesIO()
+    img.save(buf, "JPEG", quality=quality)
+    return {"frame": base64.b64encode(buf.getvalue()).decode(), "hash": digest, "width": g.width, "height": g.height}
+
+
+def _view_point(win, e):
+    x, y = int(e["x"]), int(e["y"])
+    if not (0 <= x < win["width"] and 0 <= y < win["height"]):
+        raise ToolError("that point is outside the window")
+    return str(win["x"] + x), str(win["y"] + y)
+
+
+def t_view_input(args):
+    """The user's mouse and keys, replayed into one window (raised first so they land there)."""
+    win = find_window(int(args["window"]))
+    events = args.get("events") or []
+    if not isinstance(events, list) or len(events) > VIEW_MAX_EVENTS:
+        raise ToolError(f"send at most {VIEW_MAX_EVENTS} events at a time")
+    raise_window(win["id"])
+    for e in events:
+        kind = e.get("type")
+        if kind == "move":
+            xdo("mousemove", *_view_point(win, e))
+        elif kind in ("down", "up"):
+            button = int(e.get("button", 1))
+            if button not in VIEW_BUTTONS:
+                raise ToolError("unknown mouse button")
+            if "x" in e:
+                xdo("mousemove", *_view_point(win, e))
+            xdo("mousedown" if kind == "down" else "mouseup", str(button))
+        elif kind == "scroll":
+            xdo("mousemove", *_view_point(win, e))
+            dy, dx = int(e.get("dy", 0)), int(e.get("dx", 0))
+            for n, (neg, pos) in ((dy, ("4", "5")), (dx, ("6", "7"))):
+                if n:
+                    xdo("click", "--repeat", str(min(abs(n), 20)), pos if n > 0 else neg)
+        elif kind == "key":
+            keys = str(e.get("keys", ""))
+            if not keys or len(keys) > 64 or not all(ch.isalnum() or ch in "_+" for ch in keys):
+                raise ToolError("keys look like ctrl+shift+t")
+            xdo("key", "--clearmodifiers", "--", keys)
+        elif kind == "text":
+            text = str(e.get("text", ""))
+            if len(text) > VIEW_MAX_TEXT:
+                raise ToolError(f"type at most {VIEW_MAX_TEXT} characters at a time")
+            if text:
+                xdo("type", "--delay", "0", "--", text)
+        else:
+            raise ToolError(f"unknown input {kind!r}")
+    return {"ok": True}
+
+
+def t_view_close(args):
+    return t_close(args)
+
+
 TOOLS = {
     "windows": t_windows, "look": t_look, "click": t_click, "type": t_type, "key": t_key,
     "scroll": t_scroll, "place": t_place, "close": t_close, "open": t_open, "shell": t_shell,
     "zoom": t_zoom, "hover": t_hover, "drag": t_drag,
+    # the user's, never offered to the agent
+    "view_windows": t_view_windows, "view_frame": t_view_frame, "view_input": t_view_input, "view_close": t_view_close,
 }
 
 
@@ -819,4 +961,10 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
+    # redirect before any window opens, so every window has painted its own pixels by the time the user looks
+    try:
+        with view_lock:
+            _view()
+    except (ToolError, XError, DisplayError, OSError) as e:
+        sys.stderr.write(f"agent: windows can't be shown on their own yet: {e}\n")
     ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()
