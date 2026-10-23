@@ -21,6 +21,9 @@ export async function handleProcess(action: string, id: unknown, params: any, ct
                 return a;
             });
             const env = assertEnvMap(params?.env, "env");
+            if (params?.stdin !== undefined && typeof params.stdin !== "boolean") {
+                throw new InvalidParamsError("Invalid parameter: stdin must be a boolean");
+            }
             checkSpawnEnv(env, ctx, "process:run");
             const started = await claimClient(procId, ctx, "process:run", () => engine.startProcess(
                 procId,
@@ -31,6 +34,7 @@ export async function handleProcess(action: string, id: unknown, params: any, ct
                 undefined, // onData omitted — stdout & stderr are individually routed below
                 (stdout) => sendEvent("process:data", { id: procId, data: stdout, stream: "stdout" }),
                 (stderr) => sendEvent("process:data", { id: procId, data: stderr, stream: "stderr" }),
+                { stdin: params?.stdin },
             ));
             void started.completion.then(({ exitCode }) => {
                 sendEvent("process:exit", { id: procId, exitCode });

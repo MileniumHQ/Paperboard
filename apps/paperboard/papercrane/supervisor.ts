@@ -22,6 +22,8 @@ export interface SupervisorSpawnConfig {
     cols?: number;
     rows?: number;
     appId?: string;
+    /** the child's input is closed from the start: a program that reads to its end (codex exec) is not left waiting */
+    noStdin?: boolean;
 }
 
 export interface SupervisorMetadata {
@@ -539,7 +541,7 @@ export async function runSupervisor(procId: string): Promise<void> {
                 return;
             }
             try {
-                childProcess = cp.spawn(command, args, { cwd: finalCwd, env: mergedEnv, windowsHide: true });
+                childProcess = cp.spawn(command, args, { cwd: finalCwd, env: mergedEnv, windowsHide: true, stdio: [config.noStdin ? "ignore" : "pipe", "pipe", "pipe"] });
             } catch (err) {
                 // a synchronous spawn throw is a start failure the creator reads, not an uncaught crash
                 failStart(`Could not start ${command}: ${(err as Error).message}`);

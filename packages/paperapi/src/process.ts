@@ -23,6 +23,8 @@ export interface ProcessStartOptions {
     args?: string[];
     cwd?: string;
     env?: Record<string, string>;
+    /** false: the process starts with its input closed, so one that reads input to its end isn't left waiting; writes to it fail */
+    stdin?: boolean;
 }
 
 // supervised background processes
@@ -34,6 +36,7 @@ export const processApi = {
             args: options.args || [],
             cwd: options.cwd,
             env: options.env,
+            ...(options.stdin === false ? { stdin: false } : {}),
         }),
 
     write: (id: string, data: string): Promise<void> =>

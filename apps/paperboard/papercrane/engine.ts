@@ -92,6 +92,8 @@ export class PaperCraneEngine {
     // the command each live workload runs, which says which runtime package
     // it holds. Missing or null means unknown, which blocks every swap.
     private clientCommands = new Map<string, string | null>();
+    // workloads started with their input closed; a write to one is refused, not dropped
+    private inputless = new Set<string>();
     private stagedPackages = new Map<string, StagedPackage>();
     private swapFailures = new Map<string, { version: string; error: string }>();
     private swaps = new Map<string, Promise<void>>();
@@ -401,7 +403,9 @@ export class PaperCraneEngine {
             client = new SupervisedProcessClient(id);
             if (!(await client.connect())) return null;
             this.clients.set(id, client);
-            this.clientCommands.set(id, this.supervisorCommand(id));
+            const meta = this.supervisorConfig(id);
+            this.clientCommands.set(id, typeof meta?.command === "string" ? meta.command : null);
+            if (meta?.noStdin === true) this.inputless.add(id);
         }
         return client;
     }
@@ -545,6 +549,7 @@ export class PaperCraneEngine {
     public async startProcess(
         id: string, command: string, args: string[] = [], cwd?: string, env?: Record<string, string>,
         onData?: (data: string) => void, onStdout?: (data: string) => void, onStderr?: (data: string) => void,
+        options: { stdin?: boolean } = {},
     ): Promise<{ completion: Promise<{ exitCode: number }> }> {
         if (!id || typeof id !== "string") {
             throw new Error("process id is required");
@@ -572,6 +577,7 @@ export class PaperCraneEngine {
                     args,
                     cwd: resolvedCwd,
                     env,
+                    noStdin: options.stdin === false,
                 },
                 this.clients,
                 {
@@ -586,6 +592,8 @@ export class PaperCraneEngine {
                 },
             );
         this.clientCommands.set(id, command);
+        if (options.stdin === false) this.inputless.add(id);
+        else this.inputless.delete(id);
         return { completion };
     }
 
@@ -600,6 +608,7 @@ export class PaperCraneEngine {
         const client = this.clients.get(id);
         // a write to a process that is gone is a failure, not a delivery
         if (!client) throw new Error(`Process "${id}" is not running`);
+        if (this.inputless.has(id)) throw new Error(`Process "${id}" was started with no input; it can't be written to`);
         client.write(data);
     }
 
@@ -731,10 +740,12 @@ export class PaperCraneEngine {
             const stem = file.slice(0, -".json".length);
             let id: unknown;
             let command: unknown;
+            let noStdin: unknown;
             try {
                 const meta = JSON.parse(await fs.promises.readFile(path.join(socketsDir, file), "utf8"));
                 id = meta?.id;
                 command = meta?.config?.command;
+                noStdin = meta?.config?.noStdin;
             } catch (err) {
                 logger.warn(`[Paperboard Server] unreadable supervisor metadata ${file}; not adopting it:`, err);
                 continue;
@@ -748,6 +759,7 @@ export class PaperCraneEngine {
             if (await client.connect()) {
                 this.clients.set(id, client);
                 this.clientCommands.set(id, typeof command === "string" ? command : null);
+                if (noStdin === true) this.inputless.add(id);
                 client.on("exit", () => {
                     if (this.clients.get(id) !== client) return;
                     this.clients.delete(id);
@@ -1028,14 +1040,15 @@ export class PaperCraneEngine {
     // a workload is gone: its runtime may now be free to update
     private workloadEnded(id: string): void {
         this.clientCommands.delete(id);
+        this.inputless.delete(id);
         this.forgetClientOwner(id);
         if (this.stagedPackages.size > 0) void this.applyReadyStagedPackages();
     }
 
-    private supervisorCommand(id: string): string | null {
+    private supervisorConfig(id: string): { command?: unknown; noStdin?: unknown } | null {
         try {
             const meta = JSON.parse(fs.readFileSync(path.join(getSocketsDir(), `${supervisorEndpointName(id)}.json`), "utf8"));
-            return typeof meta?.config?.command === "string" ? meta.config.command : null;
+            return meta?.config && typeof meta.config === "object" ? meta.config : null;
         } catch (err) {
             logger.warn(`[engine] supervisor metadata for ${id} is unreadable; its runtime is unknown and blocks package updates:`, err);
             return null;

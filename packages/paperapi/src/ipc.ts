@@ -369,6 +369,7 @@ async function invokeSpecial(
                 args: p.args || [],
                 cwd: p.cwd,
                 env: p.env,
+                ...(p.stdin === false ? { stdin: false } : {}),
             });
             t.trackProcess(p.id);
             return channel === "process-start" ? { success: true } : res;

@@ -75,10 +75,10 @@ afterEach(async () => {
     if (survivors.length) throw new Error(`supervised workloads survived teardown: ${survivors.join(", ")}`);
 });
 
-async function supervise(id: string): Promise<ChildProcess> {
+async function supervise(id: string, config: { source?: string; noStdin?: boolean } = {}): Promise<ChildProcess> {
     const child = spawn(process.execPath, [MAIN, "--supervise", id], { stdio: ["pipe", "ignore", "ignore"], env: process.env });
     children.push(child);
-    child.stdin!.end(JSON.stringify({ command: process.execPath, args: ["-e", WORKLOAD_SOURCE] }));
+    child.stdin!.end(JSON.stringify({ command: process.execPath, args: ["-e", config.source ?? WORKLOAD_SOURCE], noStdin: config.noStdin }));
     const deadline = Date.now() + 10_000;
     for (;;) {
         // the metadata file can be seen mid-write; keep waiting until it parses
@@ -189,6 +189,36 @@ describe("daemon restart recovery", () => {
 });
 
 // ─── Failed spawn must not orphan a detached supervisor ─────────────────────
+describe("a workload started with no input", () => {
+    // codex exec reads a piped stdin to its end before it starts, so a
+    // workload whose stdin was left open waited forever
+    it("sees its input end at once, so one that reads input to its end finishes", async () => {
+        const id = "dev.test.noinput.reader";
+        await supervise(id, { source: `${WORKLOAD_SOURCE}; process.stdin.on("end", () => process.exit(7)); process.stdin.resume()`, noStdin: true });
+        const client = new SupervisedProcessClient(id);
+        cleanup.push(() => client.destroy());
+        const exitCode = new Promise<number | "still waiting">((resolve) => {
+            const timer = setTimeout(() => resolve("still waiting"), 5000);
+            client.on("exit", (code: number) => { clearTimeout(timer); resolve(code); });
+        });
+        expect(await client.connect()).toBe(true);
+        expect(await exitCode).toBe(7);
+    }, 30_000);
+
+    it("refuses a write, even after a daemon restart adopts it, instead of dropping it", async () => {
+        const id = "dev.test.noinput.writer";
+        const child = await supervise(id, { noStdin: true });
+        const root = fs.mkdtempSync(path.join(os.tmpdir(), "supervisor-noinput-"));
+        cleanup.push(() => fs.rmSync(root, { recursive: true, force: true }));
+        const engine = new PaperCraneEngine(root);
+        await engine.recoverRunningSupervisors();
+        expect(await engine.isProcessRunning(id)).toBe(true);
+        expect(() => engine.writeProcess(id, "hello\n")).toThrow(/no input/);
+        await engine.killProcess(id);
+        expect(await exited(child)).toBe(true);
+    }, 30_000);
+});
+
 describe("failed spawn recovery", () => {
     // stopping a detached supervisor is more than sending a signal: the
     // exit is observed. In real daemon failure paths the spawned
