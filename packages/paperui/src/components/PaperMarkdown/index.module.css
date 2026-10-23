@@ -42,3 +42,9 @@
 .PaperMarkdown > :is(h1, h2, h3, h4, h5, h6):not(:first-child) {
     margin-top: var(--paper-uigap-half);
 }
+
+/* an image a renderImage hook drew alone in its paragraph: a block of its own */
+.media {
+    display: block;
+    max-width: 100%;
+}

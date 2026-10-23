@@ -74,6 +74,12 @@ export function ReleaseNotes() {
                         <td><PaperCode>false</PaperCode></td>
                         <td>Renders <PaperCode>![alt](src)</PaperCode> images. Off by default: remote images are beacons. A titled image alone in its paragraph, <PaperCode>![alt](src "Caption")</PaperCode>, renders as a figure with that caption under it.</td>
                     </tr>
+                    <tr>
+                        <td><PaperCode>renderImage</PaperCode></td>
+                        <td><PaperCode>(image: MarkdownImage) =&gt; JSX.Element | undefined</PaperCode></td>
+                        <td>none</td>
+                        <td>Draws an image yourself. Called for every image before the default, with the src as written in any scheme (refusing unsafe ones is yours), its alt, its title, and <PaperCode>block</PaperCode>: true for an image alone in its paragraph, which then replaces the paragraph. Return <PaperCode>undefined</PaperCode> for the default. A panel shows its own media this way, such as <PaperCode>![a cat](attachment:abc123)</PaperCode>.</td>
+                    </tr>
                 </tbody>
             </PaperTable>
 

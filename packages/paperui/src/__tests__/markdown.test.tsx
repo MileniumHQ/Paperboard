@@ -124,4 +124,32 @@ describe("PaperMarkdown", () => {
         expect(container.querySelectorAll("th")).toHaveLength(2);
         expect(container.querySelectorAll("td")).toHaveLength(2);
     });
+
+    it("renderImage draws the images it wants, any scheme, alone in a paragraph as a block; the rest fall back", () => {
+        const seen: unknown[] = [];
+        const { container } = render(() => (
+            <PaperMarkdown
+                text={"![a cat](attachment:abc123 \"Rex\")\n\ninline ![dot](attachment:def456) here\n\n![web](https://x.test/a.png)"}
+                renderImage={(img) => {
+                    seen.push(img);
+                    if (!img.src.startsWith("attachment:")) return undefined;
+                    return <video data-src={img.src} aria-label={img.alt} />;
+                }}
+            />
+        ));
+        expect(seen).toEqual([
+            { src: "attachment:abc123", alt: "a cat", title: "Rex", block: true },
+            { src: "attachment:def456", alt: "dot", title: null, block: false },
+            { src: "https://x.test/a.png", alt: "web", title: null, block: true },
+            { src: "https://x.test/a.png", alt: "web", title: null, block: false },
+        ]);
+        const videos = container.querySelectorAll("video");
+        expect([...videos].map((v) => v.getAttribute("data-src"))).toEqual(["attachment:abc123", "attachment:def456"]);
+        // the block one replaces its paragraph; the inline one stays in its sentence
+        expect(videos[0]!.closest("p")).toBeNull();
+        expect(videos[1]!.closest("p")?.textContent).toContain("inline");
+        // without allowImages, a fallen-back image is still only its alt text
+        expect(container.querySelector("img")).toBeNull();
+        expect(container.textContent).toContain("web");
+    });
 });

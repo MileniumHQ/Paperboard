@@ -27,8 +27,24 @@ export interface PaperMarkdownProps {
      * titled image alone in a paragraph renders as a captioned figure.
      */
     allowImages?: boolean;
+    /**
+     * Render an image yourself: called for every `![alt](src "title")` before
+     * the default, with the src as written, any scheme (refusing an unsafe one
+     * is yours to do). `block` is true for an image alone in its paragraph,
+     * which then renders in place of the paragraph. Return undefined for the
+     * default rendering. This is how a panel shows its own media, such as
+     * `![a cat](attachment:abc123)`.
+     */
+    renderImage?: (image: MarkdownImage) => JSX.Element | undefined;
     class?: string;
     classList?: JSX.HTMLAttributes<HTMLDivElement>["classList"];
+}
+
+export interface MarkdownImage {
+    src: string;
+    alt: string;
+    title: string | null;
+    block: boolean;
 }
 
 const HEADING_PRESETS: PaperTextPreset[] = [
@@ -75,6 +91,7 @@ export function PaperMarkdown(props: PaperMarkdownProps) {
         "text",
         "preset",
         "allowImages",
+        "renderImage",
         "class",
         "classList",
     ]);
@@ -137,6 +154,8 @@ export function PaperMarkdown(props: PaperMarkdownProps) {
             }
             case "image": {
                 const image = token as Tokens.Image;
+                const custom = local.renderImage?.({ src: image.href, alt: image.text, title: image.title ?? null, block: false });
+                if (custom !== undefined) return custom;
                 const src = safeImageSrc(image.href);
                 if (!local.allowImages || !src) {
                     // no image permission (or an unsafe target): keep the alt
@@ -213,6 +232,10 @@ export function PaperMarkdown(props: PaperMarkdownProps) {
             case "paragraph": {
                 const paragraph = token as Tokens.Paragraph;
                 const image = soleImage(paragraph.tokens);
+                const custom = image
+                    ? local.renderImage?.({ src: image.href, alt: image.text, title: image.title ?? null, block: true })
+                    : undefined;
+                if (custom !== undefined) return <div class={styles.media}>{custom}</div>;
                 const src = image ? safeImageSrc(image.href) : null;
                 if (local.allowImages && image?.title && src) {
                     return (
