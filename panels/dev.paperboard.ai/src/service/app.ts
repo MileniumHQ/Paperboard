@@ -22,6 +22,7 @@ import { Computer, type ComputerHost, hostSupport } from "./computer";
 import { startComputerMcp, type ComputerMcp, type ToolResult } from "./computerMcp";
 import { Conversation, type TurnHost } from "./conversation";
 import { HARNESS_COMMANDS } from "./harness";
+import { listModels, type HarnessHomes } from "./models";
 export { which } from "./which";
 
 export interface AppHost extends ComputerHost, TurnHost {
@@ -29,6 +30,8 @@ export interface AppHost extends ComputerHost, TurnHost {
     readSettings(): Promise<unknown>;
     writeSettings(s: Settings): Promise<void>;
     which(command: string): string | null;
+    /** where each harness keeps its own files, for its model catalog */
+    harnessHomes: HarnessHomes;
 }
 
 export interface AppContext {
@@ -104,6 +107,13 @@ export class AiApp {
         await this.host.writeSettings(settings);
         this.ctx.setState({ settings });
         return { saved: true };
+    }
+
+    /** What a brain can think with, from its harness's own catalog. */
+    async models(input: unknown) {
+        const harness = (input as { harness?: unknown } | undefined)?.harness;
+        if (!HARNESSES.includes(harness as Harness)) throw new Error("which brain?");
+        return { models: await listModels(harness as Harness, this.host.harnessHomes) };
     }
 
     detect(): HarnessInfo[] {

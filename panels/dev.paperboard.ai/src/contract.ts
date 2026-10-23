@@ -28,6 +28,8 @@ export const UI_ACTION_IDS = {
     sendNow: "ui-send-now",
     startOver: "ui-start-over",
     setMemory: "ui-set-memory",
+    // the models a brain offers, from the harness's own catalog
+    models: "ui-models",
 } as const;
 
 export const EVENTS = {
@@ -60,6 +62,15 @@ export const LIMITS = {
     diskGb: { min: 8, max: 128 },
     history: 200,
 } as const;
+
+/** A model a harness offers, as its own picker names it. */
+export interface BrainModel {
+    id: string;
+    name: string;
+    description: string | null;
+    /** listed after the current ones, as the harness's picker does */
+    older: boolean;
+}
 
 export interface HarnessInfo {
     id: Harness;

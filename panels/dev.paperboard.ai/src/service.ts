@@ -1,3 +1,5 @@
+import os from "node:os";
+import path from "node:path";
 import { configApi, defineAction, definePanelService, fileApi, processApi, secretsApi, type ActionDefinition } from "@mileniumhq/paperapi";
 import { DEFAULT_STATE, PANEL_ID, UI_ACTION_IDS, type AiState } from "./contract";
 import { AiApp, which, type AppHost } from "./service/app";
@@ -31,6 +33,12 @@ const host: AppHost = {
     readSettings: () => configApi.get(PANEL_ID, SETTINGS_PATH),
     writeSettings: (s) => configApi.set(s, PANEL_ID, SETTINGS_PATH),
     which,
+    // where the harnesses look for their own files: their documented overrides, else their defaults. The
+    // harnesses run with this service's environment, so they and the panel agree on it.
+    harnessHomes: {
+        claude: process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), ".claude"),
+        codex: process.env.CODEX_HOME || path.join(os.homedir(), ".codex"),
+    },
 };
 
 const app = new AiApp(host);
@@ -55,6 +63,7 @@ export const aiService = definePanelService({
     actions: [
         ui(UI_ACTION_IDS.setup, "Save the agent's settings", (i) => app.setup(i)),
         ui(UI_ACTION_IDS.detect, "Find installed agent harnesses", () => app.detect()),
+        ui(UI_ACTION_IDS.models, "List a brain's models", (i) => app.models(i)),
         ui(UI_ACTION_IDS.history, "Read the conversation", (i) => app.conversation.history(Number(i.limit) || undefined)),
         ui(UI_ACTION_IDS.send, "Send a message", (i) => app.conversation.send(String(i.text ?? ""))),
         ui(UI_ACTION_IDS.stop, "Stop the agent", () => app.conversation.stop()),

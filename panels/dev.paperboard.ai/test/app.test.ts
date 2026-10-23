@@ -63,6 +63,7 @@ describe("the service's agent", () => {
             storageDir: async () => dir,
             readSettings: readSettings ?? (async () => saved),
             writeSettings: async (s) => void writes.push(s),
+            harnessHomes: { claude: "/nonexistent/claude", codex: "/nonexistent/codex" },
             which: (c) => (installed.includes(c) ? `/usr/bin/${c}` : null),
         };
         app = new AiApp(host);

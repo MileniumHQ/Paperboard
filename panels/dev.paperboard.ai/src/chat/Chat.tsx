@@ -5,7 +5,7 @@ import type { FaceController } from "../face/controller";
 import type { ChatEntry } from "../contract";
 import type { Agent } from "../lib/agent";
 import type { Sheet } from "../Workspace";
-import { brainLabel } from "../lib/brains";
+import { brainLabel, createModels, loadedModels } from "../lib/brains";
 import { StartOver } from "../settings/Settings";
 import Composer from "./Composer";
 import styles from "./Chat.module.css";
@@ -35,6 +35,9 @@ export default function Chat(props: { agent: Agent; face: FaceController; onOpen
     // thinking while a turn runs
     createEffect(() => face.ponder(agent.state.chat.busy));
 
+    // the brain's own names for its models; until they're in (or if they can't be), the id as saved
+    const models = createModels(agent, () => agent.state.settings?.harness);
+
     const status = () => {
         if (agent.state.chat.busy) return "Working on it…";
         const c = agent.state.computer;
@@ -45,7 +48,7 @@ export default function Chat(props: { agent: Agent; face: FaceController; onOpen
                 unsupported: "No computer on this machine",
                 installing: "Setting up its computer…",
                 starting: "Starting its computer…",
-                ready: `Thinks with ${brainLabel(agent.state.settings!)}`,
+                ready: `Thinks with ${brainLabel(agent.state.settings!, loadedModels(models))}`,
                 stopping: "Turning its computer off…",
                 stopped: "Its computer is off",
                 failed: "Its computer stopped with a problem",

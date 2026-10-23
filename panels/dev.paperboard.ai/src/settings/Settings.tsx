@@ -20,7 +20,7 @@ import AgentLogo from "../../legacy/src/components/AgentLogo";
 import { Budget, DEFAULT_BUDGET } from "../computer/Computer";
 import { HARNESSES, LIMITS, type ComputerBudget, type Harness, type Settings as Saved } from "../contract";
 import type { Agent } from "../lib/agent";
-import { CLAUDE_MODELS, harnessName } from "../lib/brains";
+import { createModels, harnessName, loadedModels } from "../lib/brains";
 import styles from "./Settings.module.css";
 
 const DEFAULT_MODEL = "default";
@@ -48,6 +48,14 @@ function AgentSettings(props: { agent: Agent }) {
     const [model, setModel] = createSignal(current().model ?? "");
     const [error, setError] = createSignal<string | null>(null);
     const [installed] = createResource(() => props.agent.detect());
+    const models = createModels(props.agent, () => current().harness);
+    // as the harness lists them: its current models, then its older ones
+    const listed = () => loadedModels(models) ?? [];
+    const unlisted = () => {
+        const id = current().model;
+        const all = loadedModels(models);
+        return id && all && !all.some((m) => m.id === id) ? id : null;
+    };
     // a change made elsewhere (the composer's brain menu) shows here
     createEffect(on(() => current().name, (n) => setName(n)));
     createEffect(on(() => current().model, (m) => setModel(m ?? "")));
@@ -117,30 +125,46 @@ function AgentSettings(props: { agent: Agent }) {
                 </PaperSettingItem>
                 <PaperSettingItem title="Model" description="Leave it on the default to use whatever the harness is set to already.">
                     <Show
-                        when={current().harness === "claude-code"}
+                        when={!models.error}
                         fallback={
-                            <PaperInput
-                                name="model"
-                                label="Model"
-                                placeholder="Default"
-                                value={model()}
-                                maxLength={LIMITS.model}
-                                onInput={(e) => setModel(e.currentTarget.value)}
-                                onChange={() => save({ model: model().trim() || null })}
-                                onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
-                            />
+                            <div class={styles.field}>
+                                <PaperInput
+                                    name="model"
+                                    label="Model"
+                                    placeholder="Default"
+                                    value={model()}
+                                    maxLength={LIMITS.model}
+                                    onInput={(e) => setModel(e.currentTarget.value)}
+                                    onChange={() => save({ model: model().trim() || null })}
+                                    onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+                                />
+                                <PaperText size={1} color="muted">
+                                    {message(models.error)} Type a model's id instead.
+                                </PaperText>
+                            </div>
                         }
                     >
                         <PaperSelectMenu
                             name="model"
                             aria-label="Model"
                             value={current().model ?? DEFAULT_MODEL}
+                            disabled={!loadedModels(models)}
                             onValueChange={(v) => save({ model: v === DEFAULT_MODEL ? null : String(v) })}
                         >
-                            <PaperSelectMenuItem value={DEFAULT_MODEL} icon="tune">
+                            <PaperSelectMenuItem value={DEFAULT_MODEL} icon="tune" description={`Whatever ${harnessName(current().harness)} is set to use`}>
                                 Default
                             </PaperSelectMenuItem>
-                            <For each={CLAUDE_MODELS}>{(m) => <PaperSelectMenuItem value={m.id}>{m.name}</PaperSelectMenuItem>}</For>
+                            <For each={listed()}>
+                                {(m) => (
+                                    <PaperSelectMenuItem value={m.id} description={m.older ? "Older" : (m.description ?? undefined)}>
+                                        {m.name}
+                                    </PaperSelectMenuItem>
+                                )}
+                            </For>
+                            {/* a model saved by id that the harness no longer lists stays chosen, as typed */}
+                            <Show when={unlisted()}>
+                                {(id) => <PaperSelectMenuItem value={id()}>{id()}</PaperSelectMenuItem>}
+                            </Show>
                         </PaperSelectMenu>
                     </Show>
                 </PaperSettingItem>

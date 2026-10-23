@@ -14,3 +14,8 @@
     margin: 0;
 }
 
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap-half);
+}

@@ -17,7 +17,7 @@ import AgentLogo from "../../legacy/src/components/AgentLogo";
 import { HARNESSES, LIMITS, type Harness } from "../contract";
 import type { Agent } from "../lib/agent";
 import type { Sheet } from "../Workspace";
-import { brainLabel, harnessName } from "../lib/brains";
+import { brainLabel, createModels, harnessName, loadedModels } from "../lib/brains";
 import styles from "./Composer.module.css";
 
 const MAX_HEIGHT = "calc(var(--paper-uigap) * 12)";
@@ -27,6 +27,7 @@ const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 export default function Composer(props: { agent: Agent; onOpen: (sheet: Sheet) => void; onStartOver: () => void }) {
     const { agent } = props;
     const settings = () => agent.state.settings!;
+    const models = createModels(agent, () => agent.state.settings?.harness);
     const name = () => settings().name;
     const busy = () => agent.state.chat.busy;
     const computer = () => agent.state.computer;
@@ -164,14 +165,14 @@ export default function Composer(props: { agent: Agent; onOpen: (sheet: Sheet) =
                         class={styles.brain}
                         aria-haspopup="menu"
                         aria-expanded={brainMenu.isOpen()}
-                        aria-label={`Brain: ${brainLabel(settings())}`}
+                        aria-label={`Brain: ${brainLabel(settings(), loadedModels(models))}`}
                         title={`${harnessName(settings().harness)}${settings().model ? `, ${settings().model}` : ""}`}
                         onClick={() => void openBrains()}
                     >
                         <span class={styles.logo}>
                             <AgentLogo agent={settings().harness} />
                         </span>
-                        <span class={styles.brainName}>{brainLabel(settings())}</span>
+                        <span class={styles.brainName}>{brainLabel(settings(), loadedModels(models))}</span>
                     </button>
 
                     <button

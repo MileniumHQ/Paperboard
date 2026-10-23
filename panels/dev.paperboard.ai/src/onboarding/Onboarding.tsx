@@ -3,7 +3,7 @@ import { PaperButton, PaperInput, PaperSelector, PaperSelectorItem, PaperWizard,
 import { Face } from "../face/Face";
 import { createFace, type FaceController } from "../face/controller";
 import { createSpeaker, type Speaker } from "./speech";
-import { CLAUDE_MODELS, harnessDescription, harnessName } from "../lib/brains";
+import { createModels, harnessDescription, harnessName, loadedModels } from "../lib/brains";
 import AgentLogo from "../../legacy/src/components/AgentLogo";
 import { Budget, DEFAULT_BUDGET, SetupProgress } from "../computer/Computer";
 import { LIMITS, type ComputerBudget, type Harness, type HarnessInfo } from "../contract";
@@ -117,7 +117,7 @@ function Scenes(props: {
     harness: Getter<Harness | undefined>;
     setHarness: Setter<Harness>;
     model: Getter<string | undefined>;
-    setModel: Setter<string>;
+    setModel: Setter<string | undefined>;
     computer: Getter<"setup" | "later" | undefined>;
     setComputer: Setter<"setup" | "later">;
     budget: Getter<ComputerBudget>;
@@ -150,6 +150,10 @@ function Scenes(props: {
     };
     void detect();
     const installed = () => (harnesses() ?? []).filter((h) => h.installed);
+
+    // the chosen brain's own models; a model belongs to its harness, so another brain is chosen afresh
+    const models = createModels(agent, props.harness);
+    createEffect(on(props.harness, () => props.setModel(undefined), { defer: true }));
 
     // the Next button appears only when the scene is revealed and its answer is in
     const ready = () => {
@@ -315,16 +319,17 @@ function Scenes(props: {
                         <PaperSelectorItem value={DEFAULT_MODEL} icon="tune" description="Whatever it's set to use already.">
                             Use {harnessName(props.harness() ?? "")}'s default
                         </PaperSelectorItem>
-                        <Show when={props.harness() === "claude-code"}>
-                            <For each={CLAUDE_MODELS}>
-                                {(m) => (
-                                    <PaperSelectorItem value={m.id} icon={<AgentLogo agent="claude-code" />} description={m.description}>
-                                        {m.name}
-                                    </PaperSelectorItem>
-                                )}
-                            </For>
-                        </Show>
+                        <For each={loadedModels(models) ?? []}>
+                            {(m) => (
+                                <PaperSelectorItem value={m.id} icon={<AgentLogo agent={props.harness()!} />} description={m.description ?? undefined}>
+                                    {m.name}
+                                </PaperSelectorItem>
+                            )}
+                        </For>
                     </PaperSelector>
+                    <Show when={models.error}>
+                        <p class={styles.note}>{models.error instanceof Error ? models.error.message : String(models.error)} You can pick one later in settings.</p>
+                    </Show>
                 </Reveal>
             </PaperWizardStep>
 
