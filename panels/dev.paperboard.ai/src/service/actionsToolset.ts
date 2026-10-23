@@ -8,13 +8,20 @@
 // every registered action and refuses another panel's `internal` ones
 // (papercrane/actions.ts, ActionsRegistry.call); this module hides the same
 // set up front and refuses it again at run time, plus its own panel's actions
-// (the agent has no business rewriting itself) and event-only actions
-// (they aren't callable).
+// (the agent has no business rewriting itself), event-only actions
+// (they aren't callable), and every action of the panels in WITHHELD_PANELS.
 
 import { PANEL_ID } from "../contract";
 import type { ToolResult } from "./computerMcp";
 import type { ToolSpec } from "./computerTools";
 import type { Toolset } from "./toolsets";
+
+/**
+ * Panels whose actions the agent never gets. Chippy lives in its own computer; the terminal panel
+ * runs shell commands on this one as the user, which would step straight past that boundary.
+ * A hard-coded panel id, which the repo rules discourage; the owner chose it.
+ */
+export const WITHHELD_PANELS: ReadonlySet<string> = new Set(["dev.paperboard.terminal"]);
 
 export const MAX_FOUND = 10;
 const MAX_PANEL_NAMES = 20;
@@ -79,7 +86,7 @@ export const ACTION_TOOLS: ToolSpec[] = [
 /** Is this one the agent may find and run? */
 export function offered(a: ActionEntry): boolean {
     const s = a.schema;
-    if (a.panelId === PANEL_ID) return false;
+    if (a.panelId === PANEL_ID || WITHHELD_PANELS.has(a.panelId)) return false;
     // no schema: plumbing registered by name (state, reload), not something with a documented purpose
     if (!s) return false;
     if (s.internal === true || s.eventOnly === true || s.deprecated) return false;

@@ -26,10 +26,12 @@ const registry = [
     act("dev.paperboard.gameserver", "stop-server", { description: "Stop a game server" }),
     act("dev.paperboard.botcreator", "send-message", { description: "Post a Discord message", output: "string" }),
     act("dev.paperboard.ai", "send-message", { description: "the agent's own" }),
-    act("dev.paperboard.terminal", "ui-hidden", { internal: true }),
-    act("dev.paperboard.terminal", "on-output", { eventOnly: true }),
-    act("dev.paperboard.terminal", "old", { deprecated: "use new" }),
-    { panelId: "dev.paperboard.terminal", action: "state:get" },
+    act("dev.paperboard.actions", "ui-hidden", { internal: true }),
+    act("dev.paperboard.actions", "on-output", { eventOnly: true }),
+    act("dev.paperboard.actions", "old", { deprecated: "use new" }),
+    { panelId: "dev.paperboard.actions", action: "state:get" },
+    // withheld whole: it runs shell commands on the user's own computer
+    act("dev.paperboard.terminal", "run-terminal-command", { description: "Run a shell command" }),
 ];
 
 describe("finding actions", () => {
@@ -46,9 +48,16 @@ describe("finding actions", () => {
         const { set } = fake(registry);
         const msg = JSON.parse((await set.call("find_actions", { query: "message" })).text);
         expect(msg.actions.map((a: any) => a.panel)).toEqual(["dev.paperboard.botcreator"]);
-        // everything the terminal registers is one of those kinds
-        expect((await set.call("find_actions", { panel: "dev.paperboard.terminal" })).text).toBe("No actions match.");
+        // everything the actions panel registers here is one of those kinds
+        expect((await set.call("find_actions", { panel: "dev.paperboard.actions" })).text).toBe("No actions match.");
         expect((await set.call("find_actions", { panel: "dev.paperboard.ai" })).text).toBe("No actions match.");
+    });
+
+    test("a withheld panel (the terminal: shell commands on the user's computer) is never offered or named", async () => {
+        const { set } = fake(registry);
+        expect((await set.call("find_actions", { panel: "dev.paperboard.terminal" })).text).toBe("No actions match.");
+        expect((await set.call("find_actions", { query: "shell command" })).text).toBe("No actions match.");
+        expect(await set.instructions!()).not.toContain("dev.paperboard.terminal");
     });
 
     test("at most MAX_FOUND answers, and the rest are counted", async () => {
@@ -80,10 +89,11 @@ describe("running actions", () => {
         const { set, calls } = fake(registry);
         for (const [panel, action] of [
             ["dev.paperboard.ai", "send-message"], // itself
-            ["dev.paperboard.terminal", "ui-hidden"], // internal
-            ["dev.paperboard.terminal", "on-output"], // event-only
-            ["dev.paperboard.terminal", "old"], // deprecated
-            ["dev.paperboard.terminal", "state:get"], // plumbing
+            ["dev.paperboard.actions", "ui-hidden"], // internal
+            ["dev.paperboard.actions", "on-output"], // event-only
+            ["dev.paperboard.actions", "old"], // deprecated
+            ["dev.paperboard.actions", "state:get"], // plumbing
+            ["dev.paperboard.terminal", "run-terminal-command"], // a withheld panel
             ["dev.paperboard.nobody", "x"],
         ]) {
             expect(await set.call("run_action", { panel, action })).toMatchObject({ isError: true, text: expect.stringContaining("isn't an action you can run") });
