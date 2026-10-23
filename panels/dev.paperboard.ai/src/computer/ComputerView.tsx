@@ -1,30 +1,24 @@
-// The agent's computer: where it stands, and its windows to watch or take
-// over. Windows are listed only while this page is open; a list that fails
-// stays failed, with a way to try again, instead of retrying behind the
-// user's back. Control is held while it's renewed here; leaving the page
-// hands it back.
+// The agent's computer, laid out like the terminal panel: a tab for each of
+// its windows, the chosen one live below. Using a window takes control of
+// the computer (the agent's hands wait); a few idle seconds hand it back, and
+// so does closing this view. Windows are listed only while it's open; a list
+// that fails stays failed, with Try again, instead of retrying behind the
+// user's back.
 
-import { For, Match, Show, Switch, createEffect, createMemo, createSignal, on, onCleanup } from "solid-js";
+import { For, Match, Show, Switch, createEffect, createSignal, on, onCleanup } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
-import {
-    PaperButton,
-    PaperEmptyState,
-    PaperIcon,
-    PaperLoader,
-    PaperPageHeader,
-    PaperSelectMenu,
-    PaperSelectMenuItem,
-    PaperText,
-} from "@mileniumhq/paperui";
+import { PaperButton, PaperEmptyState, PaperIcon, PaperList, PaperListItem, PaperLoader, PaperText } from "@mileniumhq/paperui";
 import type { ComputerBudget, ComputerWindow } from "../contract";
 import type { Agent } from "../lib/agent";
 import { Budget, DEFAULT_BUDGET, SetupProgress } from "./Computer";
 import { WindowView } from "./WindowView";
-import styles from "./ComputerPage.module.css";
+import styles from "./ComputerView.module.css";
 
 const WINDOWS_POLL_MS = 2000;
 // well inside the service's 20 s lease, so a slow call doesn't let it lapse
 const RENEW_MS = 6000;
+// how long after the user's last click or key the agent gets its computer back
+const IDLE_MS = 5000;
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -35,7 +29,7 @@ function windowIcon(w: ComputerWindow) {
     return "web_asset";
 }
 
-export default function ComputerPage(props: { agent: Agent }) {
+export default function ComputerView(props: { agent: Agent }) {
     const { agent } = props;
     const c = () => agent.state.computer;
     const name = () => agent.state.settings?.name ?? "Your agent";
@@ -70,8 +64,8 @@ export default function ComputerPage(props: { agent: Agent }) {
         if (disposed || !ready() || listError()) return;
         if (!document.hidden) {
             try {
-                // the guest lists windows in stacking order, which changes whenever one is raised; by id the
-                // choice never jumps
+                // the guest lists windows in stacking order, which changes whenever one is raised; tabs go by id,
+                // so a tab never jumps (and the window being used never loses focus to the move)
                 const list = (await agent.windows()).sort((a, b) => a.id - b.id);
                 setWindows(reconcile(list, { key: "id" }));
                 setListed(true);
@@ -103,8 +97,8 @@ export default function ComputerPage(props: { agent: Agent }) {
         void refresh();
     };
 
-    // the chosen window, or the first one when it closes
-    const shown = createMemo(() => windows.find((w) => w.id === chosen()) ?? windows[0] ?? null);
+    // the chosen tab, or the first when it closes
+    const shown = () => (windows.some((w) => w.id === chosen()) ? chosen() : (windows[0]?.id ?? null));
 
     const closeWindow = (w: ComputerWindow) =>
         void act(async () => {
@@ -112,19 +106,29 @@ export default function ComputerPage(props: { agent: Agent }) {
             setWindows(windows.filter((x) => x.id !== w.id));
         });
 
-    // ------------------------------------------------------------- control
+    // ------------------------------------------------------------- control, taken by using it
 
     const [holding, setHolding] = createSignal(false);
-    const control = (take: boolean) =>
-        void act(async () => {
-            try {
-                await agent.control(take);
-                setHolding(take);
-            } catch (e) {
-                if (take) setHolding(false);
-                throw e;
-            }
-        });
+    let taking: Promise<void> | null = null;
+    let idle: ReturnType<typeof setTimeout> | undefined;
+    const handBack = () => {
+        clearTimeout(idle);
+        if (!holding()) return;
+        setHolding(false);
+        void agent.control(false).catch((e) => setError(`Couldn't hand the computer back: ${message(e)}`));
+    };
+    const use = async () => {
+        clearTimeout(idle);
+        idle = setTimeout(handBack, IDLE_MS);
+        if (holding()) return;
+        taking ??= agent
+            .control(true)
+            .then(() => {
+                if (!disposed) setHolding(true);
+            })
+            .finally(() => (taking = null));
+        await taking;
+    };
     createEffect(() => {
         if (!holding()) return;
         const renew = setInterval(
@@ -137,57 +141,34 @@ export default function ComputerPage(props: { agent: Agent }) {
         );
         onCleanup(() => clearInterval(renew));
     });
-    // the lease ended elsewhere (the computer stopped, another window handed it back)
+    // the lease ended elsewhere (the computer stopped)
     createEffect(on(() => c().userControl, (now, before) => before && !now && setHolding(false)));
-    onCleanup(() => {
-        if (holding()) void agent.control(false).catch((e) => console.error("[ai] couldn't hand the computer back:", message(e)));
-    });
+    onCleanup(handBack);
 
     // ------------------------------------------------------------- setup
 
     const [budget, setBudget] = createSignal<ComputerBudget>(DEFAULT_BUDGET);
 
-    const subtitle = () =>
-        ({
-            none: `${name()} doesn't have a computer yet.`,
-            unsupported: "This machine can't run it.",
-            installing: "Setting up…",
-            starting: "Starting…",
-            ready: holding() ? "You're driving. Hand it back when you're done." : c().userControl ? "Someone else is driving." : `On. ${name()} uses it for its work.`,
-            stopping: "Stopping…",
-            stopped: "Off.",
-            failed: c().installed ? "Stopped with a problem." : "Its setup stopped.",
-        })[c().phase];
-
     return (
-        <div class={styles.page}>
-            <PaperPageHeader icon="computer" title="Computer" subtitle={subtitle()}>
-                <Show when={ready()}>
-                    <Show
-                        when={holding()}
-                        fallback={
-                            <PaperButton disabled={busy()} onClick={() => control(true)}>
-                                <PaperIcon>pan_tool</PaperIcon> Take control
-                            </PaperButton>
-                        }
-                    >
-                        <PaperButton variant="primary" disabled={busy()} onClick={() => control(false)}>
-                            <PaperIcon>back_hand</PaperIcon> Hand back
-                        </PaperButton>
-                    </Show>
-                    <PaperButton icon disabled={busy()} onClick={() => void act(agent.stopComputer)} aria-label="Turn off" title="Turn off">
-                        power_settings_new
-                    </PaperButton>
-                </Show>
-            </PaperPageHeader>
-
+        <div class={styles.view}>
+            <Show when={ready() && windows.length > 0}>
+                <PaperList direction="horizontal" name="computer-windows" value={shown() ?? ""} onValueChange={(v) => setChosen(Number(v))}>
+                    <For each={windows}>
+                        {(w) => (
+                            <PaperListItem icon={windowIcon(w)} value={w.id} onClosed={() => closeWindow(w)}>
+                                {w.title || w.app}
+                            </PaperListItem>
+                        )}
+                    </For>
+                </PaperList>
+            </Show>
             <Show when={error()}>
-                <PaperText size={2} color="danger" role="alert">
+                <PaperText size={1} color="danger" role="alert" class={styles.error}>
                     {error()}
                 </PaperText>
             </Show>
 
-            <div class={styles.body}>
+            <div class={styles.content}>
                 <Switch>
                     <Match when={c().phase === "unsupported"}>
                         <PaperEmptyState icon="desktop_access_disabled" title="No computer on this machine" description={c().error ?? undefined} />
@@ -250,28 +231,15 @@ export default function ComputerPage(props: { agent: Agent }) {
                     <Match when={windows.length === 0}>
                         <PaperEmptyState icon="web_asset" title="Nothing is open" description={`When ${name()} opens an app or a page, you can watch it here.`} />
                     </Match>
-                    <Match when={shown()}>
-                        {(w) => (
-                            <div class={styles.windows}>
-                                <div class={styles.picker}>
-                                    <PaperSelectMenu name="window" aria-label="Window" value={w().id} onValueChange={(v) => setChosen(Number(v))}>
-                                        <For each={windows}>
-                                            {(x) => (
-                                                <PaperSelectMenuItem value={x.id} icon={windowIcon(x)}>
-                                                    {x.title || x.app}
-                                                </PaperSelectMenuItem>
-                                            )}
-                                        </For>
-                                    </PaperSelectMenu>
-                                    <PaperButton icon disabled={busy()} onClick={() => closeWindow(w())} aria-label={`Close ${w().title || w().app}`} title="Close this window">
-                                        close
-                                    </PaperButton>
+                    <Match when={true}>
+                        {/* every tab stays mounted (a window keeps its last frame); only the chosen one shows and polls */}
+                        <For each={windows}>
+                            {(w) => (
+                                <div class={styles.pane} classList={{ [styles.shown!]: shown() === w.id }}>
+                                    <WindowView agent={agent} window={w} active={shown() === w.id} holding={holding()} onUse={use} />
                                 </div>
-                                <Show when={w()} keyed>
-                                    {(win) => <WindowView agent={agent} window={win} holding={holding()} />}
-                                </Show>
-                            </div>
-                        )}
+                            )}
+                        </For>
                     </Match>
                 </Switch>
             </div>

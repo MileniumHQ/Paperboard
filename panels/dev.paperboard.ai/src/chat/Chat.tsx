@@ -4,6 +4,7 @@ import { Face } from "../face/Face";
 import type { FaceController } from "../face/controller";
 import type { ChatEntry } from "../contract";
 import type { Agent } from "../lib/agent";
+import type { Sheet } from "../Workspace";
 import { brainLabel } from "../lib/brains";
 import { StartOver } from "../settings/Settings";
 import Composer from "./Composer";
@@ -27,7 +28,7 @@ const TOOL_ICONS: Record<string, string> = {
 };
 
 /** One conversation, like texting a friend. */
-export default function Chat(props: { agent: Agent; face: FaceController; onOpenSettings: () => void; onShowComputer: () => void }) {
+export default function Chat(props: { agent: Agent; face: FaceController; onOpen: (sheet: Sheet) => void }) {
     const { agent, face } = props;
     const name = () => agent.state.settings?.name ?? "Your agent";
 
@@ -87,8 +88,7 @@ export default function Chat(props: { agent: Agent; face: FaceController; onOpen
 
             <Composer
                 agent={agent}
-                onOpenSettings={props.onOpenSettings}
-                onShowComputer={props.onShowComputer}
+                onOpen={props.onOpen}
                 onStartOver={() => setStartingOver(true)}
             />
             <StartOver agent={agent} open={startingOver()} onClose={() => setStartingOver(false)} />

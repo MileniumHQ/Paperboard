@@ -8,10 +8,10 @@ import {
     PaperIcon,
     PaperInput,
     PaperModal,
-    PaperPageHeader,
     PaperRange,
     PaperSelectMenu,
     PaperSelectMenuItem,
+    PaperSeparator,
     PaperSettingItem,
     PaperSettingList,
     PaperText,
@@ -30,16 +30,14 @@ const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 export default function Settings(props: { agent: Agent }) {
     const { agent } = props;
-    const settings = () => agent.state.settings!;
-    const name = () => settings().name;
-
     return (
-        <>
-            <PaperPageHeader icon="settings" title="Settings" subtitle={`${name()}, its brain, its computer and your conversation.`} />
+        <div class={styles.settings}>
             <AgentSettings agent={agent} />
+            <PaperSeparator />
             <ComputerSettings agent={agent} />
+            <PaperSeparator />
             <ConversationSettings agent={agent} />
-        </>
+        </div>
     );
 }
 

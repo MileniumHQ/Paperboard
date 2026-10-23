@@ -1,7 +1,7 @@
-// One of the computer's windows, live: frames are polled while it's shown
-// (one request in flight, unchanged frames skipped by hash, slower while the
-// shell is in the background), and with control the pointer and keyboard go
-// to the window.
+// One of the computer's windows, live: frames are polled while its tab is
+// shown (one request in flight, unchanged frames skipped by hash, slower
+// while the shell is in the background). Clicking, scrolling or typing in it
+// takes control of the computer first (onUse), and the input follows.
 
 import { Show, createEffect, createSignal, on, onCleanup } from "solid-js";
 import { PaperButton, PaperEmptyState, PaperLoader, PaperText } from "@mileniumhq/paperui";
@@ -20,8 +20,11 @@ const BUTTONS: Record<number, 1 | 2 | 3> = { 0: 1, 1: 2, 2: 3 };
 export function WindowView(props: {
     agent: Agent;
     window: ComputerWindow;
+    active: boolean;
     /** this shell holds control */
     holding: boolean;
+    /** the user is using the computer: resolves once this shell holds control */
+    onUse: () => Promise<void>;
 }) {
     const [src, setSrc] = createSignal<string | null>(null);
     const [size, setSize] = createSignal({ width: props.window.width, height: props.window.height });
@@ -48,7 +51,7 @@ export function WindowView(props: {
             wake = done;
         });
 
-    const showing = () => props.agent.state.computer.phase === "ready" && !error();
+    const showing = () => props.active && props.agent.state.computer.phase === "ready" && !error();
 
     async function poll() {
         if (polling) return;
@@ -79,8 +82,9 @@ export function WindowView(props: {
 
     let pending: InputEvent[] = [];
     let sending = false;
-    const send = (ev: InputEvent) => {
-        if (!props.holding) return;
+    /** `takes`: a click, scroll or key, which takes control; the pointer only moving doesn't */
+    const send = (ev: InputEvent, takes = false) => {
+        if (!props.holding && !takes) return;
         if (!enqueue(pending, ev)) {
             setInputError("Too much input at once; some was dropped.");
             return;
@@ -92,6 +96,7 @@ export function WindowView(props: {
         sending = true;
         try {
             while (pending.length && !disposed) {
+                await props.onUse();
                 const batch = pending;
                 pending = [];
                 await props.agent.input(props.window.id, batch);
@@ -140,32 +145,31 @@ export function WindowView(props: {
                             src={src()!}
                             alt={`${props.window.title || props.window.app}${props.holding ? ", under your control" : ", as the computer shows it"}`}
                             draggable={false}
-                            tabindex={props.holding ? 0 : -1}
+                            tabindex={0}
                             onPointerDown={(e) => {
-                                if (!props.holding) return;
                                 e.preventDefault();
                                 img!.focus();
                                 img!.setPointerCapture(e.pointerId);
                                 const button = BUTTONS[e.button];
-                                if (button) send({ type: "down", button, ...point(e) });
+                                if (button) send({ type: "down", button, ...point(e) }, true);
                             }}
                             onPointerUp={(e) => {
                                 const button = BUTTONS[e.button];
-                                if (button) send({ type: "up", button, ...point(e) });
+                                if (button) send({ type: "up", button, ...point(e) }, true);
                             }}
                             onPointerMove={(e) => send({ type: "move", ...point(e) })}
                             onWheel={(e) => {
-                                if (!props.holding) return;
                                 e.preventDefault();
-                                send({ type: "scroll", ...point(e), dy: Math.sign(e.deltaY), dx: Math.sign(e.deltaX) });
+                                send({ type: "scroll", ...point(e), dy: Math.sign(e.deltaY), dx: Math.sign(e.deltaX) }, true);
                             }}
-                            onContextMenu={(e) => props.holding && e.preventDefault()}
+                            // the right button belongs to the window
+                            onContextMenu={(e) => e.preventDefault()}
                             onKeyDown={(e) => {
-                                if (!props.holding || e.isComposing) return;
+                                if (e.isComposing) return;
                                 const ev = keyEvent(e);
                                 if (!ev) return;
                                 e.preventDefault();
-                                send(ev);
+                                send(ev, true);
                             }}
                         />
                     </Show>

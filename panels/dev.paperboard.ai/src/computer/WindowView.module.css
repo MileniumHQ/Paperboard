@@ -6,7 +6,7 @@
 }
 
 .inputError {
-    padding-top: var(--paper-uigap-half);
+    padding: 0 var(--paper-uigap) var(--paper-uigap-half);
 }
 
 /* the window, scaled down to fit and never up */
@@ -17,9 +17,7 @@
     align-items: center;
     justify-content: center;
     padding: var(--paper-uigap);
-    border: var(--paper-border-width) solid var(--paper-border);
-    border-radius: var(--paper-border-radius);
-    background: var(--paper-surface-sunken);
+    background: var(--paper-surface-app);
     overflow: hidden;
 }
 

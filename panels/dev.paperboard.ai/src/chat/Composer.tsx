@@ -16,6 +16,7 @@ import {
 import AgentLogo from "../../legacy/src/components/AgentLogo";
 import { HARNESSES, LIMITS, type Harness } from "../contract";
 import type { Agent } from "../lib/agent";
+import type { Sheet } from "../Workspace";
 import { brainLabel, harnessName } from "../lib/brains";
 import styles from "./Composer.module.css";
 
@@ -23,7 +24,7 @@ const MAX_HEIGHT = "calc(var(--paper-uigap) * 12)";
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
-export default function Composer(props: { agent: Agent; onOpenSettings: () => void; onStartOver: () => void; onShowComputer: () => void }) {
+export default function Composer(props: { agent: Agent; onOpen: (sheet: Sheet) => void; onStartOver: () => void }) {
     const { agent } = props;
     const settings = () => agent.state.settings!;
     const name = () => settings().name;
@@ -263,7 +264,7 @@ export default function Composer(props: { agent: Agent; onOpenSettings: () => vo
                     icon="tune"
                     onClick={() => {
                         brainMenu.close();
-                        props.onOpenSettings();
+                        props.onOpen("settings");
                     }}
                 >
                     Model and name…
@@ -277,7 +278,7 @@ export default function Composer(props: { agent: Agent; onOpenSettings: () => vo
                         icon="web_asset"
                         onClick={() => {
                             computerMenu.close();
-                            props.onShowComputer();
+                            props.onOpen("computer");
                         }}
                     >
                         Show its windows
@@ -310,7 +311,7 @@ export default function Composer(props: { agent: Agent; onOpenSettings: () => vo
                     icon="settings"
                     onClick={() => {
                         computerMenu.close();
-                        props.onOpenSettings();
+                        props.onOpen("settings");
                     }}
                 >
                     Computer settings…
@@ -319,11 +320,31 @@ export default function Composer(props: { agent: Agent; onOpenSettings: () => vo
 
             <PaperContextMenu open={moreMenu.isOpen()} target={moreMenu.target()} placement={moreMenu.placement()} onClose={moreMenu.close}>
                 <PaperContextMenuItem
+                    value="computer"
+                    icon="computer"
+                    onClick={() => {
+                        moreMenu.close();
+                        props.onOpen("computer");
+                    }}
+                >
+                    Computer
+                </PaperContextMenuItem>
+                <PaperContextMenuItem
+                    value="memories"
+                    icon="neurology"
+                    onClick={() => {
+                        moreMenu.close();
+                        props.onOpen("memories");
+                    }}
+                >
+                    Memories
+                </PaperContextMenuItem>
+                <PaperContextMenuItem
                     value="settings"
                     icon="settings"
                     onClick={() => {
                         moreMenu.close();
-                        props.onOpenSettings();
+                        props.onOpen("settings");
                     }}
                 >
                     Settings
