@@ -41,6 +41,8 @@ describe("the service's agent", () => {
         dir = fs.mkdtempSync(path.join(os.tmpdir(), "ai-app-"));
         const procs = new FakeProcesses();
         const writes: Settings[] = [];
+        const vault = new Map<string, string>();
+        const toolDocs: unknown[] = [];
         let state: AiState = structuredClone(DEFAULT_STATE);
         const host: AppHost = {
             start: procs.start,
@@ -60,6 +62,18 @@ describe("the service's agent", () => {
             writeSettings: async (s) => void writes.push(s),
             harnessHomes: { claude: "/nonexistent/claude", codex: "/nonexistent/codex" },
             which: (c) => (installed.includes(c) ? `/usr/bin/${c}` : null),
+            tools: {
+                write: async () => {},
+                readTools: async () => null,
+                writeTools: async (c) => void toolDocs.push(c),
+                vault: {
+                    get: async (n) => vault.get(n) ?? null,
+                    set: async (n, v) => void vault.set(n, v),
+                    delete: async (n) => vault.delete(n),
+                    list: async () => [...vault.keys()],
+                },
+                actions: { list: async () => [], call: async () => null },
+            },
         };
         app = new AiApp(host);
         await app.init({
@@ -69,7 +83,7 @@ describe("the service's agent", () => {
             setState: (patch) => (state = { ...state, ...patch }),
             emit: () => {},
         });
-        return { app, writes, state: () => state };
+        return { app, writes, vault, toolDocs, state: () => state };
     }
 
     test("hydrates saved settings, and an invalid saved document is no settings", async () => {
@@ -104,6 +118,22 @@ describe("the service's agent", () => {
         await app.setup({ settings: { name: "Pip", harness: "claude-code", model: "default" } });
         expect(writes).toEqual([{ name: "Pip", harness: "claude-code", model: null }]);
         expect(state().settings).toEqual({ name: "Pip", harness: "claude-code", model: null });
+    });
+
+    test("a tool server's secret goes to the vault under this panel; the saved config only names it", async () => {
+        const { app, vault, toolDocs } = await start(["codex"]);
+        expect((await app.toolsView()).config).toEqual({ actions: true, servers: [] });
+        await app.toolsSave({ server: { name: "github", transport: "stdio", command: "npx", args: ["-y", "gh-mcp"], env: { GITHUB_TOKEN: { secret: "github-token" } } } });
+        const view = await app.toolsSetSecret({ server: "github", name: "github-token", value: "ghp_realvalue" });
+        expect([...vault.entries()]).toEqual([["mcp.github.github-token", "ghp_realvalue"]]);
+        expect(JSON.stringify(toolDocs)).not.toContain("ghp_realvalue");
+        // the view the UI gets lists names, never values
+        expect(JSON.stringify(view)).not.toContain("ghp_realvalue");
+        expect(view.secrets).toEqual({ github: ["github-token"] });
+        await app.toolsSetActions({ on: false });
+        expect((await app.toolsView()).config.actions).toBe(false);
+        await app.toolsRemove({ name: "github" });
+        expect(vault.size).toBe(0);
     });
 
     test("installComputer validates the budget before accepting", async () => {

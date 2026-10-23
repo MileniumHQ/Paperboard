@@ -21,13 +21,30 @@ import { startComputerMcp, type ComputerMcp } from "./computerMcp";
 import { Conversation, type TurnHost } from "./conversation";
 import { HARNESS_COMMANDS } from "./harness";
 import { COMPUTER_INSTRUCTIONS, COMPUTER_TOOLS } from "./computerTools";
+import { actionsToolset, type ActionsHost } from "./actionsToolset";
+import { McpServers, type Vault } from "./mcpServers";
+import { mcpToolset } from "./mcpToolset";
+import { TOOLS_EVENT, type ToolsConfig, type ToolsView } from "../toolsContract";
 import { listModels, type HarnessHomes } from "./models";
 import { Memory } from "./memory";
 import { messagesToolset } from "./messages";
 import { toolbox, type Toolbox } from "./toolsets";
 export { which } from "./which";
 
+/** What the tool servers and the actions toolset need from the daemon. */
+export interface ToolsHost {
+    /** a line to a daemon-owned child's stdin */
+    write(id: string, data: string): Promise<void>;
+    readTools(): Promise<unknown>;
+    writeTools(c: ToolsConfig): Promise<void>;
+    /** this panel's vault entries, by name */
+    vault: Vault;
+    /** other panels' actions, through this service's own scoped credential */
+    actions: ActionsHost;
+}
+
 export interface AppHost extends ComputerHost, TurnHost {
+    tools: ToolsHost;
     storageDir(): Promise<string>;
     readSettings(): Promise<unknown>;
     writeSettings(s: Settings): Promise<void>;
@@ -49,6 +66,7 @@ export class AiApp {
     memory!: Memory;
     private mcp: ComputerMcp | null = null;
     private tools: Toolbox | null = null;
+    servers!: McpServers;
     private settle!: (failure: Error | null) => void;
     private readonly settled = new Promise<Error | null>((ok) => (this.settle = ok));
 
@@ -77,10 +95,22 @@ export class AiApp {
         const root = await this.host.storageDir();
         this.ctx.setState({ settings: parseSettings(await this.host.readSettings()) });
         this.memory = new Memory({ dir: path.join(root, "memory"), onChange: (memory) => this.ctx.setState({ memory }) });
+        const t = this.host.tools;
+        this.servers = new McpServers({
+            host: { start: this.host.start, write: t.write, kill: this.host.kill, exists: this.host.exists, onStdout: this.host.onStdout, onStderr: this.host.onStderr, onExit: this.host.onExit, which: this.host.which },
+            guest: (tool, args) => this.computer.callTool(tool, args),
+            computerReady: () => this.computer.state.phase === "ready",
+            store: { read: t.readTools, write: t.writeTools },
+            vault: t.vault,
+            onChange: (view) => this.ctx.emit(TOOLS_EVENT, view),
+        });
+        await this.servers.load();
         this.tools = toolbox([
             { id: "computer", tools: () => COMPUTER_TOOLS, call: (name, args) => this.computer.callTool(name, args), instructions: () => COMPUTER_INSTRUCTIONS },
             messagesToolset({ say: (text, replyTo) => this.conversation.say(text, replyTo) }),
             this.memory.toolset(),
+            mcpToolset(this.servers),
+            actionsToolset({ host: t.actions, enabled: () => this.servers.config.actions }),
         ]);
         this.mcp = await startComputerMcp(this.tools);
         this.computer = new Computer({
@@ -109,7 +139,8 @@ export class AiApp {
     }
 
     async shutdown() {
-        await Promise.allSettled([this.conversation?.shutdown(), this.computer?.shutdown()]);
+        const stops = await Promise.allSettled([this.conversation?.shutdown(), this.computer?.shutdown(), this.servers?.shutdown()]);
+        for (const r of stops) if (r.status === "rejected") console.error("[ai] shutdown:", String(r.reason));
         await this.mcp?.close();
     }
 
@@ -164,6 +195,30 @@ export class AiApp {
         const r = await this.conversation.clear();
         this.ctx.emit(EVENTS.cleared, {});
         return r;
+    }
+
+    // ------------------------------------------------------------- the Tools page
+
+    toolsView(): Promise<ToolsView> {
+        return this.servers.view();
+    }
+    toolsSave(i: Record<string, unknown>) {
+        return this.servers.save(i.server);
+    }
+    toolsRemove(i: Record<string, unknown>) {
+        return this.servers.remove(i.name);
+    }
+    toolsRestart(i: Record<string, unknown>) {
+        return this.servers.restart(i.name);
+    }
+    toolsSetActions(i: Record<string, unknown>) {
+        return this.servers.setActions(i.on);
+    }
+    toolsSetSecret(i: Record<string, unknown>) {
+        return this.servers.setSecret(i.server, i.name, i.value);
+    }
+    toolsDeleteSecret(i: Record<string, unknown>) {
+        return this.servers.deleteSecret(i.server, i.name);
     }
 
     // ------------------------------------------------------------- the user's view

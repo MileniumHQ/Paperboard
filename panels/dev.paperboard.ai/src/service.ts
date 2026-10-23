@@ -1,11 +1,14 @@
 import os from "node:os";
 import path from "node:path";
-import { configApi, defineAction, definePanelService, fileApi, processApi, secretsApi, type ActionDefinition } from "@mileniumhq/paperapi";
+import { actionsApi, configApi, defineAction, definePanelService, fileApi, processApi, secretsApi, type ActionDefinition } from "@mileniumhq/paperapi";
 import { DEFAULT_STATE, PANEL_ID, UI_ACTION_IDS, type AiState } from "./contract";
+import { TOOLS_ACTION_IDS } from "./toolsContract";
 import { AiApp, which, type AppHost } from "./service/app";
 
 // the agent's settings: their own document, apart from the panel's config document
 const SETTINGS_PATH = "agent.json";
+// the tool servers and the actions switch: another document, so one never overwrites the other
+const TOOLS_PATH = "tools.json";
 
 const host: AppHost = {
     start: (o) => processApi.start(o),
@@ -33,6 +36,26 @@ const host: AppHost = {
     readSettings: () => configApi.get(PANEL_ID, SETTINGS_PATH),
     writeSettings: (s) => configApi.set(s, PANEL_ID, SETTINGS_PATH),
     which,
+    tools: {
+        write: (id, data) => processApi.write(id, data),
+        readTools: () => configApi.get(PANEL_ID, TOOLS_PATH),
+        writeTools: (c) => configApi.set(c, PANEL_ID, TOOLS_PATH),
+        // this panel's vault entries only, the panel id explicit on every call
+        vault: {
+            get: async (name) => {
+                const r = await secretsApi.get(name, PANEL_ID);
+                return r.found ? r.value : null;
+            },
+            set: (name, value) => secretsApi.set(name, value, PANEL_ID),
+            delete: (name) => secretsApi.delete(name, PANEL_ID),
+            list: () => secretsApi.list(PANEL_ID),
+        },
+        // other panels' actions: this service's scoped credential, as any panel's flows use
+        actions: {
+            list: () => actionsApi.list(),
+            call: (panel, action, inputs, o) => actionsApi.call(panel, action, inputs, { timeoutMs: o.timeoutMs }),
+        },
+    },
     // where the harnesses look for their own files: their documented overrides, else their defaults. The
     // harnesses run with this service's environment, so they and the panel agree on it.
     harnessHomes: {
@@ -87,6 +110,13 @@ export const aiService = definePanelService({
         ui(UI_ACTION_IDS.saveNote, "Save a note in the agent's memory", (i) => app.memory.saveNote(i.key, i.when, i.body)),
         ui(UI_ACTION_IDS.deleteNote, "Forget a note", (i) => app.memory.deleteNote(i.key)),
         ui(UI_ACTION_IDS.control, "Take or hand back control of the computer", (i) => app.control(i)),
+        ui(TOOLS_ACTION_IDS.get, "Read the agent's tool servers", () => app.toolsView()),
+        ui(TOOLS_ACTION_IDS.save, "Save a tool server", (i) => app.toolsSave(i)),
+        ui(TOOLS_ACTION_IDS.remove, "Remove a tool server", (i) => app.toolsRemove(i)),
+        ui(TOOLS_ACTION_IDS.restart, "Restart a tool server", (i) => app.toolsRestart(i)),
+        ui(TOOLS_ACTION_IDS.setActions, "Allow or refuse Paperboard actions for the agent", (i) => app.toolsSetActions(i)),
+        ui(TOOLS_ACTION_IDS.setSecret, "Save a tool server's secret", (i) => app.toolsSetSecret(i)),
+        ui(TOOLS_ACTION_IDS.deleteSecret, "Delete a tool server's secret", (i) => app.toolsDeleteSecret(i)),
     ],
     async onInit(ctx) {
         await app.init({
