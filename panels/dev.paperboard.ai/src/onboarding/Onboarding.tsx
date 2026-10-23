@@ -2,8 +2,6 @@ import { For, Match, Show, Switch, createEffect, createSignal, on, onCleanup, ty
 import {
     PaperButton,
     PaperInput,
-    PaperSelectMenu,
-    PaperSelectMenuItem,
     PaperSelector,
     PaperSelectorItem,
     PaperWizard,
@@ -165,7 +163,26 @@ function Scenes(props: {
 
     // the chosen brain's own models; a model belongs to its harness, so another brain is chosen afresh
     const models = createModels(agent, props.harness);
-    createEffect(on(props.harness, () => props.setModel(undefined), { defer: true }));
+    createEffect(
+        on(
+            props.harness,
+            () => {
+                props.setModel(undefined);
+                setSearch("");
+            },
+            { defer: true },
+        ),
+    );
+    // a long list (OpenCode's) gets a search field: every word typed is somewhere in the name, the provider or the id
+    const [search, setSearch] = createSignal("");
+    const found = () => {
+        const words = search().toLowerCase().split(/\s+/).filter(Boolean);
+        const all = loadedModels(models) ?? [];
+        return all.filter((m) => {
+            const text = `${m.name} ${m.description ?? ""} ${m.id}`.toLowerCase();
+            return words.every((w) => text.includes(w));
+        });
+    };
 
     // the Next button appears only when the scene is revealed and its answer is in
     const ready = () => {
@@ -328,37 +345,21 @@ function Scenes(props: {
             <PaperWizardStep class={styles.step} index={STEP.model} canProceed={ready()}>
                 <Reveal when={revealed()}>
                     <h2 class={styles.title}>Choose a model</h2>
-                    <Show
-                        when={(loadedModels(models)?.length ?? 0) >= SEARCH_MODELS_FROM}
-                        fallback={
-                            <PaperSelector name="model" value={props.model()} onValueChange={(v) => props.setModel(String(v))}>
-                                <PaperSelectorItem value={DEFAULT_MODEL} icon="tune" description="Whatever it's set to use already.">
-                                    Use {harnessName(props.harness() ?? "")}'s default
-                                </PaperSelectorItem>
-                                <For each={loadedModels(models) ?? []}>
-                                    {(m) => (
-                                        <PaperSelectorItem value={m.id} icon={<BrainLogo harness={props.harness()!} />} description={m.description ?? undefined}>
-                                            {m.name}
-                                        </PaperSelectorItem>
-                                    )}
-                                </For>
-                            </PaperSelector>
-                        }
-                    >
-                        {/* too many to lay out as cards: a menu to search, each model's provider under its name */}
-                        <PaperSelectMenu name="model" aria-label="Model" searchable value={props.model()} placeholder="Pick a model" onValueChange={(v) => props.setModel(String(v))}>
-                            <PaperSelectMenuItem value={DEFAULT_MODEL} icon="tune" description="Whatever it's set to use already">
-                                Use {harnessName(props.harness() ?? "")}'s default
-                            </PaperSelectMenuItem>
-                            <For each={loadedModels(models)}>
-                                {(m) => (
-                                    <PaperSelectMenuItem value={m.id} description={m.description ?? undefined}>
-                                        {m.name}
-                                    </PaperSelectMenuItem>
-                                )}
-                            </For>
-                        </PaperSelectMenu>
+                    <Show when={(loadedModels(models)?.length ?? 0) >= SEARCH_MODELS_FROM}>
+                        <PaperInput label="Search" icon="search" fullWidth placeholder="Search models" value={search()} onInput={(e) => setSearch(e.currentTarget.value)} />
                     </Show>
+                    <PaperSelector name="model" value={props.model()} onValueChange={(v) => props.setModel(String(v))}>
+                        <PaperSelectorItem value={DEFAULT_MODEL} icon="tune" description="Whatever it's set to use already.">
+                            Use {harnessName(props.harness() ?? "")}'s default
+                        </PaperSelectorItem>
+                        <For each={found()}>
+                            {(m) => (
+                                <PaperSelectorItem value={m.id} icon={<BrainLogo harness={props.harness()!} />} description={m.description ?? undefined}>
+                                    {m.name}
+                                </PaperSelectorItem>
+                            )}
+                        </For>
+                    </PaperSelector>
                     <Show when={models.error}>
                         <p class={styles.note}>{models.error instanceof Error ? models.error.message : String(models.error)} You can pick one later in settings.</p>
                     </Show>
