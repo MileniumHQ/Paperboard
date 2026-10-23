@@ -9,6 +9,7 @@ import {
     onCleanup,
     onMount,
     Show,
+    createEffect,
     type ParentProps,
     type JSX,
     type Accessor,
@@ -26,18 +27,18 @@ interface RegisteredOption {
     value: string | number;
     label: Accessor<JSX.Element>;
     icon: Accessor<JSX.Element | string | undefined>;
+    /** it fits what's typed in the search field (always, without one) */
+    matches: Accessor<boolean>;
 }
 
 interface SelectMenuContextType {
-    register: (
-        value: string | number,
-        label: Accessor<JSX.Element>,
-        icon: Accessor<JSX.Element | string | undefined>,
-    ) => void;
+    register: (option: RegisteredOption) => void;
     unregister: (value: string | number) => void;
     close: () => void;
     commit: (value: string | number) => void;
     disabled: () => boolean;
+    /** what's typed in the search field, lowercased and trimmed; "" without one */
+    query: Accessor<string>;
 }
 
 const SelectMenuContext = createContext<SelectMenuContextType>();
@@ -51,6 +52,9 @@ export type PaperSelectMenuProps = SelectionProviderProps &
         placeholder?: string;
         disabled?: boolean;
         fullWidth?: boolean;
+        /** a search field above the options, for long lists; it filters by label, description, value and keywords */
+        searchable?: boolean;
+        searchPlaceholder?: string;
     };
 
 export function PaperSelectMenu(props: ParentProps<PaperSelectMenuProps>) {
@@ -62,6 +66,8 @@ export function PaperSelectMenu(props: ParentProps<PaperSelectMenuProps>) {
         "placeholder",
         "disabled",
         "fullWidth",
+        "searchable",
+        "searchPlaceholder",
         "class",
         "classList",
         "children",
@@ -79,6 +85,8 @@ export function PaperSelectMenu(props: ParentProps<PaperSelectMenuProps>) {
                 placeholder={local.placeholder}
                 disabled={local.disabled}
                 fullWidth={local.fullWidth}
+                searchable={local.searchable}
+                searchPlaceholder={local.searchPlaceholder}
                 name={local.name}
                 class={local.class}
                 classList={local.classList}
@@ -95,6 +103,8 @@ function SelectMenuInner(
             placeholder?: string;
             disabled?: boolean;
             fullWidth?: boolean;
+            searchable?: boolean;
+            searchPlaceholder?: string;
             name?: string;
         }
     >,
@@ -103,6 +113,8 @@ function SelectMenuInner(
         "placeholder",
         "disabled",
         "fullWidth",
+        "searchable",
+        "searchPlaceholder",
         "name",
         "class",
         "classList",
@@ -112,14 +124,21 @@ function SelectMenuInner(
     const selection = useSelectionContext();
     const [open, setOpen] = createSignal(false);
     const [options, setOptions] = createSignal<RegisteredOption[]>([]);
+    const [search, setSearch] = createSignal("");
+    const query = () => (local.searchable ? search().trim().toLowerCase() : "");
+    const noMatches = () => query() !== "" && !options().some((o) => o.matches());
+    // a closed menu forgets its search: it opens on the whole list
+    createEffect(() => {
+        if (!open()) setSearch("");
+    });
     let hiddenInputRef: HTMLInputElement | undefined;
     let triggerEl: HTMLButtonElement | undefined;
 
     const menuContext: SelectMenuContextType = {
-        register: (value, label, icon) => {
+        register: (option) => {
             setOptions((prev) => [
-                ...prev.filter((o) => o.value !== value),
-                { value, label, icon },
+                ...prev.filter((o) => o.value !== option.value),
+                option,
             ]);
         },
         unregister: (value) => {
@@ -128,6 +147,7 @@ function SelectMenuInner(
         close: () => setOpen(false),
         commit: (value) => commitValue(value),
         disabled: () => Boolean(local.disabled),
+        query,
     };
 
     const currentValue = () => selection.currentValue();
@@ -277,12 +297,63 @@ function SelectMenuInner(
                     initialHighlight={currentValue() ?? null}
                     onClose={() => setOpen(false)}
                 >
+                    <Show when={local.searchable}>
+                        <SearchField
+                            open={open()}
+                            value={search()}
+                            placeholder={local.searchPlaceholder ?? "Search"}
+                            onInput={setSearch}
+                        />
+                    </Show>
                     {local.children}
+                    <Show when={noMatches()}>
+                        <div class={styles.noMatches} role="status">
+                            No matches
+                        </div>
+                    </Show>
                 </PaperContextMenu>
             </div>
         </SelectMenuContext.Provider>
     );
 }
+
+/**
+ * The search field at the top of a searchable menu. It takes focus when the menu opens; typing filters the
+ * options and highlights the first one left, so Enter picks it and the arrows move through what's shown.
+ */
+function SearchField(props: { open: boolean; value: string; placeholder: string; onInput: (v: string) => void }) {
+    const ctx = useContextMenu();
+    let input: HTMLInputElement | undefined;
+    createEffect(() => {
+        if (props.open) requestAnimationFrame(() => input?.focus());
+    });
+    const highlightFirst = () =>
+        queueMicrotask(() => {
+            const first = input
+                ?.closest("[role='listbox']")
+                ?.querySelector<HTMLElement>("[data-context-item]:not([data-disabled='true'])");
+            ctx?.setHighlightedItem(first?.getAttribute("data-context-item") ?? null);
+        });
+    return (
+        <input
+            ref={input}
+            type="search"
+            class={styles.search}
+            aria-label={props.placeholder}
+            placeholder={props.placeholder}
+            autocomplete="off"
+            spellcheck={false}
+            value={props.value}
+            onInput={(e) => {
+                props.onInput(e.currentTarget.value);
+                highlightFirst();
+            }}
+        />
+    );
+}
+
+/** Every word typed appears somewhere in what the option says about itself. */
+const fits = (query: string, haystack: string) => query.split(/\s+/).every((word) => haystack.includes(word));
 
 export interface PaperSelectMenuItemProps
     extends JSX.HTMLAttributes<HTMLDivElement> {
@@ -290,6 +361,8 @@ export interface PaperSelectMenuItemProps
     icon?: JSX.Element | string;
     /** Second line under the label, like a context menu item's description. */
     description?: JSX.Element | string;
+    /** More words a search finds it by, besides its label, description and value. */
+    keywords?: string;
     disabled?: boolean;
 }
 
@@ -300,6 +373,7 @@ export function PaperSelectMenuItem(
         "value",
         "icon",
         "description",
+        "keywords",
         "disabled",
         "class",
         "classList",
@@ -314,12 +388,25 @@ export function PaperSelectMenuItem(
     const itemValue = () => String(local.value);
     const isHighlighted = () => ctx?.highlightedItem() === itemValue();
 
+    // what a search reads: the label and description when they're text, the value, the keywords
+    const haystack = () =>
+        [local.value, local.children, local.description, local.keywords]
+            .filter((t) => typeof t === "string" || typeof t === "number")
+            .join(" ")
+            .toLowerCase();
+    const matches = () => {
+        const q = menu?.query() ?? "";
+        return q === "" || fits(q, haystack());
+    };
+
     onMount(() => {
-        menu?.register(local.value, label, () => local.icon);
+        menu?.register({ value: local.value, label, icon: () => local.icon, matches });
         onCleanup(() => menu?.unregister(local.value));
     });
 
+    // filtered out: still registered, so a selected option keeps its label on the trigger
     return (
+        <Show when={matches()}>
         <MenuItem
             {...rest}
             role="option"
@@ -347,5 +434,6 @@ export function PaperSelectMenuItem(
         >
             {local.children}
         </MenuItem>
+        </Show>
     );
 }

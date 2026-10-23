@@ -83,3 +83,31 @@
     opacity: 0.45;
     cursor: not-allowed;
 }
+
+/* the search field of a searchable menu: first in the list, it stays put while the options scroll */
+.search {
+    position: sticky;
+    top: calc(var(--paper-uigap-half) * -1);
+    z-index: 1;
+    flex-shrink: 0;
+    font-family: var(--paper-font-family);
+    font-size: var(--paper-text-size-2);
+    padding: var(--paper-uigap-half) var(--paper-uigap-threefourths);
+    margin-bottom: var(--paper-uigap-onefourth);
+    border-radius: var(--paper-border-radius-half);
+    border: var(--paper-border-width) solid var(--paper-border);
+    background: var(--paper-surface-inset);
+    color: var(--paper-text);
+    outline: none;
+    user-select: text;
+}
+
+.search:focus-visible {
+    border-color: var(--paper-primary);
+}
+
+.noMatches {
+    padding: var(--paper-uigap-half) var(--paper-uigap-threefourths);
+    font-size: var(--paper-text-size-2);
+    color: var(--paper-text-subtle);
+}

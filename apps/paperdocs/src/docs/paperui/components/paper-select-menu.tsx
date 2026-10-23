@@ -97,6 +97,18 @@ export function Example() {
                             <td><PaperCode>false</PaperCode></td>
                             <td>Disables opening the dropdown menu.</td>
                         </tr>
+                        <tr>
+                            <td><PaperCode>searchable</PaperCode></td>
+                            <td><PaperCode>boolean</PaperCode></td>
+                            <td><PaperCode>false</PaperCode></td>
+                            <td>Puts a search field above the options, for long lists. It filters by each option's label, description, value and keywords.</td>
+                        </tr>
+                        <tr>
+                            <td><PaperCode>searchPlaceholder</PaperCode></td>
+                            <td><PaperCode>string</PaperCode></td>
+                            <td><PaperCode>"Search"</PaperCode></td>
+                            <td>The search field's placeholder and accessible name.</td>
+                        </tr>
                     </tbody>
                 </PaperTable>
 
@@ -107,6 +119,9 @@ export function Example() {
                 the way a context menu item does.
                 The popup portal measures window boundaries to flip above the trigger if screen space below is insufficient.
                 Pressing ArrowDown or ArrowUp steps through options; Home and End jump to the ends; Enter commits the selection.
+                A searchable menu focuses its search field when it opens: every typed word must appear in an option's label,
+                description, value or keywords (a PaperSelectMenuItem prop for extra words), the first option left is
+                highlighted so Enter picks it, and closing the menu clears the search.
                 When the selected PaperSelectMenuItem declares an icon, the trigger mirrors it next to the label, so logos and glyphs stay visible while the menu is closed.
             </PaperText>
 

@@ -455,6 +455,12 @@ export function PaperContextMenu(props: ParentProps<PaperContextMenuProps>) {
                 return;
             }
 
+            // a text field in the menu (a select's search) keeps its own editing keys: space types a space,
+            // Home/End and the side arrows move the caret; Up/Down and Enter still work the list
+            const editing =
+                e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
+            if (editing && [" ", "Home", "End", "ArrowLeft", "ArrowRight"].includes(e.key)) return;
+
             const items = levelItems(level);
             if (items.length === 0) return;
             const currentIndex = current ? items.indexOf(current) : -1;

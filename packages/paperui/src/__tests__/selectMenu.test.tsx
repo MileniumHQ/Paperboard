@@ -317,4 +317,64 @@ describe("PaperSelectMenu", () => {
         setValue("dark");
         expect(within(getTrigger()).getByText("Dark")).toBeDefined();
     });
+
+    describe("searchable", () => {
+        const models = () => (
+            <>
+                <PaperSelectMenuItem value="vertex/gemini-3-flash" description="vertex">gemini-3-flash</PaperSelectMenuItem>
+                <PaperSelectMenuItem value="openai/gpt-6" description="openai">gpt-6</PaperSelectMenuItem>
+                <PaperSelectMenuItem value="openai/gpt-6-mini" description="openai" keywords="small cheap">gpt-6-mini</PaperSelectMenuItem>
+            </>
+        );
+        const search = () => within(getListbox()).getByRole("searchbox") as HTMLInputElement;
+        const shown = () => within(getListbox()).queryAllByRole("option").map((o) => o.getAttribute("data-select-value"));
+
+        test("typing narrows the options by label, description, value and keywords; every word must fit", () => {
+            render(() => <PaperSelectMenu name="model" searchable value="openai/gpt-6">{models()}</PaperSelectMenu>);
+            fireEvent.click(getTrigger());
+            expect(shown()).toEqual(["vertex/gemini-3-flash", "openai/gpt-6", "openai/gpt-6-mini"]);
+            fireEvent.input(search(), { target: { value: "OpenAI" } });
+            expect(shown()).toEqual(["openai/gpt-6", "openai/gpt-6-mini"]);
+            fireEvent.input(search(), { target: { value: "cheap openai" } });
+            expect(shown()).toEqual(["openai/gpt-6-mini"]);
+            fireEvent.input(search(), { target: { value: "claude" } });
+            expect(shown()).toEqual([]);
+            expect(within(getListbox()).getByRole("status").textContent).toBe("No matches");
+            // the selected option is filtered out of the list, not off the trigger
+            expect(within(getTrigger()).getByText("gpt-6")).toBeDefined();
+        });
+
+        test("Enter picks the first option left; space types into the search instead of choosing", async () => {
+            let received: string | undefined;
+            render(() => (
+                <PaperSelectMenu name="model" searchable value="openai/gpt-6" onValueChange={(v) => (received = String(v))}>
+                    {models()}
+                </PaperSelectMenu>
+            ));
+            fireEvent.click(getTrigger());
+            fireEvent.keyDown(search(), { key: " " });
+            expect(received).toBeUndefined();
+            fireEvent.input(search(), { target: { value: "gemini" } });
+            await Promise.resolve();
+            fireEvent.keyDown(search(), { key: "Enter" });
+            expect(received).toBe("vertex/gemini-3-flash");
+        });
+
+        test("closing forgets the search: it opens on the whole list", async () => {
+            render(() => <PaperSelectMenu name="model" searchable>{models()}</PaperSelectMenu>);
+            fireEvent.click(getTrigger());
+            fireEvent.input(search(), { target: { value: "gemini" } });
+            expect(shown()).toHaveLength(1);
+            fireEvent.keyDown(search(), { key: "Escape" });
+            fireEvent.click(getTrigger());
+            expect(search().value).toBe("");
+            expect(shown()).toHaveLength(3);
+        });
+
+        test("without searchable there's no search field", () => {
+            render(() => <PaperSelectMenu name="model">{models()}</PaperSelectMenu>);
+            fireEvent.click(getTrigger());
+            expect(within(getListbox()).queryByRole("searchbox")).toBeNull();
+        });
+    });
 });
