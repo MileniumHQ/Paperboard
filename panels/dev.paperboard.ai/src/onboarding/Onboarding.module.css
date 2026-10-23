@@ -55,6 +55,14 @@
         opacity var(--paper-medium-transition);
 }
 
+/* the face in the same tinted chip the chat's header gives it */
+.faceChip {
+    display: inline-flex;
+    flex-shrink: 0;
+    border-radius: var(--paper-border-radius);
+    background: color-mix(in srgb, var(--paper-primary) 14%, transparent);
+}
+
 .leaving {
     transform: translateY(calc(var(--paper-uigap-double) * -2)) scale(0.3);
     opacity: 0;

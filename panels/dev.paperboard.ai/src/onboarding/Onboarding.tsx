@@ -244,7 +244,9 @@ function Scenes(props: {
             <div class={styles.above} classList={{ [styles.centered!]: alone() }} />
             <Show when={speakerShown()}>
                 <div class={styles.speaker} classList={{ [styles.leaving!]: leaving() }}>
-                    <Face face={face} size={64} frame="face" />
+                    <span class={styles.faceChip}>
+                        <Face face={face} size={64} frame="face" />
+                    </span>
                     <div
                         class={styles.bubble}
                         classList={{
