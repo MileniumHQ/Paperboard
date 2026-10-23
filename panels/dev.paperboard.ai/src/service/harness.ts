@@ -35,7 +35,7 @@ export function instructions(name: string, sections: string[] = []): string {
 
 You have your own computer, a Debian VM. Your tools act on it, never on the user's machine, so you can't see their files. Use them to actually do things instead of explaining how.
 
-The user doesn't see your tool calls. Before you start on something, say in a line what you're about to do; then work without narrating each step, and text what came of it.`,
+The user doesn't see your tool calls, only your texts: reply before you start on something, then work without narrating each step, and text what came of it.`,
         ...(character ? [VOICES[character]] : []),
         ...sections,
     ].join("\n\n");
