@@ -123,6 +123,7 @@ describe("the service's agent", () => {
         expect(app.detect()).toEqual([
             { id: "codex", installed: false, version: null },
             { id: "claude-code", installed: true, version: null },
+            { id: "opencode", installed: false, version: null },
         ]);
     });
 

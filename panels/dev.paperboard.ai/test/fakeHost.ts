@@ -23,6 +23,11 @@ export class FakeProcesses {
         if (this.exitOnKill) queueMicrotask(() => this.exit(id, signal === "SIGKILL" ? 137 : 143));
     };
     exists = async (id: string) => this.alive.has(id);
+    written: { id: string; data: string }[] = [];
+    write = async (id: string, data: string) => {
+        if (!this.alive.has(id)) throw new Error(`${id} isn't running`);
+        this.written.push({ id, data });
+    };
     onStdout = (id: string, cb: Listener<string>) => this.on("stdout", id, cb);
     onStderr = (id: string, cb: Listener<string>) => this.on("stderr", id, cb);
     onExit = (id: string, cb: Listener<number | undefined>) => this.on("exit", id, cb);

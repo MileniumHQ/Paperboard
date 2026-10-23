@@ -57,6 +57,21 @@ describe("the computer's MCP endpoint", () => {
         });
     });
 
+    test("tells who's waiting each time a harness lists the tools, and only then", async () => {
+        mcp = await startComputerMcp(box(async () => ({ text: "" })));
+        let listed = 0;
+        const off = mcp.onToolsListed(() => listed++);
+        await post({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+        expect(listed).toBe(0);
+        await post({ jsonrpc: "2.0", id: 2, method: "tools/list" }, null); // refused: not a listing
+        expect(listed).toBe(0);
+        await post({ jsonrpc: "2.0", id: 3, method: "tools/list" });
+        expect(listed).toBe(1);
+        off();
+        await post({ jsonrpc: "2.0", id: 4, method: "tools/list" });
+        expect(listed).toBe(1);
+    });
+
     test("a tool that isn't the computer's is an error, never a call", async () => {
         const calls: string[] = [];
         mcp = await startComputerMcp(box(async (name) => (calls.push(name), { text: "" })));

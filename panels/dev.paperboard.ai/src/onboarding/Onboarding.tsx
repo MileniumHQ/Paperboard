@@ -1,11 +1,21 @@
 import { For, Match, Show, Switch, createEffect, createSignal, on, onCleanup, type JSX } from "solid-js";
-import { PaperButton, PaperInput, PaperSelector, PaperSelectorItem, PaperWizard, PaperWizardStep, useWizard } from "@mileniumhq/paperui";
+import {
+    PaperButton,
+    PaperInput,
+    PaperSelectMenu,
+    PaperSelectMenuItem,
+    PaperSelector,
+    PaperSelectorItem,
+    PaperWizard,
+    PaperWizardStep,
+    useWizard,
+} from "@mileniumhq/paperui";
 import { Face } from "../face/Face";
 import { skinFor } from "../face/skins";
 import { createFace, type FaceController } from "../face/controller";
 import { createSpeaker, type Speaker } from "./speech";
 import { scriptFor } from "./script";
-import { createModels, harnessDescription, harnessName, loadedModels } from "../lib/brains";
+import { SEARCH_MODELS_FROM, createModels, harnessDescription, harnessName, loadedModels } from "../lib/brains";
 import BrainLogo from "../lib/BrainLogo";
 import { Budget, DEFAULT_BUDGET, SetupProgress } from "../computer/Computer";
 import { LIMITS, characterOf, type ComputerBudget, type Harness, type HarnessInfo } from "../contract";
@@ -291,7 +301,7 @@ function Scenes(props: {
                         </Match>
                         <Match when={installed().length === 0}>
                             <p class={styles.note}>
-                                I didn't find Codex or Claude on this computer. Install one and sign in to it, then look again.
+                                I didn't find Codex, Claude or OpenCode on this computer. Install one and sign in to it, then look again.
                             </p>
                             <PaperButton onClick={() => void detect()}>Look again</PaperButton>
                         </Match>
@@ -318,18 +328,37 @@ function Scenes(props: {
             <PaperWizardStep class={styles.step} index={STEP.model} canProceed={ready()}>
                 <Reveal when={revealed()}>
                     <h2 class={styles.title}>Choose a model</h2>
-                    <PaperSelector name="model" value={props.model()} onValueChange={(v) => props.setModel(String(v))}>
-                        <PaperSelectorItem value={DEFAULT_MODEL} icon="tune" description="Whatever it's set to use already.">
-                            Use {harnessName(props.harness() ?? "")}'s default
-                        </PaperSelectorItem>
-                        <For each={loadedModels(models) ?? []}>
-                            {(m) => (
-                                <PaperSelectorItem value={m.id} icon={<BrainLogo harness={props.harness()!} />} description={m.description ?? undefined}>
-                                    {m.name}
+                    <Show
+                        when={(loadedModels(models)?.length ?? 0) >= SEARCH_MODELS_FROM}
+                        fallback={
+                            <PaperSelector name="model" value={props.model()} onValueChange={(v) => props.setModel(String(v))}>
+                                <PaperSelectorItem value={DEFAULT_MODEL} icon="tune" description="Whatever it's set to use already.">
+                                    Use {harnessName(props.harness() ?? "")}'s default
                                 </PaperSelectorItem>
-                            )}
-                        </For>
-                    </PaperSelector>
+                                <For each={loadedModels(models) ?? []}>
+                                    {(m) => (
+                                        <PaperSelectorItem value={m.id} icon={<BrainLogo harness={props.harness()!} />} description={m.description ?? undefined}>
+                                            {m.name}
+                                        </PaperSelectorItem>
+                                    )}
+                                </For>
+                            </PaperSelector>
+                        }
+                    >
+                        {/* too many to lay out as cards: a menu to search, each model's provider under its name */}
+                        <PaperSelectMenu name="model" aria-label="Model" searchable value={props.model()} placeholder="Pick a model" onValueChange={(v) => props.setModel(String(v))}>
+                            <PaperSelectMenuItem value={DEFAULT_MODEL} icon="tune" description="Whatever it's set to use already">
+                                Use {harnessName(props.harness() ?? "")}'s default
+                            </PaperSelectMenuItem>
+                            <For each={loadedModels(models)}>
+                                {(m) => (
+                                    <PaperSelectMenuItem value={m.id} description={m.description ?? undefined}>
+                                        {m.name}
+                                    </PaperSelectMenuItem>
+                                )}
+                            </For>
+                        </PaperSelectMenu>
+                    </Show>
                     <Show when={models.error}>
                         <p class={styles.note}>{models.error instanceof Error ? models.error.message : String(models.error)} You can pick one later in settings.</p>
                     </Show>

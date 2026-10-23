@@ -20,7 +20,7 @@ import BrainLogo from "../lib/BrainLogo";
 import { Budget, DEFAULT_BUDGET } from "../computer/Computer";
 import { HARNESSES, LIMITS, type ComputerBudget, type Harness, type Settings as Saved } from "../contract";
 import type { Agent } from "../lib/agent";
-import { createModels, harnessName, loadedModels } from "../lib/brains";
+import { SEARCH_MODELS_FROM, createModels, harnessName, loadedModels } from "../lib/brains";
 import styles from "./Settings.module.css";
 
 const DEFAULT_MODEL = "default";
@@ -149,6 +149,7 @@ function AgentSettings(props: { agent: Agent }) {
                             aria-label="Model"
                             value={current().model ?? DEFAULT_MODEL}
                             disabled={!loadedModels(models)}
+                            searchable={listed().length >= SEARCH_MODELS_FROM}
                             onValueChange={(v) => save({ model: v === DEFAULT_MODEL ? null : String(v) })}
                         >
                             <PaperSelectMenuItem value={DEFAULT_MODEL} icon="tune" description={`Whatever ${harnessName(current().harness)} is set to use`}>

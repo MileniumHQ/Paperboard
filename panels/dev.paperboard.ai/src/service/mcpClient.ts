@@ -271,14 +271,7 @@ export class StdioWire implements McpWire {
     private async send(msg: unknown) {
         const line = JSON.stringify(msg) + "\n";
         if (line.length > MAX_MESSAGE) throw new Error("that message is too large to send");
-        // the daemon takes at most 64 KiB per write; never split a character
-        for (let i = 0; i < line.length; ) {
-            let end = Math.min(i + 32_768, line.length);
-            const c = line.charCodeAt(end - 1);
-            if (end < line.length && c >= 0xd800 && c <= 0xdbff) end--;
-            await this.host.write(this.id, line.slice(i, end));
-            i = end;
-        }
+        await writeLine(this.host.write, this.id, line);
     }
 
     onEnd(cb: (reason: string) => void) {
@@ -568,4 +561,15 @@ async function readEvents(res: Response, id: number): Promise<any> {
         await discard(reader);
     }
     throw new Error("the server's stream ended without an answer");
+}
+
+/** Text to a daemon-owned child's stdin. The daemon takes at most 64 KiB per write, so it goes in pieces, never splitting a character. */
+export async function writeLine(write: (id: string, data: string) => Promise<void>, id: string, text: string): Promise<void> {
+    for (let i = 0; i < text.length; ) {
+        let end = Math.min(i + 32_768, text.length);
+        const c = text.charCodeAt(end - 1);
+        if (end < text.length && c >= 0xd800 && c <= 0xdbff) end--;
+        await write(id, text.slice(i, end));
+        i = end;
+    }
 }

@@ -1,6 +1,6 @@
 // The agent's tools as an MCP server, served by the AI panel's service.
 //
-// The agent harness (Codex, Claude Code) runs as a daemon-supervised child
+// The agent harness (Codex, Claude Code, OpenCode) runs as a daemon-supervised child
 // with its own tools off; this endpoint is its only pair of hands (every
 // toolset in toolsets.ts). It speaks
 // MCP's streamable HTTP transport in its simplest form: every POST carries
@@ -32,12 +32,15 @@ type Json = Record<string, any>;
 export interface ComputerMcp {
     url: string;
     token: string;
+    /** called each time a harness has listed the tools: the moment one that connects in the background (OpenCode) has them */
+    onToolsListed(cb: () => void): () => void;
     close(): Promise<void>;
 }
 
 export async function startComputerMcp(tools: Pick<Toolbox, "list" | "call">): Promise<ComputerMcp> {
     const token = randomBytes(32).toString("hex");
     const expected = Buffer.from(`Bearer ${token}`);
+    const listed = new Set<() => void>();
     const authorized = (req: IncomingMessage) => {
         const got = Buffer.from(req.headers.authorization ?? "");
         return got.length === expected.length && timingSafeEqual(got, expected);
@@ -62,6 +65,7 @@ export async function startComputerMcp(tools: Pick<Toolbox, "list" | "call">): P
                 if (msg.id === undefined) return reply(res, 202, null); // a notification
                 try {
                     reply(res, 200, { jsonrpc: "2.0", id: msg.id, result: await handle(msg, tools) });
+                    if (msg.method === "tools/list") for (const cb of listed) cb();
                 } catch (e) {
                     const err = e as Error & { code?: number };
                     reply(res, 200, rpcError(msg.id, err.code ?? -32603, err.message));
@@ -85,8 +89,13 @@ export async function startComputerMcp(tools: Pick<Toolbox, "list" | "call">): P
     return {
         url: `http://127.0.0.1:${port}/mcp`,
         token,
+        onToolsListed: (cb) => {
+            listed.add(cb);
+            return () => listed.delete(cb);
+        },
         close: () =>
             new Promise<void>((ok) => {
+                listed.clear();
                 server.closeAllConnections();
                 server.close(() => ok());
             }),

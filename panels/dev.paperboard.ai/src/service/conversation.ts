@@ -21,7 +21,9 @@ import path from "node:path";
 import { LIMITS, PANEL_ID, type Attachment, type ChatEntry, type ChatState, type Harness, type PastConversation, type Settings, type SignInEntry, type WaitingMessage } from "../contract";
 import type { StartOptions } from "./computer";
 import { Attachments, sizeText } from "./attachments";
-import { parseTurnLine, turnLaunch } from "./harness";
+import { AcpTurn, type AcpEvent } from "./acp";
+import { HARNESS_NAMES, parseTurnLine, turnLaunch } from "./harness";
+import { writeLine } from "./mcpClient";
 
 export const TURN_PROC_ID = `${PANEL_ID}.turn`;
 const TRANSCRIPT = "transcript.jsonl";
@@ -38,11 +40,14 @@ const MAX_NOTICES = 10;
 const MAX_LINE = 16 * 1024 * 1024; // one event can carry a screenshot
 const TURN_MS = 30 * 60_000;
 const STOP_GRACE_MS = 2_000;
+const TOOLS_MS = 30_000; // how long OpenCode gets to connect to the panel's tools
+const TOOLS_SETTLE_MS = 300; // OpenCode reloads its tools 100 ms after they change; then the next step has them
 const QUOTE_CHARS = 80;
 const SHORT_ID = 6;
 
 export interface TurnHost {
     start(o: StartOptions): Promise<unknown>;
+    write(id: string, data: string): Promise<void>;
     kill(id: string, signal?: string): Promise<void>;
     exists(id: string): Promise<boolean>;
     onStdout(id: string, cb: (data: string) => void): () => void;
@@ -58,7 +63,7 @@ export interface ConversationDeps {
     /** the harness executable, or null if it isn't installed */
     resolve: (harness: Harness) => string | null;
     /** the computer's MCP endpoint for this service generation */
-    mcp: () => { url: string; token: string };
+    mcp: () => { url: string; token: string; onToolsListed(cb: () => void): () => void };
     /** every toolset's part of the agent's instructions, read at the start of each turn */
     instructions: () => Promise<string[]>;
     emit: (entry: ChatEntry) => void;
@@ -402,7 +407,7 @@ export class Conversation {
         const settings = this.deps.settings();
         if (!settings) throw new Error("finish setting up first");
         const command = this.deps.resolve(settings.harness);
-        if (!command) throw new Error(`${settings.harness === "codex" ? "Codex" : "Claude"} isn't installed on this computer anymore.`);
+        if (!command) throw new Error(`${HARNESS_NAMES[settings.harness]} isn't installed on this computer anymore.`);
         const mcp = this.deps.mcp();
         const sections = await this.deps.instructions();
         const launch = turnLaunch({
@@ -421,14 +426,59 @@ export class Conversation {
         let stderr = "";
         const failures: string[] = [];
         const plain: string[] = [];
-        const onLine = (line: string) => {
-            for (const ev of parseTurnLine(settings.harness, line)) {
-                if (ev.type === "thread") this.saveThread(settings.harness, ev.id);
-                else if (ev.type === "message") plain.push(ev.text);
-                else if (ev.type === "failed") failures.push(ev.message);
-                else if (ev.type === "typing") this.setTyping(true);
-                else if (ev.type === "working") this.setTyping(false);
+        const timers = new Set<ReturnType<typeof setTimeout>>();
+        let answered = false;
+        const onEvent = (ev: AcpEvent) => {
+            if (ev.type === "thread") this.saveThread(settings.harness, ev.id);
+            else if (ev.type === "message") plain.push(ev.text);
+            else if (ev.type === "failed") failures.push(ev.message);
+            else if (ev.type === "typing") this.setTyping(true);
+            else if (ev.type === "working") this.setTyping(false);
+            else if (ev.type === "done") {
+                // the prompt is answered; OpenCode would wait for the next one
+                answered = true;
+                const stop = (signal: string) =>
+                    this.deps.host
+                        .exists(TURN_PROC_ID)
+                        .then((alive) => (alive ? this.deps.host.kill(TURN_PROC_ID, signal) : undefined))
+                        .catch((e) => console.warn(`[ai] couldn't stop OpenCode after its answer (the turn's time limit still will): ${e instanceof Error ? e.message : e}`));
+                void stop("SIGTERM");
+                timers.add(setTimeout(() => void stop("SIGKILL"), STOP_GRACE_MS));
             }
+        };
+        // OpenCode connects to the panel's tools in the background: its prompt waits until it has listed them
+        let listed = false;
+        let onListed: (() => void) | null = null;
+        const offListed = mcp.onToolsListed(() => {
+            listed = true;
+            onListed?.();
+        });
+        const ready = () =>
+            new Promise<void>((ok, fail) => {
+                const timeout = setTimeout(() => fail(new Error("OpenCode didn't connect to the panel's tools")), TOOLS_MS);
+                timers.add(timeout);
+                const go = () => {
+                    clearTimeout(timeout);
+                    timers.add(setTimeout(ok, TOOLS_SETTLE_MS));
+                };
+                if (listed) go();
+                else onListed = go;
+            });
+        const acp =
+            settings.harness === "opencode"
+                ? new AcpTurn({
+                      cwd: this.workdir(),
+                      thread: launch.thread,
+                      model: settings.model,
+                      message,
+                      ready,
+                      write: (line) => writeLine(this.deps.host.write, TURN_PROC_ID, line),
+                      emit: onEvent,
+                  })
+                : null;
+        const onLine = (line: string) => {
+            if (acp) acp.line(line);
+            else for (const ev of parseTurnLine(settings.harness, line)) onEvent(ev);
         };
         const exited = new Promise<number | undefined>((ok) => {
             const offs = [
@@ -451,21 +501,27 @@ export class Conversation {
                 }),
             );
         });
-        await this.deps.host.start({
-            id: TURN_PROC_ID,
-            command: launch.command,
-            args: launch.args,
-            cwd: this.workdir(),
-            env: { ...launch.env, [launch.tokenEnv]: mcp.token },
-        });
-        const timer = setTimeout(() => void this.killTurn(), this.deps.turnMs ?? TURN_MS);
+        let timer: ReturnType<typeof setTimeout> | undefined;
         let code: number | undefined;
         try {
+            await this.deps.host.start({
+                id: TURN_PROC_ID,
+                command: launch.command,
+                args: launch.args,
+                cwd: this.workdir(),
+                env: { ...launch.env, [launch.tokenEnv]: mcp.token },
+            });
+            timer = setTimeout(() => void this.killTurn(), this.deps.turnMs ?? TURN_MS);
+            const driven = acp?.run();
             code = await exited;
+            if (buf.trim()) onLine(buf);
+            acp?.close();
+            await driven;
         } finally {
             clearTimeout(timer);
+            offListed();
+            for (const t of timers) clearTimeout(t);
         }
-        if (buf.trim()) onLine(buf);
         // plain output reaches the user only when the model never texted: a turn that did text ends with its own
         // recap of what it sent ("I sent you two messages…"), which isn't meant for the user. A turn that only
         // answers a notice texts with send_message or not at all: its plain output is its note to itself
@@ -478,7 +534,7 @@ export class Conversation {
         }
         if (this.stopRequested) return;
         if (failures.length) throw new Error(failures[failures.length - 1]);
-        if (code !== 0) throw new Error(`the turn ended with exit ${code ?? "?"}${stderr.trim() ? `: ${lastLines(stderr)}` : ""}`);
+        if (code !== 0 && !answered) throw new Error(`the turn ended with exit ${code ?? "?"}${stderr.trim() ? `: ${lastLines(stderr)}` : ""}`);
         if (this.sent.length === 0 && forUser) throw new Error("the turn ended without a reply");
     }
 

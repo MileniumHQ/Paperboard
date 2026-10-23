@@ -5,6 +5,8 @@
 // Claude keeps its catalog under ~/.claude/cache/model-catalog (one file per
 // account and surface; Claude Code's is the "cc" surface), Codex in
 // ~/.codex/models_cache.json. Both are the harness's own files, read only.
+// OpenCode lists its own with `opencode models --standalone` (a private,
+// one-shot server, never the shared background one): `provider/model` a line.
 // A catalog that can't be read is an error, never an empty list.
 
 import fs from "node:fs";
@@ -21,8 +23,27 @@ export interface HarnessHomes {
     codex: string;
 }
 
-export async function listModels(harness: Harness, homes: HarnessHomes): Promise<BrainModel[]> {
+/** runs a harness's own command, bounded in time */
+export type RunCommand = (command: string, args: string[], o: { timeoutMs: number }) => Promise<{ stdout: string; stderr: string; exitCode: number }>;
+
+const OPENCODE_MODELS_MS = 30_000;
+
+export async function listModels(harness: Harness, homes: HarnessHomes, run: RunCommand): Promise<BrainModel[]> {
+    if (harness === "opencode") return openCodeModels(await run("opencode", ["models", "--standalone"], { timeoutMs: OPENCODE_MODELS_MS }));
     return harness === "codex" ? codexModels(homes.codex) : claudeModels(homes.claude);
+}
+
+export function openCodeModels(out: { stdout: string; stderr: string; exitCode: number }): BrainModel[] {
+    if (out.exitCode !== 0) throw new Error(`OpenCode couldn't list its models: ${out.stderr.trim().slice(-300) || `exit ${out.exitCode}`}`);
+    const models: BrainModel[] = [];
+    for (const line of out.stdout.split("\n")) {
+        const id = line.trim();
+        const slash = id.indexOf("/");
+        if (slash <= 0 || slash === id.length - 1 || /\s/.test(id)) continue; // not a model line
+        models.push({ id, name: id.slice(slash + 1), description: id.slice(0, slash), older: false });
+    }
+    if (!models.length) throw new Error("OpenCode has no models yet. Connect a provider in OpenCode, then look again.");
+    return models;
 }
 
 function readJson(file: string): unknown {

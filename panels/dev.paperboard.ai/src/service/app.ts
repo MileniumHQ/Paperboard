@@ -19,7 +19,7 @@ import {
 import { Computer, type ComputerHost, hostSupport } from "./computer";
 import { startComputerMcp, type ComputerMcp } from "./computerMcp";
 import { Conversation, type TurnHost } from "./conversation";
-import { HARNESS_COMMANDS } from "./harness";
+import { HARNESS_COMMANDS, HARNESS_NAMES } from "./harness";
 import { COMPUTER_INSTRUCTIONS, COMPUTER_TOOLS } from "./computerTools";
 import { filesToolset } from "./attachmentTools";
 import { actionsToolset, type ActionsHost } from "./actionsToolset";
@@ -47,7 +47,7 @@ export interface ToolsHost {
     actions: ActionsHost;
 }
 
-export interface AppHost extends ComputerHost, TurnHost {
+export interface AppHost extends ComputerHost, Omit<TurnHost, "write"> {
     tools: ToolsHost;
     storageDir(): Promise<string>;
     /** the panel's config document: the agent's settings */
@@ -162,11 +162,11 @@ export class AiApp {
             onState: (computer) => this.ctx.setState({ computer }),
         });
         this.conversation = new Conversation({
-            host: this.host,
+            host: { ...this.host, write: this.host.tools.write },
             dir: path.join(root, "conversation"),
             settings: () => this.ctx.state.settings,
             resolve: (h) => this.host.which(HARNESS_COMMANDS[h]),
-            mcp: () => ({ url: this.mcp!.url, token: this.mcp!.token }),
+            mcp: () => ({ url: this.mcp!.url, token: this.mcp!.token, onToolsListed: (cb) => this.mcp!.onToolsListed(cb) }),
             instructions: () => this.tools!.instructions(),
             emit: (entry) => this.ctx.emit(EVENTS.entry, entry),
             onState: (chat) => this.ctx.setState({ chat }),
@@ -195,7 +195,7 @@ export class AiApp {
         const i = (input ?? {}) as Record<string, unknown>;
         const settings = parseSettings(i.settings);
         if (!settings) throw new Error("name and brain are required");
-        if (!this.host.which(HARNESS_COMMANDS[settings.harness])) throw new Error(`${harnessName(settings.harness)} isn't installed on this computer`);
+        if (!this.host.which(HARNESS_COMMANDS[settings.harness])) throw new Error(`${HARNESS_NAMES[settings.harness]} isn't installed on this computer`);
         await this.host.writeSettings(settings);
         this.ctx.setState({ settings });
         return { saved: true };
@@ -220,7 +220,11 @@ export class AiApp {
     async models(input: unknown) {
         const harness = (input as { harness?: unknown } | undefined)?.harness;
         if (!HARNESSES.includes(harness as Harness)) throw new Error("which brain?");
-        return { models: await listModels(harness as Harness, this.host.harnessHomes) };
+        return { models: await listModels(harness as Harness, this.host.harnessHomes, (command, args, o) => {
+                const resolved = this.host.which(command);
+                if (!resolved) throw new Error(`${command} isn't installed on this computer`);
+                return this.host.exec(resolved, args, o);
+            }) };
     }
 
     detect(): HarnessInfo[] {
@@ -352,6 +356,3 @@ export function parseBudget(v: unknown): ComputerBudget {
     return { memoryGb, diskGb };
 }
 
-function harnessName(h: Harness) {
-    return h === "codex" ? "Codex" : "Claude";
-}

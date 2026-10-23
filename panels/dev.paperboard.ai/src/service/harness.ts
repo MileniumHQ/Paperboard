@@ -8,12 +8,17 @@
 // Claude Code: `claude -p --output-format stream-json`, resumed by session id,
 // with --tools limited to WebSearch and Agent (its subagent tool: subagents draw
 // their tools from that same set, so they get web search and the computer too).
+// OpenCode: `opencode acp`, driven over ACP by acp.ts, resumed by session id.
+// Its config comes in OPENCODE_CONFIG_CONTENT, read after the user's own (so
+// their providers and logins still apply, and these rules win): every tool
+// denied but the panel's and web search, which also turns Code Mode off.
 
 import { randomUUID } from "node:crypto";
 import { characterOf, type Character, type Harness } from "../contract";
 import { MCP_TOKEN_ENV } from "./computerMcp";
 
-export const HARNESS_COMMANDS: Record<Harness, string> = { codex: "codex", "claude-code": "claude" };
+export const HARNESS_COMMANDS: Record<Harness, string> = { codex: "codex", "claude-code": "claude", opencode: "opencode" };
+export const HARNESS_NAMES: Record<Harness, string> = { codex: "Codex", "claude-code": "Claude", opencode: "OpenCode" };
 
 /** MCP server name the harness knows the service's endpoint by; its tools are mcp__paperboard__<tool> */
 export const MCP_SERVER = "paperboard";
@@ -78,11 +83,40 @@ export interface TurnLaunch {
     tokenEnv: string;
     /** fixed variables the harness is launched with (no secrets); the token's value is added by the caller */
     env: Record<string, string>;
-    /** known before the turn starts (Claude); Codex reports its own */
+    /** known before the turn starts (Claude); Codex and OpenCode report their own */
     thread: string | null;
 }
 
+/** OpenCode's config for a turn: the panel's MCP endpoint as plain tools, and nothing else but web search. */
+export function openCodeConfig(spec: Pick<TurnSpec, "name" | "sections" | "mcpUrl">): Record<string, unknown> {
+    return {
+        share: "disabled",
+        autoupdate: false,
+        mcp: {
+            servers: {
+                // codemode false: its tools are the model's own, not calls from Code Mode's script runtime
+                [MCP_SERVER]: { type: "remote", url: spec.mcpUrl, oauth: false, codemode: false, headers: { Authorization: `Bearer {env:${MCP_TOKEN_ENV}}` } },
+            },
+        },
+        agents: { build: { system: instructions(spec.name, spec.sections) } },
+        // the last matching rule wins; denying "*" denies `execute`, which turns Code Mode (and its fetch) off
+        permissions: [
+            { action: "*", resource: "*", effect: "deny" },
+            { action: `${MCP_SERVER}_*`, resource: "*", effect: "allow" },
+            { action: "websearch", resource: "*", effect: "allow" },
+        ],
+    };
+}
+
 export function turnLaunch(spec: TurnSpec): TurnLaunch {
+    if (spec.harness === "opencode") {
+        const env = {
+            OPENCODE_CONFIG_CONTENT: JSON.stringify(openCodeConfig(spec)),
+            OPENCODE_DISABLE_PROJECT_CONFIG: "1",
+            OPENCODE_DISABLE_CLAUDE_CODE: "1",
+        };
+        return { command: spec.command, args: ["acp"], tokenEnv: MCP_TOKEN_ENV, env, thread: spec.thread };
+    }
     if (spec.harness === "codex") {
         const toml = (v: unknown) => JSON.stringify(v);
         const config = [

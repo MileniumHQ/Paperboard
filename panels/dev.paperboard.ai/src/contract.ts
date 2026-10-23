@@ -72,7 +72,7 @@ export type Character = (typeof CHARACTERS)[number];
 export const characterOf = (name: string | null | undefined): Character | null =>
     CHARACTERS.find((c) => c === (name ?? "").trim().toLowerCase()) ?? null;
 
-export const HARNESSES = ["codex", "claude-code"] as const;
+export const HARNESSES = ["codex", "claude-code", "opencode"] as const;
 export type Harness = (typeof HARNESSES)[number];
 
 export interface ComputerBudget {

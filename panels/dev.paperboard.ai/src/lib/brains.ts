@@ -10,6 +10,7 @@ import type { Agent } from "./agent";
 const BRAINS: Record<Harness, { name: string; description: string }> = {
     codex: { name: "Codex", description: "OpenAI's coding agent" },
     "claude-code": { name: "Claude", description: "Anthropic's coding agent" },
+    opencode: { name: "OpenCode", description: "The open source coding agent, with any provider" },
 };
 
 export const harnessName = (id: string) => BRAINS[id as Harness]?.name ?? id;
@@ -20,6 +21,9 @@ export function createModels(agent: Agent, harness: () => Harness | undefined): 
     const [models] = createResource(harness, (h) => agent.models(h));
     return models;
 }
+
+/** Past this many models a picker gets a search field (OpenCode can list hundreds). */
+export const SEARCH_MODELS_FROM = 10;
 
 /** The list once it's in, else nothing (still loading, or it failed: models.error says why). */
 export const loadedModels = (models: Resource<BrainModel[]>) => (models.error ? undefined : models.latest);

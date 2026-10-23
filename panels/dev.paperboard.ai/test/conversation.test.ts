@@ -14,7 +14,7 @@ afterEach(async () => {
     for (const d of dirs.splice(0)) fs.rmSync(d, { recursive: true, force: true });
 });
 
-function setup(o: { settings?: Settings | null; dir?: string; installed?: boolean; turnMs?: number } = {}) {
+function setup(o: { settings?: Settings | null; dir?: string; installed?: boolean; turnMs?: number; onToolsListed?: (cb: () => void) => () => void } = {}) {
     const dir = o.dir ?? fs.mkdtempSync(path.join(os.tmpdir(), "ai-conv-"));
     if (!o.dir) dirs.push(dir);
     const host = new FakeProcesses();
@@ -26,7 +26,7 @@ function setup(o: { settings?: Settings | null; dir?: string; installed?: boolea
         dir,
         settings: () => settings,
         resolve: () => (o.installed === false ? null : "/usr/bin/codex"),
-        mcp: () => ({ url: "http://127.0.0.1:1/mcp", token: "secret-token" }),
+        mcp: () => ({ url: "http://127.0.0.1:1/mcp", token: "secret-token", onToolsListed: o.onToolsListed ?? (() => () => {}) }),
         instructions: async () => ["a section"],
         emit: (e) => emitted.push(e),
         onState: (s) => states.push(s),
@@ -346,7 +346,7 @@ describe("the conversation", () => {
         host.alive.add(TURN_PROC_ID);
         const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ai-conv-"));
         dirs.push(dir);
-        const conv = new Conversation({ host, dir, settings: () => null, resolve: () => null, mcp: () => ({ url: "", token: "" }), instructions: async () => [], emit: () => {}, onState: () => {} });
+        const conv = new Conversation({ host, dir, settings: () => null, resolve: () => null, mcp: () => ({ url: "", token: "", onToolsListed: () => () => {} }), instructions: async () => [], emit: () => {}, onState: () => {} });
         conv.init();
         await until(() => host.killed.length === 1);
         expect(host.killed[0]).toEqual({ id: TURN_PROC_ID, signal: "SIGKILL" });
@@ -574,5 +574,53 @@ describe("files in the conversation", () => {
         expect(() => conv.attachments.get(stray.id)).toThrow("no file");
         await conv.clear();
         expect(() => conv.attachments.get(cat.id)).toThrow("no file");
+    });
+});
+
+describe("an OpenCode turn", () => {
+    test("goes over ACP, prompts once OpenCode has the panel's tools, ends when answered, and resumes its session next time", async () => {
+        const listeners = new Set<() => void>();
+        const { conv, host, emitted, states } = setup({
+            settings: { name: "Pip", harness: "opencode", model: "vertex/gemini-3-flash" } as Settings,
+            onToolsListed: (cb) => (listeners.add(cb), () => listeners.delete(cb)),
+        });
+        const sent = () => host.written.map((w) => JSON.parse(w.data));
+        const out = (msg: unknown) => host.stdout(TURN_PROC_ID, JSON.stringify({ jsonrpc: "2.0", ...(msg as object) }) + "\n");
+        const answer = async (n: number, method: string, result: unknown) => {
+            await until(() => sent().length === n + 1);
+            expect(sent()[n].method).toBe(method);
+            out({ id: sent()[n].id, result });
+            return sent()[n].params;
+        };
+
+        conv.send("hi");
+        await until(() => host.started.length === 1);
+        expect(host.started[0]!.args).toEqual(["acp"]);
+        await answer(0, "initialize", {});
+        await answer(1, "session/new", { sessionId: "ses_1" });
+        expect(await answer(2, "session/set_config_option", {})).toMatchObject({ sessionId: "ses_1", configId: "model", value: "vertex/gemini-3-flash" });
+        await new Promise((r) => setTimeout(r, 400));
+        expect(sent().length).toBe(3); // no prompt while OpenCode can't use the panel's tools yet
+        for (const cb of listeners) cb();
+        await until(() => sent().length === 4);
+        expect(sent()[3].method).toBe("session/prompt");
+        expect(sent()[3].params.prompt[0].text).toContain("hi");
+        out({ method: "session/update", params: { sessionId: "ses_1", update: { sessionUpdate: "agent_message_chunk", messageId: "m1", content: { type: "text", text: "hel" } } } });
+        out({ method: "session/update", params: { sessionId: "ses_1", update: { sessionUpdate: "agent_message_chunk", messageId: "m1", content: { type: "text", text: "lo" } } } });
+        out({ id: sent()[3].id, result: { stopReason: "end_turn" } });
+
+        await until(() => busy(states) === false);
+        // answered: OpenCode is stopped, and its exit by signal isn't a failure
+        expect(host.killed).toContainEqual({ id: TURN_PROC_ID, signal: "SIGTERM" });
+        expect(emitted.filter((e) => e.kind === "agent").map((e) => (e as { text: string }).text)).toEqual(["hello"]);
+        expect(emitted.some((e) => e.kind === "error")).toBe(false);
+        expect(listeners.size).toBe(0);
+
+        host.written.length = 0;
+        conv.send("again");
+        await until(() => host.started.length === 2);
+        await answer(0, "initialize", {});
+        expect(await answer(1, "session/resume", {})).toMatchObject({ sessionId: "ses_1" });
+        await conv.stop();
     });
 });
