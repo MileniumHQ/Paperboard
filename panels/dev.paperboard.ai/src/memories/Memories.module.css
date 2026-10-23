@@ -16,10 +16,20 @@
     gap: var(--paper-uigap-half);
 }
 
+/* a fact sits on the same card as a note, so the two lists read alike */
+.factRow {
+    display: flex;
+    align-items: center;
+    gap: var(--paper-uigap-half);
+    padding: var(--paper-uigap-half) var(--paper-uigap);
+    border-radius: var(--paper-border-radius);
+    background: var(--paper-surface);
+}
+
 .note {
     display: flex;
     flex-direction: column;
-    gap: var(--paper-uigap-half);
+    gap: var(--paper-uigap-onefourth);
     align-items: flex-start;
     padding: var(--paper-uigap-half) var(--paper-uigap);
     border: 0;

@@ -75,7 +75,7 @@ export default function Routines(props: { agent: Agent }) {
                         {(r) => (
                             <div class={styles.routine}>
                                 <div class={styles.text}>
-                                    <PaperText>{r.what}</PaperText>
+                                    <PaperText size={2}>{r.what}</PaperText>
                                     <PaperText size={1} color="muted">
                                         {describeSchedule(r.schedule)}
                                         {r.next ? ` · next ${localStamp(r.next)}` : ""}

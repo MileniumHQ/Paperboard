@@ -64,7 +64,7 @@ export default function Memories(props: { agent: Agent }) {
                     <For each={list()!.notes}>
                         {(n) => (
                             <button type="button" class={styles.note} onClick={() => setOpen(n.key)}>
-                                <PaperText>{n.key}</PaperText>
+                                <PaperText size={2}>{n.key}</PaperText>
                                 <PaperText size={1} color="muted">
                                     {n.when}
                                 </PaperText>
@@ -90,8 +90,8 @@ function Facts(props: { agent: Agent; facts: MemoryList["facts"] }) {
             <PaperSectionHeader icon="lightbulb" title="Facts" count={props.facts.length} />
             <For each={props.facts}>
                 {(f) => (
-                    <div class={styles.row}>
-                        <PaperText class={styles.fact}>{f.text}</PaperText>
+                    <div class={styles.factRow}>
+                        <PaperText size={2} class={styles.fact}>{f.text}</PaperText>
                         <PaperButton icon size="small" variant="danger" aria-label={`Forget: ${f.text}`} title="Forget" onClick={() => forget(f.id)}>
                             <PaperIcon>delete</PaperIcon>
                         </PaperButton>

@@ -17,6 +17,6 @@
     display: flex;
     flex: 1;
     flex-direction: column;
-    gap: var(--paper-uigap-half);
+    gap: var(--paper-uigap-onefourth);
     min-width: 0;
 }
