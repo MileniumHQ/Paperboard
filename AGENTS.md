@@ -45,7 +45,7 @@ Never compromise on: panels are first-party, not sandboxed; the registry is clos
 
 **Validate at the boundary.** One check, at the service that owns the resource. UI-layer checks don't count.
 
-**Separate trust decisions.** Name the authority for a release, the artifact digest, the download location, and the installed manifest. Publisher URL plus checksum is not independent verification; fetching the same record twice adds no authority. The registry hashes the bytes it hosts: verify them and require archive/request identity agreement before activation. If the authoritative lookup fails, refuse the install. Download origin, publisher, signature, and installed version are different facts; never synthesize one from another.
+**Separate trust decisions.** Name the authority for a release, the artifact digest, the download location, and the installed manifest. Fetching the same record twice adds no authority. The registry hashes the bytes it hosts: verify them and require archive/request identity agreement before activation. If the authoritative lookup fails, refuse the install. Download origin, publisher, signature, and installed version are different facts; never synthesize one from another.
 
 **No dead links in UI styling.** Use `--paper-*` tokens from PaperUI; if one is missing, add it there, not a hex. No global selectors (`*`, bare `:disabled`) outside `.paperui-root`. No workbench/demo file in a component package's `files`.
 
