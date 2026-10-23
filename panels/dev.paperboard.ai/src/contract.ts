@@ -193,10 +193,12 @@ export interface SetupStep {
 }
 
 /** What a long setup step is doing, as far as the host can see it. */
-export type SetupPartId = "power" | "debian" | "setup" | "packages" | "hands" | "browser" | "desktop";
+export type SetupPartId = "power" | "linux" | "services" | "network" | "setup" | "lists" | "packages" | "hands" | "browser" | "desktop";
 export interface SetupPart {
     id: SetupPartId;
     status: StepStatus;
+    /** 0–100 when measurable (packages being installed), null otherwise */
+    percent: number | null;
 }
 
 export type ComputerPhase =
@@ -294,8 +296,8 @@ export const SETUP_PARTS: Record<SetupStepId, SetupPartId[]> = {
     image: [],
     browser: [],
     disk: [],
-    boot: ["power", "debian", "setup"],
-    install: ["packages", "hands", "browser", "desktop"],
+    boot: ["power", "linux", "services", "network", "setup"],
+    install: ["lists", "packages", "hands", "browser", "desktop"],
 };
 
 export const DEFAULT_STATE: AiState = {

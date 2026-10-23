@@ -39,18 +39,20 @@ export function Budget(props: { name: string; value: ComputerBudget; onChange: (
     );
 }
 
-const LABELS: Record<SetupStepId, (c: ComputerState) => string> = {
+/** the steps listed as themselves; the long ones (boot, install) are listed as their parts */
+const LABELS: Partial<Record<SetupStepId, (c: ComputerState) => string>> = {
     image: () => "Download Debian 13",
     browser: () => "Download the Helium browser",
     disk: (c) => `Make a ${c.budget?.diskGb ?? "?"} GB disk that grows as needed`,
-    boot: () => "Start the virtual machine",
-    install: () => "Install a desktop and a browser",
 };
 
 const PART_LABELS: Record<SetupPartId, string> = {
     power: "Turn it on",
-    debian: "Start Debian",
+    linux: "Start Linux",
+    services: "Start Debian's services",
+    network: "Connect to the network",
     setup: "Read its setup",
+    lists: "Update the package lists",
     packages: "Install the desktop's packages",
     hands: "Fetch the agent's hands",
     browser: "Install Helium",
@@ -70,23 +72,25 @@ function loaderStatus(s: { status: StepStatus; percent?: number | null }): Loade
     }
 }
 
+interface Row {
+    label: string;
+    status: StepStatus;
+    percent: number | null;
+}
+
+const rows = (c: ComputerState): Row[] =>
+    c.steps.flatMap((s): Row[] =>
+        s.parts.length ? s.parts.map((p) => ({ label: PART_LABELS[p.id], status: p.status, percent: p.percent })) : [{ label: LABELS[s.id]!(c), status: s.status, percent: s.percent }],
+    );
+
 /** The setup's steps as the service reports them, and its error when it stopped. */
 export function SetupProgress(props: { computer: ComputerState }) {
     return (
         <div class={styles.progress}>
             <PaperLoaderGroup>
-                <For each={props.computer.steps}>
-                    {(s) => (
-                        <>
-                            <PaperLoader percent={s.percent ?? 0} loaderStatus={loaderStatus(s)} label={LABELS[s.id](props.computer)} />
-                            {/* a long step shows what it's doing while it runs, or where it stopped */}
-                            <Show when={s.parts.length > 0 && (s.status === "running" || s.status === "failed")}>
-                                <div class={styles.parts}>
-                                    <For each={s.parts}>{(p) => <PaperLoader size="small" percent={0} loaderStatus={loaderStatus(p)} label={PART_LABELS[p.id]} />}</For>
-                                </div>
-                            </Show>
-                        </>
-                    )}
+                {/* one flat list: a long step is listed as its parts */}
+                <For each={rows(props.computer)}>
+                    {(row) => <PaperLoader size="small" percent={row.percent ?? 0} loaderStatus={loaderStatus(row)} label={row.label} />}
                 </For>
             </PaperLoaderGroup>
             <Show when={props.computer.phase === "failed" || props.computer.phase === "unsupported"}>

@@ -25,7 +25,7 @@ import {
 import type { ToolResult } from "./computerMcp";
 import { which } from "./which";
 import { BASE_IMAGE, BROWSER_DEB, GUEST_FILES, GUEST_PORT, GUEST_VERSION, META_DATA, updateCommand, userData } from "./guest";
-import { SEED_PARTS, freshSteps, reach, setStep } from "./setupProgress";
+import { ConsoleReader, SEED_PARTS, freshSteps, progress, reach, setStep } from "./setupProgress";
 
 export const COMPUTER_PROC_ID = `${PANEL_ID}.computer`;
 export const TOKEN_SECRET = "computer-token";
@@ -282,6 +282,7 @@ export class Computer {
         this.writeRecord();
         const abort = (this.abort = new AbortController());
         let seed: Server | null = null;
+        let stopReading: (() => void) | null = null;
         let step: SetupStepId = "image";
         try {
             step = "image";
@@ -312,7 +313,14 @@ export class Computer {
             });
             seed = seeded.server;
             await this.boot(support.qemu, budget, seeded.url);
-            this.reach("debian");
+            // and what its console shows: the boot's milestones, and apt's progress through the packages
+            const reader = new ConsoleReader();
+            stopReading = tailFile(path.join(this.deps.dir, "console.log"), (text) => {
+                for (const sign of reader.feed(text)) {
+                    if ("reach" in sign) this.reach(sign.reach);
+                    else this.progress(sign.progress, sign.percent);
+                }
+            });
             const found = await this.waitHealthy(this.deps.firstBootMs ?? FIRST_BOOT_MS, abort.signal);
             this.step("install", "done", 100);
             this.record = { ...this.record, installed: true };
@@ -325,6 +333,7 @@ export class Computer {
             this.set({ phase: "failed", error: message });
             throw e;
         } finally {
+            stopReading?.();
             seed?.closeAllConnections();
             seed?.close();
             if (this.abort === abort) this.abort = null;
@@ -526,6 +535,11 @@ export class Computer {
         this.set({ steps: setStep(this.state.steps, id, status, percent) });
     }
 
+    private progress(part: SetupPartId, percent: number) {
+        const steps = progress(this.state.steps, part, percent);
+        if (steps !== this.state.steps) this.set({ steps });
+    }
+
     private reach(part: SetupPartId) {
         const steps = reach(this.state.steps, part);
         if (steps !== this.state.steps) this.set({ steps });
@@ -607,6 +621,40 @@ async function startSeed(dir: string, token: string, onFetch: (path: string) => 
     // the guest sees the host's loopback as 10.0.2.2
     url = `http://10.0.2.2:${(server.address() as AddressInfo).port}/`;
     return { server, url };
+}
+
+/**
+ * Follow a file another process appends to (QEMU's serial console): new text goes to onText, read in bounded
+ * chunks on a timer. Returns the stop; the timer never outlives it.
+ */
+export function tailFile(file: string, onText: (text: string) => void, everyMs = 500): () => void {
+    const CHUNK = 256 * 1024;
+    let offset = 0;
+    const buf = Buffer.alloc(CHUNK);
+    const decoder = new TextDecoder();
+    const timer = setInterval(() => {
+        if (!fs.existsSync(file)) return; // QEMU hasn't made it yet
+        let fd: number;
+        try {
+            fd = fs.openSync(file, "r");
+        } catch (e) {
+            // progress is a display: an unreadable console costs the detail, never the install
+            console.error("[ai] couldn't read the computer's console:", (e as Error).message);
+            return;
+        }
+        try {
+            // at most a few chunks a tick, so a flood can't hold the service
+            for (let i = 0; i < 4; i++) {
+                const n = fs.readSync(fd, buf, 0, CHUNK, offset);
+                if (n <= 0) break;
+                offset += n;
+                onText(decoder.decode(buf.subarray(0, n), { stream: true }));
+            }
+        } finally {
+            fs.closeSync(fd);
+        }
+    }, everyMs);
+    return () => clearInterval(timer);
 }
 
 function freePort(): Promise<number> {

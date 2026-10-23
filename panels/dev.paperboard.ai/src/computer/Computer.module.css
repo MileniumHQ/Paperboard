@@ -16,13 +16,6 @@
     gap: var(--paper-uigap);
 }
 
-.parts {
-    display: flex;
-    flex-direction: column;
-    gap: var(--paper-uigap-half);
-    padding-left: var(--paper-uigap-double);
-}
-
 .error {
     margin: 0;
     color: var(--paper-danger);

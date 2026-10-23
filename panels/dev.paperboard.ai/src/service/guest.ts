@@ -67,6 +67,13 @@ const PACKAGES = [
     "fonts-noto-color-emoji", "mousepad", "galculator", "nftables", "curl", "ca-certificates",
 ];
 
+/**
+ * apt, installing without questions and printing its own progress (dlstatus: and pmstatus: lines) on the
+ * console, where the host reads it for the setup's percentages. An argv list, written as JSON (valid YAML).
+ */
+const apt = (...args: string[]) =>
+    JSON.stringify(["env", "DEBIAN_FRONTEND=noninteractive", "apt-get", "-o", "APT::Status-Fd=1", "-o", "DPkg::Lock::Timeout=300", "-o", "Dpkg::Options::=--force-confold", "-y", ...args]);
+
 /** cloud-init user-data: the agent user, its display and hands, the firewall. */
 export function userData(seed: string, token: string): string {
     return `#cloud-config
@@ -75,8 +82,6 @@ users:
   - name: agent
     shell: /bin/bash
     lock_passwd: true
-package_update: true
-packages: ${JSON.stringify(PACKAGES)}
 write_files:
   - path: /etc/paperboard/token
     permissions: "0640"
@@ -107,11 +112,14 @@ write_files:
         }
       }
 runcmd:
+  - ${apt("update")}
+  - ${apt("install", ...PACKAGES)}
   - [mkdir, -p, /opt/paperboard]
   - [curl, -fsS, -o, /opt/paperboard/agent.py, "${seed}/agent.py"]
   - [curl, -fsS, -o, /opt/paperboard/session.sh, "${seed}/session.sh"]
   - [curl, -fsS, -o, /tmp/helium.deb, "${seed}/helium.deb"]
-  - [sh, -c, "DEBIAN_FRONTEND=noninteractive apt-get install -y /tmp/helium.deb && rm /tmp/helium.deb"]
+  - ${apt("install", "/tmp/helium.deb")}
+  - [rm, -f, /tmp/helium.deb]
   # tells the setup's progress the browser is in (before the firewall shuts the host out)
   - [curl, -fsS, -o, /dev/null, "${seed}/progress/browser"]
   - [chown, "root:agent", /etc/paperboard/token]
