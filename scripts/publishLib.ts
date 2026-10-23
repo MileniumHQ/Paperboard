@@ -73,6 +73,20 @@ export const BUN_TARGET_MAP: Record<Target, string> = {
     "windows-x64": "bun-windows-x64",
 };
 
+// `bun build --compile` embeds the runtime of the Bun that runs it, so a
+// release ships whatever Bun the publisher has installed. The root
+// package.json `packageManager` pin is the version CI gates against; the
+// publisher refuses to compile with any other. Returns the refusal message,
+// or null when the running Bun is the pinned one.
+export function bunPinMismatch(packageManager: unknown, running: string): string | null {
+    const match =
+        typeof packageManager === "string" ? /^bun@(\d+\.\d+\.\d+)$/.exec(packageManager) : null;
+    if (!match) return `package.json packageManager must pin an exact Bun (bun@x.y.z), got ${JSON.stringify(packageManager)}`;
+    const pinned = match[1];
+    if (running === pinned) return null;
+    return `release binaries embed the running Bun: pinned bun@${pinned}, running bun@${running}. Install Bun ${pinned} before publishing.`;
+}
+
 // USB bundle OS/arch selection. The bundle is the slow, throwaway sneakernet
 // path, so it lets the operator compile only the OS(es) and architecture(s)
 // under test. Order here is the prompt/report order; targetsForOses preserves
