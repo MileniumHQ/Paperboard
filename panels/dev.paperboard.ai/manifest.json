@@ -1,86 +1,53 @@
 {
     "name": "AI",
     "id": "dev.paperboard.ai",
-    "version": "0.2.2",
-    "description": "Chat with local models",
+    "version": "0.3.0",
+    "description": "An agent you text, with its own computer. It thinks with Codex or Claude Code.",
     "publisher": "Paperboard",
     "base": "./dist/index.html",
     "service": "./dist/service.js",
     "icon": "./branding/icon.png",
-    "widgets": [
-        {
-            "id": "quick-ask",
-            "name": "Quick ask",
-            "description": "Ask a question from Home; the answer opens in AI",
-            "sizes": ["4x1"],
-            "options": [
-                {
-                    "id": "model",
-                    "label": "Model"
-                }
-            ]
-        },
-        {
-            "id": "loaded-model",
-            "name": "Loaded model",
-            "description": "The model in memory, how much it takes, and a button to unload it",
-            "sizes": ["2x1"]
-        }
-    ],
-    "tutorial": [
-        {"image": {"light": "./tutorial/1-light.webp", "dark": "./tutorial/1-dark.webp", "alt": "A chat answering with a Docker Compose file for Jellyfin"}, "title": "Your chats stay home", "body": "Local models run on this computer, so nothing you type or upload is sent to the cloud."},
-        {"image": {"light": "./tutorial/2-light.webp", "dark": "./tutorial/2-dark.webp", "alt": "Choosing coding agents: Codex, Claude Code and OpenCode"}, "title": "Bring a coding agent", "body": "Claude Code, Codex, OpenCode and more can work in a project you pick."},
-        {"image": {"light": "./tutorial/3-light.webp", "dark": "./tutorial/3-dark.webp", "alt": "A connected home server listing its models"}, "title": "Every model in one list", "body": "Connect any OpenAI-compatible server and its models sit right next to your local ones."},
-        {"image": {"light": "./tutorial/4-light.webp", "dark": "./tutorial/4-dark.webp", "alt": "A shell command waiting for approval, with Allow once and Deny"}, "title": "Nothing runs without you", "body": "When the AI wants to run a command, it asks every time. Allow it once or deny it."}
-    ],
     "store": {
-        "about": "./store/about.md",
-        "screenshots": [
-            {
-                "light": "./store/1-light.png",
-                "dark": "./store/1-dark.png",
-                "alt": "Chat with your own models"
-            },
-            {
-                "light": "./store/2-light.png",
-                "dark": "./store/2-dark.png",
-                "alt": "Bring your coding agents"
-            },
-            {
-                "light": "./store/3-light.png",
-                "dark": "./store/3-dark.png",
-                "alt": "Connect any OpenAI-compatible server"
-            },
-            {
-                "light": "./store/4-light.png",
-                "dark": "./store/4-dark.png",
-                "alt": "Approve commands before they run"
-            }
-        ],
         "services": [
             {
-                "name": "Ollama",
-                "detail": "Downloading models"
+                "name": "Debian",
+                "detail": "The agent's computer, downloaded once"
+            },
+            {
+                "name": "Helium",
+                "detail": "The browser on the agent's computer"
             }
         ],
         "credits": [
             {
-                "name": "Ollama",
-                "detail": "Running models locally"
+                "name": "QEMU",
+                "detail": "Running the agent's computer"
+            },
+            {
+                "name": "Debian",
+                "detail": "The agent's operating system"
+            },
+            {
+                "name": "Helium",
+                "detail": "The agent's browser"
             }
         ],
         "requirements": [
             {
+                "name": "Brain",
+                "detail": "Codex or Claude Code, installed and signed in"
+            },
+            {
+                "name": "Computer",
+                "detail": "Linux on x86-64 with KVM, and QEMU installed"
+            },
+            {
                 "name": "Storage",
-                "detail": "10 GB free for models"
+                "detail": "About 3.5 GB, up to the limit you set"
             },
             {
                 "name": "RAM",
-                "detail": "16 GB"
-            },
-            {
-                "name": "GPU",
-                "detail": "8 GB of VRAM recommended"
+                "detail": "Up to the limit you set, 4 GB by default"
             }
         ]
     }

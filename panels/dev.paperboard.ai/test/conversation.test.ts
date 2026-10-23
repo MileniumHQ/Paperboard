@@ -1,0 +1,164 @@
+import { afterEach, describe, expect, test } from "bun:test";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import type { ChatEntry, ChatState, Settings } from "../src/contract";
+import { Conversation, TURN_PROC_ID } from "../src/service/conversation";
+import { FakeProcesses, until } from "./fakeHost";
+
+const dirs: string[] = [];
+const convs: Conversation[] = [];
+afterEach(async () => {
+    await Promise.all(convs.splice(0).map((c) => c.shutdown()));
+    for (const d of dirs.splice(0)) fs.rmSync(d, { recursive: true, force: true });
+});
+
+function setup(o: { settings?: Settings | null; dir?: string; installed?: boolean; turnMs?: number } = {}) {
+    const dir = o.dir ?? fs.mkdtempSync(path.join(os.tmpdir(), "ai-conv-"));
+    if (!o.dir) dirs.push(dir);
+    const host = new FakeProcesses();
+    const emitted: ChatEntry[] = [];
+    const states: ChatState[] = [];
+    const settings = o.settings === undefined ? ({ name: "Pip", harness: "codex", model: null } as Settings) : o.settings;
+    const conv = new Conversation({
+        host,
+        dir,
+        settings: () => settings,
+        resolve: () => (o.installed === false ? null : "/usr/bin/codex"),
+        mcp: () => ({ url: "http://127.0.0.1:1/mcp", token: "secret-token" }),
+        emit: (e) => emitted.push(e),
+        onState: (s) => states.push(s),
+        turnMs: o.turnMs,
+    });
+    conv.init();
+    convs.push(conv);
+    return { conv, host, emitted, states, dir };
+}
+
+const reply = (text: string) => JSON.stringify({ type: "item.completed", item: { type: "agent_message", text } }) + "\n";
+const busy = (states: ChatState[]) => states.at(-1)?.busy;
+
+describe("the conversation", () => {
+    test("a message runs one turn: the token rides in env, never argv, and the reply joins the conversation", async () => {
+        const { conv, host, emitted, states } = setup();
+        conv.send("hello");
+        await until(() => host.started.length === 1);
+        const turn = host.started[0]!;
+        expect(turn.id).toBe(TURN_PROC_ID);
+        expect(turn.env).toEqual({ PAPERBOARD_COMPUTER_MCP_TOKEN: "secret-token" });
+        expect(turn.args.join(" ")).not.toContain("secret-token");
+        expect(busy(states)).toBe(true);
+
+        host.stdout(TURN_PROC_ID, `{"type":"thread.started","thread_id":"t-1"}\n` + reply("hi there").slice(0, 20));
+        host.stdout(TURN_PROC_ID, reply("hi there").slice(20));
+        host.exit(TURN_PROC_ID, 0);
+        await until(() => busy(states) === false);
+        expect(emitted.map((e) => [e.kind, "text" in e ? e.text : ""])).toEqual([
+            ["user", "hello"],
+            ["agent", "hi there"],
+        ]);
+        expect(host.listenerCount()).toBe(0);
+    });
+
+    test("messages sent during a turn are read together on the next one, which continues the thread", async () => {
+        const { conv, host, states } = setup();
+        conv.send("one");
+        await until(() => host.started.length === 1);
+        conv.send("two");
+        conv.send("three");
+        expect(states.at(-1)).toEqual({ busy: true, queued: 2 });
+        host.stdout(TURN_PROC_ID, `{"type":"thread.started","thread_id":"t-1"}\n` + reply("ok"));
+        host.exit(TURN_PROC_ID, 0);
+        await until(() => host.started.length === 2);
+        const next = host.started[1]!.args;
+        expect(next.slice(0, 2)).toEqual(["exec", "resume"]);
+        expect(next.slice(-2)).toEqual(["t-1", "two\n\nthree"]);
+    });
+
+    test("a turn that fails says so in the conversation", async () => {
+        const { conv, host, emitted, states } = setup();
+        conv.send("hi");
+        await until(() => host.started.length === 1);
+        host.stdout(TURN_PROC_ID, `{"type":"turn.failed","error":{"message":"usage limit reached"}}\n`);
+        host.exit(TURN_PROC_ID, 1);
+        await until(() => busy(states) === false);
+        expect(emitted.at(-1)).toMatchObject({ kind: "error", text: "usage limit reached" });
+
+        conv.send("again");
+        await until(() => host.started.length === 2);
+        host.exit(TURN_PROC_ID, 0);
+        await until(() => emitted.at(-1)?.kind === "error" && emitted.length === 4);
+        expect(emitted.at(-1)).toMatchObject({ kind: "error", text: "the turn ended without a reply" });
+    });
+
+    test("a harness that's gone is an error entry, not a silent nothing", async () => {
+        const { conv, host, emitted } = setup({ installed: false });
+        conv.send("hi");
+        await until(() => emitted.length === 2);
+        expect(host.started).toEqual([]);
+        expect(emitted[1]).toMatchObject({ kind: "error", text: "Codex isn't installed on this computer anymore." });
+    });
+
+    test("stop ends the turn and drops what was waiting", async () => {
+        const { conv, host, states, emitted } = setup();
+        conv.send("long task");
+        await until(() => host.started.length === 1);
+        conv.send("and this");
+        await conv.stop();
+        await until(() => busy(states) === false);
+        expect(host.killed[0]).toEqual({ id: TURN_PROC_ID, signal: "SIGTERM" });
+        expect(states.at(-1)).toEqual({ busy: false, queued: 0 });
+        expect(host.started.length).toBe(1);
+        expect(emitted.some((e) => e.kind === "error")).toBe(false);
+    });
+
+    test("a turn past its time is killed", async () => {
+        const { conv, host, emitted } = setup({ turnMs: 30 });
+        conv.send("hi");
+        await until(() => host.killed.length > 0);
+        await until(() => emitted.at(-1)?.kind === "error");
+        expect(emitted.at(-1)).toMatchObject({ kind: "error" });
+    });
+
+    test("input is validated by the service", () => {
+        const { conv } = setup();
+        expect(() => conv.send("   ")).toThrow();
+        expect(() => conv.send("x".repeat(16_001))).toThrow(/16000/);
+        expect(() => setup({ settings: null }).conv.send("hi")).toThrow(/setting up/);
+    });
+
+    test("the transcript survives a restart; a changed entry keeps its latest copy; a torn last line is dropped", async () => {
+        const first = setup();
+        first.conv.send("hi");
+        await until(() => first.host.started.length === 1);
+        const tool = first.conv.add({ id: "t", at: Date.now(), kind: "tool", tool: "shell", summary: "ls", status: "running", detail: null });
+        first.conv.update({ ...tool, status: "done", detail: "a b" });
+        first.host.stdout(TURN_PROC_ID, reply("done"));
+        first.host.exit(TURN_PROC_ID, 0);
+        await until(() => first.states.at(-1)?.busy === false);
+        fs.appendFileSync(path.join(first.dir, "transcript.jsonl"), `{"id":"torn","at":`);
+
+        const second = setup({ dir: first.dir });
+        const h = second.conv.history();
+        expect(h.map((e) => e.kind)).toEqual(["user", "tool", "agent"]);
+        expect(h[1]).toMatchObject({ status: "done", detail: "a b" });
+    });
+
+    test("damage before the last line is refused, not read as an empty conversation", () => {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ai-conv-"));
+        dirs.push(dir);
+        fs.writeFileSync(path.join(dir, "transcript.jsonl"), `garbage\n{"id":"a","at":1,"kind":"user","text":"hi"}\n`);
+        expect(() => setup({ dir })).toThrow(/line 1 is unreadable/);
+    });
+
+    test("a turn left running by the last service generation is stopped", async () => {
+        const host = new FakeProcesses();
+        host.alive.add(TURN_PROC_ID);
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ai-conv-"));
+        dirs.push(dir);
+        const conv = new Conversation({ host, dir, settings: () => null, resolve: () => null, mcp: () => ({ url: "", token: "" }), emit: () => {}, onState: () => {} });
+        conv.init();
+        await until(() => host.killed.length === 1);
+        expect(host.killed[0]).toEqual({ id: TURN_PROC_ID, signal: "SIGKILL" });
+    });
+});

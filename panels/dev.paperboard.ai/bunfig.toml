@@ -1,5 +1,8 @@
 # Hermetic tests: test/hermetic.ts replaces the WebSocket constructor for the
 # whole test process so no suite can reach a live daemon discovered through
 # ~/.paperboard/local/crane.json. See test/hermetic.ts for why this matters.
+# legacy/ is the old panel kept for reference during the revamp; its suites
+# don't describe this panel and aren't run.
 [test]
+root = "test"
 preload = ["./test/hermetic.ts"]
