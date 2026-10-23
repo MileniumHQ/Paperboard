@@ -94,16 +94,18 @@
     font-size: var(--paper-text-size-2);
     padding: var(--paper-uigap-half) var(--paper-uigap-threefourths);
     margin-bottom: var(--paper-uigap-onefourth);
-    border-radius: var(--paper-border-radius-half);
-    border: var(--paper-border-width) solid var(--paper-border);
-    background: var(--paper-surface-inset);
+    border: none;
+    border-bottom: var(--paper-border-width) solid var(--paper-border);
+    border-radius: 0;
+    /* no fill of its own: the popup's surface, so options scrolling under the sticky field stay hidden */
+    background: var(--paper-surface-raised);
     color: var(--paper-text);
     outline: none;
     user-select: text;
 }
 
 .search:focus-visible {
-    border-color: var(--paper-primary);
+    border-bottom-color: var(--paper-primary);
 }
 
 .noMatches {
