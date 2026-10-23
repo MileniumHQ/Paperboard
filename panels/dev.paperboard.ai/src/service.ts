@@ -65,6 +65,10 @@ export const aiService = definePanelService({
         ui(UI_ACTION_IDS.frame, "Show one of the computer's windows", (i) => app.frame(i)),
         ui(UI_ACTION_IDS.input, "Use one of the computer's windows", (i) => app.input(i)),
         ui(UI_ACTION_IDS.closeWindow, "Close one of the computer's windows", (i) => app.closeWindow(i)),
+        ui(UI_ACTION_IDS.unqueue, "Take back a waiting message", (i) => app.conversation.unqueue(String(i.id ?? ""))),
+        ui(UI_ACTION_IDS.sendNow, "Interrupt the agent to read waiting messages", () => app.conversation.sendNow()),
+        ui(UI_ACTION_IDS.startOver, "Start the conversation over", () => app.startOver()),
+        ui(UI_ACTION_IDS.setMemory, "Change the computer's memory", (i) => app.setMemory(i)),
         ui(UI_ACTION_IDS.control, "Take or hand back control of the computer", (i) => app.control(i)),
     ],
     async onInit(ctx) {

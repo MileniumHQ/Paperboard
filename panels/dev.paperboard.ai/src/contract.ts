@@ -23,11 +23,18 @@ export const UI_ACTION_IDS = {
     input: "ui-input",
     closeWindow: "ui-close-window",
     control: "ui-control",
+    // waiting messages: take one back, or interrupt the turn to read them now
+    unqueue: "ui-unqueue",
+    sendNow: "ui-send-now",
+    startOver: "ui-start-over",
+    setMemory: "ui-set-memory",
 } as const;
 
 export const EVENTS = {
     // an entry was added or changed (a tool call finishing); the whole entry
     entry: "chat-entry",
+    // the user started over: the conversation is empty
+    cleared: "chat-cleared",
 } as const;
 
 export const HARNESSES = ["codex", "claude-code"] as const;
@@ -115,8 +122,13 @@ export type InputEvent =
 export interface ChatState {
     /** a turn is running */
     busy: boolean;
-    /** messages waiting for the running turn to finish */
-    queued: number;
+    /** messages waiting for the running turn to finish; they join the conversation when a turn reads them */
+    waiting: WaitingMessage[];
+}
+
+export interface WaitingMessage {
+    id: string;
+    text: string;
 }
 
 export interface AiState {
@@ -137,5 +149,5 @@ export const SETUP_STEPS: SetupStepId[] = ["image", "browser", "disk", "boot", "
 export const DEFAULT_STATE: AiState = {
     settings: null,
     computer: { phase: "none", installed: false, budget: null, steps: [], error: null, userControl: false },
-    chat: { busy: false, queued: 0 },
+    chat: { busy: false, waiting: [] },
 };

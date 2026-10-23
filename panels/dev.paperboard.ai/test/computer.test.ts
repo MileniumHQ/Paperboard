@@ -184,3 +184,19 @@ describe("the user's view and control", () => {
         expect(guest.calls).toEqual([]);
     });
 });
+
+describe("the computer's budget", () => {
+    test("memory changes for the next start and is kept; storage can't change without setting up again", async () => {
+        const { computer, dir } = await ready();
+        await computer.setBudget({ memoryGb: 8, diskGb: 32 });
+        expect(computer.state.budget).toEqual({ memoryGb: 8, diskGb: 32 });
+        expect(JSON.parse(fs.readFileSync(path.join(dir, "computer.json"), "utf8")).budget).toEqual({ memoryGb: 8, diskGb: 32 });
+        await expect(computer.setBudget({ memoryGb: 8, diskGb: 64 })).rejects.toThrow(/Storage/);
+    });
+
+    test("a computer that was never set up has no budget to change", async () => {
+        const { computer } = make();
+        await computer.init();
+        await expect(computer.setBudget({ memoryGb: 8, diskGb: 32 })).rejects.toThrow(/Set up/);
+    });
+});

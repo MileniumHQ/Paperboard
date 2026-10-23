@@ -127,6 +127,19 @@ export class AiApp {
         return { stopped: true };
     }
 
+    /** The memory the computer gets from its next start. */
+    async setMemory(i: Record<string, unknown>) {
+        const budget = parseBudget({ memoryGb: i.memoryGb, diskGb: this.computer.state.budget?.diskGb });
+        await this.computer.setBudget(budget);
+        return { saved: true, appliesOnRestart: this.computer.state.phase === "ready" || this.computer.state.phase === "starting" };
+    }
+
+    async startOver() {
+        const r = await this.conversation.clear();
+        this.ctx.emit(EVENTS.cleared, {});
+        return r;
+    }
+
     // ------------------------------------------------------------- the user's view
 
     windows() {

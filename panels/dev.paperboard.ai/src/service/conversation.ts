@@ -1,6 +1,7 @@
 // The one conversation. There is no "new chat": like texting a friend, every
-// message continues the same thread, and messages sent while the agent is
-// busy are read together on its next turn.
+// message continues the same thread (starting over is a deliberate reset).
+// Messages sent while the agent is busy wait, can be taken back, and are read
+// together on its next turn.
 //
 // A turn is the harness run as a daemon-supervised child (one at a time, id
 // TURN_PROC_ID). The transcript is an append-only JSONL file in the panel's
@@ -10,7 +11,7 @@
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { LIMITS, PANEL_ID, type ChatEntry, type ChatState, type Harness, type Settings } from "../contract";
+import { LIMITS, PANEL_ID, type ChatEntry, type ChatState, type Harness, type Settings, type WaitingMessage } from "../contract";
 import type { StartOptions } from "./computer";
 import { parseTurnLine, turnLaunch } from "./harness";
 
@@ -50,7 +51,7 @@ export interface ConversationDeps {
 export class Conversation {
     private entries: ChatEntry[] = [];
     private threads: Partial<Record<Harness, string>> = {};
-    private queue: string[] = [];
+    private queue: WaitingMessage[] = [];
     private running: Promise<void> | null = null;
     private stopRequested = false;
     private closed = false;
@@ -75,16 +76,53 @@ export class Conversation {
         return this.entries.slice(-Math.max(1, Math.min(limit, LIMITS.history)));
     }
 
-    send(text: string): ChatEntry {
+    /** Send a message: read now, or waiting for the running turn (then it can be taken back until it's read). */
+    send(text: string): { id: string; waiting: boolean } {
         const message = text.trim();
         if (!message) throw new Error("say something first");
         if (message.length > LIMITS.message) throw new Error(`messages are limited to ${LIMITS.message} characters`);
         if (!this.deps.settings()) throw new Error("finish setting up first");
         if (this.queue.length >= MAX_QUEUED) throw new Error("that's a lot of messages at once; wait for a reply");
-        const entry = this.add({ id: randomUUID(), at: Date.now(), kind: "user", text: message });
-        this.queue.push(message);
+        const id = randomUUID();
+        this.queue.push({ id, text: message });
+        const waiting = this.running !== null;
         this.pump();
-        return entry;
+        return { id, waiting };
+    }
+
+    /** Take back a message the agent hasn't read yet. */
+    unqueue(id: string) {
+        const i = this.queue.findIndex((m) => m.id === id);
+        if (i < 0) throw new Error("that message isn't waiting anymore");
+        this.queue.splice(i, 1);
+        this.state();
+        return { removed: true };
+    }
+
+    /** Stop the running turn so the waiting messages are read now. */
+    async sendNow() {
+        if (this.queue.length === 0) throw new Error("no messages are waiting");
+        if (!this.running) {
+            this.pump();
+            return { interrupted: false };
+        }
+        this.stopRequested = true;
+        await this.killTurn();
+        return { interrupted: true };
+    }
+
+    /** Start over: stop, forget the conversation and the harness's threads. Asked for explicitly; it can't be undone. */
+    async clear() {
+        this.queue = [];
+        this.stopRequested = true;
+        await this.killTurn();
+        await this.running;
+        this.entries = [];
+        this.threads = {};
+        atomicWrite(path.join(this.deps.dir, TRANSCRIPT), "");
+        atomicWrite(path.join(this.deps.dir, THREADS), "{}");
+        this.state();
+        return { cleared: true };
     }
 
     /** Record something the conversation should show (a tool call). Returns the entry to update later. */
@@ -116,7 +154,11 @@ export class Conversation {
     private pump() {
         this.state();
         if (this.running || this.closed || this.queue.length === 0) return;
-        const message = this.queue.splice(0).join("\n\n");
+        const batch = this.queue.splice(0);
+        this.stopRequested = false; // a stop asked of an earlier turn doesn't silence this one
+        // read now, so now they join the conversation
+        for (const m of batch) this.add({ id: m.id, at: Date.now(), kind: "user", text: m.text });
+        const message = batch.map((m) => m.text).join("\n\n");
         this.running = this.turn(message)
             .catch((e: Error) => {
                 this.add({ id: randomUUID(), at: Date.now(), kind: "error", text: e.message });
@@ -227,7 +269,7 @@ export class Conversation {
     }
 
     private state() {
-        this.deps.onState({ busy: this.running !== null, queued: this.queue.length });
+        this.deps.onState({ busy: this.running !== null, waiting: this.queue.map((m) => ({ ...m })) });
     }
 
     // ------------------------------------------------------------- transcript

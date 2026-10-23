@@ -66,7 +66,7 @@ describe("the conversation", () => {
         await until(() => host.started.length === 1);
         conv.send("two");
         conv.send("three");
-        expect(states.at(-1)).toEqual({ busy: true, queued: 2 });
+        expect(states.at(-1)).toEqual({ busy: true, waiting: [expect.objectContaining({ text: "two" }), expect.objectContaining({ text: "three" })] });
         host.stdout(TURN_PROC_ID, `{"type":"thread.started","thread_id":"t-1"}\n` + reply("ok"));
         host.exit(TURN_PROC_ID, 0);
         await until(() => host.started.length === 2);
@@ -107,9 +107,77 @@ describe("the conversation", () => {
         await conv.stop();
         await until(() => busy(states) === false);
         expect(host.killed[0]).toEqual({ id: TURN_PROC_ID, signal: "SIGTERM" });
-        expect(states.at(-1)).toEqual({ busy: false, queued: 0 });
+        expect(states.at(-1)).toEqual({ busy: false, waiting: [] });
+        // never read, so never part of the conversation
+        expect(emitted.filter((e) => e.kind === "user").map((e) => (e as { text: string }).text)).toEqual(["long task"]);
         expect(host.started.length).toBe(1);
         expect(emitted.some((e) => e.kind === "error")).toBe(false);
+    });
+
+    test("a waiting message joins the conversation only when read, and can be taken back before that", async () => {
+        const { conv, host, emitted, states } = setup();
+        conv.send("one");
+        await until(() => host.started.length === 1);
+        const two = conv.send("two");
+        const three = conv.send("three");
+        expect(two.waiting).toBe(true);
+        const users = () => emitted.filter((e) => e.kind === "user").map((e) => (e as { text: string }).text);
+        expect(users()).toEqual(["one"]);
+
+        conv.unqueue(two.id);
+        expect(states.at(-1)?.waiting).toEqual([{ id: three.id, text: "three" }]);
+        expect(() => conv.unqueue(two.id)).toThrow(/isn't waiting/);
+
+        host.stdout(TURN_PROC_ID, reply("ok"));
+        host.exit(TURN_PROC_ID, 0);
+        await until(() => host.started.length === 2);
+        expect(host.started[1]!.args.at(-1)).toBe("three");
+        expect(users()).toEqual(["one", "three"]);
+        expect(emitted.find((e) => e.kind === "user" && e.text === "three")?.id).toBe(three.id);
+    });
+
+    test("send now interrupts the turn quietly and reads what was waiting", async () => {
+        const { conv, host, emitted } = setup();
+        conv.send("long task");
+        await until(() => host.started.length === 1);
+        await expect(conv.sendNow()).rejects.toThrow(/no messages/);
+        conv.send("actually, stop and do this");
+        expect(await conv.sendNow()).toEqual({ interrupted: true });
+        await until(() => host.started.length === 2);
+        expect(host.started[1]!.args.at(-1)).toBe("actually, stop and do this");
+        expect(emitted.some((e) => e.kind === "error")).toBe(false);
+    });
+
+    test("a stop with nothing running doesn't silence the next turn's failure", async () => {
+        const { conv, host, emitted } = setup();
+        await conv.stop();
+        conv.send("hi");
+        await until(() => host.started.length === 1);
+        host.exit(TURN_PROC_ID, 1);
+        await until(() => emitted.some((e) => e.kind === "error"));
+    });
+
+    test("starting over stops the turn and forgets the conversation and its thread, for good", async () => {
+        const first = setup();
+        first.conv.send("hi");
+        await until(() => first.host.started.length === 1);
+        first.host.stdout(TURN_PROC_ID, `{"type":"thread.started","thread_id":"t-1"}\n`);
+        first.conv.send("waiting");
+        await first.conv.clear();
+        expect(first.host.killed[0]).toEqual({ id: TURN_PROC_ID, signal: "SIGTERM" });
+        expect(first.conv.history()).toEqual([]);
+        expect(first.states.at(-1)).toEqual({ busy: false, waiting: [] });
+
+        first.conv.send("hello again");
+        await until(() => first.host.started.length === 2);
+        expect(first.host.started[1]!.args.slice(0, 2)).not.toEqual(["exec", "resume"]);
+        first.host.stdout(TURN_PROC_ID, reply("hey"));
+        first.host.exit(TURN_PROC_ID, 0);
+        await until(() => busy(first.states) === false);
+
+        await first.conv.shutdown();
+        const second = setup({ dir: first.dir });
+        expect(second.conv.history().map((e) => (e as { text: string }).text)).toEqual(["hello again", "hey"]);
     });
 
     test("a turn past its time is killed", async () => {

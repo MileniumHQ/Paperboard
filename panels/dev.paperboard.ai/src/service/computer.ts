@@ -158,6 +158,17 @@ export class Computer {
         });
     }
 
+    /** Change the memory it gets from its next start. Storage is fixed once the disk exists. */
+    setBudget(budget: ComputerBudget): Promise<void> {
+        return this.exclusive(async () => {
+            if (!this.record.installed || !this.record.budget) throw new Error("Set up the computer first.");
+            if (budget.diskGb !== this.record.budget.diskGb) throw new Error("Storage can only change by setting the computer up again.");
+            this.record = { ...this.record, budget };
+            this.writeRecord();
+            this.set({ budget });
+        });
+    }
+
     /** The service is going away: stop the VM and observe it gone, quickly. */
     async shutdown(): Promise<void> {
         this.releaseControl();
