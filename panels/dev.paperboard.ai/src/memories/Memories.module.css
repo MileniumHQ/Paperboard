@@ -35,3 +35,9 @@
 .note:focus-visible {
     background: var(--paper-surface-raised);
 }
+
+.fact {
+    flex: 1;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}

@@ -31,11 +31,8 @@ export const UI_ACTION_IDS = {
     models: "ui-models",
     // what the agent remembers, which the user can read and change too
     memory: "ui-memory",
-    addFact: "ui-add-fact",
-    editFact: "ui-edit-fact",
     deleteFact: "ui-delete-fact",
     readNote: "ui-read-note",
-    saveNote: "ui-save-note",
     deleteNote: "ui-delete-note",
     // what the agent does on a schedule, which the user can see and cancel
     routines: "ui-routines",

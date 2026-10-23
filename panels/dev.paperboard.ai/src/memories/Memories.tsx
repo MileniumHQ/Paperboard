@@ -1,11 +1,12 @@
 // What the agent remembers, shared with the user: short facts it always has
 // in mind, and notes (a key, when it's needed, a body) it reads when they
-// apply. The user can add, change and forget either. The list follows the
-// service's memory revision, so what the agent remembers shows up live.
+// apply. Only the agent writes them, with its memory tools; the user reads
+// them and can make it forget any. The list follows the service's memory
+// revision, so what the agent remembers shows up live.
 
 import { For, Match, Show, Switch, createEffect, createSignal, on, onCleanup } from "solid-js";
-import { PaperButton, PaperEmptyState, PaperIcon, PaperInput, PaperLoader, PaperSectionHeader, PaperText } from "@mileniumhq/paperui";
-import { LIMITS, type MemoryList } from "../contract";
+import { PaperButton, PaperEmptyState, PaperIcon, PaperLoader, PaperMarkdown, PaperSectionHeader, PaperText } from "@mileniumhq/paperui";
+import type { MemoryList } from "../contract";
 import type { Agent } from "../lib/agent";
 import styles from "./Memories.module.css";
 
@@ -16,7 +17,7 @@ export default function Memories(props: { agent: Agent }) {
     const name = () => agent.state.settings?.name ?? "Your agent";
     const [list, setList] = createSignal<MemoryList | null>(null);
     const [error, setError] = createSignal<string | null>(null);
-    const [open, setOpen] = createSignal<string | "new" | null>(null);
+    const [open, setOpen] = createSignal<string | null>(null);
 
     let gone = false;
     onCleanup(() => (gone = true));
@@ -50,20 +51,16 @@ export default function Memories(props: { agent: Agent }) {
             <Match when={list() === null}>
                 <PaperLoader loaderStatus="indeterminate" label="Reading memory" />
             </Match>
-            <Match when={open() !== null}>
-                <NoteEditor agent={agent} noteKey={open() === "new" ? null : open()!} onDone={() => setOpen(null)} />
+            <Match when={open()}>
+                {(key) => <Note agent={agent} noteKey={key()} onDone={() => setOpen(null)} />}
             </Match>
             <Match when={true}>
                 <div class={styles.memories}>
                     <Show when={empty()}>
-                        <PaperEmptyState icon="neurology" title="Nothing yet" description={`${name()} hasn't remembered anything. Add a fact, or it will as you talk.`} />
+                        <PaperEmptyState icon="neurology" title="Nothing yet" description={`${name()} hasn't remembered anything. It will as you talk.`} />
                     </Show>
                     <Facts agent={agent} facts={list()!.facts} />
-                    <PaperSectionHeader icon="description" title="Notes" count={list()!.notes.length}>
-                        <PaperButton size="small" onClick={() => setOpen("new")}>
-                            New note
-                        </PaperButton>
-                    </PaperSectionHeader>
+                    <PaperSectionHeader icon="description" title="Notes" count={list()!.notes.length} />
                     <For each={list()!.notes}>
                         {(n) => (
                             <button type="button" class={styles.note} onClick={() => setOpen(n.key)}>
@@ -81,22 +78,11 @@ export default function Memories(props: { agent: Agent }) {
 }
 
 function Facts(props: { agent: Agent; facts: MemoryList["facts"] }) {
-    const [draft, setDraft] = createSignal("");
     const [error, setError] = createSignal<string | null>(null);
-    // a refused change says why; the list stays as the service has it
-    const attempt = async (run: () => Promise<unknown>) => {
+    // a refused forget says why; the list stays as the service has it
+    const forget = (id: string) => {
         setError(null);
-        try {
-            await run();
-        } catch (e) {
-            setError(message(e));
-            return false;
-        }
-        return true;
-    };
-    const add = async () => {
-        if (!draft().trim()) return;
-        if (await attempt(() => props.agent.addFact(draft()))) setDraft("");
+        props.agent.deleteFact(id).catch((e) => setError(message(e)));
     };
 
     return (
@@ -105,35 +91,13 @@ function Facts(props: { agent: Agent; facts: MemoryList["facts"] }) {
             <For each={props.facts}>
                 {(f) => (
                     <div class={styles.row}>
-                        <PaperInput
-                            compact
-                            fullWidth
-                            label="Fact"
-                            maxLength={LIMITS.memory.factChars}
-                            value={f.text}
-                            onChange={(e) => {
-                                const text = e.currentTarget.value;
-                                if (text.trim() !== f.text) void attempt(() => props.agent.editFact(f.id, text));
-                            }}
-                        />
-                        <PaperButton icon size="small" variant="danger" aria-label={`Forget: ${f.text}`} title="Forget" onClick={() => void attempt(() => props.agent.deleteFact(f.id))}>
+                        <PaperText class={styles.fact}>{f.text}</PaperText>
+                        <PaperButton icon size="small" variant="danger" aria-label={`Forget: ${f.text}`} title="Forget" onClick={() => forget(f.id)}>
                             <PaperIcon>delete</PaperIcon>
                         </PaperButton>
                     </div>
                 )}
             </For>
-            <form
-                class={styles.row}
-                onSubmit={(e) => {
-                    e.preventDefault();
-                    void add();
-                }}
-            >
-                <PaperInput compact fullWidth label="Add a fact" maxLength={LIMITS.memory.factChars} value={draft()} onInput={(e) => setDraft(e.currentTarget.value)} />
-                <PaperButton type="submit" size="small" disabled={!draft().trim()}>
-                    Add
-                </PaperButton>
-            </form>
             <Show when={error()}>
                 <PaperText size={1} color="danger" role="alert">
                     {error()}
@@ -143,38 +107,31 @@ function Facts(props: { agent: Agent; facts: MemoryList["facts"] }) {
     );
 }
 
-function NoteEditor(props: { agent: Agent; noteKey: string | null; onDone: () => void }) {
-    const [key, setKey] = createSignal(props.noteKey ?? "");
-    const [when, setWhen] = createSignal("");
-    const [body, setBody] = createSignal("");
-    const [loaded, setLoaded] = createSignal(props.noteKey === null);
+function Note(props: { agent: Agent; noteKey: string; onDone: () => void }) {
+    const [note, setNote] = createSignal<{ when: string; body: string } | null>(null);
     const [error, setError] = createSignal<string | null>(null);
-    const [saving, setSaving] = createSignal(false);
+    const [forgetting, setForgetting] = createSignal(false);
 
     const load = async () => {
-        if (props.noteKey === null) return;
         setError(null);
         try {
-            const n = await props.agent.readNote(props.noteKey);
-            setWhen(n.when);
-            setBody(n.body);
-            setLoaded(true);
+            setNote(await props.agent.readNote(props.noteKey));
         } catch (e) {
             setError(message(e));
         }
     };
     void load();
 
-    const run = async (act: () => Promise<unknown>) => {
-        setSaving(true);
+    const forget = async () => {
+        setForgetting(true);
         setError(null);
         try {
-            await act();
+            await props.agent.deleteNote(props.noteKey);
             props.onDone();
         } catch (e) {
             setError(message(e));
         } finally {
-            setSaving(false);
+            setForgetting(false);
         }
     };
 
@@ -187,7 +144,7 @@ function NoteEditor(props: { agent: Agent; noteKey: string | null; onDone: () =>
                 </PaperButton>
             </div>
             <Show
-                when={loaded()}
+                when={note()}
                 fallback={
                     <Show when={error()} fallback={<PaperLoader loaderStatus="indeterminate" label="Reading note" />}>
                         <PaperEmptyState icon="error" title="Note can't be read" description={error()!}>
@@ -196,32 +153,25 @@ function NoteEditor(props: { agent: Agent; noteKey: string | null; onDone: () =>
                     </Show>
                 }
             >
-                <PaperInput
-                    fullWidth
-                    label="Key"
-                    disabled={props.noteKey !== null}
-                    maxLength={LIMITS.memory.keyChars}
-                    placeholder="lowercase letters, digits and dashes"
-                    value={key()}
-                    onInput={(e) => setKey(e.currentTarget.value)}
-                />
-                <PaperInput fullWidth label="When it's needed" maxLength={LIMITS.memory.whenChars} value={when()} onInput={(e) => setWhen(e.currentTarget.value)} />
-                <PaperInput fullWidth multiline rows={14} label="Note" value={body()} onInput={(e) => setBody(e.currentTarget.value)} />
-                <Show when={error()}>
-                    <PaperText size={1} color="danger" role="alert">
-                        {error()}
-                    </PaperText>
-                </Show>
-                <div class={styles.row}>
-                    <PaperButton disabled={saving()} onClick={() => void run(() => props.agent.saveNote(key(), when(), body()))}>
-                        Save
-                    </PaperButton>
-                    <Show when={props.noteKey !== null}>
-                        <PaperButton variant="danger" disabled={saving()} onClick={() => void run(() => props.agent.deleteNote(props.noteKey!))}>
-                            Forget this note
-                        </PaperButton>
-                    </Show>
-                </div>
+                {(n) => (
+                    <>
+                        <PaperSectionHeader icon="description" title={props.noteKey} />
+                        <PaperText size={1} color="muted">
+                            Read {n().when}
+                        </PaperText>
+                        <PaperMarkdown text={n().body} />
+                        <Show when={error()}>
+                            <PaperText size={1} color="danger" role="alert">
+                                {error()}
+                            </PaperText>
+                        </Show>
+                        <div class={styles.row}>
+                            <PaperButton variant="danger" disabled={forgetting()} onClick={() => void forget()}>
+                                Forget this note
+                            </PaperButton>
+                        </div>
+                    </>
+                )}
             </Show>
         </div>
     );
