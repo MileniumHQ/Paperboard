@@ -1,0 +1,185 @@
+/* After the legacy AI panel's composer: the box is the frame, and every
+   control inside it is quiet text that turns blue on hover. */
+.Composer {
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap-half);
+    box-sizing: border-box;
+    width: 100%;
+    max-width: var(--paper-page-width);
+    margin: 0 auto;
+    padding: var(--paper-uigap-half) var(--paper-uigap-double) var(--paper-uigap);
+}
+
+.box {
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap-half);
+    min-width: 0;
+    padding: var(--paper-uigap-threefourths) var(--paper-uigap-threefourths) var(--paper-uigap-half);
+    border: var(--paper-border-width) solid var(--paper-border);
+    border-radius: var(--paper-border-radius);
+    background: var(--paper-surface-sunken);
+    transition: border-color var(--paper-tiny-transition) var(--paper-ease-standard);
+}
+
+.box:focus-within {
+    border-color: var(--paper-primary);
+}
+
+/* a bare textarea: the box owns the surface and the frame */
+.field {
+    width: 100%;
+    box-sizing: border-box;
+    display: block;
+    margin: 0;
+    padding: 0;
+    border: none;
+    outline: none;
+    resize: none;
+    overflow-y: auto;
+    background: transparent;
+    color: var(--paper-text);
+    font-family: inherit;
+    font-size: var(--paper-text-size-3);
+    line-height: var(--paper-console-line-height);
+    min-height: calc(var(--paper-uigap) * 2.5);
+}
+
+.field::placeholder {
+    color: var(--paper-text-subtle);
+}
+
+.controls {
+    display: flex;
+    align-items: center;
+    gap: var(--paper-uigap-onefourth);
+    min-width: 0;
+}
+
+.brain {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--paper-uigap-half);
+    max-width: 45%;
+    min-width: 0;
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--paper-text);
+    font: inherit;
+    font-size: var(--paper-text-size-2);
+    font-weight: var(--paper-weight-semibold);
+    cursor: pointer;
+    transition: color var(--paper-short-transition) var(--paper-ease-standard);
+}
+
+.brain:hover {
+    color: var(--paper-primary);
+}
+
+.brainName {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.logo {
+    display: inline-flex;
+    font-size: var(--paper-control-size-small);
+}
+
+.picker {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--paper-uigap-onefourth);
+    flex-shrink: 0;
+    padding: 0;
+    border: none;
+    background: none;
+    margin-left: var(--paper-uigap-half);
+    color: var(--paper-text-muted);
+    font: inherit;
+    font-size: var(--paper-text-size-2);
+    cursor: pointer;
+    transition: color var(--paper-short-transition) var(--paper-ease-standard);
+}
+
+.picker:hover {
+    color: var(--paper-primary);
+}
+
+/* a stopped computer, or the user at its wheel */
+.picker.attention {
+    color: var(--paper-warning);
+}
+
+.brain:focus-visible,
+.picker:focus-visible {
+    outline: var(--paper-focus-ring);
+    outline-offset: var(--paper-focus-offset);
+    border-radius: var(--paper-border-radius-half);
+}
+
+.pickerIcon,
+.pickerChevron {
+    font-size: var(--paper-icon-size-small);
+}
+
+.spacer {
+    flex: 1;
+}
+
+.more {
+    margin-right: var(--paper-uigap-half);
+}
+
+.reason {
+    display: flex;
+    align-items: center;
+    gap: var(--paper-uigap-onefourth);
+}
+
+/* messages the agent hasn't read yet, above the box */
+.waiting {
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap-onefourth);
+    padding: var(--paper-uigap-half) var(--paper-uigap-threefourths);
+    border: var(--paper-border-width) dashed var(--paper-border);
+    border-radius: var(--paper-border-radius);
+    background: var(--paper-surface);
+}
+
+.waitingHead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--paper-uigap-half);
+    font-size: var(--paper-text-size-1);
+    color: var(--paper-text-muted);
+}
+
+.waitingItem {
+    display: flex;
+    align-items: center;
+    gap: var(--paper-uigap-half);
+    min-width: 0;
+}
+
+.waitingText {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--paper-text-size-2);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .box,
+    .brain,
+    .picker {
+        transition: none;
+    }
+}

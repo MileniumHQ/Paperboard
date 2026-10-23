@@ -137,28 +137,3 @@
     color: var(--paper-danger);
     font-size: var(--paper-text-size-2);
 }
-
-.composer {
-    display: flex;
-    flex-direction: column;
-    gap: var(--paper-uigap-half);
-    padding: var(--paper-uigap) var(--paper-uigap-double);
-    border-top: 1px solid var(--paper-border);
-}
-
-.row {
-    display: flex;
-    align-items: flex-end;
-    gap: var(--paper-uigap);
-}
-
-.input {
-    flex: 1;
-    min-width: 0;
-}
-
-.sendError {
-    margin: 0;
-    color: var(--paper-danger);
-    font-size: var(--paper-text-size-2);
-}

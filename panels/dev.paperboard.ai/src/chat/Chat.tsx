@@ -1,10 +1,12 @@
 import { For, Match, Show, Switch, createEffect, createSignal, on, onCleanup } from "solid-js";
-import { PaperButton, PaperIcon, PaperInput, PaperMarkdown } from "@mileniumhq/paperui";
+import { PaperButton, PaperIcon, PaperMarkdown } from "@mileniumhq/paperui";
 import { Face } from "../face/Face";
 import { createFace } from "../face/controller";
 import { Budget, DEFAULT_BUDGET, SetupProgress } from "../computer/Computer";
 import type { ChatEntry, ComputerBudget } from "../contract";
 import type { Agent } from "../lib/agent";
+import { StartOver } from "../settings/Settings";
+import Composer from "./Composer";
 import styles from "./Chat.module.css";
 
 const TOOL_ICONS: Record<string, string> = {
@@ -25,7 +27,7 @@ const TOOL_ICONS: Record<string, string> = {
 };
 
 /** One conversation, like texting a friend. */
-export default function Chat(props: { agent: Agent }) {
+export default function Chat(props: { agent: Agent; onOpenSettings: () => void; onShowComputer: () => void }) {
     const { agent } = props;
     const face = createFace({ expression: "happy" });
     onCleanup(face.dispose);
@@ -34,19 +36,7 @@ export default function Chat(props: { agent: Agent }) {
     // thinking while a turn runs
     createEffect(() => face.ponder(agent.state.chat.busy));
 
-    const [draft, setDraft] = createSignal("");
-    const [sendError, setSendError] = createSignal<string | null>(null);
-    const send = async () => {
-        const text = draft().trim();
-        if (!text) return;
-        setSendError(null);
-        try {
-            await agent.send(text);
-            setDraft("");
-        } catch (e) {
-            setSendError(e instanceof Error ? e.message : String(e));
-        }
-    };
+    const [startingOver, setStartingOver] = createSignal(false);
 
     // follow the conversation down as it grows, unless the user scrolled up to read
     let list!: HTMLDivElement;
@@ -83,50 +73,13 @@ export default function Chat(props: { agent: Agent }) {
                 </Show>
             </div>
 
-            <form
-                class={styles.composer}
-                onSubmit={(e) => {
-                    e.preventDefault();
-                    void send();
-                }}
-            >
-                <Show when={sendError()}>
-                    <p class={styles.sendError} role="alert">
-                        {sendError()}
-                    </p>
-                </Show>
-                <div class={styles.row}>
-                    <PaperInput
-                        class={styles.input}
-                        multiline
-                        rows={1}
-                        fullWidth
-                        label={`Message ${name()}`}
-                        placeholder={`Message ${name()}`}
-                        value={draft()}
-                        onInput={(e) => setDraft(e.currentTarget.value)}
-                        onKeyDown={(e: KeyboardEvent) => {
-                            // Enter sends, Shift+Enter breaks the line
-                            if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
-                                e.preventDefault();
-                                void send();
-                            }
-                        }}
-                    />
-                    <Show
-                        when={agent.state.chat.busy && !draft().trim()}
-                        fallback={
-                            <PaperButton type="submit" variant="primary" icon title="Send" disabled={!draft().trim()}>
-                                arrow_upward
-                            </PaperButton>
-                        }
-                    >
-                        <PaperButton type="button" icon title={`Stop ${name()}`} onClick={() => void agent.stop()}>
-                            stop
-                        </PaperButton>
-                    </Show>
-                </div>
-            </form>
+            <Composer
+                agent={agent}
+                onOpenSettings={props.onOpenSettings}
+                onShowComputer={props.onShowComputer}
+                onStartOver={() => setStartingOver(true)}
+            />
+            <StartOver agent={agent} open={startingOver()} onClose={() => setStartingOver(false)} />
         </div>
     );
 }
