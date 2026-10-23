@@ -1,9 +1,10 @@
-// One of the computer's windows, live: frames are polled only while the tab
-// is shown (one request in flight, unchanged frames skipped by hash), and
-// with control the pointer and keyboard go to the window.
+// One of the computer's windows, live: frames are polled while it's shown
+// (one request in flight, unchanged frames skipped by hash, slower while the
+// shell is in the background), and with control the pointer and keyboard go
+// to the window.
 
 import { Show, createEffect, createSignal, on, onCleanup } from "solid-js";
-import { PaperButton, PaperEmptyState, PaperIcon, PaperLoader } from "@mileniumhq/paperui";
+import { PaperButton, PaperEmptyState, PaperLoader, PaperText } from "@mileniumhq/paperui";
 import type { ComputerWindow, InputEvent } from "../contract";
 import type { Agent } from "../lib/agent";
 import { enqueue, keyEvent } from "./input";
@@ -19,12 +20,8 @@ const BUTTONS: Record<number, 1 | 2 | 3> = { 0: 1, 1: 2, 2: 3 };
 export function WindowView(props: {
     agent: Agent;
     window: ComputerWindow;
-    active: boolean;
     /** this shell holds control */
     holding: boolean;
-    onTakeControl: () => void;
-    onHandBack: () => void;
-    controlBusy: boolean;
 }) {
     const [src, setSrc] = createSignal<string | null>(null);
     const [size, setSize] = createSignal({ width: props.window.width, height: props.window.height });
@@ -51,7 +48,7 @@ export function WindowView(props: {
             wake = done;
         });
 
-    const showing = () => props.active && props.agent.state.computer.phase === "ready" && !error();
+    const showing = () => props.agent.state.computer.phase === "ready" && !error();
 
     async function poll() {
         if (polling) return;
@@ -119,27 +116,6 @@ export function WindowView(props: {
 
     return (
         <div class={styles.view}>
-            <div class={styles.bar}>
-                <span class={styles.title}>{props.window.title || props.window.app}</span>
-                <Show when={inputError()}>
-                    <span class={styles.inputError} role="alert">
-                        {inputError()}
-                    </span>
-                </Show>
-                <Show
-                    when={props.holding}
-                    fallback={
-                        <PaperButton size="small" disabled={props.controlBusy || props.agent.state.computer.phase !== "ready"} onClick={props.onTakeControl}>
-                            <PaperIcon>pan_tool</PaperIcon> Take control
-                        </PaperButton>
-                    }
-                >
-                    <PaperButton size="small" variant="primary" disabled={props.controlBusy} onClick={props.onHandBack}>
-                        <PaperIcon>back_hand</PaperIcon> Hand back
-                    </PaperButton>
-                </Show>
-            </div>
-
             <div class={styles.stage}>
                 <Show
                     when={!error()}
@@ -195,6 +171,11 @@ export function WindowView(props: {
                     </Show>
                 </Show>
             </div>
+            <Show when={inputError()}>
+                <PaperText size={1} color="danger" role="alert" class={styles.inputError}>
+                    {inputError()}
+                </PaperText>
+            </Show>
         </div>
     );
 }

@@ -1,0 +1,60 @@
+/* the page header on top, then whatever the computer has to show filling the rest */
+.page {
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap);
+    height: 100%;
+    min-height: 0;
+    box-sizing: border-box;
+    padding: var(--paper-uigap);
+}
+
+.body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.body > * {
+    flex: 1;
+    min-height: 0;
+}
+
+.setup {
+    flex: 0 1 auto;
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap);
+    width: 100%;
+    max-width: var(--paper-page-width);
+    box-sizing: border-box;
+    /* room for the range labels that hang past the track's ends */
+    padding-inline: var(--paper-uigap-half);
+    overflow-x: hidden;
+    overflow-y: auto;
+}
+
+.center {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.windows {
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap-half);
+}
+
+.picker {
+    display: flex;
+    align-items: center;
+    gap: var(--paper-uigap-half);
+    max-width: var(--paper-size-card-min);
+}
+
+.picker > :first-child {
+    flex: 1;
+    min-width: 0;
+}
