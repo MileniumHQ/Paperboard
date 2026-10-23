@@ -17,7 +17,7 @@ import {
 } from "../toolsContract";
 import type { ToolResult } from "./computerMcp";
 import { checkSecretName, parseServer, parseToolsConfig, secretNames, vaultName } from "./mcpConfig";
-import { GuestWire, HttpWire, McpClient, StdioWire, type GuestCall, type McpTool, type ProcessHost } from "./mcpClient";
+import { HttpWire, McpClient, StdioWire, type McpTool, type ProcessHost } from "./mcpClient";
 
 const WARM_MS = 25_000;
 const RETRY_AFTER_MS = 30_000;
@@ -32,8 +32,6 @@ export interface Vault {
 
 export interface ServersDeps {
     host: ProcessHost & { which(command: string): string | null };
-    guest: GuestCall;
-    computerReady(): boolean;
     store: { read(): Promise<unknown>; write(c: ToolsConfig): Promise<void> };
     vault: Vault;
     fetch?: typeof fetch;
@@ -166,8 +164,10 @@ export class McpServers {
         const run = (async () => {
             let client: McpClient | null = null;
             try {
-                if (e.spec.where === "computer" && !this.deps.computerReady()) {
-                    this.settle(e, gen, "stopped", "its computer isn't running");
+                // TODO(remove after v0.3): with "computer" in ServerSpec.where
+                if (e.spec.where === "computer") {
+                    console.warn(`[ai] tool server ${e.spec.name} is set to run inside the agent's old VM computer, which is gone; it stays off until it's edited (this check goes away in v0.3)`);
+                    this.settle(e, gen, "failed", "It ran inside the agent's old computer, which is a web browser now. Edit it to run on this computer.");
                     return;
                 }
                 client = new McpClient(await this.open(e.spec));
@@ -243,10 +243,6 @@ export class McpServers {
         };
         if (spec.transport === "http") return new HttpWire({ url: spec.url, headers: await values(spec.headers), fetch: this.deps.fetch });
         const env = await values(spec.env);
-        if (spec.where === "computer") {
-            // bash -l so the program is found where the agent installed it; argv, never a command line
-            return GuestWire.start(this.deps.guest, { id: spec.name, argv: [spec.command, ...spec.args], env });
-        }
         const command = path.isAbsolute(spec.command) ? spec.command : this.deps.host.which(spec.command);
         if (!command) throw new Error(`"${spec.command}" isn't installed on this computer`);
         return StdioWire.start(this.deps.host, { id: processId(spec.name), command, args: spec.args, env });

@@ -3,12 +3,12 @@
 // The agent is one ongoing conversation, like texting a friend. Its brain is
 // an agent harness the user already has (Codex or Claude Code) with every
 // built-in tool off except web search; its hands are its own computer, a
-// Debian VM the service runs, reached through the service's MCP endpoint.
+// web browser the service runs, reached through the service's MCP endpoint.
 
 export const PANEL_ID = "dev.paperboard.ai";
 
 export const UI_ACTION_IDS = {
-    // onboarding: name, brain and (optionally) the computer's budget
+    // onboarding: name and brain
     setup: "ui-setup",
     detect: "ui-detect",
     history: "ui-history",
@@ -21,6 +21,7 @@ export const UI_ACTION_IDS = {
     frame: "ui-frame",
     input: "ui-input",
     closeWindow: "ui-close-window",
+    go: "ui-go",
     control: "ui-control",
     // waiting messages: take one back, or interrupt the turn to read them now
     unqueue: "ui-unqueue",
@@ -31,7 +32,6 @@ export const UI_ACTION_IDS = {
     conversations: "ui-conversations",
     openConversation: "ui-open-conversation",
     deleteConversation: "ui-delete-conversation",
-    setMemory: "ui-set-memory",
     // files in the conversation: the user's are uploaded in chunks, then sent with a message; either side's are read in chunks
     attachBegin: "ui-attach-begin",
     attachPut: "ui-attach-put",
@@ -75,11 +75,6 @@ export const characterOf = (name: string | null | undefined): Character | null =
 export const HARNESSES = ["codex", "claude-code", "opencode"] as const;
 export type Harness = (typeof HARNESSES)[number];
 
-export interface ComputerBudget {
-    memoryGb: number;
-    diskGb: number;
-}
-
 export interface Settings {
     name: string;
     harness: Harness;
@@ -91,8 +86,6 @@ export const LIMITS = {
     name: 32,
     model: 64,
     message: 16_000,
-    memoryGb: { min: 2, max: 32 },
-    diskGb: { min: 8, max: 128 },
     history: 200,
     /** past conversations kept; past this, starting a new one asks to delete some first */
     pastConversations: 200,
@@ -213,23 +206,12 @@ export interface HarnessInfo {
     version: string | null;
 }
 
-export type SetupStepId = "image" | "browser" | "disk" | "boot" | "install";
+export type SetupStepId = "download" | "unpack" | "start";
 export type StepStatus = "waiting" | "running" | "done" | "failed";
 export interface SetupStep {
     id: SetupStepId;
     status: StepStatus;
     /** 0–100 when measurable, null otherwise */
-    percent: number | null;
-    /** the long steps' parts, in order (see SETUP_PARTS); empty for the others */
-    parts: SetupPart[];
-}
-
-/** What a long setup step is doing, as far as the host can see it. */
-export type SetupPartId = "power" | "linux" | "services" | "network" | "setup" | "lists" | "packages" | "hands" | "browser" | "desktop";
-export interface SetupPart {
-    id: SetupPartId;
-    status: StepStatus;
-    /** 0–100 when measurable (packages being installed), null otherwise */
     percent: number | null;
 }
 
@@ -247,7 +229,6 @@ export interface ComputerState {
     phase: ComputerPhase;
     /** set up and kept: a failure while installed is retried by starting, otherwise by installing again */
     installed: boolean;
-    budget: ComputerBudget | null;
     steps: SetupStep[];
     error: string | null;
     /** the user has taken control: the agent's tool calls are refused until they hand it back */
@@ -258,15 +239,23 @@ export interface ComputerState {
 export interface ComputerWindow {
     id: number;
     title: string;
+    /** the page's address */
+    url: string;
     app: string;
     width: number;
     height: number;
 }
 
-/** A window's picture: unchanged since the hash asked about, or a new JPEG. */
+/** A JavaScript dialog a page is waiting on: the page is paused (and can't be pictured) until it's answered. */
+export interface PageDialog {
+    type: "alert" | "confirm" | "prompt" | "beforeunload";
+    message: string;
+}
+
+/** A window's picture: unchanged since the hash asked about, or a new JPEG; and the dialog it waits on, if any. */
 export type WindowFrame =
-    | { same: true; hash: string }
-    | { same?: false; frame: string; hash: string; width: number; height: number };
+    | { same: true; hash: string; dialog: PageDialog | null }
+    | { same?: false; frame: string; hash: string; width: number; height: number; dialog: null };
 
 /** What the user does in a window they control, in window coordinates. */
 export type InputEvent =
@@ -341,18 +330,11 @@ export interface SignInEntry {
     error?: string;
 }
 
-export const SETUP_STEPS: SetupStepId[] = ["image", "browser", "disk", "boot", "install"];
-export const SETUP_PARTS: Record<SetupStepId, SetupPartId[]> = {
-    image: [],
-    browser: [],
-    disk: [],
-    boot: ["power", "linux", "services", "network", "setup"],
-    install: ["lists", "packages", "hands", "browser", "desktop"],
-};
+export const SETUP_STEPS: SetupStepId[] = ["download", "unpack", "start"];
 
 export const DEFAULT_STATE: AiState = {
     settings: null,
-    computer: { phase: "none", installed: false, budget: null, steps: [], error: null, userControl: false },
+    computer: { phase: "none", installed: false, steps: [], error: null, userControl: false },
     chat: { busy: false, typing: false, waiting: [] },
     memory: { revision: 0, error: null },
     routines: { revision: 0, error: null },

@@ -8,9 +8,9 @@
 import { For, Match, Show, Switch, createEffect, createSignal, on, onCleanup } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import { PaperButton, PaperEmptyState, PaperIcon, PaperList, PaperListItem, PaperLoader, PaperText } from "@mileniumhq/paperui";
-import type { ComputerBudget, ComputerWindow } from "../contract";
+import type { ComputerWindow } from "../contract";
 import type { Agent } from "../lib/agent";
-import { Budget, DEFAULT_BUDGET, SetupProgress } from "./Computer";
+import { SetupProgress } from "./Computer";
 import { clip } from "../lib/text";
 import { WindowView } from "./WindowView";
 import styles from "./ComputerView.module.css";
@@ -26,12 +26,6 @@ const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 /** a tab shows this much of a window's title; the rest is an ellipsis, and the whole title its tooltip */
 const TITLE_CHARS = 32;
 
-function windowIcon(w: ComputerWindow) {
-    const app = w.app.toLowerCase();
-    if (app.includes("helium") || app.includes("chrom")) return "language";
-    if (app.includes("term")) return "terminal";
-    return "web_asset";
-}
 
 export default function ComputerView(props: { agent: Agent }) {
     const { agent } = props;
@@ -68,8 +62,7 @@ export default function ComputerView(props: { agent: Agent }) {
         if (disposed || !ready() || listError()) return;
         if (!document.hidden) {
             try {
-                // the guest lists windows in stacking order, which changes whenever one is raised; tabs go by id,
-                // so a tab never jumps (and the window being used never loses focus to the move)
+                // tabs go by id, so a tab never jumps (and the window being used never loses focus to a move)
                 const list = (await agent.windows()).sort((a, b) => a.id - b.id);
                 setWindows(reconcile(list, { key: "id" }));
                 setListed(true);
@@ -149,17 +142,13 @@ export default function ComputerView(props: { agent: Agent }) {
     createEffect(on(() => c().userControl, (now, before) => before && !now && setHolding(false)));
     onCleanup(handBack);
 
-    // ------------------------------------------------------------- setup
-
-    const [budget, setBudget] = createSignal<ComputerBudget>(DEFAULT_BUDGET);
-
     return (
         <div class={styles.view}>
             <Show when={ready() && windows.length > 0}>
                 <PaperList direction="horizontal" name="computer-windows" value={shown() ?? ""} onValueChange={(v) => setChosen(Number(v))}>
                     <For each={windows}>
                         {(w) => (
-                            <PaperListItem icon={windowIcon(w)} value={w.id} onClosed={() => closeWindow(w)} title={w.title || w.app}>
+                            <PaperListItem icon="language" value={w.id} onClosed={() => closeWindow(w)} title={w.title || w.app}>
                                 {clip(w.title || w.app, TITLE_CHARS)}
                             </PaperListItem>
                         )}
@@ -181,9 +170,8 @@ export default function ComputerView(props: { agent: Agent }) {
                         <div class={styles.setup}>
                             <SetupProgress computer={c()} />
                             <Show when={c().phase === "failed"}>
-                                <Budget name={name()} value={budget()} onChange={setBudget} />
                                 <div>
-                                    <PaperButton variant="primary" disabled={busy()} onClick={() => void act(() => agent.installComputer(budget()))}>
+                                    <PaperButton variant="primary" disabled={busy()} onClick={() => void act(agent.installComputer)}>
                                         <PaperIcon>restart_alt</PaperIcon> Set up again
                                     </PaperButton>
                                 </div>
@@ -192,10 +180,11 @@ export default function ComputerView(props: { agent: Agent }) {
                     </Match>
                     <Match when={c().phase === "none"}>
                         <div class={styles.setup}>
-                            <PaperText size={3}>A Debian virtual machine {name()} uses for its work. Nothing on yours is shared with it.</PaperText>
-                            <Budget name={name()} value={budget()} onChange={setBudget} />
+                            <PaperText size={3}>
+                                A web browser of its own that {name()} uses for its work, about 400 MB of storage. It reaches the internet, never your files or your network.
+                            </PaperText>
                             <div>
-                                <PaperButton variant="primary" disabled={busy()} onClick={() => void act(() => agent.installComputer(budget()))}>
+                                <PaperButton variant="primary" disabled={busy()} onClick={() => void act(agent.installComputer)}>
                                     <PaperIcon>computer</PaperIcon> Set up {name()}'s computer
                                 </PaperButton>
                             </div>
@@ -233,7 +222,7 @@ export default function ComputerView(props: { agent: Agent }) {
                         </div>
                     </Match>
                     <Match when={windows.length === 0}>
-                        <PaperEmptyState icon="web_asset" title="Nothing is open" description={`When ${name()} opens an app or a page, you can watch it here.`} />
+                        <PaperEmptyState icon="web_asset" title="Nothing is open" description={`When ${name()} opens a page, you can watch it here.`} />
                     </Match>
                     <Match when={true}>
                         {/* every tab stays mounted (a window keeps its last frame); only the chosen one shows and polls */}

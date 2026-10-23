@@ -8,7 +8,6 @@ import {
     PaperIcon,
     PaperInput,
     PaperModal,
-    PaperRange,
     PaperSelectMenu,
     PaperSelectMenuItem,
     PaperSeparator,
@@ -17,14 +16,12 @@ import {
     PaperText,
 } from "@mileniumhq/paperui";
 import BrainLogo from "../lib/BrainLogo";
-import { Budget, DEFAULT_BUDGET } from "../computer/Computer";
-import { HARNESSES, LIMITS, type ComputerBudget, type Harness, type Settings as Saved } from "../contract";
+import { HARNESSES, LIMITS, type Harness, type Settings as Saved } from "../contract";
 import type { Agent } from "../lib/agent";
 import { SEARCH_MODELS_FROM, createModels, harnessName, loadedModels } from "../lib/brains";
 import styles from "./Settings.module.css";
 
 const DEFAULT_MODEL = "default";
-const MEMORY_MARKS = [2, 4, 8, 12, 16, 24, 32];
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -184,15 +181,11 @@ function ComputerSettings(props: { agent: Agent }) {
     const name = () => props.agent.state.settings!.name;
     const [busy, setBusy] = createSignal(false);
     const [error, setError] = createSignal<string | null>(null);
-    const [note, setNote] = createSignal<string | null>(null);
-    const [memory, setMemory] = createSignal<number | null>(null);
-    const [fresh, setFresh] = createSignal<ComputerBudget>(DEFAULT_BUDGET);
     const [confirming, setConfirming] = createSignal(false);
 
     const act = async (fn: () => Promise<unknown>) => {
         setBusy(true);
         setError(null);
-        setNote(null);
         try {
             await fn();
             return true;
@@ -201,14 +194,6 @@ function ComputerSettings(props: { agent: Agent }) {
             return false;
         } finally {
             setBusy(false);
-        }
-    };
-    const shownMemory = () => memory() ?? c().budget?.memoryGb ?? DEFAULT_BUDGET.memoryGb;
-    const saveMemory = async (memoryGb: number) => {
-        if (memoryGb === c().budget?.memoryGb) return;
-        if (await act(() => props.agent.setMemory(memoryGb))) {
-            setMemory(null);
-            if (c().phase === "ready" || c().phase === "starting") setNote(`${name()}'s computer gets ${memoryGb} GB from its next start.`);
         }
     };
     const status = () =>
@@ -236,13 +221,12 @@ function ComputerSettings(props: { agent: Agent }) {
                 </Match>
                 <Match when={!c().installed && c().phase !== "installing"}>
                     <PaperSettingList autoHeight>
-                        <PaperSettingItem title={`${name()}'s own computer`} description="A Debian virtual machine it uses for its work. Nothing on yours is shared with it.">
-                            <PaperButton variant="primary" disabled={busy()} onClick={() => void act(() => props.agent.installComputer(fresh()))}>
+                        <PaperSettingItem title={`${name()}'s own computer`} description="A web browser of its own it uses for its work, about 400 MB of storage. It reaches the internet, never your files or your network.">
+                            <PaperButton variant="primary" disabled={busy()} onClick={() => void act(props.agent.installComputer)}>
                                 <PaperIcon>computer</PaperIcon> Set up
                             </PaperButton>
                         </PaperSettingItem>
                     </PaperSettingList>
-                    <Budget name={name()} value={fresh()} onChange={setFresh} />
                 </Match>
                 <Match when={true}>
                     <PaperSettingList autoHeight>
@@ -260,31 +244,11 @@ function ComputerSettings(props: { agent: Agent }) {
                                 </Match>
                             </Switch>
                         </PaperSettingItem>
-                        <PaperSettingItem title="Memory" description="The most it can use. It only takes what it needs.">
-                            <PaperRange
-                                label="Memory"
-                                value={shownMemory()}
-                                min={LIMITS.memoryGb.min}
-                                max={LIMITS.memoryGb.max}
-                                marks={MEMORY_MARKS.map((v) => ({ value: v, label: `${v}` }))}
-                                snapToMarks
-                                disabled={busy() || c().phase === "installing"}
-                                formatValue={(v) => `${v} GB`}
-                                onInput={setMemory}
-                                onChange={(v) => void saveMemory(v)}
-                            />
-                        </PaperSettingItem>
-                        <PaperSettingItem title="Storage" description="Fixed when the computer was set up. Setting it up again can change it.">
-                            <PaperText size={2}>{c().budget?.diskGb ?? "?"} GB</PaperText>
-                        </PaperSettingItem>
                         <PaperSettingItem title="Set up again" description={`Erases ${name()}'s computer, with everything on it, and builds a fresh one.`}>
                             <PaperButton
                                 variant="danger"
                                 disabled={busy() || c().phase === "installing"}
-                                onClick={() => {
-                                    setFresh(c().budget ?? DEFAULT_BUDGET);
-                                    setConfirming(true);
-                                }}
+                                onClick={() => setConfirming(true)}
                             >
                                 <PaperIcon>restart_alt</PaperIcon> Set up again
                             </PaperButton>
@@ -292,11 +256,6 @@ function ComputerSettings(props: { agent: Agent }) {
                     </PaperSettingList>
                 </Match>
             </Switch>
-            <Show when={note()}>
-                <PaperText size={2} color="text-muted" role="status">
-                    {note()}
-                </PaperText>
-            </Show>
             <Show when={error()}>
                 <PaperText size={2} color="danger" role="alert">
                     {error()}
@@ -317,7 +276,7 @@ function ComputerSettings(props: { agent: Agent }) {
                             variant="danger"
                             disabled={busy()}
                             onClick={async () => {
-                                if (await act(() => props.agent.installComputer(fresh()))) setConfirming(false);
+                                if (await act(() => props.agent.installComputer())) setConfirming(false);
                             }}
                         >
                             Erase and set up
@@ -325,8 +284,7 @@ function ComputerSettings(props: { agent: Agent }) {
                     </>
                 }
             >
-                <PaperText>Everything on it is deleted: files, downloads, browser sign-ins. This can't be undone.</PaperText>
-                <Budget name={name()} value={fresh()} onChange={setFresh} />
+                <PaperText>Everything on it is deleted: its files, downloads and sign-ins. This can't be undone.</PaperText>
             </PaperModal>
         </section>
     );

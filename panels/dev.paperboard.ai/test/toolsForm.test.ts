@@ -28,10 +28,16 @@ describe("the server editor's form", () => {
     });
 
     test("a web address keeps headers and is always from this computer", () => {
-        const f = { ...blankForm(), name: "notes", transport: "http" as const, where: "computer" as const, url: " https://x.test/mcp ", rows: [newRow({ name: "Authorization", kind: "secret", typed: "Bearer z" })] };
+        const f = { ...blankForm(), name: "notes", transport: "http" as const, url: " https://x.test/mcp ", rows: [newRow({ name: "Authorization", kind: "secret", typed: "Bearer z" })] };
         const spec = specFromForm(f);
         expect(spec).toMatchObject({ transport: "http", where: "host", url: "https://x.test/mcp", headers: { Authorization: { secret: "authorization" } } });
         expect(parseServer(spec)).toEqual(spec);
+    });
+
+    test("a server saved for the old VM computer is saved to run on this computer, and the form says so first", () => {
+        const f = formFromSpec({ name: "inside", where: "computer", transport: "stdio", command: "npx", args: ["pkg"], env: {}, enabled: true });
+        expect(f.wasInsideComputer).toBe(true);
+        expect(specFromForm(f).where).toBe("host");
     });
 
     test("secret names are plain", () => {

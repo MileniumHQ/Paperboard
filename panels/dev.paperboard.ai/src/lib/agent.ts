@@ -15,7 +15,6 @@ import {
     type AiState,
     type BrainModel,
     type ChatEntry,
-    type ComputerBudget,
     type ComputerWindow,
     type Harness,
     type HarnessInfo,
@@ -96,7 +95,7 @@ export function createAgent() {
         detect: () => call<HarnessInfo[]>(UI_ACTION_IDS.detect),
         models: (harness: Harness) => call<{ models: BrainModel[] }>(UI_ACTION_IDS.models, { harness }).then((r) => r.models),
         setup: (settings: Settings) => call(UI_ACTION_IDS.setup, { settings }),
-        installComputer: (budget: ComputerBudget) => call(UI_ACTION_IDS.installComputer, { budget }),
+        installComputer: () => call(UI_ACTION_IDS.installComputer, {}),
         startComputer: () => call(UI_ACTION_IDS.startComputer),
         stopComputer: () => call(UI_ACTION_IDS.stopComputer),
         send: (text: string, replyTo?: string, attachments: string[] = []) =>
@@ -109,7 +108,6 @@ export function createAgent() {
         conversations: () => call<PastConversation[]>(UI_ACTION_IDS.conversations),
         openConversation: (id: string) => call(UI_ACTION_IDS.openConversation, { id }),
         deleteConversation: (id: string) => call(UI_ACTION_IDS.deleteConversation, { id }),
-        setMemory: (memoryGb: number) => call(UI_ACTION_IDS.setMemory, { memoryGb }),
         memory: () => call<MemoryList>(UI_ACTION_IDS.memory),
         deleteFact: (id: string) => call(UI_ACTION_IDS.deleteFact, { id }),
         readNote: (key: string) => call<{ key: string; when: string; body: string }>(UI_ACTION_IDS.readNote, { key }),
@@ -123,6 +121,7 @@ export function createAgent() {
         frame: (window: number, since: string | null) => call<WindowFrame>(UI_ACTION_IDS.frame, { window, since: since ?? undefined }),
         input: (window: number, events: InputEvent[]) => call(UI_ACTION_IDS.input, { window, events }),
         closeWindow: (window: number) => call(UI_ACTION_IDS.closeWindow, { window }),
+        go: (window: number, to: string) => call(UI_ACTION_IDS.go, { window, to }),
         control: (take: boolean) => call<{ userControl: boolean }>(UI_ACTION_IDS.control, { take }),
         dispose: () => {
             offState();

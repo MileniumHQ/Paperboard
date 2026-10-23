@@ -1,5 +1,5 @@
 // The user's keyboard and pointer, turned into the computer's input events.
-// The guest takes key names as xdotool keysyms (letters, digits, _ and +
+// The computer takes key names as xdotool keysyms (letters, digits, _ and +
 // only), so everything else is named here or typed as text.
 
 import type { InputEvent } from "../contract";

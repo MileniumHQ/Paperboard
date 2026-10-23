@@ -3,10 +3,10 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { DEFAULT_STATE, type AiState, type Settings } from "../src/contract";
-import { AiApp, parseBudget, parseSettings, type AppHost } from "../src/service/app";
+import { AiApp, parseSettings, type AppHost } from "../src/service/app";
 import { FakeProcesses } from "./fakeHost";
 
-describe("settings and budget are validated by the service", () => {
+describe("settings are validated by the service", () => {
     test("parseSettings", () => {
         expect(parseSettings({ name: " Pip ", harness: "codex", model: "default" })).toEqual({ name: "Pip", harness: "codex", model: null });
         expect(parseSettings({ name: "Pip", harness: "claude-code", model: "claude-opus-5-5" })).toEqual({ name: "Pip", harness: "claude-code", model: "claude-opus-5-5" });
@@ -16,14 +16,6 @@ describe("settings and budget are validated by the service", () => {
         // a model is one argv value, never flags or shell text
         expect(parseSettings({ name: "Pip", harness: "codex", model: "--dangerously-bypass" })).toBeNull();
         expect(parseSettings({ name: "Pip", harness: "codex", model: "a b" })).toBeNull();
-    });
-
-    test("parseBudget", () => {
-        expect(parseBudget({ memoryGb: 4, diskGb: 32 })).toEqual({ memoryGb: 4, diskGb: 32 });
-        expect(() => parseBudget({ memoryGb: 1, diskGb: 32 })).toThrow(/memory/);
-        expect(() => parseBudget({ memoryGb: 4, diskGb: 4096 })).toThrow(/storage/);
-        expect(() => parseBudget({ memoryGb: 4.5, diskGb: 32 })).toThrow();
-        expect(() => parseBudget(undefined)).toThrow();
     });
 
 });
@@ -55,8 +47,6 @@ describe("the service's agent", () => {
             download: async () => {
                 throw new Error("no network in tests");
             },
-            getSecret: async () => null,
-            setSecret: async () => {},
             storageDir: async () => dir,
             readSettings: readSettings ?? (async () => saved),
             writeSettings: async (s) => void writes.push(s),
@@ -151,10 +141,5 @@ describe("the service's agent", () => {
         expect((await app.toolsView()).config.actions).toBe(false);
         await app.toolsRemove({ name: "github" });
         expect(vault.size).toBe(0);
-    });
-
-    test("installComputer validates the budget before accepting", async () => {
-        const { app } = await start(["codex"]);
-        expect(() => app.installComputer({ budget: { memoryGb: 64, diskGb: 32 } })).toThrow(/memory/);
     });
 });

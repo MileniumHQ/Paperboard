@@ -12,9 +12,7 @@ export interface Script {
     computer: string[];
     /** "Not yet" to the computer */
     later: string[];
-    /** yes to the computer: its budget */
-    budget: string[];
-    /** the computer is being set up */
+    /** yes to the computer: it's being set up */
     install: string[];
 }
 
@@ -28,8 +26,7 @@ const DEFAULT: Script = {
         "[happy]I can do so much more if I have my own computer. [surprised]Hear me out: what if we share this one!\nI can set up my own environment so I can't see or touch any of your stuff.",
     ],
     later: ["[sad]Aw. [pause 700][happy]Just kidding, I'm good. Alright, let's chat!"],
-    budget: ["[wish]Awesome! [happy]I need a budget. What's the maximum amount of memory and storage you'd be okay with me using?"],
-    install: ["[happy]Sounds good. Now, I just need a moment to download and get everything set up. I'll be right with you!"],
+    install: ["[wish]Awesome! [happy]I just need a moment to download my browser and get everything set up. I'll be right with you!"],
 };
 
 const CHARACTER_SCRIPTS: Record<Character, Script> = {
@@ -44,8 +41,7 @@ const CHARACTER_SCRIPTS: Record<Character, Script> = {
             "[happy]Now, a helper friend should always be close by. [wish]What if I lived on your computer too?\n[wink]My own little corner, of course. I won't see or touch any of your stuff. Promise!",
         ],
         later: ["[sad]Oh. [pause 900][happy]That's okay! I'll be right here. [pause 400][wink]I'm always right here. Let's chat!"],
-        budget: ["[wish][bounce]Yay! [happy]How much memory and storage can your helper friend have? I'll never take more than you say!"],
-        install: ["[happy]Thank you, friend! I'll get everything ready. Don't go anywhere! [pause 500][wink]I'll be right with you. I'm always right with you!"],
+        install: ["[wish][bounce]Yay! [happy]Thank you, friend! I'll get everything ready. Don't go anywhere! [pause 500][wink]I'll be right with you. I'm always right with you!"],
     },
 };
 

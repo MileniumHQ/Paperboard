@@ -1,7 +1,6 @@
-// An MCP client (JSON-RPC 2.0: initialize, tools/list, tools/call) over three
+// An MCP client (JSON-RPC 2.0: initialize, tools/list, tools/call) over two
 // wires: a stdio child of this computer (daemon-supervised, through the
-// panel's process API), a stdio child inside the agent's computer (through
-// the guest agent's relay), or streamable HTTP. A wire carries requests and
+// panel's process API), or streamable HTTP. A wire carries requests and
 // answers; the client on top speaks the protocol.
 //
 // Everything is bounded: messages, pending requests, time, stderr kept.
@@ -300,68 +299,6 @@ export class StdioWire implements McpWire {
         } finally {
             clearTimeout(timer);
         }
-    }
-}
-
-// ------------------------------------------------------------- stdio inside the agent's computer
-
-/** The guest agent's relay (agent.py, mcp_* calls): the same JSON-RPC, carried by its authenticated HTTP API. */
-export type GuestCall = (tool: string, args: Record<string, unknown>) => Promise<ToolResult>;
-
-export class GuestWire implements McpWire {
-    private ended = false;
-    private endCbs: ((reason: string) => void)[] = [];
-
-    private constructor(
-        private call: GuestCall,
-        readonly id: string,
-    ) {}
-
-    static async start(call: GuestCall, o: { id: string; argv: string[]; env: Record<string, string> }): Promise<GuestWire> {
-        const r = await call("mcp_start", { id: o.id, argv: o.argv, env: o.env });
-        if (r.isError) throw new Error(r.text);
-        return new GuestWire(call, o.id);
-    }
-
-    async request(method: string, params: unknown, timeoutMs: number): Promise<unknown> {
-        if (this.ended) throw new Error("the server stopped");
-        const r = await this.call("mcp_rpc", { id: this.id, message: { jsonrpc: "2.0", id: 1, method, params }, timeout: timeoutMs / 1000 });
-        if (r.isError) {
-            // the guest lost the server (its agent restarted, or the child exited)
-            if (/isn't running|no such server/i.test(r.text)) this.end(r.text);
-            throw new Error(r.text);
-        }
-        let m: any;
-        try {
-            m = JSON.parse(r.text);
-        } catch {
-            throw new Error("the computer's relay answered with something that isn't JSON");
-        }
-        if (m?.error) throw new McpRpcError(String(m.error.message ?? "error"), Number(m.error.code ?? -32603));
-        return m?.result;
-    }
-
-    async notify(method: string, params?: unknown): Promise<void> {
-        if (this.ended) throw new Error("the server stopped");
-        const r = await this.call("mcp_rpc", { id: this.id, message: { jsonrpc: "2.0", method, ...(params === undefined ? {} : { params }) }, timeout: 5 });
-        if (r.isError) throw new Error(r.text);
-    }
-
-    private end(reason: string) {
-        if (this.ended) return;
-        this.ended = true;
-        for (const cb of this.endCbs) cb(reason);
-    }
-
-    onEnd(cb: (reason: string) => void) {
-        this.endCbs.push(cb);
-    }
-
-    async close(): Promise<void> {
-        if (this.ended) return;
-        this.ended = true;
-        const r = await this.call("mcp_stop", { id: this.id });
-        if (r.isError) throw new Error(r.text);
     }
 }
 

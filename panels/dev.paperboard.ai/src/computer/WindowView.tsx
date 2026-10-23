@@ -1,11 +1,12 @@
 // One of the computer's windows, live: frames are polled while its tab is
 // shown (one request in flight, unchanged frames skipped by hash, slower
-// while the shell is in the background). Clicking, scrolling or typing in it
+// while the shell is in the background). Clicking, scrolling or typing in it,
+// going somewhere from its address bar, or answering a dialog the page shows
 // takes control of the computer first (onUse), and the input follows.
 
 import { Show, createEffect, createSignal, on, onCleanup } from "solid-js";
-import { PaperButton, PaperEmptyState, PaperLoader, PaperText } from "@mileniumhq/paperui";
-import type { ComputerWindow, InputEvent } from "../contract";
+import { PaperButton, PaperEmptyState, PaperIcon, PaperInput, PaperLoader, PaperText } from "@mileniumhq/paperui";
+import type { ComputerWindow, InputEvent, PageDialog } from "../contract";
 import type { Agent } from "../lib/agent";
 import { enqueue, keyEvent } from "./input";
 import styles from "./WindowView.module.css";
@@ -30,6 +31,7 @@ export function WindowView(props: {
     const [size, setSize] = createSignal({ width: props.window.width, height: props.window.height });
     const [error, setError] = createSignal<string | null>(null);
     const [inputError, setInputError] = createSignal<string | null>(null);
+    const [dialog, setDialog] = createSignal<PageDialog | null>(null);
     let img: HTMLImageElement | undefined;
     let hash: string | null = null;
     let polling = false;
@@ -63,6 +65,7 @@ export function WindowView(props: {
                     continue;
                 }
                 const f = await props.agent.frame(props.window.id, hash);
+                setDialog(f.dialog);
                 if (!f.same) {
                     hash = f.hash;
                     setSrc(`data:image/jpeg;base64,${f.frame}`);
@@ -111,6 +114,32 @@ export function WindowView(props: {
         }
     }
 
+    // ------------------------------------------------------------- the address bar and dialogs
+
+    const [address, setAddress] = createSignal<string | null>(null);
+    // the address as typed until it's sent; the page's own address otherwise
+    createEffect(on(() => props.window.url, () => setAddress(null), { defer: true }));
+    const shownAddress = () => address() ?? (props.window.url === "about:blank" ? "" : props.window.url);
+    const go = async (to: string) => {
+        try {
+            await props.onUse();
+            await props.agent.go(props.window.id, to);
+            setAddress(null);
+            setInputError(null);
+            wake?.();
+        } catch (e) {
+            setInputError(e instanceof Error ? e.message : String(e));
+        }
+    };
+    const [answer, setAnswer] = createSignal("");
+    const reply = (accept: boolean) => {
+        const d = dialog();
+        if (!d) return;
+        // a prompt's answer is typed into it; anything else is accepted with Return or dismissed with Escape
+        send(accept && d.type === "prompt" ? { type: "text", text: answer() } : { type: "key", keys: accept ? "Return" : "Escape" }, true);
+        setAnswer("");
+    };
+
     /** a pointer position in the window's own pixels */
     const point = (e: MouseEvent) => {
         const r = img!.getBoundingClientRect();
@@ -121,6 +150,63 @@ export function WindowView(props: {
 
     return (
         <div class={styles.view}>
+            <form
+                class={styles.bar}
+                aria-label="Address bar"
+                onSubmit={(e) => {
+                    e.preventDefault();
+                    const to = shownAddress().trim();
+                    if (to) void go(to);
+                }}
+            >
+                <PaperButton icon size="small" variant="text" type="button" aria-label="Back" title="Back" onClick={() => void go("back")}>
+                    <PaperIcon>arrow_back</PaperIcon>
+                </PaperButton>
+                <PaperButton icon size="small" variant="text" type="button" aria-label="Forward" title="Forward" onClick={() => void go("forward")}>
+                    <PaperIcon>arrow_forward</PaperIcon>
+                </PaperButton>
+                <PaperButton icon size="small" variant="text" type="button" aria-label="Reload" title="Reload" onClick={() => void go("reload")}>
+                    <PaperIcon>refresh</PaperIcon>
+                </PaperButton>
+                <PaperInput
+                    class={styles.address}
+                    name="address"
+                    aria-label="Address"
+                    compact
+                    placeholder="Type a web address"
+                    value={shownAddress()}
+                    maxLength={2048}
+                    onInput={(e) => setAddress(e.currentTarget.value)}
+                />
+            </form>
+            <Show when={dialog()}>
+                {(d) => (
+                    <form
+                        class={styles.dialog}
+                        role="alertdialog"
+                        aria-label={d().type === "beforeunload" ? "The page asks whether to leave it" : "The page asks"}
+                        onSubmit={(e) => {
+                            e.preventDefault();
+                            reply(true);
+                        }}
+                    >
+                        <PaperText size={2}>{d().type === "beforeunload" ? "Leave this page? Changes you made may not be saved." : d().message || "The page is waiting."}</PaperText>
+                        <Show when={d().type === "prompt"}>
+                            <PaperInput compact name="answer" aria-label="Answer" value={answer()} maxLength={2000} onInput={(e) => setAnswer(e.currentTarget.value)} />
+                        </Show>
+                        <div class={styles.dialogActions}>
+                            <Show when={d().type !== "alert"}>
+                                <PaperButton size="small" type="button" onClick={() => reply(false)}>
+                                    {d().type === "beforeunload" ? "Stay" : "Cancel"}
+                                </PaperButton>
+                            </Show>
+                            <PaperButton size="small" variant="primary" type="submit">
+                                {d().type === "beforeunload" ? "Leave" : "OK"}
+                            </PaperButton>
+                        </div>
+                    </form>
+                )}
+            </Show>
             <div class={styles.stage}>
                 <Show
                     when={!error()}

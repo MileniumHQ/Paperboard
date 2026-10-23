@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { GuestWire, HttpWire, McpClient, StdioWire, toToolResult, type GuestCall } from "../src/service/mcpClient";
+import { HttpWire, McpClient, StdioWire, toToolResult } from "../src/service/mcpClient";
 import { ECHO_TOOL, FakeMcpProcesses, answer, fakeHttpServer, fakeServer } from "./fakeMcp";
 import { until } from "./fakeHost";
 
@@ -132,43 +132,6 @@ describe("over streamable HTTP", () => {
         stops.push(() => hang.stop(true));
         const wire = new HttpWire({ url: `http://127.0.0.1:${hang.port}/`, headers: {} });
         await expect(wire.request("initialize", {}, 50)).rejects.toThrow(/didn't answer/);
-    });
-});
-
-describe("through the guest agent's relay", () => {
-    function relay(): { call: GuestCall; calls: { tool: string; args: any }[] } {
-        const calls: { tool: string; args: any }[] = [];
-        const server = fakeServer();
-        const call: GuestCall = async (tool, args) => {
-            calls.push({ tool, args });
-            if (tool === "mcp_rpc") {
-                const reply = answer(server, (args as any).message);
-                return { text: JSON.stringify(reply ?? {}) };
-            }
-            return { text: "ok" };
-        };
-        return { call, calls };
-    }
-
-    test("start by argv, relay messages, stop", async () => {
-        const { call, calls } = relay();
-        const wire = await GuestWire.start(call, { id: "files", argv: ["npx", "-y", "pkg"], env: { A: "1" } });
-        const client = new McpClient(wire);
-        await client.initialize();
-        expect((await client.listTools()).map((t) => t.name)).toEqual([ECHO_TOOL.name]);
-        await client.close();
-        expect(calls[0]).toEqual({ tool: "mcp_start", args: { id: "files", argv: ["npx", "-y", "pkg"], env: { A: "1" } } });
-        expect(calls.at(-1)!.tool).toBe("mcp_stop");
-    });
-
-    test("a guest that lost the server ends the wire; a guest that refuses start is the start's failure", async () => {
-        const call: GuestCall = async (tool) => (tool === "mcp_start" ? { text: "started" } : { isError: true, text: "no such server" });
-        const wire = await GuestWire.start(call, { id: "files", argv: ["x"], env: {} });
-        const ended: string[] = [];
-        wire.onEnd((r) => ended.push(r));
-        await expect(wire.request("tools/list", {}, 1000)).rejects.toThrow(/no such server/);
-        expect(ended).toEqual(["no such server"]);
-        await expect(GuestWire.start(async () => ({ isError: true, text: "Your computer is off right now." }), { id: "x", argv: ["x"], env: {} })).rejects.toThrow(/off right now/);
     });
 });
 

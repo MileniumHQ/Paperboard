@@ -25,18 +25,9 @@ function setup(initial: unknown = null) {
     let stored: unknown = initial;
     const writes: ToolsConfig[] = [];
     const views: ToolsView[] = [];
-    const guestCalls: { tool: string; args: any }[] = [];
-    let ready = true;
     let clock = 1_000_000;
-    const guestServer = fakeServer();
     const deps: ServersDeps = {
         host: { start: (o) => procs.start(o), write: (id, d) => procs.write(id, d), kill: procs.kill, exists: procs.exists, onStdout: procs.onStdout, onStderr: procs.onStderr, onExit: procs.onExit, which: (c) => (c === "server" ? "/usr/bin/server" : null) },
-        guest: async (tool, args) => {
-            guestCalls.push({ tool, args });
-            if (tool === "mcp_rpc") return { text: JSON.stringify(answer(guestServer, (args as any).message) ?? {}) };
-            return { text: "ok" };
-        },
-        computerReady: () => ready,
         store: { read: async () => stored, write: async (c) => void (writes.push(c), (stored = c)) },
         vault,
         onChange: (v) => views.push(v),
@@ -44,9 +35,8 @@ function setup(initial: unknown = null) {
     };
     const servers = new McpServers(deps);
     return {
-        servers, procs, secrets, writes, views, guestCalls,
+        servers, procs, secrets, writes, views,
         get stored() { return stored; },
-        setReady: (v: boolean) => (ready = v),
         advance: (ms: number) => (clock += ms),
     };
 }
@@ -183,21 +173,13 @@ describe("a server's life", () => {
         expect(t.servers.config.servers.map((s) => s.name)).toEqual(["files"]);
     });
 
-    test("a server inside the computer starts there, and waits while the computer is off", async () => {
+    test("a server saved for the old VM computer stays off, failed with how to fix it, and never runs anywhere", async () => {
         t = setup();
         await t.servers.load();
-        await t.servers.save(stdio("inside", { where: "computer", command: "npx", args: ["-y", "pkg"], env: { A: "1" } }));
-        t.setReady(false);
+        await t.servers.save(stdio("inside", { where: "computer", command: "server" }));
         await t.servers.warm();
-        expect(t.servers.status()[0]).toMatchObject({ phase: "stopped", error: "its computer isn't running" });
-        expect(t.guestCalls).toHaveLength(0);
-        t.setReady(true);
-        await t.servers.warm();
-        expect(t.guestCalls[0]).toEqual({ tool: "mcp_start", args: { id: "inside", argv: ["npx", "-y", "pkg"], env: { A: "1" } } });
-        expect(t.servers.status()[0]).toMatchObject({ phase: "running", tools: 1 });
-        await t.servers.shutdown();
-        expect(t.guestCalls.at(-1)!.tool).toBe("mcp_stop");
-        expect(t.procs.started).toHaveLength(0); // never a host process
+        expect(t.servers.status()[0]).toMatchObject({ phase: "failed", error: expect.stringMatching(/Edit it to run on this computer/) });
+        expect(t.procs.started).toHaveLength(0);
     });
 
     test("a disabled server is not started", async () => {

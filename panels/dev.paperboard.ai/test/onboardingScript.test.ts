@@ -5,7 +5,7 @@ import { describe, expect, it } from "bun:test";
 import { scriptFor, type Script } from "../src/onboarding/script";
 import { parse } from "../src/onboarding/speech";
 
-const lines = (s: Script, name: string) => [...s.named(name), ...s.computer, ...s.later, ...s.budget, ...s.install];
+const lines = (s: Script, name: string) => [...s.named(name), ...s.computer, ...s.later, ...s.install];
 
 describe("the setup script", () => {
     it("is Verity's own when the agent is named Verity, whatever the case or spacing", () => {

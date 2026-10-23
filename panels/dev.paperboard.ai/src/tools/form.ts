@@ -16,7 +16,8 @@ export interface Row {
 export interface Form {
     editing: boolean;
     name: string;
-    where: "host" | "computer";
+    /** it was saved to run inside the agent's old VM computer: saving it runs it on this computer (TODO(remove after v0.3)) */
+    wasInsideComputer: boolean;
     transport: "stdio" | "http";
     command: string;
     /** one argument per line */
@@ -29,7 +30,7 @@ export interface Form {
 let keys = 0;
 export const newRow = (o: Partial<Row> = {}): Row => ({ key: ++keys, name: "", kind: "value", value: "", typed: "", ...o });
 
-export const blankForm = (): Form => ({ editing: false, name: "", where: "host", transport: "stdio", command: "", args: "", url: "", rows: [], enabled: true });
+export const blankForm = (): Form => ({ editing: false, name: "", wasInsideComputer: false, transport: "stdio", command: "", args: "", url: "", rows: [], enabled: true });
 
 /** the vault name the service keeps a row's secret under: the row's own name, made plain */
 export const secretNameOf = (rowName: string) => rowName.toLowerCase().replace(/[^a-z0-9_.-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 64);
@@ -40,7 +41,7 @@ export function formFromSpec(s: ServerSpec): Form {
     return {
         editing: true,
         name: s.name,
-        where: s.where,
+        wasInsideComputer: s.where === "computer",
         transport: s.transport,
         command: s.transport === "stdio" ? s.command : "",
         args: s.transport === "stdio" ? s.args.join("\n") : "",
@@ -60,7 +61,7 @@ export function specFromForm(f: Form): ServerSpec {
     if (f.transport === "http") return { name: f.name.trim(), where: "host", transport: "http", url: f.url.trim(), headers: values, enabled: f.enabled };
     return {
         name: f.name.trim(),
-        where: f.where,
+        where: "host",
         transport: "stdio",
         command: f.command.trim(),
         // an argument per line; a blank line is not an argument

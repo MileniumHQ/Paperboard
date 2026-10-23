@@ -15,8 +15,8 @@ import { createSpeaker, type Speaker } from "./speech";
 import { scriptFor } from "./script";
 import { SEARCH_MODELS_FROM, createModels, harnessDescription, harnessName, loadedModels } from "../lib/brains";
 import BrainLogo from "../lib/BrainLogo";
-import { Budget, DEFAULT_BUDGET, SetupProgress } from "../computer/Computer";
-import { LIMITS, characterOf, type ComputerBudget, type Harness, type HarnessInfo } from "../contract";
+import { SetupProgress } from "../computer/Computer";
+import { LIMITS, characterOf, type Harness, type HarnessInfo } from "../contract";
 import type { Agent } from "../lib/agent";
 import styles from "./Onboarding.module.css";
 
@@ -28,7 +28,8 @@ const NAMES = ["Pip", "Juniper", "Biscuit", "Nova", "Pebble", "Moss", "Echo", "C
 
 const DEFAULT_MODEL = "default";
 
-const STEP = { name: 0, brain: 1, model: 2, computer: 3, budget: 4, install: 5 } as const;
+// the last step is the answer to the computer: setting it up, or not yet
+const STEP = { name: 0, brain: 1, model: 2, computer: 3, last: 4 } as const;
 
 
 /**
@@ -53,7 +54,6 @@ function Flow(props: { agent: Agent; onSaving: () => void; onDone: () => void })
     const [harness, setHarness] = createSignal<Harness>();
     const [model, setModel] = createSignal<string>();
     const [computer, setComputer] = createSignal<"setup" | "later">();
-    const [budget, setBudget] = createSignal<ComputerBudget>(DEFAULT_BUDGET);
     const placeholder = NAMES[Math.floor(Math.random() * NAMES.length)]!;
 
     // saving belongs to the service: an error here is its answer, shown with a way to try again
@@ -65,7 +65,7 @@ function Flow(props: { agent: Agent; onSaving: () => void; onDone: () => void })
         props.onSaving();
         try {
             await agent.setup({ name: name().trim(), harness: harness()!, model: model() === DEFAULT_MODEL ? null : (model() ?? null) });
-            if (computer() === "setup") await agent.installComputer(budget());
+            if (computer() === "setup") await agent.installComputer();
             return true;
         } catch (e) {
             setSaveError(e instanceof Error ? e.message : String(e));
@@ -85,8 +85,7 @@ function Flow(props: { agent: Agent; onSaving: () => void; onDone: () => void })
             finishLabel={finishLabel()}
             nextLabel={undefined}
             onComplete={async () => {
-                // "Not yet" finishes at the budget step: save, then chat.
-                // Setting up finishes at the install step, already saved.
+                // "Not yet" finishes here: save, then chat. Setting up finishes already saved.
                 if (computer() === "setup" || (await save())) props.onDone();
             }}
         >
@@ -103,8 +102,6 @@ function Flow(props: { agent: Agent; onSaving: () => void; onDone: () => void })
                 setModel={setModel}
                 computer={computer}
                 setComputer={setComputer}
-                budget={budget}
-                setBudget={setBudget}
                 save={save}
                 saving={saving}
                 saveError={saveError}
@@ -130,8 +127,6 @@ function Scenes(props: {
     setModel: Setter<string | undefined>;
     computer: Getter<"setup" | "later" | undefined>;
     setComputer: Setter<"setup" | "later">;
-    budget: Getter<ComputerBudget>;
-    setBudget: Setter<ComputerBudget>;
     save: () => Promise<boolean>;
     saving: Getter<boolean>;
     saveError: Getter<string | null>;
@@ -196,10 +191,8 @@ function Scenes(props: {
                 return Boolean(props.model());
             case STEP.computer:
                 return Boolean(props.computer());
-            case STEP.budget:
-                return !props.saving();
-            case STEP.install:
-                return machine().phase === "ready";
+            case STEP.last:
+                return props.computer() === "later" ? !props.saving() : machine().phase === "ready";
             default:
                 return true;
         }
@@ -230,8 +223,8 @@ function Scenes(props: {
             face.bounce();
             return speaker.say(scriptFor(name()).computer);
         },
-        [STEP.budget]: () => speaker.say(props.computer() === "later" ? scriptFor(name()).later : scriptFor(name()).budget),
-        [STEP.install]: async () => {
+        [STEP.last]: async () => {
+            if (props.computer() === "later") return speaker.say(scriptFor(name()).later);
             const ok = await speaker.say(scriptFor(name()).install);
             if (!ok) return false;
             if (!(await speaker.wait(900))) return false;
@@ -265,7 +258,7 @@ function Scenes(props: {
 
     // with nothing on screen but the agent, it sits in the middle of the page
     const alone = () =>
-        !revealed() || (wizard.currentStep() === STEP.budget && props.computer() === "later" && !props.saveError());
+        !revealed() || (wizard.currentStep() === STEP.last && props.computer() === "later" && !props.saveError());
 
     return (
         <div class={styles.flow}>
@@ -370,7 +363,7 @@ function Scenes(props: {
                 <Reveal when={revealed()}>
                     <PaperSelector name="computer" value={props.computer()} onValueChange={(v) => props.setComputer(v as "setup" | "later")}>
                         <Show when={machine().phase !== "unsupported"}>
-                            <PaperSelectorItem value="setup" icon="computer" description="This uses about 3.5 GB of storage and could take a while.">
+                            <PaperSelectorItem value="setup" icon="computer" description="A web browser of its own, about 400 MB of storage.">
                                 Set up {name()}'s computer
                             </PaperSelectorItem>
                         </Show>
@@ -384,21 +377,14 @@ function Scenes(props: {
                 </Reveal>
             </PaperWizardStep>
 
-            <PaperWizardStep class={styles.step} index={STEP.budget} canProceed={ready()}>
-                <Show when={props.computer() === "setup"}>
-                    <Reveal when={revealed()}>
-                        <Budget name={name()} value={props.budget()} onChange={props.setBudget} />
-                    </Reveal>
-                </Show>
+            {/* always there, so the computer's step is never taken for the last one before it's answered */}
+            <PaperWizardStep class={styles.step} index={STEP.last} canProceed={ready()}>
                 <Show when={props.computer() === "later" && props.saveError()}>
                     <p class={styles.error} role="alert">
                         Couldn't save: {props.saveError()}
                     </p>
                 </Show>
-            </PaperWizardStep>
-
-            <Show when={props.computer() === "setup"}>
-                <PaperWizardStep class={styles.step} index={STEP.install} canProceed={ready()}>
+                <Show when={props.computer() === "setup"}>
                     <Show when={revealed()}>
                         <div class={styles.install}>
                             <h2 class={styles.title}>Setting up {name()}'s computer</h2>
@@ -429,8 +415,8 @@ function Scenes(props: {
                             </Switch>
                         </div>
                     </Show>
-                </PaperWizardStep>
-            </Show>
+                </Show>
+            </PaperWizardStep>
             <div class={styles.below} />
         </div>
     );

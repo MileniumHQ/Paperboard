@@ -1,7 +1,7 @@
 // A stand-in for the daemon's process API: children are records, their
 // output and exit are driven by the test.
 
-import type { StartOptions } from "../src/service/computer";
+import type { StartOptions } from "../src/service/browser";
 
 type Listener<T> = (v: T) => void;
 
@@ -37,6 +37,9 @@ export class FakeProcesses {
 
     stdout(id: string, data: string) {
         for (const cb of [...(this.listeners.stdout.get(id) ?? [])]) cb(data);
+    }
+    stderr(id: string, data: string) {
+        for (const cb of [...(this.listeners.stderr.get(id) ?? [])]) cb(data);
     }
     exit(id: string, code: number | undefined) {
         if (!this.alive.delete(id)) return;

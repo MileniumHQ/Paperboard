@@ -5,6 +5,38 @@
     min-height: 0;
 }
 
+/* the window's own toolbar: a headless browser has none */
+.bar {
+    display: flex;
+    align-items: center;
+    gap: var(--paper-uigap-half);
+    padding: var(--paper-uigap-half) var(--paper-uigap);
+}
+
+.address {
+    flex: 1;
+    min-width: 0;
+}
+
+/* a dialog the page waits on; the page itself is paused behind it */
+.dialog {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--paper-uigap);
+    margin: 0 var(--paper-uigap);
+    padding: var(--paper-uigap);
+    border-radius: var(--paper-border-radius-half);
+    box-shadow: 0 0 0 var(--paper-border-width) var(--paper-border);
+    background: var(--paper-surface);
+}
+
+.dialogActions {
+    display: flex;
+    gap: var(--paper-uigap-half);
+    margin-left: auto;
+}
+
 .inputError {
     padding: 0 var(--paper-uigap) var(--paper-uigap-half);
 }

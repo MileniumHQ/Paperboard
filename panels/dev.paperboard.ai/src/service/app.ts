@@ -11,12 +11,11 @@ import {
     PANEL_ID,
     EVENTS,
     type AiState,
-    type ComputerBudget,
     type Harness,
     type HarnessInfo,
     type Settings,
 } from "../contract";
-import { Computer, type ComputerHost, hostSupport } from "./computer";
+import { BrowserComputer, type ComputerHost } from "./browser";
 import { startComputerMcp, type ComputerMcp } from "./computerMcp";
 import { Conversation, type TurnHost } from "./conversation";
 import { HARNESS_COMMANDS, HARNESS_NAMES } from "./harness";
@@ -68,7 +67,7 @@ export interface AppContext {
 
 export class AiApp {
     private ctx!: AppContext;
-    computer!: Computer;
+    computer!: BrowserComputer;
     conversation!: Conversation;
     memory!: Memory;
     routines!: Routines;
@@ -95,7 +94,7 @@ export class AiApp {
             throw e;
         }
         this.settle(null);
-        // booting can take minutes; the UI follows it through state.computer
+        // the UI follows starting through state.computer
         void this.computer.init().catch((e) => console.error("[ai] the computer didn't start:", String(e)));
     }
 
@@ -107,8 +106,6 @@ export class AiApp {
         const t = this.host.tools;
         this.servers = new McpServers({
             host: { start: this.host.start, write: t.write, kill: this.host.kill, exists: this.host.exists, onStdout: this.host.onStdout, onStderr: this.host.onStderr, onExit: this.host.onExit, which: this.host.which },
-            guest: (tool, args) => this.computer.callTool(tool, args),
-            computerReady: () => this.computer.state.phase === "ready",
             store: { read: t.readTools, write: t.writeTools },
             vault: t.vault,
             onChange: (view) => this.ctx.emit(TOOLS_EVENT, view),
@@ -154,11 +151,11 @@ export class AiApp {
             },
         };
         this.mcp = await startComputerMcp(this.tools);
-        this.computer = new Computer({
+        // the VM computer's folder ("computer") is left as it is: it's the user's, and nothing reads it anymore
+        this.computer = new BrowserComputer({
             host: this.host,
-            dir: path.join(root, "computer"),
-            storagePath: "computer",
-            support: hostSupport,
+            dir: path.join(root, "browser"),
+            storagePath: "browser",
             onState: (computer) => this.ctx.setState({ computer }),
         });
         this.conversation = new Conversation({
@@ -231,10 +228,9 @@ export class AiApp {
         return HARNESSES.map((id) => ({ id, installed: this.host.which(HARNESS_COMMANDS[id]) !== null, version: null }));
     }
 
-    installComputer(input: unknown) {
-        const budget = parseBudget((input as { budget?: unknown } | undefined)?.budget);
-        // minutes of work: accepted now, followed through state.computer
-        void this.computer.install(budget).catch((e) => console.error("[ai] computer setup failed:", String(e)));
+    installComputer() {
+        // a download and an unpack: accepted now, followed through state.computer
+        void this.computer.install().catch((e) => console.error("[ai] computer setup failed:", String(e)));
         return { accepted: true };
     }
 
@@ -246,13 +242,6 @@ export class AiApp {
     async stopComputer() {
         await this.computer.stop();
         return { stopped: true };
-    }
-
-    /** The memory the computer gets from its next start. */
-    async setMemory(i: Record<string, unknown>) {
-        const budget = parseBudget({ memoryGb: i.memoryGb, diskGb: this.computer.state.budget?.diskGb });
-        await this.computer.setBudget(budget);
-        return { saved: true, appliesOnRestart: this.computer.state.phase === "ready" || this.computer.state.phase === "starting" };
     }
 
     async startOver() {
@@ -318,6 +307,11 @@ export class AiApp {
         return this.computer.view("view_close", { window: i.window });
     }
 
+    /** The user, in control, sends a window somewhere: an address, back, forward or reload. */
+    go(i: Record<string, unknown>) {
+        return this.computer.view("view_go", { window: i.window, to: i.to });
+    }
+
     /** take (or renew) control with take: true; hand it back with take: false */
     control(i: Record<string, unknown>) {
         if (i.take === true) this.computer.takeControl();
@@ -342,17 +336,3 @@ export function parseSettings(v: unknown): Settings | null {
     }
     return { name, harness: s.harness as Harness, model };
 }
-
-export function parseBudget(v: unknown): ComputerBudget {
-    const b = (v ?? {}) as Record<string, unknown>;
-    const memoryGb = Number(b.memoryGb);
-    const diskGb = Number(b.diskGb);
-    if (!Number.isInteger(memoryGb) || memoryGb < LIMITS.memoryGb.min || memoryGb > LIMITS.memoryGb.max) {
-        throw new Error(`memory must be ${LIMITS.memoryGb.min}–${LIMITS.memoryGb.max} GB`);
-    }
-    if (!Number.isInteger(diskGb) || diskGb < LIMITS.diskGb.min || diskGb > LIMITS.diskGb.max) {
-        throw new Error(`storage must be ${LIMITS.diskGb.min}–${LIMITS.diskGb.max} GB`);
-    }
-    return { memoryGb, diskGb };
-}
-

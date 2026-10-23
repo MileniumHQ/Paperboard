@@ -29,7 +29,7 @@ describe("the computer's MCP endpoint", () => {
     test("refuses requests without this generation's token", async () => {
         const calls: string[] = [];
         mcp = await startComputerMcp(box(async (name) => (calls.push(name), { text: "" })));
-        const call = { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "shell", arguments: { command: "id" } } };
+        const call = { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "open", arguments: { what: "example.com" } } };
         expect((await post(call, null)).status).toBe(401);
         expect((await post(call, "0".repeat(64))).status).toBe(401);
         expect((await post(call, mcp.token + "x")).status).toBe(401);
@@ -46,8 +46,8 @@ describe("the computer's MCP endpoint", () => {
         const list = await (await post({ jsonrpc: "2.0", id: 1, method: "tools/list" })).json();
         expect(list.result.tools.map((t: { name: string }) => t.name)).toEqual(COMPUTER_TOOLS.map((t) => t.name));
 
-        const r = await (await post({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "shell", arguments: { command: "id" } } })).json();
-        expect(seen).toEqual([["shell", { command: "id" }]]);
+        const r = await (await post({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "open", arguments: { what: "example.com" } } })).json();
+        expect(seen).toEqual([["open", { what: "example.com" }]]);
         expect(r.result).toEqual({
             content: [
                 { type: "text", text: "uid=1000" },

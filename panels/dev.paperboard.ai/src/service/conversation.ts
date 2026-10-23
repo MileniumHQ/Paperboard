@@ -19,7 +19,7 @@ import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { LIMITS, PANEL_ID, type Attachment, type ChatEntry, type ChatState, type Harness, type PastConversation, type Settings, type SignInEntry, type WaitingMessage } from "../contract";
-import type { StartOptions } from "./computer";
+import type { StartOptions } from "./browser";
 import { Attachments, sizeText } from "./attachments";
 import { AcpTurn, type AcpEvent } from "./acp";
 import { HARNESS_NAMES, parseTurnLine, turnLaunch } from "./harness";

@@ -17,7 +17,7 @@ export const MCP_TOKEN_ENV = "PAPERBOARD_COMPUTER_MCP_TOKEN";
 const MAX_BODY = 1 << 20;
 // a harness opens a handful of connections; anything past this is not one
 const MAX_CONNECTIONS = 16;
-const REQUEST_TIMEOUT_MS = 15 * 60_000; // past the guest's longest shell command
+const REQUEST_TIMEOUT_MS = 15 * 60_000; // past the longest tool call (a sign-in waits for the user)
 
 export interface ToolResult {
     text: string;

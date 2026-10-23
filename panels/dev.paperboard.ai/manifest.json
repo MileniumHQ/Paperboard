@@ -2,7 +2,7 @@
     "name": "AI",
     "id": "dev.paperboard.ai",
     "version": "0.3.0",
-    "description": "An agent you text, with its own computer. It thinks with Codex or Claude.",
+    "description": "An agent you text, with a web browser of its own. It thinks with Codex or Claude.",
     "publisher": "Paperboard",
     "base": "./dist/index.html",
     "service": "./dist/service.js",
@@ -10,23 +10,11 @@
     "store": {
         "services": [
             {
-                "name": "Debian",
-                "detail": "The agent's computer, downloaded once"
-            },
-            {
                 "name": "Helium",
-                "detail": "The browser on the agent's computer"
+                "detail": "The agent's web browser, downloaded once"
             }
         ],
         "credits": [
-            {
-                "name": "QEMU",
-                "detail": "Running the agent's computer"
-            },
-            {
-                "name": "Debian",
-                "detail": "The agent's operating system"
-            },
             {
                 "name": "Helium",
                 "detail": "The agent's browser"
@@ -39,15 +27,15 @@
             },
             {
                 "name": "Computer",
-                "detail": "Linux on x86-64 with KVM, and QEMU installed"
+                "detail": "Linux, macOS or Windows, 64-bit"
             },
             {
                 "name": "Storage",
-                "detail": "About 3.5 GB, up to the limit you set"
+                "detail": "About 400 MB"
             },
             {
                 "name": "RAM",
-                "detail": "Up to the limit you set, 4 GB by default"
+                "detail": "About 500 MB while the browser is on"
             }
         ]
     }

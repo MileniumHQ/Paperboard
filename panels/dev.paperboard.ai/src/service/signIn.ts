@@ -49,9 +49,9 @@ export const SIGN_IN_TOOLS: ToolSpec[] = [
 ];
 
 export interface SignInDeps {
-    /** the guest's sign_in_prepare, as the agent (refused while the user has the computer) */
+    /** the computer's sign_in_prepare, as the agent (refused while the user has the computer) */
     prepare(args: Record<string, unknown>): Promise<ToolResult>;
-    /** the guest's view_sign_in: types the values in and presses submit */
+    /** the computer's view_sign_in: types the values in and presses submit */
     fill(args: { id: string; values: string[] }): Promise<unknown>;
     /** add or update the request's bubble in the conversation */
     post(entry: SignInEntry): void;

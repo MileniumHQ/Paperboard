@@ -13,7 +13,7 @@ import styles from "./App.module.css";
 
 const HELLO: { text: string; expression: Expression; spot: Spot }[] = [
     { text: "Hi! I'm your new AI.", expression: "happy", spot: "home" },
-    { text: "I work best with a computer of my own, a little Debian machine that lives right here.", expression: "thinking", spot: "left" },
+    { text: "I work best with a computer of my own, a little web browser that lives right here.", expression: "thinking", spot: "left" },
     { text: "Want me to set one up?", expression: "happy", spot: "home" },
 ];
 
