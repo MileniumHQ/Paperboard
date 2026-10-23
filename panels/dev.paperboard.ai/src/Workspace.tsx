@@ -1,5 +1,5 @@
 // The panel once the agent exists: the conversation, and one menu that opens a
-// modal with a sidebar (computer, memories, tools, settings) beside the page.
+// modal with a sidebar (computer, memories, routines, tools, settings) beside the page.
 
 import { For, Match, Switch, createSignal, onCleanup } from "solid-js";
 import { PaperMenu, PaperMenuItem, PaperModal } from "@mileniumhq/paperui";
@@ -7,16 +7,18 @@ import Chat from "./chat/Chat";
 import ComputerView from "./computer/ComputerView";
 import { createFace } from "./face/controller";
 import Memories from "./memories/Memories";
+import Routines from "./routines/Routines";
 import Settings from "./settings/Settings";
 import Tools from "./tools/Tools";
 import type { Agent } from "./lib/agent";
 import styles from "./Workspace.module.css";
 
-export type Page = "computer" | "memories" | "tools" | "settings";
+export type Page = "computer" | "memories" | "routines" | "tools" | "settings";
 
 const PAGES: { id: Page; title: string; icon: string }[] = [
     { id: "computer", title: "Computer", icon: "computer" },
     { id: "memories", title: "Memories", icon: "neurology" },
+    { id: "routines", title: "Routines", icon: "event_repeat" },
     { id: "tools", title: "Tools", icon: "construction" },
     { id: "settings", title: "Settings", icon: "settings" },
 ];
@@ -53,6 +55,9 @@ export default function Workspace(props: { agent: Agent }) {
                             </Match>
                             <Match when={page() === "memories"}>
                                 <Memories agent={agent} />
+                            </Match>
+                            <Match when={page() === "routines"}>
+                                <Routines agent={agent} />
                             </Match>
                             <Match when={page() === "tools"}>
                                 <Tools agent={agent} />

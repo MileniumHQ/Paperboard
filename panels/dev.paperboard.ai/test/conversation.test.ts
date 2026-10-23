@@ -369,3 +369,54 @@ describe("texting", () => {
         expect(emitted.some((e) => e.kind === "error")).toBe(false);
     });
 });
+
+describe("notices (a routine is due)", () => {
+    const say = (conv: Conversation, text: string) => messagesToolset({ say: (t, r) => conv.say(t, r) }).call("send_message", { text });
+    const agentTexts = (emitted: ChatEntry[]) => emitted.filter((e) => e.kind === "agent").map((e) => ("text" in e ? e.text : ""));
+
+    test("a notice runs a turn that isn't the user's: no bubble for it, no typing, and its texts show", async () => {
+        const { conv, host, emitted, states } = setup();
+        conv.notice("Your routine [abc123] is due: text a flag fact.");
+        await until(() => host.started.length === 1);
+        expect(host.started[0]!.args.at(-1)).toBe("[from Paperboard, not the user] Your routine [abc123] is due: text a flag fact.");
+        expect(emitted.some((e) => e.kind === "user")).toBe(false);
+        expect(states.some((s) => s.busy)).toBe(false);
+        expect((await say(conv, "Nepal's flag has 5 sides!")).isError).toBeUndefined();
+        host.exit(TURN_PROC_ID, 0);
+        // the next message gets its own turn once this one is over
+        conv.send("cool");
+        await until(() => host.started.length === 2);
+        expect(agentTexts(emitted)).toEqual(["Nepal's flag has 5 sides!"]);
+        expect(emitted.some((e) => e.kind === "error")).toBe(false);
+    });
+
+    test("a notice turn may end without a text; its plain output is a note to itself, not a bubble", async () => {
+        const { conv, host, emitted } = setup();
+        conv.notice("Your routine [abc123] is due: check the forum.");
+        await until(() => host.started.length === 1);
+        host.stdout(TURN_PROC_ID, reply("Nothing new on the forum, no need to text."));
+        host.exit(TURN_PROC_ID, 0);
+        conv.send("hi");
+        await until(() => host.started.length === 2);
+        expect(agentTexts(emitted)).toEqual([]);
+        expect(emitted.some((e) => e.kind === "error")).toBe(false);
+    });
+
+    test("a notice waits for the running turn, and is read with the user's messages", async () => {
+        const { conv, host, states } = setup();
+        conv.send("first");
+        await until(() => host.started.length === 1);
+        conv.notice("routine due");
+        const second = conv.send("second");
+        host.exit(TURN_PROC_ID, 0);
+        await until(() => host.started.length === 2);
+        expect(host.started[1]!.args.at(-1)).toBe(`[${second.id}] second\n\n[from Paperboard, not the user] routine due`);
+        // the user's message is in this turn, so the agent is typing
+        expect(busy(states)).toBe(true);
+    });
+
+    test("there's no notice before the agent is set up", () => {
+        const { conv } = setup({ settings: null });
+        expect(() => conv.notice("routine due")).toThrow(/isn't set up/);
+    });
+});

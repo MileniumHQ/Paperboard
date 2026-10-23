@@ -22,6 +22,7 @@ import {
     type MemoryFact,
     type MemoryList,
     type MemoryNoteInfo,
+    type Routine,
     type Settings,
     type WindowFrame,
 } from "../contract";
@@ -90,6 +91,8 @@ export function createAgent() {
         readNote: (key: string) => call<{ key: string; when: string; body: string }>(UI_ACTION_IDS.readNote, { key }),
         saveNote: (key: string, when: string, body: string) => call<MemoryNoteInfo>(UI_ACTION_IDS.saveNote, { key, when, body }),
         deleteNote: (key: string) => call(UI_ACTION_IDS.deleteNote, { key }),
+        routines: () => call<Routine[]>(UI_ACTION_IDS.routines),
+        deleteRoutine: (id: string) => call(UI_ACTION_IDS.deleteRoutine, { id }),
         windows: () => call<{ windows: ComputerWindow[] }>(UI_ACTION_IDS.windows).then((r) => r.windows),
         frame: (window: number, since: string | null) => call<WindowFrame>(UI_ACTION_IDS.frame, { window, since: since ?? undefined }),
         input: (window: number, events: InputEvent[]) => call(UI_ACTION_IDS.input, { window, events }),

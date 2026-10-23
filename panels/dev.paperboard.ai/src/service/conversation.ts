@@ -2,7 +2,10 @@
 // message continues the same thread (starting over is a deliberate reset).
 // Messages sent while the agent is busy wait, can be taken back, and are read
 // together on its next turn. The agent talks through send_message (see
-// messages.ts): each call is a bubble, added at once, mid-turn.
+// messages.ts): each call is a bubble, added at once, mid-turn. The service
+// can start a turn too, with a notice (a routine is due): the agent reads it
+// like a message that isn't from the user, and texts only if it has
+// something to say.
 //
 // A turn is the harness run as a daemon-supervised child (one at a time, id
 // TURN_PROC_ID). The transcript is an append-only JSONL file in the panel's
@@ -22,6 +25,7 @@ const THREADS = "threads.json";
 const KEEP_IN_MEMORY = 500;
 const COMPACT_AT_BYTES = 4 * 1024 * 1024;
 const MAX_QUEUED = 20;
+const MAX_NOTICES = 10;
 const MAX_LINE = 16 * 1024 * 1024; // one event can carry a screenshot
 const TURN_MS = 30 * 60_000;
 const STOP_GRACE_MS = 2_000;
@@ -57,6 +61,8 @@ export class Conversation {
     private entries: ChatEntry[] = [];
     private threads: Partial<Record<Harness, string>> = {};
     private queue: WaitingMessage[] = [];
+    /** the service's notices for the agent's next turn; not the user's, so not in the conversation */
+    private notices: string[] = [];
     private running: Promise<void> | null = null;
     private stopRequested = false;
     private closed = false;
@@ -100,6 +106,19 @@ export class Conversation {
         return { id, waiting };
     }
 
+    /**
+     * Start the agent on something the service noticed (a routine is due): read on its next turn, which may
+     * end without a text. Throws when there's no agent to tell yet.
+     */
+    notice(text: string) {
+        if (this.closed) throw new Error("the conversation is shutting down");
+        if (!this.deps.settings()) throw new Error("the agent isn't set up yet");
+        this.notices.push(text);
+        // a backlog this long means turns aren't keeping up: the oldest notice is the least useful one
+        if (this.notices.length > MAX_NOTICES) console.error("[ai] dropped a notice nobody read:", this.notices.shift()!.slice(0, 120));
+        this.pump();
+    }
+
     /** Take back a message the agent hasn't read yet. */
     unqueue(id: string) {
         const i = this.queue.findIndex((m) => m.id === id);
@@ -124,6 +143,7 @@ export class Conversation {
     /** Start over: stop, forget the conversation and the harness's threads. Asked for explicitly; it can't be undone. */
     async clear() {
         this.queue = [];
+        this.notices = [];
         this.stopRequested = true;
         await this.killTurn();
         await this.running;
@@ -164,6 +184,7 @@ export class Conversation {
     async shutdown() {
         this.closed = true;
         this.queue = [];
+        this.notices = [];
         await this.killTurn();
     }
 
@@ -171,27 +192,30 @@ export class Conversation {
 
     private pump() {
         this.state();
-        if (this.running || this.closed || this.queue.length === 0) return;
+        if (this.running || this.closed || (this.queue.length === 0 && this.notices.length === 0)) return;
         const batch = this.queue.splice(0);
+        const notices = this.notices.splice(0);
         this.stopRequested = false; // a stop asked of an earlier turn doesn't silence this one
         // read now, so now they join the conversation
         for (const m of batch) this.put({ id: m.id, at: Date.now(), kind: "user", text: m.text, ...(m.replyTo ? { replyTo: m.replyTo } : {}) });
-        const message = batch.map((m) => this.forAgent(m)).join("\n\n");
+        const message = [...batch.map((m) => this.forAgent(m)), ...notices.map((n) => `[from Paperboard, not the user] ${n}`)].join("\n\n");
         this.sent = [];
         this.answering = batch.map((m) => m.id);
-        this.running = this.turn(message)
+        this.running = this.turn(message, batch.length > 0)
             .catch((e: Error) => {
                 this.put({ id: this.newId(), at: Date.now(), kind: "error", text: e.message });
             })
             .finally(() => {
                 this.running = null;
+                this.answering = [];
                 this.stopRequested = false;
                 this.pump();
             });
         this.state();
     }
 
-    private async turn(message: string) {
+    /** One run of the harness. `forUser`: it answers the user's messages, so it must end with a reply. */
+    private async turn(message: string, forUser: boolean) {
         const settings = this.deps.settings();
         if (!settings) throw new Error("finish setting up first");
         const command = this.deps.resolve(settings.harness);
@@ -258,8 +282,9 @@ export class Conversation {
         }
         if (buf.trim()) onLine(buf);
         // plain output reaches the user only when the model never texted: a turn that did text ends with its own
-        // recap of what it sent ("I sent you two messages…"), which isn't meant for the user
-        if (this.sent.length === 0) {
+        // recap of what it sent ("I sent you two messages…"), which isn't meant for the user. A turn that only
+        // answers a notice texts with send_message or not at all: its plain output is its note to itself
+        if (this.sent.length === 0 && forUser) {
             for (const text of plain) {
                 if (!text.trim()) continue;
                 this.sent.push(text);
@@ -269,7 +294,7 @@ export class Conversation {
         if (this.stopRequested) return;
         if (failures.length) throw new Error(failures[failures.length - 1]);
         if (code !== 0) throw new Error(`the turn ended with exit ${code ?? "?"}${stderr.trim() ? `: ${lastLines(stderr)}` : ""}`);
-        if (this.sent.length === 0) throw new Error("the turn ended without a reply");
+        if (this.sent.length === 0 && forUser) throw new Error("the turn ended without a reply");
     }
 
     private async killTurn() {
@@ -317,7 +342,8 @@ export class Conversation {
     }
 
     private state() {
-        this.deps.onState({ busy: this.running !== null, waiting: this.queue.map((m) => ({ ...m })) });
+        // typing only while answering the user: a routine that finds nothing to say shows nothing
+        this.deps.onState({ busy: this.running !== null && this.answering.length > 0, waiting: this.queue.map((m) => ({ ...m })) });
     }
 
     // ------------------------------------------------------------- transcript

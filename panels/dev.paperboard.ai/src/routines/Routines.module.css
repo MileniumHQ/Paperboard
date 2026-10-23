@@ -1,0 +1,22 @@
+.routines {
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap-half);
+}
+
+.routine {
+    display: flex;
+    align-items: center;
+    gap: var(--paper-uigap);
+    padding: var(--paper-uigap-half) var(--paper-uigap);
+    border-radius: var(--paper-border-radius);
+    background: var(--paper-surface);
+}
+
+.text {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: var(--paper-uigap-half);
+    min-width: 0;
+}

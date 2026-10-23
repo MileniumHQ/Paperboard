@@ -37,6 +37,9 @@ export const UI_ACTION_IDS = {
     readNote: "ui-read-note",
     saveNote: "ui-save-note",
     deleteNote: "ui-delete-note",
+    // what the agent does on a schedule, which the user can see and cancel
+    routines: "ui-routines",
+    deleteRoutine: "ui-delete-routine",
 } as const;
 
 export const EVENTS = {
@@ -76,6 +79,12 @@ export const LIMITS = {
         bodyBytes: 64 * 1024,
         notes: 200,
     },
+    routines: {
+        count: 50,
+        whatChars: 500,
+        /** a routine that repeats runs at most this often */
+        minEveryMinutes: 15,
+    },
 } as const;
 
 /** A short durable fact: always in the agent's context. */
@@ -94,6 +103,33 @@ export interface MemoryNoteInfo {
 export interface MemoryList {
     facts: MemoryFact[];
     notes: MemoryNoteInfo[];
+}
+
+/** When a routine runs: once, at a local time on some weekdays, or every so many minutes. */
+export type RoutineSchedule =
+    | { kind: "once"; at: number }
+    // days: 0 (Sunday) to 6, in the computer's time zone
+    | { kind: "weekly"; time: string; days: number[] }
+    | { kind: "every"; minutes: number };
+
+/** Something the agent does on a schedule. */
+export interface Routine {
+    id: string;
+    /** what to do, in the agent's words to itself */
+    what: string;
+    schedule: RoutineSchedule;
+    created: number;
+    lastRun: number | null;
+    /** why its last run couldn't happen; cleared by the next one that does */
+    lastError: string | null;
+    /** null: it has no more runs */
+    next: number | null;
+}
+
+export interface RoutinesState {
+    revision: number;
+    /** the routines can't be read; none run until they can */
+    error: string | null;
 }
 
 export interface MemoryState {
@@ -171,7 +207,7 @@ export type InputEvent =
     | { type: "text"; text: string };
 
 export interface ChatState {
-    /** a turn is running */
+    /** a turn answering the user is running: the agent is typing (a routine's turn runs without it) */
     busy: boolean;
     /** messages waiting for the running turn to finish; they join the conversation when a turn reads them */
     waiting: WaitingMessage[];
@@ -190,6 +226,7 @@ export interface AiState {
     computer: ComputerState;
     chat: ChatState;
     memory: MemoryState;
+    routines: RoutinesState;
 }
 
 export type ChatEntry =
@@ -205,4 +242,5 @@ export const DEFAULT_STATE: AiState = {
     computer: { phase: "none", installed: false, budget: null, steps: [], error: null, userControl: false },
     chat: { busy: false, waiting: [] },
     memory: { revision: 0, error: null },
+    routines: { revision: 0, error: null },
 };

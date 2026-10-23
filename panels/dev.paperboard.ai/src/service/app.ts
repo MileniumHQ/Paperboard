@@ -28,6 +28,8 @@ import { TOOLS_EVENT, type ToolsConfig, type ToolsView } from "../toolsContract"
 import { listModels, type HarnessHomes } from "./models";
 import { Memory } from "./memory";
 import { messagesToolset } from "./messages";
+import { Routines } from "./routines";
+import { describeSchedule, localStamp } from "../routineText";
 import { toolbox, type Toolbox } from "./toolsets";
 export { which } from "./which";
 
@@ -64,6 +66,7 @@ export class AiApp {
     computer!: Computer;
     conversation!: Conversation;
     memory!: Memory;
+    routines!: Routines;
     private mcp: ComputerMcp | null = null;
     private tools: Toolbox | null = null;
     servers!: McpServers;
@@ -105,10 +108,22 @@ export class AiApp {
             onChange: (view) => this.ctx.emit(TOOLS_EVENT, view),
         });
         await this.servers.load();
+        this.routines = new Routines({
+            file: path.join(root, "routines.json"),
+            run: (r, late) =>
+                this.conversation.notice(
+                    `Your routine [${r.id}] is due (${describeSchedule(r.schedule)}): ${r.what}` +
+                        // r.next is still the time it was due
+                        (late && r.next ? ` It was due at ${localStamp(r.next)}; it's late because this computer was asleep or off.` : "") +
+                        " Do it now. Text the user with send_message if there's something for them; a check that found nothing needs no text.",
+                ),
+            onChange: (routines) => this.ctx.setState({ routines }),
+        });
         this.tools = toolbox([
             { id: "computer", tools: () => COMPUTER_TOOLS, call: (name, args) => this.computer.callTool(name, args), instructions: () => COMPUTER_INSTRUCTIONS },
             messagesToolset({ say: (text, replyTo) => this.conversation.say(text, replyTo) }),
             this.memory.toolset(),
+            this.routines.toolset(),
             mcpToolset(this.servers),
             actionsToolset({ host: t.actions, enabled: () => this.servers.config.actions }),
         ]);
@@ -131,6 +146,8 @@ export class AiApp {
             onState: (chat) => this.ctx.setState({ chat }),
         });
         this.conversation.init();
+        // after the conversation exists: a one-off missed while the service was down runs as soon as it's read
+        await this.routines.load();
         // a broken index shows in state.memory.error from the start; the failure itself is reported there
         await this.memory.list().then(
             () => undefined,
@@ -139,7 +156,7 @@ export class AiApp {
     }
 
     async shutdown() {
-        const stops = await Promise.allSettled([this.conversation?.shutdown(), this.computer?.shutdown(), this.servers?.shutdown()]);
+        const stops = await Promise.allSettled([this.routines?.shutdown(), this.conversation?.shutdown(), this.computer?.shutdown(), this.servers?.shutdown()]);
         for (const r of stops) if (r.status === "rejected") console.error("[ai] shutdown:", String(r.reason));
         await this.mcp?.close();
     }
