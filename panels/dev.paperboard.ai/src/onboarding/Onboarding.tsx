@@ -4,10 +4,11 @@ import { Face } from "../face/Face";
 import { skinFor } from "../face/skins";
 import { createFace, type FaceController } from "../face/controller";
 import { createSpeaker, type Speaker } from "./speech";
+import { scriptFor } from "./script";
 import { createModels, harnessDescription, harnessName, loadedModels } from "../lib/brains";
 import BrainLogo from "../lib/BrainLogo";
 import { Budget, DEFAULT_BUDGET, SetupProgress } from "../computer/Computer";
-import { LIMITS, type ComputerBudget, type Harness, type HarnessInfo } from "../contract";
+import { LIMITS, characterOf, type ComputerBudget, type Harness, type HarnessInfo } from "../contract";
 import type { Agent } from "../lib/agent";
 import styles from "./Onboarding.module.css";
 
@@ -184,11 +185,7 @@ function Scenes(props: {
     const scenes: Record<number, () => Promise<boolean>> = {
         [STEP.name]: () =>
             speaker.say(["[happy]Hi there! I'm your personal agent. I don't have a name yet though, that's your call."]),
-        [STEP.brain]: () =>
-            speaker.say([
-                `[satisfied][bounce]**${name()}** it is! [happy]I like that name.`,
-                "[sad]I also don't have a brain yet. All this is prewritten. [happy]Fortunately, you can give me that too!\nI can think with an agent harness that's already installed on your computer.",
-            ]),
+        [STEP.brain]: () => speaker.say(scriptFor(name()).named(name())),
         [STEP.model]: async () => {
             setSpeakerShown(false);
             speaker.clear();
@@ -204,21 +201,11 @@ function Scenes(props: {
             face.shake(false);
             if (!ok) return false;
             face.bounce();
-            return speaker.say([
-                "[satisfied]Great, I can think now!",
-                "[happy]I can do so much more if I have my own computer. [surprised]Hear me out: what if we share this one!\nI can set up my own environment so I can't see or touch any of your stuff.",
-            ]);
+            return speaker.say(scriptFor(name()).computer);
         },
-        [STEP.budget]: () =>
-            props.computer() === "later"
-                ? speaker.say(["[sad]Aw. [pause 700][happy]Just kidding, I'm good. Alright, let's chat!"])
-                : speaker.say([
-                      "[wish]Awesome! [happy]I need a budget. What's the maximum amount of memory and storage you'd be okay with me using?",
-                  ]),
+        [STEP.budget]: () => speaker.say(props.computer() === "later" ? scriptFor(name()).later : scriptFor(name()).budget),
         [STEP.install]: async () => {
-            const ok = await speaker.say([
-                "[happy]Sounds good. Now, I just need a moment to download and get everything set up. I'll be right with you!",
-            ]);
+            const ok = await speaker.say(scriptFor(name()).install);
             if (!ok) return false;
             if (!(await speaker.wait(900))) return false;
             setLeaving(true);
@@ -228,6 +215,19 @@ function Scenes(props: {
             return true;
         },
     };
+
+    // a name that brings a character is recognized as it's typed: the face lights up in its new look (and settles back if it's typed away)
+    createEffect(
+        on(
+            () => characterOf(name()),
+            (character) => {
+                if (wizard.currentStep() !== STEP.name || speaker.speaking()) return;
+                face.express(character ? "wish" : "happy");
+                if (character) face.bounce();
+            },
+            { defer: true },
+        ),
+    );
 
     createEffect(
         on(wizard.currentStep, (step) => {
