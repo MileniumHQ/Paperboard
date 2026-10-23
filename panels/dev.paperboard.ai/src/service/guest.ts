@@ -9,7 +9,40 @@
 import AGENT_PY from "../../computer/guest/agent.py" with { type: "text" };
 import SESSION_SH from "../../computer/guest/session.sh" with { type: "text" };
 
+import { createHash } from "node:crypto";
+
 export const GUEST_FILES = { "agent.py": AGENT_PY, "session.sh": SESSION_SH } as const;
+type GuestFile = keyof typeof GUEST_FILES;
+
+const sha256 = (data: string | Buffer) => createHash("sha256").update(data).digest();
+
+/** What the guest agent reports on /health when it runs these files: agent.py works it out the same way. */
+export const GUEST_VERSION = createHash("sha256")
+    .update(sha256(Buffer.from(AGENT_PY, "utf8")))
+    .update(sha256(Buffer.from(SESSION_SH, "utf8")))
+    .digest("hex");
+
+const GUEST_DIR = "/opt/paperboard";
+
+/**
+ * The guest's shell command that replaces its files with these and restarts
+ * its agent, for a computer set up by an older version. Built only from the
+ * files above (base64, so nothing in them is read by the shell), never from
+ * input. The agent is the shell's parent; systemd restarts the whole session
+ * on the new files, which closes the apps open on the computer.
+ */
+export function updateCommand(): string {
+    const put = (name: GuestFile) => `printf %s '${Buffer.from(GUEST_FILES[name], "utf8").toString("base64")}' | base64 -d > ${GUEST_DIR}/${name}.new`;
+    return [
+        put("agent.py"),
+        put("session.sh"),
+        `python3 -c 'import ast, sys; ast.parse(open(sys.argv[1]).read())' ${GUEST_DIR}/agent.py.new`,
+        `mv ${GUEST_DIR}/session.sh.new ${GUEST_DIR}/session.sh`,
+        `mv ${GUEST_DIR}/agent.py.new ${GUEST_DIR}/agent.py`,
+        "{ (sleep 0.5; kill $PPID) >/dev/null 2>&1 & }",
+        "echo updated",
+    ].join(" && ");
+}
 
 /** The guest agent's port inside the VM; QEMU forwards a loopback port to it. */
 export const GUEST_PORT = 7070;

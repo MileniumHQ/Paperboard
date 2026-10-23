@@ -50,6 +50,19 @@ OUTPUT_MAX = 16_000
 MAX_MARKS = 120
 MAX_BODY = 1 << 20
 
+
+def _version():
+    # the service compares this with its own copy of these files and replaces them when they differ
+    here = os.path.dirname(os.path.abspath(__file__))
+    h = hashlib.sha256()
+    for name in ("agent.py", "session.sh"):
+        with open(os.path.join(here, name), "rb") as f:
+            h.update(hashlib.sha256(f.read()).digest())
+    return h.hexdigest()
+
+
+VERSION = _version()
+
 # the last marks shown for each window, so "click mark 7" means what the agent saw
 marks_by_window: dict[int, list[dict]] = {}
 lock = threading.Lock()
@@ -933,7 +946,7 @@ class Handler(BaseHTTPRequestHandler):
         if self.headers.get("Authorization") != f"Bearer {TOKEN}":
             return self.reply(401, {"error": "unauthorized"})
         if self.path == "/health":
-            return self.reply(200, {"ok": True, "windows": len(list_windows())})
+            return self.reply(200, {"ok": True, "version": VERSION, "windows": len(list_windows())})
         self.reply(404, {"error": "not found"})
 
     def do_POST(self):

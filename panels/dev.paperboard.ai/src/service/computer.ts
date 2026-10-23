@@ -24,7 +24,7 @@ import {
 } from "../contract";
 import type { ToolResult } from "./computerMcp";
 import { which } from "./which";
-import { BASE_IMAGE, BROWSER_DEB, GUEST_FILES, GUEST_PORT, META_DATA, userData } from "./guest";
+import { BASE_IMAGE, BROWSER_DEB, GUEST_FILES, GUEST_PORT, GUEST_VERSION, META_DATA, updateCommand, userData } from "./guest";
 
 export const COMPUTER_PROC_ID = `${PANEL_ID}.computer`;
 export const TOKEN_SECRET = "computer-token";
@@ -34,6 +34,7 @@ const DISK_FILE = "disk.qcow2";
 const FIRST_BOOT_MS = 25 * 60_000; // packages and the browser install on first boot
 const BOOT_MS = 3 * 60_000;
 const HEALTH_POLL_MS = 2_000;
+const UPDATE_MS = 2 * 60_000; // an outdated guest agent restarts its session on the new files
 const STOP_GRACE_MS = 2_000; // the daemon gives the whole service 3 s to stop
 const CALL_TIMEOUT_MS = 11 * 60_000; // a little past the guest's longest shell command
 const MAX_CALLS = 4;
@@ -77,6 +78,10 @@ interface ComputerRecord {
     port: number | null;
 }
 
+interface GuestHealth {
+    version: string | null;
+}
+
 export interface ComputerDeps {
     host: ComputerHost;
     /** absolute path of the computer's folder in the panel's storage */
@@ -87,6 +92,7 @@ export interface ComputerDeps {
     onState: (s: ComputerState) => void;
     firstBootMs?: number;
     bootMs?: number;
+    healthPollMs?: number;
     controlLeaseMs?: number;
 }
 
@@ -133,9 +139,20 @@ export class Computer {
         if ((await this.deps.host.exists(COMPUTER_PROC_ID)) && this.record.port) {
             this.running = true;
             this.token = await this.deps.host.getSecret(TOKEN_SECRET);
-            if (this.token && (await this.healthy(this.record.port))) {
-                this.set({ phase: "ready" });
-                return;
+            const found = this.token ? await this.health(this.record.port) : null;
+            if (found && typeof found !== "string") {
+                this.set({ phase: "starting" });
+                const abort = (this.abort = new AbortController());
+                try {
+                    await this.becomeReady(found, abort.signal);
+                    return;
+                } catch (e) {
+                    await this.kill();
+                    this.set({ phase: "failed", error: e instanceof Error ? e.message : String(e) });
+                    return;
+                } finally {
+                    if (this.abort === abort) this.abort = null;
+                }
             }
             await this.kill();
         }
@@ -297,11 +314,11 @@ export class Computer {
             });
             seed = seeded.server;
             await this.boot(support.qemu, budget, seeded.url);
-            await this.waitHealthy(this.deps.firstBootMs ?? FIRST_BOOT_MS, abort.signal);
+            const found = await this.waitHealthy(this.deps.firstBootMs ?? FIRST_BOOT_MS, abort.signal);
             this.step("install", "done", 100);
             this.record = { ...this.record, installed: true };
             this.writeRecord();
-            this.set({ phase: "ready" });
+            await this.becomeReady(found, abort.signal);
         } catch (e) {
             const message = e instanceof Error ? e.message : String(e);
             this.step(step, "failed");
@@ -342,9 +359,20 @@ export class Computer {
             this.set({ phase: "unsupported", error: support.reason });
             throw new Error(support.reason);
         }
-        if (this.running && this.record.port && (await this.healthy(this.record.port))) {
-            this.set({ phase: "ready", error: null });
-            return;
+        const found = this.running && this.record.port ? await this.health(this.record.port) : null;
+        if (found && typeof found !== "string") {
+            this.set({ phase: "starting", error: null });
+            const abort = (this.abort = new AbortController());
+            try {
+                await this.becomeReady(found, abort.signal);
+                return;
+            } catch (e) {
+                await this.kill();
+                this.set({ phase: "failed", error: e instanceof Error ? e.message : String(e) });
+                throw e;
+            } finally {
+                if (this.abort === abort) this.abort = null;
+            }
         }
         await this.kill();
         this.token = await this.deps.host.getSecret(TOKEN_SECRET);
@@ -356,8 +384,8 @@ export class Computer {
         const abort = (this.abort = new AbortController());
         try {
             await this.boot(support.qemu, this.record.budget ?? { memoryGb: 4, diskGb: 32 }, null);
-            await this.waitHealthy(this.deps.bootMs ?? BOOT_MS, abort.signal);
-            this.set({ phase: "ready" });
+            const found = await this.waitHealthy(this.deps.bootMs ?? BOOT_MS, abort.signal);
+            await this.becomeReady(found, abort.signal);
         } catch (e) {
             await this.kill();
             this.set({ phase: "failed", error: e instanceof Error ? e.message : String(e) });
@@ -377,32 +405,53 @@ export class Computer {
         await this.deps.host.start({ id: COMPUTER_PROC_ID, command: qemu, args: qemuArgs(this.deps.dir, budget, port, seedUrl) });
     }
 
-    private async waitHealthy(timeoutMs: number, signal: AbortSignal) {
+    private async waitHealthy(timeoutMs: number, signal: AbortSignal, current = false): Promise<GuestHealth> {
         const deadline = Date.now() + timeoutMs;
         let last = "no answer yet";
         while (Date.now() < deadline) {
             if (signal.aborted) throw new Error("stopped");
             if (!this.running) throw new Error(`the computer shut down while starting${this.stderrTail ? `: ${this.stderrTail.trim().slice(-300)}` : ""}`);
             const r = await this.health(this.record.port!);
-            if (r === true) return;
-            last = r;
-            await sleep(HEALTH_POLL_MS, signal);
+            if (typeof r !== "string" && (!current || r.version === GUEST_VERSION)) return r;
+            last = typeof r === "string" ? r : "the old agent still answers";
+            await sleep(this.deps.healthPollMs ?? HEALTH_POLL_MS, signal);
         }
         throw new Error(`the computer didn't come up in ${Math.round(timeoutMs / 60_000)} min (${last}); see ${path.join(this.deps.dir, "console.log")}`);
     }
 
-    private async healthy(port: number) {
-        return (await this.health(port)) === true;
+    /**
+     * Ready once the guest runs this service's agent. A computer set up by an
+     * older version is updated in place first: its agent would refuse what this
+     * one asks of it.
+     */
+    private async becomeReady(found: GuestHealth, signal: AbortSignal) {
+        if (found.version !== GUEST_VERSION) {
+            const r = await fetch(`http://127.0.0.1:${this.record.port}/call`, {
+                method: "POST",
+                headers: { Authorization: `Bearer ${this.token}`, "Content-Type": "application/json" },
+                body: JSON.stringify({ tool: "shell", args: { command: updateCommand(), timeout: 60 } }),
+                signal: AbortSignal.any([signal, AbortSignal.timeout(90_000)]),
+            });
+            const body = (await r.json()) as { text?: string; error?: string };
+            if (!r.ok || body.error || !body.text?.startsWith("exit 0")) {
+                throw new Error(`couldn't update the computer's agent: ${(body.error ?? body.text ?? `it answered ${r.status}`).trim().slice(0, 300)}`);
+            }
+            await this.waitHealthy(UPDATE_MS, signal, true);
+        }
+        this.set({ phase: "ready", error: null });
     }
 
-    /** true, or why not */
-    private async health(port: number): Promise<true | string> {
+    /** what the guest agent says of itself, or why it didn't answer */
+    private async health(port: number): Promise<GuestHealth | string> {
         try {
             const r = await fetch(`http://127.0.0.1:${port}/health`, {
                 headers: { Authorization: `Bearer ${this.token}` },
                 signal: AbortSignal.timeout(2000),
             });
-            return r.ok ? true : `health answered ${r.status}`;
+            if (!r.ok) return `health answered ${r.status}`;
+            const body = (await r.json()) as { version?: unknown };
+            // an agent from before versions has none, and is out of date
+            return { version: typeof body.version === "string" ? body.version : null };
         } catch (e) {
             return e instanceof Error ? e.message : String(e); // still booting: the caller polls until its deadline
         }

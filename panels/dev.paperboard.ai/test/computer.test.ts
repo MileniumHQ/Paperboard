@@ -6,6 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import type { ComputerState } from "../src/contract";
 import { COMPUTER_PROC_ID, Computer, type ComputerHost, type Support } from "../src/service/computer";
+import { GUEST_FILES, GUEST_VERSION, updateCommand } from "../src/service/guest";
 import { FakeProcesses, until } from "./fakeHost";
 
 const dirs: string[] = [];
@@ -48,6 +49,7 @@ function make(o: { support?: Support; download?: ComputerHost["download"]; dir?:
         support: () => o.support ?? { ok: true, qemu: "/usr/bin/qemu-system-x86_64", qemuImg: "/usr/bin/qemu-img" },
         onState: (s) => states.push(s),
         controlLeaseMs: o.controlLeaseMs,
+        healthPollMs: 20,
     });
     return { computer, states, dir, procs, downloads };
 }
@@ -92,18 +94,25 @@ describe("the agent's computer", () => {
 });
 
 /** A guest agent that records calls; a call to `hold` waits until released. */
-async function fakeGuest(token: string) {
+async function fakeGuest(token: string, o: { version?: string | null; shell?: string } = {}) {
+    let version = o.version === undefined ? GUEST_VERSION : o.version;
     const calls: { tool: string; args: Record<string, unknown> }[] = [];
     const held: (() => void)[] = [];
     const server = createServer((req, res) => {
         const reply = (body: unknown) => res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify(body));
         if (req.headers.authorization !== `Bearer ${token}`) return res.writeHead(401).end("{}");
-        if (req.url === "/health") return reply({ ok: true });
+        if (req.url === "/health") return reply(version === null ? { ok: true } : { ok: true, version });
         let data = "";
         req.on("data", (c) => (data += c));
         req.on("end", () => {
             const call = JSON.parse(data);
             calls.push(call);
+            if (call.tool === "shell") {
+                const text = o.shell ?? "exit 0\nupdated";
+                // the agent restarts on the files it was sent
+                if (text.startsWith("exit 0")) setTimeout(() => (version = GUEST_VERSION), 50);
+                return reply({ text });
+            }
             const answer = () => reply(call.tool === "view_windows" ? { windows: [] } : { text: "ok" });
             if (call.args?.hold) held.push(answer);
             else answer();
@@ -115,14 +124,19 @@ async function fakeGuest(token: string) {
 }
 
 /** A computer that's on: installed, its VM found running from an earlier service generation. */
-async function ready(o: { controlLeaseMs?: number } = {}) {
-    const guest = await fakeGuest("t0ken");
+async function found(guest: Awaited<ReturnType<typeof fakeGuest>>, o: { controlLeaseMs?: number } = {}) {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ai-computer-"));
     dirs.push(dir);
     fs.writeFileSync(path.join(dir, "computer.json"), JSON.stringify({ version: 1, installed: true, budget: { memoryGb: 4, diskGb: 32 }, port: guest.port }));
     const m = make({ dir, secret: "t0ken", ...o });
     m.procs.alive.add(COMPUTER_PROC_ID);
     await m.computer.init();
+    return m;
+}
+
+async function ready(o: { controlLeaseMs?: number } = {}) {
+    const guest = await fakeGuest("t0ken");
+    const m = await found(guest, o);
     expect(m.computer.state.phase).toBe("ready");
     return { ...m, guest };
 }
@@ -198,5 +212,52 @@ describe("the computer's budget", () => {
         const { computer } = make();
         await computer.init();
         await expect(computer.setBudget({ memoryGb: 8, diskGb: 32 })).rejects.toThrow(/Set up/);
+    });
+});
+
+describe("updating the guest agent", () => {
+    const sent = (command: string) =>
+        [...command.matchAll(/printf %s '([A-Za-z0-9+/=]+)' \| base64 -d > \/opt\/paperboard\/([a-z.]+)\.new/g)].map(([, b64, name]) => [name, Buffer.from(b64!, "base64").toString("utf8")]);
+
+    test("an agent from an older version is replaced with this one's files before the computer is ready", async () => {
+        const guest = await fakeGuest("t0ken", { version: null });
+        const { computer, states } = await found(guest);
+        expect(computer.state).toMatchObject({ phase: "ready", error: null });
+        const shell = guest.calls.filter((c) => c.tool === "shell");
+        expect(shell).toHaveLength(1);
+        expect(Object.fromEntries(sent(String(shell[0]!.args.command)))).toEqual({ ...GUEST_FILES });
+        // never ready on the old agent
+        expect(states.findIndex((s) => s.phase === "ready")).toBe(states.length - 1);
+    });
+
+    test("an agent that can't be updated fails the computer with the reason, and the VM is stopped", async () => {
+        const guest = await fakeGuest("t0ken", { version: "old", shell: "exit 1\nNo space left on device" });
+        const { computer, procs } = await found(guest);
+        expect(computer.state).toMatchObject({ phase: "failed", error: expect.stringContaining("No space left on device") });
+        expect(procs.alive.has(COMPUTER_PROC_ID)).toBe(false);
+    });
+
+    test("a current agent is left alone", async () => {
+        const guest = await fakeGuest("t0ken");
+        await found(guest);
+        expect(guest.calls).toEqual([]);
+    });
+
+    test("the update fits in one argument to the guest's shell", () => {
+        expect(Buffer.byteLength(updateCommand())).toBeLessThan(128 * 1024); // Linux's MAX_ARG_STRLEN
+    });
+
+    test("the guest works out the same version from its files as the service does", () => {
+        const dir = path.join(import.meta.dir, "../computer/guest");
+        // agent.py's own _version, run on its own files (the rest of agent.py needs an X display)
+        const script = `import ast, hashlib, os, sys
+src = open(sys.argv[1]).read()
+fn = next(n for n in ast.parse(src).body if isinstance(n, ast.FunctionDef) and n.name == "_version")
+ns = {"os": os, "hashlib": hashlib, "__file__": sys.argv[1]}
+exec(compile(ast.Module([fn], []), "agent.py", "exec"), ns)
+print(ns["_version"]())`;
+        const r = Bun.spawnSync(["python3", "-I", "-c", script, path.join(dir, "agent.py")]);
+        expect(r.stderr.toString()).toBe("");
+        expect(r.stdout.toString().trim()).toBe(GUEST_VERSION);
     });
 });
