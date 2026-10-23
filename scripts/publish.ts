@@ -42,6 +42,7 @@ import {
     ALL_TARGETS,
     archOf,
     BUN_TARGET_MAP,
+    bunPinMismatch,
     DL_HOST,
     GH_REPO,
     KV_PACKAGES_BINDING,
@@ -1360,6 +1361,14 @@ ${panelEntries.map((p) => `  ${p.id} (${p.name} v${p.version})`).join("\n")}
 
 async function main(): Promise<void> {
     const argv = process.argv.slice(2);
+    const rootPackage = JSON.parse(
+        readFileSync(join(import.meta.dir, "..", "package.json"), "utf8"),
+    ) as { packageManager?: unknown };
+    const bunMismatch = bunPinMismatch(rootPackage.packageManager, Bun.version);
+    if (bunMismatch) {
+        console.error(bunMismatch);
+        process.exit(1);
+    }
     if (argv[0] === "usb") {
         const { oses, arches, help } = parseUsbArgs(argv.slice(1));
         if (help) {

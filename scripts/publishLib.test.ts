@@ -11,6 +11,7 @@ import {
     paperboardArtifacts,
     buildCraneIndex,
     buildLatestYml,
+    bunPinMismatch,
     dlFileUrl,
     isArch,
     isOs,
@@ -334,3 +335,20 @@ it("Linux x64 build input matches electron-builder while release name stays cano
     expect(paperboardArtifacts("linux-x64", "0.1.0")).toEqual({ buildFile: "paperboard-0.1.0-linux-x86_64.AppImage", releaseFile: "paperboard-linux-x64.AppImage" });
 });
 
+
+describe("bunPinMismatch", () => {
+    it("accepts only the exact pinned Bun", () => {
+        expect(bunPinMismatch("bun@1.4.4", "1.4.4")).toBeNull();
+        expect(bunPinMismatch("bun@1.4.4", "1.4.3")).toContain("pinned bun@1.4.4, running bun@1.4.3");
+    });
+    it("refuses a missing or loose pin", () => {
+        expect(bunPinMismatch(undefined, "1.4.4")).toContain("must pin");
+        expect(bunPinMismatch("bun@^1.4.4", "1.4.4")).toContain("must pin");
+    });
+    it("matches the repo's own pin against the CI gate's version", async () => {
+        const root = await Bun.file(new URL("../package.json", import.meta.url)).json();
+        const gate = await Bun.file(new URL("../.github/workflows/gate.yml", import.meta.url)).text();
+        const ci = /bun-version:\s*(\S+)/.exec(gate)?.[1];
+        expect(bunPinMismatch(root.packageManager, ci ?? "")).toBeNull();
+    });
+});
