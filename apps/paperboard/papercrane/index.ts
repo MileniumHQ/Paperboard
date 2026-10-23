@@ -97,6 +97,15 @@ async function queryWindowsReleaseName(build: number): Promise<string> {
     return build >= 22000 ? "11" : "10";
 }
 
+// Darwin 20-24 were macOS 11-15. Apple then moved to year numbers: Darwin 25
+// is macOS 26, so from there the macOS major is Darwin + 1. Older releases
+// (10.x) pass the raw Darwin release through for the shell to map.
+export function macosVersionFromDarwin(release: string): string {
+    const darwinMajor = parseInt(release.split(".")[0], 10);
+    if (isNaN(darwinMajor) || darwinMajor < 20) return release;
+    return (darwinMajor >= 25 ? darwinMajor + 1 : darwinMajor - 9).toString();
+}
+
 export async function getDetailedOsInfo(): Promise<{
     os: string;
     osVersion: string;
@@ -105,14 +114,9 @@ export async function getDetailedOsInfo(): Promise<{
 }> {
     const platform = process.platform;
     if (platform === "darwin") {
-        const darwinMajor = parseInt(os.release().split(".")[0], 10);
-        const macVersion =
-            !isNaN(darwinMajor) && darwinMajor >= 20
-                ? (darwinMajor - 9).toString()
-                : os.release();
         return {
             os: "macos",
-            osVersion: macVersion,
+            osVersion: macosVersionFromDarwin(os.release()),
             distroId: "macos",
             distroName: "macOS",
         };
