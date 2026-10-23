@@ -49,8 +49,11 @@ export interface ToolsHost {
 export interface AppHost extends ComputerHost, TurnHost {
     tools: ToolsHost;
     storageDir(): Promise<string>;
+    /** the panel's config document: the agent's settings */
     readSettings(): Promise<unknown>;
     writeSettings(s: Settings): Promise<void>;
+    // TODO(remove after v0.3): where 0.3.0 kept the settings, a document of its own (agent.json in the panel's files)
+    readLegacySettings(): Promise<unknown>;
     which(command: string): string | null;
     /** where each harness keeps its own files, for its model catalog */
     harnessHomes: HarnessHomes;
@@ -98,7 +101,7 @@ export class AiApp {
     private async prepare(ctx: AppContext) {
         this.ctx = ctx;
         const root = await this.host.storageDir();
-        this.ctx.setState({ settings: parseSettings(await this.host.readSettings()) });
+        this.ctx.setState({ settings: await this.loadSettings() });
         this.memory = new Memory({ dir: path.join(root, "memory"), onChange: (memory) => this.ctx.setState({ memory }) });
         const t = this.host.tools;
         this.servers = new McpServers({
@@ -182,6 +185,21 @@ export class AiApp {
         await this.host.writeSettings(settings);
         this.ctx.setState({ settings });
         return { saved: true };
+    }
+
+    /**
+     * The settings live in the panel's config document. An install from before has them in agent.json
+     * instead: moved once, the first time the config document is empty, and the old file left as it was.
+     */
+    private async loadSettings(): Promise<Settings | null> {
+        const saved = await this.host.readSettings();
+        if (saved !== null) return parseSettings(saved);
+        // TODO(remove after v0.3): the move from agent.json, with readLegacySettings
+        const legacy = parseSettings(await this.host.readLegacySettings());
+        if (!legacy) return null;
+        await this.host.writeSettings(legacy);
+        console.warn("[ai] moved the agent's settings from agent.json into the panel's config; agent.json is no longer read (this move goes away in v0.3)");
+        return legacy;
     }
 
     /** What a brain can think with, from its harness's own catalog. */
