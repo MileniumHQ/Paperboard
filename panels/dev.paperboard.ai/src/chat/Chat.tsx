@@ -42,7 +42,6 @@ export default function Chat(props: { agent: Agent; face: FaceController; onMenu
     createEffect(() => face.ponder(agent.state.chat.busy));
 
     const status = () => {
-        if (agent.state.chat.busy) return "typing…";
         const c = agent.state.computer;
         if (c.userControl) return "Waiting while you use its computer";
         return (
@@ -114,7 +113,7 @@ export default function Chat(props: { agent: Agent; face: FaceController; onMenu
     return (
         <div class={styles.page}>
             <div class={styles.header}>
-                <PaperPageHeader icon={<Face face={face} size={40} frame="face" />} title={name()} subtitle={status()}>
+                <PaperPageHeader icon={<Face face={face} size={40} frame="sphere" />} title={name()} subtitle={status()}>
                     <PaperButton icon variant="text" aria-label="Menu" title="Menu" onClick={() => props.onMenu()}>
                         more_horiz
                     </PaperButton>
@@ -242,9 +241,9 @@ function Bubble(props: {
                     </Show>
                 </div>
                 <Show when={entry()}>
-                    <button type="button" class={styles.replyButton} aria-label="Reply" title="Reply" onClick={() => props.onReply(entry()!)}>
-                        <PaperIcon>reply</PaperIcon>
-                    </button>
+                    <PaperButton icon size="tiny" variant="text" class={styles.replyButton} aria-label="Reply" title="Reply" onClick={() => props.onReply(entry()!)}>
+                        reply
+                    </PaperButton>
                 </Show>
             </div>
             <Show when={props.row.waiting}>

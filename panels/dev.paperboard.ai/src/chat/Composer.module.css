@@ -17,7 +17,7 @@
     min-width: 0;
     padding: var(--paper-uigap-half) var(--paper-uigap-half) var(--paper-uigap-half) var(--paper-uigap);
     border: var(--paper-border-width) solid var(--paper-border);
-    border-radius: var(--paper-border-radius-pill);
+    border-radius: var(--paper-border-radius);
     background: var(--paper-surface-sunken);
     transition: border-color var(--paper-tiny-transition) var(--paper-ease-standard);
 }

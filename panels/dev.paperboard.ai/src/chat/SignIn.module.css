@@ -6,7 +6,7 @@
     width: min(80%, 28rem);
     box-sizing: border-box;
     padding: var(--paper-uigap);
-    border-radius: calc(var(--paper-border-radius) * 2);
+    border-radius: var(--paper-border-radius);
     background: var(--paper-surface-inset);
     color: var(--paper-text);
 }

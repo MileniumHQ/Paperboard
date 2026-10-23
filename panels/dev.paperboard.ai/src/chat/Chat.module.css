@@ -70,7 +70,7 @@
 }
 
 .bubble {
-    --bubble-radius: calc(var(--paper-border-radius) * 2);
+    --bubble-radius: var(--paper-border-radius);
     --bubble-join: var(--paper-border-radius-half);
     display: flex;
     flex-direction: column;
@@ -180,29 +180,12 @@
 
 /* the way to answer one bubble: shown when pointing at it or tabbing to it */
 .replyButton {
-    display: inline-flex;
-    padding: var(--paper-uigap-onefourth);
-    border: none;
-    border-radius: var(--paper-border-radius-pill);
-    background: none;
-    color: var(--paper-text-subtle);
-    font-size: var(--paper-icon-size-small);
-    cursor: pointer;
     opacity: 0;
 }
 
 .row:hover .replyButton,
 .row:focus-within .replyButton {
     opacity: 1;
-}
-
-.replyButton:hover {
-    color: var(--paper-primary);
-}
-
-.replyButton:focus-visible {
-    outline: var(--paper-focus-ring);
-    outline-offset: var(--paper-focus-offset);
 }
 
 /* ---- the typing indicator */

@@ -245,7 +245,7 @@ function Scenes(props: {
             <Show when={speakerShown()}>
                 <div class={styles.speaker} classList={{ [styles.leaving!]: leaving() }}>
                     <span class={styles.faceChip}>
-                        <Face face={face} size={64} frame="face" />
+                        <Face face={face} size={64} frame="sphere" />
                     </span>
                     <div
                         class={styles.bubble}
