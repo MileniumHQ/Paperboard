@@ -52,6 +52,28 @@ describe("turnLaunch", () => {
     });
 });
 
+describe("the harnesses' own memory is off", () => {
+    test("Codex: the memories feature, generating and using them, and AGENTS.md docs", () => {
+        const l = turnLaunch({ ...spec, harness: "codex" });
+        expect(l.args.join(" ")).toContain("--disable memories");
+        for (const c of ["memories.generate_memories=false", "memories.use_memories=false", "project_doc_max_bytes=0"]) {
+            expect(l.args[l.args.indexOf(c) - 1]).toBe("-c");
+        }
+        // resumed turns too
+        expect(turnLaunch({ ...spec, harness: "codex", thread: "t" }).args).toContain("memories.use_memories=false");
+        expect(l.env).toEqual({});
+    });
+
+    test("Claude Code: auto-memory and CLAUDE.md loading are switched off in its environment", () => {
+        for (const thread of [null, "s-1"]) {
+            const l = turnLaunch({ ...spec, harness: "claude-code", thread });
+            expect(l.env).toEqual({ CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1", CLAUDE_CODE_DISABLE_CLAUDE_MDS: "1" });
+            // --bare would also skip them, but it refuses the OAuth login
+            expect(l.args).not.toContain("--bare");
+        }
+    });
+});
+
 describe("parseTurnLine", () => {
     test("Claude Code: a subagent's words don't reach the chat, its searches still do", () => {
         const sub = { type: "assistant", parent_tool_use_id: "toolu_1", message: { content: [{ type: "text", text: "found it" }, { type: "tool_use", name: "WebSearch", input: { query: "q2" } }] } };

@@ -42,6 +42,14 @@ const CODEX_FEATURES_OFF = [
 const CLAUDE_SUBAGENT_TOOL = "Agent";
 const SUBAGENT_NOTE = `You can hand a self-contained piece of work to a subagent (the ${CLAUDE_SUBAGENT_TOOL} tool) and choose a different model for it when that helps, such as a faster, smaller one for simple lookups. Subagents have the same tools you do, web search and your computer, and can't ask the user anything, so give them everything they need and check what they bring back.`;
 
+// The harnesses' own memories and instruction files are off: the panel's memory (memory.ts) is the only one.
+// Codex: its memories feature, and AGENTS.md project docs (a zero byte budget). Both are config keys that
+// exist in the CLI; `--disable memories` is the feature flag itself.
+const CODEX_MEMORY_OFF = [`memories.generate_memories=false`, `memories.use_memories=false`, `project_doc_max_bytes=0`];
+// Claude Code: its environment switches for auto-memory and CLAUDE.md loading (named in the CLI, not in its --help). (`--bare` would
+// also do it but forbids the OAuth login the user's subscription needs.)
+const CLAUDE_MEMORY_OFF = { CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1", CLAUDE_CODE_DISABLE_CLAUDE_MDS: "1" };
+
 export interface TurnSpec {
     harness: Harness;
     /** absolute path of the harness's executable */
@@ -61,6 +69,8 @@ export interface TurnLaunch {
     args: string[];
     /** the MCP token's variable name only; its value is added by the caller */
     tokenEnv: string;
+    /** fixed variables the harness is launched with (no secrets); the token's value is added by the caller */
+    env: Record<string, string>;
     /** known before the turn starts (Claude); Codex reports its own */
     thread: string | null;
 }
@@ -78,16 +88,18 @@ export function turnLaunch(spec: TurnSpec): TurnLaunch {
             `mcp_servers.${MCP_SERVER}.tool_timeout_sec=660`,
             // the service's tools run unprompted; anything else stays denied by approval_policy=never
             `mcp_servers.${MCP_SERVER}.default_tools_approval_mode="approve"`,
+            ...CODEX_MEMORY_OFF,
         ].flatMap((c) => ["-c", c]);
         const common = [
             "--json", "--skip-git-repo-check",
             ...(spec.model ? ["-m", spec.model] : []),
             ...CODEX_FEATURES_OFF.flatMap((f) => ["--disable", f]),
+            "--disable", "memories", // the panel's memory is the only memory
             ...config,
         ];
         // `resume` takes neither -C nor -s: the cwd comes from the spawn, the sandbox from config
         const args = spec.thread ? ["exec", "resume", ...common, spec.thread, spec.message] : ["exec", ...common, spec.message];
-        return { command: spec.command, args, tokenEnv: MCP_TOKEN_ENV, thread: spec.thread };
+        return { command: spec.command, args, tokenEnv: MCP_TOKEN_ENV, env: {}, thread: spec.thread };
     }
     const session = spec.thread ?? randomUUID();
     const mcp = {
@@ -107,7 +119,7 @@ export function turnLaunch(spec: TurnSpec): TurnLaunch {
         ...(spec.thread ? ["--resume", spec.thread] : ["--session-id", session]),
         spec.message,
     ];
-    return { command: spec.command, args, tokenEnv: MCP_TOKEN_ENV, thread: session };
+    return { command: spec.command, args, tokenEnv: MCP_TOKEN_ENV, env: CLAUDE_MEMORY_OFF, thread: session };
 }
 
 export type TurnEvent =

@@ -242,7 +242,7 @@ export class Conversation {
             command: launch.command,
             args: launch.args,
             cwd: this.workdir(),
-            env: { [launch.tokenEnv]: mcp.token },
+            env: { ...launch.env, [launch.tokenEnv]: mcp.token },
         });
         const timer = setTimeout(() => void this.killTurn(), this.deps.turnMs ?? TURN_MS);
         let code: number | undefined;
