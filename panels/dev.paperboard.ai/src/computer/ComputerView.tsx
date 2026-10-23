@@ -11,6 +11,7 @@ import { PaperButton, PaperEmptyState, PaperIcon, PaperList, PaperListItem, Pape
 import type { ComputerBudget, ComputerWindow } from "../contract";
 import type { Agent } from "../lib/agent";
 import { Budget, DEFAULT_BUDGET, SetupProgress } from "./Computer";
+import { clip } from "../lib/text";
 import { WindowView } from "./WindowView";
 import styles from "./ComputerView.module.css";
 
@@ -21,6 +22,9 @@ const RENEW_MS = 6000;
 const IDLE_MS = 5000;
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
+
+/** a tab shows this much of a window's title; the rest is an ellipsis, and the whole title its tooltip */
+const TITLE_CHARS = 32;
 
 function windowIcon(w: ComputerWindow) {
     const app = w.app.toLowerCase();
@@ -155,8 +159,8 @@ export default function ComputerView(props: { agent: Agent }) {
                 <PaperList direction="horizontal" name="computer-windows" value={shown() ?? ""} onValueChange={(v) => setChosen(Number(v))}>
                     <For each={windows}>
                         {(w) => (
-                            <PaperListItem icon={windowIcon(w)} value={w.id} onClosed={() => closeWindow(w)}>
-                                {w.title || w.app}
+                            <PaperListItem icon={windowIcon(w)} value={w.id} onClosed={() => closeWindow(w)} title={w.title || w.app}>
+                                {clip(w.title || w.app, TITLE_CHARS)}
                             </PaperListItem>
                         )}
                     </For>
