@@ -115,4 +115,45 @@ describe("PaperRange", () => {
         expect(clampToStep(-3, 0, 10, 1)).toBe(0);
         expect(clampToStep(12, 0, 10, 1)).toBe(10);
     });
+
+    it("names itself from label, shows the formatted value, and snaps to marks", () => {
+        const onInput = vi.fn();
+        const { getByRole, getByText } = render(() => {
+            const [value, setValue] = createSignal(4);
+            return (
+                <PaperRange
+                    label="Memory"
+                    min={2}
+                    max={32}
+                    marks={[2, 4, { value: 8, label: "8 GB" }, 16, 32]}
+                    snapToMarks
+                    formatValue={(v) => `${v} GB`}
+                    value={value()}
+                    onInput={(v) => {
+                        setValue(v);
+                        onInput(v);
+                    }}
+                />
+            );
+        });
+        const slider = getByRole("slider", { name: "Memory" });
+        expect(slider.getAttribute("aria-valuetext")).toBe("4 GB");
+        expect(getByText("8 GB")).toBeTruthy();
+
+        // arrows walk the marks rather than the step
+        fireEvent.keyDown(slider, { key: "ArrowRight" });
+        expect(onInput).toHaveBeenLastCalledWith(8);
+        expect(slider.getAttribute("aria-valuetext")).toBe("8 GB");
+        fireEvent.keyDown(slider, { key: "PageUp" });
+        expect(onInput).toHaveBeenLastCalledWith(32);
+        fireEvent.keyDown(slider, { key: "ArrowLeft" });
+        expect(onInput).toHaveBeenLastCalledWith(16);
+
+        // a drag lands on the nearest mark: 11 of 2..32 is closest to 8
+        const track = slider.querySelector("[class*=PaperProgress]")!;
+        rect(track, { left: 0, top: 0, width: 300, height: 6 });
+        fireEvent.pointerDown(slider, { button: 0, pointerId: 1, clientX: 90, clientY: 0 });
+        expect(onInput).toHaveBeenLastCalledWith(8);
+        fireEvent.pointerUp(slider, { pointerId: 1, clientX: 90, clientY: 0 });
+    });
 });

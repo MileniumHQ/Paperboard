@@ -54,3 +54,67 @@
     cursor: not-allowed;
     opacity: 0.45;
 }
+
+/* label, value and marks stack around a horizontal track */
+.stacked {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--paper-uigap-half);
+}
+
+.stacked .track {
+    width: 100%;
+}
+
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: var(--paper-uigap);
+}
+
+.label {
+    color: var(--paper-text-subtle);
+}
+
+.value {
+    color: var(--paper-text);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+.marks {
+    position: relative;
+    height: calc(var(--paper-text-size-1) * 1.6 + var(--paper-uigap-onefourth));
+}
+
+.mark {
+    position: absolute;
+    top: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--paper-uigap-onefourth);
+    transform: translateX(-50%);
+}
+
+.tick {
+    width: var(--paper-border-width);
+    height: var(--paper-uigap-half);
+    background: var(--paper-border-strong);
+}
+
+.markLabel {
+    font-size: var(--paper-text-size-1);
+    color: var(--paper-text-faint);
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+.reached .tick {
+    background: var(--paper-primary);
+}
+
+.reached .markLabel {
+    color: var(--paper-text-subtle);
+}
