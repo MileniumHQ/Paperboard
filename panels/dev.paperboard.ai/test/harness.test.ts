@@ -13,6 +13,9 @@ describe("turnLaunch", () => {
         }
         expect(l.args).toContain(`web_search="live"`);
         expect(l.args).toContain(`sandbox_mode="read-only"`);
+        // subagents stay off for Codex, and the brain isn't told it can use them
+        expect(l.args.join(" ")).toContain("--disable multi_agent --disable multi_agent_v2");
+        expect(l.args.find((a) => a.startsWith("developer_instructions="))).not.toContain("subagent");
         expect(l.args).toContain(`mcp_servers.paperboard.url="${spec.mcpUrl}"`);
         expect(l.args).toContain(`mcp_servers.paperboard.bearer_token_env_var="${MCP_TOKEN_ENV}"`);
         expect(l.tokenEnv).toBe(MCP_TOKEN_ENV);
@@ -32,7 +35,12 @@ describe("turnLaunch", () => {
     test("Claude Code: only WebSearch, the computer's MCP and nothing else, the token expanded from env", () => {
         const l = turnLaunch({ ...spec, harness: "claude-code" });
         const at = (flag: string) => l.args[l.args.indexOf(flag) + 1];
-        expect(at("--tools")).toBe("WebSearch");
+        expect(l.args.slice(l.args.indexOf("--tools") + 1, l.args.indexOf("--tools") + 3)).toEqual(["WebSearch", "Agent"]);
+        // the subagent tool is allowed, and nothing built-in beyond it and search
+        const allowed = l.args.slice(l.args.indexOf("--allowedTools") + 1, l.args.indexOf("--permission-mode"));
+        expect(allowed).toEqual(["WebSearch", "Agent", "mcp__paperboard"]);
+        expect(at("--permission-mode")).toBe("dontAsk");
+        expect(at("--append-system-prompt")).toContain("subagent");
         expect(l.args).toContain("--strict-mcp-config");
         const config = JSON.parse(at("--mcp-config")!);
         expect(config.mcpServers.paperboard).toEqual({ type: "http", url: spec.mcpUrl, headers: { Authorization: `Bearer \${${MCP_TOKEN_ENV}}` } });
@@ -45,6 +53,11 @@ describe("turnLaunch", () => {
 });
 
 describe("parseTurnLine", () => {
+    test("Claude Code: a subagent's words don't reach the chat, its searches still do", () => {
+        const sub = { type: "assistant", parent_tool_use_id: "toolu_1", message: { content: [{ type: "text", text: "found it" }, { type: "tool_use", name: "WebSearch", input: { query: "q2" } }] } };
+        expect(parseTurnLine("claude-code", JSON.stringify(sub))).toEqual([{ type: "search", query: "q2" }]);
+    });
+
     test("Codex events", () => {
         expect(parseTurnLine("codex", `{"type":"thread.started","thread_id":"t-9"}`)).toEqual([{ type: "thread", id: "t-9" }]);
         expect(parseTurnLine("codex", `{"type":"item.completed","item":{"type":"agent_message","text":"done!"}}`)).toEqual([{ type: "message", text: "done!" }]);

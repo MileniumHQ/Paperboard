@@ -6,7 +6,8 @@
 // tools from a restricted JS sandbox with no file or network access; the
 // workspace is an empty folder and the sandbox read-only.
 // Claude Code: `claude -p --output-format stream-json`, resumed by session id,
-// with --tools limited to WebSearch.
+// with --tools limited to WebSearch and Agent (its subagent tool: subagents draw
+// their tools from that same set, so they get web search and the computer too).
 
 import { randomUUID } from "node:crypto";
 import type { Harness } from "../contract";
@@ -34,6 +35,12 @@ const CODEX_FEATURES_OFF = [
     "image_generation", "multi_agent", "multi_agent_v2", "in_app_browser", "goals", "tool_suggest", "skill_search",
     "hooks", "sleep_tool", "view_image",
 ];
+
+// Claude Code only. Codex keeps multi_agent off (CODEX_FEATURES_OFF): nothing here
+// proves its subagents inherit the read-only sandbox, the disabled shell and the
+// single MCP server, and a subagent that escaped them would hand the model a shell.
+const CLAUDE_SUBAGENT_TOOL = "Agent";
+const SUBAGENT_NOTE = `You can hand a self-contained piece of work to a subagent (the ${CLAUDE_SUBAGENT_TOOL} tool) and choose a different model for it when that helps, such as a faster, smaller one for simple lookups. Subagents have the same tools you do, web search and your computer, and can't ask the user anything, so give them everything they need and check what they bring back.`;
 
 export interface TurnSpec {
     harness: Harness;
@@ -92,11 +99,11 @@ export function turnLaunch(spec: TurnSpec): TurnLaunch {
     const args = [
         "-p", "--output-format", "stream-json", "--verbose",
         ...(spec.model ? ["--model", spec.model] : []),
-        "--tools", "WebSearch",
-        "--allowedTools", "WebSearch", `mcp__${MCP_SERVER}`,
+        "--tools", "WebSearch", CLAUDE_SUBAGENT_TOOL,
+        "--allowedTools", "WebSearch", CLAUDE_SUBAGENT_TOOL, `mcp__${MCP_SERVER}`,
         "--permission-mode", "dontAsk",
         "--mcp-config", JSON.stringify(mcp), "--strict-mcp-config",
-        "--append-system-prompt", instructions(spec.name, spec.sections),
+        "--append-system-prompt", `${instructions(spec.name, spec.sections)}\n\n${SUBAGENT_NOTE}`,
         ...(spec.thread ? ["--resume", spec.thread] : ["--session-id", session]),
         spec.message,
     ];
@@ -130,8 +137,10 @@ export function parseTurnLine(harness: Harness, line: string): TurnEvent[] {
     }
     if (ev.type === "assistant") {
         const out: TurnEvent[] = [];
+        // a subagent's words go back to the agent, which says what came of them; only its searches show
+        const subagent = typeof ev.parent_tool_use_id === "string";
         for (const c of ev.message?.content ?? []) {
-            if (c?.type === "text" && typeof c.text === "string" && c.text.trim()) out.push({ type: "message", text: c.text });
+            if (c?.type === "text" && !subagent && typeof c.text === "string" && c.text.trim()) out.push({ type: "message", text: c.text });
             if (c?.type === "tool_use" && c.name === "WebSearch") out.push({ type: "search", query: String(c.input?.query ?? "") });
         }
         return out;
