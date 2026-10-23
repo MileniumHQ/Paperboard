@@ -52,6 +52,7 @@ import {
     buildCraneIndex,
     buildLatestYml,
     dlFileUrl,
+    feedOf,
     isValidVersionSegment,
     kvKeyFor,
     mergeVersionRecord,
@@ -67,6 +68,7 @@ import {
     type Arch,
     type DlApp,
     type DlAppRecord,
+    type Feed,
     type Os,
     type Target,
     type VersionFileEntry,
@@ -685,16 +687,16 @@ async function publishIndex(signingKey: KeyObject, v: string, staged: BuiltBinar
     // electron-updater feeds (paperboard only) stay on Origami/R2; their
     // file URLs point at the dl "latest" alias, which 302s to GitHub.
     const releaseDate = new Date().toISOString();
-    const byOs = new Map<Os, YmlEntry[]>();
+    const byFeed = new Map<Feed, YmlEntry[]>();
     for (const b of staged) {
         if (b.app !== "pb") continue;
-        const os = osOf(b.target);
-        if (!byOs.has(os)) byOs.set(os, []);
-        byOs.get(os)!.push({ target: b.target, file: b.filename, sha512: b.sha512, size: b.size });
+        const feed = feedOf(b.target);
+        if (!byFeed.has(feed)) byFeed.set(feed, []);
+        byFeed.get(feed)!.push({ target: b.target, file: b.filename, sha512: b.sha512, size: b.size });
     }
-    for (const [os, entries] of byOs) {
-        const { key, text } = buildLatestYml(os, v, entries, releaseDate);
-        const tmp = join(tmpdir(), `pb-${ymlKeyFor(os)}-${Date.now()}.yml`);
+    for (const [feed, entries] of byFeed) {
+        const { key, text } = buildLatestYml(feed, v, entries, releaseDate);
+        const tmp = join(tmpdir(), `pb-${ymlKeyFor(feed)}-${Date.now()}.yml`);
         try {
             writeFileSync(tmp, text);
             await r2Put(key, tmp, "text/yaml");

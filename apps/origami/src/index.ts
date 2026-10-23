@@ -53,11 +53,13 @@ export default {
                         "/paperdl/paperboard/latest.yml",
                         "/paperdl/paperboard/latest-mac.yml",
                         "/paperdl/paperboard/latest-linux.yml",
+                        "/paperdl/paperboard/latest-linux-arm64.yml",
                         "/paperdl/:dlapp/latest/:file",
                         "/paperdl/:dlapp/:version/:file",
                         "/paperdl/pb/latest.yml",
                         "/paperdl/pb/latest-mac.yml",
                         "/paperdl/pb/latest-linux.yml",
+                        "/paperdl/pb/latest-linux-arm64.yml",
                     ],
                 });
             }

@@ -14,6 +14,9 @@ const GH_REPO = "MileniumHQ/Paperboard";
 
 // URL path segments: "pb" is the Paperboard app, "crane" the server.
 const DL_APPS = new Set(["pb", "crane"]);
+// electron-updater channel files, one per scripts/publishLib.ts ymlKeyFor
+// feed. Linux arm64 AppImages request latest-linux-arm64.yml.
+const PB_FEEDS = new Set(["latest.yml", "latest-mac.yml", "latest-linux.yml", "latest-linux-arm64.yml"]);
 
 // A version or filename sits inside a URL path slot here and inside the
 // redirect target, so neither may contain "/", whitespace, "%", "?", or
@@ -153,11 +156,7 @@ export async function handleDownloadHostRoutes(
     pathname: string,
 ): Promise<Response | null> {
     if (request.method !== "GET") return null;
-    if (
-        pathname === "/pb/latest.yml" ||
-        pathname === "/pb/latest-mac.yml" ||
-        pathname === "/pb/latest-linux.yml"
-    ) {
+    if (pathname.startsWith("/pb/") && PB_FEEDS.has(pathname.slice("/pb/".length))) {
         return serveR2Yml(env, pathname.slice("/pb/".length));
     }
     const m = pathname.match(/^\/(pb|crane)\/([^/]+)\/([^/]+)$/);
@@ -206,7 +205,7 @@ export async function handlePaperdlRoutes(
         const sub = scheme[2] || "";
         if (
             request.method === "GET" &&
-            (sub === "/latest.yml" || sub === "/latest-mac.yml" || sub === "/latest-linux.yml")
+            PB_FEEDS.has(sub.slice(1))
         ) {
             return serveR2Yml(env, sub.slice(1));
         }
@@ -268,9 +267,7 @@ export async function handlePaperdlRoutes(
         if (
             request.method === "GET" &&
             app === "paperboard" &&
-            (sub === "/latest.yml" ||
-                sub === "/latest-mac.yml" ||
-                sub === "/latest-linux.yml")
+            PB_FEEDS.has(sub.slice(1))
         ) {
             // Legacy feed path serves the current feed (now under pb/ so
             // old installs keep updating; the orphaned paperboard/*.yml

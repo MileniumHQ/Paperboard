@@ -13,6 +13,7 @@ import {
     buildLatestYml,
     bunPinMismatch,
     dlFileUrl,
+    feedOf,
     isArch,
     isOs,
     isValidFileSegment,
@@ -218,6 +219,18 @@ describe("KV version records", () => {
 });
 
 describe("latest.yml feeds", () => {
+    it("gives each target the channel file electron-updater requests for it", () => {
+        // electron-updater names Linux feeds by arch and macOS feeds by
+        // platform only, so the two Linux builds must not share a feed.
+        expect(Object.fromEntries(ALL_TARGETS.map((t) => [t, ymlKeyFor(feedOf(t))]))).toEqual({
+            "linux-x64": "latest-linux.yml",
+            "linux-arm64": "latest-linux-arm64.yml",
+            "macos-x64": "latest-mac.yml",
+            "macos-arm64": "latest-mac.yml",
+            "windows-x64": "latest.yml",
+        });
+    });
+
     it("points every file at the dl latest alias with hashes", () => {
         const { key, text } = buildLatestYml(
             "macos",

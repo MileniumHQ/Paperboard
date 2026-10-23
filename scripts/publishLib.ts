@@ -329,25 +329,36 @@ export interface YmlEntry {
     size: number;
 }
 
-export function ymlKeyFor(os: Os): string {
-    return os === "windows"
-        ? "latest.yml"
-        : os === "macos"
-          ? "latest-mac.yml"
-          : "latest-linux.yml";
+// One electron-updater feed per channel file the updater requests. macOS
+// reads both architectures from latest-mac.yml, but Linux names the arch:
+// an arm64 AppImage asks for latest-linux-arm64.yml, x64 for latest-linux.yml.
+export type Feed = Os | "linux-arm64";
+
+export function feedOf(t: Target): Feed {
+    return t === "linux-arm64" ? "linux-arm64" : osOf(t);
 }
 
-export function r2YmlKey(os: Os): string {
-    return `pb/${ymlKeyFor(os)}`;
+export function ymlKeyFor(feed: Feed): string {
+    return feed === "windows"
+        ? "latest.yml"
+        : feed === "macos"
+          ? "latest-mac.yml"
+          : feed === "linux-arm64"
+            ? "latest-linux-arm64.yml"
+            : "latest-linux.yml";
+}
+
+export function r2YmlKey(feed: Feed): string {
+    return `pb/${ymlKeyFor(feed)}`;
 }
 
 export function buildLatestYml(
-    os: Os,
+    feed: Feed,
     version: string,
     entries: YmlEntry[],
     releaseDate: string,
 ): { key: string; text: string } {
-    if (!entries.length) throw new Error(`No update artifacts for ${os}`);
+    if (!entries.length) throw new Error(`No update artifacts for ${feed}`);
     const yamlLines = [`version: ${version}`, `files:`];
     for (const e of entries) {
         yamlLines.push(
@@ -362,7 +373,7 @@ export function buildLatestYml(
         `sha512: ${primary.sha512}`,
         `releaseDate: '${releaseDate}'`,
     );
-    return { key: r2YmlKey(os), text: yamlLines.join("\n") };
+    return { key: r2YmlKey(feed), text: yamlLines.join("\n") };
 }
 
 // Legacy /paperdl/<app>/<target>/download compatibility: maps an old
