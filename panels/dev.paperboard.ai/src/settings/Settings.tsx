@@ -1,13 +1,13 @@
 // The agent's settings: who it is, its brain, its computer and the
-// conversation. Every change goes through the service, which validates it.
+// conversation. Each change saves as it's made, through the service, which
+// validates it; a refused change says why and shows what's still saved.
 
-import { For, Match, Show, Switch, createResource, createSignal } from "solid-js";
+import { For, Match, Show, Switch, createEffect, createResource, createSignal, on } from "solid-js";
 import {
     PaperButton,
     PaperIcon,
     PaperInput,
     PaperModal,
-    PaperPage,
     PaperPageHeader,
     PaperRange,
     PaperSelectMenu,
@@ -18,7 +18,7 @@ import {
 } from "@mileniumhq/paperui";
 import AgentLogo from "../../legacy/src/components/AgentLogo";
 import { Budget, DEFAULT_BUDGET } from "../computer/Computer";
-import { HARNESSES, LIMITS, type ComputerBudget, type Harness } from "../contract";
+import { HARNESSES, LIMITS, type ComputerBudget, type Harness, type Settings as Saved } from "../contract";
 import type { Agent } from "../lib/agent";
 import { CLAUDE_MODELS, harnessName } from "../lib/brains";
 import styles from "./Settings.module.css";
@@ -34,35 +34,55 @@ export default function Settings(props: { agent: Agent }) {
     const name = () => settings().name;
 
     return (
-        <PaperPage class={styles.page}>
+        <>
             <PaperPageHeader icon="settings" title="Settings" subtitle={`${name()}, its brain, its computer and your conversation.`} />
             <AgentSettings agent={agent} />
             <ComputerSettings agent={agent} />
             <ConversationSettings agent={agent} />
-        </PaperPage>
+        </>
     );
 }
 
 function AgentSettings(props: { agent: Agent }) {
     const current = () => props.agent.state.settings!;
+    // the name is typed, so it saves when the field is left; the rest save when picked
     const [name, setName] = createSignal(current().name);
-    const [harness, setHarness] = createSignal<Harness>(current().harness);
     const [model, setModel] = createSignal(current().model ?? "");
     const [saving, setSaving] = createSignal(false);
     const [error, setError] = createSignal<string | null>(null);
     const [installed] = createResource(() => props.agent.detect());
+    // a change made elsewhere (the composer's brain menu) shows here
+    createEffect(on(() => current().name, (n) => setName(n)));
+    createEffect(on(() => current().model, (m) => setModel(m ?? "")));
 
-    const changed = () => name().trim() !== current().name || harness() !== current().harness || (model().trim() || null) !== current().model;
-    const save = async () => {
-        setSaving(true);
-        setError(null);
-        try {
-            await props.agent.setup({ name: name().trim(), harness: harness(), model: model().trim() || null });
-        } catch (e) {
-            setError(message(e));
-        } finally {
-            setSaving(false);
+    // one save at a time, each of the whole settings as they stand
+    let queue: Promise<void> = Promise.resolve();
+    const save = (patch: Partial<Saved>) => {
+        queue = queue.then(async () => {
+            const next = { ...current(), ...patch };
+            if (next.name === current().name && next.harness === current().harness && next.model === current().model) return;
+            setSaving(true);
+            setError(null);
+            try {
+                await props.agent.setup(next);
+            } catch (e) {
+                setError(message(e));
+                // what's saved is what shows
+                setName(current().name);
+                setModel(current().model ?? "");
+            } finally {
+                setSaving(false);
+            }
+        });
+    };
+    const saveName = () => {
+        const n = name().trim();
+        if (!n) {
+            setError("It needs a name.");
+            setName(current().name);
+            return;
         }
+        save({ name: n });
     };
     const isInstalled = (h: Harness) => installed()?.find((i) => i.id === h)?.installed ?? h === current().harness;
 
@@ -73,10 +93,24 @@ function AgentSettings(props: { agent: Agent }) {
             </PaperText>
             <PaperSettingList autoHeight>
                 <PaperSettingItem title="Name" description="What it's called, and what it calls itself.">
-                    <PaperInput name="name" label="Name" value={name()} maxLength={LIMITS.name} onInput={(e) => setName(e.currentTarget.value)} />
+                    <PaperInput
+                        name="name"
+                        label="Name"
+                        value={name()}
+                        maxLength={LIMITS.name}
+                        onInput={(e) => setName(e.currentTarget.value)}
+                        onChange={saveName}
+                        onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+                    />
                 </PaperSettingItem>
                 <PaperSettingItem title="Brain" description="The agent harness that thinks for it. Each keeps its own thread of your conversation.">
-                    <PaperSelectMenu name="harness" aria-label="Brain" value={harness()} onValueChange={(v) => setHarness(v as Harness)}>
+                    <PaperSelectMenu
+                        name="harness"
+                        aria-label="Brain"
+                        value={current().harness}
+                        // a model belongs to its harness: the new brain starts on its own default
+                        onValueChange={(v) => v !== current().harness && save({ harness: v as Harness, model: null })}
+                    >
                         <For each={HARNESSES}>
                             {(h) => (
                                 <PaperSelectMenuItem value={h} icon={<AgentLogo agent={h} />} disabled={!isInstalled(h)}>
@@ -89,7 +123,7 @@ function AgentSettings(props: { agent: Agent }) {
                 </PaperSettingItem>
                 <PaperSettingItem title="Model" description="Leave it on the default to use whatever the harness is set to already.">
                     <Show
-                        when={harness() === "claude-code"}
+                        when={current().harness === "claude-code"}
                         fallback={
                             <PaperInput
                                 name="model"
@@ -98,10 +132,17 @@ function AgentSettings(props: { agent: Agent }) {
                                 value={model()}
                                 maxLength={LIMITS.model}
                                 onInput={(e) => setModel(e.currentTarget.value)}
+                                onChange={() => save({ model: model().trim() || null })}
+                                onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
                             />
                         }
                     >
-                        <PaperSelectMenu name="model" aria-label="Model" value={model() || DEFAULT_MODEL} onValueChange={(v) => setModel(v === DEFAULT_MODEL ? "" : String(v))}>
+                        <PaperSelectMenu
+                            name="model"
+                            aria-label="Model"
+                            value={current().model ?? DEFAULT_MODEL}
+                            onValueChange={(v) => save({ model: v === DEFAULT_MODEL ? null : String(v) })}
+                        >
                             <PaperSelectMenuItem value={DEFAULT_MODEL} icon="tune">
                                 Default
                             </PaperSelectMenuItem>
@@ -110,24 +151,11 @@ function AgentSettings(props: { agent: Agent }) {
                     </Show>
                 </PaperSettingItem>
             </PaperSettingList>
-            <div class={styles.actions}>
-                <PaperButton variant="primary" disabled={!changed() || saving() || !name().trim()} onClick={() => void save()}>
-                    {saving() ? "Saving…" : "Save"}
-                </PaperButton>
-                <Show when={changed() && !saving()}>
-                    <PaperButton
-                        variant="text"
-                        onClick={() => {
-                            setName(current().name);
-                            setHarness(current().harness);
-                            setModel(current().model ?? "");
-                            setError(null);
-                        }}
-                    >
-                        Undo changes
-                    </PaperButton>
-                </Show>
-            </div>
+            <Show when={saving()}>
+                <PaperText size={2} color="text-muted" role="status">
+                    Saving…
+                </PaperText>
+            </Show>
             <Show when={error()}>
                 <PaperText size={2} color="danger" role="alert">
                     {error()}
