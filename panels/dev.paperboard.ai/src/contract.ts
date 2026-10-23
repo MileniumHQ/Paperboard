@@ -17,6 +17,12 @@ export const UI_ACTION_IDS = {
     installComputer: "ui-install-computer",
     startComputer: "ui-start-computer",
     stopComputer: "ui-stop-computer",
+    // the user's view of the computer's windows, and taking control of them
+    windows: "ui-windows",
+    frame: "ui-frame",
+    input: "ui-input",
+    closeWindow: "ui-close-window",
+    control: "ui-control",
 } as const;
 
 export const EVENTS = {
@@ -80,7 +86,31 @@ export interface ComputerState {
     budget: ComputerBudget | null;
     steps: SetupStep[];
     error: string | null;
+    /** the user has taken control: the agent's tool calls are refused until they hand it back */
+    userControl: boolean;
 }
+
+/** One of the computer's windows, as the user's view lists it. */
+export interface ComputerWindow {
+    id: number;
+    title: string;
+    app: string;
+    width: number;
+    height: number;
+}
+
+/** A window's picture: unchanged since the hash asked about, or a new JPEG. */
+export type WindowFrame =
+    | { same: true; hash: string }
+    | { same?: false; frame: string; hash: string; width: number; height: number };
+
+/** What the user does in a window they control, in window coordinates. */
+export type InputEvent =
+    | { type: "move"; x: number; y: number }
+    | { type: "down" | "up"; button: 1 | 2 | 3; x?: number; y?: number }
+    | { type: "scroll"; x: number; y: number; dy?: number; dx?: number }
+    | { type: "key"; keys: string }
+    | { type: "text"; text: string };
 
 export interface ChatState {
     /** a turn is running */
@@ -106,6 +136,6 @@ export const SETUP_STEPS: SetupStepId[] = ["image", "browser", "disk", "boot", "
 
 export const DEFAULT_STATE: AiState = {
     settings: null,
-    computer: { phase: "none", installed: false, budget: null, steps: [], error: null },
+    computer: { phase: "none", installed: false, budget: null, steps: [], error: null, userControl: false },
     chat: { busy: false, queued: 0 },
 };

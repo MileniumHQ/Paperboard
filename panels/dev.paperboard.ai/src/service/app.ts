@@ -127,6 +127,31 @@ export class AiApp {
         return { stopped: true };
     }
 
+    // ------------------------------------------------------------- the user's view
+
+    windows() {
+        return this.computer.view("view_windows", {});
+    }
+
+    frame(i: Record<string, unknown>) {
+        return this.computer.view("view_frame", { window: i.window, since: i.since, quality: i.quality });
+    }
+
+    input(i: Record<string, unknown>) {
+        return this.computer.view("view_input", { window: i.window, events: i.events });
+    }
+
+    closeWindow(i: Record<string, unknown>) {
+        return this.computer.view("view_close", { window: i.window });
+    }
+
+    /** take (or renew) control with take: true; hand it back with take: false */
+    control(i: Record<string, unknown>) {
+        if (i.take === true) this.computer.takeControl();
+        else this.computer.releaseControl();
+        return { userControl: this.computer.state.userControl };
+    }
+
     // ------------------------------------------------------------- the computer's hands
 
     /** A tool call from the harness: shown in the conversation, carried out by the VM. */

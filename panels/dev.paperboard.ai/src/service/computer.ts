@@ -37,6 +37,13 @@ const HEALTH_POLL_MS = 2_000;
 const STOP_GRACE_MS = 2_000; // the daemon gives the whole service 3 s to stop
 const CALL_TIMEOUT_MS = 11 * 60_000; // a little past the guest's longest shell command
 const MAX_CALLS = 4;
+// the user's view polls frames from every open shell; it gets its own few slots so it never starves the agent
+const MAX_VIEW_CALLS = 3;
+const VIEW_TIMEOUT_MS = 10_000;
+/** control lasts this long past the last renewal, so a closed shell can't hold the agent off */
+export const CONTROL_LEASE_MS = 20_000;
+export const VIEW_TOOLS = ["view_windows", "view_frame", "view_input", "view_close"] as const;
+export type ViewTool = (typeof VIEW_TOOLS)[number];
 
 /** A daemon-supervised child (processApi.start). */
 export interface StartOptions {
@@ -80,10 +87,11 @@ export interface ComputerDeps {
     onState: (s: ComputerState) => void;
     firstBootMs?: number;
     bootMs?: number;
+    controlLeaseMs?: number;
 }
 
 export class Computer {
-    state: ComputerState = { phase: "none", installed: false, budget: null, steps: [], error: null };
+    state: ComputerState = { phase: "none", installed: false, budget: null, steps: [], error: null, userControl: false };
     private record: ComputerRecord = { version: 1, installed: false, budget: null, port: null };
     private token: string | null = null;
     private busy: Promise<unknown> = Promise.resolve();
@@ -96,6 +104,8 @@ export class Computer {
     private abort: AbortController | null = null;
     private calls = 0;
     private callQueue: (() => void)[] = [];
+    private viewCalls = 0;
+    private control: ReturnType<typeof setTimeout> | null = null;
 
     constructor(private deps: ComputerDeps) {}
 
@@ -150,6 +160,7 @@ export class Computer {
 
     /** The service is going away: stop the VM and observe it gone, quickly. */
     async shutdown(): Promise<void> {
+        this.releaseControl();
         this.abort?.abort();
         await this.kill();
         this.offExit?.();
@@ -168,6 +179,9 @@ export class Computer {
             };
             return { isError: true, text: why[this.state.phase] ?? "Your computer is off right now." };
         }
+        if (this.state.userControl) {
+            return { isError: true, text: "The user has taken control of your computer. Wait until they hand it back, or ask them if they need you." };
+        }
         await this.slot();
         try {
             const r = await fetch(`http://127.0.0.1:${this.record.port}/call`, {
@@ -184,6 +198,45 @@ export class Computer {
         } finally {
             this.release();
         }
+    }
+
+    // ------------------------------------------------------------- the user's view
+
+    /** The user looking at (and, with control, using) the computer's windows. The guest validates the arguments. */
+    async view(tool: ViewTool, args: Record<string, unknown>): Promise<unknown> {
+        if (!VIEW_TOOLS.includes(tool)) throw new Error(`not a view: ${tool}`);
+        if (tool === "view_input" && !this.state.userControl) throw new Error("Take control of the computer first.");
+        if (this.state.phase !== "ready" || !this.record.port || !this.token) throw new Error("The computer isn't on.");
+        if (this.viewCalls >= MAX_VIEW_CALLS) throw new Error("The computer is busy showing other views; try again.");
+        this.viewCalls++;
+        try {
+            const r = await fetch(`http://127.0.0.1:${this.record.port}/call`, {
+                method: "POST",
+                headers: { Authorization: `Bearer ${this.token}`, "Content-Type": "application/json" },
+                body: JSON.stringify({ tool, args }),
+                signal: AbortSignal.timeout(VIEW_TIMEOUT_MS),
+            });
+            const body = (await r.json()) as { error?: string };
+            if (!r.ok || body.error) throw new Error(body.error ?? `the computer answered ${r.status}`);
+            return body;
+        } finally {
+            this.viewCalls--;
+        }
+    }
+
+    /** Take control, or renew it: the agent's hands wait until it's released or the lease runs out. */
+    takeControl() {
+        if (this.state.phase !== "ready") throw new Error("The computer isn't on.");
+        if (this.control) clearTimeout(this.control);
+        this.control = setTimeout(() => this.releaseControl(), this.deps.controlLeaseMs ?? CONTROL_LEASE_MS);
+        this.set({});
+    }
+
+    releaseControl() {
+        if (!this.control) return;
+        clearTimeout(this.control);
+        this.control = null;
+        this.set({});
     }
 
     // ------------------------------------------------------------- install
@@ -399,7 +452,12 @@ export class Computer {
     }
 
     private set(patch: Partial<ComputerState>) {
-        this.state = { ...this.state, ...patch, installed: this.record.installed };
+        // control is of a running computer: it ends when the computer stops being ready
+        if (this.control && (patch.phase ?? this.state.phase) !== "ready") {
+            clearTimeout(this.control);
+            this.control = null;
+        }
+        this.state = { ...this.state, ...patch, installed: this.record.installed, userControl: this.control !== null };
         this.deps.onState(this.state);
     }
 

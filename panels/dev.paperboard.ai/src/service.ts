@@ -61,6 +61,11 @@ export const aiService = definePanelService({
         ui(UI_ACTION_IDS.installComputer, "Set up the agent's computer", (i) => app.installComputer(i)),
         ui(UI_ACTION_IDS.startComputer, "Start the agent's computer", () => app.startComputer()),
         ui(UI_ACTION_IDS.stopComputer, "Stop the agent's computer", () => app.stopComputer()),
+        ui(UI_ACTION_IDS.windows, "List the computer's windows", () => app.windows()),
+        ui(UI_ACTION_IDS.frame, "Show one of the computer's windows", (i) => app.frame(i)),
+        ui(UI_ACTION_IDS.input, "Use one of the computer's windows", (i) => app.input(i)),
+        ui(UI_ACTION_IDS.closeWindow, "Close one of the computer's windows", (i) => app.closeWindow(i)),
+        ui(UI_ACTION_IDS.control, "Take or hand back control of the computer", (i) => app.control(i)),
     ],
     async onInit(ctx) {
         await app.init({
