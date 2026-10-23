@@ -1,6 +1,6 @@
 import { Match, Switch, createEffect, createSignal, onCleanup } from "solid-js";
 import { PaperButton, PaperEmptyState, PaperLoader } from "@mileniumhq/paperui";
-import Chat from "./chat/Chat";
+import Workspace from "./Workspace";
 import Onboarding from "./onboarding/Onboarding";
 import { createAgent } from "./lib/agent";
 import styles from "./Main.module.css";
@@ -49,7 +49,7 @@ export default function Main() {
                 />
             </Match>
             <Match when={agent.state.settings}>
-                <Chat agent={agent} />
+                <Workspace agent={agent} />
             </Match>
         </Switch>
     );

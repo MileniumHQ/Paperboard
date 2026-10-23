@@ -1,0 +1,76 @@
+.view {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+}
+
+.bar {
+    display: flex;
+    align-items: center;
+    gap: var(--paper-uigap);
+    padding: var(--paper-uigap-half) var(--paper-uigap);
+    border-bottom: var(--paper-border-width) solid var(--paper-border);
+}
+
+.title {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--paper-text-size-2);
+    color: var(--paper-text-muted);
+}
+
+.inputError {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--paper-text-size-1);
+    color: var(--paper-danger);
+}
+
+/* the window, scaled down to fit and never up */
+.stage {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--paper-uigap);
+    background: var(--paper-surface-sunken);
+    overflow: hidden;
+}
+
+.frame {
+    display: block;
+    max-width: 100%;
+    max-height: 100%;
+    min-width: 0;
+    min-height: 0;
+    object-fit: contain;
+    border-radius: var(--paper-border-radius-half);
+    outline: none;
+    box-shadow: 0 0 0 var(--paper-border-width) var(--paper-border);
+    user-select: none;
+    -webkit-user-drag: none;
+    transition: box-shadow var(--paper-short-transition) var(--paper-ease-standard);
+}
+
+/* under the user's control: ringed, and the keyboard goes to it */
+.frame.driving {
+    box-shadow: 0 0 0 calc(var(--paper-border-width) * 2) var(--paper-primary);
+}
+
+.frame.driving:focus-visible {
+    outline: var(--paper-focus-ring);
+    outline-offset: var(--paper-focus-offset);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .frame {
+        transition: none;
+    }
+}
