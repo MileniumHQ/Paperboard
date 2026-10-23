@@ -14,6 +14,7 @@ import type { AddressInfo } from "node:net";
 import os from "node:os";
 import path from "node:path";
 import {
+    LIMITS,
     PANEL_ID,
     type SetupPartId,
     type ComputerBudget,
@@ -42,6 +43,8 @@ const MAX_CALLS = 4;
 // the user's view polls frames from every open shell; it gets its own few slots so it never starves the agent
 const MAX_VIEW_CALLS = 3;
 const VIEW_TIMEOUT_MS = 10_000;
+/** what the guest takes in one request (its MAX_BODY is 1 MiB, base64 included) */
+const GUEST_FILE_CHUNK = 512 * 1024;
 /** control lasts this long past the last renewal, so a closed shell can't hold the agent off */
 export const CONTROL_LEASE_MS = 20_000;
 export const VIEW_TOOLS = ["view_windows", "view_frame", "view_input", "view_close", "view_sign_in"] as const;
@@ -224,6 +227,60 @@ export class Computer {
             return { text: body.text ?? "", image: body.image };
         } catch (e) {
             return { isError: true, text: `Your computer didn't answer: ${e instanceof Error ? e.message : String(e)}` };
+        } finally {
+            this.release();
+        }
+    }
+
+    // ------------------------------------------------------------- files
+
+    /** A file from the computer's home folder, read in chunks; the guest refuses one past the size limit. */
+    async getFile(file: string): Promise<{ path: string; data: Buffer }> {
+        const chunks: Buffer[] = [];
+        let size = -1;
+        let where = file;
+        for (let offset = 0; size < 0 || offset < size; ) {
+            const r = await this.guestCall("file_get", { path: file, offset });
+            const chunk = Buffer.from(String(r.data ?? ""), "base64");
+            if (size < 0) size = Number(r.size);
+            else if (Number(r.size) !== size) throw new Error(`${where} changed while it was being read`);
+            if (!Number.isSafeInteger(size) || size > LIMITS.attachments.fileBytes) throw new Error(`${where} is too big to share`);
+            where = String(r.path ?? file);
+            if (chunk.length === 0 && offset < size) throw new Error(`${where} ended early`);
+            chunks.push(chunk);
+            offset += chunk.length;
+        }
+        return { path: where, data: Buffer.concat(chunks) };
+    }
+
+    /** Write a file in the computer's home folder, in chunks; returns where it went. */
+    async putFile(file: string, data: Buffer): Promise<string> {
+        let where = file;
+        let offset = 0;
+        do {
+            const chunk = data.subarray(offset, offset + GUEST_FILE_CHUNK);
+            const r = await this.guestCall("file_put", { path: file, offset, data: chunk.toString("base64") });
+            where = String(r.path ?? file);
+            offset += chunk.length;
+        } while (offset < data.length);
+        return where;
+    }
+
+    /** One of the service's own calls to the guest, with the agent's slots and refusals: what it answered, or why not. */
+    private async guestCall(tool: "file_get" | "file_put", args: Record<string, unknown>): Promise<Record<string, unknown>> {
+        if (this.state.phase !== "ready" || !this.record.port || !this.token) throw new Error("Your computer isn't on.");
+        if (this.state.userControl) throw new Error("The user has taken control of your computer.");
+        await this.slot();
+        try {
+            const r = await fetch(`http://127.0.0.1:${this.record.port}/call`, {
+                method: "POST",
+                headers: { Authorization: `Bearer ${this.token}`, "Content-Type": "application/json" },
+                body: JSON.stringify({ tool, args }),
+                signal: AbortSignal.timeout(VIEW_TIMEOUT_MS),
+            });
+            const body = (await r.json()) as Record<string, unknown> & { error?: string };
+            if (!r.ok || body.error) throw new Error(body.error ?? `your computer answered ${r.status}`);
+            return body;
         } finally {
             this.release();
         }

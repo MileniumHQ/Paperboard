@@ -91,3 +91,59 @@
         transition: none;
     }
 }
+
+.box.dragging {
+    border-color: var(--paper-primary);
+    border-style: dashed;
+}
+
+/* the files going with the next message */
+.tray {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--paper-uigap-half);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.chip {
+    display: flex;
+    align-items: center;
+    gap: var(--paper-uigap-half);
+    max-width: 100%;
+    padding: var(--paper-uigap-onefourth) var(--paper-uigap-onefourth) var(--paper-uigap-onefourth) var(--paper-uigap-half);
+    border: var(--paper-border-width) solid var(--paper-border);
+    border-radius: var(--paper-border-radius-half);
+    background: var(--paper-surface-inset);
+    font-size: var(--paper-text-size-2);
+}
+
+.chipFailed {
+    border-color: var(--paper-danger);
+    color: var(--paper-danger);
+}
+
+.chipThumb {
+    width: var(--paper-control-size-small);
+    height: var(--paper-control-size-small);
+    object-fit: cover;
+    border-radius: var(--paper-border-radius-half);
+}
+
+.chipIcon {
+    color: var(--paper-text-muted);
+}
+
+.chipName {
+    min-width: 0;
+    max-width: calc(var(--paper-uigap) * 16);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.chipProgress {
+    width: calc(var(--paper-uigap) * 3);
+    accent-color: var(--paper-primary);
+}

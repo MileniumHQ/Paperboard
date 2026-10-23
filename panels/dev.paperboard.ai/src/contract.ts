@@ -32,6 +32,12 @@ export const UI_ACTION_IDS = {
     openConversation: "ui-open-conversation",
     deleteConversation: "ui-delete-conversation",
     setMemory: "ui-set-memory",
+    // files in the conversation: the user's are uploaded in chunks, then sent with a message; either side's are read in chunks
+    attachBegin: "ui-attach-begin",
+    attachPut: "ui-attach-put",
+    attachFinish: "ui-attach-finish",
+    attachCancel: "ui-attach-cancel",
+    attachRead: "ui-attach-read",
     // the models a brain offers, from the harness's own catalog
     models: "ui-models",
     // what the agent remembers, which the user can read and change too
@@ -103,6 +109,23 @@ export const LIMITS = {
         whatChars: 500,
         /** a routine that repeats runs at most this often */
         minEveryMinutes: 15,
+    },
+    attachments: {
+        /** one file, either side's */
+        fileBytes: 25 * 1024 * 1024,
+        /** files sent with one message */
+        perMessage: 4,
+        /** every file in one conversation */
+        conversationBytes: 1024 * 1024 * 1024,
+        conversationFiles: 1000,
+        /** uploads begun and not yet finished; one left alone this long is dropped */
+        uploading: 8,
+        uploadIdleMinutes: 10,
+        /** one chunk of an upload or a read, before base64 */
+        chunkBytes: 1024 * 1024,
+        nameChars: 120,
+        /** what the agent can look at directly; bigger images go to its computer */
+        viewBytes: 4 * 1024 * 1024,
     },
     signIn: {
         fields: 4,
@@ -267,6 +290,7 @@ export interface WaitingMessage {
     text: string;
     /** id of the message it answers */
     replyTo?: string;
+    attachments?: Attachment[];
 }
 
 export interface AiState {
@@ -278,9 +302,24 @@ export interface AiState {
     routines: RoutinesState;
 }
 
+/** A file in the conversation: one the user attached, or one the agent shared from its computer. */
+export interface Attachment {
+    id: string;
+    name: string;
+    /** how it's shown: decided from its bytes, not its name */
+    kind: "image" | "video" | "file";
+    /** its media type, from its bytes; application/octet-stream when they don't say */
+    type: string;
+    bytes: number;
+}
+
+/** In an agent's message, `![caption](attachment:<id>)` shows one of the conversation's files inline. */
+export const ATTACHMENT_SCHEME = "attachment:";
+export const ATTACHMENT_ID = /^[a-f0-9]{12}$/;
+
 export type ChatEntry =
     // replyTo: the id of an earlier user or agent entry this bubble answers
-    | { id: string; at: number; kind: "user"; text: string; replyTo?: string }
+    | { id: string; at: number; kind: "user"; text: string; replyTo?: string; attachments?: Attachment[] }
     | { id: string; at: number; kind: "agent"; text: string; replyTo?: string }
     | { id: string; at: number; kind: "error"; text: string }
     | SignInEntry;

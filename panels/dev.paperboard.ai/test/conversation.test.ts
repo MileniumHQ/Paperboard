@@ -526,3 +526,53 @@ describe("notices (a routine is due)", () => {
         expect(() => conv.notice("routine due")).toThrow(/isn't set up/);
     });
 });
+
+describe("files in the conversation", () => {
+    const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
+    const attach = (conv: Conversation, name = "cat.png") => {
+        const { id } = conv.attachments.begin(name, PNG.length);
+        conv.attachments.put(id, 0, PNG.toString("base64"));
+        return conv.attachments.finish(id);
+    };
+
+    test("a message carries its files: the bubble lists them and the agent reads which they are", async () => {
+        const { conv, host, emitted } = setup();
+        const cat = attach(conv);
+        conv.send("", null, [cat.id]);
+        await until(() => host.started.length === 1);
+        expect(emitted[0]).toMatchObject({ kind: "user", text: "", attachments: [cat] });
+        expect(host.started[0]!.args.at(-1)).toBe(`[${emitted[0]!.id}] \n(attached: [file ${cat.id}] cat.png, image, 11 B)`);
+        expect(() => conv.send("", null, [])).toThrow("say something first");
+        expect(() => conv.send("x", null, ["0123456789ab"])).toThrow("no file");
+        expect(() => conv.send("x", null, [cat.id, cat.id])).toThrow("attached twice");
+        expect(() => conv.send("x", null, "nope")).toThrow("a list of file ids");
+    });
+
+    test("the agent shows only files the conversation has", async () => {
+        const { conv, host } = setup();
+        const cat = attach(conv);
+        conv.send("show me");
+        await until(() => host.started.length === 1);
+        expect(() => conv.say("here ![a dog](attachment:0123456789ab)")).toThrow("no file [0123456789ab]");
+        expect(() => conv.say("here ![a dog](attachment:../x)")).toThrow("isn't a file's id");
+        expect(conv.say(`here ![a cat](attachment:${cat.id})`).id).toBeString();
+    });
+
+    test("files move with their conversation into the history and back; starting over forgets them", async () => {
+        const { conv, host } = setup();
+        const cat = attach(conv);
+        conv.send("look", null, [cat.id]);
+        await until(() => host.started.length === 1);
+        host.exit(TURN_PROC_ID, 0);
+        await conv.newConversation();
+        expect(() => conv.attachments.get(cat.id)).toThrow("no file");
+        const [past] = conv.past();
+        // an upload never sent doesn't follow a conversation that's reopened
+        const stray = attach(conv, "stray.png");
+        await conv.open(past!.id);
+        expect(conv.attachments.get(cat.id)).toEqual(cat);
+        expect(() => conv.attachments.get(stray.id)).toThrow("no file");
+        await conv.clear();
+        expect(() => conv.attachments.get(cat.id)).toThrow("no file");
+    });
+});

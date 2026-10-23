@@ -18,13 +18,15 @@
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { LIMITS, PANEL_ID, type ChatEntry, type ChatState, type Harness, type PastConversation, type Settings, type SignInEntry, type WaitingMessage } from "../contract";
+import { LIMITS, PANEL_ID, type Attachment, type ChatEntry, type ChatState, type Harness, type PastConversation, type Settings, type SignInEntry, type WaitingMessage } from "../contract";
 import type { StartOptions } from "./computer";
+import { Attachments, sizeText } from "./attachments";
 import { parseTurnLine, turnLaunch } from "./harness";
 
 export const TURN_PROC_ID = `${PANEL_ID}.turn`;
 const TRANSCRIPT = "transcript.jsonl";
 const THREADS = "threads.json";
+const ATTACHMENTS = "attachments";
 const PAST = "past";
 const PAST_META = "meta.json";
 const PAST_ID = /^[a-f0-9]{12}$/;
@@ -82,7 +84,12 @@ export class Conversation {
     /** the agent is writing to the user right now, not working: only then does the typing bubble show */
     private typing = false;
 
-    constructor(private deps: ConversationDeps) {}
+    /** the current conversation's files */
+    readonly attachments: Attachments;
+
+    constructor(private deps: ConversationDeps) {
+        this.attachments = new Attachments(() => deps.dir);
+    }
 
     init() {
         fs.mkdirSync(this.deps.dir, { recursive: true });
@@ -103,18 +110,27 @@ export class Conversation {
     }
 
     /** Send a message: read now, or waiting for the running turn (then it can be taken back until it's read). */
-    send(text: string, replyTo: string | null = null): { id: string; waiting: boolean } {
+    send(text: string, replyTo: string | null = null, attachmentIds: unknown = []): { id: string; waiting: boolean } {
         const message = text.trim();
-        if (!message) throw new Error("say something first");
+        const files = this.sentFiles(attachmentIds);
+        if (!message && files.length === 0) throw new Error("say something first");
         if (message.length > LIMITS.message) throw new Error(`messages are limited to ${LIMITS.message} characters`);
         if (!this.deps.settings()) throw new Error("finish setting up first");
         if (this.queue.length >= MAX_QUEUED) throw new Error("that's a lot of messages at once; wait for a reply");
         if (replyTo !== null) this.checkReplyTarget(replyTo);
         const id = this.newId();
-        this.queue.push(replyTo === null ? { id, text: message } : { id, text: message, replyTo });
+        this.queue.push({ id, text: message, ...(replyTo === null ? {} : { replyTo }), ...(files.length ? { attachments: files } : {}) });
         const waiting = this.running !== null;
         this.pump();
         return { id, waiting };
+    }
+
+    /** The files a message carries: finished uploads in this conversation, each once, up to the limit. */
+    private sentFiles(ids: unknown): Attachment[] {
+        if (!Array.isArray(ids)) throw new Error("attachments are a list of file ids");
+        if (ids.length > LIMITS.attachments.perMessage) throw new Error(`a message can carry ${LIMITS.attachments.perMessage} files`);
+        if (new Set(ids).size !== ids.length) throw new Error("that file is attached twice");
+        return ids.map((id) => this.attachments.get(id));
     }
 
     /**
@@ -163,6 +179,7 @@ export class Conversation {
         await this.swap(() => {
             this.entries = [];
             this.threads = {};
+            fs.rmSync(path.join(this.deps.dir, ATTACHMENTS), { recursive: true, force: true });
             atomicWrite(path.join(this.deps.dir, TRANSCRIPT), "");
             atomicWrite(path.join(this.deps.dir, THREADS), "{}");
         });
@@ -201,6 +218,10 @@ export class Conversation {
         await this.swap(() => {
             if (!fs.existsSync(dir)) throw new Error("That conversation isn't in the history anymore.");
             if (this.entries.length > 0) this.putAway();
+            // files uploaded and never sent belong to no message: they don't come along
+            else fs.rmSync(path.join(this.deps.dir, ATTACHMENTS), { recursive: true, force: true });
+            const files = path.join(dir, ATTACHMENTS);
+            if (fs.existsSync(files)) fs.renameSync(files, path.join(this.deps.dir, ATTACHMENTS));
             // it comes back as it was put away; a part that's missing (an interrupted put-away) is empty
             for (const [name, empty] of [
                 [TRANSCRIPT, ""],
@@ -236,6 +257,8 @@ export class Conversation {
         if (!message) throw new Error("say something first");
         if (message.length > LIMITS.message) throw new Error(`messages are limited to ${LIMITS.message} characters`);
         if (replyTo !== null) this.checkReplyTarget(replyTo);
+        // a file it shows has to be one of the conversation's, or the bubble would show nothing
+        for (const m of message.matchAll(/\]\(\s*<?attachment:([^)\s>]*)/g)) this.attachments.get(m[1]);
         // quoting the one message this turn answers says nothing the bubble above doesn't: shown plain, as a text would be
         if (replyTo !== null && this.answering.length === 1 && this.answering[0] === replyTo) replyTo = null;
         const entry: ChatEntry = { id: this.newId(), at: Date.now(), kind: "agent", text: message, ...(replyTo === null ? {} : { replyTo }) };
@@ -268,6 +291,7 @@ export class Conversation {
     async shutdown() {
         this.closed = true;
         this.queue = [];
+        this.attachments.closeUploads();
         this.notices = [];
         await this.killTurn();
     }
@@ -283,6 +307,7 @@ export class Conversation {
         while (this.switching) await this.switching.catch(() => undefined);
         const run = (async () => {
             this.queue = [];
+            this.attachments.closeUploads();
             this.stopRequested = true;
             await this.killTurn();
             await this.running;
@@ -318,7 +343,7 @@ export class Conversation {
         fs.writeFileSync(path.join(tmp, PAST_META), JSON.stringify(meta));
         const dir = path.join(this.pastDir(), id);
         fs.renameSync(tmp, dir);
-        for (const name of [TRANSCRIPT, THREADS]) {
+        for (const name of [TRANSCRIPT, THREADS, ATTACHMENTS]) {
             const from = path.join(this.deps.dir, name);
             if (fs.existsSync(from)) fs.renameSync(from, path.join(dir, name));
         }
@@ -350,7 +375,9 @@ export class Conversation {
         const notices = this.notices.splice(0);
         this.stopRequested = false; // a stop asked of an earlier turn doesn't silence this one
         // read now, so now they join the conversation
-        for (const m of batch) this.put({ id: m.id, at: Date.now(), kind: "user", text: m.text, ...(m.replyTo ? { replyTo: m.replyTo } : {}) });
+        for (const m of batch) {
+            this.put({ id: m.id, at: Date.now(), kind: "user", text: m.text, ...(m.replyTo ? { replyTo: m.replyTo } : {}), ...(m.attachments ? { attachments: m.attachments } : {}) });
+        }
         const message = [...batch.map((m) => this.forAgent(m)), ...notices.map((n) => `[from Paperboard, not the user] ${n}`)].join("\n\n");
         this.sent = [];
         this.answering = batch.map((m) => m.id);
@@ -482,7 +509,8 @@ export class Conversation {
     private forAgent(m: WaitingMessage): string {
         const to = m.replyTo ? this.entries.find((e) => e.id === m.replyTo) : undefined;
         const quote = to && "text" in to ? ` (replying to [${to.id}] “${to.text.length > QUOTE_CHARS ? to.text.slice(0, QUOTE_CHARS - 1) + "…" : to.text}”)` : "";
-        return `[${m.id}]${quote} ${m.text}`;
+        const files = (m.attachments ?? []).map((a) => `\n(attached: [file ${a.id}] ${a.name}, ${a.kind === "file" ? a.type : a.kind}, ${sizeText(a.bytes)})`).join("");
+        return `[${m.id}]${quote} ${m.text}${files}`;
     }
 
     /** Replies point at what's in the conversation: the user's and the agent's own messages, nothing else. */

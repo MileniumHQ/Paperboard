@@ -1,11 +1,14 @@
-import { For, Show, createEffect, createMemo, createSignal, on } from "solid-js";
-import { PaperButton, PaperIcon, PaperMarkdown, PaperPageHeader } from "@mileniumhq/paperui";
+import { For, Show, createEffect, createMemo, createSignal, on, type JSX } from "solid-js";
+import { PaperButton, PaperIcon, PaperMarkdown, PaperPageHeader, type MarkdownImage } from "@mileniumhq/paperui";
 import { Face } from "../face/Face";
 import { skinFor } from "../face/skins";
 import type { FaceController } from "../face/controller";
 import type { ChatEntry, SignInEntry, WaitingMessage } from "../contract";
 import type { Agent } from "../lib/agent";
+import type { Files } from "../lib/files";
 import Composer from "./Composer";
+import { AttachmentList, renderAgentImage } from "./Media";
+import { createTray } from "./tray";
 import History from "./History";
 import SignIn, { type SignInDraft } from "./SignIn";
 import styles from "./Chat.module.css";
@@ -62,6 +65,8 @@ export default function Chat(props: { agent: Agent; face: FaceController; onMenu
 
     const [replyTo, setReplyTo] = createSignal<Said | null>(null);
     const [draft, setDraft] = createSignal("");
+    const tray = createTray(agent);
+    const agentImage = renderAgentImage(agent.files);
     const [notice, setNotice] = createSignal<string | null>(null);
     const [historyOpen, setHistoryOpen] = createSignal(false);
     const [startingNew, setStartingNew] = createSignal(false);
@@ -182,6 +187,8 @@ export default function Chat(props: { agent: Agent; face: FaceController; onMenu
                             </Show>
                             <Show when={row.side === "me" || row.side === "them"}>
                                 <Bubble
+                                    files={agent.files}
+                                    renderImage={agentImage}
                                     row={row}
                                     quoted={(id) => byId(id)}
                                     nameOf={(m) => (m.kind === "user" ? "You" : name())}
@@ -193,6 +200,7 @@ export default function Chat(props: { agent: Agent; face: FaceController; onMenu
                                         agent.unqueue(w.id).then(
                                             () => {
                                                 if (!draft().trim()) setDraft(w.text);
+                                                if (w.attachments?.length) tray.restore(w.attachments);
                                             },
                                             (e) => setNotice(e instanceof Error ? e.message : String(e)),
                                         );
@@ -227,6 +235,7 @@ export default function Chat(props: { agent: Agent; face: FaceController; onMenu
                 replyTo={replyTo()}
                 replyAuthor={(m) => (m.kind === "user" ? "yourself" : name())}
                 onCancelReply={() => setReplyTo(null)}
+                tray={tray}
             />
             <History
                 agent={agent}
@@ -246,12 +255,15 @@ function Bubble(props: {
     onReply: (m: Said) => void;
     onJump: (id: string) => void;
     onTakeBack: (w: WaitingMessage) => void;
+    files: Files;
+    renderImage: (image: MarkdownImage) => JSX.Element | undefined;
 }) {
     const entry = () => props.row.entry as Said | null;
     const text = () => entry()?.text ?? props.row.waiting!.text;
     const replyId = () => entry()?.replyTo ?? props.row.waiting?.replyTo;
     const quote = () => (replyId() ? props.quoted(replyId()!) : undefined);
     const me = () => props.row.side === "me";
+    const attachments = () => (entry()?.kind === "user" ? (entry() as Extract<Said, { kind: "user" }>).attachments : props.row.waiting?.attachments) ?? [];
 
     return (
         <div
@@ -273,8 +285,13 @@ function Bubble(props: {
                             <span class={styles.quoteText}>{quote()?.text ?? ""}</span>
                         </button>
                     </Show>
-                    <Show when={me()} fallback={<PaperMarkdown class={styles.markdown} text={text()} />}>
-                        <span class={styles.plain}>{text()}</span>
+                    <Show when={me()} fallback={<PaperMarkdown class={styles.markdown} text={text()} renderImage={props.renderImage} />}>
+                        <Show when={attachments().length}>
+                            <AttachmentList class={styles.attachments} files={props.files} list={attachments()} />
+                        </Show>
+                        <Show when={text()}>
+                            <span class={styles.plain}>{text()}</span>
+                        </Show>
                     </Show>
                 </div>
                 <Show when={entry()}>

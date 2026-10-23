@@ -22,6 +22,8 @@ const REQUEST_TIMEOUT_MS = 15 * 60_000; // past the guest's longest shell comman
 export interface ToolResult {
     text: string;
     image?: string;
+    /** the image's media type; PNG when not said (the computer's screenshots) */
+    imageType?: string;
     isError?: boolean;
 }
 
@@ -109,7 +111,7 @@ async function handle(msg: Json, tools: Pick<Toolbox, "list" | "call">): Promise
             const args = params.arguments && typeof params.arguments === "object" ? (params.arguments as Record<string, unknown>) : {};
             const r = await tools.call(name, args);
             const content: Json[] = [{ type: "text", text: r.text }];
-            if (r.image) content.push({ type: "image", data: r.image, mimeType: "image/png" });
+            if (r.image) content.push({ type: "image", data: r.image, mimeType: r.imageType ?? "image/png" });
             return { content, isError: Boolean(r.isError) };
         }
         default:

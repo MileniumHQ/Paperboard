@@ -5,6 +5,7 @@
 import { actionsApi, createPanelBridge } from "@mileniumhq/paperapi";
 import { createSignal } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
+import { createFiles } from "./files";
 import {
     DEFAULT_STATE,
     EVENTS,
@@ -46,10 +47,14 @@ export function createAgent() {
     });
 
     // someone started over (here or in another window)
-    const offCleared = actionsApi.on(PANEL_ID, EVENTS.cleared, () => setEntries([]));
+    const offCleared = actionsApi.on(PANEL_ID, EVENTS.cleared, () => {
+        setEntries([]);
+        files.clear();
+    });
     // another conversation is current now (here or in another window): its history replaces what's shown
     const offSwitched = actionsApi.on(PANEL_ID, EVENTS.switched, () => {
         setEntries([]);
+        files.clear();
         loadHistory().catch((e) => {
             // shown with a way to retry, rather than an empty conversation that isn't
             setError(e instanceof Error ? e.message : String(e));
@@ -58,6 +63,7 @@ export function createAgent() {
     });
 
     const call = <T>(id: string, inputs: Record<string, unknown> = {}) => actionsApi.call<T>(PANEL_ID, id, inputs);
+    const files = createFiles(call);
 
     /** The current conversation so far; entries that arrived as events while it was on its way are kept. */
     const loadHistory = async () => {
@@ -93,7 +99,9 @@ export function createAgent() {
         installComputer: (budget: ComputerBudget) => call(UI_ACTION_IDS.installComputer, { budget }),
         startComputer: () => call(UI_ACTION_IDS.startComputer),
         stopComputer: () => call(UI_ACTION_IDS.stopComputer),
-        send: (text: string, replyTo?: string) => call<{ id: string; waiting: boolean }>(UI_ACTION_IDS.send, { text, replyTo }),
+        send: (text: string, replyTo?: string, attachments: string[] = []) =>
+            call<{ id: string; waiting: boolean }>(UI_ACTION_IDS.send, { text, replyTo, attachments }),
+        files,
         unqueue: (id: string) => call(UI_ACTION_IDS.unqueue, { id }),
         sendNow: () => call(UI_ACTION_IDS.sendNow),
         startOver: () => call(UI_ACTION_IDS.startOver),
@@ -121,6 +129,7 @@ export function createAgent() {
             offEntry();
             offCleared();
             offSwitched();
+            files.clear();
             bridge.dispose();
         },
     };

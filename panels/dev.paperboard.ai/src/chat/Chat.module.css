@@ -108,6 +108,12 @@
     white-space: pre-wrap;
 }
 
+/* a message's files sit above its text */
+.attachments + .plain {
+    display: block;
+    margin-top: var(--paper-uigap-half);
+}
+
 .markdown > :first-child {
     margin-top: 0;
 }

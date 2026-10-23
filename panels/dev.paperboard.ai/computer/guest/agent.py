@@ -1349,6 +1349,69 @@ def t_view_sign_in(args):
     return {"ok": True}
 
 
+# ---------------------------------------------------------------- files
+
+# Files moving between the conversation and this computer, in chunks that fit a request (MAX_BODY). Only the
+# service calls these, never the agent: the user's attachments come in, the files the agent shares go out.
+FILE_CHUNK = 512 * 1024
+FILE_MAX = 25 * 1024 * 1024
+HOME = os.path.realpath(os.path.expanduser("~"))
+
+
+def _home_path(p):
+    if not isinstance(p, str) or not p.strip() or "\0" in p:
+        raise ToolError("give the file's path")
+    p = p.strip()
+    if p == "~" or p.startswith("~/"):
+        p = HOME + p[1:]
+    full = os.path.realpath(os.path.join(HOME, p))
+    if not full.startswith(HOME + os.sep):
+        raise ToolError(f"only files in {HOME} can be shared")
+    return full
+
+
+def _offset(args):
+    offset = args.get("offset", 0)
+    if not isinstance(offset, int) or isinstance(offset, bool) or offset < 0 or offset > FILE_MAX:
+        raise ToolError("offset must be a place in the file")
+    return offset
+
+
+def t_file_get(args):
+    path = _home_path(args.get("path"))
+    offset = _offset(args)
+    if not os.path.isfile(path):
+        raise ToolError(f"there's no file at {path}")
+    size = os.path.getsize(path)
+    if size > FILE_MAX:
+        raise ToolError(f"{path} is {size // (1024 * 1024)} MB; files up to {FILE_MAX // (1024 * 1024)} MB can be shared")
+    with open(path, "rb") as f:
+        f.seek(offset)
+        data = f.read(FILE_CHUNK)
+    return {"path": path, "size": size, "data": base64.b64encode(data).decode()}
+
+
+def t_file_put(args):
+    path = _home_path(args.get("path"))
+    offset = _offset(args)
+    try:
+        data = base64.b64decode(args.get("data") or "", validate=True)
+    except ValueError:
+        raise ToolError("data must be base64")
+    if len(data) > FILE_CHUNK or offset + len(data) > FILE_MAX:
+        raise ToolError("that's more than a chunk or a file can hold")
+    if offset == 0:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        mode = "wb"
+    elif not os.path.isfile(path) or os.path.getsize(path) != offset:
+        raise ToolError(f"the file doesn't end at {offset}")
+    else:
+        mode = "ab"
+    with open(path, mode) as f:
+        f.write(data)
+    return {"path": path, "written": offset + len(data)}
+
+
 TOOLS = {
     "windows": t_windows, "look": t_look, "click": t_click, "type": t_type, "key": t_key,
     "scroll": t_scroll, "place": t_place, "close": t_close, "open": t_open, "shell": t_shell,
@@ -1360,6 +1423,8 @@ TOOLS = {
     # the user's, never offered to the agent
     "view_windows": t_view_windows, "view_frame": t_view_frame, "view_input": t_view_input, "view_close": t_view_close,
     "view_sign_in": t_view_sign_in,
+    # the service's, moving the conversation's files; never offered to the agent
+    "file_get": t_file_get, "file_put": t_file_put,
 }
 
 

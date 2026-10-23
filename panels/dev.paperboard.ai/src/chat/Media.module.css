@@ -1,0 +1,96 @@
+/* a message's files: small thumbnails and cards side by side, each its own height */
+.list {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: var(--paper-uigap-half);
+}
+
+.list .media,
+.list .loading {
+    max-height: calc(var(--paper-control-size-medium) * 3);
+    max-width: calc(var(--paper-control-size-medium) * 5);
+}
+
+.list .loading {
+    width: calc(var(--paper-control-size-medium) * 3);
+    height: calc(var(--paper-control-size-medium) * 2);
+}
+
+/* an image or a video in the conversation: as wide as its bubble allows, never taller than a screenful */
+.media {
+    display: block;
+    max-width: 100%;
+    max-height: calc(var(--paper-control-size-medium) * 8);
+    border-radius: var(--paper-border-radius-half);
+    background: var(--paper-surface-inset);
+}
+
+.loading {
+    display: block;
+    width: calc(var(--paper-control-size-medium) * 4);
+    height: calc(var(--paper-control-size-medium) * 3);
+    border-radius: var(--paper-border-radius-half);
+    background: var(--paper-surface-inset);
+}
+
+.missing {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--paper-uigap-half);
+    color: var(--paper-text-subtle);
+    font-size: var(--paper-text-size-2);
+}
+
+.file {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--paper-uigap-half);
+    max-width: 100%;
+    padding: var(--paper-uigap-half) var(--paper-uigap-threefourths);
+    border-radius: var(--paper-border-radius-half);
+    background: var(--paper-surface-raised);
+    color: var(--paper-text);
+    text-decoration: none;
+    font-size: var(--paper-text-size-2);
+}
+
+.file:hover,
+.file:focus-visible {
+    background: var(--paper-surface-inset);
+}
+
+.fileName {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.fileSize {
+    flex-shrink: 0;
+    color: var(--paper-text-subtle);
+}
+
+.youtube {
+    position: relative;
+    display: inline-block;
+    max-width: 100%;
+}
+
+.play {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--paper-on-color);
+    font-size: var(--paper-icon-size-large);
+    pointer-events: none;
+}
+
+.play > * {
+    padding: var(--paper-uigap-half);
+    border-radius: 50%;
+    background: var(--paper-scrim);
+}

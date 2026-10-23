@@ -21,6 +21,7 @@ import { startComputerMcp, type ComputerMcp } from "./computerMcp";
 import { Conversation, type TurnHost } from "./conversation";
 import { HARNESS_COMMANDS } from "./harness";
 import { COMPUTER_INSTRUCTIONS, COMPUTER_TOOLS } from "./computerTools";
+import { filesToolset } from "./attachmentTools";
 import { actionsToolset, type ActionsHost } from "./actionsToolset";
 import { McpServers, type Vault } from "./mcpServers";
 import { mcpToolset } from "./mcpToolset";
@@ -133,6 +134,11 @@ export class AiApp {
         const tools = toolbox([
             { id: "computer", tools: () => COMPUTER_TOOLS, call: (name, args) => this.computer.callTool(name, args), instructions: () => COMPUTER_INSTRUCTIONS },
             messagesToolset({ say: (text, replyTo) => this.conversation.say(text, replyTo) }),
+            filesToolset({
+                files: () => this.conversation.attachments,
+                getFile: (p) => this.computer.getFile(p),
+                putFile: (p, data) => this.computer.putFile(p, data),
+            }),
             this.memory.toolset(),
             this.routines.toolset(),
             this.signIns.toolset(),
