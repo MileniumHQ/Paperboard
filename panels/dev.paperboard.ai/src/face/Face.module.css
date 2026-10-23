@@ -1,0 +1,10 @@
+.face {
+    display: block;
+    overflow: visible;
+    /* override --face-ink to recolour the face */
+    --face-ink: var(--paper-text);
+}
+
+.ink {
+    fill: var(--face-ink);
+}

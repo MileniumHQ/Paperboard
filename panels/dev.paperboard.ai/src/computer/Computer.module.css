@@ -1,0 +1,29 @@
+.budget {
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap-double);
+}
+
+.note {
+    margin: 0;
+    font-size: var(--paper-text-size-1);
+    color: var(--paper-text-subtle);
+}
+
+.progress {
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap);
+}
+
+.error {
+    margin: 0;
+    color: var(--paper-danger);
+    font-size: var(--paper-text-size-2);
+    overflow-wrap: anywhere;
+}
+
+.actions {
+    display: flex;
+    gap: var(--paper-uigap);
+}

@@ -1,0 +1,155 @@
+.page {
+    height: 100%;
+    color: var(--paper-text);
+    font-family: var(--paper-font-family);
+}
+
+/* the wizard fills the page; its steps area scrolls one centered column */
+.flow {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--paper-uigap-double);
+    padding: 0 var(--paper-uigap) var(--paper-uigap-double);
+    overflow-y: auto;
+}
+
+.flow > * {
+    width: min(100%, 40rem);
+    box-sizing: border-box;
+}
+
+/* steps flow under the speaker instead of stacking on top of it */
+.flow > .step {
+    position: static;
+    height: auto;
+    overflow: visible;
+}
+
+/* Spacers around the column. When the agent is alone they share the free
+   space and center it; once something shows up, it rises toward the top. */
+.above,
+.below {
+    flex: 1 0 12vh;
+    transition: flex-grow var(--paper-medium-transition) var(--paper-ease-emphasized);
+}
+
+.above {
+    flex-grow: 0;
+}
+
+.above.centered {
+    flex-grow: 1;
+}
+
+/* the face and its bubble, side by side */
+.speaker {
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    gap: var(--paper-uigap);
+    transform-origin: 20% 50%;
+    transition:
+        transform var(--paper-medium-transition) var(--paper-ease-emphasized),
+        opacity var(--paper-medium-transition);
+}
+
+.leaving {
+    transform: translateY(calc(var(--paper-uigap-double) * -2)) scale(0.3);
+    opacity: 0;
+}
+
+/* Rounded all round except the corner by the face, which it grows out of. */
+/* it fills the row so the face lines up with the content below */
+.bubble {
+    flex: 1 1 0;
+    max-width: 100%;
+    box-sizing: border-box;
+    padding: var(--paper-uigap) var(--paper-uigap-sixfourths);
+    border-radius: calc(var(--paper-border-radius) * 1.5) calc(var(--paper-border-radius) * 1.5)
+        calc(var(--paper-border-radius) * 1.5) var(--paper-border-radius-half);
+    background: var(--paper-surface-sunken);
+    font-family: var(--paper-font-family-rounded);
+    font-size: var(--paper-text-size-3);
+    line-height: 1.4;
+    overflow: hidden;
+    transform-origin: left bottom;
+    transition:
+        opacity var(--paper-medium-transition) var(--paper-ease-emphasized),
+        transform var(--paper-medium-transition) var(--paper-ease-emphasized),
+        flex-grow var(--paper-medium-transition) var(--paper-ease-emphasized),
+        max-width var(--paper-medium-transition) var(--paper-ease-emphasized),
+        padding var(--paper-medium-transition) var(--paper-ease-emphasized);
+}
+
+/* going out is quicker than coming in (the speaker waits SWAP_MS for it) */
+.bubble.hidden {
+    opacity: 0;
+    transform: scale(0.85);
+    transition-duration: calc(var(--paper-medium-transition) / 2);
+}
+
+.bubble.folded {
+    flex-grow: 0;
+    max-width: 0;
+    padding-inline: 0;
+}
+
+.reveal {
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap);
+    animation: rise var(--paper-medium-transition) var(--paper-ease-emphasized) both;
+}
+
+@keyframes rise {
+    from {
+        opacity: 0;
+        transform: translateY(var(--paper-uigap-half));
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .reveal {
+        animation: none;
+    }
+    .speaker,
+    .bubble,
+    .above,
+    .below {
+        transition: none;
+    }
+}
+
+.note {
+    margin: 0;
+    font-size: var(--paper-text-size-1);
+    color: var(--paper-text-subtle);
+}
+
+.title {
+    margin: 0;
+    font-size: var(--paper-text-size-3);
+}
+
+
+.install {
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap);
+    animation: rise var(--paper-medium-transition) var(--paper-ease-emphasized) both;
+}
+
+
+.error {
+    margin: 0;
+    font-size: var(--paper-text-size-2);
+    color: var(--paper-danger);
+    overflow-wrap: anywhere;
+}
+
+.actions {
+    display: flex;
+    gap: var(--paper-uigap);
+}

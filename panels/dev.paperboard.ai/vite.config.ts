@@ -8,8 +8,8 @@ export default defineConfig({
     },
     build: {
         rollupOptions: {
-            // the panel page and the Home widget page, built side by side
-            input: { index: "index.html", widget: "widget.html" },
+            // the panel page; ?face opens the face playground on it
+            input: { index: "index.html" },
         },
     },
 });
