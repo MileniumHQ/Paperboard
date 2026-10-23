@@ -32,6 +32,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from PIL import Image, ImageDraw, ImageFont
 from Xlib import X, display as xdisplay
+from Xlib.ext import composite
 from Xlib.error import ConnectionClosedError, DisplayError, XError
 
 PORT = int(os.environ.get("AGENT_PORT", "7070"))
@@ -1026,7 +1027,8 @@ def _view():
         if not d.has_extension("Composite"):
             d.close()
             raise ToolError("this display can't show windows on their own (no Composite extension)")
-        d.screen().root.composite_redirect_subwindows(1)  # automatic: the server still draws the screen
+        # automatic, not manual: the server still draws the screen, so look and capture see the windows
+        d.screen().root.composite_redirect_subwindows(composite.RedirectAutomatic)
         d.sync()
         view_display = d
     return view_display
