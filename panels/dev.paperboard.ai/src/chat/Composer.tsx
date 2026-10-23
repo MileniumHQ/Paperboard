@@ -13,7 +13,7 @@ import {
     PaperText,
     useContextMenuState,
 } from "@mileniumhq/paperui";
-import AgentLogo from "../../legacy/src/components/AgentLogo";
+import BrainLogo from "../lib/BrainLogo";
 import { HARNESSES, LIMITS, type Harness } from "../contract";
 import type { Agent } from "../lib/agent";
 import type { Sheet } from "../Workspace";
@@ -170,7 +170,7 @@ export default function Composer(props: { agent: Agent; onOpen: (sheet: Sheet) =
                         onClick={() => void openBrains()}
                     >
                         <span class={styles.logo}>
-                            <AgentLogo agent={settings().harness} />
+                            <BrainLogo harness={settings().harness} />
                         </span>
                         <span class={styles.brainName}>{brainLabel(settings(), loadedModels(models))}</span>
                     </button>

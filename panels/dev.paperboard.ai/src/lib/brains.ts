@@ -5,10 +5,15 @@
 import { createResource, type Resource } from "solid-js";
 import type { BrainModel, Harness } from "../contract";
 import type { Agent } from "./agent";
-import { AGENT_REGISTRY } from "../../legacy/src/core/agents";
 
-export const harnessName = (id: string) => AGENT_REGISTRY.find((a) => a.id === id)?.name ?? id;
-export const harnessDescription = (id: string) => AGENT_REGISTRY.find((a) => a.id === id)?.description;
+// "Claude", not "Claude Code": Anthropic's terms ask that products built on it don't carry its product's name
+const BRAINS: Record<Harness, { name: string; description: string }> = {
+    codex: { name: "Codex", description: "OpenAI's coding agent" },
+    "claude-code": { name: "Claude", description: "Anthropic's coding agent" },
+};
+
+export const harnessName = (id: string) => BRAINS[id as Harness]?.name ?? id;
+export const harnessDescription = (id: string) => BRAINS[id as Harness]?.description;
 
 /** The models a harness offers, fetched again whenever the harness changes. */
 export function createModels(agent: Agent, harness: () => Harness | undefined): Resource<BrainModel[]> {

@@ -226,7 +226,7 @@ export function parseBudget(v: unknown): ComputerBudget {
 }
 
 function harnessName(h: Harness) {
-    return h === "codex" ? "Codex" : "Claude Code";
+    return h === "codex" ? "Codex" : "Claude";
 }
 
 /** One line for the conversation: what the agent did with its computer. */

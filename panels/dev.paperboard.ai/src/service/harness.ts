@@ -136,6 +136,6 @@ export function parseTurnLine(harness: Harness, line: string): TurnEvent[] {
         }
         return out;
     }
-    if (ev.type === "result" && ev.is_error) return [{ type: "failed", message: String(ev.result ?? ev.subtype ?? "Claude Code reported an error") }];
+    if (ev.type === "result" && ev.is_error) return [{ type: "failed", message: String(ev.result ?? ev.subtype ?? "Claude reported an error") }];
     return [];
 }

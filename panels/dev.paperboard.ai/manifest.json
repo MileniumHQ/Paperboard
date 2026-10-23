@@ -2,7 +2,7 @@
     "name": "AI",
     "id": "dev.paperboard.ai",
     "version": "0.3.0",
-    "description": "An agent you text, with its own computer. It thinks with Codex or Claude Code.",
+    "description": "An agent you text, with its own computer. It thinks with Codex or Claude.",
     "publisher": "Paperboard",
     "base": "./dist/index.html",
     "service": "./dist/service.js",
@@ -35,7 +35,7 @@
         "requirements": [
             {
                 "name": "Brain",
-                "detail": "Codex or Claude Code, installed and signed in"
+                "detail": "Codex or Claude, installed and signed in"
             },
             {
                 "name": "Computer",

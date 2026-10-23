@@ -1,0 +1,12 @@
+.logo {
+    display: block;
+    width: 1em;
+    height: 1em;
+    flex-shrink: 0;
+    object-fit: contain;
+}
+
+.mono {
+    background-color: currentColor;
+    mask: var(--brain-logo) center / contain no-repeat;
+}

@@ -16,7 +16,7 @@ import {
     PaperSettingList,
     PaperText,
 } from "@mileniumhq/paperui";
-import AgentLogo from "../../legacy/src/components/AgentLogo";
+import BrainLogo from "../lib/BrainLogo";
 import { Budget, DEFAULT_BUDGET } from "../computer/Computer";
 import { HARNESSES, LIMITS, type ComputerBudget, type Harness, type Settings as Saved } from "../contract";
 import type { Agent } from "../lib/agent";
@@ -115,7 +115,7 @@ function AgentSettings(props: { agent: Agent }) {
                     >
                         <For each={HARNESSES}>
                             {(h) => (
-                                <PaperSelectMenuItem value={h} icon={<AgentLogo agent={h} />} disabled={!isInstalled(h)}>
+                                <PaperSelectMenuItem value={h} icon={<BrainLogo harness={h} />} disabled={!isInstalled(h)}>
                                     {harnessName(h)}
                                     {isInstalled(h) ? "" : " (not installed)"}
                                 </PaperSelectMenuItem>

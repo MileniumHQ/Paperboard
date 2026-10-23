@@ -4,7 +4,7 @@ import { Face } from "../face/Face";
 import { createFace, type FaceController } from "../face/controller";
 import { createSpeaker, type Speaker } from "./speech";
 import { createModels, harnessDescription, harnessName, loadedModels } from "../lib/brains";
-import AgentLogo from "../../legacy/src/components/AgentLogo";
+import BrainLogo from "../lib/BrainLogo";
 import { Budget, DEFAULT_BUDGET, SetupProgress } from "../computer/Computer";
 import { LIMITS, type ComputerBudget, type Harness, type HarnessInfo } from "../contract";
 import type { Agent } from "../lib/agent";
@@ -288,7 +288,7 @@ function Scenes(props: {
                         </Match>
                         <Match when={installed().length === 0}>
                             <p class={styles.note}>
-                                I didn't find Codex or Claude Code on this computer. Install one and sign in to it, then look again.
+                                I didn't find Codex or Claude on this computer. Install one and sign in to it, then look again.
                             </p>
                             <PaperButton onClick={() => void detect()}>Look again</PaperButton>
                         </Match>
@@ -298,7 +298,7 @@ function Scenes(props: {
                                     {(h) => (
                                         <PaperSelectorItem
                                             value={h.id}
-                                            icon={<AgentLogo agent={h.id} />}
+                                            icon={<BrainLogo harness={h.id} />}
                                             description={harnessDescription(h.id)}
                                         >
                                             {harnessName(h.id)}
@@ -321,7 +321,7 @@ function Scenes(props: {
                         </PaperSelectorItem>
                         <For each={loadedModels(models) ?? []}>
                             {(m) => (
-                                <PaperSelectorItem value={m.id} icon={<AgentLogo agent={props.harness()!} />} description={m.description ?? undefined}>
+                                <PaperSelectorItem value={m.id} icon={<BrainLogo harness={props.harness()!} />} description={m.description ?? undefined}>
                                     {m.name}
                                 </PaperSelectorItem>
                             )}

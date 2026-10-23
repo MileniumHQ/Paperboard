@@ -175,7 +175,7 @@ export class Conversation {
         const settings = this.deps.settings();
         if (!settings) throw new Error("finish setting up first");
         const command = this.deps.resolve(settings.harness);
-        if (!command) throw new Error(`${settings.harness === "codex" ? "Codex" : "Claude Code"} isn't installed on this computer anymore.`);
+        if (!command) throw new Error(`${settings.harness === "codex" ? "Codex" : "Claude"} isn't installed on this computer anymore.`);
         const mcp = this.deps.mcp();
         const launch = turnLaunch({
             harness: settings.harness,
