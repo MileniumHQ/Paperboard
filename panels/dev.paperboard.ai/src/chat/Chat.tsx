@@ -2,9 +2,10 @@ import { For, Show, createEffect, createMemo, createSignal, on } from "solid-js"
 import { PaperButton, PaperIcon, PaperMarkdown, PaperPageHeader } from "@mileniumhq/paperui";
 import { Face } from "../face/Face";
 import type { FaceController } from "../face/controller";
-import type { ChatEntry, WaitingMessage } from "../contract";
+import type { ChatEntry, SignInEntry, WaitingMessage } from "../contract";
 import type { Agent } from "../lib/agent";
 import Composer from "./Composer";
+import SignIn, { type SignInDraft } from "./SignIn";
 import styles from "./Chat.module.css";
 
 /** A message someone can reply to, and be quoted. */
@@ -19,7 +20,7 @@ interface Row {
     entry: ChatEntry | null;
     /** a message not yet read by the agent */
     waiting: WaitingMessage | null;
-    side: "me" | "them" | "note";
+    side: "me" | "them" | "note" | "card";
     /** a timestamp to show above this row, if any */
     stamp: number | null;
     joinsPrev: boolean;
@@ -63,16 +64,20 @@ export default function Chat(props: { agent: Agent; face: FaceController; onMenu
     const [notice, setNotice] = createSignal<string | null>(null);
     const byId = (id: string) => agent.entries.find((e): e is Said => e.id === id && (e.kind === "user" || e.kind === "agent"));
 
-    // Old transcripts held tool-call entries; only messages and errors are shown.
+    // a waiting sign-in's typed values outlive the row redraws; the card drops them when it's answered
+    const drafts = new Map<string, SignInDraft>();
+    const draftOf = (id: string) => drafts.get(id) ?? drafts.set(id, { values: [], image: null }).get(id)!;
+
+    // Old transcripts held tool-call entries; only messages, errors and sign-in requests are shown.
     const rows = createMemo<Row[]>(() => {
-        const shown = agent.entries.filter((e) => e.kind === "user" || e.kind === "agent" || e.kind === "error");
+        const shown = agent.entries.filter((e) => e.kind === "user" || e.kind === "agent" || e.kind === "error" || e.kind === "sign-in");
         const items: Pick<Row, "key" | "entry" | "waiting" | "side">[] = [
             ...shown.map((entry) => ({ key: entry.id, entry, waiting: null, side: sideOf(entry) })),
             ...agent.state.chat.waiting.map((w) => ({ key: w.id, entry: null, waiting: w, side: "me" as const })),
         ];
         const gap = (a: (typeof items)[number], b: (typeof items)[number]) => (a.entry && b.entry ? b.entry.at - a.entry.at : 0);
         const near = (a: (typeof items)[number] | undefined, b: (typeof items)[number] | undefined) =>
-            !!a && !!b && a.side === b.side && a.side !== "note" && gap(a, b) < GROUP_MS;
+            !!a && !!b && a.side === b.side && (a.side === "me" || a.side === "them") && gap(a, b) < GROUP_MS;
         return items.map((r, i) => {
             const prev = items[i - 1];
             const next = items[i + 1];
@@ -136,7 +141,16 @@ export default function Chat(props: { agent: Agent; face: FaceController; onMenu
                                     <PaperIcon>error</PaperIcon> {(row.entry as { text: string }).text}
                                 </p>
                             </Show>
-                            <Show when={row.side !== "note"}>
+                            <Show when={row.side === "card"}>
+                                <SignIn
+                                    agent={agent}
+                                    entry={row.entry as SignInEntry}
+                                    name={name()}
+                                    draft={draftOf(row.key)}
+                                    onDone={() => drafts.delete(row.key)}
+                                />
+                            </Show>
+                            <Show when={row.side === "me" || row.side === "them"}>
                                 <Bubble
                                     row={row}
                                     quoted={(id) => byId(id)}
@@ -187,7 +201,7 @@ export default function Chat(props: { agent: Agent; face: FaceController; onMenu
     );
 }
 
-const sideOf = (e: ChatEntry): Row["side"] => (e.kind === "user" ? "me" : e.kind === "agent" ? "them" : "note");
+const sideOf = (e: ChatEntry): Row["side"] => (e.kind === "user" ? "me" : e.kind === "agent" ? "them" : e.kind === "sign-in" ? "card" : "note");
 
 function Bubble(props: {
     row: Row;

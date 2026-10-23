@@ -228,6 +228,23 @@ describe("the conversation", () => {
         expect(conv.history().map((e) => e.id)).toEqual(["a", "b"]);
     });
 
+    test("a sign-in request is kept in the transcript, and one still waiting at a restart reads as lapsed", () => {
+        const first = setup();
+        const at = Date.now();
+        const asked = { id: "s1", at, kind: "sign-in", site: "github.com", fields: [{ label: "Password", secret: true }], status: "waiting" } as const;
+        first.conv.post(asked);
+        first.conv.post({ ...asked, id: "s2", at: at + 1, status: "submitted" });
+        expect(first.emitted.map((e) => e.id)).toEqual(["s1", "s2"]);
+
+        const second = setup({ dir: first.dir });
+        expect(second.conv.history().map((e) => [e.id, e.kind === "sign-in" && e.status])).toEqual([
+            ["s1", "expired"],
+            ["s2", "submitted"],
+        ]);
+        // not a message: nothing can reply to it
+        expect(() => second.conv.send("re", "s1")).toThrow("no message [s1]");
+    });
+
     test("damage before the last line is refused, not read as an empty conversation", () => {
         const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ai-conv-"));
         dirs.push(dir);

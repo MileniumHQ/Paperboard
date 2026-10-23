@@ -29,6 +29,7 @@ import { listModels, type HarnessHomes } from "./models";
 import { Memory } from "./memory";
 import { messagesToolset } from "./messages";
 import { Routines } from "./routines";
+import { SignIns } from "./signIn";
 import { describeSchedule, localStamp } from "../routineText";
 import { toolbox, type Toolbox } from "./toolsets";
 export { which } from "./which";
@@ -67,6 +68,7 @@ export class AiApp {
     conversation!: Conversation;
     memory!: Memory;
     routines!: Routines;
+    signIns!: SignIns;
     private mcp: ComputerMcp | null = null;
     private tools: Toolbox | null = null;
     servers!: McpServers;
@@ -119,11 +121,18 @@ export class AiApp {
                 ),
             onChange: (routines) => this.ctx.setState({ routines }),
         });
+        this.signIns = new SignIns({
+            prepare: (args) => this.computer.callTool("sign_in_prepare", args),
+            fill: (args) => this.computer.view("view_sign_in", args),
+            post: (entry) => this.conversation.post(entry),
+            notice: (text) => this.conversation.notice(text),
+        });
         this.tools = toolbox([
             { id: "computer", tools: () => COMPUTER_TOOLS, call: (name, args) => this.computer.callTool(name, args), instructions: () => COMPUTER_INSTRUCTIONS },
             messagesToolset({ say: (text, replyTo) => this.conversation.say(text, replyTo) }),
             this.memory.toolset(),
             this.routines.toolset(),
+            this.signIns.toolset(),
             mcpToolset(this.servers),
             actionsToolset({ host: t.actions, enabled: () => this.servers.config.actions }),
         ]);
@@ -156,6 +165,8 @@ export class AiApp {
     }
 
     async shutdown() {
+        // before the conversation closes, so a waiting request's bubble says it lapsed
+        this.signIns?.shutdown();
         const stops = await Promise.allSettled([this.routines?.shutdown(), this.conversation?.shutdown(), this.computer?.shutdown(), this.servers?.shutdown()]);
         for (const r of stops) if (r.status === "rejected") console.error("[ai] shutdown:", String(r.reason));
         await this.mcp?.close();

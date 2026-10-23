@@ -26,6 +26,7 @@ import subprocess
 import sys
 import threading
 import time
+import urllib.parse
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -67,6 +68,8 @@ VERSION = _version()
 
 # the last marks shown for each window, so "click mark 7" means what the agent saw
 marks_by_window: dict[int, list[dict]] = {}
+# and the web page each look found in it (screen x, y, w, h, title), for the browser's DevTools
+docs_by_window: dict[int, tuple | None] = {}
 lock = threading.Lock()
 
 
@@ -426,23 +429,42 @@ POINTER_JS = r"""
 """
 
 
-def cdp_eval(expression, title):
+def cdp_pages(title):
+    with urllib.request.urlopen(f"{CDP}/json", timeout=2) as r:
+        return [t for t in json.load(r) if t.get("type") == "page" and t.get("title") == title]
+
+
+def cdp_open(page):
     import websocket  # python3-websocket
 
-    with urllib.request.urlopen(f"{CDP}/json", timeout=2) as r:
-        pages = [t for t in json.load(r) if t.get("type") == "page" and t.get("title") == title]
+    return websocket.create_connection(page["webSocketDebuggerUrl"], timeout=5, suppress_origin=True)
+
+
+def cdp_send(ws, n, method, params):
+    """One DevTools command on an open page connection; its result. Errors never quote the params."""
+    ws.send(json.dumps({"id": n, "method": method, "params": params}))
+    while True:
+        msg = json.loads(ws.recv())
+        if msg.get("id") == n:
+            if "error" in msg:
+                raise ToolError(f"{method} failed: {str(msg['error'].get('message', ''))[:200]}")
+            return msg.get("result", {})
+
+
+def cdp_value(ws, n, expression):
+    res = cdp_send(ws, n, "Runtime.evaluate", {"expression": expression, "returnByValue": True})
+    if "exceptionDetails" in res:
+        raise ToolError("page script failed: " + json.dumps(res["exceptionDetails"])[:300])
+    return res.get("result", {}).get("value")
+
+
+def cdp_eval(expression, title):
+    pages = cdp_pages(title)
     if not pages:
         return None
-    ws = websocket.create_connection(pages[0]["webSocketDebuggerUrl"], timeout=5, suppress_origin=True)
+    ws = cdp_open(pages[0])
     try:
-        ws.send(json.dumps({"id": 1, "method": "Runtime.evaluate", "params": {"expression": expression, "returnByValue": True}}))
-        while True:
-            msg = json.loads(ws.recv())
-            if msg.get("id") == 1:
-                res = msg.get("result", {})
-                if "exceptionDetails" in res:
-                    raise ToolError("page script failed: " + json.dumps(res["exceptionDetails"])[:300])
-                return res.get("result", {}).get("value")
+        return cdp_value(ws, 1, expression)
     finally:
         ws.close()
 
@@ -478,7 +500,7 @@ def chromium_based(argv0):
     return any(os.path.exists(os.path.join(d, f)) for d in (real, os.path.dirname(real)) for f in ("resources.pak", "v8_context_snapshot.bin"))
 
 
-def draw_marks(img, marks):
+def draw_marks(img, marks, labels=None):
     out = img.copy()
     dr = ImageDraw.Draw(out)
     try:
@@ -490,7 +512,7 @@ def draw_marks(img, marks):
         c = palette[i % len(palette)]
         x, y, w, h = m["x"], m["y"], m["w"], m["h"]
         dr.rectangle([x, y, x + w, y + h], outline=c, width=2)
-        label = str(i + 1)
+        label = labels[i] if labels else str(i + 1)
         tw = dr.textlength(label, font=font)
         lx, ly = max(0, x - 1), max(0, y - 16) if y >= 16 else y
         dr.rectangle([lx, ly, lx + tw + 6, ly + 16], fill=c)
@@ -563,6 +585,7 @@ def t_look(args):
     marks = sorted(marks, key=lambda m: (m["y"] // 12, m["x"]))[:MAX_MARKS]
     with lock:
         marks_by_window[win["id"]] = marks
+        docs_by_window[win["id"]] = doc
     listing = "\n".join(f'{i + 1}. {m["kind"]} "{m["name"]}"' if m["name"] else f'{i + 1}. {m["kind"]}' for i, m in enumerate(marks))
     head = f'Window {win["id"]} "{win["title"]}" ({win["width"]}x{win["height"]} px; x/y coordinates are pixels from its top-left).'
     if (rect[2], rect[3]) != (win["width"], win["height"]):
@@ -1116,14 +1139,143 @@ def t_view_close(args):
     return t_close(args)
 
 
+# ---------------------------------------------------------------- sign-in
+# The agent points at a page's sign-in fields and its submit button, and the
+# user types the values into the panel. They never reach the agent: the
+# service hands them to view_sign_in, which types them in through the
+# browser's DevTools (never a command line) and presses submit. One request
+# waits at a time, and it can be used once.
+
+SIGN_IN_FIELD_KINDS = {"entry", "text", "password text"}
+SIGN_IN_MAX_FIELDS = 4
+SIGN_IN_MAX_VALUE = 1000
+SIGN_IN_ID = re.compile(r"^[a-z0-9]{6,32}$")
+EDITABLE_JS = r"""
+(() => {
+  const e = document.activeElement;
+  const editable = !!e && !e.disabled && !e.readOnly && (e.tagName === 'INPUT' || e.tagName === 'TEXTAREA' || e.isContentEditable);
+  if (editable && e.select) e.select();  // typing replaces what's there
+  return [location.protocol + '//' + location.hostname, editable];
+})()
+"""
+sign_in_pending = None
+
+
+def site_of(url):
+    """What the user is told they're signing in to: the host, with the scheme only when it isn't https."""
+    u = urllib.parse.urlsplit(url)
+    if u.scheme not in ("https", "http") or not u.hostname:
+        raise ToolError("that page isn't a website")
+    return u.hostname if u.scheme == "https" else f"http://{u.hostname}"
+
+
+def sign_in_page(title):
+    pages = cdp_pages(title)
+    if not pages:
+        raise ToolError("that page isn't open anymore")
+    if len({p.get("url") for p in pages}) > 1:
+        raise ToolError("two tabs share that page's title; close one and look again")
+    return pages[0]
+
+
+def t_sign_in_prepare(args):
+    """Check the agent's picks and remember them; the page's site and a picture of the picks for the user."""
+    global sign_in_pending
+    rid = str(args.get("id", ""))
+    if not SIGN_IN_ID.match(rid):
+        raise ToolError("a sign-in id is lowercase letters and digits")
+    win = find_window(int(args["window"]))
+    if not is_browser(win):
+        raise ToolError("sign-in works in your browser (Helium) only")
+    with lock:
+        ms, doc = marks_by_window.get(win["id"]), docs_by_window.get(win["id"])
+    if not ms or not doc:
+        raise ToolError("look at the browser window first so its marks are fresh")
+    fields = args.get("fields")
+    if not isinstance(fields, list) or not 1 <= len(fields) <= SIGN_IN_MAX_FIELDS:
+        raise ToolError(f"pick 1 to {SIGN_IN_MAX_FIELDS} fields")
+
+    def mark(n):
+        n = int(n)
+        if not 1 <= n <= len(ms):
+            raise ToolError(f"mark {n} doesn't exist; the last look had {len(ms)}")
+        return n, ms[n - 1]
+
+    picked = [mark(n) for n in fields]
+    submit_n, submit = mark(args["submit"])
+    numbers = [n for n, _ in picked] + [submit_n]
+    if len(set(numbers)) != len(numbers):
+        raise ToolError("each field, and the submit button, is a different mark")
+    for n, m in picked:
+        if m["kind"] not in SIGN_IN_FIELD_KINDS:
+            raise ToolError(f"mark {n} is a {m['kind']}, not a text field")
+    page = sign_in_page(doc[4])
+    site = site_of(page.get("url", ""))
+    centre = lambda m: (m["x"] + m["w"] // 2, m["y"] + m["h"] // 2)  # noqa: E731
+    raise_window(win["id"])
+    time.sleep(0.15)
+    img = capture(view_rect(find_window(win["id"])))
+    boxes = [m for _, m in picked] + [submit]
+    labels = [str(i + 1) for i in range(len(picked))] + ["submit"]
+    sign_in_pending = {"id": rid, "window": win["id"], "title": doc[4], "site": site,
+                       "fields": [centre(m) for _, m in picked], "submit": centre(submit)}
+    info = {"site": site, "fields": [{"secret": m["kind"] == "password text"} for _, m in picked]}
+    return {"text": json.dumps(info), "image": png_b64(draw_marks(img, boxes, labels))}
+
+
+def t_view_sign_in(args):
+    """The user's values, typed into the fields the waiting request named, then submit pressed."""
+    global sign_in_pending
+    p = sign_in_pending
+    if not p or p["id"] != args.get("id"):
+        raise ToolError("that sign-in isn't waiting anymore")
+    values = args.get("values")
+    if not isinstance(values, list) or len(values) != len(p["fields"]) or not all(isinstance(v, str) and len(v) <= SIGN_IN_MAX_VALUE for v in values):
+        raise ToolError(f"one value per field, each at most {SIGN_IN_MAX_VALUE} characters")
+    sign_in_pending = None  # used once, whatever happens next
+    win = find_window(p["window"])
+    page = sign_in_page(p["title"])
+    if site_of(page.get("url", "")) != p["site"]:
+        raise ToolError(f"the page isn't on {p['site']} anymore")
+    ws = cdp_open(page)
+    try:
+        n = 0
+        for i, ((x, y), value) in enumerate(zip(p["fields"], values)):
+            raise_window(win["id"])
+            xdo("mousemove", "--sync", str(win["x"] + x), str(win["y"] + y))
+            xdo("click", "1")
+            time.sleep(0.15)
+            n += 1
+            origin, editable = cdp_value(ws, n, EDITABLE_JS)
+            if site_of(origin) != p["site"]:
+                raise ToolError(f"the page isn't on {p['site']} anymore")
+            if not editable:
+                raise ToolError(f"field {i + 1} didn't take the cursor; the page may have changed")
+            n += 1
+            cdp_send(ws, n, "Input.insertText", {"text": value})
+        n += 1
+        origin, _ = cdp_value(ws, n, EDITABLE_JS)
+        if site_of(origin) != p["site"]:
+            raise ToolError(f"the page isn't on {p['site']} anymore")
+    finally:
+        ws.close()
+    sx, sy = p["submit"]
+    xdo("mousemove", "--sync", str(win["x"] + sx), str(win["y"] + sy))
+    xdo("click", "1")
+    return {"ok": True}
+
+
 TOOLS = {
     "windows": t_windows, "look": t_look, "click": t_click, "type": t_type, "key": t_key,
     "scroll": t_scroll, "place": t_place, "close": t_close, "open": t_open, "shell": t_shell,
     "zoom": t_zoom, "hover": t_hover, "drag": t_drag,
+    # the service's half of a sign-in; the agent reaches it only through ask_to_sign_in
+    "sign_in_prepare": t_sign_in_prepare,
     # the service's relay to the user's tool servers; never offered to the agent as tools
     "mcp_start": t_mcp_start, "mcp_rpc": t_mcp_rpc, "mcp_stop": t_mcp_stop, "mcp_status": t_mcp_status,
     # the user's, never offered to the agent
     "view_windows": t_view_windows, "view_frame": t_view_frame, "view_input": t_view_input, "view_close": t_view_close,
+    "view_sign_in": t_view_sign_in,
 }
 
 

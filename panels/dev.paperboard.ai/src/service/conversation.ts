@@ -15,7 +15,7 @@
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { LIMITS, PANEL_ID, type ChatEntry, type ChatState, type Harness, type Settings, type WaitingMessage } from "../contract";
+import { LIMITS, PANEL_ID, type ChatEntry, type ChatState, type Harness, type Settings, type SignInEntry, type WaitingMessage } from "../contract";
 import type { StartOptions } from "./computer";
 import { parseTurnLine, turnLaunch } from "./harness";
 
@@ -117,6 +117,12 @@ export class Conversation {
         // a backlog this long means turns aren't keeping up: the oldest notice is the least useful one
         if (this.notices.length > MAX_NOTICES) console.error("[ai] dropped a notice nobody read:", this.notices.shift()!.slice(0, 120));
         this.pump();
+    }
+
+    /** Add or update a sign-in request's bubble (signIn.ts owns the request; this only shows it). */
+    post(entry: SignInEntry) {
+        if (this.closed) return;
+        this.put(entry);
     }
 
     /** Take back a message the agent hasn't read yet. */
@@ -375,7 +381,9 @@ export class Conversation {
                 throw new Error(`${file} line ${n + 1} is unreadable: ${(err as Error).message}`);
             }
             // transcripts from before the chat was only a chat hold tool-call entries: not messages, not shown
-            if (e.kind !== "user" && e.kind !== "agent" && e.kind !== "error") return;
+            if (e.kind !== "user" && e.kind !== "agent" && e.kind !== "error" && e.kind !== "sign-in") return;
+            // a sign-in request lives only as long as the service that asked for it
+            if (e.kind === "sign-in" && (e.status === "waiting" || e.status === "submitting")) e = { ...e, status: "expired" };
             byId.delete(e.id); // re-insert so a changed entry keeps its newest position
             byId.set(e.id, e);
         });

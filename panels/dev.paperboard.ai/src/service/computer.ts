@@ -43,7 +43,7 @@ const MAX_VIEW_CALLS = 3;
 const VIEW_TIMEOUT_MS = 10_000;
 /** control lasts this long past the last renewal, so a closed shell can't hold the agent off */
 export const CONTROL_LEASE_MS = 20_000;
-export const VIEW_TOOLS = ["view_windows", "view_frame", "view_input", "view_close"] as const;
+export const VIEW_TOOLS = ["view_windows", "view_frame", "view_input", "view_close", "view_sign_in"] as const;
 export type ViewTool = (typeof VIEW_TOOLS)[number];
 
 /** A daemon-supervised child (processApi.start). */

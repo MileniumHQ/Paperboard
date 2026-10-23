@@ -40,6 +40,10 @@ export const UI_ACTION_IDS = {
     // what the agent does on a schedule, which the user can see and cancel
     routines: "ui-routines",
     deleteRoutine: "ui-delete-routine",
+    // a sign-in the agent asked for: its picture, the user's values (never kept), or a no
+    signInShot: "ui-sign-in-shot",
+    signIn: "ui-sign-in",
+    declineSignIn: "ui-decline-sign-in",
 } as const;
 
 export const EVENTS = {
@@ -84,6 +88,13 @@ export const LIMITS = {
         whatChars: 500,
         /** a routine that repeats runs at most this often */
         minEveryMinutes: 15,
+    },
+    signIn: {
+        fields: 4,
+        labelChars: 40,
+        valueChars: 1000,
+        /** an unanswered request lapses after this long */
+        waitMinutes: 10,
     },
 } as const;
 
@@ -233,7 +244,25 @@ export type ChatEntry =
     // replyTo: the id of an earlier user or agent entry this bubble answers
     | { id: string; at: number; kind: "user"; text: string; replyTo?: string }
     | { id: string; at: number; kind: "agent"; text: string; replyTo?: string }
-    | { id: string; at: number; kind: "error"; text: string };
+    | { id: string; at: number; kind: "error"; text: string }
+    | SignInEntry;
+
+/**
+ * The agent asking the user to sign in on a site in its browser. The values the user types are never part
+ * of it: they go once to the computer, which types them in and presses submit.
+ */
+export interface SignInEntry {
+    id: string;
+    at: number;
+    kind: "sign-in";
+    /** the page's host, from the browser itself ("http://" in front when it isn't https) */
+    site: string;
+    /** what the agent says each field is; secret ones are password fields */
+    fields: { label: string; secret: boolean }[];
+    /** submitted: the values were typed in and submit pressed, not that the site let them in */
+    status: "waiting" | "submitting" | "submitted" | "declined" | "expired" | "failed";
+    error?: string;
+}
 
 export const SETUP_STEPS: SetupStepId[] = ["image", "browser", "disk", "boot", "install"];
 
