@@ -74,11 +74,13 @@ describe("reading the guest's console", () => {
         expect(pct("browser")).toEqual([0, 48, 100]);
     });
 
-    test("apt-get update's download is the package lists' percentage; malformed status lines say nothing", () => {
+    test("apt-get update's download is most of the package lists' percentage; malformed status lines say nothing", () => {
         const r = new ConsoleReader();
         expect(r.feed([ci("dlstatus:1:12.5:Retrieving file 1 of 9"), ci("pmstatus:x:50:y"), ci("dlstatus:x:NaN:y"), ci("dlstatus:x::y")].join("\n") + "\n")).toEqual([
-            { progress: "lists", percent: 12.5 },
+            { progress: "lists", percent: 11.25 },
         ]);
+        // the download finishing isn't the step finishing: apt still reads the lists
+        expect(r.feed(ci("dlstatus:9:100:Retrieving file 9 of 9") + "\n")).toEqual([{ progress: "lists", percent: 90 }]);
     });
 
     test("a runaway line is cut, not buffered without end", () => {

@@ -78,10 +78,12 @@ const ANSI = /\x1b\[[0-9;?]*[A-Za-z]/g;
 
 /** how much of an apt install's percentage is the download: from a second to half a minute on first boots seen, while dpkg takes about half a minute */
 const DOWNLOAD_SHARE = 0.35;
+/** after apt-get update's download, apt still reads the lists it fetched: the download ends short of done */
+const LISTS_SHARE = 0.9;
 
 /**
  * Reads the guest's serial console as it's written and says what it shows. Boot milestones begin the boot's
- * parts. apt-get update's download (dlstatus, before any install) is the package lists' percentage. Each apt
+ * parts. apt-get update's download (dlstatus, before any install) is most of the package lists' percentage. Each apt
  * install starts with "N newly installed" and then reports its own progress (it runs with
  * APT::Status-Fd on the console): dlstatus for the download, pmstatus for dpkg. The first install is the
  * desktop's packages, a later one is Helium's.
@@ -110,7 +112,7 @@ export class ConsoleReader {
         if (!s) return [];
         const pct = Math.min(100, Number(s[2]));
         if (!Number.isFinite(pct)) return [];
-        if (!this.apt) return s[1] === "dl" ? [{ progress: "lists", percent: pct }] : [];
+        if (!this.apt) return s[1] === "dl" ? [{ progress: "lists", percent: pct * LISTS_SHARE }] : [];
         // dpkg's progress means the download is done, even when nothing had to be downloaded
         const percent = s[1] === "dl" ? pct * DOWNLOAD_SHARE : 100 * DOWNLOAD_SHARE + pct * (1 - DOWNLOAD_SHARE);
         return [{ progress: this.apt, percent }];

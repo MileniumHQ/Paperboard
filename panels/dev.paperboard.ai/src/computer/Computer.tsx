@@ -1,7 +1,7 @@
 // The agent's computer as the UI shows it: the budget the user grants it and
 // the setup's progress, both straight from the service's state.
 
-import { For, Show } from "solid-js";
+import { Index, Show } from "solid-js";
 import { PaperLoader, PaperLoaderGroup, PaperRange, type LoaderStatus } from "@mileniumhq/paperui";
 import { LIMITS, type ComputerBudget, type ComputerState, type SetupPartId, type SetupStep, type SetupStepId, type StepStatus } from "../contract";
 import styles from "./Computer.module.css";
@@ -88,10 +88,12 @@ export function SetupProgress(props: { computer: ComputerState }) {
     return (
         <div class={styles.progress}>
             <PaperLoaderGroup>
-                {/* one flat list: a long step is listed as its parts */}
-                <For each={rows(props.computer)}>
-                    {(row) => <PaperLoader size="small" percent={row.percent ?? 0} loaderStatus={loaderStatus(row)} label={row.label} />}
-                </For>
+                {/* one flat list: a long step is listed as its parts. Each update is a new list of new rows, so the
+                    loaders are kept by position: recreating them would replay every finished one's success
+                    animation and skip the running one's transition. */}
+                <Index each={rows(props.computer)}>
+                    {(row) => <PaperLoader size="small" percent={row().percent ?? 0} loaderStatus={loaderStatus(row())} label={row().label} />}
+                </Index>
             </PaperLoaderGroup>
             <Show when={props.computer.phase === "failed" || props.computer.phase === "unsupported"}>
                 <p class={styles.error} role="alert">
