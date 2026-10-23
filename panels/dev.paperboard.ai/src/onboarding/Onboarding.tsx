@@ -3,7 +3,7 @@ import { PaperButton, PaperInput, PaperSelector, PaperSelectorItem, PaperWizard,
 import { Face } from "../face/Face";
 import { createFace, type FaceController } from "../face/controller";
 import { createSpeaker, type Speaker } from "./speech";
-import { AGENT_REGISTRY } from "../../legacy/src/core/agents";
+import { CLAUDE_MODELS, harnessDescription, harnessName } from "../lib/brains";
 import AgentLogo from "../../legacy/src/components/AgentLogo";
 import { Budget, DEFAULT_BUDGET, SetupProgress } from "../computer/Computer";
 import { LIMITS, type ComputerBudget, type Harness, type HarnessInfo } from "../contract";
@@ -16,16 +16,10 @@ import styles from "./Onboarding.module.css";
 
 const NAMES = ["Pip", "Juniper", "Biscuit", "Nova", "Pebble", "Moss", "Echo", "Clover", "Ziggy", "Wren", "Tofu", "Atlas", "Maple", "Orbit", "Fern", "Scout"];
 
-const CLAUDE_MODELS = [
-    { id: "claude-opus-5-5", name: "Opus 5.5", description: "Most capable. Best for long, careful work." },
-    { id: "claude-sonnet-5-5", name: "Sonnet 5.5", description: "Fast and capable. A good default." },
-    { id: "claude-haiku-5-5", name: "Haiku 5.5", description: "Quickest, for light tasks." },
-];
 const DEFAULT_MODEL = "default";
 
 const STEP = { name: 0, brain: 1, model: 2, computer: 3, budget: 4, install: 5 } as const;
 
-const harnessName = (id: string) => AGENT_REGISTRY.find((a) => a.id === id)?.name ?? id;
 
 /**
  * onSaving: the settings are about to be saved, so this window keeps the
@@ -301,7 +295,7 @@ function Scenes(props: {
                                         <PaperSelectorItem
                                             value={h.id}
                                             icon={<AgentLogo agent={h.id} />}
-                                            description={AGENT_REGISTRY.find((a) => a.id === h.id)?.description}
+                                            description={harnessDescription(h.id)}
                                         >
                                             {harnessName(h.id)}
                                         </PaperSelectorItem>

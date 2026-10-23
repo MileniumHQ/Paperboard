@@ -14,8 +14,11 @@ import {
     type AiState,
     type ChatEntry,
     type ComputerBudget,
+    type ComputerWindow,
     type HarnessInfo,
+    type InputEvent,
     type Settings,
+    type WindowFrame,
 } from "../contract";
 
 export type Hydration = "loading" | "ready" | "failed";
@@ -34,6 +37,9 @@ export function createAgent() {
         if (i >= 0) setEntries(i, reconcile(entry));
         else setEntries(entries.length, entry);
     });
+
+    // someone started over (here or in another window)
+    const offCleared = actionsApi.on(PANEL_ID, EVENTS.cleared, () => setEntries([]));
 
     const call = <T>(id: string, inputs: Record<string, unknown> = {}) => actionsApi.call<T>(PANEL_ID, id, inputs);
 
@@ -66,11 +72,21 @@ export function createAgent() {
         installComputer: (budget: ComputerBudget) => call(UI_ACTION_IDS.installComputer, { budget }),
         startComputer: () => call(UI_ACTION_IDS.startComputer),
         stopComputer: () => call(UI_ACTION_IDS.stopComputer),
-        send: (text: string) => call<ChatEntry>(UI_ACTION_IDS.send, { text }),
+        send: (text: string) => call<{ id: string; waiting: boolean }>(UI_ACTION_IDS.send, { text }),
         stop: () => call(UI_ACTION_IDS.stop),
+        unqueue: (id: string) => call(UI_ACTION_IDS.unqueue, { id }),
+        sendNow: () => call(UI_ACTION_IDS.sendNow),
+        startOver: () => call(UI_ACTION_IDS.startOver),
+        setMemory: (memoryGb: number) => call(UI_ACTION_IDS.setMemory, { memoryGb }),
+        windows: () => call<{ windows: ComputerWindow[] }>(UI_ACTION_IDS.windows).then((r) => r.windows),
+        frame: (window: number, since: string | null) => call<WindowFrame>(UI_ACTION_IDS.frame, { window, since: since ?? undefined }),
+        input: (window: number, events: InputEvent[]) => call(UI_ACTION_IDS.input, { window, events }),
+        closeWindow: (window: number) => call(UI_ACTION_IDS.closeWindow, { window }),
+        control: (take: boolean) => call<{ userControl: boolean }>(UI_ACTION_IDS.control, { take }),
         dispose: () => {
             offState();
             offEntry();
+            offCleared();
             bridge.dispose();
         },
     };
