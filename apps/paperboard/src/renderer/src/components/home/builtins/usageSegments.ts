@@ -44,7 +44,8 @@ export function formatBytes(bytes: number): string {
     const units = ["B", "KB", "MB", "GB", "TB"];
     let value = bytes;
     let unit = 0;
-    while (value >= 1024 && unit < units.length - 1) {
+    // promote on the shown value, so 1023.6 KB reads "1 MB", not "1024 KB"
+    while (Math.round(value) >= 1024 && unit < units.length - 1) {
         value /= 1024;
         unit++;
     }

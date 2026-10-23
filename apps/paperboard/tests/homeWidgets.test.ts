@@ -96,6 +96,8 @@ describe("usage chart", () => {
         expect(formatBytes(512)).toBe("512 B");
         expect(formatBytes(1.5 * GiB)).toBe("1.5 GB");
         expect(formatBytes(24 * GiB)).toBe("24 GB");
+        // just under a unit, the rounded value moves up a unit
+        expect(formatBytes(1024 * 1024 - 1)).toBe("1 MB");
     });
 });
 
