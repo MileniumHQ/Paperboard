@@ -84,7 +84,7 @@ export default function SignIn(props: { agent: Agent; entry: SignInEntry; name: 
                         <img
                             class={styles.shot}
                             src={`data:image/png;base64,${image()}`}
-                            alt={`The sign-in page on ${e().site}, with the fields ${props.name} picked numbered and its submit button marked`}
+                            alt={`The sign-in page on ${e().site}, with the fields ${props.name} picked numbered`}
                         />
                     </Show>
                     <form

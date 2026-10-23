@@ -4,7 +4,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import type { SignInEntry } from "../src/contract";
 import type { ToolResult } from "../src/service/computerMcp";
-import { SignIns } from "../src/service/signIn";
+import { SIGN_IN_TOOLS, SignIns } from "../src/service/signIn";
 import { until } from "./fakeHost";
 
 const PNG = "aW1hZ2U=";
@@ -119,6 +119,16 @@ describe("sign-in requests", () => {
         expect(v.last().status).toBe("waiting");
         // a replaced request isn't news to the agent: it asked for the new one
         expect(v.notices).toHaveLength(0);
+    });
+
+    test("a greyed-out or missing submit button needn't stop a sign-in: submit can be left out", async () => {
+        const t = setup();
+        expect(SIGN_IN_TOOLS[0]!.inputSchema.required).not.toContain("submit");
+        const r = await t.ask({ window: 7, fields: [{ mark: 3, label: "Email" }, { mark: 4, label: "Password" }] });
+        expect(r.isError).toBeFalsy();
+        expect(t.prepared[0]).not.toHaveProperty("submit");
+        expect(t.last().status).toBe("waiting");
+        expect((await t.ask({ window: 7, fields: [{ mark: 3, label: "Email" }], submit: "5" })).isError).toBe(true);
     });
 
     test("bad picks are refused before the computer is asked; the computer's refusal reaches the agent", async () => {

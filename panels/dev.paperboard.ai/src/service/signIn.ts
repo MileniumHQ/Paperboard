@@ -11,7 +11,8 @@ import type { ToolResult } from "./computerMcp";
 import type { ToolSpec } from "./computerTools";
 import type { Toolset } from "./toolsets";
 
-export const SIGN_IN_INSTRUCTIONS = `Signing in: never ask the user to text you a password or a code, and never type one yourself. When a site needs a sign-in, open its sign-in page in your browser, \`look\`, then call \`ask_to_sign_in\` with the marks of the fields (email or username, password, a one-time code) and of the submit button. The user sees the site and a picture of your picks, and types the values in themselves; you never see them. You'll be told when it's done or they said no: then \`look\` again to see whether it worked. A site that splits sign-in over two pages (email first, then password) is two asks.`;
+export const SIGN_IN_INSTRUCTIONS = `Signing in: the user types their own email, username, password and codes, always through \`ask_to_sign_in\`, and you never see them. When a site needs a sign-in, open its sign-in page in your browser, \`look\`, then call \`ask_to_sign_in\` with the marks of the fields (email or username, password, a one-time code) and of the button that submits them. A button that's greyed out until something is typed is still the right pick; if there's no button you can mark, leave \`submit\` out and Enter is pressed in the last field. The user sees the site and a picture of your picks, and types the values in themselves. You'll be told when it's done or they said no: then \`look\` again to see whether it worked. A site that splits sign-in over two pages (email first, then password) is two asks.
+Never type a sign-in value yourself, and never offer to: not an email or username you know from the conversation, and not any account details about the user that came with your instructions or your environment (those aren't for signing in to sites). If the user offers to tell you one, or sends one in the chat, don't use it: say you'd rather they type it into the sign-in request, and call \`ask_to_sign_in\`.`;
 
 export const SIGN_IN_TOOLS: ToolSpec[] = [
     {
@@ -37,9 +38,12 @@ export const SIGN_IN_TOOLS: ToolSpec[] = [
                         required: ["mark", "label"],
                     },
                 },
-                submit: { type: "integer", description: "The mark of the button that submits them." },
+                submit: {
+                    type: "integer",
+                    description: "The mark of the button that submits them, even if it's greyed out until something is typed. Leave it out when there's no button to mark: Enter is pressed in the last field.",
+                },
             },
-            required: ["window", "fields", "submit"],
+            required: ["window", "fields"],
         },
     },
 ];
@@ -83,7 +87,7 @@ export class SignIns {
         const submit = args.submit;
         const fields = args.fields;
         if (!Number.isInteger(window)) return fault("window is the browser window's id");
-        if (!Number.isInteger(submit)) return fault("submit is the submit button's mark");
+        if (submit !== undefined && !Number.isInteger(submit)) return fault("submit is the submit button's mark, or left out to press Enter");
         if (!Array.isArray(fields) || fields.length < 1 || fields.length > LIMITS.signIn.fields) return fault(`name 1 to ${LIMITS.signIn.fields} fields`);
         const picks: { mark: number; label: string }[] = [];
         for (const f of fields as unknown[]) {
@@ -96,7 +100,7 @@ export class SignIns {
         }
 
         const id = crypto.randomBytes(8).toString("hex");
-        const r = await this.deps.prepare({ id, window, fields: picks.map((p) => p.mark), submit });
+        const r = await this.deps.prepare({ id, window, fields: picks.map((p) => p.mark), ...(submit === undefined ? {} : { submit }) });
         if (r.isError) return r;
         let info: { site: string; fields: { secret: boolean }[] };
         try {

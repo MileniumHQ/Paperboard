@@ -1222,8 +1222,9 @@ def t_view_close(args):
 # The agent points at a page's sign-in fields and its submit button, and the
 # user types the values into the panel. They never reach the agent: the
 # service hands them to view_sign_in, which types them in through the
-# browser's DevTools (never a command line) and presses submit. One request
-# waits at a time, and it can be used once.
+# browser's DevTools (never a command line) and presses submit, or Enter in
+# the last field when the agent marked no button. One request waits at a
+# time, and it can be used once.
 
 SIGN_IN_FIELD_KINDS = {"entry", "text", "password text"}
 SIGN_IN_MAX_FIELDS = 4
@@ -1281,8 +1282,9 @@ def t_sign_in_prepare(args):
         return n, ms[n - 1]
 
     picked = [mark(n) for n in fields]
-    submit_n, submit = mark(args["submit"])
-    numbers = [n for n, _ in picked] + [submit_n]
+    # no button marked: Enter is pressed in the last field (a page whose button is greyed out until typed in)
+    submit_n, submit = mark(args["submit"]) if args.get("submit") is not None else (None, None)
+    numbers = [n for n, _ in picked] + ([submit_n] if submit else [])
     if len(set(numbers)) != len(numbers):
         raise ToolError("each field, and the submit button, is a different mark")
     for n, m in picked:
@@ -1294,10 +1296,10 @@ def t_sign_in_prepare(args):
     raise_window(win["id"])
     time.sleep(0.15)
     img = capture(view_rect(find_window(win["id"])))
-    boxes = [m for _, m in picked] + [submit]
-    labels = [str(i + 1) for i in range(len(picked))] + ["submit"]
+    boxes = [m for _, m in picked] + ([submit] if submit else [])
+    labels = [str(i + 1) for i in range(len(picked))] + (["submit"] if submit else [])
     sign_in_pending = {"id": rid, "window": win["id"], "title": doc[4], "site": site,
-                       "fields": [centre(m) for _, m in picked], "submit": centre(submit)}
+                       "fields": [centre(m) for _, m in picked], "submit": centre(submit) if submit else None}
     info = {"site": site, "fields": [{"secret": m["kind"] == "password text"} for _, m in picked]}
     return {"text": json.dumps(info), "image": png_b64(draw_marks(img, boxes, labels))}
 
@@ -1338,9 +1340,12 @@ def t_view_sign_in(args):
             raise ToolError(f"the page isn't on {p['site']} anymore")
     finally:
         ws.close()
-    sx, sy = p["submit"]
-    xdo("mousemove", "--sync", str(win["x"] + sx), str(win["y"] + sy))
-    xdo("click", "1")
+    if p["submit"] is None:
+        xdo("key", "Return")  # the last field still has the cursor
+    else:
+        sx, sy = p["submit"]
+        xdo("mousemove", "--sync", str(win["x"] + sx), str(win["y"] + sy))
+        xdo("click", "1")
     return {"ok": True}
 
 

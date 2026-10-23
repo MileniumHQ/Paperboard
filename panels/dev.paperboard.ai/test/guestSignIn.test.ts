@@ -95,6 +95,13 @@ out["not_editable"] = run("t_view_sign_in", {"id": "abc126", "values": ["me", "h
 out["not_editable_log"] = list(log)
 state["editable"] = True
 
+# no submit button marked (one greyed out until typed in): Enter in the last field
+out["no_submit"] = run("t_sign_in_prepare", {"id": "abc128", "window": 7, "fields": [1, 2]})
+out["no_submit_drawn"] = [l for l in log if l[0] == "drawn"][-1]
+log.clear()
+out["entered"] = run("t_view_sign_in", {"id": "abc128", "values": ["me", "hunter2"]})
+out["entered_log"] = list(log)
+
 state["pages"] = [{**page, "url": "http://intranet.local/login"}]
 out["http_site"] = run("t_sign_in_prepare", {"id": "abc127", "window": 7, "fields": [1], "submit": 3})
 print(json.dumps(out))
@@ -153,6 +160,15 @@ describe("the guest's sign-in", () => {
             ["160", "80"],
             ["160", "120"],
         ]);
+    });
+
+    test("with no submit button marked, Enter is pressed in the last field instead", () => {
+        expect(o.no_submit.ok.image).toBe("PNG");
+        expect(o.no_submit_drawn).toEqual(["drawn", ["1", "2"]]);
+        expect(o.entered).toEqual({ ok: { ok: true } });
+        const moves = o.entered_log.filter((l: string[]) => l[0] === "xdo" && l[1] === "mousemove");
+        expect(moves).toHaveLength(2); // the two fields, no button
+        expect(o.entered_log.at(-1)).toEqual(["xdo", "key", "Return"]);
     });
 
     test("a field that doesn't take the cursor stops the fill before anything is typed", () => {
