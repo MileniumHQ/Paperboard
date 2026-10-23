@@ -9,3 +9,8 @@
     flex-direction: column;
     gap: var(--paper-uigap);
 }
+
+.title {
+    margin: 0;
+}
+

@@ -46,7 +46,6 @@ function AgentSettings(props: { agent: Agent }) {
     // the name is typed, so it saves when the field is left; the rest save when picked
     const [name, setName] = createSignal(current().name);
     const [model, setModel] = createSignal(current().model ?? "");
-    const [saving, setSaving] = createSignal(false);
     const [error, setError] = createSignal<string | null>(null);
     const [installed] = createResource(() => props.agent.detect());
     // a change made elsewhere (the composer's brain menu) shows here
@@ -59,7 +58,6 @@ function AgentSettings(props: { agent: Agent }) {
         queue = queue.then(async () => {
             const next = { ...current(), ...patch };
             if (next.name === current().name && next.harness === current().harness && next.model === current().model) return;
-            setSaving(true);
             setError(null);
             try {
                 await props.agent.setup(next);
@@ -68,8 +66,6 @@ function AgentSettings(props: { agent: Agent }) {
                 // what's saved is what shows
                 setName(current().name);
                 setModel(current().model ?? "");
-            } finally {
-                setSaving(false);
             }
         });
     };
@@ -85,8 +81,8 @@ function AgentSettings(props: { agent: Agent }) {
     const isInstalled = (h: Harness) => installed()?.find((i) => i.id === h)?.installed ?? h === current().harness;
 
     return (
-        <section class={styles.group} aria-labelledby="settings-agent">
-            <PaperText as="h2" preset="subtitle" id="settings-agent">
+        <section class={styles.group} aria-label="Agent">
+            <PaperText as="h2" preset="subtitle" class={styles.title}>
                 Agent
             </PaperText>
             <PaperSettingList autoHeight>
@@ -149,11 +145,6 @@ function AgentSettings(props: { agent: Agent }) {
                     </Show>
                 </PaperSettingItem>
             </PaperSettingList>
-            <Show when={saving()}>
-                <PaperText size={2} color="text-muted" role="status">
-                    Saving…
-                </PaperText>
-            </Show>
             <Show when={error()}>
                 <PaperText size={2} color="danger" role="alert">
                     {error()}
@@ -208,8 +199,8 @@ function ComputerSettings(props: { agent: Agent }) {
         })[c().phase];
 
     return (
-        <section class={styles.group} aria-labelledby="settings-computer">
-            <PaperText as="h2" preset="subtitle" id="settings-computer">
+        <section class={styles.group} aria-label="Computer">
+            <PaperText as="h2" preset="subtitle" class={styles.title}>
                 Computer
             </PaperText>
             <Switch>
@@ -319,8 +310,8 @@ function ComputerSettings(props: { agent: Agent }) {
 function ConversationSettings(props: { agent: Agent }) {
     const [open, setOpen] = createSignal(false);
     return (
-        <section class={styles.group} aria-labelledby="settings-conversation">
-            <PaperText as="h2" preset="subtitle" id="settings-conversation">
+        <section class={styles.group} aria-label="Conversation">
+            <PaperText as="h2" preset="subtitle" class={styles.title}>
                 Conversation
             </PaperText>
             <PaperSettingList autoHeight>
