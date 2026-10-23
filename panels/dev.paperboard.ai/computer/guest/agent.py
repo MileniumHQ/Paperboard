@@ -1235,7 +1235,21 @@ EDITABLE_JS = r"""
   const e = document.activeElement;
   const editable = !!e && !e.disabled && !e.readOnly && (e.tagName === 'INPUT' || e.tagName === 'TEXTAREA' || e.isContentEditable);
   if (editable && e.select) e.select();  // typing replaces what's there
-  return [location.protocol + '//' + location.hostname, editable];
+  return [location.protocol + '//' + location.hostname, editable, editable && e.maxLength > 0 ? e.maxLength : -1];
+})()
+"""
+# A one-time code split into a box per character (each input holds maxLength characters): the value is typed a key
+# at a time, the way the site expects, and the site moves the cursor to the next box. A site that doesn't is
+# moved along with Tab once the box is full. SIGN_IN_FOCUS_JS remembers the box with the cursor; SIGN_IN_MOVED_JS
+# says whether the cursor still needs moving after a key.
+SIGN_IN_FOCUS_JS = r"""
+(() => { window[Symbol.for('paperboard.signIn')] = document.activeElement; return true; })()
+"""
+SIGN_IN_MOVED_JS = r"""
+(() => {
+  const was = window[Symbol.for('paperboard.signIn')];
+  const stuck = !!was && document.activeElement === was && was.maxLength > 0 && (was.value || '').length >= was.maxLength;
+  return stuck;
 })()
 """
 sign_in_pending = None
@@ -1304,6 +1318,34 @@ def t_sign_in_prepare(args):
     return {"text": json.dumps(info), "image": png_b64(draw_marks(img, boxes, labels))}
 
 
+def sign_in_key(ws, n, key, text=None):
+    """One key pressed and let go, as the browser's own keyboard would send it; returns the last message number."""
+    if len(key) == 1 and key.isascii() and key.isalnum():
+        code, vk = ("Digit" if key.isdigit() else "Key") + key.upper(), ord(key.upper())
+    else:
+        code, vk = key, {"Tab": 9}.get(key, 0)
+    down = {"type": "keyDown" if text else "rawKeyDown", "key": key, "code": code, "windowsVirtualKeyCode": vk}
+    if text:
+        down.update(text=text, unmodifiedText=text)
+    cdp_send(ws, n + 1, "Input.dispatchKeyEvent", down)
+    cdp_send(ws, n + 2, "Input.dispatchKeyEvent", {"type": "keyUp", "key": key, "code": code, "windowsVirtualKeyCode": vk})
+    return n + 2
+
+
+def sign_in_type_split(ws, n, value, max_length):
+    """A value longer than its box: typed a key at a time, moving to the next box whenever the site leaves the cursor in a full one."""
+    for i, c in enumerate(value):
+        n += 1
+        cdp_value(ws, n, SIGN_IN_FOCUS_JS)
+        n = sign_in_key(ws, n, c, c)
+        time.sleep(0.03)  # the site's own handler moves the cursor
+        if i < len(value) - 1:
+            n += 1
+            if cdp_value(ws, n, SIGN_IN_MOVED_JS):
+                n = sign_in_key(ws, n, "Tab")
+    return n
+
+
 def t_view_sign_in(args):
     """The user's values, typed into the fields the waiting request named, then submit pressed."""
     global sign_in_pending
@@ -1327,15 +1369,18 @@ def t_view_sign_in(args):
             xdo("click", "1")
             time.sleep(0.15)
             n += 1
-            origin, editable = cdp_value(ws, n, EDITABLE_JS)
+            origin, editable, max_length = cdp_value(ws, n, EDITABLE_JS)
             if site_of(origin) != p["site"]:
                 raise ToolError(f"the page isn't on {p['site']} anymore")
             if not editable:
                 raise ToolError(f"field {i + 1} didn't take the cursor; the page may have changed")
-            n += 1
-            cdp_send(ws, n, "Input.insertText", {"text": value})
+            if 0 < max_length < len(value):
+                n = sign_in_type_split(ws, n, value, max_length)
+            else:
+                n += 1
+                cdp_send(ws, n, "Input.insertText", {"text": value})
         n += 1
-        origin, _ = cdp_value(ws, n, EDITABLE_JS)
+        origin = cdp_value(ws, n, EDITABLE_JS)[0]
         if site_of(origin) != p["site"]:
             raise ToolError(f"the page isn't on {p['site']} anymore")
     finally:

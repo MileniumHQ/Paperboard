@@ -43,11 +43,19 @@ ns.update(
     draw_marks=lambda img, marks, labels: (log.append(["drawn", labels]), "drawn")[1],
     png_b64=lambda img: "PNG",
     cdp_open=lambda p: type("Ws", (), {"close": lambda self: log.append(["closed"])})(),
-    cdp_value=lambda ws, n, js: [state["origin"], state["editable"]],
+    cdp_value=lambda ws, n, js: fake_value(ws, n, js),
     cdp_send=lambda ws, n, method, params: log.append([method, params]),
     xdo=lambda *a: log.append(["xdo", *a]),
 )
 ns["time"] = type("T", (), {"sleep": staticmethod(lambda s: None)})
+
+# the page, as DevTools sees it: the focused field, and whether the cursor stayed in a full box after a key
+def fake_value(ws, n, js):
+    if js is ns["SIGN_IN_FOCUS_JS"]:
+        return True
+    if js is ns["SIGN_IN_MOVED_JS"]:
+        return state.get("stuck", False)
+    return [state["origin"], state["editable"], state.get("maxLength", -1)]
 
 def run(fn, args):
     try:
@@ -81,11 +89,11 @@ log.clear()
 calls = {"n": 0}
 def flaky(ws, n, js):
     calls["n"] += 1
-    return ["https://github.com" if calls["n"] == 1 else "https://evil.example", True]
+    return ["https://github.com" if calls["n"] == 1 else "https://evil.example", True, -1]
 ns["cdp_value"] = flaky
 out["redirected"] = run("t_view_sign_in", {"id": "abc125", "values": ["me", "hunter2"]})
 out["redirected_log"] = list(log)
-ns["cdp_value"] = lambda ws, n, js: [state["origin"], state["editable"]]
+ns["cdp_value"] = fake_value
 
 # a field that didn't take the cursor
 run("t_sign_in_prepare", {"id": "abc126", "window": 7, "fields": [1, 2], "submit": 3})
@@ -101,6 +109,22 @@ out["no_submit_drawn"] = [l for l in log if l[0] == "drawn"][-1]
 log.clear()
 out["entered"] = run("t_view_sign_in", {"id": "abc128", "values": ["me", "hunter2"]})
 out["entered_log"] = list(log)
+
+# a one-time code split into a box per digit: typed a key at a time; the site moves the cursor, or Tab does
+keys = lambda: [l[1]["key"] for l in log if l[0] == "Input.dispatchKeyEvent" and l[1]["type"] != "keyUp"]
+state["maxLength"] = 1
+run("t_sign_in_prepare", {"id": "abc129", "window": 7, "fields": [1], "submit": 3})
+log.clear()
+out["split"] = run("t_view_sign_in", {"id": "abc129", "values": ["123"]})
+out["split_keys"] = keys()
+out["split_inserted"] = [l for l in log if l[0] == "Input.insertText"]
+out["split_down"] = [l[1] for l in log if l[0] == "Input.dispatchKeyEvent"][0]
+state["stuck"] = True
+run("t_sign_in_prepare", {"id": "abc130", "window": 7, "fields": [1], "submit": 3})
+log.clear()
+out["split_tabbed"] = run("t_view_sign_in", {"id": "abc130", "values": ["123"]})
+out["split_tabbed_keys"] = keys()
+state["maxLength"], state["stuck"] = -1, False
 
 state["pages"] = [{**page, "url": "http://intranet.local/login"}]
 out["http_site"] = run("t_sign_in_prepare", {"id": "abc127", "window": 7, "fields": [1], "submit": 3})
@@ -174,5 +198,14 @@ describe("the guest's sign-in", () => {
     test("a field that doesn't take the cursor stops the fill before anything is typed", () => {
         expect(o.not_editable.error).toContain("didn't take the cursor");
         expect(o.not_editable_log.filter((l: string[]) => l[0] === "Input.insertText")).toEqual([]);
+    });
+
+    test("a code split into a box per digit is typed a key at a time, moving on with Tab only where the site doesn't", () => {
+        expect(o.split).toEqual({ ok: { ok: true } });
+        expect(o.split_inserted).toEqual([]); // one insert would leave the whole code in the first box
+        expect(o.split_keys).toEqual(["1", "2", "3"]);
+        expect(o.split_down).toEqual({ type: "keyDown", key: "1", code: "Digit1", windowsVirtualKeyCode: 49, text: "1", unmodifiedText: "1" });
+        expect(o.split_tabbed).toEqual({ ok: { ok: true } });
+        expect(o.split_tabbed_keys).toEqual(["1", "Tab", "2", "Tab", "3"]);
     });
 });
