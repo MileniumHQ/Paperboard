@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { MCP_TOKEN_ENV } from "../src/service/computerMcp";
-import { parseTurnLine, turnLaunch } from "../src/service/harness";
+import { instructions, parseTurnLine, turnLaunch } from "../src/service/harness";
+import { characterOf } from "../src/contract";
+import { skinFor } from "../src/face/skins";
 
 const spec = { command: "/usr/bin/x", model: null, name: "Pip", thread: null, message: "hi; rm -rf ~", mcpUrl: "http://127.0.0.1:4567/mcp", sections: ["SECTION-ONE"] };
 
@@ -112,5 +114,20 @@ describe("parseTurnLine", () => {
 
     test("a line that isn't an event is no event", () => {
         expect(parseTurnLine("codex", "Reading prompt from stdin...")).toEqual([]);
+    });
+});
+
+describe("a name that brings a character", () => {
+    test("Verity, in any case or spacing, gets her voice and her yellow face; other names get neither", () => {
+        for (const name of ["Verity", " verity ", "VERITY"]) {
+            expect(characterOf(name)).toBe("verity");
+            expect(instructions(name)).toContain("you're Verity");
+            expect(skinFor(name)).toEqual({ sphere: "var(--paper-face-verity)", ink: "var(--paper-face-verity-ink)" });
+        }
+        for (const name of ["Chippy", "Verity2", "", null]) {
+            expect(characterOf(name)).toBeNull();
+            expect(skinFor(name)).toBeNull();
+        }
+        expect(instructions("Chippy")).not.toContain("Verity");
     });
 });

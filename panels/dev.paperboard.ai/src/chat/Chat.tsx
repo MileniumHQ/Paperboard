@@ -1,6 +1,7 @@
 import { For, Show, createEffect, createMemo, createSignal, on } from "solid-js";
 import { PaperButton, PaperIcon, PaperMarkdown, PaperPageHeader } from "@mileniumhq/paperui";
 import { Face } from "../face/Face";
+import { skinFor } from "../face/skins";
 import type { FaceController } from "../face/controller";
 import type { ChatEntry, SignInEntry, WaitingMessage } from "../contract";
 import type { Agent } from "../lib/agent";
@@ -123,7 +124,7 @@ export default function Chat(props: { agent: Agent; face: FaceController; onMenu
     return (
         <div class={styles.page}>
             <div class={styles.header}>
-                <PaperPageHeader icon={<Face face={face} size={40} frame="sphere" />} title={name()} subtitle={status()}>
+                <PaperPageHeader icon={<Face face={face} size={40} frame="sphere" skin={skinFor(agent.state.settings?.name)} />} title={name()} subtitle={status()}>
                     <PaperButton icon variant="text" aria-label="Past conversations" title="Past conversations" onClick={() => setHistoryOpen(true)}>
                         history
                     </PaperButton>

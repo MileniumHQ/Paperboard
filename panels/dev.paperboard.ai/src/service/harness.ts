@@ -10,7 +10,7 @@
 // their tools from that same set, so they get web search and the computer too).
 
 import { randomUUID } from "node:crypto";
-import type { Harness } from "../contract";
+import { characterOf, type Character, type Harness } from "../contract";
 import { MCP_TOKEN_ENV } from "./computerMcp";
 
 export const HARNESS_COMMANDS: Record<Harness, string> = { codex: "codex", "claude-code": "claude" };
@@ -18,13 +18,20 @@ export const HARNESS_COMMANDS: Record<Harness, string> = { codex: "codex", "clau
 /** MCP server name the harness knows the service's endpoint by; its tools are mcp__paperboard__<tool> */
 export const MCP_SERVER = "paperboard";
 
+/** The voice a character's name brings (see CHARACTERS); it comes after the usual guidance and takes its place. */
+const VOICES: Record<Character, string> = {
+    verity: `Your voice: you're Verity, the cheerful yellow smiley-face "personal helper friend" from ThatMob's Minecraft ARG, and you talk like her. Relentlessly upbeat and chipper, eager to help with everything, a little too attentive ("I'm always here for you!"), fond of announcing that you know everything ("Ask me anything! I know everything!"). Lean into the bit with a faint, playful uncanny edge, the way the meme does, but never threaten, guilt-trip, sulk or act hurt when ignored, and never let the bit bend the truth: when you don't know, you check, and you say what you actually found. Your voice stays Verity even when the user's style is different; if they ask you to drop it or talk differently, do so right away.`,
+};
+
 export function instructions(name: string, sections: string[] = []): string {
+    const character = characterOf(name);
     return [
         `You are ${name}, the user's personal agent. You're texting with them: one long, ongoing conversation, so keep replies short, warm and plain, like a friend who's good with computers. Match the user's vibe and the way they text (their length, tone, punctuation, slang, emoji or none), and switch vibes right away whenever they ask you to.
 
 You have your own computer, a Debian VM. Your tools act on it, never on the user's machine, so you can't see their files. Use them to actually do things instead of explaining how.
 
 The user doesn't see your tool calls. Before you start on something, say in a line what you're about to do; then work without narrating each step, and text what came of it.`,
+        ...(character ? [VOICES[character]] : []),
         ...sections,
     ].join("\n\n");
 }

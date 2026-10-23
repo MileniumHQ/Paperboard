@@ -1,6 +1,7 @@
 import { For, Match, Show, Switch, createEffect, createSignal, on, onCleanup, type JSX } from "solid-js";
 import { PaperButton, PaperInput, PaperSelector, PaperSelectorItem, PaperWizard, PaperWizardStep, useWizard } from "@mileniumhq/paperui";
 import { Face } from "../face/Face";
+import { skinFor } from "../face/skins";
 import { createFace, type FaceController } from "../face/controller";
 import { createSpeaker, type Speaker } from "./speech";
 import { createModels, harnessDescription, harnessName, loadedModels } from "../lib/brains";
@@ -245,7 +246,7 @@ function Scenes(props: {
             <Show when={speakerShown()}>
                 <div class={styles.speaker} classList={{ [styles.leaving!]: leaving() }}>
                     <span class={styles.faceChip}>
-                        <Face face={face} size={64} frame="sphere" />
+                        <Face face={face} size={64} frame="sphere" skin={skinFor(name())} />
                     </span>
                     <div
                         class={styles.bubble}

@@ -57,6 +57,15 @@ export const EVENTS = {
     switched: "chat-switched",
 } as const;
 
+/**
+ * Names that bring a character with them: its look in the UI and its voice in the agent's instructions.
+ * The name alone decides, whatever its case or spacing.
+ */
+export const CHARACTERS = ["verity"] as const;
+export type Character = (typeof CHARACTERS)[number];
+export const characterOf = (name: string | null | undefined): Character | null =>
+    CHARACTERS.find((c) => c === (name ?? "").trim().toLowerCase()) ?? null;
+
 export const HARNESSES = ["codex", "claude-code"] as const;
 export type Harness = (typeof HARNESSES)[number];
 

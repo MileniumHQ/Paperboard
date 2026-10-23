@@ -29,6 +29,10 @@
     --paper-panel-actions: #2454bd;
     --paper-panel-botcreator: #5865f2;
 
+    /* the AI panel's Verity face: a yellow sphere with black features, the same in every theme */
+    --paper-face-verity: #ffd60a;
+    --paper-face-verity-ink: #000000;
+
     /* text and icons on a colored fill */
     --paper-on-color: #ffffff;
     /* scrim resting behind modal surfaces; dark/light resolve below */

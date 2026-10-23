@@ -1,8 +1,9 @@
-import { For, createEffect, createSignal, on, onCleanup, onMount } from "solid-js";
+import { For, Show, createEffect, createSignal, on, onCleanup, onMount } from "solid-js";
 import type { FaceController } from "./controller";
 import { EXPRESSIONS } from "./expressions";
 import { FEATURES, arrayToPose, faceBasis, poseToArray, strokePath, type Orientation } from "./geometry";
 import styles from "./Face.module.css";
+import type { FaceSkin } from "./skins";
 
 const R = 80;
 const BLINK_MS = 170;
@@ -30,6 +31,8 @@ export function Face(props: {
     size?: number;
     /** "face" zooms in on the features; "sphere" shows the whole hidden sphere. Small sizes default to "face". */
     frame?: "face" | "sphere";
+    /** a painted sphere and features (see skins.ts); a painted face is always shown whole */
+    skin?: FaceSkin | null;
     class?: string;
 }) {
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -60,7 +63,8 @@ export function Face(props: {
     };
 
     const size = () => props.size ?? 160;
-    const cropped = () => (props.frame ? props.frame === "face" : size() < CROP_SIZE);
+    // a painted sphere cropped to the features would be a yellow square: it's always shown whole
+    const cropped = () => !props.skin && (props.frame ? props.frame === "face" : size() < CROP_SIZE);
     // effective size of the face on screen, so cropping counts as zooming in
     const weight = () =>
         Math.max(1, Math.pow(WEIGHT_SIZE / (cropped() ? (size() * 100) / CROP_HALF : size()), 0.6));
@@ -138,7 +142,11 @@ export function Face(props: {
             height={size()}
             role="img"
             aria-label={`AI, looking ${props.face.expression()}`}
+            style={props.skin ? { "--face-ink": props.skin.ink } : undefined}
         >
+            <Show when={props.skin}>
+                {(skin) => <circle cx={frame().dx} cy={-frame().dy} r={R} fill={skin().sphere} />}
+            </Show>
             <g class={styles.ink} opacity={frame().facing} transform={`translate(${frame().dx} ${-frame().dy})`}>
                 <For each={FEATURES}>{(_, i) => <path d={frame().paths[i()]} />}</For>
             </g>
