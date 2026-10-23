@@ -18,8 +18,10 @@ import hashlib
 import io
 import json
 import os
+import re
 import shlex
 import shutil
+import signal
 import subprocess
 import sys
 import threading
@@ -787,6 +789,198 @@ def t_shell(args):
     return {"text": f"exit {r.returncode}\n{out}"}
 
 
+# ---------------------------------------------------------------- tool servers (MCP over stdio)
+#
+# The user can have MCP servers run in this computer. The service speaks
+# JSON-RPC to them through this relay: it starts one by argv, writes the
+# service's messages to its stdin one per line, and hands back the answer to
+# each request. Servers are bounded (count, line size, waiting requests,
+# time) and stop when asked, with the whole process group.
+
+MCP_MAX_SERVERS = 8
+MCP_MAX_LINE = 4 << 20
+MCP_MAX_WAITING = 32
+MCP_STDERR_KEEP = 4000
+MCP_RPC_TIMEOUT_MAX = 600
+MCP_ID = re.compile(r"^[a-z][a-z0-9-]{0,23}$")
+MCP_ENV_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,63}$")
+
+
+class McpServer:
+    def __init__(self, argv, env):
+        # bash -l so a program is found where the agent installed it; argv is passed as arguments, never as a command line
+        self.proc = subprocess.Popen(
+            ["bash", "-lc", 'exec "$0" "$@"', *argv],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            env={**os.environ, **env}, cwd=HOME, start_new_session=True,
+        )
+        self.cond = threading.Condition()
+        self.wlock = threading.Lock()
+        self.waiting = set()
+        self.replies = {}
+        self.next_id = 1
+        self.stderr = ""
+        threading.Thread(target=self._read_out, daemon=True).start()
+        threading.Thread(target=self._read_err, daemon=True).start()
+
+    def _read_out(self):
+        for raw in iter(lambda: self.proc.stdout.readline(MCP_MAX_LINE + 1), b""):
+            if len(raw) > MCP_MAX_LINE and not raw.endswith(b"\n"):
+                self.stderr = "a message was past the size limit"
+                self.kill()
+                break
+            try:
+                msg = json.loads(raw)
+            except ValueError:
+                continue  # a server logging to stdout is not a message
+            if not isinstance(msg, dict) or "method" in msg or "id" not in msg:
+                continue  # we offer no capabilities: nothing it asks of us is answered
+            with self.cond:
+                if msg["id"] in self.waiting:
+                    self.replies[msg["id"]] = msg
+                    self.cond.notify_all()
+        with self.cond:
+            self.cond.notify_all()
+
+    def _read_err(self):
+        for raw in iter(lambda: self.proc.stderr.read1(4096), b""):
+            self.stderr = (self.stderr + raw.decode("utf-8", "replace"))[-MCP_STDERR_KEEP:]
+
+    def running(self):
+        return self.proc.poll() is None
+
+    def _gone(self):
+        tail = " | ".join(self.stderr.strip().splitlines()[-3:])
+        return ToolError(f"the server isn't running (exit {self.proc.poll()})" + (f": {tail}" if tail else ""))
+
+    def _write(self, msg):
+        line = json.dumps(msg).encode() + b"\n"
+        if len(line) > MCP_MAX_LINE:
+            raise ToolError("that message is too large")
+        with self.wlock:
+            try:
+                self.proc.stdin.write(line)
+                self.proc.stdin.flush()
+            except (BrokenPipeError, ValueError, OSError):
+                raise self._gone()
+
+    def rpc(self, msg, timeout):
+        if not self.running():
+            raise self._gone()
+        if "id" not in msg:
+            self._write(msg)
+            return {}
+        # the service numbers its requests from 1 on every connection: ours are unique for this server
+        with self.cond:
+            if len(self.waiting) >= MCP_MAX_WAITING:
+                raise ToolError("too many requests are waiting on this server")
+            rid = self.next_id
+            self.next_id += 1
+            self.waiting.add(rid)
+        try:
+            self._write({**msg, "id": rid})
+            with self.cond:
+                self.cond.wait_for(lambda: rid in self.replies or not self.running(), timeout)
+                reply = self.replies.pop(rid, None)
+            if reply is None:
+                if not self.running():
+                    raise self._gone()
+                raise ToolError(f"the server didn't answer within {timeout:g} s")
+            return {**reply, "id": msg["id"]}
+        finally:
+            with self.cond:
+                self.waiting.discard(rid)
+                self.replies.pop(rid, None)
+
+    def kill(self):
+        try:
+            os.killpg(self.proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass  # already gone
+
+    def stop(self):
+        """Stop it and its children, and return its exit code once it has gone."""
+        if self.running():
+            try:
+                os.killpg(self.proc.pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass  # exited on its own just now
+            try:
+                self.proc.wait(2)
+            except subprocess.TimeoutExpired:
+                self.kill()
+                self.proc.wait(5)
+        else:
+            self.kill()  # its children may outlive it
+        return self.proc.returncode
+
+
+mcp_servers = {}
+mcp_lock = threading.Lock()
+
+
+def _mcp_id(args):
+    sid = args.get("id")
+    if not isinstance(sid, str) or not MCP_ID.match(sid):
+        raise ToolError("a server's id is lowercase letters, digits and dashes")
+    return sid
+
+
+def t_mcp_start(args):
+    sid = _mcp_id(args)
+    argv = args.get("argv")
+    if not isinstance(argv, list) or not 1 <= len(argv) <= 33 or not all(isinstance(a, str) and len(a) <= 4096 and "\0" not in a for a in argv):
+        raise ToolError("argv is a list of up to 33 strings")
+    if not argv[0] or argv[0].startswith("-"):
+        raise ToolError("the first item is the program")
+    env = args.get("env") or {}
+    if not isinstance(env, dict) or len(env) > 32 or not all(
+            isinstance(k, str) and MCP_ENV_NAME.match(k) and isinstance(v, str) and len(v) <= 8192 and "\0" not in v for k, v in env.items()):
+        raise ToolError("env is up to 32 names with text values")
+    with mcp_lock:
+        old = mcp_servers.pop(sid, None)
+    if old:
+        old.stop()  # a fresh start is a fresh server: it must be initialized again
+    with mcp_lock:
+        if len(mcp_servers) >= MCP_MAX_SERVERS:
+            raise ToolError(f"at most {MCP_MAX_SERVERS} tool servers can run in this computer")
+        try:
+            mcp_servers[sid] = McpServer(argv, env)
+        except OSError as e:
+            raise ToolError(f"couldn't start it: {e}")
+    return {"text": "started"}
+
+
+def t_mcp_rpc(args):
+    sid = _mcp_id(args)
+    msg = args.get("message")
+    if not isinstance(msg, dict) or msg.get("jsonrpc") != "2.0" or not isinstance(msg.get("method"), str):
+        raise ToolError("message is a JSON-RPC request or notification")
+    try:
+        timeout = min(max(float(args.get("timeout", 30)), 1.0), MCP_RPC_TIMEOUT_MAX)
+    except (TypeError, ValueError):
+        raise ToolError("timeout is a number of seconds")
+    with mcp_lock:
+        server = mcp_servers.get(sid)
+    if server is None:
+        raise ToolError("no such server")
+    return {"text": json.dumps(server.rpc(msg, timeout))}
+
+
+def t_mcp_stop(args):
+    sid = _mcp_id(args)
+    with mcp_lock:
+        server = mcp_servers.pop(sid, None)
+    if server is None:
+        return {"text": "wasn't running"}
+    return {"text": f"stopped (exit {server.stop()})"}
+
+
+def t_mcp_status(args):
+    with mcp_lock:
+        return {"text": json.dumps({sid: {"running": s.running(), "stderr": s.stderr[-500:]} for sid, s in mcp_servers.items()})}
+
+
 # ---------------------------------------------------------------- the user's view
 #
 # The panel shows each window in a tab the user can watch and drive. These
@@ -926,6 +1120,8 @@ TOOLS = {
     "windows": t_windows, "look": t_look, "click": t_click, "type": t_type, "key": t_key,
     "scroll": t_scroll, "place": t_place, "close": t_close, "open": t_open, "shell": t_shell,
     "zoom": t_zoom, "hover": t_hover, "drag": t_drag,
+    # the service's relay to the user's tool servers; never offered to the agent as tools
+    "mcp_start": t_mcp_start, "mcp_rpc": t_mcp_rpc, "mcp_stop": t_mcp_stop, "mcp_status": t_mcp_status,
     # the user's, never offered to the agent
     "view_windows": t_view_windows, "view_frame": t_view_frame, "view_input": t_view_input, "view_close": t_view_close,
 }
