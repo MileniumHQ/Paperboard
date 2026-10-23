@@ -112,6 +112,8 @@ runcmd:
   - [curl, -fsS, -o, /opt/paperboard/session.sh, "${seed}/session.sh"]
   - [curl, -fsS, -o, /tmp/helium.deb, "${seed}/helium.deb"]
   - [sh, -c, "DEBIAN_FRONTEND=noninteractive apt-get install -y /tmp/helium.deb && rm /tmp/helium.deb"]
+  # tells the setup's progress the browser is in (before the firewall shuts the host out)
+  - [curl, -fsS, -o, /dev/null, "${seed}/progress/browser"]
   - [chown, "root:agent", /etc/paperboard/token]
   # the agent's own computer: its hands run as it and it may update them (the VM is the boundary)
   - [chown, -R, "agent:agent", /opt/paperboard]

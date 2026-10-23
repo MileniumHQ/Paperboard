@@ -3,7 +3,7 @@
 
 import { For, Show } from "solid-js";
 import { PaperLoader, PaperLoaderGroup, PaperRange, type LoaderStatus } from "@mileniumhq/paperui";
-import { LIMITS, type ComputerBudget, type ComputerState, type SetupStep, type SetupStepId } from "../contract";
+import { LIMITS, type ComputerBudget, type ComputerState, type SetupPartId, type SetupStep, type SetupStepId, type StepStatus } from "../contract";
 import styles from "./Computer.module.css";
 
 export const DEFAULT_BUDGET: ComputerBudget = { memoryGb: 4, diskGb: 32 };
@@ -47,12 +47,22 @@ const LABELS: Record<SetupStepId, (c: ComputerState) => string> = {
     install: () => "Install a desktop and a browser",
 };
 
-function loaderStatus(s: SetupStep): LoaderStatus {
+const PART_LABELS: Record<SetupPartId, string> = {
+    power: "Turn it on",
+    debian: "Start Debian",
+    setup: "Read its setup",
+    packages: "Install the desktop's packages",
+    hands: "Fetch the agent's hands",
+    browser: "Install Helium",
+    desktop: "Start the desktop",
+};
+
+function loaderStatus(s: { status: StepStatus; percent?: number | null }): LoaderStatus {
     switch (s.status) {
         case "waiting":
             return "waiting";
         case "running":
-            return s.percent === null ? "indeterminate" : "loading";
+            return s.percent == null ? "indeterminate" : "loading";
         case "done":
             return "success";
         case "failed":
@@ -66,7 +76,17 @@ export function SetupProgress(props: { computer: ComputerState }) {
         <div class={styles.progress}>
             <PaperLoaderGroup>
                 <For each={props.computer.steps}>
-                    {(s) => <PaperLoader percent={s.percent ?? 0} loaderStatus={loaderStatus(s)} label={LABELS[s.id](props.computer)} />}
+                    {(s) => (
+                        <>
+                            <PaperLoader percent={s.percent ?? 0} loaderStatus={loaderStatus(s)} label={LABELS[s.id](props.computer)} />
+                            {/* a long step shows what it's doing while it runs, or where it stopped */}
+                            <Show when={s.parts.length > 0 && (s.status === "running" || s.status === "failed")}>
+                                <div class={styles.parts}>
+                                    <For each={s.parts}>{(p) => <PaperLoader size="small" percent={0} loaderStatus={loaderStatus(p)} label={PART_LABELS[p.id]} />}</For>
+                                </div>
+                            </Show>
+                        </>
+                    )}
                 </For>
             </PaperLoaderGroup>
             <Show when={props.computer.phase === "failed" || props.computer.phase === "unsupported"}>

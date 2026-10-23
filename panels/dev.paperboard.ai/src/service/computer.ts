@@ -15,7 +15,7 @@ import os from "node:os";
 import path from "node:path";
 import {
     PANEL_ID,
-    SETUP_STEPS,
+    type SetupPartId,
     type ComputerBudget,
     type ComputerPhase,
     type ComputerState,
@@ -25,6 +25,7 @@ import {
 import type { ToolResult } from "./computerMcp";
 import { which } from "./which";
 import { BASE_IMAGE, BROWSER_DEB, GUEST_FILES, GUEST_PORT, GUEST_VERSION, META_DATA, updateCommand, userData } from "./guest";
+import { SEED_PARTS, freshSteps, reach, setStep } from "./setupProgress";
 
 export const COMPUTER_PROC_ID = `${PANEL_ID}.computer`;
 export const TOKEN_SECRET = "computer-token";
@@ -276,8 +277,7 @@ export class Computer {
             throw new Error(support.reason);
         }
         await this.kill();
-        const steps: SetupStep[] = SETUP_STEPS.map((id) => ({ id, status: "waiting", percent: null }));
-        this.set({ phase: "installing", budget, steps, error: null });
+        this.set({ phase: "installing", budget, steps: freshSteps(), error: null });
         this.record = { version: 1, installed: false, budget, port: null };
         this.writeRecord();
         const abort = (this.abort = new AbortController());
@@ -301,19 +301,18 @@ export class Computer {
             this.step("disk", "done", 100);
 
             step = "boot";
-            this.step("boot", "running");
+            this.reach("power");
             const token = randomBytes(32).toString("hex");
             await this.deps.host.setSecret(TOKEN_SECRET, token);
             this.token = token;
-            const seeded = await startSeed(this.deps.dir, token, () => {
-                if (this.state.steps.find((s) => s.id === "boot")?.status === "running") {
-                    this.step("boot", "done", 100);
-                    this.step("install", "running");
-                    step = "install";
-                }
+            // what the guest fetches from its seed says how far its first boot has got
+            const seeded = await startSeed(this.deps.dir, token, (p) => {
+                const part = SEED_PARTS[p];
+                if (part) this.reach(part);
             });
             seed = seeded.server;
             await this.boot(support.qemu, budget, seeded.url);
+            this.reach("debian");
             const found = await this.waitHealthy(this.deps.firstBootMs ?? FIRST_BOOT_MS, abort.signal);
             this.step("install", "done", 100);
             this.record = { ...this.record, installed: true };
@@ -321,7 +320,7 @@ export class Computer {
             await this.becomeReady(found, abort.signal);
         } catch (e) {
             const message = e instanceof Error ? e.message : String(e);
-            this.step(step, "failed");
+            this.step(this.state.steps.find((s) => s.status === "running")?.id ?? step, "failed");
             await this.kill();
             this.set({ phase: "failed", error: message });
             throw e;
@@ -524,7 +523,12 @@ export class Computer {
     private step(id: SetupStepId, status: SetupStep["status"], percent: number | null = null) {
         const cur = this.state.steps.find((s) => s.id === id);
         if (cur && cur.status === status && cur.percent === percent) return; // downloads report every chunk
-        this.set({ steps: this.state.steps.map((s) => (s.id === id ? { ...s, status, percent } : s)) });
+        this.set({ steps: setStep(this.state.steps, id, status, percent) });
+    }
+
+    private reach(part: SetupPartId) {
+        const steps = reach(this.state.steps, part);
+        if (steps !== this.state.steps) this.set({ steps });
     }
 
     private readRecord(): ComputerRecord {
@@ -578,15 +582,14 @@ export function hostSupport(): Support {
 }
 
 /** The first-boot seed: cloud-init's NoCloud source plus the files it fetches. Loopback only. */
-async function startSeed(dir: string, token: string, onUserData: () => void): Promise<{ server: Server; url: string }> {
+async function startSeed(dir: string, token: string, onFetch: (path: string) => void): Promise<{ server: Server; url: string }> {
     let url = "";
     const server = createServer((req, res) => {
-        const p = (req.url ?? "").split("?")[0];
+        const p = (req.url ?? "").split("?")[0] ?? "";
         const send = (body: string) => res.writeHead(200, { "Content-Type": "text/plain" }).end(body);
-        if (p === "/user-data") {
-            onUserData();
-            return send(userData(url.replace(/\/$/, ""), token));
-        }
+        onFetch(p);
+        if (p === "/user-data") return send(userData(url.replace(/\/$/, ""), token));
+        if (p === "/progress/browser") return res.writeHead(204).end();
         if (p === "/meta-data") return send(META_DATA);
         if (p === "/vendor-data") return send("");
         if (p === "/agent.py" || p === "/session.sh") return send(GUEST_FILES[p.slice(1) as keyof typeof GUEST_FILES]);
