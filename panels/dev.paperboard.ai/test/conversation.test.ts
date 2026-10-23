@@ -49,6 +49,8 @@ describe("the conversation", () => {
         expect(turn.id).toBe(TURN_PROC_ID);
         expect(turn.env).toEqual({ PAPERBOARD_COMPUTER_MCP_TOKEN: "secret-token" });
         expect(turn.args.join(" ")).not.toContain("secret-token");
+        // codex exec waits for a piped stdin to end, so a turn's input is closed from the start
+        expect(turn.stdin).toBe(false);
         expect(busy(states)).toBe(true);
 
         host.stdout(TURN_PROC_ID, `{"type":"thread.started","thread_id":"t-1"}\n` + reply("hi there").slice(0, 20));
@@ -596,6 +598,7 @@ describe("an OpenCode turn", () => {
         conv.send("hi");
         await until(() => host.started.length === 1);
         expect(host.started[0]!.args).toEqual(["acp"]);
+        expect(host.started[0]!.stdin).toBeUndefined(); // ACP speaks over stdin
         await answer(0, "initialize", {});
         await answer(1, "session/new", { sessionId: "ses_1" });
         expect(await answer(2, "session/set_config_option", {})).toMatchObject({ sessionId: "ses_1", configId: "model", value: "vertex/gemini-3-flash" });

@@ -510,6 +510,8 @@ export class Conversation {
                 args: launch.args,
                 cwd: this.workdir(),
                 env: { ...launch.env, [launch.tokenEnv]: mcp.token },
+                // only an ACP turn talks over stdin; codex exec reads a piped stdin to its end before it starts
+                ...(acp ? {} : { stdin: false }),
             });
             timer = setTimeout(() => void this.killTurn(), this.deps.turnMs ?? TURN_MS);
             const driven = acp?.run();

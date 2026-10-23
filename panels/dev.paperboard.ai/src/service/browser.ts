@@ -72,6 +72,8 @@ export interface StartOptions {
     args: string[];
     cwd?: string;
     env?: Record<string, string>;
+    /** false: started with its input closed */
+    stdin?: boolean;
 }
 
 export interface ComputerHost {
