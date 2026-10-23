@@ -169,10 +169,17 @@ export class ConnectionPool extends EventEmitter {
         return this.activeId;
     }
 
-    /** Running panel services across every connected computer, for the tray. */
+    /**
+     * Running panel services across every connected computer, for the tray.
+     * A paired remote that is offline runs nothing reachable and is skipped;
+     * the local daemon, or a connected computer that fails to answer, still
+     * fails the count.
+     */
     public async runningServiceCount(): Promise<number> {
         let total = 0;
         for (const client of this.clients.values()) {
+            const status = client.getStatus();
+            if (status.isRemote && !status.connected) continue;
             total += await client.runningServiceCount();
         }
         return total;
