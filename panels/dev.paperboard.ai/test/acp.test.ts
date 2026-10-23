@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { AcpTurn, type AcpEvent } from "../src/service/acp";
+import { AcpTurn, RETRY_MS, type AcpEvent } from "../src/service/acp";
 import { until } from "./fakeHost";
 
 function driver(o: { thread?: string | null; ready?: () => Promise<void> } = {}) {
@@ -67,5 +67,42 @@ describe("an ACP turn", () => {
             { type: "failed", message: "OpenCode stopped before answering" },
             { type: "done" },
         ]);
+    });
+
+    test("a provider OpenCode keeps retrying past a minute fails the turn with its reason", async () => {
+        const d = driver();
+        await d.answer(0, { result: {} });
+        await d.answer(1, { result: { sessionId: "s" } });
+        await until(() => d.sent.length === 3);
+        const retry = (inMs: number, attempt: number) =>
+            d.line({ method: "session/update", params: { sessionId: "s", update: { sessionUpdate: "session_info_update", _meta: { "opencode/retry": { attempt, nextRetryAt: new Date(Date.now() + inMs).toISOString(), error: { type: "provider.rate-limit", message: "Resource exhausted." } } } } } });
+        const cleared = () => d.line({ method: "session/update", params: { sessionId: "s", update: { sessionUpdate: "session_info_update", _meta: { "opencode/retry": null } } } });
+        retry(5_000, 1);
+        expect(d.sent.some((m) => m.method === "session/cancel")).toBe(false); // a short wait is OpenCode's to make
+        cleared(); // OpenCode clears the notice at each attempt: the wait goes on until the provider answers
+        retry(RETRY_MS + 5_000, 2);
+        await until(() => d.sent.some((m) => m.method === "session/cancel"));
+        expect(d.sent.find((m) => m.method === "session/cancel")).toMatchObject({ params: { sessionId: "s" } });
+        await d.answer(2, { result: { stopReason: "cancelled" } });
+        await d.done;
+        expect(d.events.slice(1)).toEqual([
+            { type: "working" },
+            { type: "working" },
+            { type: "failed", message: "Resource exhausted. (OpenCode was still retrying after a minute, so this turn stopped)" },
+            { type: "done" },
+        ]);
+    });
+
+    test("a text that's gone out ends the typing: the next step is work", async () => {
+        const d = driver();
+        await d.answer(0, { result: {} });
+        await d.answer(1, { result: { sessionId: "s" } });
+        await until(() => d.sent.length === 3);
+        const upd = (update: object) => d.line({ method: "session/update", params: { sessionId: "s", update } });
+        upd({ sessionUpdate: "tool_call", toolCallId: "c1", name: "paperboard_send_message", status: "pending" });
+        upd({ sessionUpdate: "tool_call_update", toolCallId: "c1", status: "completed" });
+        await d.answer(2, { result: { stopReason: "end_turn" } });
+        await d.done;
+        expect(d.events.slice(1)).toEqual([{ type: "typing" }, { type: "working" }, { type: "done" }]);
     });
 });
