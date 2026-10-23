@@ -76,16 +76,6 @@ describe("process.run timeout", () => {
         (globalThis as any).WebSocket = undefined;
     });
 
-    test("start carries stdin: ignore to the daemon", async () => {
-        const connecting = initPaperApi({ port: 1234, token: "tok" });
-        await waitFor(() => MockWebSocket.instances.length > 0);
-        LAST().open();
-        await connecting;
-        void processApi.start({ id: "reader", command: "cat", stdin: "ignore" });
-        await waitFor(() => LAST().frames().some((f) => f.action === "process:run"));
-        expect(LAST().frames().find((f) => f.action === "process:run")!.params.stdin).toBe("ignore");
-    });
-
     test("timeout kills the child (process:kill) and reports RUN_TIMEOUT", async () => {
         const connecting = initPaperApi({ port: 1234, token: "tok" });
         await waitFor(() => MockWebSocket.instances.length > 0);

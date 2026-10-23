@@ -19,8 +19,6 @@ export interface SupervisorSpawnConfig {
     cwd?: string;
     env?: Record<string, string | undefined>;
     isPty?: boolean;
-    /** "ignore": the child gets an empty, closed stdin (default: a pipe that stdin frames write to) */
-    stdin?: "pipe" | "ignore";
     cols?: number;
     rows?: number;
     appId?: string;
@@ -541,12 +539,7 @@ export async function runSupervisor(procId: string): Promise<void> {
                 return;
             }
             try {
-                childProcess = cp.spawn(command, args, {
-                    cwd: finalCwd,
-                    env: mergedEnv,
-                    windowsHide: true,
-                    stdio: [config.stdin === "ignore" ? "ignore" : "pipe", "pipe", "pipe"],
-                });
+                childProcess = cp.spawn(command, args, { cwd: finalCwd, env: mergedEnv, windowsHide: true });
             } catch (err) {
                 // a synchronous spawn throw is a start failure the creator reads, not an uncaught crash
                 failStart(`Could not start ${command}: ${(err as Error).message}`);

@@ -271,13 +271,6 @@ describe("process ownership ledger stays bounded by live workloads", () => {
         if (fs.existsSync(ledger)) expect(JSON.parse(fs.readFileSync(ledger, "utf8"))).not.toHaveProperty("doomed");
     });
 
-    it("refuses a stdin other than pipe or ignore, before anything is claimed", async () => {
-        const { handleProcess } = await import("../papercrane/rpc/process");
-        const ctx = { engine, callerPanelId: () => "panel.a", sendEvent: () => undefined, reply: () => undefined };
-        await expect(handleProcess("process:run", 1, { id: "tty", command: "true", stdin: "inherit" }, ctx as any)).rejects.toThrow(/stdin is "pipe" or "ignore"/);
-        expect(engine.clientOwner("tty")).toBeNull();
-    });
-
     it("an ended workload's entry is removed from the persisted ledger too", async () => {
         engine.setClientOwner("finished", "panel.a");
         const ledger = path.join(engine.getAppDataDir(), "local", "process-owners.json");

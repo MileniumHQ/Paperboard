@@ -25,8 +25,6 @@ interface SupervisorConfig {
     env?: Record<string, string>;
     cols?: number;
     rows?: number;
-    /** "ignore": the child gets an empty, closed stdin (default: a pipe that write() feeds) */
-    stdin?: "pipe" | "ignore";
 }
 
 // mirrors the client surface consumed by the engine
@@ -108,7 +106,7 @@ export class EmbeddedSupervisor implements PaperCraneClientLike {
                     {
                         cwd: cwd || os.homedir(),
                         env: workloadEnv(this.config.env, cwd || os.homedir()),
-                        stdio: [this.config.stdin === "ignore" ? "ignore" : "pipe", "pipe", "pipe"],
+                        stdio: ["pipe", "pipe", "pipe"],
                         windowsHide: true,
                     },
                 );

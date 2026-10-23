@@ -545,7 +545,6 @@ export class PaperCraneEngine {
     public async startProcess(
         id: string, command: string, args: string[] = [], cwd?: string, env?: Record<string, string>,
         onData?: (data: string) => void, onStdout?: (data: string) => void, onStderr?: (data: string) => void,
-        stdin: "pipe" | "ignore" = "pipe",
     ): Promise<{ completion: Promise<{ exitCode: number }> }> {
         if (!id || typeof id !== "string") {
             throw new Error("process id is required");
@@ -573,7 +572,6 @@ export class PaperCraneEngine {
                     args,
                     cwd: resolvedCwd,
                     env,
-                    ...(stdin === "ignore" ? { stdin } : {}),
                 },
                 this.clients,
                 {
