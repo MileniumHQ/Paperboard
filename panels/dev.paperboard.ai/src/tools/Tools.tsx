@@ -93,7 +93,7 @@ function ActionsAccess(props: { tools: ToolsClient; on: boolean; locked: boolean
                 Paperboard actions
             </PaperText>
             <PaperSettingList autoHeight>
-                <PaperSettingItem title="Let it use your other panels" description={`${props.name} can look up what your other panels can do (start a game server, post a message) and run it. Each run shows in the conversation.`}>
+                <PaperSettingItem title="Let it use your other panels" description={`${props.name} can look up what your other panels can do (start a game server, post a message) and run it.`}>
                     <PaperToggle aria-label="Let it use your other panels" checked={props.on} disabled={busy() || props.locked} onChange={(v) => void change(v)} />
                 </PaperSettingItem>
             </PaperSettingList>
