@@ -26,6 +26,11 @@ export const UI_ACTION_IDS = {
     unqueue: "ui-unqueue",
     sendNow: "ui-send-now",
     startOver: "ui-start-over",
+    // past conversations: start a new one (the current one is kept), list, reopen or delete them
+    newConversation: "ui-new-conversation",
+    conversations: "ui-conversations",
+    openConversation: "ui-open-conversation",
+    deleteConversation: "ui-delete-conversation",
     setMemory: "ui-set-memory",
     // the models a brain offers, from the harness's own catalog
     models: "ui-models",
@@ -48,6 +53,8 @@ export const EVENTS = {
     entry: "chat-entry",
     // the user started over: the conversation is empty
     cleared: "chat-cleared",
+    // another conversation is the current one now: read its history again
+    switched: "chat-switched",
 } as const;
 
 export const HARNESSES = ["codex", "claude-code"] as const;
@@ -72,6 +79,8 @@ export const LIMITS = {
     memoryGb: { min: 2, max: 32 },
     diskGb: { min: 8, max: 128 },
     history: 200,
+    /** past conversations kept; past this, starting a new one asks to delete some first */
+    pastConversations: 200,
     memory: {
         factChars: 200,
         facts: 100,
@@ -94,6 +103,16 @@ export const LIMITS = {
         waitMinutes: 10,
     },
 } as const;
+
+/** A conversation put away in the history. */
+export interface PastConversation {
+    id: string;
+    /** its first message, cut short */
+    title: string;
+    startedAt: number;
+    endedAt: number;
+    messages: number;
+}
 
 /** A short durable fact: always in the agent's context. */
 export interface MemoryFact {

@@ -1,5 +1,8 @@
-// The one conversation. There is no "new chat": like texting a friend, every
-// message continues the same thread (starting over is a deliberate reset).
+// The current conversation, and the ones put away. Like texting a friend,
+// every message continues the same thread until the user starts a new one;
+// the old one goes into the history (its transcript and harness threads,
+// moved as they are) and can be reopened and continued. Starting over is
+// different: it forgets the current conversation.
 // Messages sent while the agent is busy wait, can be taken back, and are read
 // together on its next turn. The agent talks through send_message (see
 // messages.ts): each call is a bubble, added at once, mid-turn. The service
@@ -15,13 +18,17 @@
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { LIMITS, PANEL_ID, type ChatEntry, type ChatState, type Harness, type Settings, type SignInEntry, type WaitingMessage } from "../contract";
+import { LIMITS, PANEL_ID, type ChatEntry, type ChatState, type Harness, type PastConversation, type Settings, type SignInEntry, type WaitingMessage } from "../contract";
 import type { StartOptions } from "./computer";
 import { parseTurnLine, turnLaunch } from "./harness";
 
 export const TURN_PROC_ID = `${PANEL_ID}.turn`;
 const TRANSCRIPT = "transcript.jsonl";
 const THREADS = "threads.json";
+const PAST = "past";
+const PAST_META = "meta.json";
+const PAST_ID = /^[a-f0-9]{12}$/;
+const TITLE_CHARS = 80;
 const KEEP_IN_MEMORY = 500;
 const COMPACT_AT_BYTES = 4 * 1024 * 1024;
 const MAX_QUEUED = 20;
@@ -66,6 +73,8 @@ export class Conversation {
     private running: Promise<void> | null = null;
     private stopRequested = false;
     private closed = false;
+    /** set while conversations are swapped: no turn starts until the files are in place */
+    private switching: Promise<unknown> | null = null;
     /** what the agent has texted in the running turn; once it has, its plain output is only a recap */
     private sent: string[] = [];
     /** ids of the user's messages the running turn is answering */
@@ -148,17 +157,71 @@ export class Conversation {
 
     /** Start over: stop, forget the conversation and the harness's threads. Asked for explicitly; it can't be undone. */
     async clear() {
-        this.queue = [];
         this.notices = [];
-        this.stopRequested = true;
-        await this.killTurn();
-        await this.running;
-        this.entries = [];
-        this.threads = {};
-        atomicWrite(path.join(this.deps.dir, TRANSCRIPT), "");
-        atomicWrite(path.join(this.deps.dir, THREADS), "{}");
-        this.state();
+        await this.swap(() => {
+            this.entries = [];
+            this.threads = {};
+            atomicWrite(path.join(this.deps.dir, TRANSCRIPT), "");
+            atomicWrite(path.join(this.deps.dir, THREADS), "{}");
+        });
         return { cleared: true };
+    }
+
+    /** Put the current conversation in the history and start a new one. An empty one is just left. */
+    newConversation() {
+        return this.swap(() => {
+            if (this.entries.length === 0) return;
+            if (this.pastIds().length >= LIMITS.pastConversations) {
+                throw new Error(`You have ${LIMITS.pastConversations} past conversations; delete some from the history first.`);
+            }
+            this.putAway();
+        }).then(() => ({ started: true }));
+    }
+
+    /** The history, newest first. */
+    past(): PastConversation[] {
+        return this.pastIds()
+            .map((id) => {
+                const file = path.join(this.pastDir(), id, PAST_META);
+                try {
+                    return JSON.parse(fs.readFileSync(file, "utf8")) as PastConversation;
+                } catch (e) {
+                    // unreadable isn't "not there": say which one, so it can be deleted
+                    throw new Error(`${file} can't be read: ${(e as Error).message}`);
+                }
+            })
+            .sort((a, b) => b.endedAt - a.endedAt);
+    }
+
+    /** Make a past conversation the current one, to continue it; the current one goes into the history. */
+    async open(id: unknown) {
+        const dir = this.pastEntry(id);
+        await this.swap(() => {
+            if (!fs.existsSync(dir)) throw new Error("That conversation isn't in the history anymore.");
+            if (this.entries.length > 0) this.putAway();
+            // it comes back as it was put away; a part that's missing (an interrupted put-away) is empty
+            for (const [name, empty] of [
+                [TRANSCRIPT, ""],
+                [THREADS, "{}"],
+            ] as const) {
+                const from = path.join(dir, name);
+                const to = path.join(this.deps.dir, name);
+                if (fs.existsSync(from)) fs.renameSync(from, to);
+                else atomicWrite(to, empty);
+            }
+            fs.rmSync(dir, { recursive: true });
+            this.entries = this.load();
+            this.threads = JSON.parse(fs.readFileSync(path.join(this.deps.dir, THREADS), "utf8"));
+        });
+        return { opened: true };
+    }
+
+    /** Delete a past conversation for good. The current one is never deleted this way. */
+    deletePast(id: unknown) {
+        const dir = this.pastEntry(id);
+        if (!fs.existsSync(dir)) throw new Error("That conversation isn't in the history anymore.");
+        fs.rmSync(dir, { recursive: true });
+        return { deleted: true };
     }
 
     /**
@@ -194,11 +257,80 @@ export class Conversation {
         await this.killTurn();
     }
 
+    // ------------------------------------------------------------- the history
+
+    /**
+     * Stop the running turn, then change which conversation is current. Messages waiting for the old one are
+     * dropped with it; the service's notices wait for the next turn, in whichever conversation that is.
+     */
+    private async swap(change: () => void) {
+        if (this.closed) throw new Error("the conversation is shutting down");
+        while (this.switching) await this.switching.catch(() => undefined);
+        const run = (async () => {
+            this.queue = [];
+            this.stopRequested = true;
+            await this.killTurn();
+            await this.running;
+            change();
+        })();
+        this.switching = run;
+        try {
+            await run;
+        } finally {
+            this.switching = null;
+            this.pump();
+        }
+    }
+
+    /**
+     * Move the current conversation into the history. Its summary goes in first, then the files are moved,
+     * so an interruption at any point leaves every message somewhere, never nowhere.
+     */
+    private putAway() {
+        const said = this.entries.filter((e): e is Extract<ChatEntry, { kind: "user" | "agent" }> => e.kind === "user" || e.kind === "agent");
+        const first = said.find((e) => e.kind === "user") ?? said[0];
+        const text = first?.text.replace(/\s+/g, " ").trim() ?? "";
+        const id = randomUUID().replace(/-/g, "").slice(0, 12);
+        const meta: PastConversation = {
+            id,
+            title: text.length > TITLE_CHARS ? `${text.slice(0, TITLE_CHARS - 1).trimEnd()}…` : text || "A conversation",
+            startedAt: this.entries[0]!.at,
+            endedAt: this.entries.at(-1)!.at,
+            messages: said.length,
+        };
+        const tmp = path.join(this.pastDir(), `.${id}`);
+        fs.mkdirSync(tmp, { recursive: true });
+        fs.writeFileSync(path.join(tmp, PAST_META), JSON.stringify(meta));
+        const dir = path.join(this.pastDir(), id);
+        fs.renameSync(tmp, dir);
+        for (const name of [TRANSCRIPT, THREADS]) {
+            const from = path.join(this.deps.dir, name);
+            if (fs.existsSync(from)) fs.renameSync(from, path.join(dir, name));
+        }
+        this.entries = [];
+        this.threads = {};
+    }
+
+    private pastDir() {
+        return path.join(this.deps.dir, PAST);
+    }
+
+    /** Past conversations' ids; a half-made one (a dot folder from an interrupted put-away) isn't listed. */
+    private pastIds(): string[] {
+        if (!fs.existsSync(this.pastDir())) return [];
+        return fs.readdirSync(this.pastDir()).filter((n) => PAST_ID.test(n));
+    }
+
+    private pastEntry(id: unknown): string {
+        if (typeof id !== "string" || !PAST_ID.test(id)) throw new Error("that isn't a conversation's id");
+        return path.join(this.pastDir(), id);
+    }
+
     // ------------------------------------------------------------- turns
 
     private pump() {
         this.state();
-        if (this.running || this.closed || (this.queue.length === 0 && this.notices.length === 0)) return;
+        if (this.running || this.closed || this.switching || (this.queue.length === 0 && this.notices.length === 0)) return;
         const batch = this.queue.splice(0);
         const notices = this.notices.splice(0);
         this.stopRequested = false; // a stop asked of an earlier turn doesn't silence this one

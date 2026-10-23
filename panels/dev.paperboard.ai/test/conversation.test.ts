@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import type { ChatEntry, ChatState, Settings } from "../src/contract";
+import { LIMITS, type ChatEntry, type ChatState, type Settings } from "../src/contract";
 import { Conversation, TURN_PROC_ID } from "../src/service/conversation";
 import { messagesToolset } from "../src/service/messages";
 import { FakeProcesses, until } from "./fakeHost";
@@ -180,6 +180,72 @@ describe("the conversation", () => {
         await first.conv.shutdown();
         const second = setup({ dir: first.dir });
         expect(second.conv.history().map((e) => (e as { text: string }).text)).toEqual(["hello again", "hey"]);
+    });
+
+    test("a new conversation puts the current one in the history with its thread; reopening it continues that thread", async () => {
+        const first = setup();
+        first.conv.send("plan my trip to Oslo");
+        await until(() => first.host.started.length === 1);
+        first.host.stdout(TURN_PROC_ID, `{"type":"thread.started","thread_id":"t-oslo"}\n` + reply("sure"));
+        first.conv.send("waiting");
+        await first.conv.newConversation();
+        expect(first.host.killed[0]).toEqual({ id: TURN_PROC_ID, signal: "SIGTERM" });
+        expect(first.conv.history()).toEqual([]);
+        expect(first.states.at(-1)).toEqual({ busy: false, waiting: [] });
+        const [oslo] = first.conv.past();
+        expect(oslo).toMatchObject({ title: "plan my trip to Oslo", messages: 2 });
+
+        // the new one starts a new thread
+        first.conv.send("what's 2+2");
+        await until(() => first.host.started.length === 2);
+        expect(first.host.started[1]!.args.slice(0, 2)).not.toEqual(["exec", "resume"]);
+        first.host.stdout(TURN_PROC_ID, `{"type":"thread.started","thread_id":"t-math"}\n` + reply("4"));
+        first.host.exit(TURN_PROC_ID, 0);
+        await until(() => busy(first.states) === false);
+
+        // reopening survives a restart, and swaps: Oslo is current again, the sum is in the history
+        await first.conv.shutdown();
+        const second = setup({ dir: first.dir });
+        await second.conv.open(oslo!.id);
+        expect(second.conv.history().map((e) => (e as { text: string }).text)).toEqual(["plan my trip to Oslo", "sure"]);
+        expect(second.conv.past().map((p) => p.title)).toEqual(["what's 2+2"]);
+        second.conv.send("and hotels?");
+        await until(() => second.host.started.length === 1);
+        expect(second.host.started[0]!.args.slice(0, 2)).toEqual(["exec", "resume"]);
+        expect(second.host.started[0]!.args).toContain("t-oslo");
+    });
+
+    test("the history: an empty conversation isn't kept, ids are checked, deleting is for good, and it's bounded", async () => {
+        const { conv, dir } = setup();
+        await conv.newConversation();
+        expect(conv.past()).toEqual([]);
+        await expect(conv.open("../escape")).rejects.toThrow("isn't a conversation's id");
+        expect(() => conv.deletePast("../../x")).toThrow("isn't a conversation's id");
+        await expect(conv.open("0123456789ab")).rejects.toThrow("isn't in the history");
+
+        conv.send("hi");
+        await conv.stop();
+        await conv.newConversation();
+        const [p] = conv.past();
+        expect(conv.deletePast(p!.id)).toEqual({ deleted: true });
+        expect(conv.past()).toEqual([]);
+        expect(fs.existsSync(path.join(dir, "past", p!.id))).toBe(false);
+
+        // full: a new conversation asks for room rather than dropping an old one
+        for (let i = 0; i < LIMITS.pastConversations; i++) {
+            fs.mkdirSync(path.join(dir, "past", i.toString(16).padStart(12, "0")), { recursive: true });
+        }
+        conv.send("one more");
+        await conv.stop();
+        await expect(conv.newConversation()).rejects.toThrow("delete some");
+        expect(conv.history()).toHaveLength(1);
+    });
+
+    test("a past conversation whose summary can't be read is reported, not hidden", async () => {
+        const { conv, dir } = setup();
+        fs.mkdirSync(path.join(dir, "past", "aaaaaaaaaaaa"), { recursive: true });
+        fs.writeFileSync(path.join(dir, "past", "aaaaaaaaaaaa", "meta.json"), "{torn");
+        expect(() => conv.past()).toThrow("can't be read");
     });
 
     test("a turn past its time is killed", async () => {

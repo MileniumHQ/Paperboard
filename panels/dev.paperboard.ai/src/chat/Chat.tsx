@@ -5,6 +5,7 @@ import type { FaceController } from "../face/controller";
 import type { ChatEntry, SignInEntry, WaitingMessage } from "../contract";
 import type { Agent } from "../lib/agent";
 import Composer from "./Composer";
+import History from "./History";
 import SignIn, { type SignInDraft } from "./SignIn";
 import styles from "./Chat.module.css";
 
@@ -61,11 +62,20 @@ export default function Chat(props: { agent: Agent; face: FaceController; onMenu
     const [replyTo, setReplyTo] = createSignal<Said | null>(null);
     const [draft, setDraft] = createSignal("");
     const [notice, setNotice] = createSignal<string | null>(null);
+    const [historyOpen, setHistoryOpen] = createSignal(false);
+    const [startingNew, setStartingNew] = createSignal(false);
     const byId = (id: string) => agent.entries.find((e): e is Said => e.id === id && (e.kind === "user" || e.kind === "agent"));
 
     // a waiting sign-in's typed values outlive the row redraws; the card drops them when it's answered
     const drafts = new Map<string, SignInDraft>();
     const draftOf = (id: string) => drafts.get(id) ?? drafts.set(id, { values: [], image: null }).get(id)!;
+
+    // another conversation became current: a reply or a sign-in draft from the last one has nothing to point at
+    createEffect(() => {
+        const r = replyTo();
+        if (r && !agent.entries.some((e) => e.id === r.id)) setReplyTo(null);
+        for (const id of drafts.keys()) if (!agent.entries.some((e) => e.id === id)) drafts.delete(id);
+    });
 
     // Old transcripts held tool-call entries; only messages, errors and sign-in requests are shown.
     const rows = createMemo<Row[]>(() => {
@@ -114,6 +124,26 @@ export default function Chat(props: { agent: Agent; face: FaceController; onMenu
         <div class={styles.page}>
             <div class={styles.header}>
                 <PaperPageHeader icon={<Face face={face} size={40} frame="sphere" />} title={name()} subtitle={status()}>
+                    <PaperButton icon variant="text" aria-label="Past conversations" title="Past conversations" onClick={() => setHistoryOpen(true)}>
+                        history
+                    </PaperButton>
+                    <PaperButton
+                        icon
+                        variant="text"
+                        aria-label="New conversation"
+                        title="New conversation"
+                        disabled={startingNew() || agent.entries.length === 0}
+                        onClick={() => {
+                            setNotice(null);
+                            setStartingNew(true);
+                            agent
+                                .newConversation()
+                                .catch((e) => setNotice(e instanceof Error ? e.message : String(e)))
+                                .finally(() => setStartingNew(false));
+                        }}
+                    >
+                        add
+                    </PaperButton>
                     <PaperButton icon variant="text" aria-label="Menu" title="Menu" onClick={() => props.onMenu()}>
                         more_horiz
                     </PaperButton>
@@ -195,6 +225,11 @@ export default function Chat(props: { agent: Agent; face: FaceController; onMenu
                 replyTo={replyTo()}
                 replyAuthor={(m) => (m.kind === "user" ? "yourself" : name())}
                 onCancelReply={() => setReplyTo(null)}
+            />
+            <History
+                agent={agent}
+                open={historyOpen()}
+                onClose={() => setHistoryOpen(false)}
             />
         </div>
     );

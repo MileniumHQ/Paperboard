@@ -22,6 +22,7 @@ import {
     type MemoryFact,
     type MemoryList,
     type MemoryNoteInfo,
+    type PastConversation,
     type Routine,
     type Settings,
     type WindowFrame,
@@ -46,8 +47,24 @@ export function createAgent() {
 
     // someone started over (here or in another window)
     const offCleared = actionsApi.on(PANEL_ID, EVENTS.cleared, () => setEntries([]));
+    // another conversation is current now (here or in another window): its history replaces what's shown
+    const offSwitched = actionsApi.on(PANEL_ID, EVENTS.switched, () => {
+        setEntries([]);
+        loadHistory().catch((e) => {
+            // shown with a way to retry, rather than an empty conversation that isn't
+            setError(e instanceof Error ? e.message : String(e));
+            setHydration("failed");
+        });
+    });
 
     const call = <T>(id: string, inputs: Record<string, unknown> = {}) => actionsApi.call<T>(PANEL_ID, id, inputs);
+
+    /** The current conversation so far; entries that arrived as events while it was on its way are kept. */
+    const loadHistory = async () => {
+        const history = await call<ChatEntry[]>(UI_ACTION_IDS.history, { limit: LIMITS.history });
+        const known = new Set(history.map((e) => e.id));
+        setEntries(reconcile([...history, ...entries.filter((e) => !known.has(e.id))]));
+    };
 
     /** Hydrate (again): state, then the conversation so far. Failure is shown, with a way to retry. */
     const hydrate = async () => {
@@ -55,10 +72,7 @@ export function createAgent() {
         setError(null);
         try {
             setState(reconcile(await bridge.refreshState()));
-            const history = await call<ChatEntry[]>(UI_ACTION_IDS.history, { limit: LIMITS.history });
-            // entries that arrived as events while history was on its way are kept
-            const known = new Set(history.map((e) => e.id));
-            setEntries(reconcile([...history, ...entries.filter((e) => !known.has(e.id))]));
+            await loadHistory();
             setHydration("ready");
         } catch (e) {
             setError(e instanceof Error ? e.message : String(e));
@@ -83,6 +97,10 @@ export function createAgent() {
         unqueue: (id: string) => call(UI_ACTION_IDS.unqueue, { id }),
         sendNow: () => call(UI_ACTION_IDS.sendNow),
         startOver: () => call(UI_ACTION_IDS.startOver),
+        newConversation: () => call(UI_ACTION_IDS.newConversation),
+        conversations: () => call<PastConversation[]>(UI_ACTION_IDS.conversations),
+        openConversation: (id: string) => call(UI_ACTION_IDS.openConversation, { id }),
+        deleteConversation: (id: string) => call(UI_ACTION_IDS.deleteConversation, { id }),
         setMemory: (memoryGb: number) => call(UI_ACTION_IDS.setMemory, { memoryGb }),
         memory: () => call<MemoryList>(UI_ACTION_IDS.memory),
         deleteFact: (id: string) => call(UI_ACTION_IDS.deleteFact, { id }),
@@ -102,6 +120,7 @@ export function createAgent() {
             offState();
             offEntry();
             offCleared();
+            offSwitched();
             bridge.dispose();
         },
     };

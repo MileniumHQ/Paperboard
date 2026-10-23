@@ -1,0 +1,44 @@
+.list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap-half);
+}
+
+.row {
+    display: flex;
+    align-items: center;
+    gap: var(--paper-uigap-half);
+}
+
+.item {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap-onefourth);
+    align-items: flex-start;
+    padding: var(--paper-uigap-half) var(--paper-uigap);
+    border: 0;
+    border-radius: var(--paper-border-radius);
+    background: var(--paper-surface);
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.item:hover:not(:disabled),
+.item:focus-visible {
+    background: var(--paper-surface-raised);
+}
+
+.item:disabled {
+    cursor: default;
+}
+
+.title {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}

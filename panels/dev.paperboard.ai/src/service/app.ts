@@ -225,6 +225,21 @@ export class AiApp {
         return r;
     }
 
+    /** Start a new conversation, or continue a past one: a waiting sign-in belongs to the one being put away. */
+    async newConversation() {
+        this.signIns?.shutdown();
+        const r = await this.conversation.newConversation();
+        this.ctx.emit(EVENTS.switched, {});
+        return r;
+    }
+
+    async openConversation(id: unknown) {
+        this.signIns?.shutdown();
+        const r = await this.conversation.open(id);
+        this.ctx.emit(EVENTS.switched, {});
+        return r;
+    }
+
     // ------------------------------------------------------------- the Tools page
 
     toolsView(): Promise<ToolsView> {
