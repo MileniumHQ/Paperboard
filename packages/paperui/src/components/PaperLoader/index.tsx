@@ -109,7 +109,8 @@ export function PaperLoader(props: PaperLoaderProps) {
                 </span>
             </span>
             <Show when={local.label}>
-                <PaperText size={4} class={styles.labelWrapper}>
+                {/* a small loader sits in lists of many steps: its label shrinks with it */}
+                <PaperText size={local.size === "small" ? 2 : 4} class={styles.labelWrapper}>
                     {local.label}
                 </PaperText>
             </Show>
