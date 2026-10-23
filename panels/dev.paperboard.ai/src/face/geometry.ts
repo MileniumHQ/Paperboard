@@ -65,11 +65,15 @@ type V2 = [number, number];
 type V3 = [number, number, number];
 
 const EDGE_STEPS = 18;
+/** an open stroke's half length is at least this times its opening */
+const OPEN_LEN = 1.1;
 const CAP_STEPS = 9;
 
 /** Outline of one stroke in face (u, v) space, before the sphere wrap. */
 export function strokeOutline(s: Stroke): V2[] {
-    const len = Math.max(0, s.len);
+    // a parted mouth is never taller than it is wide: a short stroke (a pursed or "o" mouth) that opens
+    // grows along itself as it opens, instead of its lips shooting out past its ends like blades
+    const len = Math.max(0, s.len, OPEN_LEN * Math.max(0, s.open));
     const half = s.width / 2;
     const centre = (t: number): V2 => [t * len, s.bend * len * t * t];
     const normal = (t: number): V2 => {

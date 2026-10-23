@@ -63,6 +63,8 @@ function nextGlance(from: Orientation | undefined): Orientation {
     }
 }
 const PONDER_FACES: Expression[] = ["thinking", "musing", "hmm", "focused", "skeptical", "thinking", "musing"];
+/** faces that can't talk: their mouth is a held shape, so talking changes to another face */
+const WHILE_TALKING: Partial<Record<Expression, Expression>> = { surprised: "happy" };
 const PONDER_HOLD = [1100, 2600] as const;
 const AHA_CHANCE = 0.08;
 
@@ -105,9 +107,12 @@ export function createFace(initial: { expression?: Expression; at?: Spot | Orien
         },
         express(e) {
             if (!(e in EXPRESSIONS)) throw new Error(`unknown expression: ${e}`);
-            setExpression(e);
+            setExpression(talking() ? (WHILE_TALKING[e] ?? e) : e);
         },
-        talk: (on) => setTalking(on),
+        talk(on) {
+            setTalking(on);
+            if (on) setExpression((e) => WHILE_TALKING[e] ?? e);
+        },
         blink: () => setBlinkRequest((n) => n + 1),
         bounce: () => setBounceRequest((n) => n + 1),
         shake: (on) => setShaking(on),
