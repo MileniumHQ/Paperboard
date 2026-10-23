@@ -7,6 +7,7 @@ import { logger } from "./logger";
 import { workloadExitCode } from "./exitStatus";
 import * as os from "os";
 import { spawnPty } from "./pty";
+import { workloadEnv } from "./workloadEnv";
 import type { PaperCraneClientLike } from "./supervisorTypes";
 
 export function isEmbeddedHost(): boolean {
@@ -26,18 +27,6 @@ interface SupervisorConfig {
     rows?: number;
     /** "ignore": the child gets an empty, closed stdin (default: a pipe that write() feeds) */
     stdin?: "pipe" | "ignore";
-}
-
-function buildEnv(config: SupervisorConfig): Record<string, string> {
-    const merged = { ...process.env, ...(config.env || {}) } as Record<
-        string,
-        string
-    >;
-    if (config.env?.JAVA_HOME) {
-        const delim = process.platform === "win32" ? ";" : ":";
-        merged.PATH = `${config.env.JAVA_HOME}/bin${delim}${merged.PATH || ""}`;
-    }
-    return merged;
 }
 
 // mirrors the client surface consumed by the engine
@@ -109,7 +98,7 @@ export class EmbeddedSupervisor implements PaperCraneClientLike {
                     this.config.cols || 80,
                     this.config.rows || 24,
                     cwd || os.homedir(),
-                    buildEnv(this.config),
+                    workloadEnv(this.config.env, cwd || os.homedir()),
                     ptyArgs,
                 );
             } else {
@@ -118,7 +107,7 @@ export class EmbeddedSupervisor implements PaperCraneClientLike {
                     this.config.args || [],
                     {
                         cwd: cwd || os.homedir(),
-                        env: buildEnv(this.config),
+                        env: workloadEnv(this.config.env, cwd || os.homedir()),
                         stdio: [this.config.stdin === "ignore" ? "ignore" : "pipe", "pipe", "pipe"],
                         windowsHide: true,
                     },

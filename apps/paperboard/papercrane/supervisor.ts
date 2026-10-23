@@ -5,6 +5,7 @@ import * as os from "os";
 import * as cp from "child_process";
 import * as crypto from "crypto";
 import { spawnPty, getDefaultShell } from "./pty";
+import { workloadEnv } from "./workloadEnv";
 import { IPtyProcess } from "./types";
 import { logger } from "./logger";
 import { workloadExitCode } from "./exitStatus";
@@ -514,13 +515,11 @@ export async function runSupervisor(procId: string): Promise<void> {
             const shell = config.command || getDefaultShell();
             const cols = config.cols || 80;
             const rows = config.rows || 24;
-            const finalEnv = {
-                ...process.env,
+            const finalEnv = workloadEnv(config.env, finalCwd, {
                 TERM_PROGRAM: "Paperboard",
                 TERM: "xterm-256color",
                 COLORTERM: "truecolor",
-                ...(config.env || {}),
-            };
+            });
 
             try {
                 ptyInstance = spawnPty(shell, cols, rows, finalCwd, finalEnv);
@@ -534,11 +533,7 @@ export async function runSupervisor(procId: string): Promise<void> {
         } else {
             const command = config.command || "sh";
             const args = config.args || [];
-            const mergedEnv = { ...process.env, ...(config.env || {}) };
-            if (config.env?.JAVA_HOME) {
-                const delim = process.platform === "win32" ? ";" : ":";
-                mergedEnv.PATH = `${config.env.JAVA_HOME}/bin${delim}${mergedEnv.PATH || ""}`;
-            }
+            const mergedEnv = workloadEnv(config.env, finalCwd);
 
             const refusal = batchFileRefusal(command);
             if (refusal) {
