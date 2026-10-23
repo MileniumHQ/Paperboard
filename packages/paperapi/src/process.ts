@@ -23,6 +23,8 @@ export interface ProcessStartOptions {
     args?: string[];
     cwd?: string;
     env?: Record<string, string>;
+    /** "ignore": the child's stdin is empty and closed from the start (a program that reads it to the end then runs). Default "pipe": `write` feeds it. */
+    stdin?: "pipe" | "ignore";
 }
 
 // supervised background processes
@@ -34,6 +36,7 @@ export const processApi = {
             args: options.args || [],
             cwd: options.cwd,
             env: options.env,
+            ...(options.stdin ? { stdin: options.stdin } : {}),
         }),
 
     write: (id: string, data: string): Promise<void> =>

@@ -22,6 +22,8 @@ export async function handleProcess(action: string, id: unknown, params: any, ct
             });
             const env = assertEnvMap(params?.env, "env");
             checkSpawnEnv(env, ctx, "process:run");
+            const stdin = params?.stdin ?? "pipe";
+            if (stdin !== "pipe" && stdin !== "ignore") throw new InvalidParamsError('Invalid parameter: stdin is "pipe" or "ignore"');
             const started = await claimClient(procId, ctx, "process:run", () => engine.startProcess(
                 procId,
                 command,
@@ -31,6 +33,7 @@ export async function handleProcess(action: string, id: unknown, params: any, ct
                 undefined, // onData omitted — stdout & stderr are individually routed below
                 (stdout) => sendEvent("process:data", { id: procId, data: stdout, stream: "stdout" }),
                 (stderr) => sendEvent("process:data", { id: procId, data: stderr, stream: "stderr" }),
+                stdin,
             ));
             void started.completion.then(({ exitCode }) => {
                 sendEvent("process:exit", { id: procId, exitCode });
