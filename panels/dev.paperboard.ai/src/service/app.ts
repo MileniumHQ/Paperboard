@@ -22,6 +22,7 @@ import { Conversation, type TurnHost } from "./conversation";
 import { HARNESS_COMMANDS } from "./harness";
 import { COMPUTER_INSTRUCTIONS, COMPUTER_TOOLS } from "./computerTools";
 import { listModels, type HarnessHomes } from "./models";
+import { Memory } from "./memory";
 import { messagesToolset } from "./messages";
 import { toolbox, type Toolbox } from "./toolsets";
 export { which } from "./which";
@@ -45,6 +46,7 @@ export class AiApp {
     private ctx!: AppContext;
     computer!: Computer;
     conversation!: Conversation;
+    memory!: Memory;
     private mcp: ComputerMcp | null = null;
     private tools: Toolbox | null = null;
     private settle!: (failure: Error | null) => void;
@@ -74,9 +76,11 @@ export class AiApp {
         this.ctx = ctx;
         const root = await this.host.storageDir();
         this.ctx.setState({ settings: parseSettings(await this.host.readSettings()) });
+        this.memory = new Memory({ dir: path.join(root, "memory"), onChange: (memory) => this.ctx.setState({ memory }) });
         this.tools = toolbox([
             { id: "computer", tools: () => COMPUTER_TOOLS, call: (name, args) => this.computer.callTool(name, args), instructions: () => COMPUTER_INSTRUCTIONS },
             messagesToolset({ say: (text, replyTo) => this.conversation.say(text, replyTo) }),
+            this.memory.toolset(),
         ]);
         this.mcp = await startComputerMcp(this.tools);
         this.computer = new Computer({
@@ -97,6 +101,11 @@ export class AiApp {
             onState: (chat) => this.ctx.setState({ chat }),
         });
         this.conversation.init();
+        // a broken index shows in state.memory.error from the start; the failure itself is reported there
+        await this.memory.list().then(
+            () => undefined,
+            (e) => console.error("[ai] memory is unreadable:", String(e)),
+        );
     }
 
     async shutdown() {

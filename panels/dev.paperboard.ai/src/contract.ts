@@ -29,6 +29,14 @@ export const UI_ACTION_IDS = {
     setMemory: "ui-set-memory",
     // the models a brain offers, from the harness's own catalog
     models: "ui-models",
+    // what the agent remembers, which the user can read and change too
+    memory: "ui-memory",
+    addFact: "ui-add-fact",
+    editFact: "ui-edit-fact",
+    deleteFact: "ui-delete-fact",
+    readNote: "ui-read-note",
+    saveNote: "ui-save-note",
+    deleteNote: "ui-delete-note",
 } as const;
 
 export const EVENTS = {
@@ -60,7 +68,40 @@ export const LIMITS = {
     memoryGb: { min: 2, max: 32 },
     diskGb: { min: 8, max: 128 },
     history: 200,
+    memory: {
+        factChars: 200,
+        facts: 100,
+        keyChars: 48,
+        whenChars: 200,
+        bodyBytes: 64 * 1024,
+        notes: 200,
+    },
 } as const;
+
+/** A short durable fact: always in the agent's context. */
+export interface MemoryFact {
+    id: string;
+    text: string;
+}
+
+/** A note as the index lists it: the body is read on demand. */
+export interface MemoryNoteInfo {
+    key: string;
+    /** when the note is needed */
+    when: string;
+}
+
+export interface MemoryList {
+    facts: MemoryFact[];
+    notes: MemoryNoteInfo[];
+}
+
+export interface MemoryState {
+    /** counts every change, the agent's and the user's, so open windows know to read again */
+    revision: number;
+    /** memory can't be read or written (an unreadable index is never replaced by an empty one) */
+    error: string | null;
+}
 
 /** A model a harness offers, as its own picker names it. */
 export interface BrainModel {
@@ -148,6 +189,7 @@ export interface AiState {
     settings: Settings | null;
     computer: ComputerState;
     chat: ChatState;
+    memory: MemoryState;
 }
 
 export type ChatEntry =
@@ -162,4 +204,5 @@ export const DEFAULT_STATE: AiState = {
     settings: null,
     computer: { phase: "none", installed: false, budget: null, steps: [], error: null, userControl: false },
     chat: { busy: false, waiting: [] },
+    memory: { revision: 0, error: null },
 };

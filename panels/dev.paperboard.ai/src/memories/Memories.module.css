@@ -1,0 +1,37 @@
+.memories {
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap);
+}
+
+.group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap-half);
+}
+
+.row {
+    display: flex;
+    align-items: center;
+    gap: var(--paper-uigap-half);
+}
+
+.note {
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap-half);
+    align-items: flex-start;
+    padding: var(--paper-uigap-half) var(--paper-uigap);
+    border: 0;
+    border-radius: var(--paper-border-radius);
+    background: var(--paper-surface);
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.note:hover,
+.note:focus-visible {
+    background: var(--paper-surface-raised);
+}
