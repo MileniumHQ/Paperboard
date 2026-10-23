@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The agent's hands inside its own computer (scratch prototype).
+"""The agent's hands inside its own computer.
 
 Runs inside the Debian VM as the unprivileged `agent` user, next to an Xvfb
 display with no window manager: every top-level window is its own thing the
