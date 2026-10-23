@@ -86,7 +86,7 @@ export function Example() {
                             <td><PaperCode>spacing</PaperCode></td>
                             <td><PaperCode>boolean | PaperSpacing</PaperCode></td>
                             <td><PaperCode>undefined</PaperCode></td>
-                            <td>Item gap spacing token or boolean flag.</td>
+                            <td>The gap between items: a spacing token, or <PaperCode>false</PaperCode> to pack them with no gap. Items are a quarter gap apart by default.</td>
                         </tr>
                         <tr>
                             <td><PaperCode>horizontal</PaperCode></td>

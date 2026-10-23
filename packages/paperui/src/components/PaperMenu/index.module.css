@@ -8,7 +8,8 @@
     border-right: var(--paper-border-width) solid var(--paper-border);
     background: var(--paper-surface);
     overflow-y: auto;
-    gap: var(--menu-spacing, 0);
+    /* items get room to breathe by default; spacing={false} packs them tight */
+    gap: var(--menu-spacing, var(--paper-uigap-onefourth));
 }
 
 /* The menu is a sidebar by default: it brings its own surface, divider and
@@ -32,11 +33,6 @@
     overflow-x: auto;
 }
 
-.PaperMenu.spacing,
-.PaperMenu.spacing .PaperMenuSection,
-.PaperMenu.spacing .sectionContent {
-    gap: var(--menu-spacing, var(--paper-uigap-onefourth));
-}
 
 .PaperMenuItem {
     padding: var(--paper-uigap-half);
@@ -97,6 +93,7 @@
     display: flex;
     flex-direction: column;
     width: 100%;
+    gap: var(--menu-spacing, var(--paper-uigap-onefourth));
 }
 
 .sectionHeader {
@@ -154,6 +151,7 @@
     display: flex;
     flex-direction: column;
     width: 100%;
+    gap: var(--menu-spacing, var(--paper-uigap-onefourth));
 }
 
 /* The phone layout: a PaperPanel's sidebar is the whole panel, and its

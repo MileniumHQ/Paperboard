@@ -48,6 +48,22 @@ describe("PaperMenu & PaperMenuSection Tests", () => {
         expect(menuEl.style.getPropertyValue("--menu-spacing")).toBe("var(--paper-uigap-onefourth)");
     });
 
+    test("spacing={false} packs the items with no gap; the default is left to the stylesheet's quarter gap", () => {
+        const { container } = render(() => (
+            <>
+                <PaperMenu name="tight-menu" spacing={false}>
+                    <PaperMenuItem value="a">A</PaperMenuItem>
+                </PaperMenu>
+                <PaperMenu name="default-menu">
+                    <PaperMenuItem value="a">A</PaperMenuItem>
+                </PaperMenu>
+            </>
+        ));
+        const [tight, plain] = [...container.children] as HTMLElement[];
+        expect(tight!.style.getPropertyValue("--menu-spacing")).toBe("0px");
+        expect(plain!.style.getPropertyValue("--menu-spacing")).toBe("");
+    });
+
     test("renders PaperMenu with custom token spacing", () => {
         const { container } = render(() => (
             <PaperMenu name="spacing-half-menu" spacing="half">

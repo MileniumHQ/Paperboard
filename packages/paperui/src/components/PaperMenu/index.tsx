@@ -69,7 +69,8 @@ export function PaperMenu(props: ParentProps<PaperMenuProps>) {
     const isCompact = () => isPanelNav && Boolean(panel?.compact?.());
 
     const resolvedSpacing = () => {
-        if (local.spacing === undefined || local.spacing === false) return undefined;
+        if (local.spacing === undefined) return undefined; // the stylesheet's default gap
+        if (local.spacing === false) return "0px";
         if (local.spacing === true) return resolveSpacing("onefourth");
         return resolveSpacing(local.spacing);
     };
