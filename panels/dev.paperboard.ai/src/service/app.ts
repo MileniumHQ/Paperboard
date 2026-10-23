@@ -130,7 +130,7 @@ export class AiApp {
             post: (entry) => this.conversation.post(entry),
             notice: (text) => this.conversation.notice(text),
         });
-        this.tools = toolbox([
+        const tools = toolbox([
             { id: "computer", tools: () => COMPUTER_TOOLS, call: (name, args) => this.computer.callTool(name, args), instructions: () => COMPUTER_INSTRUCTIONS },
             messagesToolset({ say: (text, replyTo) => this.conversation.say(text, replyTo) }),
             this.memory.toolset(),
@@ -139,6 +139,14 @@ export class AiApp {
             mcpToolset(this.servers),
             actionsToolset({ host: t.actions, enabled: () => this.servers.config.actions }),
         ]);
+        // any tool but its messages means the agent is working, not typing, whatever its harness reports
+        this.tools = {
+            ...tools,
+            call: (name, args) => {
+                if (name !== "send_message") this.conversation?.working();
+                return tools.call(name, args);
+            },
+        };
         this.mcp = await startComputerMcp(this.tools);
         this.computer = new Computer({
             host: this.host,

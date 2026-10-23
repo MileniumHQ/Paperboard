@@ -75,6 +75,19 @@ describe("the harnesses' own memory is off", () => {
 });
 
 describe("parseTurnLine", () => {
+    test("a block's start says whether the model is writing to the user or working; a subagent's says nothing", () => {
+        const start = (content_block: object, parent: string | null = null) =>
+            JSON.stringify({ type: "stream_event", parent_tool_use_id: parent, event: { type: "content_block_start", index: 0, content_block } });
+        expect(parseTurnLine("claude-code", start({ type: "tool_use", name: "mcp__paperboard__send_message", input: {} }))).toEqual([{ type: "typing" }]);
+        expect(parseTurnLine("claude-code", start({ type: "text", text: "" }))).toEqual([{ type: "typing" }]);
+        expect(parseTurnLine("claude-code", start({ type: "tool_use", name: "mcp__paperboard__look", input: {} }))).toEqual([{ type: "working" }]);
+        expect(parseTurnLine("claude-code", start({ type: "server_tool_use", name: "web_search", input: {} }))).toEqual([{ type: "working" }]);
+        expect(parseTurnLine("claude-code", start({ type: "thinking", thinking: "" }))).toEqual([]);
+        expect(parseTurnLine("claude-code", start({ type: "text", text: "" }, "toolu_1"))).toEqual([]);
+        expect(parseTurnLine("codex", `{"type":"item.started","item":{"type":"mcp_tool_call","server":"paperboard","tool":"look"}}`)).toEqual([{ type: "working" }]);
+        expect(parseTurnLine("codex", `{"type":"item.started","item":{"type":"mcp_tool_call","server":"paperboard","tool":"send_message"}}`)).toEqual([]);
+    });
+
     test("Claude Code: a subagent's words don't reach the chat, its searches still do", () => {
         const sub = { type: "assistant", parent_tool_use_id: "toolu_1", message: { content: [{ type: "text", text: "found it" }, { type: "tool_use", name: "WebSearch", input: { query: "q2" } }] } };
         expect(parseTurnLine("claude-code", JSON.stringify(sub))).toEqual([{ type: "search", query: "q2" }]);

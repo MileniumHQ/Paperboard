@@ -79,6 +79,8 @@ export class Conversation {
     private sent: string[] = [];
     /** ids of the user's messages the running turn is answering */
     private answering: string[] = [];
+    /** the agent is writing to the user right now, not working: only then does the typing bubble show */
+    private typing = false;
 
     constructor(private deps: ConversationDeps) {}
 
@@ -238,8 +240,21 @@ export class Conversation {
         if (replyTo !== null && this.answering.length === 1 && this.answering[0] === replyTo) replyTo = null;
         const entry: ChatEntry = { id: this.newId(), at: Date.now(), kind: "agent", text: message, ...(replyTo === null ? {} : { replyTo }) };
         this.sent.push(message);
+        this.setTyping(false);
         this.put(entry);
         return { id: entry.id };
+    }
+
+    /** The agent is using a tool other than its messages: it's working, not typing. */
+    working() {
+        this.setTyping(false);
+    }
+
+    private setTyping(on: boolean) {
+        const typing = on && this.running !== null;
+        if (typing === this.typing) return;
+        this.typing = typing;
+        this.state();
     }
 
     /** Stop the running turn; messages waiting for it are dropped with it. Not offered to the user: the agent just chats. */
@@ -339,6 +354,8 @@ export class Conversation {
         const message = [...batch.map((m) => this.forAgent(m)), ...notices.map((n) => `[from Paperboard, not the user] ${n}`)].join("\n\n");
         this.sent = [];
         this.answering = batch.map((m) => m.id);
+        // answering the user begins with writing to them; a routine's turn shows nothing until it writes
+        this.typing = batch.length > 0;
         this.running = this.turn(message, batch.length > 0)
             .catch((e: Error) => {
                 this.put({ id: this.newId(), at: Date.now(), kind: "error", text: e.message });
@@ -346,6 +363,7 @@ export class Conversation {
             .finally(() => {
                 this.running = null;
                 this.answering = [];
+                this.typing = false;
                 this.stopRequested = false;
                 this.pump();
             });
@@ -381,6 +399,8 @@ export class Conversation {
                 if (ev.type === "thread") this.saveThread(settings.harness, ev.id);
                 else if (ev.type === "message") plain.push(ev.text);
                 else if (ev.type === "failed") failures.push(ev.message);
+                else if (ev.type === "typing") this.setTyping(true);
+                else if (ev.type === "working") this.setTyping(false);
             }
         };
         const exited = new Promise<number | undefined>((ok) => {
@@ -480,8 +500,12 @@ export class Conversation {
     }
 
     private state() {
-        // typing only while answering the user: a routine that finds nothing to say shows nothing
-        this.deps.onState({ busy: this.running !== null && this.answering.length > 0, waiting: this.queue.map((m) => ({ ...m })) });
+        // busy only while answering the user: a routine that finds nothing to say shows nothing
+        this.deps.onState({
+            busy: this.running !== null && this.answering.length > 0,
+            typing: this.running !== null && this.typing,
+            waiting: this.queue.map((m) => ({ ...m })),
+        });
     }
 
     // ------------------------------------------------------------- transcript

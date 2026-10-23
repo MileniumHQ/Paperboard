@@ -109,7 +109,8 @@ export function turnLaunch(spec: TurnSpec): TurnLaunch {
         },
     };
     const args = [
-        "-p", "--output-format", "stream-json", "--verbose",
+        // partial messages: a message or a tool call shows as it begins, so the typing bubble follows the model
+        "-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages",
         ...(spec.model ? ["--model", spec.model] : []),
         "--tools", "WebSearch", CLAUDE_SUBAGENT_TOOL,
         "--allowedTools", "WebSearch", CLAUDE_SUBAGENT_TOOL, `mcp__${MCP_SERVER}`,
@@ -126,6 +127,9 @@ export type TurnEvent =
     | { type: "thread"; id: string }
     | { type: "message"; text: string }
     | { type: "search"; query: string }
+    // the model began writing to the user (as far as its harness shows that), or began using a tool
+    | { type: "typing" }
+    | { type: "working" }
     | { type: "failed"; message: string };
 
 /** One line of the harness's JSON output → what the conversation cares about. Tool calls arrive through MCP instead. */
@@ -143,8 +147,17 @@ export function parseTurnLine(harness: Harness, line: string): TurnEvent[] {
             return [{ type: "message", text: ev.item.text }];
         }
         if (ev.type === "item.completed" && ev.item?.type === "web_search") return [{ type: "search", query: String(ev.item.query ?? "") }];
+        // Codex shows an item when it starts, not while it's written: a tool other than its messages is work
+        if (ev.type === "item.started" && ev.item?.type !== "agent_message" && ev.item?.type !== "reasoning" && ev.item?.tool !== "send_message") return [{ type: "working" }];
         if (ev.type === "turn.failed") return [{ type: "failed", message: String(ev.error?.message ?? "the turn failed") }];
         if (ev.type === "error") return [{ type: "failed", message: String(ev.message ?? "Codex reported an error") }];
+        return [];
+    }
+    // the beginning of a block, written token by token after it: a message to the user, or a tool call
+    if (ev.type === "stream_event" && ev.event?.type === "content_block_start" && typeof ev.parent_tool_use_id !== "string") {
+        const block = ev.event.content_block;
+        if (block?.type === "text" || (block?.type === "tool_use" && block.name === `mcp__${MCP_SERVER}__send_message`)) return [{ type: "typing" }];
+        if (block?.type === "tool_use" || block?.type === "server_tool_use") return [{ type: "working" }];
         return [];
     }
     if (ev.type === "assistant") {

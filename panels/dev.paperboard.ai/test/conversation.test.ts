@@ -62,13 +62,36 @@ describe("the conversation", () => {
         expect(host.listenerCount()).toBe(0);
     });
 
+    test("the typing bubble follows what the agent does: writing shows it, working with a tool hides it", async () => {
+        const { conv, host, states } = setup({ settings: { name: "Pip", harness: "claude-code", model: null } });
+        const typing = () => states.at(-1)?.typing;
+        const block = (content_block: object) => JSON.stringify({ type: "stream_event", parent_tool_use_id: null, event: { type: "content_block_start", content_block } }) + "\n";
+        conv.send("book me a table");
+        await until(() => host.started.length === 1);
+        expect(typing()).toBe(true); // answering begins with writing back
+        host.stdout(TURN_PROC_ID, block({ type: "tool_use", name: "mcp__paperboard__open_url" }));
+        expect(typing()).toBe(false);
+        expect(busy(states)).toBe(true); // still on it: its face shows that, not a typing bubble
+        host.stdout(TURN_PROC_ID, block({ type: "tool_use", name: "mcp__paperboard__send_message" }));
+        expect(typing()).toBe(true);
+        conv.say("On it, looking now.");
+        expect(typing()).toBe(false);
+        host.stdout(TURN_PROC_ID, block({ type: "text" }));
+        expect(typing()).toBe(true);
+        conv.working(); // any other tool call through the service's endpoint
+        expect(typing()).toBe(false);
+        host.exit(TURN_PROC_ID, 0);
+        await until(() => busy(states) === false);
+        expect(typing()).toBe(false);
+    });
+
     test("messages sent during a turn are read together on the next one, which continues the thread", async () => {
         const { conv, host, states } = setup();
         conv.send("one");
         await until(() => host.started.length === 1);
         const two = conv.send("two");
         const three = conv.send("three");
-        expect(states.at(-1)).toEqual({ busy: true, waiting: [expect.objectContaining({ text: "two" }), expect.objectContaining({ text: "three" })] });
+        expect(states.at(-1)).toEqual({ busy: true, typing: true, waiting: [expect.objectContaining({ text: "two" }), expect.objectContaining({ text: "three" })] });
         host.stdout(TURN_PROC_ID, `{"type":"thread.started","thread_id":"t-1"}\n` + reply("ok"));
         host.exit(TURN_PROC_ID, 0);
         await until(() => host.started.length === 2);
@@ -109,7 +132,7 @@ describe("the conversation", () => {
         await conv.stop();
         await until(() => busy(states) === false);
         expect(host.killed[0]).toEqual({ id: TURN_PROC_ID, signal: "SIGTERM" });
-        expect(states.at(-1)).toEqual({ busy: false, waiting: [] });
+        expect(states.at(-1)).toEqual({ busy: false, typing: false, waiting: [] });
         // never read, so never part of the conversation
         expect(emitted.filter((e) => e.kind === "user").map((e) => (e as { text: string }).text)).toEqual(["long task"]);
         expect(host.started.length).toBe(1);
@@ -168,7 +191,7 @@ describe("the conversation", () => {
         await first.conv.clear();
         expect(first.host.killed[0]).toEqual({ id: TURN_PROC_ID, signal: "SIGTERM" });
         expect(first.conv.history()).toEqual([]);
-        expect(first.states.at(-1)).toEqual({ busy: false, waiting: [] });
+        expect(first.states.at(-1)).toEqual({ busy: false, typing: false, waiting: [] });
 
         first.conv.send("hello again");
         await until(() => first.host.started.length === 2);
@@ -191,7 +214,7 @@ describe("the conversation", () => {
         await first.conv.newConversation();
         expect(first.host.killed[0]).toEqual({ id: TURN_PROC_ID, signal: "SIGTERM" });
         expect(first.conv.history()).toEqual([]);
-        expect(first.states.at(-1)).toEqual({ busy: false, waiting: [] });
+        expect(first.states.at(-1)).toEqual({ busy: false, typing: false, waiting: [] });
         const [oslo] = first.conv.past();
         expect(oslo).toMatchObject({ title: "plan my trip to Oslo", messages: 2 });
 
@@ -463,7 +486,7 @@ describe("notices (a routine is due)", () => {
         await until(() => host.started.length === 1);
         expect(host.started[0]!.args.at(-1)).toBe("[from Paperboard, not the user] Your routine [abc123] is due: text a flag fact.");
         expect(emitted.some((e) => e.kind === "user")).toBe(false);
-        expect(states.some((s) => s.busy)).toBe(false);
+        expect(states.some((s) => s.busy || s.typing)).toBe(false);
         expect((await say(conv, "Nepal's flag has 5 sides!")).isError).toBeUndefined();
         host.exit(TURN_PROC_ID, 0);
         // the next message gets its own turn once this one is over

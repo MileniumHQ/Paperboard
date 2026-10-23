@@ -39,7 +39,7 @@ export default function Chat(props: { agent: Agent; face: FaceController; onMenu
     const { agent, face } = props;
     const name = () => agent.state.settings?.name ?? "Your agent";
 
-    // thinking while the agent is typing
+    // thinking while the agent is on it, working or writing
     createEffect(() => face.ponder(agent.state.chat.busy));
 
     const status = () => {
@@ -110,7 +110,7 @@ export default function Chat(props: { agent: Agent; face: FaceController; onMenu
     let pinned = true;
     createEffect(
         on(
-            () => [agent.entries.length, agent.state.chat.waiting.length, agent.state.chat.busy],
+            () => [agent.entries.length, agent.state.chat.waiting.length, agent.state.chat.typing],
             () => queueMicrotask(() => pinned && list.scrollTo({ top: list.scrollHeight })),
         ),
     );
@@ -201,7 +201,8 @@ export default function Chat(props: { agent: Agent; face: FaceController; onMenu
                         </>
                     )}
                 </For>
-                <Show when={agent.state.chat.busy}>
+                {/* only while it writes: working with its tools shows on its face, not as typing */}
+                <Show when={agent.state.chat.typing}>
                     <div class={styles.row} classList={{ [styles.them!]: true, [styles.joinsPrev!]: typingJoins() }} role="status" aria-label={`${name()} is typing`}>
                         <div class={`${styles.bubble} ${styles.typing}`} classList={{ [styles.joinsPrev!]: typingJoins() }} aria-hidden="true">
                             <span class={styles.dot} />

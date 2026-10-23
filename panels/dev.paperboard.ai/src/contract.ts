@@ -245,8 +245,10 @@ export type InputEvent =
     | { type: "text"; text: string };
 
 export interface ChatState {
-    /** a turn answering the user is running: the agent is typing (a routine's turn runs without it) */
+    /** a turn answering the user is running: the agent is on it (a routine's turn runs without it) */
     busy: boolean;
+    /** the agent is writing a message right now, rather than working with its tools */
+    typing: boolean;
     /** messages waiting for the running turn to finish; they join the conversation when a turn reads them */
     waiting: WaitingMessage[];
 }
@@ -303,7 +305,7 @@ export const SETUP_PARTS: Record<SetupStepId, SetupPartId[]> = {
 export const DEFAULT_STATE: AiState = {
     settings: null,
     computer: { phase: "none", installed: false, budget: null, steps: [], error: null, userControl: false },
-    chat: { busy: false, waiting: [] },
+    chat: { busy: false, typing: false, waiting: [] },
     memory: { revision: 0, error: null },
     routines: { revision: 0, error: null },
 };
