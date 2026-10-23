@@ -32,6 +32,8 @@ const HANDSHAKE_MS = 15_000;
 /** a model can think for a while between streamed tokens */
 const IDLE_MS = 5 * 60_000;
 const USER = "pb";
+/** refusals are logged once per destination; a harness polling one (OpenCode looks for local model servers every 30 s) logs it once */
+const MAX_LOGGED_REFUSALS = 256;
 
 const blockedV4 = new net.BlockList();
 for (const [net4, bits] of [
@@ -82,6 +84,7 @@ export interface EgressOptions {
 
 export class Egress {
     private sockets = new Set<Duplex>();
+    private loggedRefusals = new Set<string>();
 
     private constructor(
         private server: http.Server,
@@ -131,6 +134,13 @@ export class Egress {
         }
     }
 
+    private logRefusal(what: string, destination: string, why: string) {
+        if (this.loggedRefusals.has(destination)) return;
+        if (this.loggedRefusals.size >= MAX_LOGGED_REFUSALS) this.loggedRefusals.delete(this.loggedRefusals.values().next().value!);
+        this.loggedRefusals.add(destination);
+        console.warn(`[ai] egress refused ${what}: ${why} (further refusals of ${destination} aren't logged)`);
+    }
+
     private authorized(req: http.IncomingMessage): boolean {
         const header = req.headers["proxy-authorization"];
         if (typeof header !== "string" || !header.startsWith("Basic ")) return false;
@@ -160,7 +170,7 @@ export class Egress {
 
     private async tunnel(req: http.IncomingMessage, socket: Duplex, head: Buffer) {
         const fail = (status: string, why: string) => {
-            console.warn(`[ai] egress refused CONNECT ${req.url}: ${why}`);
+            this.logRefusal(`CONNECT ${req.url}`, req.url ?? "", why);
             socket.end(`HTTP/1.1 ${status}\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\n${why}\n`);
         };
         if (!this.authorized(req)) return socket.end(`HTTP/1.1 407 Proxy Authentication Required\r\nProxy-Authenticate: Basic realm="paperboard"\r\nConnection: close\r\n\r\n`);
@@ -192,7 +202,7 @@ export class Egress {
 
     private async forward(req: http.IncomingMessage, res: http.ServerResponse) {
         const fail = (status: number, why: string) => {
-            if (status === 403) console.warn(`[ai] egress refused ${req.method} ${req.url}: ${why}`);
+            if (status === 403) this.logRefusal(`${req.method} ${req.url}`, originKey(req.url ?? "") ?? req.url ?? "", why);
             if (!res.headersSent) res.writeHead(status, { "content-type": "text/plain", connection: "close" });
             res.end(why + "\n");
         };

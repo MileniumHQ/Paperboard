@@ -148,6 +148,24 @@ describe("the egress proxy", () => {
         expect((await get(p.port, `http://nowhere.test:${up.port}/x`, p.auth)).status).toBe(403);
     });
 
+    it("logs a refused destination once, however often it's asked for", async () => {
+        const p = await proxy();
+        const warned: string[] = [];
+        const warn = console.warn;
+        console.warn = (...a: unknown[]) => void warned.push(a.join(" "));
+        try {
+            for (let i = 0; i < 3; i++) {
+                expect((await get(p.port, "http://127.0.0.1:11434/api/tags", p.auth)).status).toBe(403);
+                expect((await connect(p.port, "127.0.0.1:8000", p.auth)).status).toBe(403);
+            }
+        } finally {
+            console.warn = warn;
+        }
+        expect(warned.length).toBe(2);
+        expect(warned[0]).toContain("127.0.0.1:11434");
+        expect(warned[1]).toContain("127.0.0.1:8000");
+    });
+
     it("closing cuts open tunnels", async () => {
         const up = await upstream();
         const p = await proxy({ lookup: async () => [{ address: "127.0.0.1", family: 4 }], isAllowedAddress: () => true });
