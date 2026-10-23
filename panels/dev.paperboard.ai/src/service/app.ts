@@ -22,7 +22,9 @@ import { Computer, type ComputerHost, hostSupport } from "./computer";
 import { startComputerMcp, type ComputerMcp, type ToolResult } from "./computerMcp";
 import { Conversation, type TurnHost } from "./conversation";
 import { HARNESS_COMMANDS } from "./harness";
+import { COMPUTER_INSTRUCTIONS, COMPUTER_TOOLS } from "./computerTools";
 import { listModels, type HarnessHomes } from "./models";
+import { toolbox, type Toolbox } from "./toolsets";
 export { which } from "./which";
 
 export interface AppHost extends ComputerHost, TurnHost {
@@ -45,6 +47,7 @@ export class AiApp {
     computer!: Computer;
     conversation!: Conversation;
     private mcp: ComputerMcp | null = null;
+    private tools: Toolbox | null = null;
     private settle!: (failure: Error | null) => void;
     private readonly settled = new Promise<Error | null>((ok) => (this.settle = ok));
 
@@ -72,7 +75,10 @@ export class AiApp {
         this.ctx = ctx;
         const root = await this.host.storageDir();
         this.ctx.setState({ settings: parseSettings(await this.host.readSettings()) });
-        this.mcp = await startComputerMcp((name, args) => this.callTool(name, args));
+        this.tools = toolbox([
+            { id: "computer", tools: () => COMPUTER_TOOLS, call: (name, args) => this.callTool(name, args), instructions: () => COMPUTER_INSTRUCTIONS },
+        ]);
+        this.mcp = await startComputerMcp(this.tools);
         this.computer = new Computer({
             host: this.host,
             dir: path.join(root, "computer"),
@@ -86,6 +92,7 @@ export class AiApp {
             settings: () => this.ctx.state.settings,
             resolve: (h) => this.host.which(HARNESS_COMMANDS[h]),
             mcp: () => ({ url: this.mcp!.url, token: this.mcp!.token }),
+            instructions: () => this.tools!.instructions(),
             emit: (entry) => this.ctx.emit(EVENTS.entry, entry),
             onState: (chat) => this.ctx.setState({ chat }),
         });

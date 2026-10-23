@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { MCP_TOKEN_ENV } from "../src/service/computerMcp";
 import { parseTurnLine, turnLaunch } from "../src/service/harness";
 
-const spec = { command: "/usr/bin/x", model: null, name: "Pip", thread: null, message: "hi; rm -rf ~", mcpUrl: "http://127.0.0.1:4567/mcp" };
+const spec = { command: "/usr/bin/x", model: null, name: "Pip", thread: null, message: "hi; rm -rf ~", mcpUrl: "http://127.0.0.1:4567/mcp", sections: ["SECTION-ONE"] };
 
 describe("turnLaunch", () => {
     test("Codex: built-in tools off, live web search, the computer over MCP with the token by variable name", () => {
@@ -13,9 +13,11 @@ describe("turnLaunch", () => {
         }
         expect(l.args).toContain(`web_search="live"`);
         expect(l.args).toContain(`sandbox_mode="read-only"`);
-        expect(l.args).toContain(`mcp_servers.computer.url="${spec.mcpUrl}"`);
-        expect(l.args).toContain(`mcp_servers.computer.bearer_token_env_var="${MCP_TOKEN_ENV}"`);
+        expect(l.args).toContain(`mcp_servers.paperboard.url="${spec.mcpUrl}"`);
+        expect(l.args).toContain(`mcp_servers.paperboard.bearer_token_env_var="${MCP_TOKEN_ENV}"`);
         expect(l.tokenEnv).toBe(MCP_TOKEN_ENV);
+        // every toolset's section reaches the instructions
+        expect(l.args.find((a) => a.startsWith("developer_instructions="))).toContain("SECTION-ONE");
         // the message is one argv entry, never shell text
         expect(l.args.at(-1)).toBe(spec.message);
     });
@@ -33,9 +35,10 @@ describe("turnLaunch", () => {
         expect(at("--tools")).toBe("WebSearch");
         expect(l.args).toContain("--strict-mcp-config");
         const config = JSON.parse(at("--mcp-config")!);
-        expect(config.mcpServers.computer).toEqual({ type: "http", url: spec.mcpUrl, headers: { Authorization: `Bearer \${${MCP_TOKEN_ENV}}` } });
+        expect(config.mcpServers.paperboard).toEqual({ type: "http", url: spec.mcpUrl, headers: { Authorization: `Bearer \${${MCP_TOKEN_ENV}}` } });
         // a new conversation is given its id up front, so it can be resumed even if the turn dies
         expect(at("--session-id")).toBe(l.thread!);
+        expect(at("--append-system-prompt")).toContain("SECTION-ONE");
         expect(l.args.at(-1)).toBe(spec.message);
         expect(turnLaunch({ ...spec, harness: "claude-code", thread: "s-1" }).args).toContain("--resume");
     });

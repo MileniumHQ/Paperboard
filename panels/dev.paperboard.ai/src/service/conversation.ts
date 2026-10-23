@@ -43,6 +43,8 @@ export interface ConversationDeps {
     resolve: (harness: Harness) => string | null;
     /** the computer's MCP endpoint for this service generation */
     mcp: () => { url: string; token: string };
+    /** every toolset's part of the agent's instructions, read at the start of each turn */
+    instructions: () => Promise<string[]>;
     emit: (entry: ChatEntry) => void;
     onState: (s: ChatState) => void;
     turnMs?: number;
@@ -177,6 +179,7 @@ export class Conversation {
         const command = this.deps.resolve(settings.harness);
         if (!command) throw new Error(`${settings.harness === "codex" ? "Codex" : "Claude"} isn't installed on this computer anymore.`);
         const mcp = this.deps.mcp();
+        const sections = await this.deps.instructions();
         const launch = turnLaunch({
             harness: settings.harness,
             command,
@@ -185,6 +188,7 @@ export class Conversation {
             thread: this.threads[settings.harness] ?? null,
             message,
             mcpUrl: mcp.url,
+            sections,
         });
         if (launch.thread) this.saveThread(settings.harness, launch.thread);
 

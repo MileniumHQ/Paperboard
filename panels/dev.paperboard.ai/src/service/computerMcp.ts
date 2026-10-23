@@ -1,7 +1,8 @@
-// The computer as an MCP server, served by the AI panel's service.
+// The agent's tools as an MCP server, served by the AI panel's service.
 //
 // The agent harness (Codex, Claude Code) runs as a daemon-supervised child
-// with its own tools off; this endpoint is its only pair of hands. It speaks
+// with its own tools off; this endpoint is its only pair of hands (every
+// toolset in toolsets.ts). It speaks
 // MCP's streamable HTTP transport in its simplest form: every POST carries
 // one JSON-RPC message and gets one JSON reply. It listens on loopback only
 // and every request needs this generation's bearer token, which reaches the
@@ -10,7 +11,7 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
-import { COMPUTER_TOOLS } from "./computerTools";
+import type { Toolbox } from "./toolsets";
 
 export const MCP_TOKEN_ENV = "PAPERBOARD_COMPUTER_MCP_TOKEN";
 const MAX_BODY = 1 << 20;
@@ -24,8 +25,6 @@ export interface ToolResult {
     isError?: boolean;
 }
 
-export type CallTool = (name: string, args: Record<string, unknown>) => Promise<ToolResult>;
-
 type Json = Record<string, any>;
 
 export interface ComputerMcp {
@@ -34,7 +33,7 @@ export interface ComputerMcp {
     close(): Promise<void>;
 }
 
-export async function startComputerMcp(callTool: CallTool): Promise<ComputerMcp> {
+export async function startComputerMcp(tools: Pick<Toolbox, "list" | "call">): Promise<ComputerMcp> {
     const token = randomBytes(32).toString("hex");
     const expected = Buffer.from(`Bearer ${token}`);
     const authorized = (req: IncomingMessage) => {
@@ -60,7 +59,7 @@ export async function startComputerMcp(callTool: CallTool): Promise<ComputerMcp>
                 }
                 if (msg.id === undefined) return reply(res, 202, null); // a notification
                 try {
-                    reply(res, 200, { jsonrpc: "2.0", id: msg.id, result: await handle(msg, callTool) });
+                    reply(res, 200, { jsonrpc: "2.0", id: msg.id, result: await handle(msg, tools) });
                 } catch (e) {
                     const err = e as Error & { code?: number };
                     reply(res, 200, rpcError(msg.id, err.code ?? -32603, err.message));
@@ -92,26 +91,23 @@ export async function startComputerMcp(callTool: CallTool): Promise<ComputerMcp>
     };
 }
 
-async function handle(msg: Json, callTool: CallTool): Promise<Json> {
+async function handle(msg: Json, tools: Pick<Toolbox, "list" | "call">): Promise<Json> {
     const params = (msg.params ?? {}) as Json;
     switch (msg.method) {
         case "initialize":
             return {
                 protocolVersion: typeof params.protocolVersion === "string" ? params.protocolVersion : "2025-06-18",
                 capabilities: { tools: {} },
-                serverInfo: { name: "computer", version: "0.1.0" },
+                serverInfo: { name: "paperboard", version: "0.1.0" },
             };
         case "ping":
             return {};
         case "tools/list":
-            return { tools: COMPUTER_TOOLS };
+            return { tools: await tools.list() };
         case "tools/call": {
             const name = String(params.name ?? "");
-            if (!COMPUTER_TOOLS.some((t) => t.name === name)) {
-                throw Object.assign(new Error(`unknown tool ${name}`), { code: -32602 });
-            }
             const args = params.arguments && typeof params.arguments === "object" ? (params.arguments as Record<string, unknown>) : {};
-            const r = await callTool(name, args);
+            const r = await tools.call(name, args);
             const content: Json[] = [{ type: "text", text: r.text }];
             if (r.image) content.push({ type: "image", data: r.image, mimeType: "image/png" });
             return { content, isError: Boolean(r.isError) };

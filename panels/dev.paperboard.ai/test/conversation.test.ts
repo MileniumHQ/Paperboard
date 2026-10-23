@@ -26,6 +26,7 @@ function setup(o: { settings?: Settings | null; dir?: string; installed?: boolea
         settings: () => settings,
         resolve: () => (o.installed === false ? null : "/usr/bin/codex"),
         mcp: () => ({ url: "http://127.0.0.1:1/mcp", token: "secret-token" }),
+        instructions: async () => ["a section"],
         emit: (e) => emitted.push(e),
         onState: (s) => states.push(s),
         turnMs: o.turnMs,
@@ -224,7 +225,7 @@ describe("the conversation", () => {
         host.alive.add(TURN_PROC_ID);
         const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ai-conv-"));
         dirs.push(dir);
-        const conv = new Conversation({ host, dir, settings: () => null, resolve: () => null, mcp: () => ({ url: "", token: "" }), emit: () => {}, onState: () => {} });
+        const conv = new Conversation({ host, dir, settings: () => null, resolve: () => null, mcp: () => ({ url: "", token: "" }), instructions: async () => [], emit: () => {}, onState: () => {} });
         conv.init();
         await until(() => host.killed.length === 1);
         expect(host.killed[0]).toEqual({ id: TURN_PROC_ID, signal: "SIGKILL" });

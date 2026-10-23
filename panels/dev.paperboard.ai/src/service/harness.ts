@@ -14,20 +14,18 @@ import { MCP_TOKEN_ENV } from "./computerMcp";
 
 export const HARNESS_COMMANDS: Record<Harness, string> = { codex: "codex", "claude-code": "claude" };
 
-export function instructions(name: string): string {
-    return `You are ${name}, the user's personal agent. You're texting with them: one long, ongoing conversation, so keep replies short, warm and plain, like a friend who's good with computers.
+/** MCP server name the harness knows the service's endpoint by; its tools are mcp__paperboard__<tool> */
+export const MCP_SERVER = "paperboard";
+
+export function instructions(name: string, sections: string[] = []): string {
+    return [
+        `You are ${name}, the user's personal agent. You're texting with them: one long, ongoing conversation, so keep replies short, warm and plain, like a friend who's good with computers.
 
 You have your own computer, a Debian VM. Your tools act on it, never on the user's machine, so you can't see their files. Use them to actually do things instead of explaining how.
 
-Work quietly. The user sees your tool calls already, so don't announce or narrate steps ("let me open…", "now I'll click…", "next one"). Do the work, then reply once with what came of it. Only write mid-task when you need something from them or a long task has news worth hearing.
-
-How to use your computer:
-- Reach for \`shell\` first. Downloads, files, calculations, text, scripts and lookups are faster and more reliable there. Only open a window (\`open\`) when a task really needs one, like reading a web page that needs a browser or using a graphical app.
-- With windows: \`look\` at it, act on a numbered mark (\`click\` with mark, then \`type\`/\`key\`), then \`look\` again to check what happened. Marks are only valid for the latest look.
-- When something isn't marked, is tiny, or the text is too small to read (canvas, games, custom widgets), \`zoom\` into that region and click with the x/y its grid shows. \`hover\` opens hover menus; \`drag\` moves sliders and drags things.
-- In the browser, ctrl+l focuses the address bar; typing a URL with enter=true goes there.
-- You can search the web directly, too.
-- Don't claim you did something you didn't verify.`;
+Work quietly. The user sees your tool calls already, so don't announce or narrate steps ("let me open…", "now I'll click…", "next one"). Do the work, then reply once with what came of it. Only write mid-task when you need something from them or a long task has news worth hearing.`,
+        ...sections,
+    ].join("\n\n");
 }
 
 // Codex features that would hand the model tools other than search and the computer
@@ -47,6 +45,8 @@ export interface TurnSpec {
     thread: string | null;
     message: string;
     mcpUrl: string;
+    /** each toolset's part of the instructions, in order */
+    sections: string[];
 }
 
 export interface TurnLaunch {
@@ -65,12 +65,12 @@ export function turnLaunch(spec: TurnSpec): TurnLaunch {
             `approval_policy="never"`,
             `sandbox_mode="read-only"`,
             `web_search="live"`,
-            `developer_instructions=${toml(instructions(spec.name))}`,
-            `mcp_servers.computer.url=${toml(spec.mcpUrl)}`,
-            `mcp_servers.computer.bearer_token_env_var=${toml(MCP_TOKEN_ENV)}`,
-            `mcp_servers.computer.tool_timeout_sec=660`,
-            // the computer's tools run unprompted; anything else stays denied by approval_policy=never
-            `mcp_servers.computer.default_tools_approval_mode="approve"`,
+            `developer_instructions=${toml(instructions(spec.name, spec.sections))}`,
+            `mcp_servers.${MCP_SERVER}.url=${toml(spec.mcpUrl)}`,
+            `mcp_servers.${MCP_SERVER}.bearer_token_env_var=${toml(MCP_TOKEN_ENV)}`,
+            `mcp_servers.${MCP_SERVER}.tool_timeout_sec=660`,
+            // the service's tools run unprompted; anything else stays denied by approval_policy=never
+            `mcp_servers.${MCP_SERVER}.default_tools_approval_mode="approve"`,
         ].flatMap((c) => ["-c", c]);
         const common = [
             "--json", "--skip-git-repo-check",
@@ -86,17 +86,17 @@ export function turnLaunch(spec: TurnSpec): TurnLaunch {
     const mcp = {
         mcpServers: {
             // Claude Code expands ${VAR} in headers: the token stays out of argv
-            computer: { type: "http", url: spec.mcpUrl, headers: { Authorization: `Bearer \${${MCP_TOKEN_ENV}}` } },
+            [MCP_SERVER]: { type: "http", url: spec.mcpUrl, headers: { Authorization: `Bearer \${${MCP_TOKEN_ENV}}` } },
         },
     };
     const args = [
         "-p", "--output-format", "stream-json", "--verbose",
         ...(spec.model ? ["--model", spec.model] : []),
         "--tools", "WebSearch",
-        "--allowedTools", "WebSearch", "mcp__computer",
+        "--allowedTools", "WebSearch", `mcp__${MCP_SERVER}`,
         "--permission-mode", "dontAsk",
         "--mcp-config", JSON.stringify(mcp), "--strict-mcp-config",
-        "--append-system-prompt", instructions(spec.name),
+        "--append-system-prompt", instructions(spec.name, spec.sections),
         ...(spec.thread ? ["--resume", spec.thread] : ["--session-id", session]),
         spec.message,
     ];

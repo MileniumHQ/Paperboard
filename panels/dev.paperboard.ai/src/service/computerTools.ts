@@ -14,6 +14,15 @@ const where = {
     y: { type: "integer", description: "Pixels from the window's top edge." },
 };
 
+/** The computer's part of the agent's instructions. */
+export const COMPUTER_INSTRUCTIONS = `How to use your computer:
+- Reach for \`shell\` first. Downloads, files, calculations, text, scripts and lookups are faster and more reliable there. Only open a window (\`open\`) when a task really needs one, like reading a web page that needs a browser or using a graphical app.
+- With windows: \`look\` at it, act on a numbered mark (\`click\` with mark, then \`type\`/\`key\`), then \`look\` again to check what happened. Marks are only valid for the latest look.
+- When something isn't marked, is tiny, or the text is too small to read (canvas, games, custom widgets), \`zoom\` into that region and click with the x/y its grid shows. \`hover\` opens hover menus; \`drag\` moves sliders and drags things.
+- In the browser, ctrl+l focuses the address bar; typing a URL with enter=true goes there.
+- You can search the web directly, too.
+- Don't claim you did something you didn't verify.`;
+
 export const COMPUTER_TOOLS: ToolSpec[] = [
     {
         name: "shell",
