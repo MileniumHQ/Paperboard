@@ -3,7 +3,7 @@ import { EXPRESSIONS, type Expression } from "./expressions";
 import type { Orientation } from "./geometry";
 
 /** Where the face rests when nothing is asking it to look elsewhere. */
-export const HOME: Orientation = { yaw: 24, pitch: 20, roll: -5 };
+export const HOME: Orientation = { yaw: 26, pitch: 0, roll: 0 };
 
 export const SPOTS = {
     home: HOME,
@@ -48,19 +48,22 @@ export interface FaceController {
     readonly blinkRequest: () => number;
 }
 
-// Where the eyes wander while pondering. Glances stay in the lower half and
-// hold long enough to read; about half keep the current face so it isn't
-// changing expression on every glance.
-const GLANCES: Orientation[] = [
-    { yaw: -20, pitch: -14, roll: 5 },
-    { yaw: 28, pitch: -10, roll: -6 },
-    { yaw: 4, pitch: -26, roll: 0 },
-    { yaw: 36, pitch: -24, roll: -5 },
-    { yaw: -30, pitch: -28, roll: 4 },
-    { yaw: 16, pitch: -4, roll: -3 },
-];
+// While pondering the eyes go all over: up, down and to both sides, each
+// glance far enough from the last to read as a new thought. About half keep
+// the current face so it isn't changing expression on every glance.
+const GLANCE = { yaw: [-56, 56], pitch: [-36, 42], minStep: 34 } as const;
+function nextGlance(from: Orientation | undefined): Orientation {
+    const rand = ([lo, hi]: readonly [number, number]) => lo + Math.random() * (hi - lo);
+    for (let i = 0; ; i++) {
+        const yaw = rand(GLANCE.yaw);
+        const pitch = rand(GLANCE.pitch);
+        const far = !from || Math.hypot(yaw - from.yaw, pitch - from.pitch) >= GLANCE.minStep;
+        // tilt with the turn, the way a head does
+        if (far || i >= 8) return { yaw, pitch, roll: -yaw / 10 };
+    }
+}
 const PONDER_FACES: Expression[] = ["thinking", "musing", "hmm", "focused", "skeptical", "thinking", "musing"];
-const PONDER_HOLD = [2200, 3600] as const;
+const PONDER_HOLD = [1100, 2600] as const;
 const AHA_CHANCE = 0.08;
 
 export function createFace(initial: { expression?: Expression; at?: Spot | Orientation } = {}): FaceController {
@@ -81,7 +84,7 @@ export function createFace(initial: { expression?: Expression; at?: Spot | Orien
     };
     let lastGlance: Orientation | undefined;
     const ponderStep = () => {
-        lastGlance = pick(GLANCES, lastGlance);
+        lastGlance = nextGlance(lastGlance);
         setOrientation({ ...lastGlance });
         if (Math.random() < AHA_CHANCE) setExpression("aha");
         else if (Math.random() < 0.5 || !PONDER_FACES.includes(expression())) {
