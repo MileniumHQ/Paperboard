@@ -325,15 +325,17 @@ describe("texting", () => {
         expect(emitted.some((e) => e.kind === "error")).toBe(false);
     });
 
-    test("plain output that repeats what was sent is not shown twice; something new is", async () => {
+    // This used to show plain output that didn't repeat a sent text. A real Claude turn ends with a recap of
+    // its texts ("I sent you two messages…"), which then showed up as a bubble, so a turn that texted shows none.
+    test("once the agent has texted, its plain output (a recap) isn't shown", async () => {
         const { conv, host, emitted, states } = setup();
         conv.send("hi");
         await until(() => host.started.length === 1);
         await send(conv, "All done, the file is ready.");
-        host.stdout(TURN_PROC_ID, reply("All done,  the file is ready.") + reply("Also: it's 3 MB."));
+        host.stdout(TURN_PROC_ID, reply("All done,  the file is ready.") + reply("I sent you a message saying it's done."));
         host.exit(TURN_PROC_ID, 0);
         await until(() => busy(states) === false);
-        expect(bubbles(emitted).map((b) => b.text)).toEqual(["All done, the file is ready.", "Also: it's 3 MB."]);
+        expect(bubbles(emitted).map((b) => b.text)).toEqual(["All done, the file is ready."]);
     });
 
     test("a turn that only used send_message counts as a reply", async () => {

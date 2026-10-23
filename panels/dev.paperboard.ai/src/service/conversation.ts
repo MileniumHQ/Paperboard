@@ -60,7 +60,7 @@ export class Conversation {
     private running: Promise<void> | null = null;
     private stopRequested = false;
     private closed = false;
-    /** what the agent has texted in the running turn, to tell a plain-text ending from a repeat of it */
+    /** what the agent has texted in the running turn; once it has, its plain output is only a recap */
     private sent: string[] = [];
 
     constructor(private deps: ConversationDeps) {}
@@ -252,14 +252,14 @@ export class Conversation {
             clearTimeout(timer);
         }
         if (buf.trim()) onLine(buf);
-        // what the model wrote as plain output instead of send_message still reaches the user, unless it repeats what it texted
-        const texted = this.sent.map(squash);
-        for (const text of plain) {
-            const t = squash(text);
-            if (!t || texted.some((s) => s.includes(t))) continue;
-            texted.push(t);
-            this.sent.push(text);
-            this.put({ id: this.newId(), at: Date.now(), kind: "agent", text: text.trim() });
+        // plain output reaches the user only when the model never texted: a turn that did text ends with its own
+        // recap of what it sent ("I sent you two messages…"), which isn't meant for the user
+        if (this.sent.length === 0) {
+            for (const text of plain) {
+                if (!text.trim()) continue;
+                this.sent.push(text);
+                this.put({ id: this.newId(), at: Date.now(), kind: "agent", text: text.trim() });
+            }
         }
         if (this.stopRequested) return;
         if (failures.length) throw new Error(failures[failures.length - 1]);
@@ -355,10 +355,6 @@ export class Conversation {
 function atomicWrite(file: string, data: string) {
     fs.writeFileSync(`${file}.tmp`, data);
     fs.renameSync(`${file}.tmp`, file);
-}
-
-function squash(s: string) {
-    return s.replace(/\s+/g, " ").trim().toLowerCase();
 }
 
 function lastLines(s: string) {
