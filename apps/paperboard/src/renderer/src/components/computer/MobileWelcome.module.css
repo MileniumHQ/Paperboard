@@ -1,75 +1,117 @@
-/* The phone's first screen before any computer is paired: a sign-in page. */
+/* The phone's first screen before any computer is paired, drawn like the
+   Panel Library: a banner of panel icons on top, the page under it. */
 .welcome {
     flex: 1;
+    min-width: 0;
+    overflow-y: auto;
+    box-sizing: border-box;
+    padding: var(--paper-uigap);
+    padding-top: calc(var(--paper-uigap) + env(safe-area-inset-top, 0px));
+    padding-bottom: calc(var(--paper-uigap-double) + env(safe-area-inset-bottom, 0px));
+}
+
+.column {
+    max-width: var(--paper-page-width);
+    margin: 0 auto;
     display: flex;
     flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: var(--paper-uigap-double);
-    padding: var(--paper-uigap-quadruple) var(--paper-uigap-double);
-    padding-bottom: calc(var(--paper-uigap-quadruple) + env(safe-area-inset-bottom, 0px));
-    background: var(--paper-surface-app);
-    text-align: center;
-    overflow-y: auto;
+    gap: var(--paper-uigap);
 }
 
-.stack {
+/* the library banner turned for a phone: its side columns of icons become a
+   row above the title and a row below it */
+.banner {
     position: relative;
-    width: 220px;
-    height: 150px;
-    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap);
+    padding: var(--paper-uigap) 0;
+    border-radius: var(--paper-border-radius);
+    overflow: hidden;
+    background: linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--paper-primary) 55%, var(--paper-on-color)) 0%,
+        var(--paper-primary) 55%,
+        var(--paper-primary-deep) 100%
+    );
 }
 
-.stack img {
-    position: absolute;
-    top: 0;
-    left: 50%;
-    width: 112px;
-    height: 112px;
-    margin-left: -56px;
+.row {
+    display: flex;
+    align-items: center;
+    gap: var(--paper-uigap-half);
+    padding: 0 var(--paper-uigap);
+}
+
+.end {
+    flex-direction: row-reverse;
+}
+
+.icon,
+.ghost {
+    flex-shrink: 0;
+    width: var(--paper-avatar-size-xlarge);
+    height: var(--paper-avatar-size-xlarge);
+}
+
+.icon {
     user-select: none;
     -webkit-user-drag: none;
     animation: deal var(--paper-long-transition) both;
 }
 
-.left {
-    transform: translate(-62px, 22px) rotate(-14deg);
-    animation-delay: 60ms;
+.icon:nth-child(2) {
+    animation-delay: 50ms;
 }
 
-.right {
-    transform: translate(62px, 22px) rotate(12deg);
-    animation-delay: 120ms;
+.icon:nth-child(3) {
+    animation-delay: 100ms;
 }
 
-.front {
-    transform: translateY(6px);
+/* the banner's frosted paper tiles, fading toward the middle */
+.ghost {
+    box-sizing: border-box;
+    border-radius: var(--paper-border-radius);
+    background: color-mix(in srgb, var(--paper-on-color) 16%, transparent);
+    border: var(--paper-border-width) solid color-mix(in srgb, var(--paper-on-color) 22%, transparent);
 }
 
-/* each card is dealt up from below into its place */
+/* each icon is dealt in from below */
 @keyframes deal {
     from {
         opacity: 0;
-        translate: 0 24px;
+        translate: 0 12px;
     }
 }
 
-.copy {
+.heading {
     display: flex;
     flex-direction: column;
-    gap: var(--paper-uigap-half);
-    max-width: 320px;
+    align-items: center;
+    gap: var(--paper-uigap-third);
+    padding: var(--paper-uigap-half) var(--paper-uigap);
+    text-align: center;
+    color: var(--paper-on-color);
 }
 
 .title {
     margin: 0;
-    font-size: var(--paper-text-size-7);
-    font-weight: 700;
-    color: var(--paper-text);
+    font-family: var(--paper-font-family-rounded);
+    font-size: var(--paper-text-size-10);
+    font-weight: 800;
+    line-height: 1.05;
+    text-shadow: 0 2px 10px color-mix(in srgb, var(--paper-primary-deep) 60%, transparent);
+}
+
+.subtitle {
+    margin: 0;
+    font-size: var(--paper-text-size-3);
+    font-weight: 600;
 }
 
 .lead {
     margin: 0;
+    text-align: center;
 }
 
 .failure {
@@ -77,6 +119,7 @@
     flex-direction: column;
     align-items: center;
     gap: var(--paper-uigap-half);
+    text-align: center;
 }
 
 .failure p {
@@ -85,7 +128,6 @@
 
 .action {
     width: 100%;
-    max-width: 320px;
 }
 
 .button {
