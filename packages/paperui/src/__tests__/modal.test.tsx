@@ -30,6 +30,26 @@ describe("PaperModal - Accessibility & Focus Trapping Tests", () => {
         expect(handleClose).toHaveBeenCalledTimes(1);
     });
 
+    test("a concealed dialog stays mounted, hidden from the screen, and ignores Escape", async () => {
+        const handleClose = vi.fn();
+        const [concealed, setConcealed] = createSignal(false);
+        render(() => (
+            <PaperModal open onClose={handleClose} title="Carried from" concealed={concealed()}>
+                <button>Held</button>
+            </PaperModal>
+        ));
+        const held = screen.getByText("Held");
+        setConcealed(true);
+        // the same element: a touch that started on it keeps going
+        expect(document.body.querySelector("button:not([aria-label])")).toBe(held);
+        expect(held.closest("[aria-hidden='true']")).not.toBeNull();
+        await fireEvent.keyDown(window, { key: "Escape" });
+        expect(handleClose).not.toHaveBeenCalled();
+        setConcealed(false);
+        await fireEvent.keyDown(window, { key: "Escape" });
+        expect(handleClose).toHaveBeenCalledTimes(1);
+    });
+
     test("restores focus to trigger element upon closing", async () => {
         const [open, setOpen] = createSignal(false);
 

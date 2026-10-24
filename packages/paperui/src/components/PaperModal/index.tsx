@@ -25,6 +25,14 @@ export interface PaperModalProps extends Omit<JSX.HTMLAttributes<HTMLDivElement>
     noHeader?: boolean;
     noPadding?: boolean;
     footer?: JSX.Element;
+    /** "bottom" rises from the screen's bottom edge, like a phone's sheet */
+    placement?: "center" | "bottom";
+    /**
+     * Stays open and mounted but isn't shown and takes no input: what was
+     * picked up from it is being carried elsewhere, and the touch that
+     * picked it up must keep its element.
+     */
+    concealed?: boolean;
 }
 
 export function PaperModal(props: ParentProps<PaperModalProps>) {
@@ -41,6 +49,8 @@ export function PaperModal(props: ParentProps<PaperModalProps>) {
         "noHeader",
         "noPadding",
         "footer",
+        "placement",
+        "concealed",
         "class",
         "classList",
         "children",
@@ -73,6 +83,7 @@ export function PaperModal(props: ParentProps<PaperModalProps>) {
         });
 
         const handleKeyDown = (e: KeyboardEvent) => {
+            if (local.concealed) return;
             if ((local.closeOnEsc ?? true) && e.key === "Escape") {
                 local.onClose?.();
                 return;
@@ -126,7 +137,12 @@ export function PaperModal(props: ParentProps<PaperModalProps>) {
                 enterClass={styles.backdropTransitionIn}
                 exitClass={styles.backdropTransitionOut}
             >
-                <div class={styles.backdrop} onClick={handleBackdropClick}>
+                <div
+                    class={styles.backdrop}
+                    classList={{ [styles.bottom]: local.placement === "bottom", [styles.concealed]: !!local.concealed }}
+                    aria-hidden={local.concealed ? "true" : undefined}
+                    onClick={handleBackdropClick}
+                >
                     <div
                         ref={modalRef}
                         tabIndex={-1}

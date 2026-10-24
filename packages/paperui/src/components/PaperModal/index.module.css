@@ -21,6 +21,14 @@
     transform: translateZ(0);
 }
 
+.bottom {
+    align-items: flex-end;
+}
+
+.concealed {
+    visibility: hidden;
+    pointer-events: none;
+}
 
 .modalBox {
     background: var(--paper-surface-raised);
@@ -76,6 +84,17 @@
 
     .modalBox {
         max-height: 100%;
+    }
+
+    /* a sheet sits on the screen's bottom edge */
+    .bottom {
+        padding-bottom: 0;
+    }
+
+    .bottom .modalBox {
+        border-bottom: none;
+        border-bottom-left-radius: 0;
+        border-bottom-right-radius: 0;
     }
 
     .footer {
@@ -152,6 +171,33 @@
 
 .backdropTransitionOut .modalBox {
     animation: modalScaleOut var(--paper-short-transition) ease-in both;
+}
+
+/* a sheet rises from the bottom edge and sinks back into it */
+.bottom.backdropTransitionIn .modalBox {
+    animation: sheetIn var(--paper-mid-transition) var(--paper-ease-emphasized) both;
+}
+
+.bottom.backdropTransitionOut .modalBox {
+    animation: sheetOut var(--paper-short-transition) ease-in both;
+}
+
+@keyframes sheetIn {
+    from {
+        transform: translate3d(0, 100%, 0);
+    }
+    to {
+        transform: translate3d(0, 0, 0);
+    }
+}
+
+@keyframes sheetOut {
+    from {
+        transform: translate3d(0, 0, 0);
+    }
+    to {
+        transform: translate3d(0, 100%, 0);
+    }
 }
 
 @keyframes backdropFadeIn {
