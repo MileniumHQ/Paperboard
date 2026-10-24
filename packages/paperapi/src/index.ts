@@ -1,6 +1,7 @@
 import { invoke, send, on, unpackIpcPayload } from "./ipc";
 import "./readiness";
 import "./swipeBack";
+import "./haptics";
 
 export * from "./ipc";
 export * from "./config";
@@ -12,6 +13,7 @@ export * from "./identity";
 export * from "./secrets";
 export * from "./backups";
 export { SWIPE_BACK_MESSAGE, swipeBackMessage, type SwipeBackMessage } from "./swipeBack";
+export { HAPTIC_MESSAGE, hapticMessage, type HapticMessage } from "./haptics";
 export * from "./package";
 export * from "./file";
 export * from "./process";
