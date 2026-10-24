@@ -1,10 +1,9 @@
-// Phones buzz under the finger. Only named kinds play, only through the one
-// gate the shell's setting holds, and a framed document reports instead of
-// vibrating (browsers refuse vibrate in cross-origin frames).
+// Phones buzz under the finger. Only named kinds play, and a framed
+// document reports instead of vibrating (browsers refuse vibrate in cross-origin frames).
 import { render, fireEvent, cleanup } from "@solidjs/testing-library";
 import { createRoot, createSignal } from "solid-js";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { HAPTIC_EVENT, haptic, playHaptic, setHapticsEnabled } from "../utils/haptics";
+import { HAPTIC_EVENT, haptic, playHaptic } from "../utils/haptics";
 import { PaperEffect } from "../components/PaperEffect";
 import { PaperToggle } from "../components/PaperToggle";
 import { PaperRange } from "../components/PaperRange";
@@ -15,23 +14,19 @@ let vibrate: ReturnType<typeof vi.fn>;
 beforeEach(() => {
     vibrate = vi.fn(() => true);
     Object.defineProperty(navigator, "vibrate", { value: vibrate, configurable: true, writable: true });
-    setHapticsEnabled(true);
 });
 afterEach(() => {
     cleanup();
-    setHapticsEnabled(true);
     Reflect.deleteProperty(navigator, "vibrate");
 });
 
 describe("haptics", () => {
-    it("plays only kinds in the table, and nothing while the setting is off", () => {
+    it("plays only kinds in the table", () => {
         expect(playHaptic("selection")).toBe(true);
         expect(vibrate).toHaveBeenLastCalledWith([5]);
         expect(playHaptic("forever")).toBe(false);
         expect(playHaptic([10000])).toBe(false);
         expect(playHaptic("toString")).toBe(false);
-        setHapticsEnabled(false);
-        expect(playHaptic("heavy")).toBe(false);
         expect(vibrate).toHaveBeenCalledTimes(1);
     });
 

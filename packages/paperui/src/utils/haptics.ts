@@ -6,7 +6,7 @@
 // Browsers refuse navigator.vibrate inside a cross-origin frame, and every
 // panel is one. So a framed document only reports the kind on window
 // (HAPTIC_EVENT); PaperAPI forwards it to the shell, which plays it with
-// playHaptic. The shell's own setting turns them all off in one place.
+// playHaptic.
 
 /** dispatched on window when a framed document asks for a haptic */
 export const HAPTIC_EVENT = "paperui:haptic";
@@ -41,24 +41,13 @@ export function isHapticKind(value: unknown): value is HapticKind {
     return typeof value === "string" && Object.prototype.hasOwnProperty.call(PATTERNS, value);
 }
 
-let enabled = true;
-
-/** The app's vibration setting; while off, playHaptic plays nothing. */
-export function setHapticsEnabled(on: boolean): void {
-    enabled = on;
-}
-
-export function hapticsEnabled(): boolean {
-    return enabled;
-}
-
 /**
- * Plays `kind` on this document's device, if it has a vibrator and the setting
- * allows it. The shell calls it for kinds its panel frames forward; anything
- * not in the table is ignored. Returns whether a vibration was started.
+ * Plays `kind` on this document's device, if it has a vibrator. The shell
+ * calls it for kinds its panel frames forward; anything not in the table is
+ * ignored. Returns whether a vibration was started.
  */
 export function playHaptic(kind: unknown): boolean {
-    if (!enabled || !isHapticKind(kind)) return false;
+    if (!isHapticKind(kind)) return false;
     if (typeof navigator === "undefined" || typeof navigator.vibrate !== "function") return false;
     // a new pattern replaces one still playing; nothing queues
     return navigator.vibrate(PATTERNS[kind] as unknown as number[]);

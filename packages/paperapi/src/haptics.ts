@@ -3,7 +3,7 @@ import { currentFrameSession, type FrameSession } from "./frameSession";
 // Browsers won't vibrate inside a cross-origin frame, so PaperUI in a panel
 // frame reports the haptic it wants on window (its HAPTIC_EVENT). Forward the
 // kind to the shell under this document's generation; the shell checks it
-// against PaperUI's table and its own setting before anything buzzes.
+// against PaperUI's table before anything buzzes.
 
 /** PaperUI's HAPTIC_EVENT */
 export const HAPTIC_EVENT = "paperui:haptic";
