@@ -21,9 +21,11 @@
     text-overflow: ellipsis;
 }
 
-.PaperButton:focus-visible {
-    outline: var(--paper-focus-ring);
-    outline-offset: var(--paper-focus-offset);
+@media (hover: hover) {
+    .PaperButton:focus-visible {
+        outline: var(--paper-focus-ring);
+        outline-offset: var(--paper-focus-offset);
+    }
 }
 
 /* sizes: medium is the default; small is more compact, large is the hero */
@@ -68,12 +70,14 @@
     transition: var(--paper-tiny-transition) background;
 }
 
-.PaperButton.size-tiny:hover {
-    background: color-mix(
-        in srgb,
-        var(--paper-contrast) 8%,
-        var(--paper-surface-raised)
-    );
+@media (hover: hover) {
+    .PaperButton.size-tiny:hover {
+        background: color-mix(
+            in srgb,
+            var(--paper-contrast) 8%,
+            var(--paper-surface-raised)
+        );
+    }
 }
 .PaperButton.size-tiny:active {
     background: color-mix(
@@ -92,12 +96,14 @@
     color: var(--paper-on-color);
 }
 
-.PaperButton.size-tiny[aria-pressed="true"]:hover {
-    background: color-mix(
-        in srgb,
-        var(--paper-contrast) 8%,
-        var(--role-base, var(--paper-primary))
-    );
+@media (hover: hover) {
+    .PaperButton.size-tiny[aria-pressed="true"]:hover {
+        background: color-mix(
+            in srgb,
+            var(--paper-contrast) 8%,
+            var(--role-base, var(--paper-primary))
+        );
+    }
 }
 
 .PaperButton.size-tiny[aria-pressed="true"]:active {
@@ -124,14 +130,16 @@
         color var(--paper-short-transition),
         transform var(--paper-tiny-transition);
 }
-.PaperButton.text:hover {
-    color: var(--paper-text);
-    background: color-mix(
-        in srgb,
-        var(--paper-contrast) 8%,
-        transparent
-    );
-    opacity: 1;
+@media (hover: hover) {
+    .PaperButton.text:hover {
+        color: var(--paper-text);
+        background: color-mix(
+            in srgb,
+            var(--paper-contrast) 8%,
+            transparent
+        );
+        opacity: 1;
+    }
 }
 .PaperButton.text:active {
     background: color-mix(
@@ -147,8 +155,15 @@
 .PaperButton.size-tiny.text {
     color: var(--paper-text-subtle);
 }
-.PaperButton.size-tiny.text:hover {
-    color: var(--paper-text);
+@media (hover: hover) {
+    .PaperButton.size-tiny.text:hover {
+        color: var(--paper-text);
+    }
+}
+@media (hover: none) {
+    .PaperButton.size-tiny.text:active {
+        color: var(--paper-text);
+    }
 }
 
 .PaperButton.icon {
@@ -178,11 +193,15 @@
     border-radius: var(--paper-border-radius-half);
 }
 
-.PaperButton:not(.size-tiny):not(.text):hover {
-    opacity: 0.8;
+@media (hover: hover) {
+    .PaperButton:not(.size-tiny):not(.text):hover {
+        opacity: 0.8;
+    }
 }
-:global([class*="PaperEffect"]) .PaperButton:hover {
-    opacity: 1 !important;
+@media (hover: hover) {
+    :global([class*="PaperEffect"]) .PaperButton:hover {
+        opacity: 1 !important;
+    }
 }
 .PaperButton:not(.size-tiny):not(.text):active {
     transform: scale(0.95);
@@ -197,12 +216,29 @@
     opacity: 0.45;
     cursor: not-allowed;
 }
-.PaperButton.disabled:hover,
-.PaperButton:disabled:hover {
-    opacity: 0.45;
+@media (hover: hover) {
+    .PaperButton.disabled:hover,
+    .PaperButton:disabled:hover {
+        opacity: 0.45;
+    }
 }
-.PaperButton.text.disabled:hover,
-.PaperButton.text:disabled:hover {
-    background: transparent;
-    color: var(--paper-text);
+@media (hover: none) {
+    .PaperButton.disabled:active,
+    .PaperButton:disabled:active {
+        opacity: 0.45;
+    }
+}
+@media (hover: hover) {
+    .PaperButton.text.disabled:hover,
+    .PaperButton.text:disabled:hover {
+        background: transparent;
+        color: var(--paper-text);
+    }
+}
+@media (hover: none) {
+    .PaperButton.text.disabled:active,
+    .PaperButton.text:disabled:active {
+        background: transparent;
+        color: var(--paper-text);
+    }
 }

@@ -55,9 +55,16 @@
     font-size: var(--paper-text-size-2);
 }
 
-.file:hover,
-.file:focus-visible {
-    background: var(--paper-surface-inset);
+@media (hover: hover) {
+    .file:hover,
+    .file:focus-visible {
+        background: var(--paper-surface-inset);
+    }
+}
+@media (hover: none) {
+    .file:active {
+        background: var(--paper-surface-inset);
+    }
 }
 
 .fileName {

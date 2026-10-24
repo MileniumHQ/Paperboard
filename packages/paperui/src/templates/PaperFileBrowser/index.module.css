@@ -69,8 +69,15 @@
     outline: none;
 }
 
-.row:hover {
-    background: color-mix(in srgb, var(--paper-contrast) 4%, transparent);
+@media (hover: hover) {
+    .row:hover {
+        background: color-mix(in srgb, var(--paper-contrast) 4%, transparent);
+    }
+}
+@media (hover: none) {
+    .row:active {
+        background: color-mix(in srgb, var(--paper-contrast) 4%, transparent);
+    }
 }
 
 .row.selected {
@@ -87,9 +94,11 @@
     background: var(--paper-primary);
 }
 
-.row:focus-visible {
-    outline: var(--paper-focus-ring);
-    outline-offset: calc(var(--paper-thick-border-width) * -1);
+@media (hover: hover) {
+    .row:focus-visible {
+        outline: var(--paper-focus-ring);
+        outline-offset: calc(var(--paper-thick-border-width) * -1);
+    }
 }
 
 .chevron {

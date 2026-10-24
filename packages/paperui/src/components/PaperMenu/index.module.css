@@ -74,14 +74,31 @@
     color: var(--paper-text-subtle);
 }
 
-.PaperMenuItem:hover {
-    color: var(--paper-primary-deep);
-    background: color-mix(in srgb, var(--paper-primary) 5%, transparent);
+@media (hover: hover) {
+    .PaperMenuItem:hover {
+        color: var(--paper-primary-deep);
+        background: color-mix(in srgb, var(--paper-primary) 5%, transparent);
+    }
+}
+@media (hover: none) {
+    .PaperMenuItem:active {
+        color: var(--paper-primary-deep);
+        background: color-mix(in srgb, var(--paper-primary) 5%, transparent);
+    }
 }
 
-.PaperMenuItem.selected .menuIcon,
-.PaperMenuItem:hover .menuIcon {
+.PaperMenuItem.selected .menuIcon {
     color: var(--paper-primary-deep);
+}
+@media (hover: hover) {
+    .PaperMenuItem:hover .menuIcon {
+        color: var(--paper-primary-deep);
+    }
+}
+@media (hover: none) {
+    .PaperMenuItem:active .menuIcon {
+        color: var(--paper-primary-deep);
+    }
 }
 
 .PaperMenuItem.selected {
@@ -114,19 +131,33 @@
         color var(--paper-short-transition);
 }
 
-.sectionHeader:hover {
-    color: var(--paper-text);
-    background: color-mix(
-        in srgb,
-        var(--paper-contrast) 4%,
-        transparent
-    );
+@media (hover: hover) {
+    .sectionHeader:hover {
+        color: var(--paper-text);
+        background: color-mix(
+            in srgb,
+            var(--paper-contrast) 4%,
+            transparent
+        );
+    }
+}
+@media (hover: none) {
+    .sectionHeader:active {
+        color: var(--paper-text);
+        background: color-mix(
+            in srgb,
+            var(--paper-contrast) 4%,
+            transparent
+        );
+    }
 }
 
-.PaperMenuItem:focus-visible,
-.sectionHeader:focus-visible {
-    outline: var(--paper-thickest-border-width) solid var(--paper-primary);
-    outline-offset: var(--paper-border-width);
+@media (hover: hover) {
+    .PaperMenuItem:focus-visible,
+    .sectionHeader:focus-visible {
+        outline: var(--paper-thickest-border-width) solid var(--paper-primary);
+        outline-offset: var(--paper-border-width);
+    }
 }
 
 .sectionTitle {

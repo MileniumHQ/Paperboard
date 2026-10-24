@@ -45,9 +45,11 @@
     transition: none;
 }
 
-.PaperRange:focus-visible .track {
-    outline: var(--paper-focus-ring);
-    outline-offset: var(--paper-focus-offset);
+@media (hover: hover) {
+    .PaperRange:focus-visible .track {
+        outline: var(--paper-focus-ring);
+        outline-offset: var(--paper-focus-offset);
+    }
 }
 
 .disabled {

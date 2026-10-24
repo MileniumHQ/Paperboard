@@ -128,9 +128,11 @@
     background: color-mix(in srgb, var(--paper-surface-raised) 15%, transparent);
 }
 
-.editOverlay:focus-visible {
-    outline: var(--paper-focus-ring);
-    outline-offset: var(--paper-focus-offset);
+@media (hover: hover) {
+    .editOverlay:focus-visible {
+        outline: var(--paper-focus-ring);
+        outline-offset: var(--paper-focus-offset);
+    }
 }
 
 .dragging .editOverlay {
@@ -146,8 +148,15 @@
     box-shadow: var(--paper-element-shadow);
 }
 
-.editing .editOverlay .removeBadge:hover {
-    background: color-mix(in srgb, var(--paper-contrast) 8%, var(--paper-surface-raised));
+@media (hover: hover) {
+    .editing .editOverlay .removeBadge:hover {
+        background: color-mix(in srgb, var(--paper-contrast) 8%, var(--paper-surface-raised));
+    }
+}
+@media (hover: none) {
+    .editing .editOverlay .removeBadge:active {
+        background: color-mix(in srgb, var(--paper-contrast) 8%, var(--paper-surface-raised));
+    }
 }
 
 .editing .editOverlay .removeBadge {
@@ -320,9 +329,11 @@
     margin-top: var(--paper-uigap-half);
 }
 
-.preview:focus-visible {
-    outline: var(--paper-focus-ring);
-    outline-offset: var(--paper-focus-offset);
+@media (hover: hover) {
+    .preview:focus-visible {
+        outline: var(--paper-focus-ring);
+        outline-offset: var(--paper-focus-offset);
+    }
 }
 
 /* where widgets come from: Paperboard, then each panel, as a list to the panel's edges */
@@ -363,8 +374,15 @@
     transition: transform var(--paper-short-transition) var(--paper-ease-symmetric);
 }
 
-.preview:hover:not(:disabled) {
-    transform: scale(var(--paper-scale-hover));
+@media (hover: hover) {
+    .preview:hover:not(:disabled) {
+        transform: scale(var(--paper-scale-hover));
+    }
+}
+@media (hover: none) {
+    .preview:active:not(:disabled) {
+        transform: scale(var(--paper-scale-hover));
+    }
 }
 
 .preview:disabled {

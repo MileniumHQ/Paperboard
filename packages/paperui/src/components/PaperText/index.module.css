@@ -41,8 +41,15 @@
     opacity: 0.6;
     transition: opacity var(--paper-tiny-transition) ease;
 }
-.anchorLink:hover {
-    opacity: 1;
+@media (hover: hover) {
+    .anchorLink:hover {
+        opacity: 1;
+    }
+}
+@media (hover: none) {
+    .anchorLink:active {
+        opacity: 1;
+    }
 }
 
 .PaperText.code {

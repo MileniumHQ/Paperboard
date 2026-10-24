@@ -26,19 +26,23 @@
     z-index: -1;
 }
 
-.PaperEffect:hover:not(:active) {
-    transform: translate3d(
-        var(--hover-offset),
-        var(--hover-offset),
-        0
-    );
+@media (hover: hover) {
+    .PaperEffect:hover:not(:active) {
+        transform: translate3d(
+            var(--hover-offset),
+            var(--hover-offset),
+            0
+        );
+    }
 }
-.PaperEffect:hover:not(:active)::before {
-    transform: translate3d(
-        calc(var(--transform-size) - var(--hover-offset)),
-        calc(var(--transform-size) - var(--hover-offset)),
-        0
-    );
+@media (hover: hover) {
+    .PaperEffect:hover:not(:active)::before {
+        transform: translate3d(
+            calc(var(--transform-size) - var(--hover-offset)),
+            calc(var(--transform-size) - var(--hover-offset)),
+            0
+        );
+    }
 }
 
 .PaperEffect:active {
@@ -70,19 +74,23 @@
 .PaperEffect:has([class*="disabled"]) {
     cursor: default;
 }
-.PaperEffect.disabled:hover:not(:active),
-.PaperEffect:has(:disabled):hover:not(:active),
-.PaperEffect:has([class*="disabled"]):hover:not(:active) {
-    transform: translate3d(0, 0, 0);
+@media (hover: hover) {
+    .PaperEffect.disabled:hover:not(:active),
+    .PaperEffect:has(:disabled):hover:not(:active),
+    .PaperEffect:has([class*="disabled"]):hover:not(:active) {
+        transform: translate3d(0, 0, 0);
+    }
 }
-.PaperEffect.disabled:hover:not(:active)::before,
-.PaperEffect:has(:disabled):hover:not(:active)::before,
-.PaperEffect:has([class*="disabled"]):hover:not(:active)::before {
-    transform: translate3d(
-        var(--transform-size),
-        var(--transform-size),
-        calc(var(--paper-border-width) * -1)
-    );
+@media (hover: hover) {
+    .PaperEffect.disabled:hover:not(:active)::before,
+    .PaperEffect:has(:disabled):hover:not(:active)::before,
+    .PaperEffect:has([class*="disabled"]):hover:not(:active)::before {
+        transform: translate3d(
+            var(--transform-size),
+            var(--transform-size),
+            calc(var(--paper-border-width) * -1)
+        );
+    }
 }
 
 .text,
@@ -96,28 +104,38 @@
 .PaperEffect:has([class*="text"])::before {
     display: none;
 }
-.text:hover:not(:active),
-.PaperEffect:has([class*="text"]):hover:not(:active) {
-    box-shadow: var(--transform-size) var(--transform-size) 0 var(--transition-color);
-    transform: translate3d(calc(var(--transform-size) * -1), calc(var(--transform-size) * -1), 0);
+@media (hover: hover) {
+    .text:hover:not(:active),
+    .PaperEffect:has([class*="text"]):hover:not(:active) {
+        box-shadow: var(--transform-size) var(--transform-size) 0 var(--transition-color);
+        transform: translate3d(calc(var(--transform-size) * -1), calc(var(--transform-size) * -1), 0);
+    }
 }
 
-:global([data-paperui-motion="reduced"]) .PaperEffect:hover:not(:active),
 :global([data-paperui-motion="reduced"]) .PaperEffect:active {
     transform: translate3d(0, 0, 0);
 }
-:global([data-paperui-motion="reduced"]) .PaperEffect:hover:not(:active)::before {
-    transform: translate3d(var(--transform-size), var(--transform-size), 0);
+@media (hover: hover) {
+    :global([data-paperui-motion="reduced"]) .PaperEffect:hover:not(:active) {
+        transform: translate3d(0, 0, 0);
+    }
+}
+@media (hover: hover) {
+    :global([data-paperui-motion="reduced"]) .PaperEffect:hover:not(:active)::before {
+        transform: translate3d(var(--transform-size), var(--transform-size), 0);
+    }
 }
 :global([data-paperui-motion="reduced"]) .PaperEffect:active::before {
     transform: translate3d(var(--transform-size), var(--transform-size), 0);
     opacity: 0;
 }
 
-:global([data-paperui-motion="reduced"]) .text:hover:not(:active),
-:global([data-paperui-motion="reduced"]) .PaperEffect:has([class*="text"]):hover:not(:active) {
-    transform: translate3d(0, 0, 0);
-    box-shadow: none;
+@media (hover: hover) {
+    :global([data-paperui-motion="reduced"]) .text:hover:not(:active),
+    :global([data-paperui-motion="reduced"]) .PaperEffect:has([class*="text"]):hover:not(:active) {
+        transform: translate3d(0, 0, 0);
+        box-shadow: none;
+    }
 }
 
 @media (prefers-reduced-motion: reduce) {

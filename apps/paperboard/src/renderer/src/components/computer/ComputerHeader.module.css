@@ -18,6 +18,13 @@
     transition: opacity var(--paper-short-transition) var(--paper-ease-standard);
 }
 
-.computerItem:hover::after {
-    opacity: 1;
+@media (hover: hover) {
+    .computerItem:hover::after {
+        opacity: 1;
+    }
+}
+@media (hover: none) {
+    .computerItem:active::after {
+        opacity: 1;
+    }
 }

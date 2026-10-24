@@ -9,9 +9,11 @@
     flex-shrink: 0;
 }
 
-.PaperToggle:focus-visible .track {
-    outline: var(--paper-focus-ring);
-    outline-offset: var(--paper-focus-offset);
+@media (hover: hover) {
+    .PaperToggle:focus-visible .track {
+        outline: var(--paper-focus-ring);
+        outline-offset: var(--paper-focus-offset);
+    }
 }
 
 .track {
@@ -60,13 +62,17 @@
     box-shadow: 0 var(--paper-thick-border-width) 0 var(--paper-primary-deep);
 }
 
-.PaperToggle:hover:not(:active):not(.animating) .knob {
-    transform: translate3d(0, calc(-50% - var(--paper-thickest-border-width)), 0);
-    box-shadow: 0 var(--paper-thickest-border-width) 0 var(--paper-border-strong);
+@media (hover: hover) {
+    .PaperToggle:hover:not(:active):not(.animating) .knob {
+        transform: translate3d(0, calc(-50% - var(--paper-thickest-border-width)), 0);
+        box-shadow: 0 var(--paper-thickest-border-width) 0 var(--paper-border-strong);
+    }
 }
 
-.PaperToggle.checked:hover:not(:active):not(.animating) .knob {
-    box-shadow: 0 var(--paper-thickest-border-width) 0 var(--paper-primary-deep);
+@media (hover: hover) {
+    .PaperToggle.checked:hover:not(:active):not(.animating) .knob {
+        box-shadow: 0 var(--paper-thickest-border-width) 0 var(--paper-primary-deep);
+    }
 }
 
 .PaperToggle:active .knob,

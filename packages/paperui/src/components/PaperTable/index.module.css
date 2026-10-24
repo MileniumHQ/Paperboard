@@ -46,6 +46,13 @@
     border-bottom: 0;
 }
 
-.PaperTable tr:hover td {
-    background: color-mix(in srgb, var(--paper-contrast) 3%, transparent);
+@media (hover: hover) {
+    .PaperTable tr:hover td {
+        background: color-mix(in srgb, var(--paper-contrast) 3%, transparent);
+    }
+}
+@media (hover: none) {
+    .PaperTable tr:active td {
+        background: color-mix(in srgb, var(--paper-contrast) 3%, transparent);
+    }
 }

@@ -29,10 +29,12 @@
     user-select: none;
 }
 
-.interactive:hover {
-    border-color: var(--paper-primary);
-    transform: translate3d(0, calc(var(--paper-border-width) * -2), 0);
-    box-shadow: var(--paper-heavy-element-shadow);
+@media (hover: hover) {
+    .interactive:hover {
+        border-color: var(--paper-primary);
+        transform: translate3d(0, calc(var(--paper-border-width) * -2), 0);
+        box-shadow: var(--paper-heavy-element-shadow);
+    }
 }
 
 .interactive:active {

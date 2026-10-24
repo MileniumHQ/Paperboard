@@ -35,6 +35,15 @@
     font: inherit;
 }
 
+/* A touch screen draws no focus rings: a finger already shows what it
+   pressed (component rings sit behind (hover: hover); this drops the
+   browser's own). Zero specificity, like the rule above. */
+@media (hover: none) {
+    :where(.paperui-root, [data-paperui-theme]) :where(:focus-visible) {
+        outline: none;
+    }
+}
+
 .paperui-root,
 [data-paperui-theme] {
     margin: 0;

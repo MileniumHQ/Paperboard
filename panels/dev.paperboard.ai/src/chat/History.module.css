@@ -27,9 +27,16 @@
     cursor: pointer;
 }
 
-.item:hover:not(:disabled),
-.item:focus-visible {
-    background: var(--paper-surface-raised);
+@media (hover: hover) {
+    .item:hover:not(:disabled),
+    .item:focus-visible {
+        background: var(--paper-surface-raised);
+    }
+}
+@media (hover: none) {
+    .item:active:not(:disabled) {
+        background: var(--paper-surface-raised);
+    }
 }
 
 .item:disabled {

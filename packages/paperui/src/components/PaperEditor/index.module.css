@@ -18,9 +18,11 @@
     border-color: var(--paper-border-emphasis);
 }
 
-.PaperEditor:has(.input:focus-visible) {
-    outline: var(--paper-focus-ring);
-    outline-offset: var(--paper-focus-offset);
+@media (hover: hover) {
+    .PaperEditor:has(.input:focus-visible) {
+        outline: var(--paper-focus-ring);
+        outline-offset: var(--paper-focus-offset);
+    }
 }
 
 .scroller {

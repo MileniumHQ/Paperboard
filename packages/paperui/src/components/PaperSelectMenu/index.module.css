@@ -34,10 +34,12 @@
         opacity var(--paper-short-transition);
 }
 
-.trigger:focus-visible {
-    border-color: var(--paper-primary);
-    outline: var(--paper-focus-ring);
-    outline-offset: var(--paper-focus-offset);
+@media (hover: hover) {
+    .trigger:focus-visible {
+        border-color: var(--paper-primary);
+        outline: var(--paper-focus-ring);
+        outline-offset: var(--paper-focus-offset);
+    }
 }
 
 .triggerLabel {
@@ -104,8 +106,10 @@
     user-select: text;
 }
 
-.search:focus-visible {
-    border-bottom-color: var(--paper-primary);
+@media (hover: hover) {
+    .search:focus-visible {
+        border-bottom-color: var(--paper-primary);
+    }
 }
 
 .noMatches {

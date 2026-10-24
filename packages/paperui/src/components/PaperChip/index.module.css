@@ -19,9 +19,17 @@
         border-color var(--paper-tiny-transition) ease;
 }
 
-.PaperChip:hover {
-    background: var(--paper-surface-inset);
-    color: var(--paper-text);
+@media (hover: hover) {
+    .PaperChip:hover {
+        background: var(--paper-surface-inset);
+        color: var(--paper-text);
+    }
+}
+@media (hover: none) {
+    .PaperChip:active {
+        background: var(--paper-surface-inset);
+        color: var(--paper-text);
+    }
 }
 
 .PaperChip.selected {
@@ -30,9 +38,11 @@
     color: var(--paper-primary-deep);
 }
 
-.PaperChip:focus-visible {
-    outline: var(--paper-thickest-border-width) solid var(--paper-primary);
-    outline-offset: var(--paper-focus-offset);
+@media (hover: hover) {
+    .PaperChip:focus-visible {
+        outline: var(--paper-thickest-border-width) solid var(--paper-primary);
+        outline-offset: var(--paper-focus-offset);
+    }
 }
 
 .count {

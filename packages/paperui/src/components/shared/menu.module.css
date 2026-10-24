@@ -71,7 +71,6 @@
     text-decoration: none;
 }
 
-.item:hover,
 .item.highlighted {
     background: color-mix(
         in srgb,
@@ -79,14 +78,41 @@
         var(--paper-surface-raised)
     );
 }
+@media (hover: hover) {
+    .item:hover {
+        background: color-mix(
+            in srgb,
+            var(--paper-contrast) 6%,
+            var(--paper-surface-raised)
+        );
+    }
+}
+@media (hover: none) {
+    .item:active {
+        background: color-mix(
+            in srgb,
+            var(--paper-contrast) 6%,
+            var(--paper-surface-raised)
+        );
+    }
+}
 
 .item.danger {
     color: var(--paper-danger);
 }
 
-.item.danger:hover,
 .item.danger.highlighted {
     background: color-mix(in srgb, var(--paper-danger) 12%, transparent);
+}
+@media (hover: hover) {
+    .item.danger:hover {
+        background: color-mix(in srgb, var(--paper-danger) 12%, transparent);
+    }
+}
+@media (hover: none) {
+    .item.danger:active {
+        background: color-mix(in srgb, var(--paper-danger) 12%, transparent);
+    }
 }
 
 .item.disabled {

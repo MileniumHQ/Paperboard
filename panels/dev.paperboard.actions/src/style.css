@@ -233,8 +233,15 @@ body,
     box-sizing: border-box;
 }
 
-.actionInput:hover {
-    background: color-mix(in srgb, var(--paper-primary) 35%, transparent);
+@media (hover: hover) {
+    .actionInput:hover {
+        background: color-mix(in srgb, var(--paper-primary) 35%, transparent);
+    }
+}
+@media (hover: none) {
+    .actionInput:active {
+        background: color-mix(in srgb, var(--paper-primary) 35%, transparent);
+    }
 }
 
 .actionInput.colorless {
@@ -242,8 +249,15 @@ body,
     color: var(--paper-text-subtle);
 }
 
-.actionInput.colorless:hover {
-    background: color-mix(in srgb, var(--paper-contrast) 14%, transparent);
+@media (hover: hover) {
+    .actionInput.colorless:hover {
+        background: color-mix(in srgb, var(--paper-contrast) 14%, transparent);
+    }
+}
+@media (hover: none) {
+    .actionInput.colorless:active {
+        background: color-mix(in srgb, var(--paper-contrast) 14%, transparent);
+    }
 }
 
 .actionInput.requiredError {
@@ -251,8 +265,15 @@ body,
     color: var(--paper-danger);
 }
 
-.actionInput.requiredError:hover {
-    background: color-mix(in srgb, var(--paper-danger) 25%, transparent);
+@media (hover: hover) {
+    .actionInput.requiredError:hover {
+        background: color-mix(in srgb, var(--paper-danger) 25%, transparent);
+    }
+}
+@media (hover: none) {
+    .actionInput.requiredError:active {
+        background: color-mix(in srgb, var(--paper-danger) 25%, transparent);
+    }
 }
 
 /* the wrap is the pill's box in the row: it hugs the value up to the cap,
@@ -565,8 +586,15 @@ body,
     transition: background var(--paper-tiny-transition) var(--paper-ease-standard);
 }
 
-.actionVariableMenuItem:hover {
-    background: color-mix(in srgb, var(--paper-primary) 14%, transparent);
+@media (hover: hover) {
+    .actionVariableMenuItem:hover {
+        background: color-mix(in srgb, var(--paper-primary) 14%, transparent);
+    }
+}
+@media (hover: none) {
+    .actionVariableMenuItem:active {
+        background: color-mix(in srgb, var(--paper-primary) 14%, transparent);
+    }
 }
 
 .actionVariableMenuItemLeft {
@@ -605,8 +633,15 @@ body,
     color: var(--paper-success);
 }
 
-.actionInputBool.isTrue:hover {
-    background: color-mix(in srgb, var(--paper-success) 35%, transparent);
+@media (hover: hover) {
+    .actionInputBool.isTrue:hover {
+        background: color-mix(in srgb, var(--paper-success) 35%, transparent);
+    }
+}
+@media (hover: none) {
+    .actionInputBool.isTrue:active {
+        background: color-mix(in srgb, var(--paper-success) 35%, transparent);
+    }
 }
 
 .actionInputBool.isFalse {
@@ -614,8 +649,15 @@ body,
     color: var(--paper-text-subtle);
 }
 
-.actionInputBool.isFalse:hover {
-    background: color-mix(in srgb, var(--paper-contrast) 18%, transparent);
+@media (hover: hover) {
+    .actionInputBool.isFalse:hover {
+        background: color-mix(in srgb, var(--paper-contrast) 18%, transparent);
+    }
+}
+@media (hover: none) {
+    .actionInputBool.isFalse:active {
+        background: color-mix(in srgb, var(--paper-contrast) 18%, transparent);
+    }
 }
 
 /* a boolean bound to a variable: the chip carries the meaning, the close
@@ -643,9 +685,17 @@ body,
     transition: background var(--paper-tiny-transition) var(--paper-ease-standard);
 }
 
-.actionBoolClear:hover {
-    color: var(--paper-text);
-    background: color-mix(in srgb, var(--paper-contrast) 14%, transparent);
+@media (hover: hover) {
+    .actionBoolClear:hover {
+        color: var(--paper-text);
+        background: color-mix(in srgb, var(--paper-contrast) 14%, transparent);
+    }
+}
+@media (hover: none) {
+    .actionBoolClear:active {
+        color: var(--paper-text);
+        background: color-mix(in srgb, var(--paper-contrast) 14%, transparent);
+    }
 }
 
 .actionInputOption {
@@ -660,8 +710,15 @@ body,
     transition: filter var(--paper-tiny-transition) var(--paper-ease-standard);
 }
 
-.actionInputOption:hover {
-    filter: brightness(1.2);
+@media (hover: hover) {
+    .actionInputOption:hover {
+        filter: brightness(1.2);
+    }
+}
+@media (hover: none) {
+    .actionInputOption:active {
+        filter: brightness(1.2);
+    }
 }
 
 /* the option popup hugs its widest value instead of the shared min-width */

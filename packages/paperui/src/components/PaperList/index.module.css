@@ -150,8 +150,15 @@
     margin-left: auto;
 }
 
-.PaperListItem:hover {
-    background: color-mix(in srgb, var(--paper-contrast) 3%, var(--paper-surface-raised));
+@media (hover: hover) {
+    .PaperListItem:hover {
+        background: color-mix(in srgb, var(--paper-contrast) 3%, var(--paper-surface-raised));
+    }
+}
+@media (hover: none) {
+    .PaperListItem:active {
+        background: color-mix(in srgb, var(--paper-contrast) 3%, var(--paper-surface-raised));
+    }
 }
 
 .PaperListItem.selected {

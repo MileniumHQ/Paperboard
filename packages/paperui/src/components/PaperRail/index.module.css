@@ -84,8 +84,15 @@
     color: var(--paper-primary);
 }
 
-.PaperRailItem:hover {
-    background: var(--paper-surface);
+@media (hover: hover) {
+    .PaperRailItem:hover {
+        background: var(--paper-surface);
+    }
+}
+@media (hover: none) {
+    .PaperRailItem:active {
+        background: var(--paper-surface);
+    }
 }
 
 .railIcon {
@@ -118,6 +125,13 @@
 .PaperRailItem.disabled .railIcon {
     opacity: 0.4;
 }
-.PaperRailItem.disabled:hover {
-    background: transparent;
+@media (hover: hover) {
+    .PaperRailItem.disabled:hover {
+        background: transparent;
+    }
+}
+@media (hover: none) {
+    .PaperRailItem.disabled:active {
+        background: transparent;
+    }
 }

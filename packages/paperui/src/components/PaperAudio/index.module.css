@@ -41,9 +41,11 @@
 }
 
 /* the range input carries focus; the ring belongs on the visible track */
-.track:has(.range:focus-visible) {
-    outline: var(--paper-focus-ring);
-    outline-offset: var(--paper-focus-offset);
+@media (hover: hover) {
+    .track:has(.range:focus-visible) {
+        outline: var(--paper-focus-ring);
+        outline-offset: var(--paper-focus-offset);
+    }
 }
 
 .wave {

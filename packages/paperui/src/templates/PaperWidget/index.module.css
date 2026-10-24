@@ -30,13 +30,22 @@
     transition: background-color var(--paper-tiny-transition) var(--paper-ease-standard);
 }
 
-.press:hover:not(:disabled) {
-    background: var(--paper-surface-inset);
+@media (hover: hover) {
+    .press:hover:not(:disabled) {
+        background: var(--paper-surface-inset);
+    }
+}
+@media (hover: none) {
+    .press:active:not(:disabled) {
+        background: var(--paper-surface-inset);
+    }
 }
 
-.press:focus-visible {
-    outline: var(--paper-focus-ring);
-    outline-offset: calc(var(--paper-uigap-sixth) * -1);
+@media (hover: hover) {
+    .press:focus-visible {
+        outline: var(--paper-focus-ring);
+        outline-offset: calc(var(--paper-uigap-sixth) * -1);
+    }
 }
 
 .press:disabled {
@@ -253,13 +262,22 @@ button.rowInner {
     transition: background-color var(--paper-tiny-transition) var(--paper-ease-standard);
 }
 
-button.rowInner:hover {
-    background: var(--paper-surface-inset);
+@media (hover: hover) {
+    button.rowInner:hover {
+        background: var(--paper-surface-inset);
+    }
+}
+@media (hover: none) {
+    button.rowInner:active {
+        background: var(--paper-surface-inset);
+    }
 }
 
-button.rowInner:focus-visible {
-    outline: var(--paper-focus-ring);
-    outline-offset: calc(var(--paper-uigap-sixth) * -1);
+@media (hover: hover) {
+    button.rowInner:focus-visible {
+        outline: var(--paper-focus-ring);
+        outline-offset: calc(var(--paper-uigap-sixth) * -1);
+    }
 }
 
 .rowLabel {

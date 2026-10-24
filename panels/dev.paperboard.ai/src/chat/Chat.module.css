@@ -144,8 +144,15 @@
     cursor: pointer;
 }
 
-.takeBack:hover {
-    text-decoration: underline;
+@media (hover: hover) {
+    .takeBack:hover {
+        text-decoration: underline;
+    }
+}
+@media (hover: none) {
+    .takeBack:active {
+        text-decoration: underline;
+    }
 }
 
 /* the message a bubble answers */
@@ -184,14 +191,25 @@
     -webkit-box-orient: vertical;
 }
 
-/* the way to answer one bubble: shown when pointing at it or tabbing to it */
+/* the way to answer one bubble: shown when pointing at it or tabbing to it,
+   and always on a touch screen */
 .replyButton {
     opacity: 0;
 }
 
-.row:hover .replyButton,
 .row:focus-within .replyButton {
     opacity: 1;
+}
+@media (hover: hover) {
+    .row:hover .replyButton {
+        opacity: 1;
+    }
+}
+/* a finger can't point first: the reply button is always there */
+@media (hover: none) {
+    .replyButton {
+        opacity: 1;
+    }
 }
 
 /* ---- the typing indicator */

@@ -6,15 +6,23 @@
 }
 
 .updateAction.updateAvailable,
-.updateAction.updateAvailable:hover,
 .updateAction.updateAvailable:active {
     color: var(--paper-success);
 }
+@media (hover: hover) {
+    .updateAction.updateAvailable:hover {
+        color: var(--paper-success);
+    }
+}
 
 .updateAction.updateFailed,
-.updateAction.updateFailed:hover,
 .updateAction.updateFailed:active {
     color: var(--paper-danger);
+}
+@media (hover: hover) {
+    .updateAction.updateFailed:hover {
+        color: var(--paper-danger);
+    }
 }
 
 /* PaperRail gives its icon a separate color; inherit this action's status. */

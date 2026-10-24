@@ -73,9 +73,11 @@
     box-shadow: 0 0 0 calc(var(--paper-border-width) * 2) var(--paper-primary);
 }
 
-.frame.driving:focus-visible {
-    outline: var(--paper-focus-ring);
-    outline-offset: var(--paper-focus-offset);
+@media (hover: hover) {
+    .frame.driving:focus-visible {
+        outline: var(--paper-focus-ring);
+        outline-offset: var(--paper-focus-offset);
+    }
 }
 
 @media (prefers-reduced-motion: reduce) {

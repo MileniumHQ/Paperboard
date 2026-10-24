@@ -11,9 +11,17 @@
     gap: var(--paper-uigap-onefourth);
 }
 
-.PaperLink:hover {
-    color: var(--paper-primary-deep);
-    text-decoration: underline;
+@media (hover: hover) {
+    .PaperLink:hover {
+        color: var(--paper-primary-deep);
+        text-decoration: underline;
+    }
+}
+@media (hover: none) {
+    .PaperLink:active {
+        color: var(--paper-primary-deep);
+        text-decoration: underline;
+    }
 }
 
 .externalIcon {

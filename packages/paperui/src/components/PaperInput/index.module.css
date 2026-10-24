@@ -103,11 +103,13 @@
     width: 100%;
 }
 
-.PaperInput input:focus-visible,
-.PaperInput textarea:focus-visible {
-    border-color: var(--paper-primary);
-    outline: var(--paper-focus-ring);
-    outline-offset: var(--paper-focus-offset);
+@media (hover: hover) {
+    .PaperInput input:focus-visible,
+    .PaperInput textarea:focus-visible {
+        border-color: var(--paper-primary);
+        outline: var(--paper-focus-ring);
+        outline-offset: var(--paper-focus-offset);
+    }
 }
 
 .PaperInput input:focus,

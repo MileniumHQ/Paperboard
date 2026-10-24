@@ -24,9 +24,11 @@
     flex-shrink: 0;
 }
 
-.PaperCheckbox:focus-visible .box {
-    outline: var(--paper-focus-ring);
-    outline-offset: var(--paper-focus-offset);
+@media (hover: hover) {
+    .PaperCheckbox:focus-visible .box {
+        outline: var(--paper-focus-ring);
+        outline-offset: var(--paper-focus-offset);
+    }
 }
 
 .box {
@@ -48,8 +50,15 @@
         border-color var(--paper-tiny-transition) ease;
 }
 
-.PaperCheckboxContainer:hover:not(.disabled) .box {
-    border-color: var(--paper-border-emphasis);
+@media (hover: hover) {
+    .PaperCheckboxContainer:hover:not(.disabled) .box {
+        border-color: var(--paper-border-emphasis);
+    }
+}
+@media (hover: none) {
+    .PaperCheckboxContainer:active:not(.disabled) .box {
+        border-color: var(--paper-border-emphasis);
+    }
 }
 
 .checked .box {
@@ -57,9 +66,17 @@
     border-color: var(--paper-primary);
 }
 
-.PaperCheckboxContainer:hover:not(.disabled) .checked .box {
-    background: var(--paper-primary);
-    border-color: var(--paper-primary);
+@media (hover: hover) {
+    .PaperCheckboxContainer:hover:not(.disabled) .checked .box {
+        background: var(--paper-primary);
+        border-color: var(--paper-primary);
+    }
+}
+@media (hover: none) {
+    .PaperCheckboxContainer:active:not(.disabled) .checked .box {
+        background: var(--paper-primary);
+        border-color: var(--paper-primary);
+    }
 }
 
 .iconCheck {

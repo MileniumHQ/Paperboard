@@ -41,9 +41,16 @@
     cursor: pointer;
 }
 
-.note:hover,
-.note:focus-visible {
-    background: var(--paper-surface-raised);
+@media (hover: hover) {
+    .note:hover,
+    .note:focus-visible {
+        background: var(--paper-surface-raised);
+    }
+}
+@media (hover: none) {
+    .note:active {
+        background: var(--paper-surface-raised);
+    }
 }
 
 .fact {
