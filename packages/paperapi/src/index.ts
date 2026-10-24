@@ -1,5 +1,6 @@
 import { invoke, send, on, unpackIpcPayload } from "./ipc";
 import "./readiness";
+import "./swipeBack";
 
 export * from "./ipc";
 export * from "./config";
@@ -10,6 +11,7 @@ export { isPanelId, requirePanelId } from "./panelIdentity";
 export * from "./identity";
 export * from "./secrets";
 export * from "./backups";
+export { SWIPE_BACK_MESSAGE, swipeBackMessage, type SwipeBackMessage } from "./swipeBack";
 export * from "./package";
 export * from "./file";
 export * from "./process";

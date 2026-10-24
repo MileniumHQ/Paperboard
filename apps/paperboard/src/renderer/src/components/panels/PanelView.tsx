@@ -1,4 +1,5 @@
-import { PaperFlex, getVarCss } from "@mileniumhq/paperui";
+import { PaperFlex, getVarCss, swipeFromFrame } from "@mileniumhq/paperui";
+import { SWIPE_BACK_MESSAGE } from "@mileniumhq/paperapi";
 import { type Component, createEffect, createSignal, For, Show, onCleanup, onMount } from "solid-js";
 import { recordUse, liveKeys, MAX_LIVE_IFRAMES } from "./panelLru";
 import LoadingOverlay from "./LoadingOverlay";
@@ -42,6 +43,9 @@ const PanelFrame: Component<{ panelKey: string; computerName: string; current: b
                 clearTimeout(timer); setReady(true); setFailure("");
             } else if (event.data.type === "paperboard:failed") {
                 clearTimeout(timer); setFailure(String(event.data.message || "Panel initialization failed"));
+            } else if (event.data.type === SWIPE_BACK_MESSAGE) {
+                // the panel's list had no page to go back from: this frame's page goes back
+                if (frame && props.current) swipeFromFrame(frame, event.data);
             } else if (event.data.type === BACKUP_LOCATION_REQUEST) {
                 const target = frame?.contentWindow;
                 const request = parseBackupLocationRequest(event.data, panelId, chooser() !== null);
@@ -61,7 +65,8 @@ const PanelFrame: Component<{ panelKey: string; computerName: string; current: b
         };
         window.addEventListener("message", receive);
         // a reloaded document asked nothing; its open window closes unanswered
-        onCleanup(() => { clearTimeout(timer); window.removeEventListener("message", receive); setChooser(null); });
+        // a document that goes mid-swipe leaves its page where it was, not half dragged
+        onCleanup(() => { if (frame) swipeFromFrame(frame, { phase: "cancel", dx: 0, velocity: 0 }); clearTimeout(timer); window.removeEventListener("message", receive); setChooser(null); });
     });
     onMount(() => { if (frame) frame.src = panelUrl(computerId, panelId, `?_r=${props.reload}&generation=${generation}`); });
     return <div style={{ position: "absolute", inset: "0", visibility: props.current ? "visible" : "hidden", "pointer-events": props.current ? "auto" : "none" }}>

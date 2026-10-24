@@ -27,7 +27,8 @@ export interface PaperSlidePageProps {
 /**
  * The phone layout's drill-down page: what was picked from a list slides in
  * over the list from the right, with a top bar to go back. Back is the
- * button, or a rightward swipe on the top bar or the page's left edge.
+ * button, or a rightward swipe: from the top bar or the page's left edge with
+ * any pointer, or from anywhere on the page with a finger (see swipeBack).
  * Closed, the page stays mounted off-screen and inert, so its content keeps
  * its state and comes back as it was left.
  *
@@ -40,6 +41,8 @@ export function PaperSlidePage(props: PaperSlidePageProps) {
     const swipe = createSwipeBack({
         width: () => pageRef?.clientWidth ?? window.innerWidth,
         onBack: () => props.onBack(),
+        el: () => pageRef,
+        active: () => props.enabled && props.open,
     });
 
     // Switching layouts moves the page to where it already is: a closed page

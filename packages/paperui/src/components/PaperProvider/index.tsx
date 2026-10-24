@@ -9,6 +9,7 @@ import {
     type ParentProps,
     type JSX,
 } from "solid-js";
+import { installSwipeBack } from "../../utils/swipeBack";
 
 export type ThemeMode = "light" | "dark" | "system";
 
@@ -89,6 +90,9 @@ export function PaperProvider(props: ParentProps<PaperProviderProps>) {
         mediaQuery.addEventListener("change", handleChange);
         onCleanup(() => mediaQuery.removeEventListener("change", handleChange));
     });
+
+    // touch screens: a finger swipes an open page back from anywhere on it
+    onCleanup(installSwipeBack());
 
     const currentThemeMode = createMemo(() => local.theme ?? internalTheme());
     const resolvedTheme = createMemo(() => {
