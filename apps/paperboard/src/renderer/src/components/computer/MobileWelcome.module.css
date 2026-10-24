@@ -1,5 +1,7 @@
 /* The phone's first screen before any computer is paired: the copy and Add
-   Computer in the middle of the page, paperdocs' bouncy paper icons around. */
+   Computer in the middle of the page, paperdocs' bouncy paper icons around.
+   The blue is the banner's, washed toward the page so the primary button
+   still stands out on it in light and dark. */
 .welcome {
     position: relative;
     flex: 1;
@@ -12,7 +14,12 @@
     padding: calc(var(--paper-uigap-double) + env(safe-area-inset-top, 0px)) var(--paper-uigap-double)
         calc(var(--paper-uigap-double) + env(safe-area-inset-bottom, 0px));
     overflow: hidden;
-    background: var(--paper-surface-app);
+    background: linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--paper-primary) 22%, var(--paper-surface-app)) 0%,
+        color-mix(in srgb, var(--paper-primary) 40%, var(--paper-surface-app)) 60%,
+        color-mix(in srgb, var(--paper-primary-deep) 58%, var(--paper-surface-app)) 100%
+    );
     /* a finger on the page plays with the icons; nothing here scrolls or swipes back */
     touch-action: none;
 }
