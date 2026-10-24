@@ -19,7 +19,9 @@
     align-items: center;
     gap: var(--paper-uigap-threefourths);
     min-width: 0;
-    flex: 1 1 var(--paper-size-card-min);
+    /* a field's width before the actions give way: a phone keeps a few
+       icon actions beside the title, and a long row still wraps */
+    flex: 1 1 var(--paper-size-field);
 }
 
 .iconChip {
