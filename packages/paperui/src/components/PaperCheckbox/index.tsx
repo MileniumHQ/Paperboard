@@ -1,6 +1,7 @@
 import styles from "./index.module.css";
 import { splitProps, createSignal, Show, type JSX } from "solid-js";
 import { PaperIcon } from "../PaperIcon";
+import { haptic } from "../../utils/haptics";
 
 export interface PaperCheckboxProps
     extends Omit<JSX.InputHTMLAttributes<HTMLInputElement>, "onChange"> {
@@ -34,6 +35,7 @@ export function PaperCheckbox(props: PaperCheckboxProps) {
     const handleToggle = () => {
         if (local.disabled) return;
         const next = !isChecked();
+        haptic("light");
 
         if (local.checked === undefined) {
             setInternalChecked(next);

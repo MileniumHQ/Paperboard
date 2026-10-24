@@ -3,6 +3,7 @@ import { createSignal, splitProps, Show, type JSX } from "solid-js";
 import { PaperButton } from "../PaperButton";
 import { PaperIcon } from "../PaperIcon";
 import { copyText } from "../../utils/clipboard";
+import { haptic } from "../../utils/haptics";
 import type { PaperButtonVariant } from "../../types";
 
 export interface PaperCopyButtonProps
@@ -29,6 +30,7 @@ export function PaperCopyButton(props: PaperCopyButtonProps) {
     const handleCopy = async () => {
         const ok = await copyText(local.text);
         if (!ok) return;
+        haptic("success");
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
     };

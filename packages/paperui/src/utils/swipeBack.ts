@@ -1,4 +1,5 @@
 import { createEffect, createSignal, onCleanup } from "solid-js";
+import { haptic } from "./haptics";
 
 // Phone layouts: an open page goes back when it is dragged to the right, like
 // iOS's back swipe. A page's top bar and a strip along its left edge are drag
@@ -65,7 +66,10 @@ function apply(target: SwipeTarget, detail: SwipeBackDetail) {
         return;
     }
     target.setOffset(null);
-    if (detail.phase === "end" && swipeGoesBack(detail.dx, detail.velocity, target.width())) target.onBack();
+    if (detail.phase === "end" && swipeGoesBack(detail.dx, detail.velocity, target.width())) {
+        haptic("light");
+        target.onBack();
+    }
 }
 
 /** a swipe-back message from a panel frame, or null if it isn't one */
@@ -295,7 +299,9 @@ export function createSwipeBack(opts: {
         end();
         if (!tracking) return;
         swallowNextClick();
-        if (swipeGoesBack(dx, velocity, opts.width())) opts.onBack();
+        if (!swipeGoesBack(dx, velocity, opts.width())) return;
+        haptic("light");
+        opts.onBack();
     }
 
     function onCancel(e: PointerEvent) {

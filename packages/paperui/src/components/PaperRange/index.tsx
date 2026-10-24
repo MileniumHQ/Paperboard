@@ -2,6 +2,10 @@ import styles from "./index.module.css";
 // the track and bar are PaperProgress's own: one look, one stylesheet
 import progressStyles from "../PaperProgress/index.module.css";
 import { For, Show, splitProps, type JSX } from "solid-js";
+import { haptic } from "../../utils/haptics";
+
+/** most stops a drag ticks through; finer sliders glide without buzzing */
+const MAX_DETENTS = 24;
 
 export type PaperRangeOrientation = "horizontal" | "vertical";
 
@@ -86,6 +90,8 @@ export function PaperRange(props: PaperRangeProps) {
         return values[Math.min(values.length - 1, Math.max(0, at + dir * by))]!;
     };
     const percentOf = (value: number) => ((value - min()) / (max() - min())) * 100;
+    // a finger feels each stop when there are few enough to count
+    const detented = () => snapping() || (max() - min()) / step() <= MAX_DETENTS;
     const stacked = () => !vertical() && (local.label !== undefined || local.formatValue !== undefined || marks().length > 0);
 
     const emit = (value: number, commit: boolean) => {
@@ -115,7 +121,9 @@ export function PaperRange(props: PaperRangeProps) {
 
     const onPointerMove: JSX.EventHandler<HTMLDivElement, PointerEvent> = (e) => {
         if (!dragging) return;
-        dragValue = emit(valueAt(e), false);
+        const next = emit(valueAt(e), false);
+        if (next !== dragValue && detented()) haptic("selection");
+        dragValue = next;
     };
 
     const endDrag: JSX.EventHandler<HTMLDivElement, PointerEvent> = (e) => {

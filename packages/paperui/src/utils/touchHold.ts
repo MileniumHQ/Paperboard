@@ -6,6 +6,8 @@
 // contextmenu for that press and the click its release would make are
 // dropped, so the menu opens once and the item under it doesn't also open.
 
+import { haptic } from "./haptics";
+
 /** how long a still finger is held before it opens the context menu */
 export const HOLD_MS = 500;
 /** px a finger may wander and still be holding still */
@@ -40,6 +42,7 @@ function fire() {
         dispatching = false;
     }
     hold.handled = event.defaultPrevented;
+    if (hold.handled) haptic("medium");
     if (!hold.handled) hold = null;
 }
 

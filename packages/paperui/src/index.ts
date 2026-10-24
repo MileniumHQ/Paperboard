@@ -69,5 +69,6 @@ export * from "./utils/cx";
 export * from "./utils/clipboard";
 export * from "./utils/polling";
 export * from "./utils/swipeBack";
+export * from "./utils/haptics";
 
 export * from "./types";

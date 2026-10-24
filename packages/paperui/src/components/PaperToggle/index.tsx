@@ -1,6 +1,7 @@
 import styles from "./index.module.css";
 import { splitProps, createSignal, Show, type JSX } from "solid-js";
 import { PaperIcon } from "../PaperIcon";
+import { haptic } from "../../utils/haptics";
 
 export interface PaperToggleProps
     extends Omit<JSX.InputHTMLAttributes<HTMLInputElement>, "onChange"> {
@@ -41,6 +42,7 @@ export function PaperToggle(props: PaperToggleProps) {
         if (e?.target === inputRef) return;
         if (local.disabled) return;
         const next = !isChecked();
+        haptic(next ? "medium" : "light");
 
         setIsAnimating(true);
         setTimeout(() => setIsAnimating(false), 380);
