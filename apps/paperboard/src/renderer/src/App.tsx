@@ -531,6 +531,9 @@ const App: Component = () => {
         return panel.icon || "dashboard";
     };
 
+    const showTopBar = () =>
+        !mobile() || packageUpdates.state().notices.length > 0 || appUpdate.state().status === "ready";
+
     // the mobile page's top bar: the open tab's icon and name
     const mobilePageHeading = (): { title: string; icon: JSX.Element } => {
         const compId = activeComputerId();
@@ -561,6 +564,8 @@ const App: Component = () => {
                 inert={mobileSettingsOpen()}
                 style={{ width: "100vw", height: "100vh", overflow: "hidden" }}
             >
+                {/* a phone has no window title to show: the bar comes only to say an update is waiting */}
+                <Show when={showTopBar()}>
                 <TopBar
                     updateState={appUpdate.state()}
                     onOpenUpdate={() => appUpdate.setOpen(true)}
@@ -571,11 +576,12 @@ const App: Component = () => {
                     mobile={mobile()}
                     inert={mobilePageOpen()}
                 />
+                </Show>
                 <PaperFlex
                     direction="row"
                     style={{
                         flex: 1,
-                        height: "calc(100vh - var(--paperboard-titlebar-height))",
+                        height: showTopBar() ? "calc(100vh - var(--paperboard-titlebar-height))" : "100vh",
                         overflow: "hidden",
                     }}
                 >
