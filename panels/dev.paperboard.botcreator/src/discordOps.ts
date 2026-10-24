@@ -987,20 +987,6 @@ export class InteractionOps {
         });
     }
 
-    // TODO(remove after v0.3): Defer Interaction is redundant now that every
-    // interaction is acknowledged automatically; it stays only so flows
-    // saved with that step keep running for one release.
-    async defer(interactionId: string, ephemeral?: boolean): Promise<boolean> {
-        const interaction = this.take(interactionId.trim());
-        return serialize(interaction, async () => {
-            if (interaction.deferred || interaction.replied) return true;
-            await interaction.deferReply({
-                flags: ephemeral ? MessageFlags.Ephemeral : undefined,
-            });
-            return true;
-        });
-    }
-
     /** Another message after the answer (or the answer, if none was sent yet). */
     async followUp(
         interactionId: string,

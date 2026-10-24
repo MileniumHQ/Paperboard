@@ -587,8 +587,9 @@ describe("pending interaction store", () => {
         expect(pendingInteractionCount()).toBe(1);
     });
 
+    // Defer Interaction is gone (0.3): the automatic acknowledgement defers instead
     it("keeps a deferred interaction answerable later", async () => {
-        const { InteractionOps } = await import("../src/discordOps");
+        const { InteractionOps, autoAcknowledge } = await import("../src/discordOps");
         const live: any = {
             id: "deferred",
             deferred: false,
@@ -601,7 +602,8 @@ describe("pending interaction store", () => {
         };
         rememberInteraction(live);
         const ops = new InteractionOps(takeInteraction);
-        await ops.defer("deferred");
+        await autoAcknowledge(live);
+        expect(live.deferred).toBe(true);
         await ops.respond("deferred", { content: "late" });
         expect(pendingInteractionCount()).toBe(1);
     });

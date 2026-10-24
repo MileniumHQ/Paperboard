@@ -1586,38 +1586,6 @@ export const actions = [
     }),
 
     defineAction({
-        // TODO(remove after v0.3): kept so saved flows with this step keep
-        // running for one release; the bot now acknowledges automatically
-        id: "defer-interaction",
-        name: "Defer Interaction",
-        category: "Interactions",
-        description: "Shows that the bot is thinking about a slash command",
-        deprecated:
-            "No longer needed: the bot acknowledges every interaction automatically. Remove this step; it stops working after v0.3.",
-        template: "Defer interaction {interactionId}",
-        inputs: {
-            interactionId: INPUTS.interaction,
-            ephemeral: INPUTS.ephemeral,
-        },
-        output: {
-            type: "boolean",
-            label: "Success",
-        },
-        icon: "hourglass_top",
-        run: async (
-            _ctx,
-            inputs: { interactionId: string; ephemeral?: boolean },
-        ) => {
-            console.warn(
-                "[DiscordService] Defer Interaction is no longer needed and will be removed after v0.3: the bot acknowledges interactions automatically. Remove the step from your flow.",
-            );
-            const ops = new InteractionOps(takeInteraction);
-            await ops.defer(inputs.interactionId, inputs.ephemeral);
-            return true;
-        },
-    }),
-
-    defineAction({
         id: "respond-to-interaction",
         name: "Respond to Interaction",
         category: "Interactions",
