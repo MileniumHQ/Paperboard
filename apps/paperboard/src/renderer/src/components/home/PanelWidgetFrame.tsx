@@ -1,6 +1,6 @@
-import { PaperButton, PaperText } from "@mileniumhq/paperui";
+import { PaperButton, PaperText, playHaptic } from "@mileniumhq/paperui";
 import { type Component, createEffect, createMemo, createSignal, on, onCleanup, onMount, Show } from "solid-js";
-import type { WidgetOptionValues, WidgetSize } from "@mileniumhq/paperapi";
+import { HAPTIC_MESSAGE, type WidgetOptionValues, type WidgetSize } from "@mileniumhq/paperapi";
 import { panelUrl } from "../../lib/shell";
 import type { LoadQueue } from "../../lib/loadQueue";
 import styles from "./Home.module.css";
@@ -82,6 +82,8 @@ const PanelWidgetFrame: Component<PanelWidgetFrameProps> = (props) => {
             if (event.data.type === "paperboard:ready" && event.data.panelId === props.panelId) settle();
             else if (event.data.type === "paperboard:failed") settle(String(event.data.message || "The widget failed to start"));
             else if (event.data.type === "paperboard:widget-open-panel") props.onOpenPanel?.();
+            // frames can't vibrate; the shell plays it, if it is a kind it knows
+            else if (event.data.type === HAPTIC_MESSAGE && props.visible) playHaptic(event.data.kind);
         };
         window.addEventListener("message", receive);
         void slot.granted.then(() => {

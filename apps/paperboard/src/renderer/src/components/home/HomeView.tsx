@@ -1,4 +1,4 @@
-import { PaperButton, PaperEmptyState, PaperModal, PaperPresence, PaperText } from "@mileniumhq/paperui";
+import { PaperButton, PaperEmptyState, PaperModal, PaperPresence, PaperText, haptic } from "@mileniumhq/paperui";
 import {
     type Component,
     createEffect,
@@ -527,6 +527,7 @@ const HomeView: Component<HomeViewProps> = (props) => {
         if (!d) return;
         const pointer = { x: event.clientX, y: event.clientY };
         const started = d.started || Math.hypot(pointer.x - d.start.x, pointer.y - d.start.y) > DRAG_THRESHOLD_PX;
+        if (started && !d.started) haptic("lift");
         setDrag({ ...d, pointer, started });
         if (started && scroller) {
             const bounds = scroller.getBoundingClientRect();
@@ -547,7 +548,10 @@ const HomeView: Component<HomeViewProps> = (props) => {
     let turnTimer: ReturnType<typeof setTimeout> | undefined;
     const turnPage = () => {
         const next = Math.min(pages() - 1, Math.max(0, page() + turning));
-        if (next !== page()) showPage(next);
+        if (next !== page()) {
+            haptic("selection");
+            showPage(next);
+        }
         turnTimer = setTimeout(turnPage, PAGE_TURN_MS);
     };
     const onPointerUp = () => {
@@ -561,7 +565,12 @@ const HomeView: Component<HomeViewProps> = (props) => {
             else setSelectedId(d.source.itemId);
             return;
         }
-        if (!t?.valid) return;
+        // let go where it can't go: it falls back to where it came from
+        if (!t?.valid) {
+            haptic("warning");
+            return;
+        }
+        haptic("land");
         if (d.source.kind === "new") addAt(d.source.entry, t.placement);
         else moveTo(d.source.itemId, t.placement);
     };
@@ -661,6 +670,7 @@ const HomeView: Component<HomeViewProps> = (props) => {
         };
         const timer = setTimeout(() => {
             cancelHold();
+            haptic("lift");
             setSheetConcealed(true);
             // the ghost hangs from the finger near its top, like picking up a card
             startDrag(target, pointerId, start, pointer, true, { kind: "new", entry }, entry.widget.name, size, { x: size.w / 2, y: 0.3 });

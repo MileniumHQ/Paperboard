@@ -24,12 +24,15 @@ export interface AppSettingsData {
     darkMode: "system" | "light" | "dark";
     reducedMotion: boolean;
     runOnStartup: boolean;
+    /** buzz on taps, holds, and swipes, on a device that can */
+    haptics: boolean;
 }
 
 export const APP_SETTINGS_DEFAULTS: AppSettingsData = {
     darkMode: "system",
     reducedMotion: false,
     runOnStartup: false,
+    haptics: true,
 };
 
 export const APP_SETTINGS_ID = "app-settings";
@@ -269,6 +272,11 @@ function CompactSettings(props: {
                         <label class={styles.row}>
                             <span class={styles.label}>Reduce motion</span>
                             <PaperToggle name="reducedMotion" checked={props.settings.reducedMotion} />
+                        </label>
+                        {/* only phones vibrate, so only the phone layout asks */}
+                        <label class={styles.row}>
+                            <span class={styles.label}>Vibration</span>
+                            <PaperToggle name="haptics" checked={props.settings.haptics} />
                         </label>
                     </div>
                 </section>
