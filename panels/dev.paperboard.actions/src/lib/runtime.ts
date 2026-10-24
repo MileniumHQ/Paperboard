@@ -178,6 +178,17 @@ export function resolveToken(
         }
     }
 
+    // named flow variables (set-variable): a live store read after every
+    // step-output, payload and generic rule, so those keep their meaning,
+    // but before the primitive catch-alls below — a variable chip is how a
+    // step reads a variable, and a string last output must not answer for it
+    if (flowVariablesStore.has(token)) {
+        return { found: true, value: flowVariablesStore.get(token) };
+    }
+    if (label && flowVariablesStore.has(label)) {
+        return { found: true, value: flowVariablesStore.get(label) };
+    }
+
     // primitive payloads
     if (typeof triggerPayload === "string" || typeof triggerPayload === "number") {
         return { found: true, value: triggerPayload };
@@ -187,16 +198,6 @@ export function resolveToken(
         return { found: true, value: contextPayload };
     }
 
-    // named flow variables (set-variable): a live store read, deliberately
-    // last — every step-output, payload and generic rule above keeps its
-    // existing meaning, and only tokens that would otherwise fail as
-    // dangling fall through to the variable name
-    if (flowVariablesStore.has(token)) {
-        return { found: true, value: flowVariablesStore.get(token) };
-    }
-    if (label && flowVariablesStore.has(label)) {
-        return { found: true, value: flowVariablesStore.get(label) };
-    }
 
     return { found: false };
 }

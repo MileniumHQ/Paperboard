@@ -169,9 +169,20 @@ describe("try-catch", () => {
                     [blk("set-variable", { key: "tc_loop_caught", value: "bad" })],
                 ),
             ]),
-            blk("get-variable", { key: "tc_loop" }),
+            blk("math-calculate", { expression: "{{tc_loop:tc_loop:data_object}}" }),
         ]);
         expect(log.status).toBe("success");
         expect(finalResult(log)).toBe(1);
+    });
+});
+
+describe("variable chips", () => {
+    it("read the variable even when the step before returned a string", async () => {
+        const log: any = await run([
+            blk("set-variable", { key: "chip_after_text", value: "kept" }),
+            blk("text", { value: "" }),
+            blk("text", { value: "{{chip_after_text:chip_after_text:data_object}}" }),
+        ]);
+        expect(finalResult(log)).toBe("kept");
     });
 });
