@@ -80,23 +80,3 @@ button.row:active {
 .chevron {
     color: var(--paper-text-subtle);
 }
-
-.primary {
-    color: var(--paper-primary);
-}
-
-.danger {
-    color: var(--paper-danger);
-}
-
-.primary .label,
-.danger .label {
-    text-align: center;
-}
-
-.note {
-    margin: 0;
-    padding: 0 var(--paper-uigap);
-    font-size: var(--paper-text-size-1);
-    color: var(--paper-text-subtle);
-}

@@ -24,15 +24,12 @@ export interface AppSettingsData {
     darkMode: "system" | "light" | "dark";
     reducedMotion: boolean;
     runOnStartup: boolean;
-    /** buzz on taps, holds, and swipes, on a device that can */
-    haptics: boolean;
 }
 
 export const APP_SETTINGS_DEFAULTS: AppSettingsData = {
     darkMode: "system",
     reducedMotion: false,
     runOnStartup: false,
-    haptics: true,
 };
 
 export const APP_SETTINGS_ID = "app-settings";
@@ -227,7 +224,7 @@ export default function AppSettings(props: {
 }
 
 // The phone layout: titled groups of one-line rows, controls on the right,
-// actions as rows you tap, and the longer explanations under their group.
+// and actions as rows you tap. Only what applies on a phone is here.
 function CompactSettings(props: {
     settings: AppSettingsData;
     onChange: (next: Record<string, any>) => void;
@@ -235,11 +232,10 @@ function CompactSettings(props: {
     onViewLicense: (kind: LicenseKind) => void;
     licenseModal: JSX.Element;
 }) {
-    const ActionRow = (row: { label: string; onClick: () => void; tone?: "primary" | "danger"; chevron?: boolean }) => (
+    const ActionRow = (row: { label: string; onClick: () => void; chevron?: boolean }) => (
         <button
             type="button"
             class={styles.row}
-            classList={{ [styles.primary]: row.tone === "primary", [styles.danger]: row.tone === "danger" }}
             onClick={row.onClick}
         >
             <span class={styles.label}>{row.label}</span>
@@ -273,37 +269,18 @@ function CompactSettings(props: {
                             <span class={styles.label}>Reduce motion</span>
                             <PaperToggle name="reducedMotion" checked={props.settings.reducedMotion} />
                         </label>
-                        {/* only phones vibrate, so only the phone layout asks */}
-                        <label class={styles.row}>
-                            <span class={styles.label}>Vibration</span>
-                            <PaperToggle name="haptics" checked={props.settings.haptics} />
-                        </label>
                     </div>
                 </section>
 
                 <section class={styles.group} aria-labelledby="settings-general">
                     <h2 id="settings-general" class={styles.heading}>General</h2>
                     <div class={styles.card}>
-                        <label class={styles.row}>
-                            <span class={styles.label}>Run on startup</span>
-                            <PaperToggle name="runOnStartup" checked={props.settings.runOnStartup} />
-                        </label>
                         <ActionRow label="Show tutorial" onClick={props.onShowTutorial} chevron />
                     </div>
                 </section>
             </PaperSettingList>
 
-            {/* browser mode has no updater window to restart into */}
-            <Show when={!isBrowserShell()}>
-                <section class={styles.group} aria-labelledby="settings-updates">
-                    <h2 id="settings-updates" class={styles.heading}>Updates</h2>
-                    <div class={styles.card}>
-                        <ActionRow label="Update everything now" onClick={updateEverything} tone="primary" />
-                    </div>
-                    <p class={styles.note}>{UPDATE_NOTE}</p>
-                </section>
-            </Show>
-
+            {/* a phone doesn't start at login, update itself, or quit: those rows are the desktop's */}
             <section class={styles.group} aria-labelledby="settings-licenses">
                 <h2 id="settings-licenses" class={styles.heading}>Licenses</h2>
                 <div class={styles.card}>
@@ -311,15 +288,6 @@ function CompactSettings(props: {
                     <ActionRow label={`${LICENSE_TITLES.mit} (SDKs)`} onClick={() => props.onViewLicense("mit")} chevron />
                 </div>
             </section>
-
-            <Show when={!isBrowserShell()}>
-                <section class={styles.group} aria-label="Quit">
-                    <div class={styles.card}>
-                        <ActionRow label="Quit Paperboard" onClick={quitApp} tone="danger" />
-                    </div>
-                    <p class={styles.note}>{QUIT_NOTE}</p>
-                </section>
-            </Show>
 
             {props.licenseModal}
         </div>

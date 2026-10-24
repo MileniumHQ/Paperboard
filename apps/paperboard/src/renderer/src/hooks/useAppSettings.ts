@@ -1,6 +1,5 @@
 import { createSignal, createEffect } from "solid-js";
 import { config } from "@mileniumhq/paperapi";
-import { setHapticsEnabled } from "@mileniumhq/paperui";
 import { logToMain, notifyAppSettingsChanged } from "../lib/shell";
 import {
     APP_SETTINGS_DEFAULTS,
@@ -29,9 +28,6 @@ export function useAppSettings() {
             }
         }
     });
-
-    // every haptic, the shell's and its frames', plays through PaperUI here
-    createEffect(() => setHapticsEnabled(appSettings().haptics));
 
     const loadAppSettings = async () => {
         try {
