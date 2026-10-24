@@ -269,12 +269,13 @@ export function findPhoneSpot(items: HomeItem[], size: WidgetSize, rows: number,
 /**
  * A phone Home that was never arranged: the window's widgets in reading
  * order, filled into pages of `rows` rows. A widget that doesn't fit
- * anywhere is left off.
+ * anywhere, or belongs to a computer the phone doesn't show, is left off.
  */
-export function phoneLayoutFrom(items: HomeItem[], rows: number): HomeItem[] {
+export function phoneLayoutFrom(items: HomeItem[], rows: number, shown: ReadonlySet<string>): HomeItem[] {
     const placed: HomeItem[] = [];
     let page = 0;
     for (const item of [...items].sort((a, b) => a.y - b.y || a.x - b.x)) {
+        if (!shown.has(item.computerId)) continue;
         const spot = findPhoneSpot(placed, sizeOf(item), rows, page);
         if (!spot) continue;
         page = pageOf(spot);

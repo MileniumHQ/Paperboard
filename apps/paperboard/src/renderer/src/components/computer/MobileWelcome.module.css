@@ -1,0 +1,94 @@
+/* The phone's first screen before any computer is paired: a sign-in page. */
+.welcome {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--paper-uigap-double);
+    padding: var(--paper-uigap-quadruple) var(--paper-uigap-double);
+    padding-bottom: calc(var(--paper-uigap-quadruple) + env(safe-area-inset-bottom, 0px));
+    background: var(--paper-surface-app);
+    text-align: center;
+    overflow-y: auto;
+}
+
+.stack {
+    position: relative;
+    width: 220px;
+    height: 150px;
+    flex-shrink: 0;
+}
+
+.stack img {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    width: 112px;
+    height: 112px;
+    margin-left: -56px;
+    user-select: none;
+    -webkit-user-drag: none;
+    animation: deal var(--paper-long-transition) both;
+}
+
+.left {
+    transform: translate(-62px, 22px) rotate(-14deg);
+    animation-delay: 60ms;
+}
+
+.right {
+    transform: translate(62px, 22px) rotate(12deg);
+    animation-delay: 120ms;
+}
+
+.front {
+    transform: translateY(6px);
+}
+
+/* each card is dealt up from below into its place */
+@keyframes deal {
+    from {
+        opacity: 0;
+        translate: 0 24px;
+    }
+}
+
+.copy {
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap-half);
+    max-width: 320px;
+}
+
+.title {
+    margin: 0;
+    font-size: var(--paper-text-size-7);
+    font-weight: 700;
+    color: var(--paper-text);
+}
+
+.lead {
+    margin: 0;
+}
+
+.failure {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--paper-uigap-half);
+}
+
+.failure p {
+    margin: 0;
+}
+
+.action {
+    width: 100%;
+    max-width: 320px;
+}
+
+.button {
+    width: 100%;
+    justify-content: center;
+}

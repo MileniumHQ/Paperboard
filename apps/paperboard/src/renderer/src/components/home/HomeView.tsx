@@ -166,7 +166,7 @@ const HomeView: Component<HomeViewProps> = (props) => {
                 // a phone never arranged shows the window's Home, laid out on
                 // pages as tall as the screen, until it is changed
                 const window = await config.get(HOME_LAYOUT_ID, undefined, HOME_LAYOUT_COMPUTER);
-                setUnarranged(window === null || window === undefined ? defaultHomeItems(HOME_LAYOUT_COMPUTER) : parseHomeLayout(window));
+                setUnarranged(window === null || window === undefined ? "default" : parseHomeLayout(window));
             }
             setLoadState("ready");
         } catch (err) {
@@ -228,10 +228,20 @@ const HomeView: Component<HomeViewProps> = (props) => {
     const pageWidth = () => viewport().width;
     const phoneGeometry = () => ({ cell: phoneCell(), pageWidth: pageWidth(), gutter: PHONE_GUTTER_PX, pages: pages(), rows: phoneRows() });
     // a phone Home never arranged follows the window's layout and the screen
-    const [unarranged, setUnarranged] = createSignal<HomeItem[] | null>(null);
+    // ("default": the window's Home was never arranged either)
+    const [unarranged, setUnarranged] = createSignal<HomeItem[] | "default" | null>(null);
+    // a phone shows only paired computers, so it starts with the first one at
+    // a glance and leaves out widgets of computers it doesn't show. Compared
+    // as a string: a status update re-sends the same computers
+    const shownIds = createMemo(() => props.computers.map((c) => c.id).join("\n"));
+    const phoneDefaults = createMemo(() => {
+        const first = shownIds().split("\n")[0];
+        return first ? defaultHomeItems(first) : [];
+    });
     createEffect(() => {
         const from = unarranged();
-        if (from) setItems(phoneLayoutFrom(from, phoneRows()));
+        if (!from) return;
+        setItems(phoneLayoutFrom(from === "default" ? phoneDefaults() : from, phoneRows(), new Set(shownIds().split("\n"))));
     });
 
     const geometry = createMemo(() =>

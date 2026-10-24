@@ -53,6 +53,8 @@ import { usePackageUpdates } from "./hooks/usePackageUpdates";
 import PackageUpdateModal from "./components/layout/PackageUpdateModal";
 import TopBar from "./components/layout/TopBar";
 import { computerIcon } from "./components/computer/computerIcon";
+import MobileWelcome from "./components/computer/MobileWelcome";
+import { shownComputers, showsWelcome } from "./lib/phoneComputers";
 import libraryIcon from "./assets/PanelLibrary.png";
 import { useAppSettings } from "./hooks/useAppSettings";
 import { useComputers } from "./hooks/useComputers";
@@ -72,6 +74,7 @@ const App: Component = () => {
         activeComputer,
         subscribeComputerChanges,
         computersLoadFailed,
+        computersLoaded,
     } = useComputers();
     const {
         panelsByComputer,
@@ -131,6 +134,9 @@ const App: Component = () => {
     const [mobilePageOpen, setMobilePageOpen] = createSignal(false);
     // the rail's Settings opens as a page over whatever the rail shows
     const [mobileSettingsOpen, setMobileSettingsOpen] = createSignal(false);
+    // a phone lists only paired computers, and opens on a welcome until one is
+    const listedComputers = () => shownComputers(computers(), mobile());
+    const mobileWelcome = () => showsWelcome(computers(), mobile());
     const openMobilePage = () => {
         if (mobile()) setMobilePageOpen(true);
     };
@@ -589,11 +595,24 @@ const App: Component = () => {
                         overflow: "hidden",
                     }}
                 >
+                    <Show
+                        when={!mobileWelcome()}
+                        fallback={
+                            // nothing until the paired computers are known, so a paired phone never flashes the welcome
+                            <Show when={computersLoaded() || computersLoadFailed()}>
+                                <MobileWelcome
+                                    onAdd={() => setIsSetupOpen(true)}
+                                    loadFailed={computersLoadFailed()}
+                                    onRetryLoad={() => void refreshComputers()}
+                                />
+                            </Show>
+                        }
+                    >
                     <ComputerRail
                         updateState={appUpdate.state()}
                         showUpdate={railMode() === "home" || (railMode() === "computer" && getSelectedTab(activeComputerId()) === "landing")}
                         onOpenUpdate={() => appUpdate.setOpen(true)}
-                        computers={computers()}
+                        computers={listedComputers()}
                         value={
                             railMode() === "home"
                                 ? "__home"
@@ -667,7 +686,7 @@ const App: Component = () => {
                                 overflow: "hidden",
                             }}
                         >
-                            <For each={computers()}>
+                            <For each={listedComputers()}>
                                 {(comp) => {
                                     const isActive = () =>
                                         activeComputerId() === comp.id;
@@ -805,7 +824,7 @@ const App: Component = () => {
                                 position: "relative",
                             }}
                         >
-                            <For each={computers()}>
+                            <For each={listedComputers()}>
                                 {(comp) => {
                                     const isVisible = () =>
                                         activeComputerId() === comp.id &&
@@ -870,7 +889,7 @@ const App: Component = () => {
                                 />
                             </PaperFlex>
 
-                            <For each={computers()}>
+                            <For each={listedComputers()}>
                                 {(comp) => {
                                     const isVisible = () =>
                                         activeComputerId() === comp.id &&
@@ -945,7 +964,7 @@ const App: Component = () => {
                     <HomeView
                         mobile={mobile()}
                         visible={railMode() === "home"}
-                        computers={computers()}
+                        computers={listedComputers()}
                         panelsByComputer={panelsByComputer()}
                         panelsLoadFailed={panelsLoadFailed()}
                         onRefreshPanels={(compId) => void refreshPanelsForComputer(compId)}
@@ -953,6 +972,7 @@ const App: Component = () => {
                         onOpenComputer={(compId) => handleRailSelect(compId)}
                         reloadTokens={reloadTokens()}
                     />
+                    </Show>
                     </Show>
                 </PaperFlex>
             </PaperFlex>

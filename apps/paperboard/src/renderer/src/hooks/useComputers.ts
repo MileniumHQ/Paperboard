@@ -29,6 +29,8 @@ export function useComputers() {
     // panels path already has).
     const [computersLoadFailed, setComputersLoadFailed] =
         createSignal<boolean>(false);
+    // the list above is a placeholder until the first load answers
+    const [computersLoaded, setComputersLoaded] = createSignal<boolean>(false);
 
     const refreshComputers = async () => {
         try {
@@ -39,6 +41,7 @@ export function useComputers() {
                     setActiveComputerId(data.activeId);
                 }
                 setComputersLoadFailed(false);
+                setComputersLoaded(true);
             }
         } catch (err) {
             console.error("[useComputers] load failed:", err);
@@ -70,6 +73,7 @@ export function useComputers() {
         activeComputer,
         subscribeComputerChanges,
         computersLoadFailed,
+        computersLoaded,
     };
 }
 

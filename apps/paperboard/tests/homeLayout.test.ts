@@ -238,13 +238,19 @@ describe("phone Home", () => {
             item({ id: "first", size: "4x2", x: 0, y: 0 }),
             item({ id: "low", size: "2x2", x: 0, y: 3 }),
         ];
-        const phone = phoneLayoutFrom(window, 3);
+        const phone = phoneLayoutFrom(window, 3, new Set(["local"]));
         expect(phone.map((i) => [i.id, i.x, i.y])).toEqual([
             ["first", 0, 0],
             ["wide", 0, 2],
             ["low", 4, 0],
         ]);
         expect(usedPages(phone)).toBe(2);
+    });
+
+    it("leaves out widgets of computers the phone doesn't show", () => {
+        // a phone hides This Computer; its widgets aren't drawn as "removed"
+        const window = [item({ id: "mine", computerId: "local" }), item({ id: "nas", computerId: "nas", x: 2 })];
+        expect(phoneLayoutFrom(window, 3, new Set(["nas"])).map((i) => i.id)).toEqual(["nas"]);
     });
 
     it("closes up empty pages without reordering the rest", () => {
