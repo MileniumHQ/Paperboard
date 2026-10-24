@@ -1,4 +1,4 @@
-import { type JSX, Show } from "solid-js";
+import { type JSX, Show, createEffect, on } from "solid-js";
 import { PaperButton } from "../PaperButton";
 import { PaperIcon } from "../PaperIcon";
 import { PaperText } from "../PaperText";
@@ -41,6 +41,22 @@ export function PaperSlidePage(props: PaperSlidePageProps) {
         width: () => pageRef?.clientWidth ?? window.innerWidth,
         onBack: () => props.onBack(),
     });
+
+    // Switching layouts moves the page to where it already is: a closed page
+    // turning into the phone layout must be off-screen at once, not slide out
+    // over the list. Only opening and closing animate.
+    createEffect(
+        on(
+            () => props.enabled,
+            () => {
+                if (!pageRef) return;
+                pageRef.style.transition = "none";
+                void pageRef.offsetWidth;
+                pageRef.style.transition = "";
+            },
+            { defer: true },
+        ),
+    );
 
     const transform = () => {
         if (!props.enabled) return undefined;
