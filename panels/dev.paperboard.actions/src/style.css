@@ -1242,3 +1242,13 @@ body,
     border-radius: var(--paper-border-radius-half);
     background: var(--paper-surface-inset);
 }
+
+/* what a phone sees instead of the canvas */
+.actions-unsupported {
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--paper-uigap-double);
+    box-sizing: border-box;
+}
