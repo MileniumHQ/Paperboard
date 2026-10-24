@@ -47,8 +47,7 @@ export type ServerValue = string | SecretRef;
 export type ServerSpec =
     | {
           name: string;
-          /** "computer": TODO(remove after v0.3) — saved for the agent's old VM computer; loaded, and shown failed until edited */
-          where: "host" | "computer";
+          where: "host";
           transport: "stdio";
           /** argv[0]; never a shell line */
           command: string;

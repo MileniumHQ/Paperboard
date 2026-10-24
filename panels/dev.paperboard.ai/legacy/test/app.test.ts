@@ -272,39 +272,6 @@ describe("AiApp connections", () => {
             expect(ctx.state.connections.map((c) => c.id)).toEqual(["ollama"]);
         });
     });
-
-    // TODO(remove after v0.3): with migrateSingleProvider
-    it("migrates a 0.2 custom endpoint once, moving its key to the connection's own secret", async () => {
-        secrets.clear();
-        secrets.set("openai-api-key", "legacy");
-        const legacy = { settings: { defaultModel: "local:7b" }, provider: { id: "custom", baseUrl: "https://api.example.com/v1" } };
-        let id = "";
-        await withApp(async (_app, ctx) => {
-            expect(ctx.state.connections).toHaveLength(1);
-            const [c] = ctx.state.connections;
-            id = c!.id;
-            expect(c).toMatchObject({ kind: "openai-compatible", baseUrl: "https://api.example.com/v1", hasApiKey: true });
-            expect(secrets.get(`api-key-${id}`)).toBe("legacy");
-            expect(secrets.has("openai-api-key")).toBe(false);
-            expect(savedConfig).toMatchObject({ version: 2, settings: { defaultModel: "local:7b" } });
-            expect((savedConfig as any).provider).toBeUndefined();
-            // a second start reads the migrated document as it is
-            const migrated = structuredClone(savedConfig);
-            await withApp(async (_again, again) => {
-                expect(again.state.connections.map((x) => x.id)).toEqual([id]);
-            }, migrated);
-        }, legacy);
-    });
-
-    // TODO(remove after v0.3): with migrateSingleProvider
-    it("migrates a 0.2 Ollama choice, and an unfinished setup to no providers", async () => {
-        await withApp(async (_app, ctx) => {
-            expect(ctx.state.connections.map((c) => c.id)).toEqual(["ollama"]);
-        }, { provider: { id: "ollama" } });
-        await withApp(async (_app, ctx) => {
-            expect(ctx.state.connections).toEqual([]);
-        }, { settings: { reasoning: "off" } });
-    });
 });
 
 describe("AiApp readiness", () => {

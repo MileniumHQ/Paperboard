@@ -34,12 +34,6 @@ describe("the server editor's form", () => {
         expect(parseServer(spec)).toEqual(spec);
     });
 
-    test("a server saved for the old VM computer is saved to run on this computer, and the form says so first", () => {
-        const f = formFromSpec({ name: "inside", where: "computer", transport: "stdio", command: "npx", args: ["pkg"], env: {}, enabled: true });
-        expect(f.wasInsideComputer).toBe(true);
-        expect(specFromForm(f).where).toBe("host");
-    });
-
     test("secret names are plain", () => {
         expect(secretNameOf("X-Api Key!")).toBe("x-api-key");
     });

@@ -29,7 +29,7 @@ describe("the service's agent", () => {
         if (dir) fs.rmSync(dir, { recursive: true, force: true });
     });
 
-    async function start(installed: string[], saved: unknown = null, readSettings?: () => Promise<unknown>, legacy: unknown = null) {
+    async function start(installed: string[], saved: unknown = null, readSettings?: () => Promise<unknown>) {
         dir = fs.mkdtempSync(path.join(os.tmpdir(), "ai-app-"));
         const procs = new FakeProcesses();
         const writes: Settings[] = [];
@@ -50,7 +50,6 @@ describe("the service's agent", () => {
             storageDir: async () => dir,
             readSettings: readSettings ?? (async () => saved),
             writeSettings: async (s) => void writes.push(s),
-            readLegacySettings: async () => legacy,
             harnessHomes: { claude: "/nonexistent/claude", codex: "/nonexistent/codex" },
             which: (c) => (installed.includes(c) ? `/usr/bin/${c}` : null),
             tools: {
@@ -84,19 +83,10 @@ describe("the service's agent", () => {
         expect((await start(["codex"], { name: "Pip", harness: "nope" })).state().settings).toBeNull();
     });
 
-    test("settings from before, in agent.json, move once into the panel's config; the config wins after that", async () => {
-        const pip = { name: "Pip", harness: "codex", model: null };
-        const moved = await start(["codex"], null, undefined, pip);
-        expect(moved.state().settings).toEqual(pip);
-        expect(moved.writes).toEqual([pip]);
-        await app!.shutdown();
-        app = null;
-        const after = await start(["codex"], { ...pip, name: "Pop" }, undefined, pip);
-        expect(after.state().settings?.name).toBe("Pop");
-        expect(after.writes).toEqual([]);
-        await app!.shutdown();
-        app = null;
-        expect((await start(["codex"])).writes).toEqual([]); // a fresh install has nothing to move
+    test("a fresh install starts with no settings and writes none", async () => {
+        const fresh = await start(["codex"]);
+        expect(fresh.state().settings).toBeNull();
+        expect(fresh.writes).toEqual([]);
     });
 
     test("a service that fails to start fails its actions instead of leaving them waiting", async () => {

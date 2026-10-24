@@ -79,7 +79,7 @@ export function parseServer(raw: unknown): ServerSpec {
     if (typeof enabled !== "boolean") return fail("enabled is on or off");
     const transport = raw.transport;
     const where: unknown = raw.where === undefined ? "host" : raw.where;
-    if (where !== "host" && where !== "computer") return fail('where is "host" (this computer) or "computer" (its computer)');
+    if (where !== "host") return fail('where is "host": a tool server runs on this computer');
     if (transport === "stdio") {
         exactKeys(raw, ["name", "where", "transport", "command", "args", "env", "enabled"], name);
         const command = text(raw.command, "the command", L.command);
@@ -96,7 +96,6 @@ export function parseServer(raw: unknown): ServerSpec {
     }
     if (transport === "http") {
         exactKeys(raw, ["name", "where", "transport", "url", "headers", "enabled"], name);
-        if (where !== "host") fail("an HTTP server is reached from this computer, not from inside its computer");
         const url = text(raw.url, "the address", L.url).trim();
         let u: URL;
         try {

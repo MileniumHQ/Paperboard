@@ -35,8 +35,6 @@ import {
 import { startProxy, type Proxy } from "./proxy";
 
 export const BROWSER_PROC_ID = `${PANEL_ID}.browser`;
-// TODO(remove after v0.3): the VM computer's children (QEMU and passt), stopped if a version before the browser left them running
-const OLD_VM_PROCS = [`${PANEL_ID}.computer`, `${PANEL_ID}.net`];
 const RECORD_FILE = "browser.json";
 const RECORD_VERSION = 1;
 
@@ -194,7 +192,6 @@ export class BrowserComputer {
                 this.stderrTail = (this.stderrTail + data).slice(-2000);
             }),
         );
-        await this.stopOldComputer();
         try {
             this.record = this.readRecord();
         } catch (e) {
@@ -543,27 +540,6 @@ export class BrowserComputer {
         } finally {
             this.teardown();
             this.stopping = false;
-        }
-    }
-
-    // TODO(remove after v0.3): with OLD_VM_PROCS. The VM's disk stays in the panel's storage (user data is kept).
-    private async stopOldComputer() {
-        for (const id of OLD_VM_PROCS) {
-            if (!(await this.deps.host.exists(id))) continue;
-            console.warn(`[ai] stopping ${id}, the agent's old VM computer: the agent's computer is a browser now (this check goes away in v0.3)`);
-            const gone = new Promise<void>((ok) => {
-                const off = this.deps.host.onExit(id, () => {
-                    off();
-                    ok();
-                });
-            });
-            if (!(await this.deps.host.exists(id))) continue;
-            await this.deps.host.kill(id, "SIGTERM");
-            const late = await Promise.race([gone.then(() => false), new Promise<boolean>((r) => setTimeout(() => r(true), STOP_GRACE_MS))]);
-            if (late) {
-                await this.deps.host.kill(id, "SIGKILL");
-                await gone;
-            }
         }
     }
 

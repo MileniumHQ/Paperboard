@@ -132,7 +132,7 @@ function Servers(props: { tools: ToolsClient; agent: Agent }) {
         }
     };
     const statusOf = (s: ServerSpec): ServerStatus => view().status.find((x) => x.name === s.name) ?? { name: s.name, phase: "stopped", error: null, tools: 0 };
-    const where = (s: ServerSpec) => (s.transport === "http" ? "This computer, over the web" : s.where === "computer" ? `${name()}'s old computer` : "This computer");
+    const where = (s: ServerSpec) => (s.transport === "http" ? "This computer, over the web" : "This computer");
 
     return (
         <section class={styles.group} aria-label="Tool servers">
@@ -315,11 +315,6 @@ function Editor(props: { tools: ToolsClient; name: string; initial: Form; onClos
                     </PaperSelectMenu>
                 </div>
                 <Show when={!http()}>
-                    <Show when={f().wasInsideComputer}>
-                        <PaperText size={2} color="text-muted" role="note">
-                            This server ran inside {props.name}'s old computer, which is a web browser now. Saving it runs it on this computer, with your access to your files and network.
-                        </PaperText>
-                    </Show>
                     <PaperInput name="command" label="Program" placeholder="npx" value={f().command} maxLength={TOOL_LIMITS.command} onInput={(e) => set("command", e.currentTarget.value)} />
                     <PaperInput
                         name="args"

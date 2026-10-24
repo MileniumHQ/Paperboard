@@ -5,8 +5,6 @@ import { DEFAULT_STATE, PANEL_ID, UI_ACTION_IDS, type AiState } from "./contract
 import { TOOLS_ACTION_IDS } from "./toolsContract";
 import { AiApp, which, type AppHost } from "./service/app";
 
-// TODO(remove after v0.3): where 0.3.0 kept the agent's settings; they're in the panel's config document now
-const LEGACY_SETTINGS_PATH = "agent.json";
 // the tool servers and the actions switch: another document, so one never overwrites the other
 const TOOLS_PATH = "tools.json";
 
@@ -30,7 +28,6 @@ const host: AppHost = {
     storageDir: () => fileApi.getPath("", PANEL_ID),
     readSettings: () => configApi.get(PANEL_ID),
     writeSettings: (s) => configApi.set(s, PANEL_ID),
-    readLegacySettings: () => configApi.get(PANEL_ID, LEGACY_SETTINGS_PATH),
     which,
     tools: {
         write: (id, data) => processApi.write(id, data),

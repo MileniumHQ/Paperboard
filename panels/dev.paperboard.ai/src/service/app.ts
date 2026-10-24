@@ -52,8 +52,6 @@ export interface AppHost extends ComputerHost, Omit<TurnHost, "write"> {
     /** the panel's config document: the agent's settings */
     readSettings(): Promise<unknown>;
     writeSettings(s: Settings): Promise<void>;
-    // TODO(remove after v0.3): where 0.3.0 kept the settings, a document of its own (agent.json in the panel's files)
-    readLegacySettings(): Promise<unknown>;
     which(command: string): string | null;
     /** where each harness keeps its own files, for its model catalog */
     harnessHomes: HarnessHomes;
@@ -198,19 +196,10 @@ export class AiApp {
         return { saved: true };
     }
 
-    /**
-     * The settings live in the panel's config document. An install from before has them in agent.json
-     * instead: moved once, the first time the config document is empty, and the old file left as it was.
-     */
+    /** The settings live in the panel's config document; none yet is a fresh install. */
     private async loadSettings(): Promise<Settings | null> {
         const saved = await this.host.readSettings();
-        if (saved !== null) return parseSettings(saved);
-        // TODO(remove after v0.3): the move from agent.json, with readLegacySettings
-        const legacy = parseSettings(await this.host.readLegacySettings());
-        if (!legacy) return null;
-        await this.host.writeSettings(legacy);
-        console.warn("[ai] moved the agent's settings from agent.json into the panel's config; agent.json is no longer read (this move goes away in v0.3)");
-        return legacy;
+        return saved === null ? null : parseSettings(saved);
     }
 
     /** What a brain can think with, from its harness's own catalog. */

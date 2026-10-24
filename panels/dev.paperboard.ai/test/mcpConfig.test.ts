@@ -7,7 +7,7 @@ const http = (o: Record<string, unknown> = {}) => ({ name: "notes", transport: "
 describe("a stdio server is an argv array", () => {
     test("a valid server, with defaults filled in", () => {
         expect(parseServer(stdio())).toEqual({ name: "files", where: "host", transport: "stdio", command: "npx", args: ["-y", "pkg"], env: {}, enabled: true });
-        expect(parseServer(stdio({ where: "computer" })).where).toBe("computer");
+        expect(() => parseServer(stdio({ where: "computer" }))).toThrow(/this computer/);
     });
 
     test("a command line in the command field is refused: arguments have their own list", () => {

@@ -164,12 +164,6 @@ export class McpServers {
         const run = (async () => {
             let client: McpClient | null = null;
             try {
-                // TODO(remove after v0.3): with "computer" in ServerSpec.where
-                if (e.spec.where === "computer") {
-                    console.warn(`[ai] tool server ${e.spec.name} is set to run inside the agent's old VM computer, which is gone; it stays off until it's edited (this check goes away in v0.3)`);
-                    this.settle(e, gen, "failed", "It ran inside the agent's old computer, which is a web browser now. Edit it to run on this computer.");
-                    return;
-                }
                 client = new McpClient(await this.open(e.spec));
                 const opened = client;
                 opened.onEnd((reason) => {

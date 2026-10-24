@@ -16,8 +16,6 @@ export interface Row {
 export interface Form {
     editing: boolean;
     name: string;
-    /** it was saved to run inside the agent's old VM computer: saving it runs it on this computer (TODO(remove after v0.3)) */
-    wasInsideComputer: boolean;
     transport: "stdio" | "http";
     command: string;
     /** one argument per line */
@@ -30,7 +28,7 @@ export interface Form {
 let keys = 0;
 export const newRow = (o: Partial<Row> = {}): Row => ({ key: ++keys, name: "", kind: "value", value: "", typed: "", ...o });
 
-export const blankForm = (): Form => ({ editing: false, name: "", wasInsideComputer: false, transport: "stdio", command: "", args: "", url: "", rows: [], enabled: true });
+export const blankForm = (): Form => ({ editing: false, name: "", transport: "stdio", command: "", args: "", url: "", rows: [], enabled: true });
 
 /** the vault name the service keeps a row's secret under: the row's own name, made plain */
 export const secretNameOf = (rowName: string) => rowName.toLowerCase().replace(/[^a-z0-9_.-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 64);
@@ -41,7 +39,6 @@ export function formFromSpec(s: ServerSpec): Form {
     return {
         editing: true,
         name: s.name,
-        wasInsideComputer: s.where === "computer",
         transport: s.transport,
         command: s.transport === "stdio" ? s.command : "",
         args: s.transport === "stdio" ? s.args.join("\n") : "",

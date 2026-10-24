@@ -6,7 +6,7 @@ import { AskMemory } from "./askMemory";
 import { Projects } from "./projects";
 import { projectName } from "../core/projects";
 import { isLocalMode } from "../core/projectTools";
-import { createHash, randomBytes } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -107,15 +107,9 @@ interface StoredConfig {
     favorites?: FavoriteModel[];
     /** the models each agent connection offered last, listed without starting it */
     agentModels?: Record<string, AgentModel[]>;
-    // TODO(remove after v0.3): the single provider choice of 0.2 configs,
-    // read once by migrateSingleProvider and then deleted from the document
-    provider?: { id?: string; baseUrl?: string };
 }
 
 const CONFIG_VERSION = 2;
-// TODO(remove after v0.3): the 0.2 custom endpoint's vault secret, moved to
-// the migrated connection's own secret by migrateSingleProvider
-const LEGACY_API_KEY_SECRET = "openai-api-key";
 
 const MAX_ALWAYS_ALLOWED = 500;
 const MAX_SPEEDS = 100;
@@ -527,31 +521,6 @@ export class AiApp {
         return { models: tags.length };
     }
 
-    // TODO(remove after v0.3): 0.2 saved one provider choice, with the custom
-    // endpoint's key under one vault name. This turns it into connections
-    // once; the endpoint's id comes from its URL, so a retry after a failed
-    // write lands on the same secret instead of leaving another behind.
-    private async migrateSingleProvider(saved: StoredConfig): Promise<StoredConfig> {
-        const { provider: legacy, ...rest } = saved;
-        const connections: StoredConnection[] = [];
-        let movedKey = false;
-        if (legacy?.id === "custom" && typeof legacy.baseUrl === "string" && legacy.baseUrl) {
-            const id = `api-${createHash("sha256").update(legacy.baseUrl).digest("hex").slice(0, 8)}`;
-            connections.push({ id, kind: "openai-compatible", label: endpointLabel(legacy.baseUrl), baseUrl: legacy.baseUrl });
-            const { found, value } = await secretsApi.get(LEGACY_API_KEY_SECRET, PANEL_ID);
-            if (found && value) {
-                await secretsApi.set(apiKeySecretName(id), value, PANEL_ID);
-                movedKey = true;
-            }
-        } else if (legacy?.id) {
-            connections.push({ id: OLLAMA_PROVIDER_ID, kind: "ollama", label: OLLAMA_PROVIDER.label });
-        }
-        const next: StoredConfig = { ...rest, version: CONFIG_VERSION, connections };
-        await config.set(next, PANEL_ID);
-        if (movedKey) await secretsApi.delete(LEGACY_API_KEY_SECRET, PANEL_ID);
-        return next;
-    }
-
     async init(ctx: Ctx): Promise<void> {
         this.ctx = ctx;
         this.filesDir = await fileApi.getPath("", PANEL_ID);
@@ -694,8 +663,9 @@ export class AiApp {
     private async loadConfig(): Promise<void> {
         try {
             const read = (await config.get<StoredConfig | null>(PANEL_ID)) ?? {};
-            let saved: StoredConfig = typeof read === "object" ? read : {};
-            if (saved.version !== CONFIG_VERSION) saved = await this.migrateSingleProvider(saved);
+            const saved: StoredConfig = typeof read === "object" ? read : {};
+            // 0.2's single provider choice is no longer moved into connections
+            if (saved.version !== undefined && saved.version !== CONFIG_VERSION) throw new Error(`the AI settings are version ${String(saved.version)}, not ${CONFIG_VERSION}`);
             this.stored = saved;
             const connections = await this.connectionsFromStored(Array.isArray(saved.connections) ? saved.connections : []);
             this.configLoaded = true;

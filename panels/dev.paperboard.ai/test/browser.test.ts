@@ -50,16 +50,6 @@ describe("the browser computer's lifecycle", () => {
         expect(await t.computer.callTool("open", { what: "example.com" })).toEqual({ isError: true, text: expect.stringMatching(/don't have a computer yet/) });
     });
 
-    // TODO(remove after v0.3): with the old VM's children
-    test("the old VM computer's children are stopped, and observed gone, before anything else", async () => {
-        const t = setup();
-        t.procs.alive.add("dev.paperboard.ai.computer");
-        t.procs.alive.add("dev.paperboard.ai.net");
-        await t.computer.init();
-        expect(t.procs.killed.map((k) => k.id).sort()).toEqual(["dev.paperboard.ai.computer", "dev.paperboard.ai.net"]);
-        expect(t.procs.alive.size).toBe(0);
-    });
-
     test("an unreadable record fails visibly and is left as it is", async () => {
         const t = setup();
         fs.writeFileSync(path.join(t.dir, "browser.json"), "{nope");

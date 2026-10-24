@@ -173,15 +173,6 @@ describe("a server's life", () => {
         expect(t.servers.config.servers.map((s) => s.name)).toEqual(["files"]);
     });
 
-    test("a server saved for the old VM computer stays off, failed with how to fix it, and never runs anywhere", async () => {
-        t = setup();
-        await t.servers.load();
-        await t.servers.save(stdio("inside", { where: "computer", command: "server" }));
-        await t.servers.warm();
-        expect(t.servers.status()[0]).toMatchObject({ phase: "failed", error: expect.stringMatching(/Edit it to run on this computer/) });
-        expect(t.procs.started).toHaveLength(0);
-    });
-
     test("a disabled server is not started", async () => {
         t = setup();
         await t.servers.load();
