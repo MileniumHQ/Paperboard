@@ -17,6 +17,9 @@ export interface RenderedPage {
     landing?: boolean;
     /** Learn pages share marketing chrome with ordinary document scrolling. */
     learn?: boolean;
+    /** A learn page's `--paper-site-accent`, set on <html> so the document
+        canvas (painted past the page on mobile scroll) takes the panel color. */
+    accent?: string;
 }
 
 const LANDING: RenderedPage = {
@@ -42,7 +45,7 @@ export function render(path: string): RenderedPage {
     const panel = LEARN_PANELS.find(panel => path === `/${panel.slug}/`);
     if (panel) return {
         title: panel.seoTitle, description: panel.description,
-        html: renderToString(() => <LearnPage panel={panel} />), learn: true,
+        html: renderToString(() => <LearnPage panel={panel} />), learn: true, accent: panel.accent,
     };
 
     const docs = docsRoutes().find((candidate) => candidate.path === path);

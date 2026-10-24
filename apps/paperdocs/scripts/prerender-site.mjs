@@ -43,7 +43,7 @@ function isDocsPath(path) {
 // gets carousel, stage and drag effects.
 function landingDocument(page, path) {
     return `<!doctype html>
-<html lang="en">
+<html lang="en"${page.accent ? ` style="--paper-site-accent: ${page.accent}"` : ""}>
     <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />

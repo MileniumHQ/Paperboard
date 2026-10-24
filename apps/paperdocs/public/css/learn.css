@@ -1,3 +1,9 @@
+/* The panel accent sits on <html> (prerender-site.mjs), so the canvas behind
+   the page takes the field's deepest stop. Mobile browsers paint the canvas
+   while their toolbars move; with the landing's blue it flashed through. */
+html:has(.learn-page) {
+    background: color-mix(in srgb, var(--paper-site-accent) 10%, var(--paper-marketing-ink));
+}
 .learn-page {
     --paper-button-face: color-mix(
         in srgb,

@@ -196,6 +196,18 @@ try {
             luminance(backLayer) < luminance(pageField),
             `The button back layer on ${slug} must sit darker than the page field`,
         );
+        // Mobile browsers paint the document canvas while their toolbars move.
+        // It must be the panel field's deepest stop, never the landing blue.
+        const canvas = await page.evaluate(() => {
+            const probe = document.createElement("div");
+            probe.style.background =
+                "color-mix(in srgb, var(--paper-site-accent) 10%, var(--paper-marketing-ink))";
+            document.querySelector(".learn-page").appendChild(probe);
+            const field = getComputedStyle(probe).backgroundColor;
+            probe.remove();
+            return { field, html: getComputedStyle(document.documentElement).backgroundColor };
+        });
+        assert.equal(canvas.html, canvas.field, `The document canvas on ${slug} must match its page field`);
         assert.equal(await page.locator(".learn-feature").count(), slug === "game-server" ? 4 : 3);
         // Reveals are scroll-driven CSS: the hero is shown on arrival, a
         // section below the fold waits for the reader to scroll to it.

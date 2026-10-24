@@ -29,7 +29,7 @@ function ZoomableScreenshot(props: { src: string; alt: string; sizes: string; pr
 
 export function LearnPage(props: { panel: LearnPanel }) {
     return (
-        <div class="learn-page" style={{ "--paper-site-accent": props.panel.accent }}>
+        <div class="learn-page">
             <MarketingChrome>
                 <main class="learn-main">
                     <section class="learn-hero">
