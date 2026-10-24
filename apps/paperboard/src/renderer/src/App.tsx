@@ -550,28 +550,6 @@ const App: Component = () => {
         return { title: panel.name, icon: renderPanelIcon(panel, compId) };
     };
 
-    // the right-click menus a phone can't right-click for: a panel's
-    // restart/uninstall/tutorial, and the library's reload
-    const mobilePageMenu = (): { label: string; open: (e: MouseEvent) => void } | undefined => {
-        const compId = activeComputerId();
-        const tab = getSelectedTab(compId);
-        if (tab === "library") {
-            return {
-                label: "Library options",
-                open: (e) => libraryContextMenu.openBelow(e.currentTarget as HTMLElement, { align: "right" }),
-            };
-        }
-        const panel = !isShellTab(tab) && panelsByComputer()[compId]?.find((p) => p.id === tab);
-        if (!panel) return undefined;
-        return {
-            label: `${panel.name} options`,
-            open: (e) => {
-                setContextMenuPanel({ compId, panel });
-                panelContextMenu.openBelow(e.currentTarget as HTMLElement, { align: "right" });
-            },
-        };
-    };
-
     return (
         <PaperProvider
             theme={appSettings().darkMode}
@@ -807,8 +785,6 @@ const App: Component = () => {
                             title={mobilePageHeading().title}
                             icon={mobilePageHeading().icon}
                             onBack={() => setMobilePageOpen(false)}
-                            onMore={mobilePageMenu()?.open}
-                            moreLabel={mobilePageMenu()?.label}
                         >
                         <PaperFlex
                             direction="column"
