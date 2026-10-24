@@ -15,6 +15,13 @@ import {
     snapToGrid,
     stepPlacement,
     usedRows,
+    canPlaceOnPhone,
+    findPhoneSpot,
+    parsePhoneLayout,
+    phoneLayoutFrom,
+    snapToPhone,
+    usedPages,
+    withoutEmptyPages,
     type HomeItem,
 } from "../src/renderer/src/lib/homeLayout";
 import { createLoadQueue } from "../src/renderer/src/lib/loadQueue";
@@ -199,5 +206,62 @@ describe("load queue", () => {
         expect(thirdGranted).toBe(true);
         expect(queue.active).toBe(1);
         expect(queue.waiting).toBe(0);
+    });
+});
+
+describe("phone Home", () => {
+    const doc = (items: HomeItem[]) => serializeHomeLayout(items);
+
+    it("refuses a stored widget that spans two pages", () => {
+        expect(() => parsePhoneLayout(doc([item({ size: "2x1", x: 3 })]))).toThrow(/spans two pages/);
+        expect(parsePhoneLayout(doc([item({ size: "2x1", x: 6 })]))).toHaveLength(1);
+    });
+
+    it("places only inside one page and above its bottom", () => {
+        const placed = [item({ id: "a", size: "2x2", x: 0, y: 0 })];
+        expect(canPlaceOnPhone(placed, { x: 2, y: 0, w: 2, h: 2 }, 6)).toBe(true);
+        expect(canPlaceOnPhone(placed, { x: 3, y: 0, w: 2, h: 1 }, 6)).toBe(false);
+        expect(canPlaceOnPhone(placed, { x: 1, y: 0, w: 2, h: 1 }, 6)).toBe(false);
+        expect(canPlaceOnPhone(placed, { x: 0, y: 5, w: 2, h: 2 }, 6)).toBe(false);
+    });
+
+    it("fills a full page's widgets onto the next page", () => {
+        const full = [item({ id: "a", size: "4x2", x: 0, y: 0 }), item({ id: "b", size: "4x2", x: 0, y: 2 })];
+        expect(findPhoneSpot(full, { w: 2, h: 1 }, 4)).toEqual({ x: 4, y: 0, w: 2, h: 1 });
+        // from a later page, earlier pages with room are still found
+        expect(findPhoneSpot([], { w: 1, h: 1 }, 4, 7)).toEqual({ x: 28, y: 0, w: 1, h: 1 });
+    });
+
+    it("lays the window's Home out in reading order on pages", () => {
+        const window = [
+            item({ id: "wide", size: "4x1", x: 6, y: 0 }),
+            item({ id: "first", size: "4x2", x: 0, y: 0 }),
+            item({ id: "low", size: "2x2", x: 0, y: 3 }),
+        ];
+        const phone = phoneLayoutFrom(window, 3);
+        expect(phone.map((i) => [i.id, i.x, i.y])).toEqual([
+            ["first", 0, 0],
+            ["wide", 0, 2],
+            ["low", 4, 0],
+        ]);
+        expect(usedPages(phone)).toBe(2);
+    });
+
+    it("closes up empty pages without reordering the rest", () => {
+        const items = [item({ id: "a", x: 9, y: 1, size: "1x1" }), item({ id: "b", x: 17, y: 0, size: "2x1" })];
+        expect(withoutEmptyPages(items).map((i) => i.x)).toEqual([1, 5]);
+        const tidy = [item({ id: "a", x: 1, y: 0, size: "1x1" })];
+        expect(withoutEmptyPages(tidy)).toBe(tidy);
+    });
+
+    it("snaps to the page under the widget's center, clamped inside it", () => {
+        const phone = { cell: 80, pageWidth: 340, gutter: 10, pages: 2, rows: 6 };
+        // a 2x1 whose center is over page 1, pushed past its right edge
+        expect(snapToPhone(340 + 250, 85, { w: 2, h: 1 }, phone)).toEqual({ x: 6, y: 1, w: 2, h: 1 });
+        // over page 0's left gutter
+        expect(snapToPhone(-30, 0, { w: 1, h: 1 }, phone)).toEqual({ x: 0, y: 0, w: 1, h: 1 });
+        // never below the last row
+        expect(snapToPhone(10, 2000, { w: 2, h: 2 }, phone)).toEqual({ x: 0, y: 4, w: 2, h: 2 });
+        expect(snapToPhone(700, 0, { w: 1, h: 1 }, phone)).toBeNull();
     });
 });

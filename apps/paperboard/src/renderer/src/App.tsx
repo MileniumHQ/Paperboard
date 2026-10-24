@@ -126,6 +126,8 @@ const App: Component = () => {
     // --mobile: the phone layout. The rail and panel list fill the screen,
     // and what's opened from them slides in over them as its own page.
     const [mobile, setMobile] = createSignal(false);
+    // Home waits for the layout to be known: a phone keeps its own arrangement
+    const [layoutKnown, setLayoutKnown] = createSignal(false);
     const [mobilePageOpen, setMobilePageOpen] = createSignal(false);
     // the rail's Settings opens as a page over whatever the rail shows
     const [mobileSettingsOpen, setMobileSettingsOpen] = createSignal(false);
@@ -268,9 +270,11 @@ const App: Component = () => {
             options = await shellApi.getLaunchOptions();
         } catch (err) {
             logToMain("error", "Couldn't read the launch options; first-open tutorials are off and the layout is the desktop one until restart:", err);
+            setLayoutKnown(true);
             return;
         }
         setMobile(options.mobile);
+        setLayoutKnown(true);
         if (!options.firstOpenTutorials) return;
         try {
             setSeenTutorials(await loadSeenTutorials());
@@ -937,7 +941,9 @@ const App: Component = () => {
                     </PaperFlex>
                     </Show>
 
+                    <Show when={layoutKnown()}>
                     <HomeView
+                        mobile={mobile()}
                         visible={railMode() === "home"}
                         computers={computers()}
                         panelsByComputer={panelsByComputer()}
@@ -947,6 +953,7 @@ const App: Component = () => {
                         onOpenComputer={(compId) => handleRailSelect(compId)}
                         reloadTokens={reloadTokens()}
                     />
+                    </Show>
                 </PaperFlex>
             </PaperFlex>
 

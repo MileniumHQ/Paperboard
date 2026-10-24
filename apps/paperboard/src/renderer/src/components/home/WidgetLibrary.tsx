@@ -66,7 +66,9 @@ export interface WidgetLibraryProps {
     onAdd: (entry: LibraryEntry) => void;
     onDone: () => void;
     /** the room the gallery takes from Home's right edge, in px */
-    onWidth: (px: number) => void;
+    onWidth?: (px: number) => void;
+    /** shown in a phone's sheet: it fills the sheet, and widgets are held to be placed */
+    sheet?: boolean;
 }
 
 // The widget gallery, floating on the right while Home is being edited:
@@ -113,9 +115,9 @@ const WidgetLibrary: Component<WidgetLibraryProps> = (props) => {
     };
 
     onMount(() => {
-        if (!root) return;
+        if (!root || !props.onWidth) return;
         const el = root;
-        const report = () => props.onWidth(el.offsetWidth + parseFloat(getComputedStyle(el).right));
+        const report = () => props.onWidth?.(el.offsetWidth + parseFloat(getComputedStyle(el).right));
         const resize = new ResizeObserver(report);
         resize.observe(el);
         report();
@@ -123,7 +125,7 @@ const WidgetLibrary: Component<WidgetLibraryProps> = (props) => {
     });
 
     return (
-        <aside ref={root} class={styles.library} aria-label="Widget gallery">
+        <aside ref={root} class={styles.library} classList={{ [styles.librarySheet]: props.sheet }} aria-label="Widget gallery">
             <div class={styles.libraryHeader}>
                 <Show when={choosing() && open()}>
                     <PaperButton ref={backButton} size="small" variant="text" icon onClick={closeSource} aria-label="Back to all widgets">
@@ -133,10 +135,17 @@ const WidgetLibrary: Component<WidgetLibraryProps> = (props) => {
                 <div class={styles.libraryTitle}>
                     <PaperText size={3} weight={700}>{choosing() && open() ? openName() : "Add widgets"}</PaperText>
                     <PaperText size={1} color="text-subtle">
-                        {open() ? "Drag onto Home, or click to add" : "Choose where a widget comes from"}
+                        {open()
+                            ? props.sheet
+                                ? "Hold to place on Home, or tap to add"
+                                : "Drag onto Home, or click to add"
+                            : "Choose where a widget comes from"}
                     </PaperText>
                 </div>
-                <PaperButton size="small" variant="primary" onClick={props.onDone}>Done</PaperButton>
+                {/* a sheet is closed by its own button; Home's toolbar has Done */}
+                <Show when={!props.sheet}>
+                    <PaperButton size="small" variant="primary" onClick={props.onDone}>Done</PaperButton>
+                </Show>
             </div>
             <Show when={props.full}>
                 <div class={styles.libraryNote}>

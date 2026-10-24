@@ -249,6 +249,28 @@
     overflow: hidden;
 }
 
+/* in a phone's sheet, the gallery is the sheet */
+.librarySheet {
+    position: relative;
+    inset: auto;
+    width: 100%;
+    height: 100%;
+    border: none;
+    border-radius: 0;
+}
+
+/* room for the sheet's close button */
+.librarySheet .libraryHeader {
+    padding-right: calc(var(--paper-uigap-double) + var(--paper-control-size-tiny));
+}
+
+/* a list that scrolls under the finger: a widget is picked up by holding it */
+.librarySheet .preview {
+    touch-action: pan-y;
+    -webkit-touch-callout: none;
+    user-select: none;
+}
+
 .libraryHeader {
     display: flex;
     align-items: center;
@@ -394,4 +416,85 @@
     border-radius: var(--paper-thick-border-width);
     background: currentColor;
     opacity: var(--paper-opacity-disabled);
+}
+
+/* ── phones: pages of one column, swiped sideways ─────────────────────── */
+.phone .scroller {
+    /* pages are the screen's width, so nothing pads them sideways; the
+       page dots sit below the last row */
+    padding: var(--paper-size-bar) 0 calc(var(--paper-control-size-tiny) + var(--paper-uigap));
+    scrollbar-width: none;
+    scrollbar-gutter: auto;
+    scroll-snap-type: x mandatory;
+    overscroll-behavior-x: contain;
+}
+
+.page {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    scroll-snap-align: start;
+    scroll-snap-stop: always;
+    pointer-events: none;
+}
+
+.pageDots {
+    position: absolute;
+    top: 0;
+}
+
+.pageIndicator {
+    position: absolute;
+    left: 50%;
+    bottom: var(--paper-uigap-onefourth);
+    transform: translateX(-50%);
+    z-index: calc(var(--paper-z-raised) + 2);
+    display: flex;
+}
+
+/* a dot to see, in a target big enough to tap */
+.pageDot {
+    width: var(--paper-control-size-tiny);
+    height: var(--paper-control-size-tiny);
+    padding: 0;
+    border: none;
+    background: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.pageDot::before {
+    content: "";
+    width: var(--paper-uigap-half);
+    height: var(--paper-uigap-half);
+    border-radius: 50%;
+    background: var(--paper-text);
+    opacity: var(--paper-opacity-disabled);
+    transition: opacity var(--paper-short-transition) var(--paper-ease-standard);
+}
+
+.pageDot[aria-current="page"]::before {
+    opacity: 1;
+}
+
+@media (hover: hover) {
+    .pageDot:focus-visible {
+        outline: var(--paper-focus-ring);
+        outline-offset: calc(var(--paper-focus-offset) * -1);
+        border-radius: 50%;
+    }
+}
+
+.phone .toolbar {
+    display: flex;
+    gap: var(--paper-uigap-half);
+    right: var(--paper-uigap);
+}
+
+/* a steady height, whether it lists sources or one source's widgets */
+.sheetBody {
+    display: flex;
+    height: 75dvh;
 }

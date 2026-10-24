@@ -210,3 +210,103 @@ export function snapToGrid(left: number, top: number, size: WidgetSize, geometry
 export function stepPlacement(p: Placement, dx: number, dy: number): Placement {
     return { ...p, x: p.x + dx, y: p.y + dy };
 }
+
+// ── phones ───────────────────────────────────────────────────────────────
+// A phone shows Home as pages, one column of PHONE_COLUMNS cells each,
+// swiped sideways. It is its own document: a phone can't draw the
+// window's layout, and arranging one must not rearrange the other. A
+// page is a band of PHONE_COLUMNS cells, so item x = page * PHONE_COLUMNS
+// + column, and the same item format and rules hold.
+
+export const HOME_PHONE_LAYOUT_ID = "shell-home-phone-layout";
+/** One column of the widest widget; the window grows by this many cells too. */
+export const PHONE_COLUMNS = WIDGET_MAX_WIDTH;
+export const MAX_PHONE_PAGES = Math.floor(MAX_CELLS_ACROSS / PHONE_COLUMNS);
+
+export const pageOf = (p: Pick<Placement, "x">): number => Math.floor(p.x / PHONE_COLUMNS);
+
+/** True when `p` sits inside one page: a widget never spans two. */
+export function onOnePage(p: Placement): boolean {
+    return (p.x % PHONE_COLUMNS) + p.w <= PHONE_COLUMNS;
+}
+
+/** canPlace, kept inside one page and above the page's bottom. */
+export function canPlaceOnPhone(items: HomeItem[], p: Placement, rows: number, ignoreId?: string): boolean {
+    return onOnePage(p) && p.y + p.h <= rows && canPlace(items, p, ignoreId);
+}
+
+/** Pages the layout fills: through its last page with a widget, at least one. */
+export function usedPages(items: HomeItem[]): number {
+    return items.reduce((max, item) => Math.max(max, pageOf(item) + 1), 1);
+}
+
+/** Reads the phone document: the same checks as the window's, and no widget across two pages. */
+export function parsePhoneLayout(raw: unknown): HomeItem[] {
+    const items = parseHomeLayout(raw);
+    for (const item of items) {
+        if (!onOnePage(placementOf(item))) throw new Error(`Home layout item ${item.id} spans two pages`);
+    }
+    return items;
+}
+
+/**
+ * First free spot on a phone, row by row, from page `fromPage` on and then
+ * the pages before it. null when every page is full.
+ */
+export function findPhoneSpot(items: HomeItem[], size: WidgetSize, rows: number, fromPage = 0): Placement | null {
+    for (let n = 0; n < MAX_PHONE_PAGES; n++) {
+        const page = (fromPage + n) % MAX_PHONE_PAGES;
+        for (let y = 0; y + size.h <= rows; y++) {
+            for (let col = 0; col + size.w <= PHONE_COLUMNS; col++) {
+                const p = { x: page * PHONE_COLUMNS + col, y, ...size };
+                if (canPlaceOnPhone(items, p, rows)) return p;
+            }
+        }
+    }
+    return null;
+}
+
+/**
+ * A phone Home that was never arranged: the window's widgets in reading
+ * order, filled into pages of `rows` rows. A widget that doesn't fit
+ * anywhere is left off.
+ */
+export function phoneLayoutFrom(items: HomeItem[], rows: number): HomeItem[] {
+    const placed: HomeItem[] = [];
+    let page = 0;
+    for (const item of [...items].sort((a, b) => a.y - b.y || a.x - b.x)) {
+        const spot = findPhoneSpot(placed, sizeOf(item), rows, page);
+        if (!spot) continue;
+        page = pageOf(spot);
+        placed.push({ ...item, x: spot.x, y: spot.y });
+    }
+    return placed;
+}
+
+/** Drops empty pages, so the pages left keep their order without gaps. */
+export function withoutEmptyPages(items: HomeItem[]): HomeItem[] {
+    const pages = [...new Set(items.map((item) => pageOf(item)))].sort((a, b) => a - b);
+    if (pages.every((page, index) => page === index)) return items;
+    return items.map((item) => ({ ...item, x: pages.indexOf(pageOf(item)) * PHONE_COLUMNS + (item.x % PHONE_COLUMNS) }));
+}
+
+/**
+ * Snaps a widget whose top-left corner is at (left, top) px to the page
+ * its center is over. Pages are `pageWidth` px apart, their cells start
+ * `gutter` px in. null when its center is off every page.
+ */
+export function snapToPhone(
+    left: number,
+    top: number,
+    size: WidgetSize,
+    phone: { cell: number; pageWidth: number; gutter: number; pages: number; rows: number },
+): Placement | null {
+    const { cell, pageWidth, gutter, pages, rows } = phone;
+    const centerX = left + (size.w * cell) / 2;
+    const centerY = top + (size.h * cell) / 2;
+    if (centerX < 0 || centerX >= pages * pageWidth || centerY < 0) return null;
+    const page = Math.floor(centerX / pageWidth);
+    const col = Math.min(PHONE_COLUMNS - size.w, Math.max(0, Math.round((left - page * pageWidth - gutter) / cell)));
+    const y = Math.min(Math.max(0, rows - size.h), Math.max(0, Math.round(top / cell)));
+    return { x: page * PHONE_COLUMNS + col, y, ...size };
+}

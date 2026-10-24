@@ -1,4 +1,4 @@
-import { PaperButton, PaperEmptyState, PaperPresence, PaperText } from "@mileniumhq/paperui";
+import { PaperButton, PaperEmptyState, PaperModal, PaperPresence, PaperText } from "@mileniumhq/paperui";
 import {
     type Component,
     createEffect,
@@ -10,23 +10,35 @@ import {
     Show,
     untrack,
 } from "solid-js";
-import { config, parseWidgetSize, type PanelItem, type WidgetOptionValues, type WidgetSize } from "@mileniumhq/paperapi";
+import { config, parseWidgetSize, WIDGET_MAX_HEIGHT, type PanelItem, type WidgetOptionValues, type WidgetSize } from "@mileniumhq/paperapi";
 import { logToMain, type ComputerInfo } from "../../lib/shell";
 import {
     canPlace,
+    canPlaceOnPhone,
     computeGeometry,
     findFreeSpot,
+    findPhoneSpot,
     fitCanvas,
+    FLOOR_CELL,
     HOME_LAYOUT_COMPUTER,
     HOME_LAYOUT_ID,
+    HOME_PHONE_LAYOUT_ID,
     MAX_HOME_ITEMS,
+    MAX_PHONE_PAGES,
+    pageOf,
     parseHomeLayout,
+    parsePhoneLayout,
+    PHONE_COLUMNS,
+    phoneLayoutFrom,
     placementOf,
     serializeHomeLayout,
     sizeOf,
     snapToGrid,
+    snapToPhone,
     stepPlacement,
+    usedPages,
     usedRows,
+    withoutEmptyPages,
     type HomeItem,
     type Placement,
 } from "../../lib/homeLayout";
@@ -51,6 +63,15 @@ const SAVE_DEBOUNCE_MS = 250;
 const DRAG_THRESHOLD_PX = 4;
 const AUTOSCROLL_EDGE_PX = 48;
 const AUTOSCROLL_STEP_PX = 16;
+// phones: a widget in the gallery is picked up by holding it this long,
+// still; moving first scrolls the gallery instead
+const HOLD_MS = 400;
+const HOLD_SLOP_PX = 8;
+// a widget carried to a page's side edge turns the page after this long
+const PAGE_EDGE_PX = 28;
+const PAGE_TURN_MS = 550;
+// room between a page's cells and the screen's sides
+const PHONE_GUTTER_PX = 12;
 
 type DragSource =
     | { kind: "new"; entry: LibraryEntry }
@@ -80,9 +101,13 @@ export interface HomeViewProps {
     onOpenComputer: (computerId: string) => void;
     /** bumped when a panel is restarted, by `computerId::panelId` */
     reloadTokens: Record<string, number>;
+    /** the phone layout: pages of one column, its own arrangement. Fixed for Home's life. */
+    mobile?: boolean;
 }
 
 const HomeView: Component<HomeViewProps> = (props) => {
+    const phone = !!props.mobile;
+    const layoutId = phone ? HOME_PHONE_LAYOUT_ID : HOME_LAYOUT_ID;
     const [items, setItems] = createSignal<HomeItem[]>([]);
     const itemsById = createMemo(() => new Map(items().map((item) => [item.id, item])));
     const itemIds = createMemo(
@@ -108,6 +133,12 @@ const HomeView: Component<HomeViewProps> = (props) => {
     };
     const [selectedId, setSelectedId] = createSignal<string | null>(null);
     const [drag, setDrag] = createSignal<DragState | null>(null);
+    // phones: the gallery's sheet, hidden while a widget is carried out of
+    // it; the page on screen; a tick per scroll, for what moves with it
+    const [sheetOpen, setSheetOpen] = createSignal(false);
+    const [sheetConcealed, setSheetConcealed] = createSignal(false);
+    const [page, setPage] = createSignal(0);
+    const [scrolled, setScrolled] = createSignal(0);
     const [viewport, setViewport] = createSignal({ width: 0, height: 0 });
     const [inView, setInView] = createSignal<Record<string, boolean>>({});
     const [suspended, setSuspended] = createSignal(false);
@@ -124,10 +155,19 @@ const HomeView: Component<HomeViewProps> = (props) => {
     const load = async () => {
         setLoadState("loading");
         try {
-            const raw = await config.get(HOME_LAYOUT_ID, undefined, HOME_LAYOUT_COMPUTER);
-            // a Home never arranged starts with this computer at a glance;
-            // nothing is saved until it is changed
-            setItems(raw === null || raw === undefined ? defaultHomeItems(HOME_LAYOUT_COMPUTER) : parseHomeLayout(raw));
+            const raw = await config.get(layoutId, undefined, HOME_LAYOUT_COMPUTER);
+            setUnarranged(null);
+            if (raw !== null && raw !== undefined) setItems(phone ? parsePhoneLayout(raw) : parseHomeLayout(raw));
+            else if (!phone) {
+                // a Home never arranged starts with this computer at a glance;
+                // nothing is saved until it is changed
+                setItems(defaultHomeItems(HOME_LAYOUT_COMPUTER));
+            } else {
+                // a phone never arranged shows the window's Home, laid out on
+                // pages as tall as the screen, until it is changed
+                const window = await config.get(HOME_LAYOUT_ID, undefined, HOME_LAYOUT_COMPUTER);
+                setUnarranged(window === null || window === undefined ? defaultHomeItems(HOME_LAYOUT_COMPUTER) : parseHomeLayout(window));
+            }
             setLoadState("ready");
         } catch (err) {
             logToMain("error", "Failed to load the Home layout:", err);
@@ -144,7 +184,7 @@ const HomeView: Component<HomeViewProps> = (props) => {
         saving = true;
         dirty = false;
         try {
-            await config.set(serializeHomeLayout(items()), HOME_LAYOUT_ID, undefined, HOME_LAYOUT_COMPUTER);
+            await config.set(serializeHomeLayout(items()), layoutId, undefined, HOME_LAYOUT_COMPUTER);
             setSaveError(null);
         } catch (err) {
             logToMain("error", "Failed to save the Home layout:", err);
@@ -157,6 +197,7 @@ const HomeView: Component<HomeViewProps> = (props) => {
         if (dirty && !saveError()) saveTimer = setTimeout(() => void flush(), SAVE_DEBOUNCE_MS);
     };
     const commit = (next: HomeItem[]) => {
+        setUnarranged(null);
         setItems(next);
         dirty = true;
         clearTimeout(saveTimer);
@@ -165,7 +206,8 @@ const HomeView: Component<HomeViewProps> = (props) => {
     const startOver = async () => {
         // explicit, user-chosen replacement of a layout that can't be read
         try {
-            await config.set(serializeHomeLayout([]), HOME_LAYOUT_ID, undefined, HOME_LAYOUT_COMPUTER);
+            await config.set(serializeHomeLayout([]), layoutId, undefined, HOME_LAYOUT_COMPUTER);
+            setUnarranged(null);
             setItems([]);
             setLoadState("ready");
         } catch (err) {
@@ -177,25 +219,54 @@ const HomeView: Component<HomeViewProps> = (props) => {
     // ── geometry ─────────────────────────────────────────────────────────
     // the layout never changes to fit: when it is wider than the window, or
     // the gallery takes room from it, it is drawn smaller
-    const geometry = createMemo(() => computeGeometry(viewport().width, items()));
-    const gridWidth = () => geometry().across * geometry().cell;
+    // A phone draws pages side by side, each the screen's width with
+    // PHONE_COLUMNS cells inside it, as many rows as fit the screen. While a
+    // widget is carried there is one more, empty page to carry it to.
+    const phoneCell = createMemo(() => Math.max(FLOOR_CELL, (viewport().width - PHONE_GUTTER_PX * 2) / PHONE_COLUMNS));
+    const phoneRows = createMemo(() => Math.max(WIDGET_MAX_HEIGHT, Math.floor(viewport().height / phoneCell())));
+    const pages = createMemo(() => Math.min(MAX_PHONE_PAGES, usedPages(items()) + (drag()?.started ? 1 : 0)));
+    const pageWidth = () => viewport().width;
+    const phoneGeometry = () => ({ cell: phoneCell(), pageWidth: pageWidth(), gutter: PHONE_GUTTER_PX, pages: pages(), rows: phoneRows() });
+    // a phone Home never arranged follows the window's layout and the screen
+    const [unarranged, setUnarranged] = createSignal<HomeItem[] | null>(null);
+    createEffect(() => {
+        const from = unarranged();
+        if (from) setItems(phoneLayoutFrom(from, phoneRows()));
+    });
+
+    const geometry = createMemo(() =>
+        phone ? { cell: phoneCell(), across: pages() * PHONE_COLUMNS } : computeGeometry(viewport().width, items()),
+    );
+    const gridWidth = () => (phone ? pages() * pageWidth() : geometry().across * geometry().cell);
     // a gallery left open on a hidden Home is released with Home's widgets
     const galleryOpen = () => editing() && loadState() === "ready" && !suspended();
-    const fitted = createMemo(() => fitCanvas(gridWidth(), viewport().width - (galleryOpen() ? galleryWidth() : 0)));
+    const fitted = createMemo(() =>
+        phone
+            ? { scale: 1, left: 0, width: gridWidth() }
+            : fitCanvas(gridWidth(), viewport().width - (galleryOpen() ? galleryWidth() : 0)),
+    );
     const scale = () => fitted().scale;
     const gridLeft = () => fitted().left;
     // a spare row to drop into while editing; never fewer than reach the
     // bottom of the window, so the dots do too
     const rows = createMemo(() =>
-        Math.max(usedRows(items(), editing() ? 1 : 0), Math.floor(viewport().height / (geometry().cell * scale()))),
+        phone
+            ? Math.max(phoneRows(), usedRows(items(), 0))
+            : Math.max(usedRows(items(), editing() ? 1 : 0), Math.floor(viewport().height / (geometry().cell * scale()))),
     );
     const gridHeight = () => rows() * geometry().cell;
     const inset = () => Math.round(geometry().cell * 0.06);
+    const fits = (p: Placement, ignoreId?: string) =>
+        phone ? canPlaceOnPhone(items(), p, phoneRows(), ignoreId) : canPlace(items(), p, ignoreId);
 
     const rectOf = (p: Placement) => {
         const g = geometry();
+        // on a phone, x counts across pages: which page, then which column in it
+        const left = phone
+            ? pageOf(p) * pageWidth() + PHONE_GUTTER_PX + (p.x % PHONE_COLUMNS) * g.cell
+            : p.x * g.cell;
         return {
-            left: p.x * g.cell + inset(),
+            left: left + inset(),
             top: p.y * g.cell + inset(),
             width: p.w * g.cell - inset() * 2,
             height: p.h * g.cell - inset() * 2,
@@ -361,7 +432,8 @@ const HomeView: Component<HomeViewProps> = (props) => {
                     return next;
                 });
             },
-            { root: scroller, rootMargin: "50% 0px" },
+            // a phone's neighbouring pages count as near, so a swipe finds them ready
+            { root: scroller, rootMargin: phone ? "0px 100%" : "50% 0px" },
         );
         for (const el of tileElements.values()) observer.observe(el);
         onCleanup(() => {
@@ -393,13 +465,14 @@ const HomeView: Component<HomeViewProps> = (props) => {
         for (const timer of offscreenTimers.values()) clearTimeout(timer);
         offscreenTimers.clear();
         tileElements.clear();
+        cancelHold();
         endDrag();
         void flush();
     });
 
     // ── editing ──────────────────────────────────────────────────────────
     const addAt = (entry: LibraryEntry, p: Placement) => {
-        if (items().length >= MAX_HOME_ITEMS || !canPlace(items(), p)) return;
+        if (items().length >= MAX_HOME_ITEMS || !fits(p)) return;
         const id = crypto.randomUUID();
         const base = {
             id,
@@ -416,11 +489,14 @@ const HomeView: Component<HomeViewProps> = (props) => {
     const addToFirstFreeSpot = (entry: LibraryEntry) => {
         const size = parseWidgetSize(entry.size);
         if (!size) return;
-        const spot = findFreeSpot(items(), size, geometry().across);
-        if (spot) addAt(entry, spot);
+        // a phone fills the page on screen first
+        const spot = phone ? findPhoneSpot(items(), size, phoneRows(), page()) : findFreeSpot(items(), size, geometry().across);
+        if (!spot) return;
+        addAt(entry, spot);
+        if (phone) queueMicrotask(() => showPage(pageOf(spot)));
     };
     const moveTo = (id: string, p: Placement) => {
-        if (!canPlace(items(), p, id)) return false;
+        if (!fits(p, id)) return false;
         commit(items().map((item) => (item.id === id ? { ...item, x: p.x, y: p.y } : item)));
         return true;
     };
@@ -431,17 +507,19 @@ const HomeView: Component<HomeViewProps> = (props) => {
     // ── dragging ─────────────────────────────────────────────────────────
     const target = createMemo(() => {
         const d = drag();
+        // the grid moves under a still pointer when a phone's page turns
+        scrolled();
         if (!d?.started || !grid) return null;
         const g = geometry();
         const rect = grid.getBoundingClientRect();
         // the grid may be drawn smaller than it is laid out
         const left = (d.pointer.x - rect.left) / scale() - d.grab.x * g.cell;
         const top = (d.pointer.y - rect.top) / scale() - d.grab.y * g.cell;
-        const p = snapToGrid(left, top, d.size, g);
+        const p = phone ? snapToPhone(left, top, d.size, phoneGeometry()) : snapToGrid(left, top, d.size, g);
         if (!p) return null;
         const ignore = d.source.kind === "move" ? d.source.itemId : undefined;
         const full = d.source.kind === "new" && items().length >= MAX_HOME_ITEMS;
-        return { placement: p, valid: !full && canPlace(items(), p, ignore) };
+        return { placement: p, valid: !full && fits(p, ignore) };
     });
 
     const onPointerMove = (event: PointerEvent) => {
@@ -454,7 +532,23 @@ const HomeView: Component<HomeViewProps> = (props) => {
             const bounds = scroller.getBoundingClientRect();
             if (pointer.y > bounds.bottom - AUTOSCROLL_EDGE_PX) scroller.scrollTop += AUTOSCROLL_STEP_PX;
             else if (pointer.y < bounds.top + AUTOSCROLL_EDGE_PX) scroller.scrollTop -= AUTOSCROLL_STEP_PX;
+            if (phone) {
+                const edge = pointer.x < bounds.left + PAGE_EDGE_PX ? -1 : pointer.x > bounds.right - PAGE_EDGE_PX ? 1 : 0;
+                if (edge !== turning) {
+                    turning = edge;
+                    clearTimeout(turnTimer);
+                    if (edge !== 0) turnTimer = setTimeout(turnPage, PAGE_TURN_MS);
+                }
+            }
         }
+    };
+    // a widget held at a page's side turns the page, and keeps turning while it is held there
+    let turning = 0;
+    let turnTimer: ReturnType<typeof setTimeout> | undefined;
+    const turnPage = () => {
+        const next = Math.min(pages() - 1, Math.max(0, page() + turning));
+        if (next !== page()) showPage(next);
+        turnTimer = setTimeout(turnPage, PAGE_TURN_MS);
     };
     const onPointerUp = () => {
         const d = drag();
@@ -474,6 +568,8 @@ const HomeView: Component<HomeViewProps> = (props) => {
     const onDragKey = (event: KeyboardEvent) => {
         if (event.key === "Escape") endDrag();
     };
+    // a held finger asks for the page's context menu; Home is carrying something
+    const noContextMenu = (event: Event) => event.preventDefault();
     let dragTarget: Element | null = null;
     let dragPointer = -1;
     function endDrag() {
@@ -482,25 +578,123 @@ const HomeView: Component<HomeViewProps> = (props) => {
         window.removeEventListener("pointercancel", endDrag);
         window.removeEventListener("keydown", onDragKey);
         window.removeEventListener("blur", endDrag);
+        window.removeEventListener("contextmenu", noContextMenu);
         if (dragTarget?.hasPointerCapture?.(dragPointer)) dragTarget.releasePointerCapture(dragPointer);
         dragTarget = null;
+        clearTimeout(turnTimer);
+        turning = 0;
         setDrag(null);
+        // a widget carried out of the sheet is placed, or not, on Home; the sheet stays closed
+        if (sheetConcealed()) {
+            setSheetConcealed(false);
+            closeSheet();
+        }
     }
-    const beginDrag = (event: PointerEvent, source: DragSource, name: string, size: WidgetSize, grab: { x: number; y: number }) => {
-        if (event.button !== 0) return;
-        event.preventDefault();
+    const startDrag = (
+        target: Element,
+        pointerId: number,
+        start: { x: number; y: number },
+        pointer: { x: number; y: number },
+        started: boolean,
+        source: DragSource,
+        name: string,
+        size: WidgetSize,
+        grab: { x: number; y: number },
+    ) => {
         endDrag();
-        dragTarget = event.currentTarget as Element;
-        dragPointer = event.pointerId;
+        dragTarget = target;
+        dragPointer = pointerId;
         // capture keeps the drag ours while the pointer crosses widget frames
-        dragTarget.setPointerCapture?.(event.pointerId);
-        const start = { x: event.clientX, y: event.clientY };
-        setDrag({ source, name, size, grab, start, pointer: start, started: false });
+        dragTarget.setPointerCapture?.(pointerId);
+        setDrag({ source, name, size, grab, start, pointer, started });
         window.addEventListener("pointermove", onPointerMove);
         window.addEventListener("pointerup", onPointerUp);
         window.addEventListener("pointercancel", endDrag);
         window.addEventListener("keydown", onDragKey);
         window.addEventListener("blur", endDrag);
+        window.addEventListener("contextmenu", noContextMenu);
+    };
+    const beginDrag = (event: PointerEvent, source: DragSource, name: string, size: WidgetSize, grab: { x: number; y: number }) => {
+        if (event.button !== 0) return;
+        event.preventDefault();
+        const start = { x: event.clientX, y: event.clientY };
+        startDrag(event.currentTarget as Element, event.pointerId, start, start, false, source, name, size, grab);
+    };
+
+    // ── phones: the sheet, holding, pages ─────────────────────────────────
+    // Edit Home raises the gallery as a sheet. Holding a widget in it hides
+    // the sheet (mounted, so the finger's touch keeps its element) and the
+    // widget follows the finger until it is let go on Home.
+    let addButton: HTMLButtonElement | undefined;
+    const closeSheet = () => {
+        if (!sheetOpen()) return;
+        setSheetOpen(false);
+        queueMicrotask(() => addButton?.focus());
+    };
+    // what stops the hold in progress, if one is
+    let holding: (() => void) | undefined;
+    const cancelHold = () => holding?.();
+    const holdLibraryEntry = (entry: LibraryEntry, event: PointerEvent) => {
+        const size = parseWidgetSize(entry.size);
+        if (event.button !== 0 || !size) return;
+        // no mouse events follow the touch, so nothing in the closing sheet
+        // takes focus from where closing it puts focus; touch-action, not
+        // this, decides whether the gallery scrolls
+        event.preventDefault();
+        cancelHold();
+        const target = event.currentTarget as Element;
+        const pointerId = event.pointerId;
+        const start = { x: event.clientX, y: event.clientY };
+        let pointer = start;
+        const move = (e: PointerEvent) => {
+            if (e.pointerId !== pointerId) return;
+            pointer = { x: e.clientX, y: e.clientY };
+            // moving first is scrolling the gallery
+            if (Math.hypot(pointer.x - start.x, pointer.y - start.y) > HOLD_SLOP_PX) cancelHold();
+        };
+        const up = (e: PointerEvent) => {
+            if (e.pointerId !== pointerId) return;
+            cancelHold();
+            // a tap adds it where it fits and shows where
+            addToFirstFreeSpot(entry);
+            closeSheet();
+        };
+        const timer = setTimeout(() => {
+            cancelHold();
+            setSheetConcealed(true);
+            // the ghost hangs from the finger near its top, like picking up a card
+            startDrag(target, pointerId, start, pointer, true, { kind: "new", entry }, entry.widget.name, size, { x: size.w / 2, y: 0.3 });
+        }, HOLD_MS);
+        holding = () => {
+            clearTimeout(timer);
+            window.removeEventListener("pointermove", move);
+            window.removeEventListener("pointerup", up);
+            window.removeEventListener("pointercancel", cancelHold);
+            window.removeEventListener("contextmenu", noContextMenu);
+            holding = undefined;
+        };
+        window.addEventListener("pointermove", move);
+        window.addEventListener("pointerup", up);
+        window.addEventListener("pointercancel", cancelHold);
+        window.addEventListener("contextmenu", noContextMenu);
+    };
+    // a carried widget must not scroll the gallery it came from: only a
+    // non-passive listener on the touched element can stop that
+    const holdSheetScroll = (el: HTMLElement) => {
+        el.addEventListener("touchmove", (e) => { if (drag()) e.preventDefault(); }, { passive: false });
+    };
+
+    const onScroll = () => {
+        setScrolled((n) => n + 1);
+        if (phone && scroller && pageWidth() > 0) setPage(Math.min(pages() - 1, Math.round(scroller.scrollLeft / pageWidth())));
+    };
+    const showPage = (index: number) => {
+        const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        scroller?.scrollTo({ left: index * pageWidth(), behavior: reduce ? "auto" : "smooth" });
+    };
+    const startEditing = () => {
+        setEditing(true);
+        if (phone) setSheetOpen(true);
     };
     const startLibraryDrag = (entry: LibraryEntry, event: PointerEvent) => {
         const size = parseWidgetSize(entry.size);
@@ -542,7 +736,14 @@ const HomeView: Component<HomeViewProps> = (props) => {
 
     let editButton: HTMLButtonElement | undefined;
     const finishEditing = () => {
+        cancelHold();
         endDrag();
+        setSheetOpen(false);
+        // a page emptied while arranging closes up
+        if (phone) {
+            const tidy = withoutEmptyPages(items());
+            if (tidy !== items()) commit(tidy);
+        }
         setEditing(false);
         setSelectedId(null);
         // the Done button is gone; focus lands on the button that comes back
@@ -637,25 +838,43 @@ const HomeView: Component<HomeViewProps> = (props) => {
     };
 
     return (
-        <div class={styles.home} style={{ display: props.visible ? "flex" : "none" }}>
+        <div class={styles.home} classList={{ [styles.phone]: phone }} style={{ display: props.visible ? "flex" : "none" }}>
             <div class={styles.canvasArea}>
                 <div
                     ref={scroller}
                     class={styles.scroller}
                     classList={{ [styles.editing]: editing(), [styles.dragging]: !!drag()?.started }}
+                    // arranging Home: a sideways swipe turns pages, it doesn't leave Home
+                    data-paper-no-swipe-back={editing() ? "" : undefined}
+                    onScroll={onScroll}
                 >
-                    <div class={styles.stage} style={{ height: `${gridHeight() * scale()}px`, width: `${fitted().width + (galleryOpen() ? galleryWidth() : 0)}px` }}>
+                    <div class={styles.stage} style={{ height: `${gridHeight() * scale()}px`, width: `${fitted().width + (galleryOpen() && !phone ? galleryWidth() : 0)}px` }}>
                     <div
                         ref={grid}
-                        class={`${styles.grid} ${styles.dots}`}
-                        classList={{ [styles.easing]: easing() }}
+                        class={styles.grid}
+                        classList={{ [styles.easing]: easing(), [styles.dots]: !phone }}
                         style={{
                             width: `${gridWidth()}px`,
                             height: `${gridHeight()}px`,
-                            transform: `translateX(${gridLeft()}px) scale(${scale()})`,
+                            transform: phone ? "none" : `translateX(${gridLeft()}px) scale(${scale()})`,
                             "--home-cell": `${geometry().cell}px`,
                         }}
                     >
+                        {/* a phone's pages: where the swipe stops, and their dots while arranging */}
+                        <Show when={phone}>
+                            <For each={Array.from({ length: pages() }, (_, i) => i)}>
+                                {(index) => (
+                                    <div class={styles.page} style={{ left: `${index * pageWidth()}px`, width: `${pageWidth()}px` }}>
+                                        <Show when={editing()}>
+                                            <div
+                                                class={`${styles.pageDots} ${styles.dots}`}
+                                                style={{ left: `${PHONE_GUTTER_PX}px`, width: `${PHONE_COLUMNS * geometry().cell}px`, height: `${phoneRows() * geometry().cell}px` }}
+                                            />
+                                        </Show>
+                                    </div>
+                                )}
+                            </For>
+                        </Show>
                         <Show when={loadState() === "ready"}>
                             <For each={itemIds()}>
                                 {(id) => {
@@ -716,7 +935,7 @@ const HomeView: Component<HomeViewProps> = (props) => {
                             title="Welcome home"
                             description="Widgets from your panels, on every computer, in one place."
                         >
-                            <PaperButton variant="primary" onClick={() => setEditing(true)}>Add widgets</PaperButton>
+                            <PaperButton variant="primary" onClick={startEditing}>Add widgets</PaperButton>
                         </PaperEmptyState>
                     </div>
                 </Show>
@@ -738,7 +957,29 @@ const HomeView: Component<HomeViewProps> = (props) => {
 
                 <Show when={loadState() === "ready" && !editing() && items().length > 0}>
                     <div class={styles.toolbar}>
-                        <PaperButton ref={editButton} size="small" onClick={() => setEditing(true)}>Edit Home</PaperButton>
+                        <PaperButton ref={editButton} size="small" onClick={startEditing}>Edit Home</PaperButton>
+                    </div>
+                </Show>
+                {/* a phone's gallery is a sheet, so arranging needs its own way back to it and out */}
+                <Show when={phone && galleryOpen()}>
+                    <div class={styles.toolbar}>
+                        <PaperButton ref={addButton} size="small" onClick={() => setSheetOpen(true)}>Add widgets</PaperButton>
+                        <PaperButton size="small" variant="primary" onClick={finishEditing}>Done</PaperButton>
+                    </div>
+                </Show>
+                <Show when={phone && pages() > 1}>
+                    <div class={styles.pageIndicator} role="group" aria-label="Pages">
+                        <For each={Array.from({ length: pages() }, (_, i) => i)}>
+                            {(index) => (
+                                <button
+                                    type="button"
+                                    class={styles.pageDot}
+                                    aria-label={`Page ${index + 1} of ${pages()}`}
+                                    aria-current={page() === index ? "page" : undefined}
+                                    onClick={() => showPage(index)}
+                                />
+                            )}
+                        </For>
                     </div>
                 </Show>
                 <Show when={saveError()}>
@@ -749,7 +990,42 @@ const HomeView: Component<HomeViewProps> = (props) => {
                 </Show>
             </div>
 
-            <PaperPresence when={galleryOpen()} motion="slide-end">
+            <Show when={phone}>
+                <PaperModal
+                    open={sheetOpen() && galleryOpen()}
+                    concealed={sheetConcealed()}
+                    onClose={closeSheet}
+                    placement="bottom"
+                    size="full"
+                    noHeader
+                    noPadding
+                    aria-label="Add widgets"
+                >
+                    <div ref={holdSheetScroll} class={styles.sheetBody}>
+                        <WidgetLibrary
+                            sheet
+                            computers={props.computers}
+                            panelsByComputer={props.panelsByComputer}
+                            panelsLoadFailed={props.panelsLoadFailed}
+                            full={items().length >= MAX_HOME_ITEMS}
+                            visible={props.visible}
+                            cell={geometry().cell}
+                            inset={inset()}
+                            queue={queue}
+                            panelName={panelName}
+                            frameFacts={frameFacts}
+                            onRetry={props.onRefreshPanels}
+                            onStartDrag={holdLibraryEntry}
+                            onAdd={(entry) => {
+                                addToFirstFreeSpot(entry);
+                                closeSheet();
+                            }}
+                            onDone={closeSheet}
+                        />
+                    </div>
+                </PaperModal>
+            </Show>
+            <PaperPresence when={galleryOpen() && !phone} motion="slide-end">
                 <WidgetLibrary
                     onWidth={setGalleryWidth}
                     computers={props.computers}
