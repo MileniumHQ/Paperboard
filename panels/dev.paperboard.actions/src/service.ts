@@ -424,6 +424,8 @@ async function applyDefinitions(ctx: Ctx, nextFlows: CanvasBlock[], nextFunction
 const canvasDoc = createCanvasDocument({
     read: () => config.get<any>(ACTIONS_PANEL_ID, "canvas.json"),
     write: (doc) => config.set(doc, ACTIONS_PANEL_ID, "canvas.json"),
+    // TODO(remove after v0.4): with the update in removedSteps.ts
+    backup: (saved) => config.set(saved, ACTIONS_PANEL_ID, "canvas.before-0.3.json"),
     validate: (canvas) => ({
         flows: validateFlowDefinitions(Array.isArray(canvas?.flows) ? canvas.flows : []),
         notes: Array.isArray(canvas?.notes) ? canvas.notes : [],

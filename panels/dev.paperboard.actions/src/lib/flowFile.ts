@@ -13,6 +13,7 @@ import {
     functionIdFromTriggerAction,
     type FunctionDef,
 } from "./functions";
+import { withoutRemovedSteps } from "./removedSteps";
 import { isCanvasBlock, walkBlocks, type CanvasBlock } from "./tree";
 
 export const FLOW_FILE_FORMAT = "paperboard.actions.flows";
@@ -87,6 +88,8 @@ export function addFlowFile(
     newId: (kind: "block" | "note" | "fn") => string,
     minX = 0,
 ): CanvasDocument {
+    // TODO(remove after v0.4): a file written before 0.3 may hold steps 0.3 removed
+    file = { ...file, flows: withoutRemovedSteps(file.flows).flows };
     const blockIds = new Map<string, string>();
     walkBlocks(file.flows, (b) => {
         if (!blockIds.has(b.id)) blockIds.set(b.id, newId("block"));

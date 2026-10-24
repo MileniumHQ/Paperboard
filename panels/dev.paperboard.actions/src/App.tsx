@@ -355,7 +355,7 @@ export default function App() {
             };
             // names assigned by Set/Increment Variable blocks are picker
             // items too: a stored name resolves against the live variable
-            // store at run time, so no Get Variable hop is needed. Only
+            // store at run time. Only
             // literal names qualify — a key that is itself a reference
             // cannot be listed. Clears drop the name again so a deleted
             // variable is not offered.

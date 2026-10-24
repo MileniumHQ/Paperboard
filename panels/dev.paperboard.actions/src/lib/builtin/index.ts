@@ -26,9 +26,9 @@ export const BUILTIN_DEFS: BuiltinDef[] = [
     ...utilityBuiltins,
 ];
 
-// A deprecated builtin (Get Variable) stays registered and runnable for
-// existing flows, which show its deprecation note, but the library no
-// longer offers it: the same rule as a panel's deprecated actions.
+// A deprecated builtin stays registered and runnable for existing flows,
+// which show its deprecation note, but the library no longer offers it:
+// the same rule as a panel's deprecated actions.
 export const BUILTIN_CATEGORIES: BuiltinCategory[] = BUILTIN_CATEGORY_META.map((meta) => ({
     ...meta,
     items: BUILTIN_DEFS.filter((d) => d.category === meta.id && isLibraryVisible(d.item)).map((d) => d.item),

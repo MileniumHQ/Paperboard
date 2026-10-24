@@ -12,7 +12,6 @@ const schemaFor = (id: string): any => {
         }
     }
     // runtime registry, not the library: hidden-but-runnable builtins
-    // (get-variable) still execute for existing flows
     for (const def of BUILTIN_DEFS as any[]) {
         if (def.id === id) return def.item.schema;
     }

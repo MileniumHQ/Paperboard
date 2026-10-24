@@ -99,3 +99,20 @@ test("an import that would sit under the open Library moves right of it, keeping
     // already clear of it: left where the file put it
     expect(addFlowFile(canvas(), canvas(), counter(), 0).flows[2].pos.x).toBe(10);
 });
+
+describe("a flow file written before 0.3", () => {
+    test("imports without the steps 0.3 removed", () => {
+        const file: CanvasDocument = {
+            flows: [block({ id: "t1", isTrigger: true, children: [
+                block({ id: "g1", action: { id: "get-variable", name: "Get Variable" } as any, values: { key: "score" } }),
+                block({ id: "s1", values: { text: "{{g1:Value:data_object}}" } }),
+            ] })],
+            notes: [],
+            functions: [],
+        };
+        const after = addFlowFile({ flows: [], notes: [], functions: [] }, file, counter());
+        const steps = after.flows[0].children!;
+        expect(steps).toHaveLength(1);
+        expect(steps[0].values.text).toBe("{{score:score:data_object}}");
+    });
+});

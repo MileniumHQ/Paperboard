@@ -770,11 +770,6 @@ const builtinHandlers: Record<string, BuiltinHandler> = {
         schedulePersistVariables();
         return null;
     },
-    // TODO(remove after v0.3): with the deprecated Get Variable builtin
-    "get-variable": (inputs) => {
-        const key = String(inputs.key || "");
-        return flowVariablesStore.get(key) ?? "";
-    },
     "math-calculate": (inputs) => evaluateMath(String(inputs.expression || "0")),
     "math-random": (inputs) => {
         const min = Math.ceil(Number(inputs.min ?? 1));

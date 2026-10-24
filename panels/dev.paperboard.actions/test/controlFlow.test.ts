@@ -11,7 +11,6 @@ const schemaFor = (id: string): any => {
         }
     }
     // runtime registry, not the library: hidden-but-runnable builtins
-    // (get-variable) still execute for existing flows
     for (const def of BUILTIN_DEFS as any[]) {
         if (def.id === id) return def.item.schema;
     }
@@ -52,7 +51,7 @@ describe("repeat with break and continue", () => {
     it("runs the body the requested number of times", async () => {
         const log = await run([
             blk("repeat", { count: 3 }, [blk("increment-variable", { key: "loop-n" })]),
-            blk("get-variable", { key: "loop-n" }),
+            blk("math-calculate", { expression: "{{loop-n:loop-n:data_object}}" }),
         ]);
         expect(log.status).toBe("success");
         expect(finalResult(log)).toBe(3);
@@ -64,7 +63,7 @@ describe("repeat with break and continue", () => {
                 blk("increment-variable", { key: "loop-break" }),
                 blk("break"),
             ]),
-            blk("get-variable", { key: "loop-break" }),
+            blk("math-calculate", { expression: "{{loop-break:loop-break:data_object}}" }),
         ]);
         expect(log.status).toBe("success");
         expect(finalResult(log)).toBe(1);
@@ -77,7 +76,7 @@ describe("repeat with break and continue", () => {
                 blk("continue"),
                 blk("increment-variable", { key: "loop-continue" }),
             ]),
-            blk("get-variable", { key: "loop-continue" }),
+            blk("math-calculate", { expression: "{{loop-continue:loop-continue:data_object}}" }),
         ]);
         expect(log.status).toBe("success");
         expect(finalResult(log)).toBe(2);
@@ -119,7 +118,7 @@ describe("try-catch", () => {
                 [blk("set-variable", { key: "tc_ok", value: "yes" })],
                 [blk("set-variable", { key: "tc_caught", value: "no" })],
             ),
-            blk("get-variable", { key: "tc_ok" }),
+            blk("text", { value: "{{tc_ok:tc_ok:data_object}}" }),
         ]);
         expect(log.status).toBe("success");
         expect(finalResult(log)).toBe("yes");
@@ -131,7 +130,7 @@ describe("try-catch", () => {
                 [blk("math-calculate", { expression: "2 +" })],
                 [blk("set-variable", { key: "tc_err", value: "caught" })],
             ),
-            blk("get-variable", { key: "tc_err" }),
+            blk("text", { value: "{{tc_err:tc_err:data_object}}" }),
         ]);
         expect(log.status).toBe("success");
         expect(finalResult(log)).toBe("caught");

@@ -13,7 +13,6 @@ const schemaFor = (id: string): any => {
         }
     }
     // runtime registry, not the library: hidden-but-runnable builtins
-    // (get-variable) still execute for existing flows
     for (const def of BUILTIN_DEFS as any[]) {
         if (def.id === id) return def.item.schema;
     }
@@ -85,7 +84,7 @@ describe("flow execution", () => {
                     replacement: "mc.example.com",
                 }),
                 blk("set-variable", { key: "last_reply", value: "{{output:Replaced Text:find_replace}}" }),
-                blk("get-variable", { key: "last_reply" }),
+                blk("text", { value: "{{last_reply:last_reply:data_object}}" }),
             ],
             { content: "hey !ip please", author: "Steve", channelId: "123" },
         );
@@ -94,7 +93,8 @@ describe("flow execution", () => {
         const steps = Object.fromEntries(log.steps.map((s: any) => [s.actionName, s.result]));
         expect(steps["Text Contains"]).toBe(true);
         expect(steps["Replace Text"]).toBe("Server IP: mc.example.com\nPort: 25565");
-        expect(steps["Get Variable"]).toBe("Server IP: mc.example.com\nPort: 25565");
+        // the variable is read by name where it's used
+        expect(log.steps.at(-1).result).toBe("Server IP: mc.example.com\nPort: 25565");
     });
 
     it("counter, clamp and coalesce semantics hold", async () => {
@@ -172,13 +172,13 @@ describe("named variables resolve without a Get block", () => {
     });
 });
 
-describe("get-variable library hiding", () => {
-    it("is absent from the library but present in the runtime registry", () => {
+describe("Get Variable", () => {
+    it("is gone: neither offered nor runnable (0.3 reads a variable by name instead)", () => {
         const inLibrary = (BUILTIN_CATEGORIES as any[]).some((cat) =>
             (cat.items || []).some((item: any) => item.action === "get-variable"),
         );
         expect(inLibrary).toBe(false);
-        const def = (BUILTIN_DEFS as any[]).find((d) => d.id === "get-variable");
-        expect(def?.item?.schema?.id).toBe("get-variable");
+        expect((BUILTIN_DEFS as any[]).some((d) => d.id === "get-variable")).toBe(false);
     });
 });
+

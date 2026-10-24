@@ -4,6 +4,7 @@
 import { describe, expect, it } from "bun:test";
 import { createCanvasDocument, emptyCanvas, isCanvasConflict, type CanvasDocument } from "../src/lib/canvasDoc";
 import { createCanvasFollower } from "../src/lib/canvasSync";
+import { CANVAS_VERSION } from "../src/lib/removedSteps";
 
 const note = (text: string) => ({ ...emptyCanvas(), notes: [{ id: "n", pos: { x: 0, y: 0 }, text }] });
 
@@ -11,6 +12,7 @@ function owner(stored: unknown = null) {
     let disk: any = stored;
     const changes: { revision: number; clientId: string }[] = [];
     const applied: CanvasDocument[] = [];
+    const backups: unknown[] = [];
     let failApply = false;
     let failRead = false;
     let clock = 0;
@@ -21,6 +23,9 @@ function owner(stored: unknown = null) {
         },
         write: async (d) => {
             disk = structuredClone(d);
+        },
+        backup: async (saved) => {
+            backups.push(structuredClone(saved));
         },
         validate: (c) => c,
         apply: async (c) => {
@@ -34,6 +39,7 @@ function owner(stored: unknown = null) {
         doc,
         changes,
         applied,
+        backups,
         disk: () => disk,
         failApply: (v: boolean) => (failApply = v),
         failRead: (v: boolean) => (failRead = v),
@@ -224,5 +230,48 @@ describe("a window following other windows", () => {
         w.setRevision(0);
         await w.follower.reload();
         expect(w.shown).toEqual([7]);
+    });
+});
+
+describe("a canvas saved before 0.3", () => {
+    const step = (id: string, panelId: string, action: string, values: Record<string, any>) =>
+        ({ id, panelId, pos: { x: 0, y: 0 }, isTrigger: false, action: { id: action, name: action }, values });
+    const before03 = () => ({
+        revision: 5,
+        flows: [{ ...step("t", "builtin.logic", "trigger", {}), isTrigger: true, children: [
+            step("g1", "builtin.logic", "get-variable", { key: "score" }),
+            step("s1", "builtin.text", "text", { value: "{{g1:Value:data_object}}" }),
+        ] }],
+        notes: [],
+        functions: [],
+    });
+
+    it("is backed up, then updated once and stamped with the version", async () => {
+        const o = owner(before03());
+        o.setClock(3);
+        const { revision, canvas } = await o.doc.load();
+        expect(o.backups).toEqual([before03()]);
+        expect(revision).toBe(6);
+        expect(canvas.flows[0].children!.map((b: any) => b.id)).toEqual(["s1"]);
+        expect(o.disk()).toMatchObject({ version: CANVAS_VERSION, revision: 6 });
+        expect(o.disk().flows[0].children[0].values.value).toBe("{{score:score:data_object}}");
+
+        await o.doc.load();
+        expect(o.backups).toHaveLength(1);
+    });
+
+    it("with nothing removed is not rewritten", async () => {
+        const o = owner({ revision: 2, flows: [], notes: [note("a").notes[0]], functions: [] });
+        await o.doc.load();
+        expect(o.backups).toEqual([]);
+        expect(o.disk().version).toBeUndefined();
+    });
+
+    it("written by a newer Actions is refused, not overwritten", async () => {
+        const newer = { ...before03(), version: CANVAS_VERSION + 1 };
+        const o = owner(newer);
+        await expect(o.doc.load()).rejects.toThrow("newer version of Actions");
+        expect(o.disk()).toEqual(newer);
+        expect(o.backups).toEqual([]);
     });
 });

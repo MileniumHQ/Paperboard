@@ -6,6 +6,7 @@
 // Storage and apply are injected so the rules run without a daemon.
 
 import type { FunctionDef } from "./functions";
+import { CANVAS_VERSION, withoutRemovedSteps } from "./removedSteps";
 import type { CanvasBlock } from "./tree";
 
 export interface CanvasDocument {
@@ -53,7 +54,9 @@ function revisionOf(saved: any): number {
 
 export function createCanvasDocument(deps: {
     read: () => Promise<unknown>;
-    write: (doc: CanvasDocument & { revision: number }) => Promise<void>;
+    write: (doc: CanvasDocument & { version: number; revision: number }) => Promise<void>;
+    /** keeps a document from before CANVAS_VERSION as it was, before it is rewritten */
+    backup: (saved: unknown) => Promise<void>;
     /** validates the definitions; throws to refuse the save before any write */
     validate: (canvas: CanvasDocument) => CanvasDocument;
     /** activates the saved flows; a throw means saved, not applied */
@@ -76,21 +79,46 @@ export function createCanvasDocument(deps: {
     };
 
     const api = {
-        /** Reads the stored canvas. Missing is empty; unreadable is refused. */
+        /**
+         * Reads the stored canvas. Missing is empty; unreadable, or written by
+         * a newer Actions, is refused. A canvas from before CANVAS_VERSION
+         * holding steps 0.3 removed is updated once: its old document is
+         * backed up first, then the updated one is written.
+         */
         load(): Promise<CanvasSnapshot> {
             return serial(async () => {
                 try {
                     const saved = (await deps.read()) as any;
-                    current = {
-                        revision: revisionOf(saved),
-                        canvas: {
-                            flows: Array.isArray(saved?.flows) ? saved.flows : [],
-                            notes: Array.isArray(saved?.notes) ? saved.notes : [],
-                            functions: Array.isArray(saved?.functions)
-                                ? saved.functions.filter((f: any) => f && typeof f.id === "string" && typeof f.name === "string")
-                                : [],
-                        },
+                    const version = saved?.version;
+                    if (typeof version === "number" && version > CANVAS_VERSION) {
+                        throw new Error(`it was saved by a newer version of Actions (canvas version ${version}); update Actions to open it`);
+                    }
+                    let canvas: CanvasDocument = {
+                        flows: Array.isArray(saved?.flows) ? saved.flows : [],
+                        notes: Array.isArray(saved?.notes) ? saved.notes : [],
+                        functions: Array.isArray(saved?.functions)
+                            ? saved.functions.filter((f: any) => f && typeof f.id === "string" && typeof f.name === "string")
+                            : [],
                     };
+                    let revision = revisionOf(saved);
+                    if (saved && typeof saved === "object" && version !== CANVAS_VERSION) {
+                        // nothing to change: the next save stamps the version
+                        const updated = withoutRemovedSteps(canvas.flows);
+                        if (updated.removed > 0) {
+                            await deps.backup(saved);
+                            canvas = { ...canvas, flows: updated.flows };
+                            revision = Math.max(revision + 1, Math.floor(now()));
+                            await deps.write({ ...canvas, version: CANVAS_VERSION, revision });
+                        }
+                        if (updated.removed > 0 || updated.kept > 0) {
+                            console.warn(
+                                `[ActionsService] updated the saved flows for Actions 0.3: ${updated.removed} removed step(s) replaced` +
+                                    (updated.kept ? `; ${updated.kept} Get Variable step(s) read a variable name from a reference and must be replaced by hand` : "") +
+                                    " (this update goes away in v0.4)",
+                            );
+                        }
+                    }
+                    current = { revision, canvas };
                     loadError = null;
                     return current;
                 } catch (err) {
@@ -120,7 +148,7 @@ export function createCanvasDocument(deps: {
                 // newer ones issued since. Drawing from the clock puts every
                 // later save past all of them.
                 const revision = Math.max(current.revision + 1, Math.floor(now()));
-                await deps.write({ ...canvas, revision });
+                await deps.write({ ...canvas, version: CANVAS_VERSION, revision });
                 current = { revision, canvas };
                 let applyError: string | undefined;
                 try {
