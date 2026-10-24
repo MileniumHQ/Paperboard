@@ -10,6 +10,7 @@ import {
     type JSX,
 } from "solid-js";
 import { installSwipeBack } from "../../utils/swipeBack";
+import { installTouchHold } from "../../utils/touchHold";
 
 export type ThemeMode = "light" | "dark" | "system";
 
@@ -91,8 +92,10 @@ export function PaperProvider(props: ParentProps<PaperProviderProps>) {
         onCleanup(() => mediaQuery.removeEventListener("change", handleChange));
     });
 
-    // touch screens: a finger swipes an open page back from anywhere on it
+    // touch screens: a finger swipes an open page back from anywhere on it,
+    // and holding still opens a context menu
     onCleanup(installSwipeBack());
+    onCleanup(installTouchHold());
 
     const currentThemeMode = createMemo(() => local.theme ?? internalTheme());
     const resolvedTheme = createMemo(() => {
