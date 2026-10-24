@@ -1,97 +1,34 @@
-/* The phone's first screen before any computer is paired: the Panel Library
-   banner as a whole screen. Blue, panel icons at the top and bottom edges,
-   frosted paper tiles fading from them toward the title in the middle. */
+/* The phone's first screen before any computer is paired: the copy and Add
+   Computer in the middle of the page, paperdocs' bouncy paper icons around. */
 .welcome {
-    --tile: calc(var(--paper-avatar-size-xlarge) * 1.25);
+    position: relative;
     flex: 1;
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: var(--paper-uigap);
+    align-items: center;
+    justify-content: center;
     box-sizing: border-box;
     padding: calc(var(--paper-uigap-double) + env(safe-area-inset-top, 0px)) var(--paper-uigap-double)
         calc(var(--paper-uigap-double) + env(safe-area-inset-bottom, 0px));
     overflow: hidden;
-    color: var(--paper-on-color);
-    background: linear-gradient(
-        180deg,
-        color-mix(in srgb, var(--paper-primary) 55%, var(--paper-on-color)) 0%,
-        var(--paper-primary) 50%,
-        var(--paper-primary-deep) 100%
-    );
+    background: var(--paper-surface-app);
+    /* a finger on the page plays with the icons; nothing here scrolls or swipes back */
+    touch-action: none;
 }
 
-/* a band keeps its icons at the screen's edge; on a short screen the faded
-   rows nearest the title are the ones cut */
-.band {
-    flex: 1 1 0;
-    min-height: var(--tile);
+.copy {
+    position: relative;
+    z-index: calc(var(--paper-z-raised) + 1);
+    width: 100%;
+    max-width: calc(var(--paper-size-card-min) * 1.4);
     display: flex;
     flex-direction: column;
-    gap: var(--paper-uigap-sixfourths);
-    overflow: hidden;
-}
-
-.bottom {
-    flex-direction: column-reverse;
-}
-
-.row {
-    display: flex;
-    justify-content: center;
+    align-items: center;
     gap: var(--paper-uigap-double);
-    flex-shrink: 0;
-}
-
-.tile,
-.ghost {
-    flex-shrink: 0;
-    width: var(--tile);
-    height: var(--tile);
-}
-
-.tile {
-    user-select: none;
-    -webkit-user-drag: none;
-    animation: deal var(--paper-long-transition) both;
-}
-
-.tile:nth-child(2) {
-    animation-delay: calc(var(--paper-short-transition) / 2);
-}
-
-.tile:nth-child(3) {
-    animation-delay: var(--paper-short-transition);
-}
-
-.ghost {
-    box-sizing: border-box;
-    border-radius: var(--paper-border-radius);
-    background: color-mix(in srgb, var(--paper-on-color) 16%, transparent);
-    border: var(--paper-border-width) solid color-mix(in srgb, var(--paper-on-color) 24%, transparent);
-}
-
-/* each icon is dealt in from beyond its edge */
-@keyframes deal {
-    from {
-        opacity: 0;
-        translate: 0 calc(var(--paper-uigap) * -1);
-    }
-}
-
-.bottom .tile {
-    animation-name: deal-up;
-}
-
-@keyframes deal-up {
-    from {
-        opacity: 0;
-        translate: 0 var(--paper-uigap);
-    }
 }
 
 .heading {
-    flex-shrink: 0;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -104,23 +41,15 @@
     font-family: var(--paper-font-family-rounded);
     font-size: var(--paper-text-size-12);
     font-weight: var(--paper-weight-bold);
-    text-shadow: 0 var(--paper-uigap-sixth) var(--paper-uigap) color-mix(in srgb, var(--paper-primary-deep) 60%, transparent);
+    color: var(--paper-text);
 }
 
 .subtitle {
     margin: 0;
-    text-wrap: balance;
     font-size: var(--paper-text-size-4);
     font-weight: var(--paper-weight-semibold);
-}
-
-.actions {
-    flex-shrink: 0;
-    margin-top: var(--paper-uigap);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: var(--paper-uigap);
+    color: var(--paper-text-muted);
+    text-wrap: balance;
 }
 
 .failure {
@@ -129,26 +58,51 @@
     align-items: center;
     gap: var(--paper-uigap-third);
     text-align: center;
-    font-weight: var(--paper-weight-semibold);
+    color: var(--paper-text-muted);
 }
 
 .failure p {
     margin: 0;
 }
 
-.retry {
-    color: var(--paper-on-color);
-}
-
+/* Add Computer stays above a tossed icon, so it can always be tapped */
 .action {
+    position: relative;
+    z-index: calc(var(--paper-z-raised) + 3);
     width: 100%;
 }
 
-/* a sheet of paper on the blue, like the banner's icons */
-.action .button {
+.button {
     width: 100%;
     justify-content: center;
-    background: var(--paper-surface-raised);
-    color: var(--paper-primary);
-    font-weight: var(--paper-weight-bold);
+}
+
+/* placed and moved by iconPlay; hidden until then */
+.icon {
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: calc(var(--paper-z-raised) + 2);
+    width: calc(var(--paper-avatar-size-xlarge) * 1.125);
+    height: calc(var(--paper-avatar-size-xlarge) * 1.125);
+    object-fit: contain;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-drag: none;
+    filter: drop-shadow(0 var(--paper-uigap-half) var(--paper-uigap) color-mix(in srgb, var(--paper-text) 22%, transparent));
+    will-change: transform;
+    opacity: 0;
+}
+
+.icon[style*="transform"] {
+    opacity: 1;
+    transition: opacity var(--paper-medium-transition);
+}
+
+.icon[data-dragging] {
+    filter: drop-shadow(0 var(--paper-uigap) var(--paper-uigap-double) color-mix(in srgb, var(--paper-text) 30%, transparent));
+}
+
+.welcome[data-play="unavailable"] .icon {
+    display: none;
 }
