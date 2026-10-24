@@ -1,6 +1,6 @@
 {
     "name": "@mileniumhq/paperui",
-    "version": "0.2.2",
+    "version": "0.3.0",
     "type": "module",
     "main": "./dist/paperui.cjs",
     "module": "./dist/paperui.es.js",

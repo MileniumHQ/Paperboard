@@ -1,6 +1,6 @@
 {
     "name": "@mileniumhq/create-panel",
-    "version": "0.2.2",
+    "version": "0.3.0",
     "type": "module",
     "description": "Scaffold a Paperboard panel: npm create @mileniumhq/panel",
     "bin": {
