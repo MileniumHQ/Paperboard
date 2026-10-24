@@ -1,136 +1,154 @@
-/* The phone's first screen before any computer is paired, drawn like the
-   Panel Library: a banner of panel icons on top, the page under it. */
+/* The phone's first screen before any computer is paired: the Panel Library
+   banner as a whole screen. Blue, panel icons at the top and bottom edges,
+   frosted paper tiles fading from them toward the title in the middle. */
 .welcome {
+    --tile: calc(var(--paper-avatar-size-xlarge) * 1.25);
     flex: 1;
     min-width: 0;
-    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap);
     box-sizing: border-box;
-    padding: var(--paper-uigap);
-    padding-top: calc(var(--paper-uigap) + env(safe-area-inset-top, 0px));
-    padding-bottom: calc(var(--paper-uigap-double) + env(safe-area-inset-bottom, 0px));
-}
-
-.column {
-    max-width: var(--paper-page-width);
-    margin: 0 auto;
-    display: flex;
-    flex-direction: column;
-    gap: var(--paper-uigap);
-}
-
-/* the library banner turned for a phone: its side columns of icons become a
-   row above the title and a row below it */
-.banner {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    gap: var(--paper-uigap);
-    padding: var(--paper-uigap) 0;
-    border-radius: var(--paper-border-radius);
+    padding: calc(var(--paper-uigap-double) + env(safe-area-inset-top, 0px)) var(--paper-uigap-double)
+        calc(var(--paper-uigap-double) + env(safe-area-inset-bottom, 0px));
     overflow: hidden;
+    color: var(--paper-on-color);
     background: linear-gradient(
         180deg,
         color-mix(in srgb, var(--paper-primary) 55%, var(--paper-on-color)) 0%,
-        var(--paper-primary) 55%,
+        var(--paper-primary) 50%,
         var(--paper-primary-deep) 100%
     );
 }
 
+/* a band keeps its icons at the screen's edge; on a short screen the faded
+   rows nearest the title are the ones cut */
+.band {
+    flex: 1 1 0;
+    min-height: var(--tile);
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap-sixfourths);
+    overflow: hidden;
+}
+
+.bottom {
+    flex-direction: column-reverse;
+}
+
 .row {
     display: flex;
-    align-items: center;
-    gap: var(--paper-uigap-half);
-    padding: 0 var(--paper-uigap);
+    justify-content: center;
+    gap: var(--paper-uigap-double);
+    flex-shrink: 0;
 }
 
-.end {
-    flex-direction: row-reverse;
-}
-
-.icon,
+.tile,
 .ghost {
     flex-shrink: 0;
-    width: var(--paper-avatar-size-xlarge);
-    height: var(--paper-avatar-size-xlarge);
+    width: var(--tile);
+    height: var(--tile);
 }
 
-.icon {
+.tile {
     user-select: none;
     -webkit-user-drag: none;
     animation: deal var(--paper-long-transition) both;
 }
 
-.icon:nth-child(2) {
-    animation-delay: 50ms;
+.tile:nth-child(2) {
+    animation-delay: calc(var(--paper-short-transition) / 2);
 }
 
-.icon:nth-child(3) {
-    animation-delay: 100ms;
+.tile:nth-child(3) {
+    animation-delay: var(--paper-short-transition);
 }
 
-/* the banner's frosted paper tiles, fading toward the middle */
 .ghost {
     box-sizing: border-box;
     border-radius: var(--paper-border-radius);
     background: color-mix(in srgb, var(--paper-on-color) 16%, transparent);
-    border: var(--paper-border-width) solid color-mix(in srgb, var(--paper-on-color) 22%, transparent);
+    border: var(--paper-border-width) solid color-mix(in srgb, var(--paper-on-color) 24%, transparent);
 }
 
-/* each icon is dealt in from below */
+/* each icon is dealt in from beyond its edge */
 @keyframes deal {
     from {
         opacity: 0;
-        translate: 0 12px;
+        translate: 0 calc(var(--paper-uigap) * -1);
+    }
+}
+
+.bottom .tile {
+    animation-name: deal-up;
+}
+
+@keyframes deal-up {
+    from {
+        opacity: 0;
+        translate: 0 var(--paper-uigap);
     }
 }
 
 .heading {
+    flex-shrink: 0;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: var(--paper-uigap-third);
-    padding: var(--paper-uigap-half) var(--paper-uigap);
+    gap: var(--paper-uigap-half);
     text-align: center;
-    color: var(--paper-on-color);
 }
 
 .title {
     margin: 0;
     font-family: var(--paper-font-family-rounded);
-    font-size: var(--paper-text-size-10);
-    font-weight: 800;
-    line-height: 1.05;
-    text-shadow: 0 2px 10px color-mix(in srgb, var(--paper-primary-deep) 60%, transparent);
+    font-size: var(--paper-text-size-12);
+    font-weight: var(--paper-weight-bold);
+    text-shadow: 0 var(--paper-uigap-sixth) var(--paper-uigap) color-mix(in srgb, var(--paper-primary-deep) 60%, transparent);
 }
 
 .subtitle {
     margin: 0;
-    font-size: var(--paper-text-size-3);
-    font-weight: 600;
+    text-wrap: balance;
+    font-size: var(--paper-text-size-4);
+    font-weight: var(--paper-weight-semibold);
 }
 
-.lead {
-    margin: 0;
-    text-align: center;
+.actions {
+    flex-shrink: 0;
+    margin-top: var(--paper-uigap);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--paper-uigap);
 }
 
 .failure {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: var(--paper-uigap-half);
+    gap: var(--paper-uigap-third);
     text-align: center;
+    font-weight: var(--paper-weight-semibold);
 }
 
 .failure p {
     margin: 0;
 }
 
+.retry {
+    color: var(--paper-on-color);
+}
+
 .action {
     width: 100%;
 }
 
-.button {
+/* a sheet of paper on the blue, like the banner's icons */
+.action .button {
     width: 100%;
     justify-content: center;
+    background: var(--paper-surface-raised);
+    color: var(--paper-primary);
+    font-weight: var(--paper-weight-bold);
 }
