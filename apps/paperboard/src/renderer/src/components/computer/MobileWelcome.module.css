@@ -1,7 +1,8 @@
 /* The phone's first screen before any computer is paired: the copy and Add
    Computer in the middle of the page, paperdocs' bouncy paper icons around.
-   The blue is the banner's, washed toward the page so the primary button
-   still stands out on it in light and dark. */
+   The blue is paperdocs' landing gradient (light at the top, the brand
+   blue, deepening at the foot); dark mode is the same gradient sunk toward
+   the marketing ink. */
 .welcome {
     position: relative;
     flex: 1;
@@ -14,14 +15,24 @@
     padding: calc(var(--paper-uigap-double) + env(safe-area-inset-top, 0px)) var(--paper-uigap-double)
         calc(var(--paper-uigap-double) + env(safe-area-inset-bottom, 0px));
     overflow: hidden;
-    background: linear-gradient(
-        180deg,
-        color-mix(in srgb, var(--paper-primary) 22%, var(--paper-surface-app)) 0%,
-        color-mix(in srgb, var(--paper-primary) 40%, var(--paper-surface-app)) 60%,
-        color-mix(in srgb, var(--paper-primary-deep) 58%, var(--paper-surface-app)) 100%
-    );
+    --welcome-top: color-mix(in srgb, var(--paper-primary) 50%, var(--paper-on-color));
+    --welcome-mid: var(--paper-primary);
+    --welcome-foot: color-mix(in srgb, var(--paper-primary) 68%, var(--paper-marketing-ink));
+    /* the icons cast ink, never --paper-text, which turns light in dark mode */
+    --welcome-shadow: color-mix(in srgb, var(--paper-marketing-ink) 28%, transparent);
+    --welcome-shadow-lifted: color-mix(in srgb, var(--paper-marketing-ink) 36%, transparent);
+    color: var(--paper-on-color);
+    background: linear-gradient(180deg, var(--welcome-top) 0%, var(--welcome-mid) 75%, var(--welcome-foot) 100%);
     /* a finger on the page plays with the icons; nothing here scrolls or swipes back */
     touch-action: none;
+}
+
+:global([data-paperui-theme="dark"]) .welcome {
+    --welcome-top: color-mix(in srgb, var(--paper-primary) 55%, var(--paper-marketing-ink));
+    --welcome-mid: color-mix(in srgb, var(--paper-primary) 38%, var(--paper-marketing-ink));
+    --welcome-foot: color-mix(in srgb, var(--paper-primary) 22%, var(--paper-marketing-ink));
+    --welcome-shadow: color-mix(in srgb, var(--paper-marketing-ink) 55%, transparent);
+    --welcome-shadow-lifted: color-mix(in srgb, var(--paper-marketing-ink) 70%, transparent);
 }
 
 .copy {
@@ -48,14 +59,13 @@
     font-family: var(--paper-font-family-rounded);
     font-size: var(--paper-text-size-12);
     font-weight: var(--paper-weight-bold);
-    color: var(--paper-text);
+    text-shadow: 0 var(--paper-uigap-sixth) var(--paper-uigap) color-mix(in srgb, var(--paper-primary-deep) 60%, transparent);
 }
 
 .subtitle {
     margin: 0;
     font-size: var(--paper-text-size-4);
     font-weight: var(--paper-weight-semibold);
-    color: var(--paper-text-muted);
     text-wrap: balance;
 }
 
@@ -65,11 +75,15 @@
     align-items: center;
     gap: var(--paper-uigap-third);
     text-align: center;
-    color: var(--paper-text-muted);
+    font-weight: var(--paper-weight-semibold);
 }
 
 .failure p {
     margin: 0;
+}
+
+.retry {
+    color: var(--paper-on-color);
 }
 
 /* Add Computer stays above a tossed icon, so it can always be tapped */
@@ -96,7 +110,7 @@
     touch-action: none;
     user-select: none;
     -webkit-user-drag: none;
-    filter: drop-shadow(0 var(--paper-uigap-half) var(--paper-uigap) color-mix(in srgb, var(--paper-text) 22%, transparent));
+    filter: drop-shadow(0 var(--paper-uigap-half) var(--paper-uigap) var(--welcome-shadow));
     will-change: transform;
     opacity: 0;
 }
@@ -107,7 +121,7 @@
 }
 
 .icon[data-dragging] {
-    filter: drop-shadow(0 var(--paper-uigap) var(--paper-uigap-double) color-mix(in srgb, var(--paper-text) 30%, transparent));
+    filter: drop-shadow(0 var(--paper-uigap) var(--paper-uigap-double) var(--welcome-shadow-lifted));
 }
 
 .welcome[data-play="unavailable"] .icon {

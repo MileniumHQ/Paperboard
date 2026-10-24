@@ -61,7 +61,7 @@ export default function MobileWelcome(props: {
                 <Show when={props.loadFailed}>
                     <div class={styles.failure} role="alert">
                         <p>Couldn't load your paired computers.</p>
-                        <PaperButton size="small" variant="text" onClick={() => props.onRetryLoad?.()}>
+                        <PaperButton size="small" variant="text" class={styles.retry} onClick={() => props.onRetryLoad?.()}>
                             <PaperIcon>refresh</PaperIcon>
                             Try again
                         </PaperButton>
