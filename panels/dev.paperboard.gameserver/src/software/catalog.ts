@@ -67,7 +67,7 @@ export const SOFTWARE: Readonly<Record<ServerSoftwareType, SoftwareInfo>> = {
         name: "Paper",
         description:
             "Vast plugin support and high performance, but makes opinionated changes to some game mechanics.",
-        icon: { src: "/assets/paper.png" },
+        icon: { src: "assets/paper.png" },
         addons: { kind: "plugin", dir: "plugins", projectType: "plugin", modrinthLoader: "paper" },
         worldLayout: "bukkit-split",
         recommended: true,
@@ -77,7 +77,7 @@ export const SOFTWARE: Readonly<Record<ServerSoftwareType, SoftwareInfo>> = {
         name: "Fabric",
         description:
             "Lightweight mod loader. Limited traditional plugin support, and does not improve performance out of the box.",
-        icon: { src: "/assets/fabric.png" },
+        icon: { src: "assets/fabric.png" },
         addons: MODS("fabric"),
         worldLayout: "vanilla-split",
     },
@@ -86,7 +86,7 @@ export const SOFTWARE: Readonly<Record<ServerSoftwareType, SoftwareInfo>> = {
         name: "NeoForge",
         description:
             "Mod loader for large content mods and most modern modpacks.",
-        icon: { src: "/assets/neoforge.png", pixelated: true },
+        icon: { src: "assets/neoforge.png", pixelated: true },
         addons: MODS("neoforge"),
         worldLayout: "vanilla-split",
     },
@@ -95,7 +95,7 @@ export const SOFTWARE: Readonly<Record<ServerSoftwareType, SoftwareInfo>> = {
         name: "Forge",
         description:
             "The original mod loader. Needed for older modpacks and mods that never moved to NeoForge.",
-        icon: { mask: "/assets/forge.png" },
+        icon: { mask: "assets/forge.png" },
         addons: MODS("forge"),
         worldLayout: "vanilla-split",
     },
