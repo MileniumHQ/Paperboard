@@ -17,6 +17,7 @@ import {
     buildPanelCsp,
     remotePanelHtmlCsp,
 } from "./panelAssets";
+import { injectCraneBootstrap, injectCspNonce, injectUnselectable } from "../shared/panelDocument";
 
 export { parsePanelHost } from "./panelAssets";
 
@@ -24,18 +25,6 @@ const log = logger;
 
 const headerValue = (value: string | string[] | undefined): string | undefined =>
     Array.isArray(value) ? value[0] : value;
-
-const injectCspNonce = (html: string, nonce: string) =>
-    html.replaceAll("<script", `<script nonce="${nonce}"`);
-
-// panels render outside shell styles; keep the same no-select baseline
-const injectUnselectable = (html: string): string => {
-    const style = `<style>html{-webkit-user-select:none;user-select:none}input,textarea,select,[contenteditable="true"],[contenteditable=""]{-webkit-user-select:text;user-select:text}code,pre,kbd,samp,[data-selectable="true"]{-webkit-user-select:text;user-select:text}</style>`;
-    if (/<head[^>]*>/i.test(html)) {
-        return html.replace(/<head[^>]*>/i, (m) => `${m}${style}`);
-    }
-    return `${style}${html}`;
-};
 
 // inject computer-scoped creds; scope comes from serving URL.
 // panelId travels with the credentials: identity is a granted fact,
@@ -59,13 +48,7 @@ const injectCraneCreds = async (
     if (typeof scoped !== "string" || !scoped) throw new Error("Daemon did not issue a panel credential");
     const creds = client.getLocalCredentials();
     if (!creds) throw new Error("CRANE_NOT_READY");
-    const payload = buildCraneCredentialPayload(creds, comp, panelId, scoped);
-    const bootstrap = `<script>window.__PAPERBOARD_CRANE=${payload};</script>`;
-    if (/<head[^>]*>/i.test(html)) {
-        return html.replace(/<head[^>]*>/i, (m) => `${m}${bootstrap}`);
-    }
-    // no <head> — prepend; scripts run before body anyway
-    return `${bootstrap}${html}`;
+    return injectCraneBootstrap(html, buildCraneCredentialPayload(creds, comp, panelId, scoped));
 };
 
 export async function servePanelAsset(

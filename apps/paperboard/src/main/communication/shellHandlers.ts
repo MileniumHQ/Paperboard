@@ -14,19 +14,9 @@ import { openRemoteFolder } from "../remoteFolder";
 import { servePanelAsset } from "../panelServe";
 import type { LaunchOptions } from "../../shared/launchOptions";
 import type { Graphics } from "../../shared/graphics";
+import { isListingFilePath, LISTING_FILE_MAX_BYTES } from "../../shared/listingFile";
 
-// The panel library reads an installed panel's manifest and listing media,
-// nothing else: never HTML (the serve path injects credentials into it),
-// never scripts, and never more than the listing caps allow.
-const LISTING_FILE_MAX_BYTES = 2 * 1024 * 1024;
-const LISTING_FILE_EXTENSIONS = new Set([".png", ".webp", ".jpg", ".jpeg", ".md"]);
-
-export function isListingFilePath(subpath: string): boolean {
-    if (subpath === "manifest.json") return true;
-    if (subpath.split(/[\\/]/).includes("..")) return false;
-    return LISTING_FILE_EXTENSIONS.has(path.extname(subpath).toLowerCase());
-}
-
+export { isListingFilePath } from "../../shared/listingFile";
 export interface ShellHandlerDeps {
     appVersion: () => string;
     launchOptions: () => LaunchOptions;
