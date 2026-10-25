@@ -10,6 +10,29 @@ import { serviceBootContext } from "./boot";
 
 const LOCAL_ONLY_APP_SETTINGS = "app-settings";
 
+/** How a host says where its daemon is: the loopback port it listens on, or
+ * the ws(s):// URL of a daemon it reaches some other way. */
+export type CraneCredentials = { token: string } & ({ port: number; url?: undefined } | { url: string; port?: undefined });
+
+export function craneEndpoint(creds: { port?: unknown; url?: unknown }): string {
+    if (typeof creds.url === "string") {
+        let url: URL;
+        try {
+            url = new URL(creds.url);
+        } catch {
+            throw new Error(`The Paperboard host gave a daemon address that isn't a URL: ${creds.url}`);
+        }
+        if (url.protocol !== "wss:" && url.protocol !== "ws:") {
+            throw new Error(`The Paperboard host gave a daemon address that isn't a WebSocket URL: ${creds.url}`);
+        }
+        return url.href;
+    }
+    if (typeof creds.port === "number" && Number.isInteger(creds.port) && creds.port > 0 && creds.port < 65536) {
+        return `ws://127.0.0.1:${creds.port}`;
+    }
+    throw new Error("The Paperboard host gave neither a daemon port nor a daemon URL");
+}
+
 export interface TransportOptions {
     port?: number;
     token?: string;
@@ -158,14 +181,12 @@ async function getWebSocketImpl(): Promise<any> {
 export class CraneTransport {
     public readonly computerId: string;
     private ws: any = null;
-    private port: number | null = null;
+    // where the daemon answers: loopback by port, or a URL a host hands out
+    private endpoint: string | null = null;
     private token: string | null = null;
     private opts: TransportOptions = {};
     // supplies local daemon credentials
-    public credentialProvider: (() => Promise<{
-        port: number;
-        token: string;
-    }>) | null = null;
+    public credentialProvider: (() => Promise<CraneCredentials>) | null = null;
     private pending = new Map<number, Pending>();
     private listeners = new Map<string, Set<Listener>>();
     private requestId = 1;
@@ -201,14 +222,14 @@ export class CraneTransport {
 
     private async resolveCredentials(): Promise<void> {
         if (this.opts.port && this.opts.token) {
-            this.port = this.opts.port;
+            this.endpoint = craneEndpoint({ port: this.opts.port });
             this.token = this.opts.token;
             return;
         }
 
         if (this.credentialProvider) {
             const creds = await this.credentialProvider();
-            this.port = creds.port;
+            this.endpoint = craneEndpoint(creds);
             this.token = creds.token;
             return;
         }
@@ -219,7 +240,7 @@ export class CraneTransport {
         // never reads crane.json or ambient env to find out who it is.
         const boot = serviceBootContext();
         if (boot) {
-            this.port = boot.port;
+            this.endpoint = craneEndpoint(boot);
             this.token = boot.token;
             return;
         }
@@ -228,7 +249,7 @@ export class CraneTransport {
             // Browser: credentials are injected by the host at serve time
             // (scoped to this document's computer). No fetch fallback.
             const injected = (globalThis as any).__PAPERBOARD_CRANE;
-            if (!injected?.port || !injected?.token) {
+            if (!(injected?.port || injected?.url) || !injected?.token) {
                 throw new Error("Paperboard host unavailable (no injected crane credentials)");
             }
             if (injected.computerId !== this.computerId) {
@@ -236,7 +257,7 @@ export class CraneTransport {
                     `Paperboard host served credentials for "${injected.computerId}" but this panel is scoped to "${this.computerId}"`,
                 );
             }
-            this.port = injected.port;
+            this.endpoint = craneEndpoint(injected);
             this.token = injected.token;
             return;
         }
@@ -262,7 +283,7 @@ export class CraneTransport {
         if (typeof raw.token !== "string" || raw.token.length === 0) {
             throw new Error(`Invalid crane handshake file (token must be a non-empty string): ${file}`);
         }
-        this.port = raw.port;
+        this.endpoint = craneEndpoint({ port: raw.port });
         this.token = raw.token;
     }
 
@@ -315,7 +336,7 @@ export class CraneTransport {
             const Ws = await getWebSocketImpl();
             if (this.closedByUser) throw new Error("PaperCrane transport is disposed");
             await new Promise<void>((resolve, reject) => {
-                const ws = new Ws(`ws://127.0.0.1:${this.port}`);
+                const ws = new Ws(this.endpoint);
                 let settled = false;
                 const timeout = setTimeout(() => {
                     if (settled) return;

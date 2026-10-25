@@ -3,6 +3,7 @@
 
 import { serviceBootContext } from "./boot";
 import { requirePanelId } from "./panelIdentity";
+import { panelHostLabel } from "./panelHost";
 
 // log-once ledger. BOUNDED: an append-only array grows with every distinct
 // label a long-lived process warns about, so past the cap the oldest entry
@@ -44,9 +45,10 @@ export function resolveDefaultPanelId(optsPanelId: string | undefined): string {
 
 // Address of an asset served from another panel's origin on the same
 // computer (a sibling's icon in a picker, say). Electron serves every panel
-// from panel://<computerId>.<panelId>/; browser mode serves it from
-// http://<computerId>.<panelId>.<shell host>/. The shape follows the
-// document this runs in; the computer is the granted one, never assumed.
+// from panel://<computerId>.<panelId>/; the desktop's browser mode serves it
+// from http://<computerId>.<panelId>.<shell host>/, and a public host from
+// https://<panelHostLabel>.<shell host>/. The shape follows the document
+// this runs in; the computer is the granted one, never assumed.
 export function panelAssetUrl(panelId: string, subpath = ""): string {
     const target = requirePanelId(panelId);
     const computerId = grantedComputerId();
@@ -57,6 +59,10 @@ export function panelAssetUrl(panelId: string, subpath = ""): string {
         const prefix = `${computerId}.${own}.`;
         if (loc.host.startsWith(prefix)) {
             return `${loc.protocol}//${computerId}.${target}.${loc.host.slice(prefix.length)}/${rest}`;
+        }
+        const labelPrefix = `${panelHostLabel(computerId, own)}.`;
+        if (loc.host.startsWith(labelPrefix)) {
+            return `${loc.protocol}//${panelHostLabel(computerId, target)}.${loc.host.slice(labelPrefix.length)}/${rest}`;
         }
     }
     return `panel://${computerId}.${target}/${rest}`;

@@ -10,6 +10,8 @@ export * from "./panelMerge";
 export * from "./storeListing";
 export { isPanelId, requirePanelId } from "./panelIdentity";
 export * from "./identity";
+export { panelHostLabel, parsePanelHostLabel, PANEL_HOST_LABEL_MAX } from "./panelHost";
+export { craneEndpoint, type CraneCredentials } from "./ws";
 export * from "./secrets";
 export * from "./backups";
 export * from "./ports";
