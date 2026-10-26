@@ -11,12 +11,16 @@ import { PaperCraneAuth } from "../papercrane/auth";
 import { PanelServicesManager } from "../papercrane/panelServices";
 import { setupWebSocketServer } from "../papercrane/ws";
 import { CraneTransport } from "../../../packages/paperapi/src/ws";
-import { saveSettings } from "../../../panels/dev.paperboard.ai/src/core/saveSettings";
-import { PANEL_ID, UI_ACTION_IDS } from "../../../panels/dev.paperboard.ai/src/contract";
-import type { AiState, Settings } from "../../../panels/dev.paperboard.ai/src/core/types";
+import { PANEL_ID, UI_ACTION_IDS, type AiState, type Settings } from "../../../panels/dev.paperboard.ai/src/contract";
 
-test("custom prompt toggle persists and hydrates through the running AI service", async () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), "ai-prompt-wire-"));
+test("the agent's settings persist and hydrate through the running AI service", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "ai-settings-wire-"));
+    // the service looks for the chosen brain's command on PATH: only Codex is installed here, whatever this machine has
+    const bin = path.join(root, "bin");
+    fs.mkdirSync(bin);
+    fs.writeFileSync(path.join(bin, "codex"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+    const originalPath = process.env.PATH;
+    process.env.PATH = [bin, path.dirname(process.execPath)].join(path.delimiter);
     const manager = new PanelServicesManager(root);
     const engine = new PaperCraneEngine(root, manager);
     const auth = new PaperCraneAuth(false, path.join(root, "local"));
@@ -41,23 +45,28 @@ test("custom prompt toggle persists and hydrates through the running AI service"
         manager.init(port, undefined, auth);
         await manager.waitUntilReady(PANEL_ID);
         sdk = new CraneTransport({ port, token: auth.issuePanelToken(PANEL_ID), computerId: "local" });
-        const action = async <T>(name: string, patch?: Partial<Settings>): Promise<T> =>
-            (await sdk!.call<{ result: T }>("actions:call", { panelId: PANEL_ID, action: name, args: [patch] })).result;
-        let displayed: AiState | undefined;
-        const save = (patch: Partial<Settings>) => saveSettings(patch, {
-            update: (patch) => action<Settings>(UI_ACTION_IDS.updateSettings, patch),
-            refresh: async () => { displayed = await action<AiState>("__getState"); },
-        });
-        // No state-event subscription: the settings UI must refresh after saving.
-        await save({ customPromptEnabled: true });
-        expect(displayed!.settings.customPromptEnabled).toBe(true);
-        expect(displayed!.settings.customSystemPrompt).toContain("helpful expert friend");
-        await save({ customSystemPrompt: "Answer briefly." });
-        await save({ customPromptEnabled: false });
-        await save({ customPromptEnabled: true });
-        expect(displayed!.settings.customSystemPrompt).toBe("Answer briefly.");
-        expect((await engine.getConfig(PANEL_ID)).settings.customPromptEnabled).toBe(true);
+        const call = async <T>(name: string, arg?: unknown): Promise<T> =>
+            (await sdk!.call<{ result: T }>("actions:call", { panelId: PANEL_ID, action: name, args: [arg] })).result;
+        const state = () => call<AiState>("__getState");
+
+        expect((await state()).settings).toBeNull();
+
+        const settings: Settings = { name: "Pixel", harness: "codex", model: null };
+        expect(await call(UI_ACTION_IDS.setup, { settings })).toEqual({ saved: true });
+        expect((await state()).settings).toEqual(settings);
+        expect(await engine.getConfig(PANEL_ID)).toEqual(settings);
+
+        // a brain that isn't installed is refused loudly, and what was saved stays
+        await expect(call(UI_ACTION_IDS.setup, { settings: { ...settings, harness: "claude-code", name: "Other" } })).rejects.toThrow();
+        expect(await engine.getConfig(PANEL_ID)).toEqual(settings);
+
+        // a restarted service reads them from the daemon's config
+        await manager.stopService(PANEL_ID);
+        manager.startService(PANEL_ID);
+        await manager.waitUntilReady(PANEL_ID);
+        expect((await state()).settings).toEqual(settings);
     } finally {
+        process.env.PATH = originalPath;
         sdk?.close();
         await manager.stopService(PANEL_ID);
         await engine.disposeClients();
@@ -67,4 +76,4 @@ test("custom prompt toggle persists and hydrates through the running AI service"
         auth.dispose();
         fs.rmSync(root, { recursive: true, force: true });
     }
-}, 20000);
+}, 30000);
