@@ -161,6 +161,7 @@ export async function runFixture(
             chrome,
             [
                 "--headless=new",
+                `--user-data-dir=${join(dir, "profile")}`,
                 "--disable-gpu",
                 "--no-sandbox",
                 "--disable-dev-shm-usage",

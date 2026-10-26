@@ -83,13 +83,27 @@ describe("PaperModal - Accessibility & Focus Trapping Tests", () => {
 
         setOpen(false);
 
-        expect(dialog.isConnected, "the dialog left before it could let go").toBe(true);
         expect(dialog.hasAttribute("aria-modal")).toBe(false);
+        // with no exit animation (as under reduced motion), WebKit still
+        // needs a frame to see the change before the dialog goes
         await Promise.resolve();
+        expect(dialog.isConnected, "the dialog left before a frame passed").toBe(true);
+        await new Promise((resolve) => requestAnimationFrame(resolve));
         expect(dialog.isConnected).toBe(false);
 
         setOpen(true);
         expect(screen.getByRole("dialog", { name: "Leaving" }).getAttribute("aria-modal")).toBe("true");
+    });
+
+    test("reopening before the next frame keeps the dialog modal", async () => {
+        const [open, setOpen] = createSignal(true);
+        render(() => <PaperModal open={open()} title="Reopening"><p>Content</p></PaperModal>);
+        const dialog = screen.getByRole("dialog", { name: "Reopening" });
+        setOpen(false);
+        setOpen(true);
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        expect(dialog.isConnected).toBe(true);
+        expect(dialog.getAttribute("aria-modal")).toBe("true");
     });
 
     test("focus traversal skips disabled first and last controls", async () => {

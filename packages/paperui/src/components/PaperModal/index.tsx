@@ -3,6 +3,7 @@ import styles from "./index.module.css";
 import {
     splitProps,
     createEffect,
+    createSignal,
     createUniqueId,
     onCleanup,
     Show,
@@ -76,11 +77,19 @@ export function PaperModal(props: ParentProps<PaperModalProps>) {
         if (local.closeOnEsc ?? true) local.onClose?.();
     });
 
-    // A closing dialog lets go of the page while it animates out. WebKit
-    // keeps the page hidden from VoiceOver if an aria-modal dialog leaves
-    // the DOM still claiming it, until something else on the page changes.
+    // A closing dialog lets go of the page (aria-modal follows open), and
+    // leaves a frame later. WebKit keeps the page hidden from VoiceOver if
+    // an aria-modal dialog leaves the DOM still claiming it, and it only
+    // sees the claim dropped on a later frame. Without an exit animation,
+    // under reduced motion, nothing else would wait that long.
+    const [shown, setShown] = createSignal(!!local.open);
     createEffect(() => {
-        if (!local.open) modalRef?.removeAttribute("aria-modal");
+        if (local.open) {
+            setShown(true);
+            return;
+        }
+        const frame = requestAnimationFrame(() => setShown(false));
+        onCleanup(() => cancelAnimationFrame(frame));
     });
 
     createEffect(() => {
@@ -146,7 +155,7 @@ export function PaperModal(props: ParentProps<PaperModalProps>) {
         <Portal>
             {/* appear: a modal mounted already open (shown by a <Show>) still rises in */}
             <PaperPresence
-                when={local.open}
+                when={shown()}
                 appear
                 enterClass={styles.backdropTransitionIn}
                 exitClass={styles.backdropTransitionOut}
@@ -161,7 +170,7 @@ export function PaperModal(props: ParentProps<PaperModalProps>) {
                         ref={modalRef}
                         tabIndex={-1}
                         role="dialog"
-                        aria-modal="true"
+                        aria-modal={local.open ? "true" : undefined}
                         aria-labelledby={local.title && !local.noHeader ? titleId : undefined}
                         {...rest}
                         class={[styles.modalBox, sizeClass(), local.class]
