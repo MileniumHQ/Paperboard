@@ -40,6 +40,10 @@ export function PaperToggle(props: PaperToggleProps) {
         // whose click then bubbles back here. Toggling on both passes would
         // cancel out and leave the switch stuck.
         if (e?.target === inputRef) return;
+        // Browsers send a click on the switch on to that checkbox as well, and
+        // the checkbox would flip back and report the old value. Cancelling
+        // the click cancels the label's activation.
+        e?.preventDefault();
         if (local.disabled) return;
         const next = !isChecked();
         haptic(next ? "medium" : "light");
