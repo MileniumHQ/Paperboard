@@ -76,6 +76,13 @@ export function PaperModal(props: ParentProps<PaperModalProps>) {
         if (local.closeOnEsc ?? true) local.onClose?.();
     });
 
+    // A closing dialog lets go of the page while it animates out. WebKit
+    // keeps the page hidden from VoiceOver if an aria-modal dialog leaves
+    // the DOM still claiming it, until something else on the page changes.
+    createEffect(() => {
+        if (!local.open) modalRef?.removeAttribute("aria-modal");
+    });
+
     createEffect(() => {
         if (!local.open) return;
 

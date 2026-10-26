@@ -74,6 +74,24 @@ describe("PaperModal - Accessibility & Focus Trapping Tests", () => {
         expect(document.activeElement).toBe(trigger);
     });
 
+    test("a closing dialog lets go of the page before it leaves", async () => {
+        // WebKit keeps the page hidden from VoiceOver when an aria-modal
+        // dialog is removed while still claiming to be modal
+        const [open, setOpen] = createSignal(true);
+        render(() => <PaperModal open={open()} title="Leaving"><p>Content</p></PaperModal>);
+        const dialog = screen.getByRole("dialog", { name: "Leaving" });
+
+        setOpen(false);
+
+        expect(dialog.isConnected, "the dialog left before it could let go").toBe(true);
+        expect(dialog.hasAttribute("aria-modal")).toBe(false);
+        await Promise.resolve();
+        expect(dialog.isConnected).toBe(false);
+
+        setOpen(true);
+        expect(screen.getByRole("dialog", { name: "Leaving" }).getAttribute("aria-modal")).toBe("true");
+    });
+
     test("focus traversal skips disabled first and last controls", async () => {
         render(() => <PaperModal open title="Enabled controls">
             <button disabled>Unavailable first</button><button>Enabled first</button>
