@@ -28,15 +28,23 @@
 }
 
 .bar {
+    box-sizing: border-box;
     display: flex;
     align-items: center;
     gap: var(--paper-uigap-half);
     flex-shrink: 0;
     min-height: var(--paper-size-bar);
-    padding: env(safe-area-inset-top, 0px) var(--paper-uigap-half) 0;
+    padding: 0 var(--paper-uigap-half);
     background: var(--paper-surface-sunken);
     border-bottom: var(--paper-border-width) solid var(--paper-border);
     touch-action: none;
+}
+
+.fixed > .bar {
+    min-height: calc(var(--paper-size-bar) + var(--paper-safe-area-top));
+    padding-top: var(--paper-safe-area-top);
+    padding-left: calc(var(--paper-uigap-half) + var(--paper-safe-area-left));
+    padding-right: calc(var(--paper-uigap-half) + var(--paper-safe-area-right));
 }
 
 .icon {
@@ -60,7 +68,12 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.fixed > .content {
+    padding-bottom: var(--paper-safe-area-bottom);
+    padding-left: var(--paper-safe-area-left);
+    padding-right: var(--paper-safe-area-right);
 }
 
 .edge {

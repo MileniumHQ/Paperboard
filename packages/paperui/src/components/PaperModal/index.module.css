@@ -14,7 +14,8 @@
     align-items: center;
     justify-content: center;
     z-index: 1000;
-    padding: var(--paper-uigap-double);
+    --modal-rim: var(--paper-uigap-double);
+    padding: calc(var(--modal-rim) + var(--paper-safe-area-top)) calc(var(--modal-rim) + var(--paper-safe-area-right)) calc(var(--modal-rim) + var(--paper-safe-area-bottom)) calc(var(--modal-rim) + var(--paper-safe-area-left));
     /* a modal taller than the viewport scrolls instead of running off it */
     overflow-y: auto;
     overscroll-behavior: contain;
@@ -79,7 +80,7 @@
    running off the edge. */
 @media (max-width: 600px) {
     .backdrop {
-        padding: var(--paper-uigap-half);
+        --modal-rim: var(--paper-uigap-half);
     }
 
     .modalBox {

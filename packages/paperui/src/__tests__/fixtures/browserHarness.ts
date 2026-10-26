@@ -80,6 +80,7 @@ async function buildFixture(
         configFile: false,
         logLevel: "error",
         plugins: [solidPlugin()],
+        resolve: { dedupe: ["solid-js", "solid-js/web", "solid-js/store"] },
         build: {
             outDir,
             emptyOutDir: true,
@@ -148,8 +149,8 @@ async function readStream(stream: Readable): Promise<string> {
 export async function runFixture(
     chrome: string,
     fixtureHtml: string,
+    packageDir = findPackageDir(),
 ): Promise<FixtureResults> {
-    const packageDir = findPackageDir();
     const dir = mkdtempSync(join(tmpdir(), "paperui-browser-"));
     const dist = join(dir, "dist");
     let server: Server | undefined;
