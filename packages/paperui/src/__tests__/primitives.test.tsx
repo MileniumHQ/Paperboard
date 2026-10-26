@@ -1,4 +1,6 @@
 import { describe, test, expect, vi, afterEach } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { render } from "@solidjs/testing-library";
 import { PaperAvatar } from "../components/PaperAvatar";
 import { PaperButton } from "../components/PaperButton";
@@ -82,6 +84,27 @@ describe("PaperButton", () => {
         expect(el.getAttribute("target")).toBe("_blank");
         expect(el.getAttribute("rel")).toContain("noopener");
         expect(el.className).toContain("PaperButton");
+    });
+
+    test("an anchor button sizes like a button", () => {
+        // <button> is border-box by default and <a> is not, so a full-width
+        // href button (Continue with Google) ran its padding past its parent
+        const css = readFileSync(
+            join(__dirname, "../components/PaperButton/index.module.css"),
+            "utf8",
+        );
+        const style = document.createElement("style");
+        style.textContent = css;
+        document.head.append(style);
+        const anchor = document.createElement("a");
+        anchor.className = "PaperButton";
+        document.body.append(anchor);
+        try {
+            expect(getComputedStyle(anchor).boxSizing).toBe("border-box");
+        } finally {
+            style.remove();
+            anchor.remove();
+        }
     });
 });
 
