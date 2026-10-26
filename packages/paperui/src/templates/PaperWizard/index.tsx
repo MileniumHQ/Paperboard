@@ -157,11 +157,12 @@ export function PaperWizard(props: ParentProps<PaperWizardProps>) {
     const stepNumbers = () => Array.from({ length: totalSteps() }, (_, i) => i);
 
     // The finish glow light takes the button's color so the two never
-    // disagree; a text variant has no surface to light, so it goes colorless.
+    // disagree; a text or outline variant has no surface to light, so it goes
+    // colorless.
     const finishEffect = (): { variant?: PaperRole; colorless?: boolean } => {
         if (!isLastStep()) return {};
         const variant = local.finishVariant ?? "success";
-        return variant === "text" ? { colorless: true } : { variant };
+        return variant === "text" || variant === "outline" ? { colorless: true } : { variant };
     };
 
     return (

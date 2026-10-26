@@ -263,6 +263,8 @@ body[data-unselectable="true"],
     --paper-weight-medium: 500;
     --paper-weight-semibold: 600;
     --paper-weight-bold: 700;
+    /* display type only, such as a wordmark */
+    --paper-weight-black: 900;
     --paper-leading-none: 1;
     --paper-leading-tight: 1.1;
     --paper-leading-snug: 1.25;

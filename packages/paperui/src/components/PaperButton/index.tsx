@@ -41,6 +41,7 @@ export function PaperButton(props: PaperButtonProps) {
             styles.PaperButton,
             styles[`size-${local.size ?? "medium"}`],
             local.variant === "text" ? styles.text : "",
+            local.variant === "outline" ? styles.outline : "",
             local.disabled ? styles.disabled : "",
             local.icon ? styles.icon : "",
             local.class,

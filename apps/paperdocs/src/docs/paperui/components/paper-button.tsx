@@ -34,6 +34,7 @@ export function Example() {
                 <PaperButton>Button</PaperButton>
                 <PaperButton variant="primary">Primary</PaperButton>
                 <PaperButton variant="danger">Danger</PaperButton>
+                <PaperButton variant="outline">Outline</PaperButton>
                 <PaperButton disabled>Disabled</PaperButton>
             </PaperFlex>
         </PaperCard>
@@ -46,6 +47,7 @@ export function Example() {
                     <PaperButton>Button</PaperButton>
                     <PaperButton variant="primary">Primary</PaperButton>
                     <PaperButton variant="danger">Danger</PaperButton>
+                    <PaperButton variant="outline">Outline</PaperButton>
                     <PaperButton disabled>Disabled</PaperButton>
                 </PaperFlex>
             </PaperCard>
@@ -69,7 +71,7 @@ export function Example() {
                         <td><PaperCode>variant</PaperCode></td>
                         <td><PaperCode>PaperButtonVariant</PaperCode></td>
                         <td><PaperCode>undefined</PaperCode></td>
-                        <td>Semantic role or "text" for borderless low-emphasis actions.</td>
+                        <td>Semantic role, "text" for borderless low-emphasis actions, or "outline" for a quiet bordered alternative beside a primary action.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>size</PaperCode></td>

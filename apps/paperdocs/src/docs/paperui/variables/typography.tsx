@@ -176,6 +176,10 @@ export default function TypographyDoc() {
                         <td>700</td>
                     </tr>
                     <tr>
+                        <td><PaperCode>--paper-weight-black</PaperCode></td>
+                        <td>900, display type only, such as a wordmark</td>
+                    </tr>
+                    <tr>
                         <td><PaperCode>--paper-leading-none</PaperCode></td>
                         <td>1</td>
                     </tr>

@@ -106,6 +106,7 @@ export type PaperTextPreset = (typeof textPresets)[number] | (string & {});
 export const buttonVariants = [
     ...paperRoles,
     "text",
+    "outline",
 ] as const;
 
 export type PaperButtonVariant = (typeof buttonVariants)[number];

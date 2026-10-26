@@ -56,6 +56,16 @@ describe("PaperButton", () => {
         expect(container.firstElementChild!.className).toContain("medium");
     });
 
+    test("outline is its own quiet treatment, not a role", () => {
+        const { container } = render(() => (
+            <PaperButton variant="outline">Continue with Google</PaperButton>
+        ));
+        const el = container.firstElementChild as HTMLElement;
+        expect(el.className).toContain("outline");
+        expect(el.className).not.toContain("text");
+        expect(el.getAttribute("style") ?? "").not.toContain("--role-base");
+    });
+
     test("renders an anchor when href is set", () => {
         const { container } = render(() => (
             <PaperButton

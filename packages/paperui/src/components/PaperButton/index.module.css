@@ -166,6 +166,46 @@
     }
 }
 
+/* outline: a quiet alternative beside a primary action, such as signing
+   in with another service. No fill, subtle text, a hairline drawn inside
+   so it stays the same size as the buttons next to it. */
+.PaperButton.outline {
+    background: transparent;
+    color: var(--paper-text-subtle);
+    box-shadow: inset 0 0 0 var(--paper-border-width) var(--paper-border);
+    transition:
+        background var(--paper-short-transition),
+        color var(--paper-short-transition),
+        transform var(--paper-tiny-transition);
+}
+@media (hover: hover) {
+    .PaperButton.outline:hover {
+        color: var(--paper-text);
+        background: color-mix(
+            in srgb,
+            var(--paper-contrast) 6%,
+            transparent
+        );
+        opacity: 1;
+    }
+}
+.PaperButton.outline:active {
+    color: var(--paper-text);
+    background: color-mix(
+        in srgb,
+        var(--paper-contrast) 12%,
+        transparent
+    );
+    transform: scale(0.98);
+}
+@media (hover: hover) {
+    .PaperButton.outline.disabled:hover,
+    .PaperButton.outline:disabled:hover {
+        background: transparent;
+        color: var(--paper-text-subtle);
+    }
+}
+
 .PaperButton.icon {
     padding: 0;
     /* The glyph itself renders through PaperIcon (which carries the icon
@@ -194,7 +234,7 @@
 }
 
 @media (hover: hover) {
-    .PaperButton:not(.size-tiny):not(.text):hover {
+    .PaperButton:not(.size-tiny):not(.text):not(.outline):hover {
         opacity: 0.8;
     }
 }
@@ -203,7 +243,7 @@
         opacity: 1 !important;
     }
 }
-.PaperButton:not(.size-tiny):not(.text):active {
+.PaperButton:not(.size-tiny):not(.text):not(.outline):active {
     transform: scale(0.95);
     opacity: 1;
 }
