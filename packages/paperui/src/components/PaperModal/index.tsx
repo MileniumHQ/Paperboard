@@ -1,3 +1,4 @@
+import { createNavigationBack } from "../../utils/navigationBack";
 import styles from "./index.module.css";
 import {
     splitProps,
@@ -70,6 +71,10 @@ export function PaperModal(props: ParentProps<PaperModalProps>) {
                 return styles.medium;
         }
     };
+
+    createNavigationBack(() => !!local.open && !local.concealed, () => {
+        if (local.closeOnEsc ?? true) local.onClose?.();
+    });
 
     createEffect(() => {
         if (!local.open) return;

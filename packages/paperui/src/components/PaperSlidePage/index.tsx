@@ -3,6 +3,7 @@ import { PaperButton } from "../PaperButton";
 import { PaperIcon } from "../PaperIcon";
 import { PaperText } from "../PaperText";
 import { createSwipeBack } from "../../utils/swipeBack";
+import { createNavigationBack } from "../../utils/navigationBack";
 import styles from "./index.module.css";
 
 export interface PaperSlidePageProps {
@@ -37,6 +38,7 @@ export interface PaperSlidePageProps {
  * re-parented either way, so nothing inside remounts or reloads.
  */
 export function PaperSlidePage(props: PaperSlidePageProps) {
+    createNavigationBack(() => props.enabled && props.open, () => props.onBack());
     let pageRef: HTMLDivElement | undefined;
     const swipe = createSwipeBack({
         width: () => pageRef?.clientWidth ?? window.innerWidth,
