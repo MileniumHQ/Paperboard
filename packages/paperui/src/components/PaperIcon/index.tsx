@@ -6,6 +6,10 @@ export interface PaperIconProps extends JSX.HTMLAttributes<HTMLSpanElement> {
     monogram?: boolean;
     src?: string;
     alt?: string;
+    /** draw `src` as a stencil in the text color, for one-color logos */
+    tint?: boolean;
+    /** keep pixel art crisp when `src` is scaled up */
+    pixelated?: boolean;
     /**
      * What the icon means, for an icon that carries information no nearby
      * text does. Without it the icon is decorative and hidden from
@@ -22,6 +26,8 @@ export function PaperIcon(props: PaperIconProps) {
         "monogram",
         "src",
         "alt",
+        "tint",
+        "pixelated",
         "class",
         "classList",
         "children",
@@ -47,11 +53,26 @@ export function PaperIcon(props: PaperIconProps) {
     return (
         <span {...semantics()} {...rest} class={className()} classList={local.classList}>
             <Show when={local.src} fallback={local.children}>
-                <img
-                    src={local.src}
-                    alt={local.alt ?? ""}
-                    class={styles.iconImage}
-                />
+                {(src) => (
+                    <Show
+                        when={local.tint}
+                        fallback={
+                            <img
+                                src={src()}
+                                alt={local.alt ?? ""}
+                                class={[styles.iconImage, local.pixelated ? styles.pixelated : ""]
+                                    .filter(Boolean)
+                                    .join(" ")}
+                            />
+                        }
+                    >
+                        {/* the image's alpha cut out of the text color */}
+                        <span
+                            class={[styles.iconImage, styles.tint].join(" ")}
+                            style={{ "--paper-icon-mask": `url(${JSON.stringify(src())})` }}
+                        />
+                    </Show>
+                )}
             </Show>
         </span>
     );

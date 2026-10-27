@@ -10,13 +10,15 @@ import {
 } from "solid-js";
 import { PaperButton } from "../PaperButton";
 import { PaperIcon } from "../PaperIcon";
-import { PaperText } from "../PaperText";
+import { PaperText, type PaperTextProps } from "../PaperText";
 import {
     SelectionProvider,
     SelectionRadioInput,
     useSelectionItem,
     type SelectionProviderProps,
 } from "../contexts/selection";
+import type { PaperBackgroundSurface } from "../../types";
+import { resolveBackground } from "../../utils/theme";
 
 export interface PaperListItemCloseEvent {
     value: string | number;
@@ -41,6 +43,9 @@ export type PaperListProps = SelectionProviderProps &
         fullHeight?: boolean;
         flex?: boolean | number | JSX.CSSProperties["flex"];
         scrollable?: boolean | "x" | "y";
+        /** the list's surface; inset by default, transparent inside a card
+         *  that already provides one */
+        background?: PaperBackgroundSurface | "transparent";
     };
 
 interface DragState {
@@ -96,6 +101,7 @@ export function PaperList(props: ParentProps<PaperListProps>) {
         "fullHeight",
         "flex",
         "scrollable",
+        "background",
         "class",
         "classList",
         "style",
@@ -325,6 +331,7 @@ export function PaperList(props: ParentProps<PaperListProps>) {
         }
         if (local.fullWidth) extra.width = "100%";
         if (local.fullHeight) extra.height = "100%";
+        if (local.background) extra.background = resolveBackground(local.background);
         if (isScrollable()) {
             const scrollable = local.scrollable;
             extra.overflow =
@@ -362,6 +369,24 @@ export function PaperList(props: ParentProps<PaperListProps>) {
                 </div>
             </PaperListContext.Provider>
         </SelectionProvider>
+    );
+}
+
+export type PaperListLabelProps = PaperTextProps;
+
+/** A group label between list items: names the items that follow it. */
+export function PaperListLabel(props: ParentProps<PaperListLabelProps>) {
+    const [local, rest] = splitProps(props, ["class", "children"]);
+    return (
+        <PaperText
+            as="div"
+            color="text-subtle"
+            {...rest}
+            preset="section"
+            class={[styles.PaperListLabel, local.class].filter(Boolean).join(" ")}
+        >
+            {local.children}
+        </PaperText>
     );
 }
 

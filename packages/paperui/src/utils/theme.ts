@@ -1,4 +1,5 @@
-import type { PaperSpacing, PaperColor, PaperBackgroundSurface } from "../types";
+import type { PaperSpacing, PaperColor, PaperBackgroundSurface, PaperSize } from "../types";
+import { paperSizes } from "../types";
 
 export const SPACING_MAP: Record<string, string> = {
     none: "0",
@@ -63,4 +64,14 @@ export function getVarCss(name: string, fallback?: string): string {
           ? `--${name}`
           : `--paper-${name}`;
     return fallback ? `var(${varName}, ${fallback})` : `var(${varName})`;
+}
+
+export function isPaperSize(value: unknown): value is PaperSize {
+    return (paperSizes as readonly unknown[]).includes(value);
+}
+
+/** a size token ("field") becomes its --paper-size-* variable; a number is px */
+export function resolveSize(value: string | number): string {
+    if (typeof value === "number") return `${value}px`;
+    return isPaperSize(value) ? getVarCss(`size-${value}`) : value;
 }

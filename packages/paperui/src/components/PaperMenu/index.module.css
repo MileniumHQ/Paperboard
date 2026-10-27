@@ -56,6 +56,16 @@
         color var(--paper-short-transition);
 }
 
+/* a group label sits flush with the entries' text, with room above it */
+.menuLabel {
+    margin: 0;
+    padding: var(--paper-uigap-threefourths) var(--paper-uigap-threefourths) var(--paper-uigap-onefourth);
+    padding-left: calc(
+        var(--paper-uigap-threefourths) +
+            (var(--menu-indent-level, 0) * var(--paper-uigap))
+    );
+}
+
 .menuIcon {
     font-size: var(--paper-icon-size-medium);
     display: inline-flex;

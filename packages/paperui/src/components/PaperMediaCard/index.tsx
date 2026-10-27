@@ -1,4 +1,5 @@
-import { getVarCss } from "../../utils/theme";
+import { getVarCss, resolveSize } from "../../utils/theme";
+import type { PaperSize } from "../../types";
 import styles from "./index.module.css";
 import { splitProps, Show, type JSX, type ParentProps } from "solid-js";
 import { Dynamic } from "solid-js/web";
@@ -254,8 +255,8 @@ export function PaperMediaCard(props: ParentProps<PaperMediaCardProps>) {
 }
 
 export interface PaperMediaCardGroupProps extends JSX.HTMLAttributes<HTMLDivElement> {
-    /** Minimum card width before cards wrap to the next row. */
-    minCardWidth?: string;
+    /** Minimum card width before cards wrap to the next row, a size token. */
+    minCardWidth?: PaperSize | (string & {});
 }
 
 export function PaperMediaCardGroup(props: ParentProps<PaperMediaCardGroupProps>) {
@@ -273,7 +274,7 @@ export function PaperMediaCardGroup(props: ParentProps<PaperMediaCardGroupProps>
             class={[styles.cardGroup, local.class].filter(Boolean).join(" ")}
             classList={local.classList}
             style={{
-                "grid-template-columns": `repeat(auto-fill, minmax(${local.minCardWidth ?? `${getVarCss("size-card-min")}`}, 1fr))`,
+                "grid-template-columns": `repeat(auto-fill, minmax(${resolveSize(local.minCardWidth ?? "card-min")}, 1fr))`,
                 ...(typeof local.style === "object" ? local.style : {}),
             }}
         >

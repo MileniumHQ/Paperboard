@@ -51,6 +51,31 @@ export const backgroundSurfaces = [
 
 export type PaperBackgroundSurface = (typeof backgroundSurfaces)[number];
 
+/** footprint tokens (--paper-size-*): fixed sizes name one of these, never px */
+export const paperSizes = [
+    "panel",
+    "panel-height",
+    "panel-small",
+    "panel-height-small",
+    "panel-medium",
+    "panel-height-medium",
+    "panel-large",
+    "panel-height-large",
+    "panel-wide",
+    "panel-height-wide",
+    "sidebar",
+    "loader",
+    "field-small",
+    "field-medium",
+    "field",
+    "bar",
+    "card-min",
+    "split-side",
+    "menu-max",
+] as const;
+
+export type PaperSize = (typeof paperSizes)[number];
+
 export const borderColors = [
     "border-subtle",
     "border",

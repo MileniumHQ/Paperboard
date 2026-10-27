@@ -41,6 +41,7 @@ export function PaperPage(props: ParentProps<PaperPageProps>) {
         "minHeight",
         "maxWidth",
         "maxHeight",
+        "height",
         "fullWidth",
         "fullHeight",
         "scrollable",

@@ -1,14 +1,23 @@
 import { createContext, useContext, type JSX } from "solid-js";
+import type { PaperSize } from "../types";
+import { resolveSize } from "../utils/theme";
 
 export interface PaperLayoutProps {
     flex?: boolean | number | JSX.CSSProperties["flex"];
     shrink?: boolean | number | JSX.CSSProperties["flex-shrink"];
     grow?: boolean | number | JSX.CSSProperties["flex-grow"];
-    minWidth?: JSX.CSSProperties["min-width"] | number;
-    minHeight?: JSX.CSSProperties["min-height"] | number;
-    maxWidth?: JSX.CSSProperties["max-width"] | number;
-    maxHeight?: JSX.CSSProperties["max-height"] | number;
+    /** min and max sizes take a size token ("field"), or 0 to let a flex
+     *  child shrink below its content */
+    minWidth?: PaperSize | JSX.CSSProperties["min-width"] | number;
+    minHeight?: PaperSize | JSX.CSSProperties["min-height"] | number;
+    maxWidth?: PaperSize | JSX.CSSProperties["max-width"] | number;
+    maxHeight?: PaperSize | JSX.CSSProperties["max-height"] | number;
+    /** a fixed height, always a size token */
+    height?: PaperSize;
+    /** true fills the parent's width; false sizes to content, over a
+     *  component's full-width default (a PaperCard beside a growing column) */
     fullWidth?: boolean;
+    /** true fills the parent's height; false sizes to content */
     fullHeight?: boolean;
     scrollable?: boolean | "x" | "y";
     overflow?: JSX.CSSProperties["overflow"];
@@ -58,31 +67,31 @@ export function resolveLayoutStyles(
     }
 
     if (props.minWidth !== undefined) {
-        styles["min-width"] =
-            typeof props.minWidth === "number" ? `${props.minWidth}px` : props.minWidth;
+        styles["min-width"] = resolveSize(props.minWidth);
     }
 
     if (props.minHeight !== undefined) {
-        styles["min-height"] =
-            typeof props.minHeight === "number" ? `${props.minHeight}px` : props.minHeight;
+        styles["min-height"] = resolveSize(props.minHeight);
     }
 
     if (props.maxWidth !== undefined) {
-        styles["max-width"] =
-            typeof props.maxWidth === "number" ? `${props.maxWidth}px` : props.maxWidth;
+        styles["max-width"] = resolveSize(props.maxWidth);
     }
 
     if (props.maxHeight !== undefined) {
-        styles["max-height"] =
-            typeof props.maxHeight === "number" ? `${props.maxHeight}px` : props.maxHeight;
+        styles["max-height"] = resolveSize(props.maxHeight);
     }
 
-    if (props.fullWidth) {
-        styles.width = "100%";
+    if (props.height !== undefined) {
+        styles.height = resolveSize(props.height);
     }
 
-    if (props.fullHeight) {
-        styles.height = "100%";
+    if (props.fullWidth !== undefined) {
+        styles.width = props.fullWidth ? "100%" : "auto";
+    }
+
+    if (props.fullHeight !== undefined) {
+        styles.height = props.fullHeight ? "100%" : "auto";
     }
 
     if (props.scrollable) {

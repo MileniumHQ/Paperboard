@@ -15,6 +15,12 @@
     color: var(--paper-text-subtle);
 }
 
+/* accent: a role-tinted chip, like PaperCard's accent */
+.PaperAvatar.chip.accent {
+    background: color-mix(in srgb, var(--role-base) 16%, transparent);
+    color: var(--role-base);
+}
+
 .PaperAvatar.square {
     border-radius: var(--paper-border-radius-half);
 }
@@ -49,6 +55,10 @@
 .fallback {
     font-size: var(--paper-icon-size-medium);
     color: var(--paper-text-faint);
+}
+
+.PaperAvatar.chip.accent .fallback {
+    color: var(--role-base);
 }
 
 .small .fallback {

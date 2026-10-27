@@ -1,12 +1,13 @@
-import { getVarCss } from "../../utils/theme";
+import { getVarCss, resolveColor } from "../../utils/theme";
+import type { PaperColor } from "../../types";
 import styles from "./index.module.css";
 import { splitProps, type JSX } from "solid-js";
 
 export type PaperSwatchSize = "small" | "medium" | "large";
 
 export interface PaperSwatchProps extends JSX.HTMLAttributes<HTMLSpanElement> {
-    /** any CSS color; defaults to the neutral border tone */
-    color?: string;
+    /** a color token ("success") or any CSS color; defaults to the neutral border tone */
+    color?: PaperColor;
     size?: PaperSwatchSize;
 }
 
@@ -31,7 +32,7 @@ export function PaperSwatch(props: PaperSwatchProps) {
             class={className()}
             classList={local.classList}
             style={{
-                background: local.color || `${getVarCss("border")}`,
+                background: resolveColor(local.color) || getVarCss("border"),
                 ...(typeof local.style === "object" ? local.style : {}),
             }}
         />

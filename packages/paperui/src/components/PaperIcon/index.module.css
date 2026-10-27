@@ -45,3 +45,15 @@ button .PaperIcon {
     display: inline-block;
     vertical-align: middle;
 }
+
+.pixelated {
+    image-rendering: pixelated;
+}
+
+.tint {
+    background-color: currentColor;
+    mask-image: var(--paper-icon-mask);
+    mask-size: contain;
+    mask-repeat: no-repeat;
+    mask-position: center;
+}

@@ -59,6 +59,7 @@ export function PaperCard(props: ParentProps<PaperCardProps>) {
         "minHeight",
         "maxWidth",
         "maxHeight",
+        "height",
         "fullWidth",
         "fullHeight",
         "scrollable",

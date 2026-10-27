@@ -66,6 +66,7 @@ export function PaperFlex(props: ParentProps<PaperFlexProps>) {
         "minHeight",
         "maxWidth",
         "maxHeight",
+        "height",
         "resizable",
         "onResize",
         "class",

@@ -1,6 +1,8 @@
 import styles from "./index.module.css";
 import { splitProps, Show, type JSX } from "solid-js";
 import { PaperIcon } from "../PaperIcon";
+import { roleVars, isPaperRole } from "../../utils/colors";
+import type { PaperRole } from "../../types";
 
 export type PaperAvatarSize = "small" | "medium" | "large" | "xlarge";
 
@@ -12,6 +14,8 @@ export interface PaperAvatarProps extends JSX.HTMLAttributes<HTMLSpanElement> {
     shape?: "circle" | "square";
     /** material icon shown when src is missing or fails */
     fallbackIcon?: string;
+    /** tint the fallback chip with a semantic role (the active item of a set) */
+    accent?: PaperRole;
 }
 
 /**
@@ -26,6 +30,7 @@ export function PaperAvatar(props: PaperAvatarProps) {
         "size",
         "shape",
         "fallbackIcon",
+        "accent",
         "class",
         "classList",
         "style",
@@ -37,6 +42,7 @@ export function PaperAvatar(props: PaperAvatarProps) {
             styles[local.size ?? "medium"],
             local.shape === "square" ? styles.square : "",
             local.src ? "" : styles.chip,
+            !local.src && local.accent ? styles.accent : "",
             local.class,
         ]
             .filter(Boolean)
@@ -47,7 +53,10 @@ export function PaperAvatar(props: PaperAvatarProps) {
             {...rest}
             class={className()}
             classList={local.classList}
-            style={typeof local.style === "object" ? local.style : {}}
+            style={{
+                ...(isPaperRole(local.accent) ? roleVars(local.accent) : {}),
+                ...(typeof local.style === "object" ? local.style : {}),
+            }}
         >
             <Show
                 when={local.src}

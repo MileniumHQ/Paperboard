@@ -1,6 +1,6 @@
 import styles from "./index.module.css";
 import { createContext, useContext, Show, splitProps, type JSX, type ParentProps } from "solid-js";
-import { PaperPage } from "../PaperPage";
+import { PaperPage, type PaperPageWidth } from "../PaperPage";
 import { usePaperPanel } from "../../contexts/panel";
 import { PaperSlidePage } from "../../components/PaperSlidePage";
 
@@ -11,17 +11,21 @@ export interface PaperInterfaceGroupProps extends JSX.HTMLAttributes<HTMLDivElem
 }
 
 /** how an active item hosts its content */
-export type PaperInterfaceItemVariant = "page" | "full" | "centered" | "plain";
+export type PaperInterfaceItemVariant = "page" | "fill" | "full" | "centered" | "plain";
 
 export interface PaperInterfaceItemProps extends JSX.HTMLAttributes<HTMLDivElement> {
     value: string | number;
     /**
      * page (default): centered PaperPage column, item scrolls
+     * fill: the page column at the item's full height; its content takes
+     *   the space and scrolls itself (consoles, chat, file browsers)
      * full: edge to edge, no padding, item clips (canvas-style tabs)
      * centered: content centered in the item, item scrolls
      * plain: raw item, the author composes
      */
     variant?: PaperInterfaceItemVariant;
+    /** the page column's width, for the page and fill variants */
+    width?: PaperPageWidth;
 }
 
 export function PaperInterfaceGroup(props: ParentProps<PaperInterfaceGroupProps>) {
@@ -62,12 +66,14 @@ export function PaperInterfaceItem(props: ParentProps<PaperInterfaceItemProps>) 
     const [local, rest] = splitProps(props, [
         "value",
         "variant",
+        "width",
         "class",
         "classList",
         "children",
     ]);
 
     const variant = () => local.variant ?? "page";
+    const hostsPage = () => variant() === "page" || variant() === "fill";
 
     const className = () =>
         [styles.PaperInterfaceItem, styles[variant()], local.class]
@@ -77,8 +83,10 @@ export function PaperInterfaceItem(props: ParentProps<PaperInterfaceItemProps>) 
     return (
         <Show when={activeValue?.() === local.value}>
             <div {...rest} class={className()} classList={local.classList}>
-                <Show when={variant() === "page"} fallback={local.children}>
-                    <PaperPage>{local.children}</PaperPage>
+                <Show when={hostsPage()} fallback={local.children}>
+                    <PaperPage width={local.width} fullHeight={variant() === "fill" || undefined}>
+                        {local.children}
+                    </PaperPage>
                 </Show>
             </div>
         </Show>

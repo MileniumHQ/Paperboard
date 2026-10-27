@@ -29,6 +29,7 @@
     overflow-x: hidden;
 }
 
+.PaperInterfaceItem.fill,
 .PaperInterfaceItem.full {
     display: flex;
     flex-direction: column;

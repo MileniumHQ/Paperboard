@@ -12,7 +12,7 @@ import {
 } from "solid-js";
 import { usePaperPanel } from "../../contexts/panel";
 import { PaperIcon } from "../PaperIcon";
-import { PaperText } from "../PaperText";
+import { PaperText, type PaperTextProps } from "../PaperText";
 import {
     SelectionProvider,
     SelectionRadioInput,
@@ -247,6 +247,28 @@ export function PaperMenuSection(props: ParentProps<PaperMenuSectionProps>) {
                 </MenuLevelContext.Provider>
             </Show>
         </div>
+    );
+}
+
+export type PaperMenuLabelProps = PaperTextProps;
+
+/** A group label between menu entries: names the entries that follow it. */
+export function PaperMenuLabel(props: ParentProps<PaperMenuLabelProps>) {
+    const [local, rest] = splitProps(props, ["class", "style", "children"]);
+    const level = useMenuLevel();
+    return (
+        <PaperText
+            as="div"
+            {...rest}
+            preset="section"
+            class={[styles.menuLabel, local.class].filter(Boolean).join(" ")}
+            style={{
+                "--menu-indent-level": level,
+                ...(typeof local.style === "object" ? local.style : {}),
+            }}
+        >
+            {local.children}
+        </PaperText>
     );
 }
 
