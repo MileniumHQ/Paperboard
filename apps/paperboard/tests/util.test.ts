@@ -29,6 +29,14 @@ describe("semverGt", () => {
         expect(semverGt("1.0", "1.0.3")).toBe(false);
     });
 
+    it("compares a fourth segment (Helium's 0.20.1.1 style)", () => {
+        expect(semverGt("0.20.1.2", "0.20.1.1")).toBe(true);
+        expect(semverGt("0.20.1.1", "0.20.1.2")).toBe(false);
+        expect(semverGt("0.20.1.1", "0.20.1.1")).toBe(false);
+        expect(semverGt("0.20.2", "0.20.1.9")).toBe(true);
+        expect(semverGt("0.20.1.0", "0.20.1")).toBe(false);
+    });
+
     it("handles empty/garbage as zero", () => {
         expect(semverGt("", "0")).toBe(false);
         expect(semverGt("0.0.1", "")).toBe(true);

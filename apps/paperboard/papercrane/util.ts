@@ -103,6 +103,18 @@ export function withTimeout<T>(
 
 // version compare with coerce, numeric fallback for garbage
 export function semverGt(a: string, b: string): boolean {
+    // plain dotted numbers compare every segment: coerce would cut
+    // Chromium-style 0.20.1.2 to 0.20.1 and never see the update
+    const dotted = /^v?\d+(\.\d+)*$/;
+    if (dotted.test(a ?? "") && dotted.test(b ?? "")) {
+        const pa = a.replace(/^v/, "").split(".").map(Number);
+        const pb = b.replace(/^v/, "").split(".").map(Number);
+        for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+            const d = (pa[i] ?? 0) - (pb[i] ?? 0);
+            if (d !== 0) return d > 0;
+        }
+        return false;
+    }
     try {
         const ca = semver.coerce(a ?? "");
         const cb = semver.coerce(b ?? "");
