@@ -137,13 +137,13 @@ export function Example() {
                 Arrange cards in a responsive catalog using PaperMediaCardGroup.
             </PaperText>
             <PaperCode block language="tsx">
-{`<PaperMediaCardGroup minCardWidth="220px">
+{`<PaperMediaCardGroup minCardWidth="field">
     <PaperMediaCard icon="extension" title="Extension 1" />
     <PaperMediaCard icon="extension" title="Extension 2" />
 </PaperMediaCardGroup>`}
             </PaperCode>
             <PaperCard padding="double" surface="back">
-                <PaperMediaCardGroup minCardWidth="220px">
+                <PaperMediaCardGroup minCardWidth="field">
                     <PaperMediaCard icon="extension" title="Extension 1" />
                     <PaperMediaCard icon="extension" title="Extension 2" />
                 </PaperMediaCardGroup>

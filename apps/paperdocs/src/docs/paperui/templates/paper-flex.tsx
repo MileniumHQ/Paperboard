@@ -106,6 +106,30 @@ export function Example() {
                             <td><PaperCode>false</PaperCode></td>
                             <td>Renders an interactive drag handle on the container edge.</td>
                         </tr>
+                        <tr>
+                            <td><PaperCode>height</PaperCode></td>
+                            <td><PaperCode>PaperSize</PaperCode></td>
+                            <td><PaperCode>undefined</PaperCode></td>
+                            <td>A fixed height, always a size token such as "panel-height-small".</td>
+                        </tr>
+                        <tr>
+                            <td><PaperCode>minWidth / maxWidth / minHeight / maxHeight</PaperCode></td>
+                            <td><PaperCode>PaperSize | 0</PaperCode></td>
+                            <td><PaperCode>undefined</PaperCode></td>
+                            <td>Size bounds as size tokens. 0 lets a flex child shrink below its content, so its own content scrolls or wraps.</td>
+                        </tr>
+                        <tr>
+                            <td><PaperCode>fullWidth / fullHeight</PaperCode></td>
+                            <td><PaperCode>boolean</PaperCode></td>
+                            <td><PaperCode>undefined</PaperCode></td>
+                            <td>true fills the parent. false sizes to content, overriding a component that fills by default, such as PaperCard.</td>
+                        </tr>
+                        <tr>
+                            <td><PaperCode>flex</PaperCode></td>
+                            <td><PaperCode>boolean | number</PaperCode></td>
+                            <td><PaperCode>false</PaperCode></td>
+                            <td>Takes the remaining space along the parent's axis.</td>
+                        </tr>
                     </tbody>
                 </PaperTable>
 
@@ -113,6 +137,7 @@ export function Example() {
             <PaperText preset="body">
                 PaperFlex provides a layout context that allows nested children to inherit flex parent awareness.
                 When resizable is active, dragging the handle updates dimensions and triggers onResize.
+                PaperCard and PaperPage take the same sizing props. Layout is set through these props, never a style tag; see the size tokens under Spacing.
             </PaperText>
 
             <PaperText preset="subheader" id="recipes">Recipes</PaperText>

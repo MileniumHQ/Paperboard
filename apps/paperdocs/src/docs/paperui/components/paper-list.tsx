@@ -103,6 +103,12 @@ export function Example() {
                             <td><PaperCode>undefined</PaperCode></td>
                             <td>Callback executed when an item drop completes with the updated value array.</td>
                         </tr>
+                        <tr>
+                            <td><PaperCode>background</PaperCode></td>
+                            <td><PaperCode>PaperBackgroundSurface | "transparent"</PaperCode></td>
+                            <td><PaperCode>"surface-inset"</PaperCode></td>
+                            <td>The list's surface. Use transparent inside a card that already provides one.</td>
+                        </tr>
                     </tbody>
                 </PaperTable>
 
@@ -159,7 +165,16 @@ export function Example() {
                 A list scrolls on its layout axis by default, so too many tabs overflow and scroll
                 rather than shrinking to slivers.
                 The close button of a closeable item is named Close for assistive devices.
+                PaperListLabel names the group of items that follows it. It is text, not an item, so selection and arrow keys skip it.
+                It takes PaperText props, so pass as="h3" when the label heads a section.
             </PaperText>
+            <PaperCode block language="tsx">
+{`<PaperList name="players" background="surface-raised">
+    <PaperListLabel as="h3">Online (2)</PaperListLabel>
+    <PaperListItem value="alex">Alex</PaperListItem>
+    <PaperListItem value="steve">Steve</PaperListItem>
+</PaperList>`}
+            </PaperCode>
 
             <PaperText preset="subheader" id="recipes">Recipes</PaperText>
             <PaperText preset="body">

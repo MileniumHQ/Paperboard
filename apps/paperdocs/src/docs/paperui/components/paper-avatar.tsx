@@ -89,6 +89,12 @@ export function Example() {
                             <td><PaperCode>"person"</PaperCode></td>
                             <td>Material Symbols icon name rendered when src is absent.</td>
                         </tr>
+                        <tr>
+                            <td><PaperCode>accent</PaperCode></td>
+                            <td><PaperCode>PaperRole</PaperCode></td>
+                            <td>No default</td>
+                            <td>Tints the fallback chip with a role, such as success for the active item. Ignored when src is set.</td>
+                        </tr>
                     </tbody>
                 </PaperTable>
 

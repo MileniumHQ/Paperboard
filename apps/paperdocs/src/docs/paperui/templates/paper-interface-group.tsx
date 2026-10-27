@@ -119,9 +119,15 @@ export function Example() {
                         </tr>
                         <tr>
                             <td><PaperCode>variant</PaperCode></td>
-                            <td><PaperCode>"page" | "full" | "centered" | "plain"</PaperCode></td>
+                            <td><PaperCode>"page" | "fill" | "full" | "centered" | "plain"</PaperCode></td>
                             <td><PaperCode>"page"</PaperCode></td>
-                            <td>Hosting style: page (centered column), full (edge-to-edge), centered (flex center), plain (raw wrapper).</td>
+                            <td>Hosting style: page (scrolling centered column), fill (centered column that fills the height, for views whose content scrolls inside), full (edge-to-edge), centered (flex center), plain (raw wrapper).</td>
+                        </tr>
+                        <tr>
+                            <td><PaperCode>width</PaperCode></td>
+                            <td><PaperCode>PaperPageWidth</PaperCode></td>
+                            <td>The page default</td>
+                            <td>Column width for the page and fill variants.</td>
                         </tr>
                     </tbody>
                 </PaperTable>
@@ -129,16 +135,31 @@ export function Example() {
             <PaperText preset="subheader" id="behavior">Behavior</PaperText>
             <PaperText preset="body">
                 Inactive items are unmounted from the DOM tree.
-                The page variant wraps children in PaperPage to establish centered readability margins.
+                The page and fill variants wrap children in PaperPage to establish centered readability margins.
+                A fill page is as tall as the item, so a child with the flex prop takes the remaining height and scrolls on its own.
             </PaperText>
 
             <PaperText preset="subheader" id="recipes">Recipes</PaperText>
             <PaperText preset="body">
-                Use the full variant for terminal consoles and canvas boards that require raw viewport dimensions.
+                Use the fill variant for a header over a log or chat that scrolls inside its card.
             </PaperText>
             <PaperCode block language="tsx">
-{`<PaperInterfaceItem value="terminal" variant="full">
-    <div style={{ width: "100%", height: "100%" }}>Terminal canvas</div>
+{`<PaperInterfaceItem value="logs" variant="fill">
+    <PaperPageHeader icon="description" title="Logs" />
+    <PaperCard flex minHeight={0} scrollable="y">
+        {lines()}
+    </PaperCard>
+</PaperInterfaceItem>`}
+            </PaperCode>
+            <PaperText preset="body">
+                Use the full variant for terminal consoles and canvas boards that require raw viewport dimensions.
+                Custom drawing surfaces style themselves from their own CSS module.
+            </PaperText>
+            <PaperCode block language="tsx">
+{`import styles from "./Terminal.module.css";
+
+<PaperInterfaceItem value="terminal" variant="full">
+    <div class={styles.canvas}>Terminal canvas</div>
 </PaperInterfaceItem>`}
             </PaperCode>
         </PaperFlex>

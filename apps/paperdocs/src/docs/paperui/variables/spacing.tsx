@@ -181,6 +181,143 @@ export default function SpacingDoc() {
                 </tbody>
             </PaperTable>
 
+            <PaperText preset="subheader" id="size-tokens">Size tokens</PaperText>
+            <PaperText preset="body">
+                Fixed sizes are never px or rem. Layout props that take a size (height, minWidth, maxWidth, minHeight, maxHeight, PaperGrid min, PaperMediaCardGroup minCardWidth) accept these names and resolve them to their variables.
+            </PaperText>
+            <PaperCode block language="tsx">
+{`<PaperFlex height="panel-height-small" minHeight={0}>
+    <PaperGrid min="field">{fields}</PaperGrid>
+</PaperFlex>`}
+            </PaperCode>
+
+            <PaperTable>
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Variable</th>
+                        <th>Dimension</th>
+                        <th>Use</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><PaperCode>"panel"</PaperCode></td>
+                        <td><PaperCode>--paper-size-panel</PaperCode></td>
+                        <td>600px</td>
+                        <td>Standard panel width</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>"panel-height"</PaperCode></td>
+                        <td><PaperCode>--paper-size-panel-height</PaperCode></td>
+                        <td>400px</td>
+                        <td>Standard panel height</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>"panel-small"</PaperCode></td>
+                        <td><PaperCode>--paper-size-panel-small</PaperCode></td>
+                        <td>420px</td>
+                        <td>Narrow column or dialog body</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>"panel-height-small"</PaperCode></td>
+                        <td><PaperCode>--paper-size-panel-height-small</PaperCode></td>
+                        <td>300px</td>
+                        <td>Short fixed-height box, such as a picker</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>"panel-medium"</PaperCode></td>
+                        <td><PaperCode>--paper-size-panel-medium</PaperCode></td>
+                        <td>600px</td>
+                        <td>Medium panel width</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>"panel-height-medium"</PaperCode></td>
+                        <td><PaperCode>--paper-size-panel-height-medium</PaperCode></td>
+                        <td>400px</td>
+                        <td>Medium panel height</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>"panel-large"</PaperCode></td>
+                        <td><PaperCode>--paper-size-panel-large</PaperCode></td>
+                        <td>760px</td>
+                        <td>Large panel width</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>"panel-height-large"</PaperCode></td>
+                        <td><PaperCode>--paper-size-panel-height-large</PaperCode></td>
+                        <td>520px</td>
+                        <td>Large panel height</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>"panel-wide"</PaperCode></td>
+                        <td><PaperCode>--paper-size-panel-wide</PaperCode></td>
+                        <td>920px</td>
+                        <td>Wide panel width</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>"panel-height-wide"</PaperCode></td>
+                        <td><PaperCode>--paper-size-panel-height-wide</PaperCode></td>
+                        <td>580px</td>
+                        <td>Wide panel height</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>"sidebar"</PaperCode></td>
+                        <td><PaperCode>--paper-size-sidebar</PaperCode></td>
+                        <td>190px</td>
+                        <td>Sidebar menu width</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>"loader"</PaperCode></td>
+                        <td><PaperCode>--paper-size-loader</PaperCode></td>
+                        <td>400px</td>
+                        <td>Loader and progress column</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>"field-small"</PaperCode></td>
+                        <td><PaperCode>--paper-size-field-small</PaperCode></td>
+                        <td>88px</td>
+                        <td>Short input, such as a port</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>"field-medium"</PaperCode></td>
+                        <td><PaperCode>--paper-size-field-medium</PaperCode></td>
+                        <td>120px</td>
+                        <td>Medium input</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>"field"</PaperCode></td>
+                        <td><PaperCode>--paper-size-field</PaperCode></td>
+                        <td>160px</td>
+                        <td>Default input or grid column</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>"bar"</PaperCode></td>
+                        <td><PaperCode>--paper-size-bar</PaperCode></td>
+                        <td>54px</td>
+                        <td>Toolbar height</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>"card-min"</PaperCode></td>
+                        <td><PaperCode>--paper-size-card-min</PaperCode></td>
+                        <td>256px</td>
+                        <td>Smallest card in a card grid</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>"split-side"</PaperCode></td>
+                        <td><PaperCode>--paper-size-split-side</PaperCode></td>
+                        <td>320px</td>
+                        <td>PaperSplit side pane</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>"menu-max"</PaperCode></td>
+                        <td><PaperCode>--paper-size-menu-max</PaperCode></td>
+                        <td>416px</td>
+                        <td>Tallest dropdown menu</td>
+                    </tr>
+                </tbody>
+            </PaperTable>
+
             <PaperText preset="subheader" id="stacking">Stacking</PaperText>
             <PaperText preset="body">
                 Name a layer instead of writing a z-index number. Each step sits above the one before it; layering inside one component is raised plus a small offset.

@@ -72,9 +72,9 @@ export function Example() {
                     <tbody>
                         <tr>
                             <td><PaperCode>color</PaperCode></td>
-                            <td><PaperCode>string</PaperCode></td>
+                            <td><PaperCode>PaperColor</PaperCode></td>
                             <td><PaperCode>"var(--paper-border)"</PaperCode></td>
-                            <td>Background color value. Supports hex codes, rgb, or CSS token variables.</td>
+                            <td>A color token such as "success", or a CSS color for data that is not a theme color.</td>
                         </tr>
                         <tr>
                             <td><PaperCode>size</PaperCode></td>

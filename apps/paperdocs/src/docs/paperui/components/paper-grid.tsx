@@ -62,9 +62,9 @@ export function Example() {
                     <tbody>
                         <tr>
                             <td><PaperCode>min</PaperCode></td>
-                            <td><PaperCode>string</PaperCode></td>
+                            <td><PaperCode>PaperSize</PaperCode></td>
                             <td><PaperCode>"var(--paper-grid-min)"</PaperCode></td>
-                            <td>Minimum track size for repeat(auto-fill, minmax(min, 1fr)). Default is 200px.</td>
+                            <td>Minimum track size for repeat(auto-fill, minmax(min, 1fr)), as a size token such as "field".</td>
                         </tr>
                         <tr>
                             <td><PaperCode>columns</PaperCode></td>

@@ -82,7 +82,8 @@ export function Example() {
             <PaperText preset="subheader" id="behavior">Behavior</PaperText>
             <PaperText preset="body">
                 PaperCopyButton uses the browser navigator clipboard API.
-                When clipboard access is denied or unavailable, the button does not trigger the copied state.
+                When clipboard access is denied or unavailable, the button shows an error icon, says Couldn't copy, and plays the error haptic.
+                Either state resets after two seconds.
             </PaperText>
 
             <PaperText preset="subheader" id="recipes">Recipes</PaperText>

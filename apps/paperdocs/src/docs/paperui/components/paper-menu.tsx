@@ -107,7 +107,15 @@ export function Example() {
             <PaperText preset="body">
                 PaperMenu handles keyboard arrow navigation between sibling items and sections.
                 Home and End keys move focus directly to the first and last focusable items.
+                PaperMenuLabel names the entries that follow it. It is text, not an entry, so it is never selected or focused, and it indents with its section.
             </PaperText>
+            <PaperCode block language="tsx">
+{`<PaperMenu name="nav" value={tab()} onValueChange={setTab}>
+    <PaperMenuLabel>Play</PaperMenuLabel>
+    <PaperMenuItem value="chat" icon="chat">Chat</PaperMenuItem>
+    <PaperMenuItem value="players" icon="group">Players</PaperMenuItem>
+</PaperMenu>`}
+            </PaperCode>
 
             <PaperText preset="subheader" id="recipes">Recipes</PaperText>
             <PaperText preset="body">

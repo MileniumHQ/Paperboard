@@ -87,6 +87,18 @@ export function Example() {
                             <td>Accessible image description when src is provided.</td>
                         </tr>
                         <tr>
+                            <td><PaperCode>tint</PaperCode></td>
+                            <td><PaperCode>boolean</PaperCode></td>
+                            <td><PaperCode>false</PaperCode></td>
+                            <td>Draws src as a stencil in the current text color, for single-color logos that follow the theme.</td>
+                        </tr>
+                        <tr>
+                            <td><PaperCode>pixelated</PaperCode></td>
+                            <td><PaperCode>boolean</PaperCode></td>
+                            <td><PaperCode>false</PaperCode></td>
+                            <td>Keeps pixel art crisp when src is scaled up.</td>
+                        </tr>
+                        <tr>
                             <td><PaperCode>label</PaperCode></td>
                             <td><PaperCode>string</PaperCode></td>
                             <td><PaperCode>undefined</PaperCode></td>
