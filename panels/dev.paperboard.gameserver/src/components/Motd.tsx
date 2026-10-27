@@ -319,12 +319,12 @@ export function MotdEditor(props: { open: boolean; onClose: () => void }) {
             title="Server list message"
             size="medium"
             footer={
-                <PaperFlex direction="row" justify="flex-end" gap="half" fullWidth>
+                <>
                     <PaperButton onClick={props.onClose}>Cancel</PaperButton>
                     <PaperButton variant="primary" disabled={!loaded() || saving()} onClick={() => void save()}>
                         Save
                     </PaperButton>
-                </PaperFlex>
+                </>
             }
         >
             <Show

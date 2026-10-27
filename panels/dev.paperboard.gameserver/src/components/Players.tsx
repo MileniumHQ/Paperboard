@@ -612,14 +612,14 @@ export default function Players() {
                 title={`Delete ${openPlayer()?.name ?? "player"}'s data`}
                 size="small"
                 footer={
-                    <PaperFlex direction="row" justify="flex-end" gap="half" fullWidth>
+                    <>
                         <PaperButton onClick={() => setDeleteConfirmOpen(false)}>
                             Cancel
                         </PaperButton>
                         <PaperButton variant="danger" onClick={deleteOpenPlayer}>
                             Delete Data
                         </PaperButton>
-                    </PaperFlex>
+                    </>
                 }
             >
                 <PaperText preset="body">
@@ -635,7 +635,7 @@ export default function Players() {
                 title="Whitelist Player"
                 size="small"
                 footer={
-                    <PaperFlex direction="row" justify="flex-end" gap="half" fullWidth>
+                    <>
                         <PaperButton onClick={() => setWhitelistOpen(false)}>
                             Cancel
                         </PaperButton>
@@ -646,7 +646,7 @@ export default function Players() {
                         >
                             Whitelist
                         </PaperButton>
-                    </PaperFlex>
+                    </>
                 }
             >
                 <PaperFlex direction="column" gap="half" fullWidth>
@@ -1031,14 +1031,14 @@ function ReasonActionModal(props: {
             title={props.title}
             size="small"
             footer={
-                <PaperFlex direction="row" justify="flex-end" gap="half" fullWidth>
+                <>
                     <PaperButton onClick={props.onClose}>
                         Cancel
                     </PaperButton>
                     <PaperButton variant="danger" onClick={submit}>
                         {props.confirmLabel}
                     </PaperButton>
-                </PaperFlex>
+                </>
             }
         >
             <PaperInput

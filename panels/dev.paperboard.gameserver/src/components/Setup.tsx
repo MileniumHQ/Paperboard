@@ -211,14 +211,14 @@ function InstallStep(props: InstallStepProps) {
                 onClose={() => { if (!busy()) void handleDeclineEula(); }}
                 title="Minecraft End User License Agreement"
                 footer={
-                    <PaperFlex direction="row" justify="flex-end" gap="half" fullWidth>
+                    <>
                         <PaperButton disabled={busy()} onClick={handleDeclineEula} variant="text">
                             Decline
                         </PaperButton>
                         <PaperButton disabled={busy()} onClick={handleAgreeEula}>
                             Agree & Continue
                         </PaperButton>
-                    </PaperFlex>
+                    </>
                 }
             >
                 <PaperFlex direction="column" gap="half">

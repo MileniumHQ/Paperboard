@@ -290,14 +290,14 @@ export default function Backups(props: { active: boolean }) {
                 size="small"
                 onClose={() => { if (!confirmBusy()) setConfirmOpen(false); }}
                 footer={
-                    <PaperFlex direction="row" justify="flex-end" gap="half" fullWidth>
+                    <>
                         <PaperButton variant="text" disabled={confirmBusy()} onClick={() => setConfirmOpen(false)}>Cancel</PaperButton>
                         <PaperButton variant="danger" disabled={confirmBusy()} onClick={() => void confirm()}>
                             {confirmBusy()
                                 ? confirming()?.kind === "delete" ? "Deleting..." : "Restoring..."
                                 : confirming()?.kind === "delete" ? "Delete" : "Restore"}
                         </PaperButton>
-                    </PaperFlex>
+                    </>
                 }
             >
                 <PaperFlex direction="column" gap="half">

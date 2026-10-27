@@ -813,7 +813,7 @@ export default function Plugins(props: {
                 }
                 size="medium"
                 footer={
-                    <PaperFlex direction="row" justify="flex-end" gap="half" fullWidth>
+                    <>
                         <PaperButton onClick={closeInstallModal}>
                             Cancel
                         </PaperButton>
@@ -826,7 +826,7 @@ export default function Plugins(props: {
                             </PaperIcon>
                             {installingId() ? "Installing…" : "Install"}
                         </PaperButton>
-                    </PaperFlex>
+                    </>
                 }
             >
                 <Show when={installTarget()} keyed>
@@ -988,7 +988,7 @@ export default function Plugins(props: {
                 title={`Uninstall ${pendingDelete()?.filename ?? ""}`}
                 size="small"
                 footer={
-                    <PaperFlex direction="row" justify="flex-end" gap="half" fullWidth>
+                    <>
                         <PaperButton
                             disabled={uninstallingFile() !== null}
                             onClick={() => setPendingDelete(null)}>
@@ -1000,7 +1000,7 @@ export default function Plugins(props: {
                             onClick={() => void confirmDelete()}>
                             {uninstallingFile() !== null ? "Uninstalling…" : "Uninstall"}
                         </PaperButton>
-                    </PaperFlex>
+                    </>
                 }
             >
                 <PaperText preset="body">
@@ -1022,7 +1022,7 @@ export default function Plugins(props: {
                 title="Couldn't update these plugins"
                 size="medium"
                 footer={
-                    <PaperFlex direction="row" justify="flex-end" gap="half" fullWidth>
+                    <>
                         <PaperButton
                             variant="danger"
                             disabled={uninstallingFailure() !== null}
@@ -1032,7 +1032,7 @@ export default function Plugins(props: {
                         <PaperButton onClick={() => setFailures(null)}>
                             Close
                         </PaperButton>
-                    </PaperFlex>
+                    </>
                 }
             >
                 <PaperFlex direction="column" gap="half">

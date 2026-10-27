@@ -28,4 +28,21 @@ describe("UI standards", () => {
         }
         expect(offenders).toEqual([]);
     });
+
+    test("every modal stays mounted and opens through its open prop", () => {
+        // a modal inside <Show>, <Match> or a render callback mounts and
+        // unmounts instead of opening and closing like every other modal
+        const offenders: string[] = [];
+        for (const file of tsxFiles(SRC)) {
+            const lines = readFileSync(file, "utf8").split("\n");
+            lines.forEach((line, index) => {
+                if (!/<PaperModal\b/.test(line)) return;
+                const before = lines.slice(0, index).reverse().find((l) => l.trim() !== "") ?? "";
+                if (/<Show\b|<Match\b|=>\s*\(?\s*$/.test(before)) {
+                    offenders.push(`${relative(SRC, file)}:${index + 1}`);
+                }
+            });
+        }
+        expect(offenders).toEqual([]);
+    });
 });

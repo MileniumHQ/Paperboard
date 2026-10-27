@@ -381,7 +381,7 @@ export default function Worlds() {
                 title={detail()?.name ?? ""}
                 size="medium"
                 footer={
-                    <PaperFlex direction="row" justify="flex-end" gap="half" fullWidth>
+                    <>
                         <PaperButton onClick={() => setSelected(null)}>
                             Close
                         </PaperButton>
@@ -408,7 +408,7 @@ export default function Worlds() {
                                 Switch to this world
                             </PaperButton>
                         </Show>
-                    </PaperFlex>
+                    </>
                 }
             >
                 <Show when={detail()} keyed>
@@ -461,7 +461,7 @@ export default function Worlds() {
                 title="Add uploaded world"
                 size="small"
                 footer={
-                    <PaperFlex direction="row" justify="flex-end" gap="half" fullWidth>
+                    <>
                         <PaperButton disabled={uploading()} onClick={() => void cancelUpload()}>
                             Cancel
                         </PaperButton>
@@ -471,7 +471,7 @@ export default function Worlds() {
                             onClick={() => void submitUpload()}>
                             {uploading() ? "Adding..." : "Add world"}
                         </PaperButton>
-                    </PaperFlex>
+                    </>
                 }
             >
                 <PaperFlex direction="column" gap="half">
@@ -501,7 +501,7 @@ export default function Worlds() {
                 title="New World"
                 size="medium"
                 footer={
-                    <PaperFlex direction="row" justify="flex-end" gap="half" fullWidth>
+                    <>
                         <PaperButton onClick={() => setCreateOpen(false)}>
                             Cancel
                         </PaperButton>
@@ -516,7 +516,7 @@ export default function Worlds() {
                             onClick={() => void submitCreate()}>
                             Create
                         </PaperButton>
-                    </PaperFlex>
+                    </>
                 }
             >
                 <PaperFlex direction="column" gap="full">
@@ -581,14 +581,14 @@ export default function Worlds() {
                 title={`Delete world "${selected()?.name ?? ""}"`}
                 size="small"
                 footer={
-                    <PaperFlex direction="row" justify="flex-end" gap="half" fullWidth>
+                    <>
                         <PaperButton onClick={() => setDeleteConfirmOpen(false)}>
                             Cancel
                         </PaperButton>
                         <PaperButton variant="danger" onClick={() => void confirmDelete()}>
                             Delete
                         </PaperButton>
-                    </PaperFlex>
+                    </>
                 }
             >
                 <PaperText preset="body">

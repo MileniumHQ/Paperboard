@@ -80,51 +80,42 @@ const ServerIssueModal: Component = () => {
     };
 
     return (
-        <Show when={shownIssue()}>
-            {(issue) => (
-                <PaperModal
-                    open={activeIssue() !== null}
-                    onClose={clearActiveIssue}
-                    title={issue().title}
-                    size="small"
-                    footer={
-                        <PaperFlex
-                            direction="row"
-                            justify="flex-end"
-                            gap="half"
-                            fullWidth
-                        >
-                            <PaperButton onClick={clearActiveIssue}>
-                                Dismiss
+        <PaperModal
+            open={activeIssue() !== null}
+            onClose={clearActiveIssue}
+            title={shownIssue()?.title}
+            size="small"
+            footer={
+                <>
+                    <PaperButton onClick={clearActiveIssue}>
+                        Dismiss
+                    </PaperButton>
+                    <For each={shownIssue()?.actions}>
+                        {(action) => (
+                            <PaperButton
+                                variant={action.variant || "brand"}
+                                onClick={() => handleActionClick(action)}>
+                                <Show when={action.icon}>
+                                    <PaperIcon>{action.icon}</PaperIcon>
+                                </Show>
+                                {action.label}
                             </PaperButton>
-                            <For each={issue().actions}>
-                                {(action) => (
-                                    <PaperButton
-                                        variant={action.variant || "brand"}
-                                        onClick={() => handleActionClick(action)}>
-                                        <Show when={action.icon}>
-                                            <PaperIcon>{action.icon}</PaperIcon>
-                                        </Show>
-                                        {action.label}
-                                    </PaperButton>
-                                )}
-                            </For>
-                        </PaperFlex>
-                    }
-                >
-                    <PaperFlex direction="column" gap="half" fullWidth>
-                        <PaperText preset="body">{issue().description}</PaperText>
-                        <Show when={actionError()}>
-                            {(error) => (
-                                <PaperQuote variant="danger" icon="warning" title="Repair failed">
-                                    {error()}
-                                </PaperQuote>
-                            )}
-                        </Show>
-                    </PaperFlex>
-                </PaperModal>
-            )}
-        </Show>
+                        )}
+                    </For>
+                </>
+            }
+        >
+            <PaperFlex direction="column" gap="half" fullWidth>
+                <PaperText preset="body">{shownIssue()?.description}</PaperText>
+                <Show when={actionError()}>
+                    {(error) => (
+                        <PaperQuote variant="danger" icon="warning" title="Repair failed">
+                            {error()}
+                        </PaperQuote>
+                    )}
+                </Show>
+            </PaperFlex>
+        </PaperModal>
     );
 };
 

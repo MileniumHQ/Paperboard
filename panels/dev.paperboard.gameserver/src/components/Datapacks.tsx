@@ -359,7 +359,7 @@ export default function Datapacks(props: { active: boolean }) {
                 title={target() ? `Install ${target()!.title}` : "Install datapack"}
                 size="medium"
                 footer={
-                    <PaperFlex direction="row" justify="flex-end" gap="half" fullWidth>
+                    <>
                         <PaperButton onClick={() => setTarget(null)}>Cancel</PaperButton>
                         <PaperButton
                             variant="success"
@@ -369,7 +369,7 @@ export default function Datapacks(props: { active: boolean }) {
                             <PaperIcon aria-hidden="true">{installing() ? "hourglass_top" : "download"}</PaperIcon>
                             {installing() ? "Installing…" : "Install"}
                         </PaperButton>
-                    </PaperFlex>
+                    </>
                 }
             >
                 <Show when={target()}>
@@ -439,13 +439,13 @@ export default function Datapacks(props: { active: boolean }) {
                 title="Remove datapack"
                 size="small"
                 footer={
-                    <PaperFlex direction="row" justify="flex-end" gap="half" fullWidth>
+                    <>
                         <PaperButton onClick={() => setPendingRemove(null)}>Cancel</PaperButton>
                         <PaperButton variant="danger" disabled={removing()} onClick={() => void confirmRemove()}>
                             <PaperIcon aria-hidden="true">delete</PaperIcon>
                             {removing() ? "Removing…" : "Remove"}
                         </PaperButton>
-                    </PaperFlex>
+                    </>
                 }
             >
                 <PaperFlex direction="column" gap="half">

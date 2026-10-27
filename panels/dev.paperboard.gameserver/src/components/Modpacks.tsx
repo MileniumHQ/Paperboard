@@ -389,7 +389,7 @@ export default function Modpacks(props: { active: boolean }) {
                 title={target() ? `Install ${target()!.title}` : "Install modpack"}
                 size="medium"
                 footer={
-                    <PaperFlex direction="row" justify="flex-end" gap="half" fullWidth>
+                    <>
                         <PaperButton disabled={installing()} onClick={closeInstall}>
                             Cancel
                         </PaperButton>
@@ -401,7 +401,7 @@ export default function Modpacks(props: { active: boolean }) {
                             <PaperIcon aria-hidden="true">{installing() ? "hourglass_top" : "download"}</PaperIcon>
                             {installing() ? "Installing…" : "Install"}
                         </PaperButton>
-                    </PaperFlex>
+                    </>
                 }
             >
                 <Show when={target()}>
@@ -493,13 +493,13 @@ export default function Modpacks(props: { active: boolean }) {
                 title="Remove modpack"
                 size="small"
                 footer={
-                    <PaperFlex direction="row" justify="flex-end" gap="half" fullWidth>
+                    <>
                         <PaperButton onClick={() => setConfirmingRemove(false)}>Cancel</PaperButton>
                         <PaperButton variant="danger" disabled={removing() || !offline()} onClick={() => void confirmRemove()}>
                             <PaperIcon aria-hidden="true">delete</PaperIcon>
                             {removing() ? "Removing…" : "Remove"}
                         </PaperButton>
-                    </PaperFlex>
+                    </>
                 }
             >
                 <PaperFlex direction="column" gap="half">

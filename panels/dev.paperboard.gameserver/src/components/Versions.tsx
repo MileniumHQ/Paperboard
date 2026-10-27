@@ -211,7 +211,7 @@ export default function Versions(props: { onRequestPluginUpdate?: () => void }) 
                 title="Switch version?"
                 size="small"
                 footer={
-                    <PaperFlex direction="row" justify="flex-end" gap="half" fullWidth>
+                    <>
                         <PaperButton onClick={() => setConfirmSwitchOpen(false)}>
                             Cancel
                         </PaperButton>
@@ -223,7 +223,7 @@ export default function Versions(props: { onRequestPluginUpdate?: () => void }) 
                             }}>
                             Switch anyway
                         </PaperButton>
-                    </PaperFlex>
+                    </>
                 }
             >
                 <PaperFlex direction="column" gap="half">
@@ -248,7 +248,7 @@ export default function Versions(props: { onRequestPluginUpdate?: () => void }) 
                 closeOnEsc={false}
                 footer={
                     installFailed() ? (
-                        <PaperFlex direction="row" justify="flex-end" gap="half" fullWidth>
+                        <>
                             <PaperButton
                                 onClick={() => {
                                     setInstallOpen(false);
@@ -256,7 +256,7 @@ export default function Versions(props: { onRequestPluginUpdate?: () => void }) 
                                 }}>
                                 Dismiss
                             </PaperButton>
-                        </PaperFlex>
+                        </>
                     ) : undefined
                 }
             >
@@ -278,7 +278,7 @@ export default function Versions(props: { onRequestPluginUpdate?: () => void }) 
                 title="Version switched"
                 size="small"
                 footer={
-                    <PaperFlex direction="row" justify="flex-end" gap="half" fullWidth>
+                    <>
                         <Show when={SOFTWARE[software()].addons}>
                             <PaperButton
                                 onClick={() => {
@@ -299,7 +299,7 @@ export default function Versions(props: { onRequestPluginUpdate?: () => void }) 
                         <PaperButton onClick={() => setPostSwitchOpen(false)}>
                             Done
                         </PaperButton>
-                    </PaperFlex>
+                    </>
                 }
             >
                 <PaperFlex direction="column" gap="half">
