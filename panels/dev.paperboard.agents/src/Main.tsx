@@ -1,9 +1,9 @@
 import { Match, Switch, createEffect, createSignal, onCleanup } from "solid-js";
-import { PaperButton, PaperEmptyState, PaperLoader } from "@mileniumhq/paperui";
+import { PaperButton, PaperEmptyState, PaperFlex, PaperLoader } from "@mileniumhq/paperui";
 import Workspace from "./Workspace";
 import Onboarding from "./onboarding/Onboarding";
 import { createAgent } from "./lib/agent";
-import styles from "./Main.module.css";
+import "./tokens.css";
 
 /**
  * The panel: the service's agent, met for the first time or chatted with.
@@ -27,16 +27,16 @@ export default function Main() {
     return (
         <Switch>
             <Match when={agent.hydration() === "loading"}>
-                <div class={styles.center}>
+                <PaperFlex center fullHeight padding="double">
                     <PaperLoader loaderStatus="indeterminate" label="Waking up" />
-                </div>
+                </PaperFlex>
             </Match>
             <Match when={agent.hydration() === "failed"}>
-                <div class={styles.center}>
+                <PaperFlex center fullHeight padding="double">
                     <PaperEmptyState icon="cloud_off" title="Couldn't reach the Agents service" description={agent.error() ?? undefined}>
                         <PaperButton onClick={() => void agent.hydrate()}>Try again</PaperButton>
                     </PaperEmptyState>
-                </div>
+                </PaperFlex>
             </Match>
             <Match when={meeting()}>
                 <Onboarding

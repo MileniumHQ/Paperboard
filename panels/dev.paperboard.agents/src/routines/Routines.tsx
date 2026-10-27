@@ -3,13 +3,11 @@
 // and can stop any of them. The list follows the service's routines revision.
 
 import { For, Match, Show, Switch, createEffect, createSignal, on, onCleanup } from "solid-js";
-import { PaperButton, PaperEmptyState, PaperIcon, PaperLoader, PaperText } from "@mileniumhq/paperui";
+import { PaperButton, PaperCard, PaperEmptyState, PaperFlex, PaperIcon, PaperLoader, PaperQuote, PaperText } from "@mileniumhq/paperui";
 import type { Routine } from "../contract";
 import { describeSchedule, localStamp } from "../routineText";
 import type { Agent } from "../lib/agent";
-import styles from "./Routines.module.css";
-
-const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
+import { errorText } from "../lib/failure";
 
 export default function Routines(props: { agent: Agent }) {
     const { agent } = props;
@@ -31,7 +29,7 @@ export default function Routines(props: { agent: Agent }) {
                 setError(null);
             }
         } catch (e) {
-            if (!gone && mine === reads) setError(message(e));
+            if (!gone && mine === reads) setError(errorText(e));
         }
     };
     createEffect(on(() => agent.state.routines.revision, () => void load()));
@@ -41,7 +39,7 @@ export default function Routines(props: { agent: Agent }) {
         try {
             await agent.deleteRoutine(r.id);
         } catch (e) {
-            setFailed(message(e));
+            setFailed(errorText(e));
         }
     };
 
@@ -65,35 +63,37 @@ export default function Routines(props: { agent: Agent }) {
                 />
             </Match>
             <Match when={true}>
-                <div class={styles.routines}>
+                <PaperFlex gap="half">
                     <Show when={failed()}>
-                        <PaperText size={1} color="danger" role="alert">
+                        <PaperQuote variant="danger" icon="error" title="Routine not stopped" role="alert">
                             {failed()}
-                        </PaperText>
+                        </PaperQuote>
                     </Show>
                     <For each={list()!}>
                         {(r) => (
-                            <div class={styles.routine}>
-                                <div class={styles.text}>
-                                    <PaperText size={2}>{r.what}</PaperText>
-                                    <PaperText size={1} color="text-muted">
-                                        {describeSchedule(r.schedule)}
-                                        {r.next ? ` · next ${localStamp(r.next)}` : ""}
-                                        {r.lastRun ? ` · last ran ${localStamp(r.lastRun)}` : ""}
-                                    </PaperText>
-                                    <Show when={r.lastError}>
-                                        <PaperText size={1} color="danger">
-                                            Its last run didn't happen: {r.lastError}
+                            <PaperCard borderless paddingX="full" paddingY="half">
+                                <PaperFlex direction="row" align="center" gap="full">
+                                    <PaperFlex flex minWidth={0} gap="onefourth">
+                                        <PaperText size={2}>{r.what}</PaperText>
+                                        <PaperText size={1} color="text-muted">
+                                            {describeSchedule(r.schedule)}
+                                            {r.next ? ` · next ${localStamp(r.next)}` : ""}
+                                            {r.lastRun ? ` · last ran ${localStamp(r.lastRun)}` : ""}
                                         </PaperText>
-                                    </Show>
-                                </div>
-                                <PaperButton icon size="small" variant="danger" aria-label={`Stop: ${r.what}`} title="Stop this routine" onClick={() => void stop(r)}>
-                                    <PaperIcon>delete</PaperIcon>
-                                </PaperButton>
-                            </div>
+                                        <Show when={r.lastError}>
+                                            <PaperQuote variant="danger" icon="error" title="Last run missed">
+                                                {r.lastError}
+                                            </PaperQuote>
+                                        </Show>
+                                    </PaperFlex>
+                                    <PaperButton icon size="small" variant="danger" aria-label={`Stop: ${r.what}`} title="Stop this routine" onClick={() => void stop(r)}>
+                                        <PaperIcon>delete</PaperIcon>
+                                    </PaperButton>
+                                </PaperFlex>
+                            </PaperCard>
                         )}
                     </For>
-                </div>
+                </PaperFlex>
             </Match>
         </Switch>
     );

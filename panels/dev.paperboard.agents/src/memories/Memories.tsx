@@ -5,12 +5,22 @@
 // revision, so what the agent remembers shows up live.
 
 import { For, Match, Show, Switch, createEffect, createSignal, on, onCleanup } from "solid-js";
-import { PaperButton, PaperEmptyState, PaperIcon, PaperLoader, PaperMarkdown, PaperSectionHeader, PaperText } from "@mileniumhq/paperui";
+import {
+    PaperButton,
+    PaperCard,
+    PaperEmptyState,
+    PaperFlex,
+    PaperIcon,
+    PaperLoader,
+    PaperMarkdown,
+    PaperMediaCard,
+    PaperQuote,
+    PaperSectionHeader,
+    PaperText,
+} from "@mileniumhq/paperui";
 import type { MemoryList } from "../contract";
 import type { Agent } from "../lib/agent";
-import styles from "./Memories.module.css";
-
-const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
+import { errorText } from "../lib/failure";
 
 export default function Memories(props: { agent: Agent }) {
     const { agent } = props;
@@ -32,7 +42,7 @@ export default function Memories(props: { agent: Agent }) {
                 setError(null);
             }
         } catch (e) {
-            if (!gone && mine === reads) setError(message(e));
+            if (!gone && mine === reads) setError(errorText(e));
         }
     };
     createEffect(on(() => agent.state.memory.revision, () => void load()));
@@ -55,23 +65,14 @@ export default function Memories(props: { agent: Agent }) {
                 {(key) => <Note agent={agent} noteKey={key()} onDone={() => setOpen(null)} />}
             </Match>
             <Match when={true}>
-                <div class={styles.memories}>
+                <PaperFlex gap="full">
                     <Show when={empty()}>
                         <PaperEmptyState icon="neurology" title="Nothing yet" description={`${name()} hasn't remembered anything. It will as you talk.`} />
                     </Show>
                     <Facts agent={agent} facts={list()!.facts} />
                     <PaperSectionHeader icon="description" title="Notes" count={list()!.notes.length} />
-                    <For each={list()!.notes}>
-                        {(n) => (
-                            <button type="button" class={styles.note} onClick={() => setOpen(n.key)}>
-                                <PaperText size={2}>{n.key}</PaperText>
-                                <PaperText size={1} color="text-muted">
-                                    {n.when}
-                                </PaperText>
-                            </button>
-                        )}
-                    </For>
-                </div>
+                    <For each={list()!.notes}>{(n) => <PaperMediaCard title={n.key} subtitle={n.when} onClick={() => setOpen(n.key)} />}</For>
+                </PaperFlex>
             </Match>
         </Switch>
     );
@@ -82,42 +83,49 @@ function Facts(props: { agent: Agent; facts: MemoryList["facts"] }) {
     // a refused forget says why; the list stays as the service has it
     const forget = (id: string) => {
         setError(null);
-        props.agent.deleteFact(id).catch((e) => setError(message(e)));
+        props.agent.deleteFact(id).catch((e) => setError(errorText(e)));
     };
 
     return (
-        <div class={styles.group}>
+        <PaperFlex gap="half">
             <PaperSectionHeader icon="lightbulb" title="Facts" count={props.facts.length} />
             <For each={props.facts}>
                 {(f) => (
-                    <div class={styles.factRow}>
-                        <PaperText size={2} class={styles.fact}>{f.text}</PaperText>
-                        <PaperButton icon size="small" variant="danger" aria-label={`Forget: ${f.text}`} title="Forget" onClick={() => forget(f.id)}>
-                            <PaperIcon>delete</PaperIcon>
-                        </PaperButton>
-                    </div>
+                    <PaperCard borderless paddingX="full" paddingY="half">
+                        <PaperFlex direction="row" align="center" gap="half">
+                            <PaperFlex flex minWidth={0}>
+                                <PaperText size={2} breakWord>
+                                    {f.text}
+                                </PaperText>
+                            </PaperFlex>
+                            <PaperButton icon size="small" variant="danger" aria-label={`Forget: ${f.text}`} title="Forget" onClick={() => forget(f.id)}>
+                                <PaperIcon>delete</PaperIcon>
+                            </PaperButton>
+                        </PaperFlex>
+                    </PaperCard>
                 )}
             </For>
             <Show when={error()}>
-                <PaperText size={1} color="danger" role="alert">
+                <PaperQuote variant="danger" icon="error" title="Fact not forgotten" role="alert">
                     {error()}
-                </PaperText>
+                </PaperQuote>
             </Show>
-        </div>
+        </PaperFlex>
     );
 }
 
 function Note(props: { agent: Agent; noteKey: string; onDone: () => void }) {
     const [note, setNote] = createSignal<{ when: string; body: string } | null>(null);
+    const [readError, setReadError] = createSignal<string | null>(null);
     const [error, setError] = createSignal<string | null>(null);
     const [forgetting, setForgetting] = createSignal(false);
 
     const load = async () => {
-        setError(null);
+        setReadError(null);
         try {
             setNote(await props.agent.readNote(props.noteKey));
         } catch (e) {
-            setError(message(e));
+            setReadError(errorText(e));
         }
     };
     void load();
@@ -129,25 +137,25 @@ function Note(props: { agent: Agent; noteKey: string; onDone: () => void }) {
             await props.agent.deleteNote(props.noteKey);
             props.onDone();
         } catch (e) {
-            setError(message(e));
+            setError(errorText(e));
         } finally {
             setForgetting(false);
         }
     };
 
     return (
-        <div class={styles.memories}>
-            <div class={styles.row}>
+        <PaperFlex gap="full">
+            <PaperFlex direction="row">
                 <PaperButton size="small" variant="text" onClick={props.onDone}>
                     <PaperIcon>arrow_back</PaperIcon>
                     Back
                 </PaperButton>
-            </div>
+            </PaperFlex>
             <Show
                 when={note()}
                 fallback={
-                    <Show when={error()} fallback={<PaperLoader loaderStatus="indeterminate" label="Reading note" />}>
-                        <PaperEmptyState icon="error" title="Note can't be read" description={error()!}>
+                    <Show when={readError()} fallback={<PaperLoader loaderStatus="indeterminate" label="Reading note" />}>
+                        <PaperEmptyState icon="error" title="Note can't be read" description={readError()!}>
                             <PaperButton onClick={() => void load()}>Try again</PaperButton>
                         </PaperEmptyState>
                     </Show>
@@ -161,18 +169,18 @@ function Note(props: { agent: Agent; noteKey: string; onDone: () => void }) {
                         </PaperText>
                         <PaperMarkdown text={n().body} />
                         <Show when={error()}>
-                            <PaperText size={1} color="danger" role="alert">
+                            <PaperQuote variant="danger" icon="error" title="Note not forgotten" role="alert">
                                 {error()}
-                            </PaperText>
+                            </PaperQuote>
                         </Show>
-                        <div class={styles.row}>
+                        <PaperFlex direction="row">
                             <PaperButton variant="danger" disabled={forgetting()} onClick={() => void forget()}>
                                 Forget this note
                             </PaperButton>
-                        </div>
+                        </PaperFlex>
                     </>
                 )}
             </Show>
-        </div>
+        </PaperFlex>
     );
 }

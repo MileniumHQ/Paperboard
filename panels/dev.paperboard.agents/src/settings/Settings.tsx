@@ -5,11 +5,13 @@
 import { For, Match, Show, Switch, createEffect, createResource, createSignal, on } from "solid-js";
 import {
     PaperButton,
+    PaperFlex,
     PaperIcon,
     PaperInput,
     PaperModal,
     PaperQuote,
     PaperSelectMenu,
+    PaperSectionHeader,
     PaperSelectMenuItem,
     PaperSeparator,
     PaperSettingItem,
@@ -20,22 +22,20 @@ import BrainLogo from "../lib/BrainLogo";
 import { COMPACTIONS, HARNESSES, LIMITS, type Compaction, type Harness, type Settings as Saved } from "../contract";
 import type { Agent } from "../lib/agent";
 import { SEARCH_MODELS_FROM, createModels, harnessName, loadedModels } from "../lib/brains";
-import styles from "./Settings.module.css";
+import { errorText, failure, type Failure } from "../lib/failure";
 
 const DEFAULT_MODEL = "default";
-
-const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 export default function Settings(props: { agent: Agent }) {
     const { agent } = props;
     return (
-        <div class={styles.settings}>
+        <PaperFlex gap="full">
             <AgentSettings agent={agent} />
             <PaperSeparator />
             <ComputerSettings agent={agent} />
             <PaperSeparator />
             <ConversationSettings agent={agent} />
-        </div>
+        </PaperFlex>
     );
 }
 
@@ -44,7 +44,7 @@ function AgentSettings(props: { agent: Agent }) {
     // the name is typed, so it saves when the field is left; the rest save when picked
     const [name, setName] = createSignal(current().name);
     const [model, setModel] = createSignal(current().model ?? "");
-    const [error, setError] = createSignal<string | null>(null);
+    const [error, setError] = createSignal<Failure | null>(null);
     // a failed look leaves the saved brain choosable, and says why
     const [installed, { refetch: detectAgain }] = createResource(() => props.agent.detect());
     const models = createModels(props.agent, () => current().harness);
@@ -61,7 +61,7 @@ function AgentSettings(props: { agent: Agent }) {
 
     // one save at a time, each of the whole settings as they stand
     let queue: Promise<void> = Promise.resolve();
-    const save = (patch: Partial<Saved>) => {
+    const save = (title: string, patch: Partial<Saved>) => {
         queue = queue.then(async () => {
             const next = { ...current(), ...patch };
             if (next.name === current().name && next.harness === current().harness && next.model === current().model) return;
@@ -69,7 +69,7 @@ function AgentSettings(props: { agent: Agent }) {
             try {
                 await props.agent.setup(next);
             } catch (e) {
-                setError(message(e));
+                setError(failure(title, e));
                 // what's saved is what shows
                 setName(current().name);
                 setModel(current().model ?? "");
@@ -79,19 +79,17 @@ function AgentSettings(props: { agent: Agent }) {
     const saveName = () => {
         const n = name().trim();
         if (!n) {
-            setError("It needs a name.");
+            setError({ title: "Name not saved", message: "It needs a name." });
             setName(current().name);
             return;
         }
-        save({ name: n });
+        save("Name not saved", { name: n });
     };
     const isInstalled = (h: Harness) => (installed.error ? undefined : installed.latest)?.find((i) => i.id === h)?.installed ?? h === current().harness;
 
     return (
-        <section class={styles.group} aria-label="Agent">
-            <PaperText as="h2" preset="subtitle" class={styles.title}>
-                Agent
-            </PaperText>
+        <PaperFlex gap="full" role="region" aria-label="Agent">
+            <PaperSectionHeader icon="badge" title="Agent" role="heading" aria-level={2} />
             <PaperSettingList autoHeight>
                 <PaperSettingItem title="Name" description="What it's called, and what it calls itself.">
                     <PaperInput
@@ -110,7 +108,7 @@ function AgentSettings(props: { agent: Agent }) {
                         aria-label="Brain"
                         value={current().harness}
                         // a model belongs to its harness: the new brain starts on its own default
-                        onValueChange={(v) => v !== current().harness && save({ harness: v as Harness, model: null })}
+                        onValueChange={(v) => v !== current().harness && save("Brain not changed", { harness: v as Harness, model: null })}
                     >
                         <For each={HARNESSES}>
                             {(h) => (
@@ -126,21 +124,16 @@ function AgentSettings(props: { agent: Agent }) {
                     <Show
                         when={!models.error}
                         fallback={
-                            <div class={styles.field}>
-                                <PaperInput
-                                    name="model"
-                                    label="Model"
-                                    placeholder="Default"
-                                    value={model()}
-                                    maxLength={LIMITS.model}
-                                    onInput={(e) => setModel(e.currentTarget.value)}
-                                    onChange={() => save({ model: model().trim() || null })}
-                                    onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
-                                />
-                                <PaperText size={1} color="text-muted">
-                                    {message(models.error)} Type a model's id instead.
-                                </PaperText>
-                            </div>
+                            <PaperInput
+                                name="model"
+                                label="Model"
+                                placeholder="Default"
+                                value={model()}
+                                maxLength={LIMITS.model}
+                                onInput={(e) => setModel(e.currentTarget.value)}
+                                onChange={() => save("Model not changed", { model: model().trim() || null })}
+                                onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+                            />
                         }
                     >
                         <PaperSelectMenu
@@ -149,7 +142,7 @@ function AgentSettings(props: { agent: Agent }) {
                             value={current().model ?? DEFAULT_MODEL}
                             disabled={!loadedModels(models)}
                             searchable={listed().length >= SEARCH_MODELS_FROM}
-                            onValueChange={(v) => save({ model: v === DEFAULT_MODEL ? null : String(v) })}
+                            onValueChange={(v) => save("Model not changed", { model: v === DEFAULT_MODEL ? null : String(v) })}
                         >
                             <PaperSelectMenuItem value={DEFAULT_MODEL} icon="tune" description={`Whatever ${harnessName(current().harness)} is set to use`}>
                                 Default
@@ -169,20 +162,27 @@ function AgentSettings(props: { agent: Agent }) {
                     </Show>
                 </PaperSettingItem>
             </PaperSettingList>
+            <Show when={models.error}>
+                <PaperQuote variant="danger" icon="error" title="Models not listed" role="alert">
+                    {errorText(models.error)} Type a model's id instead.
+                </PaperQuote>
+            </Show>
             <Show when={installed.error}>
                 <PaperQuote variant="danger" icon="error" title="Brains not found" role="alert">
-                    {message(installed.error)}
+                    {errorText(installed.error)}
                 </PaperQuote>
-                <div>
+                <PaperFlex direction="row">
                     <PaperButton onClick={() => void detectAgain()}>Look again</PaperButton>
-                </div>
+                </PaperFlex>
             </Show>
             <Show when={error()}>
-                <PaperText size={2} color="danger" role="alert">
-                    {error()}
-                </PaperText>
+                {(shown) => (
+                    <PaperQuote variant="danger" icon="error" title={shown().title} role="alert">
+                        {shown().message}
+                    </PaperQuote>
+                )}
             </Show>
-        </section>
+        </PaperFlex>
     );
 }
 
@@ -190,20 +190,18 @@ function ComputerSettings(props: { agent: Agent }) {
     const c = () => props.agent.state.computer;
     const name = () => props.agent.state.settings!.name;
     const [busy, setBusy] = createSignal(false);
-    const [error, setError] = createSignal<string | null>(null);
+    const [error, setError] = createSignal<Failure | null>(null);
     const [confirming, setConfirming] = createSignal(false);
     // a refused erase is told in the confirmation, which stays open over the page
     const [eraseError, setEraseError] = createSignal<string | null>(null);
 
-    const act = async (fn: () => Promise<unknown>) => {
+    const act = async (title: string, fn: () => Promise<unknown>) => {
         setBusy(true);
         setError(null);
         try {
             await fn();
-            return true;
         } catch (e) {
-            setError(message(e));
-            return false;
+            setError(failure(title, e));
         } finally {
             setBusy(false);
         }
@@ -215,7 +213,7 @@ function ComputerSettings(props: { agent: Agent }) {
             await props.agent.installComputer();
             setConfirming(false);
         } catch (e) {
-            setEraseError(message(e));
+            setEraseError(errorText(e));
         } finally {
             setBusy(false);
         }
@@ -233,10 +231,8 @@ function ComputerSettings(props: { agent: Agent }) {
         })[c().phase];
 
     return (
-        <section class={styles.group} aria-label="Computer">
-            <PaperText as="h2" preset="subtitle" class={styles.title}>
-                Computer
-            </PaperText>
+        <PaperFlex gap="full" role="region" aria-label="Computer">
+            <PaperSectionHeader icon="computer" title="Computer" role="heading" aria-level={2} />
             <Switch>
                 <Match when={c().phase === "unsupported"}>
                     <PaperText size={2} color="text-muted">
@@ -246,7 +242,7 @@ function ComputerSettings(props: { agent: Agent }) {
                 <Match when={!c().installed && c().phase !== "installing"}>
                     <PaperSettingList autoHeight>
                         <PaperSettingItem title={`${name()}'s own computer`} description="A web browser of its own it uses for its work, about 400 MB of storage. It reaches the internet, never your files or your network.">
-                            <PaperButton variant="primary" disabled={busy()} onClick={() => void act(props.agent.installComputer)}>
+                            <PaperButton variant="primary" disabled={busy()} onClick={() => void act("Computer not set up", props.agent.installComputer)}>
                                 <PaperIcon>computer</PaperIcon> Set up
                             </PaperButton>
                         </PaperSettingItem>
@@ -257,12 +253,12 @@ function ComputerSettings(props: { agent: Agent }) {
                         <PaperSettingItem title="Status" description={c().phase === "failed" ? (c().error ?? undefined) : `${status()}.`}>
                             <Switch>
                                 <Match when={c().phase === "ready"}>
-                                    <PaperButton disabled={busy()} onClick={() => void act(props.agent.stopComputer)}>
+                                    <PaperButton disabled={busy()} onClick={() => void act("Computer not turned off", props.agent.stopComputer)}>
                                         <PaperIcon>power_settings_new</PaperIcon> Turn off
                                     </PaperButton>
                                 </Match>
                                 <Match when={c().phase === "stopped" || c().phase === "failed"}>
-                                    <PaperButton disabled={busy()} onClick={() => void act(props.agent.startComputer)}>
+                                    <PaperButton disabled={busy()} onClick={() => void act("Computer not turned on", props.agent.startComputer)}>
                                         <PaperIcon>power_settings_new</PaperIcon> {c().phase === "failed" ? "Try again" : "Turn on"}
                                     </PaperButton>
                                 </Match>
@@ -284,9 +280,11 @@ function ComputerSettings(props: { agent: Agent }) {
                 </Match>
             </Switch>
             <Show when={error()}>
-                <PaperText size={2} color="danger" role="alert">
-                    {error()}
-                </PaperText>
+                {(shown) => (
+                    <PaperQuote variant="danger" icon="error" title={shown().title} role="alert">
+                        {shown().message}
+                    </PaperQuote>
+                )}
             </Show>
 
             <PaperModal
@@ -296,7 +294,7 @@ function ComputerSettings(props: { agent: Agent }) {
                 size="small"
                 footer={
                     <>
-                        <PaperButton disabled={busy()} onClick={() => setConfirming(false)}>
+                        <PaperButton variant="text" disabled={busy()} onClick={() => setConfirming(false)}>
                             Keep it
                         </PaperButton>
                         <PaperButton
@@ -316,7 +314,7 @@ function ComputerSettings(props: { agent: Agent }) {
                     </PaperQuote>
                 </Show>
             </PaperModal>
-        </section>
+        </PaperFlex>
     );
 }
 
@@ -332,13 +330,11 @@ function ConversationSettings(props: { agent: Agent }) {
     const setCompaction = (compaction: Compaction) => {
         if (compaction === current().compaction) return;
         setError(null);
-        props.agent.setup({ ...current(), compaction }).catch((e) => setError(message(e)));
+        props.agent.setup({ ...current(), compaction }).catch((e) => setError(errorText(e)));
     };
     return (
-        <section class={styles.group} aria-label="Conversation">
-            <PaperText as="h2" preset="subtitle" class={styles.title}>
-                Conversation
-            </PaperText>
+        <PaperFlex gap="full" role="region" aria-label="Conversation">
+            <PaperSectionHeader icon="forum" title="Conversation" role="heading" aria-level={2} />
             <PaperSettingList autoHeight>
                 <PaperSettingItem title="Compaction" description="A long conversation costs more tokens with every reply. Past a point, it's compacted: this is what happens to its older part.">
                     <PaperSelectMenu name="compaction" aria-label="Compaction" value={current().compaction} onValueChange={(v) => setCompaction(v as Compaction)}>
@@ -358,12 +354,12 @@ function ConversationSettings(props: { agent: Agent }) {
                 </PaperSettingItem>
             </PaperSettingList>
             <Show when={error()}>
-                <PaperText size={2} color="danger" role="alert">
+                <PaperQuote variant="danger" icon="error" title="Compaction not changed" role="alert">
                     {error()}
-                </PaperText>
+                </PaperQuote>
             </Show>
             <StartOver agent={props.agent} open={open()} onClose={() => setOpen(false)} />
-        </section>
+        </PaperFlex>
     );
 }
 
@@ -372,6 +368,8 @@ export function StartOver(props: { agent: Agent; open: boolean; onClose: () => v
     const [busy, setBusy] = createSignal(false);
     const [error, setError] = createSignal<string | null>(null);
     const name = () => props.agent.state.settings?.name ?? "Your agent";
+    // each time it opens, it asks afresh
+    createEffect(on(() => props.open, (open) => open && setError(null)));
     return (
         <PaperModal
             open={props.open}
@@ -380,7 +378,7 @@ export function StartOver(props: { agent: Agent; open: boolean; onClose: () => v
             size="small"
             footer={
                 <>
-                    <PaperButton disabled={busy()} onClick={props.onClose}>
+                    <PaperButton variant="text" disabled={busy()} onClick={props.onClose}>
                         Keep talking
                     </PaperButton>
                     <PaperButton
@@ -393,7 +391,7 @@ export function StartOver(props: { agent: Agent; open: boolean; onClose: () => v
                                 await props.agent.startOver();
                                 props.onClose();
                             } catch (e) {
-                                setError(message(e));
+                                setError(errorText(e));
                             } finally {
                                 setBusy(false);
                             }
@@ -408,9 +406,9 @@ export function StartOver(props: { agent: Agent; open: boolean; onClose: () => v
                 {name()} stops what it's doing and forgets your whole conversation. Its computer and what's on it stay. This can't be undone.
             </PaperText>
             <Show when={error()}>
-                <PaperText size={2} color="danger" role="alert">
+                <PaperQuote variant="danger" icon="error" title="Conversation not cleared" role="alert">
                     {error()}
-                </PaperText>
+                </PaperQuote>
             </Show>
         </PaperModal>
     );

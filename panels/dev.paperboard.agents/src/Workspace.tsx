@@ -2,7 +2,7 @@
 // modal with a sidebar (computer, memories, routines, tools, settings) beside the page.
 
 import { For, Match, Switch, createSignal, onCleanup } from "solid-js";
-import { PaperMenu, PaperMenuItem, PaperModal } from "@mileniumhq/paperui";
+import { PAPER_PANEL_COMPACT_WIDTH, PaperFlex, PaperMenu, PaperMenuItem, PaperModal } from "@mileniumhq/paperui";
 import Chat from "./chat/Chat";
 import ComputerView from "./computer/ComputerView";
 import { createFace } from "./face/controller";
@@ -33,13 +33,20 @@ export default function Workspace(props: { agent: Agent }) {
 
     const title = () => PAGES.find((p) => p.id === page())!.title;
 
+    // phones: the menu becomes a strip above the page, at the width panels take their phone layout
+    const narrow = matchMedia(`(max-width: ${PAPER_PANEL_COMPACT_WIDTH - 1}px)`);
+    const [phone, setPhone] = createSignal(narrow.matches);
+    const onWidth = () => setPhone(narrow.matches);
+    narrow.addEventListener("change", onWidth);
+    onCleanup(() => narrow.removeEventListener("change", onWidth));
+
     return (
         <>
             <Chat agent={agent} face={face} onMenu={() => setOpen(true)} />
             {/* closing the modal unmounts the page, which hands back the computer */}
             <PaperModal open={open()} onClose={() => setOpen(false)} title={title()} size="full" noPadding>
-                <div class={styles.layout}>
-                    <PaperMenu class={styles.sidebar} name="ai-pages" aria-label="Menu" value={page()} onValueChange={(v) => setPage(v as Page)}>
+                <PaperFlex class={styles.layout} direction={phone() ? "column" : "row"} minHeight={0}>
+                    <PaperMenu name="ai-pages" aria-label="Menu" horizontal={phone()} value={page()} onValueChange={(v) => setPage(v as Page)}>
                         <For each={PAGES}>
                             {(p) => (
                                 <PaperMenuItem value={p.id} icon={p.icon}>
@@ -48,7 +55,7 @@ export default function Workspace(props: { agent: Agent }) {
                             )}
                         </For>
                     </PaperMenu>
-                    <div class={styles.page} classList={{ [styles.padded!]: page() !== "computer" }}>
+                    <PaperFlex flex minWidth={0} minHeight={0} scrollable="y" padding={page() === "computer" ? undefined : "double"}>
                         <Switch>
                             <Match when={page() === "computer"}>
                                 <ComputerView agent={agent} />
@@ -66,8 +73,8 @@ export default function Workspace(props: { agent: Agent }) {
                                 <Settings agent={agent} />
                             </Match>
                         </Switch>
-                    </div>
-                </div>
+                    </PaperFlex>
+                </PaperFlex>
             </PaperModal>
         </>
     );

@@ -4,14 +4,19 @@
 // Secret values are typed into password fields and go straight to the
 // daemon's vault; this page only ever sees their names.
 
-import { For, Match, Show, Switch, createMemo, createSignal } from "solid-js";
+import { For, Match, Show, Switch, createEffect, createMemo, createSignal, on } from "solid-js";
 import {
     PaperBadge,
     PaperButton,
+    PaperCard,
+    PaperEmptyState,
+    PaperFlex,
     PaperIcon,
     PaperInput,
+    PaperLoader,
     PaperModal,
     PaperQuote,
+    PaperSectionHeader,
     PaperSelectMenu,
     PaperSelectMenuItem,
     PaperSeparator,
@@ -21,56 +26,45 @@ import {
     PaperToggle,
 } from "@mileniumhq/paperui";
 import type { Agent } from "../lib/agent";
+import { errorText, failure, type Failure } from "../lib/failure";
 import { TOOL_LIMITS, type ServerSpec, type ServerStatus } from "../toolsContract";
 import { createTools, type Tools as ToolsClient } from "./api";
 import { blankForm, formFromSpec, newRow, secretNameOf, specFromForm, typedSecrets, type Form, type Row } from "./form";
-import styles from "./Tools.module.css";
-
-const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 export default function Tools(props: { agent: Agent }) {
     const tools = createTools();
     const name = () => props.agent.state.settings?.name ?? "The agent";
 
     return (
-        <div class={styles.tools}>
-            <Switch>
-                <Match when={tools.load() === "failed"}>
-                    <PaperText size={2} color="danger" role="alert">
-                        The tools couldn't be read: {tools.loadError()}
-                    </PaperText>
-                    <div>
-                        <PaperButton onClick={() => void tools.refresh()}>
-                            <PaperIcon>refresh</PaperIcon> Try again
-                        </PaperButton>
-                    </div>
-                </Match>
-                <Match when={tools.view()}>
-                    {(view) => (
-                        <>
-                            <Show when={view().configError}>
-                                <PaperText size={2} color="danger" role="alert">
-                                    {name()}'s tools file can't be read ({view().configError}). Nothing was changed. Fix or delete tools.json in the panel's config, then try again.
-                                </PaperText>
-                                <div>
-                                    <PaperButton onClick={() => void tools.refresh()}>
-                                        <PaperIcon>refresh</PaperIcon> Try again
-                                    </PaperButton>
-                                </div>
-                            </Show>
-                            <ActionsAccess tools={tools} on={view().config.actions} locked={view().configError !== null} name={name()} />
-                            <PaperSeparator />
-                            <Servers tools={tools} agent={props.agent} />
-                        </>
-                    )}
-                </Match>
-                <Match when={true}>
-                    <PaperText size={2} color="text-muted" role="status">
-                        Loading…
-                    </PaperText>
-                </Match>
-            </Switch>
-        </div>
+        <Switch>
+            <Match when={tools.load() === "failed"}>
+                <PaperEmptyState icon="error" title="Tools can't be read" description={tools.loadError() ?? undefined}>
+                    <PaperButton onClick={() => void tools.refresh()}>Try again</PaperButton>
+                </PaperEmptyState>
+            </Match>
+            <Match when={tools.view()}>
+                {(view) => (
+                    <PaperFlex gap="full">
+                        <Show when={view().configError}>
+                            <PaperQuote variant="danger" icon="error" title="Tools file unreadable" role="alert">
+                                {name()}'s tools file can't be read ({view().configError}). Nothing was changed. Fix or delete tools.json in the panel's config, then try again.
+                            </PaperQuote>
+                            <PaperFlex direction="row">
+                                <PaperButton onClick={() => void tools.refresh()}>
+                                    <PaperIcon>refresh</PaperIcon> Try again
+                                </PaperButton>
+                            </PaperFlex>
+                        </Show>
+                        <ActionsAccess tools={tools} on={view().config.actions} locked={view().configError !== null} name={name()} />
+                        <PaperSeparator />
+                        <Servers tools={tools} agent={props.agent} />
+                    </PaperFlex>
+                )}
+            </Match>
+            <Match when={true}>
+                <PaperLoader loaderStatus="indeterminate" label="Reading the tools" />
+            </Match>
+        </Switch>
     );
 }
 
@@ -83,27 +77,25 @@ function ActionsAccess(props: { tools: ToolsClient; on: boolean; locked: boolean
         try {
             await props.tools.setActions(on);
         } catch (e) {
-            setError(message(e));
+            setError(errorText(e));
         } finally {
             setBusy(false);
         }
     };
     return (
-        <section class={styles.group} aria-label="Paperboard actions">
-            <PaperText as="h2" preset="subtitle" class={styles.title}>
-                Paperboard actions
-            </PaperText>
+        <PaperFlex gap="full" role="region" aria-label="Paperboard actions">
+            <PaperSectionHeader icon="widgets" title="Paperboard actions" role="heading" aria-level={2} />
             <PaperSettingList autoHeight>
                 <PaperSettingItem title="Let it use your other panels" description={`${props.name} can look up what your other panels can do (start a game server, post a message) and run it.`}>
                     <PaperToggle aria-label="Let it use your other panels" checked={props.on} disabled={busy() || props.locked} onChange={(v) => void change(v)} />
                 </PaperSettingItem>
             </PaperSettingList>
             <Show when={error()}>
-                <PaperText size={2} color="danger" role="alert">
+                <PaperQuote variant="danger" icon="error" title="Panel access not changed" role="alert">
                     {error()}
-                </PaperText>
+                </PaperQuote>
             </Show>
-        </section>
+        </PaperFlex>
     );
 }
 
@@ -116,22 +108,32 @@ function Servers(props: { tools: ToolsClient; agent: Agent }) {
     const name = () => props.agent.state.settings?.name ?? "The agent";
     const [form, setForm] = createSignal<Form | null>(null);
     // the editor stays mounted with the last form while it closes, so it animates out instead of vanishing
-    const lastForm = createMemo<Form | null>((prev) => form() ?? prev, null);
+    const lastForm = createMemo<Form>((prev) => form() ?? prev, blankForm());
     const [removing, setRemoving] = createSignal<ServerSpec | null>(null);
     // a refused removal is told in the confirmation, which stays open over the page
     const [removeError, setRemoveError] = createSignal<string | null>(null);
     const [busy, setBusy] = createSignal<string | null>(null);
-    const [error, setError] = createSignal<string | null>(null);
+    const [error, setError] = createSignal<Failure | null>(null);
 
-    const act = async (key: string, fn: () => Promise<unknown>, fail: (why: string | null) => void = setError) => {
+    const act = async (key: string, title: string, fn: () => Promise<unknown>) => {
         setBusy(key);
-        fail(null);
+        setError(null);
         try {
             await fn();
-            return true;
         } catch (e) {
-            fail(message(e));
-            return false;
+            setError(failure(title, e));
+        } finally {
+            setBusy(null);
+        }
+    };
+    const remove = async (s: ServerSpec) => {
+        setBusy(`remove:${s.name}`);
+        setRemoveError(null);
+        try {
+            await props.tools.remove(s.name);
+            setRemoving(null);
+        } catch (e) {
+            setRemoveError(errorText(e));
         } finally {
             setBusy(null);
         }
@@ -140,51 +142,68 @@ function Servers(props: { tools: ToolsClient; agent: Agent }) {
     const where = (s: ServerSpec) => (s.transport === "http" ? "This computer, over the web" : "This computer");
 
     return (
-        <section class={styles.group} aria-label="Tool servers">
-            <PaperText as="h2" preset="subtitle" class={styles.title}>
-                Tool servers
-            </PaperText>
-            <PaperText size={2} color="text-muted" class={styles.hint}>
+        <PaperFlex gap="full" role="region" aria-label="Tool servers">
+            <PaperSectionHeader icon="dns" title="Tool servers" role="heading" aria-level={2} />
+            <PaperText size={2} color="text-muted">
                 MCP servers give {name()} more tools. They start when it next needs them. A server on this computer runs with your access; one inside {name()}'s computer stays in it.
             </PaperText>
             <For each={view().config.servers} fallback={<PaperText size={2} color="text-muted">No tool servers yet.</PaperText>}>
                 {(server) => {
                     const status = () => statusOf(server);
+                    const restart = () => act(`restart:${server.name}`, status().phase === "running" ? "Server not restarted" : "Server not started", () => props.tools.restart(server.name));
                     return (
-                        <div class={styles.server} role="group" aria-label={server.name}>
-                            <div class={styles.head}>
-                                <PaperText weight={600} class={styles.name}>
-                                    {server.name}
-                                </PaperText>
+                        <PaperCard surface="transparent" padding="full" gap="half" role="group" aria-label={server.name}>
+                            <PaperFlex direction="row" align="center" wrap gap="half">
+                                <PaperFlex flex minWidth={0}>
+                                    <PaperText weight={600} breakWord>
+                                        {server.name}
+                                    </PaperText>
+                                </PaperFlex>
                                 <PaperBadge variant={server.enabled ? PHASE_VARIANT[status().phase] : "monochrome"}>
                                     {server.enabled ? PHASE_TEXT[status().phase] : "Off"}
                                     {server.enabled && status().phase === "running" ? ` · ${status().tools} tools` : ""}
                                 </PaperBadge>
-                            </div>
+                            </PaperFlex>
                             <PaperText size={2} color="text-muted">
                                 {where(server)} ·{" "}
                                 {server.transport === "stdio" ? [server.command, ...server.args].join(" ") : server.url}
                             </PaperText>
                             <Show when={server.enabled && status().error}>
-                                <PaperText size={2} color={status().phase === "failed" ? "danger" : "text-muted"} role={status().phase === "failed" ? "alert" : "status"}>
-                                    {status().error}
-                                </PaperText>
+                                <Show
+                                    when={status().phase === "failed"}
+                                    fallback={
+                                        <PaperText size={2} color="text-muted" role="status">
+                                            {status().error}
+                                        </PaperText>
+                                    }
+                                >
+                                    <PaperQuote variant="danger" icon="error" title="Server failed" role="alert">
+                                        {status().error}
+                                    </PaperQuote>
+                                </Show>
                             </Show>
-                            <div class={styles.buttons}>
+                            <PaperFlex direction="row" wrap gap="half">
                                 <Show when={server.enabled && status().phase !== "running" && status().phase !== "starting"}>
-                                    <PaperButton disabled={busy() !== null || locked()} onClick={() => void act(`restart:${server.name}`, () => props.tools.restart(server.name))}>
+                                    <PaperButton disabled={busy() !== null || locked()} onClick={() => void restart()}>
                                         <PaperIcon>{status().phase === "failed" ? "refresh" : "play_arrow"}</PaperIcon> {status().phase === "failed" ? "Try again" : "Start now"}
                                     </PaperButton>
                                 </Show>
                                 <Show when={server.enabled && status().phase === "running"}>
-                                    <PaperButton disabled={busy() !== null || locked()} onClick={() => void act(`restart:${server.name}`, () => props.tools.restart(server.name))}>
+                                    <PaperButton disabled={busy() !== null || locked()} onClick={() => void restart()}>
                                         <PaperIcon>refresh</PaperIcon> Restart
                                     </PaperButton>
                                 </Show>
                                 <PaperButton disabled={busy() !== null || locked()} onClick={() => setForm(formFromSpec(server))}>
                                     <PaperIcon>edit</PaperIcon> Edit
                                 </PaperButton>
-                                <PaperButton disabled={busy() !== null || locked()} onClick={() => void act(`toggle:${server.name}`, () => props.tools.save({ ...server, enabled: !server.enabled }))}>
+                                <PaperButton
+                                    disabled={busy() !== null || locked()}
+                                    onClick={() =>
+                                        void act(`toggle:${server.name}`, server.enabled ? "Server not switched off" : "Server not switched on", () =>
+                                            props.tools.save({ ...server, enabled: !server.enabled }),
+                                        )
+                                    }
+                                >
                                     <PaperIcon>{server.enabled ? "pause" : "play_arrow"}</PaperIcon> {server.enabled ? "Switch off" : "Switch on"}
                                 </PaperButton>
                                 <PaperButton
@@ -197,25 +216,25 @@ function Servers(props: { tools: ToolsClient; agent: Agent }) {
                                 >
                                     <PaperIcon>delete</PaperIcon> Remove
                                 </PaperButton>
-                            </div>
-                        </div>
+                            </PaperFlex>
+                        </PaperCard>
                     );
                 }}
             </For>
-            <div>
+            <PaperFlex direction="row">
                 <PaperButton variant="primary" disabled={busy() !== null || locked() || view().config.servers.length >= TOOL_LIMITS.servers} onClick={() => setForm(blankForm())}>
                     <PaperIcon>add</PaperIcon> Add a server
                 </PaperButton>
-            </div>
+            </PaperFlex>
             <Show when={error()}>
-                <PaperText size={2} color="danger" role="alert">
-                    {error()}
-                </PaperText>
+                {(shown) => (
+                    <PaperQuote variant="danger" icon="error" title={shown().title} role="alert">
+                        {shown().message}
+                    </PaperQuote>
+                )}
             </Show>
 
-            <Show when={lastForm()} keyed>
-                {(f) => <Editor tools={props.tools} name={name()} open={form() !== null} initial={f} onClose={() => setForm(null)} />}
-            </Show>
+            <Editor tools={props.tools} name={name()} open={form() !== null} initial={lastForm()} onClose={() => setForm(null)} />
 
             <PaperModal
                 open={removing() !== null}
@@ -224,15 +243,15 @@ function Servers(props: { tools: ToolsClient; agent: Agent }) {
                 size="small"
                 footer={
                     <>
-                        <PaperButton disabled={busy() !== null} onClick={() => setRemoving(null)}>
+                        <PaperButton variant="text" disabled={busy() !== null} onClick={() => setRemoving(null)}>
                             Keep it
                         </PaperButton>
                         <PaperButton
                             variant="danger"
                             disabled={busy() !== null}
-                            onClick={async () => {
+                            onClick={() => {
                                 const s = removing();
-                                if (s && (await act(`remove:${s.name}`, () => props.tools.remove(s.name), setRemoveError))) setRemoving(null);
+                                if (s) void remove(s);
                             }}
                         >
                             Remove
@@ -247,14 +266,25 @@ function Servers(props: { tools: ToolsClient; agent: Agent }) {
                     </PaperQuote>
                 </Show>
             </PaperModal>
-        </section>
+        </PaperFlex>
     );
 }
 
 function Editor(props: { tools: ToolsClient; name: string; open: boolean; initial: Form; onClose: () => void }) {
     const [f, setF] = createSignal<Form>(props.initial);
     const [busy, setBusy] = createSignal(false);
-    const [error, setError] = createSignal<string | null>(null);
+    const [error, setError] = createSignal<Failure | null>(null);
+    // another server (or a new one) to edit: the editor starts from it, with nothing refused yet
+    createEffect(
+        on(
+            () => props.initial,
+            (initial) => {
+                setF(initial);
+                setError(null);
+            },
+            { defer: true },
+        ),
+    );
     const set = <K extends keyof Form>(k: K, v: Form[K]) => setF((cur) => ({ ...cur, [k]: v }));
     const setRow = (key: number, patch: Partial<Row>) => setF((cur) => ({ ...cur, rows: cur.rows.map((r) => (r.key === key ? { ...r, ...patch } : r)) }));
     const http = () => f().transport === "http";
@@ -267,7 +297,7 @@ function Editor(props: { tools: ToolsClient; name: string; open: boolean; initia
         try {
             await props.tools.save(specFromForm(f()));
         } catch (e) {
-            setError(message(e));
+            setError(failure("Server not saved", e));
             setBusy(false);
             return;
         }
@@ -275,10 +305,11 @@ function Editor(props: { tools: ToolsClient; name: string; open: boolean; initia
         try {
             for (const s of typedSecrets(f())) await props.tools.setSecret(f().name.trim(), s.name, s.value);
         } catch (e) {
-            setError(`The server was saved, but a secret wasn't: ${message(e)} Edit it to add the secret again.`);
+            setError({ title: "Secret not saved", message: `The server was saved, but a secret wasn't: ${errorText(e)} Edit it to add the secret again.` });
             setBusy(false);
             return;
         }
+        setBusy(false);
         props.onClose();
     };
 
@@ -290,7 +321,7 @@ function Editor(props: { tools: ToolsClient; name: string; open: boolean; initia
             size="medium"
             footer={
                 <>
-                    <PaperButton disabled={busy()} onClick={props.onClose}>
+                    <PaperButton variant="text" disabled={busy()} onClick={props.onClose}>
                         Cancel
                     </PaperButton>
                     <PaperButton variant="primary" disabled={busy()} onClick={() => void save()}>
@@ -300,102 +331,111 @@ function Editor(props: { tools: ToolsClient; name: string; open: boolean; initia
             }
         >
             <form
-                class={styles.form}
                 onSubmit={(e) => {
                     e.preventDefault();
                     void save();
                 }}
             >
-                <PaperInput
-                    name="name"
-                    label="Name"
-                    placeholder="github"
-                    value={f().name}
-                    maxLength={TOOL_LIMITS.name}
-                    disabled={f().editing}
-                    onInput={(e) => set("name", e.currentTarget.value)}
-                />
-                <div class={styles.fields}>
-                    <PaperText size={2} weight={600}>
-                        Type
-                    </PaperText>
-                    <PaperSelectMenu
-                        name="transport"
-                        aria-label="Type"
-                        value={f().transport}
-                        onValueChange={(v) => setF((cur) => ({ ...cur, transport: v as Form["transport"], rows: [] }))}
-                    >
-                        <PaperSelectMenuItem value="stdio" icon="terminal" description="A program the server runs for you">
-                            Program
-                        </PaperSelectMenuItem>
-                        <PaperSelectMenuItem value="http" icon="language" description="A server you reach over the web (streamable HTTP)">
-                            Web address
-                        </PaperSelectMenuItem>
-                    </PaperSelectMenu>
-                </div>
-                <Show when={!http()}>
-                    <PaperInput name="command" label="Program" placeholder="npx" value={f().command} maxLength={TOOL_LIMITS.command} onInput={(e) => set("command", e.currentTarget.value)} />
+                <PaperFlex gap="full">
                     <PaperInput
-                        name="args"
-                        label="Arguments, one per line"
-                        placeholder={"-y\n@modelcontextprotocol/server-filesystem\n/home/me/notes"}
-                        multiline
-                        rows={4}
-                        value={f().args}
-                        onInput={(e) => set("args", e.currentTarget.value)}
+                        name="name"
+                        label="Name"
+                        placeholder="github"
+                        value={f().name}
+                        maxLength={TOOL_LIMITS.name}
+                        disabled={f().editing}
+                        autofocus={!f().editing}
+                        onInput={(e) => set("name", e.currentTarget.value)}
                     />
-                </Show>
-                <Show when={http()}>
-                    <PaperInput name="url" label="Address" placeholder="https://example.com/mcp" value={f().url} maxLength={TOOL_LIMITS.url} onInput={(e) => set("url", e.currentTarget.value)} />
-                </Show>
-
-                <div class={styles.fields}>
-                    <PaperText size={2} weight={600}>
-                        {valuesLabel()}
-                    </PaperText>
-                    <Show when={http()}>
-                        <PaperText size={1} color="text-muted" class={styles.hint}>
-                            A secret header holds the whole value, like “Bearer abc123”.
+                    <PaperFlex gap="half">
+                        <PaperText size={2} weight={600}>
+                            Type
                         </PaperText>
+                        <PaperSelectMenu
+                            name="transport"
+                            aria-label="Type"
+                            value={f().transport}
+                            onValueChange={(v) => setF((cur) => ({ ...cur, transport: v as Form["transport"], rows: [] }))}
+                        >
+                            <PaperSelectMenuItem value="stdio" icon="terminal" description="A program the server runs for you">
+                                Program
+                            </PaperSelectMenuItem>
+                            <PaperSelectMenuItem value="http" icon="language" description="A server you reach over the web (streamable HTTP)">
+                                Web address
+                            </PaperSelectMenuItem>
+                        </PaperSelectMenu>
+                    </PaperFlex>
+                    <Show when={!http()}>
+                        <PaperInput name="command" label="Program" placeholder="npx" value={f().command} maxLength={TOOL_LIMITS.command} onInput={(e) => set("command", e.currentTarget.value)} />
+                        <PaperInput
+                            name="args"
+                            label="Arguments, one per line"
+                            placeholder={"-y\n@modelcontextprotocol/server-filesystem\n/home/me/notes"}
+                            multiline
+                            rows={4}
+                            value={f().args}
+                            onInput={(e) => set("args", e.currentTarget.value)}
+                        />
                     </Show>
-                    <For each={f().rows}>
-                        {(row) => (
-                            <div class={styles.row} role="group" aria-label={row.name || valuesLabel()}>
-                                <PaperInput label="Name" value={row.name} maxLength={TOOL_LIMITS.envName} onInput={(e) => setRow(row.key, { name: e.currentTarget.value })} />
-                                <PaperSelectMenu name={`kind-${row.key}`} aria-label="Kind" value={row.kind} onValueChange={(v) => setRow(row.key, { kind: v as Row["kind"], value: "", typed: "" })}>
-                                    <PaperSelectMenuItem value="value">Value</PaperSelectMenuItem>
-                                    <PaperSelectMenuItem value="secret">Secret</PaperSelectMenuItem>
-                                </PaperSelectMenu>
-                                <Show
-                                    when={row.kind === "secret"}
-                                    fallback={<PaperInput label="Value" value={row.value} maxLength={TOOL_LIMITS.envValue} onInput={(e) => setRow(row.key, { value: e.currentTarget.value })} />}
-                                >
-                                    <PaperInput
-                                        label={saved(row) ? "Secret (saved; type to replace)" : "Secret"}
-                                        type="password"
-                                        autocomplete="off"
-                                        value={row.typed}
-                                        maxLength={TOOL_LIMITS.secretValue}
-                                        onInput={(e) => setRow(row.key, { typed: e.currentTarget.value })}
-                                    />
-                                </Show>
-                                <PaperButton aria-label={`Remove ${row.name || "this row"}`} onClick={() => set("rows", f().rows.filter((r) => r.key !== row.key))}>
-                                    <PaperIcon>close</PaperIcon>
-                                </PaperButton>
-                            </div>
+                    <Show when={http()}>
+                        <PaperInput name="url" label="Address" placeholder="https://example.com/mcp" value={f().url} maxLength={TOOL_LIMITS.url} onInput={(e) => set("url", e.currentTarget.value)} />
+                    </Show>
+
+                    <PaperFlex gap="half">
+                        <PaperText size={2} weight={600}>
+                            {valuesLabel()}
+                        </PaperText>
+                        <Show when={http()}>
+                            <PaperText size={1} color="text-muted">
+                                A secret header holds the whole value, like “Bearer abc123”.
+                            </PaperText>
+                        </Show>
+                        <For each={f().rows}>
+                            {(row) => (
+                                <PaperFlex direction="row" align="end" gap="half" role="group" aria-label={row.name || valuesLabel()}>
+                                    <PaperFlex flex minWidth={0}>
+                                        <PaperInput label="Name" value={row.name} maxLength={TOOL_LIMITS.envName} onInput={(e) => setRow(row.key, { name: e.currentTarget.value })} />
+                                    </PaperFlex>
+                                    <PaperSelectMenu name={`kind-${row.key}`} aria-label="Kind" value={row.kind} onValueChange={(v) => setRow(row.key, { kind: v as Row["kind"], value: "", typed: "" })}>
+                                        <PaperSelectMenuItem value="value">Value</PaperSelectMenuItem>
+                                        <PaperSelectMenuItem value="secret">Secret</PaperSelectMenuItem>
+                                    </PaperSelectMenu>
+                                    {/* the value gets the most room: it's what's longest */}
+                                    <PaperFlex flex={1.4} minWidth={0}>
+                                        <Show
+                                            when={row.kind === "secret"}
+                                            fallback={<PaperInput label="Value" value={row.value} maxLength={TOOL_LIMITS.envValue} onInput={(e) => setRow(row.key, { value: e.currentTarget.value })} />}
+                                        >
+                                            <PaperInput
+                                                label={saved(row) ? "Secret (saved; type to replace)" : "Secret"}
+                                                type="password"
+                                                autocomplete="off"
+                                                value={row.typed}
+                                                maxLength={TOOL_LIMITS.secretValue}
+                                                onInput={(e) => setRow(row.key, { typed: e.currentTarget.value })}
+                                            />
+                                        </Show>
+                                    </PaperFlex>
+                                    <PaperButton icon variant="text" aria-label={`Remove ${row.name || "this row"}`} title="Remove" onClick={() => set("rows", f().rows.filter((r) => r.key !== row.key))}>
+                                        <PaperIcon>close</PaperIcon>
+                                    </PaperButton>
+                                </PaperFlex>
+                            )}
+                        </For>
+                        <PaperFlex direction="row">
+                            <PaperButton disabled={f().rows.length >= (http() ? TOOL_LIMITS.headers : TOOL_LIMITS.env)} onClick={() => set("rows", [...f().rows, newRow()])}>
+                                <PaperIcon>add</PaperIcon> Add {http() ? "a header" : "a variable"}
+                            </PaperButton>
+                        </PaperFlex>
+                    </PaperFlex>
+                    <Show when={error()}>
+                        {(shown) => (
+                            <PaperQuote variant="danger" icon="error" title={shown().title} role="alert">
+                                {shown().message}
+                            </PaperQuote>
                         )}
-                    </For>
-                    <div>
-                        <PaperButton disabled={f().rows.length >= (http() ? TOOL_LIMITS.headers : TOOL_LIMITS.env)} onClick={() => set("rows", [...f().rows, newRow()])}>
-                            <PaperIcon>add</PaperIcon> Add {http() ? "a header" : "a variable"}
-                        </PaperButton>
-                    </div>
-                </div>
-                <Show when={error()}>
-                    <PaperText size={2} color="danger" role="alert">
-                        {error()}
-                    </PaperText>
-                </Show>
+                    </Show>
+                </PaperFlex>
             </form>
         </PaperModal>
     );
