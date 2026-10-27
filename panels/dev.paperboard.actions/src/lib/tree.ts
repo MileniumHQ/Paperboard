@@ -326,3 +326,31 @@ export function updateBlockValue(
 
     return updateInTree(blocks);
 }
+
+/** The scrollable world: everything placed, plus room to place more. */
+export function canvasWorldSize(
+    blocks: CanvasBlock[],
+    notes: readonly { pos: { x: number; y: number } }[],
+): { w: number; h: number } {
+    let maxX = 0;
+    let maxY = 0;
+    const visit = (list: CanvasBlock[]) => {
+        for (const b of list) {
+            if (b.pos) {
+                maxX = Math.max(maxX, b.pos.x);
+                maxY = Math.max(maxY, b.pos.y);
+            }
+            if (b.children) visit(b.children);
+            if (b.elseChildren) visit(b.elseChildren);
+        }
+    };
+    visit(blocks);
+    for (const n of notes) {
+        maxX = Math.max(maxX, n.pos.x);
+        maxY = Math.max(maxY, n.pos.y);
+    }
+    return {
+        w: Math.max(maxX + 600, 2400),
+        h: Math.max(maxY + 600, 1600),
+    };
+}

@@ -1,15 +1,7 @@
-import { createSignal, createMemo, createEffect, onMount, onCleanup, For, Show } from "solid-js";
-import { createStore, reconcile, unwrap } from "solid-js/store";
-
-// console log ring: newest entries win, oldest drop past the cap
-const MAX_CONSOLE_LOGS = 500;
-import ActionBlock from "./components/ActionBlock";
-import NoteBlock, { type CanvasNote } from "./components/NoteBlock";
-import ActionLibrary from "./components/ActionLibrary";
-import VariableMenu from "./components/VariableMenu";
-import ActionDropdownMenu from "./components/ActionDropdownMenu";
-import CanvasFileMenu, { type CanvasNotice } from "./components/CanvasFileMenu";
-import { addFlowFile, revealScroll, REVEAL_MARGIN } from "./lib/flowFile";
+// The Actions editor: the Library, the canvas of flows and notes, and the
+// controls over it. The document, runs, pickers and pointer work each live
+// in src/canvas; this puts them on screen.
+import { createMemo, createSignal, For, Show } from "solid-js";
 import {
     PaperContextMenu,
     PaperContextMenuItem,
@@ -18,1506 +10,107 @@ import {
     PaperButton,
     PaperEffect,
     PaperText,
-    PaperModal,
-    PaperInput,
-    PaperFlex,
 } from "@mileniumhq/paperui";
-import {
-    config as configApi,
-    actions as actionsApi,
-    type ActionInfo,
-} from "@mileniumhq/paperapi";
-import { ACTIONS_PANEL_ID } from "./panelId";
-import { createCanvasFollower, createCanvasSync, type CanvasSyncState } from "./lib/canvasSync";
-import {
-    CANVAS_CHANGED_EVENT,
-    isCanvasConflict,
-    type CanvasDocument,
-    type CanvasSaveResult,
-    type CanvasSnapshot,
-} from "./lib/canvasDoc";
-import { variableFieldIcon } from "./lib/variableTypes";
-import { typeInfo, updateTypeCatalog } from "./lib/typeCatalog";
-import { filterPickerItems } from "./lib/variablePicker";
-import { BUILTIN_SCHEMA_ENTRIES } from "./lib/builtins";
-import {
-    type CanvasBlock,
-    removeBlock,
-    insertBlock,
-    updateBlockValue,
-    findBlock,
-    findOwnerTrigger,
-    blockVariableName,
-    renameBlockVariable,
-    relabelVariableRefs,
-    mergeActionSchemas,
-    isCanvasBlock,
-} from "./lib/tree";
-import {
-    type FunctionDef,
-    functionIdFromCallAction,
-    functionIdFromTriggerAction,
-    createFunctionId,
-    buildCallSchema,
-    buildTriggerSchema,
-} from "./lib/functions";
+import ActionBlock from "./components/ActionBlock";
+import NoteBlock from "./components/NoteBlock";
+import ActionLibrary from "./components/ActionLibrary";
+import VariableMenu from "./components/VariableMenu";
+import ActionDropdownMenu from "./components/ActionDropdownMenu";
+import CanvasFileMenu, { type CanvasNotice } from "./components/CanvasFileMenu";
+import { revealScroll, REVEAL_MARGIN } from "./lib/flowFile";
+import type { CanvasDocument } from "./lib/canvasDoc";
+import { blockVariableName, canvasWorldSize, findBlock } from "./lib/tree";
+import { createCanvasDocument } from "./canvas/document";
+import { createFlowRuns } from "./canvas/runs";
+import { createPickers } from "./canvas/pickers";
+import { createCanvasInteraction } from "./canvas/interaction";
+import ConsolePanel, { createConsoleLog } from "./canvas/Console";
+import BlockMenu from "./canvas/BlockMenu";
+import Notices from "./canvas/Notices";
+import GhostBlock from "./canvas/GhostBlock";
 import "@mileniumhq/paperui/style.css";
 import "./style.css";
 
 export default function App() {
-    const [scroll, setScroll] = createSignal({ x: 0, y: 0 });
+    const doc = createCanvasDocument();
+    const log = createConsoleLog();
+    const runs = createFlowRuns(doc, log);
+    const pickers = createPickers(doc, doc.setValue);
+    const canvas = createCanvasInteraction(doc);
 
-    const viewportScroll = () => {
-        const el = containerRef;
-        return { x: el ? el.scrollLeft : 0, y: el ? el.scrollTop : 0 };
-    };
-    const [isPanning, setIsPanning] = createSignal(false);
-    const [hoverDropTarget, setHoverDropTarget] = createSignal<{
-        parentId: string;
-        insertIndex: number;
-    } | null>(null);
-    const [isOverTrash, setIsOverTrash] = createSignal(false);
-    const [draggingCanvasBlockId, setDraggingCanvasBlockId] = createSignal<string | null>(null);
-
-    const [runningBlockIds, setRunningBlockIds] = createSignal<Set<string>>(new Set());
-
-    let maxZIndex = 10;
-
-    const [ghostDrag, setGhostDrag] = createSignal<{
-        id?: string;
-        panelId: string;
-        item: ActionInfo;
-        isTrigger: boolean;
-        iconSrc?: string;
-        pos: { x: number; y: number };
-        grabOffset: { x: number; y: number };
-        values?: Record<string, any>;
-        children?: CanvasBlock[];
-        detachedFrom?: {
-            originalParentId: string | null;
-            originalIndex: number;
-            block: CanvasBlock;
-        };
-    } | null>(null);
-
-    // a press on a nested action only becomes a drag after the pointer moves
-    // past this distance; below it the press is a plain click and the block
-    // must stay mounted where it is
-    const DRAG_START_THRESHOLD_PX = 4;
-
-    interface PendingChildDrag {
-        child: CanvasBlock;
-        grabOffset: { x: number; y: number };
-        startClient: { x: number; y: number };
-        originalParentId: string | null;
-        originalIndex: number;
-    }
-
-    const [pendingChildDrag, setPendingChildDrag] =
-        createSignal<PendingChildDrag | null>(null);
-
-    const blockContextMenu = useContextMenuState("mouse");
-    const canvasContextMenu = useContextMenuState("mouse");
-    const [canvasContextMenuPos, setCanvasContextMenuPos] = createSignal<{ x: number; y: number }>({ x: 0, y: 0 });
-    const [contextBlockId, setContextBlockId] = createSignal<string | null>(null);
-
-    const [variablePicker, setVariablePicker] = createSignal<{
-        open: boolean;
-        blockId: string;
-        paramKey: string;
-        x: number;
-        y: number;
-        availableVariables: {
-            id: string;
-            label: string;
-            sourceBlockId: string;
-            sourceName: string;
-            icon?: string;
-            type?: string;
-        }[];
-        onInsert?: (varId: string, label: string, icon: string) => void;
-        anchor?: HTMLElement | null;
-    }>({
-        open: false,
-        blockId: "",
-        paramKey: "",
-        x: 0,
-        y: 0,
-        availableVariables: [],
-        anchor: null,
-    });
-
-    interface TriggerFieldInfo {
-        type: string;
-        label?: string;
-        typeName?: string;
-        icon?: string;
-    }
-    type TriggerFieldMap = Record<string, TriggerFieldInfo>;
-
-    const typedTriggerFields = (action: any): TriggerFieldMap | null => {
-        if (!action || typeof action !== "object") return null;
-        // trigger schemas can carry typed output fields directly; the label
-        // travels with the field so the picker can name it
-        if (
-            action.outputFields &&
-            typeof action.outputFields === "object" &&
-            Object.keys(action.outputFields).length > 0
-        ) {
-            const map: TriggerFieldMap = {};
-            for (const [fieldId, v] of Object.entries<any>(action.outputFields)) {
-                map[fieldId] =
-                    typeof v === "string"
-                        ? { type: v }
-                        : {
-                              type: v?.type || "any",
-                              label: v?.label,
-                              typeName: v?.typeName,
-                              icon: v?.icon,
-                          };
-            }
-            return map;
-        }
-        // typed output defined with the PaperAPI schema DSL: derive fields
-        // from the registered custom type
-        const outType =
-            typeof action.output === "string" ? action.output : action.output?.type;
-        if (outType) {
-            const def = typeInfo(outType);
-            if (def?.fields && Object.keys(def.fields).length > 0) {
-                const map: TriggerFieldMap = {};
-                for (const [fieldId, f] of Object.entries(def.fields)) {
-                    map[fieldId] = { type: String(f.type), label: f.label };
-                }
-                return map;
-            }
-        }
-        return null;
-    };
-
-    const [functions, setFunctions] = createSignal<FunctionDef[]>([]);
-
-    const functionTriggerFields = (actionId: string): TriggerFieldMap | null => {
-        const fid = functionIdFromTriggerAction(actionId);
-        if (!fid) return null;
-        const def = functions().find((f) => f.id === fid);
-        if (!def) return null;
-        const map: TriggerFieldMap = {};
-        for (const p of def.params) map[p.name] = { type: p.type, label: p.name };
-        return map;
-    };
-
-    const appendConsoleLog = (entry: {
-        time: string;
-        message: string;
-        level?: "error";
-    }) => {
-        // bounded: a long flow-test session must not grow this store forever
-        setConsoleLogs((prev) => {
-            const next = [
-                ...prev,
-                {
-                    id: `log_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-                    ...entry,
-                },
-            ];
-            return next.length > MAX_CONSOLE_LOGS
-                ? next.slice(next.length - MAX_CONSOLE_LOGS)
-                : next;
-        });
-        // the newest line is the point: scroll there on every append so a
-        // failure can never hide below the fold
-        queueMicrotask(() => {
-            if (consoleBodyRef) {
-                consoleBodyRef.scrollTop = consoleBodyRef.scrollHeight;
-            }
-        });
-    };
-
-    const [hoveredSourceBlockId, setHoveredSourceBlockId] = createSignal<string | null>(null);
-
-    const closeVariablePicker = () => {
-        setVariablePicker((prev) => ({ ...prev, open: false }));
-        setHoveredSourceBlockId(null);
-    };
-
-    const handleRequestVariablePicker = (
-        blockId: string,
-        paramKey: string,
-        x: number,
-        y: number,
-        onInsert?: (varId: string, label: string, icon: string) => void,
-        expectedType?: string,
-        _isArray?: boolean,
-        anchor?: HTMLElement,
-    ) => {
-        const available: {
-            id: string;
-            label: string;
-            sourceBlockId: string;
-            sourceName: string;
-            icon?: string;
-            type?: string;
-            typeName?: string;
-        }[] = [];
-
-        for (const trig of blocks) {
-            if (trig.id === blockId) {
-                break;
-            }
-            if (!findBlock([trig], blockId)) {
-                continue;
-            }
-
-            const trigActionId = (trig.action as any)?.id || "";
-                    const fieldTypes =
-                        functionTriggerFields(trigActionId) ||
-                        (() => {
-                            const typed = typedTriggerFields(trig.action);
-                            if (!typed) {
-                                console.debug(
-                                    `[actions] trigger "${trigActionId}" exposes no typed field metadata; variable picker offers only the trigger output`,
-                                );
-                            }
-                            return typed;
-                        })();
-            if (fieldTypes) {
-                for (const [fieldId, field] of Object.entries(fieldTypes)) {
-                    const def = typeInfo(field.type);
-                    available.push({
-                        id: fieldId,
-                        label:
-                            field.label ||
-                            def?.name ||
-                            fieldId.charAt(0).toUpperCase() + fieldId.slice(1),
-                        sourceBlockId: trig.id,
-                        sourceName: trig.action.name,
-                        // resolved once, here: the picker displays this icon
-                        // and the inserted chip stores the very same one
-                        icon: variableFieldIcon(field.type, field.icon),
-                        type: field.type,
-                        typeName: field.typeName,
-                    });
-                }
-            }
-
-            const trigOutput = trig.action.output;
-            // a trigger with typed fields exposes those instead of one opaque
-            // output, so the picker never offers "Command Data" next to them
-            const hasTypedFields =
-                fieldTypes !== null && Object.keys(fieldTypes).length > 0;
-            if (trigOutput && !hasTypedFields) {
-                const label =
-                    typeof trigOutput === "string"
-                        ? trigOutput
-                        : (trigOutput as any).label || (trigOutput as any).type || "Output";
-                const id =
-                    typeof trigOutput === "string"
-                        ? trigOutput
-                        : (trigOutput as any).type || "output";
-                const outType =
-                    typeof trigOutput === "string"
-                        ? trigOutput
-                        : (trigOutput as any).type || "any";
-
-                available.push({
-                    id,
-                    label: label.charAt(0).toUpperCase() + label.slice(1),
-                    sourceBlockId: trig.id,
-                    sourceName: trig.action.name,
-                    icon: trig.action.icon || "bolt",
-                    type: outType,
-                });
-
-                if (id === "message" || (trig.action as any).id === "chat-message") {
-                    available.push({
-                        id: "message.sender",
-                        label: "Sender",
-                        sourceBlockId: trig.id,
-                        sourceName: trig.action.name,
-                        icon: "person",
-                        type: "string",
-                    });
-                }
-            }
-
-            const pushActionOutput = (child: CanvasBlock) => {
-                const out = child.action.output;
-                if (!out) return;
-                available.push({
-                    id: child.id,
-                    label: blockVariableName(child) || "Result",
-                    sourceBlockId: child.id,
-                    sourceName: child.action.name,
-                    icon: child.action.icon || "terminal",
-                    type: typeof out === "string" ? out : (out as any).type || "any",
-                });
-            };
-            // names assigned by Set/Increment Variable blocks are picker
-            // items too: a stored name resolves against the live variable
-            // store at run time. Only
-            // literal names qualify — a key that is itself a reference
-            // cannot be listed. Clears drop the name again so a deleted
-            // variable is not offered.
-            const namedVariables = new Map<
-                string,
-                {
-                    id: string;
-                    label: string;
-                    sourceBlockId: string;
-                    sourceName: string;
-                    icon?: string;
-                    type?: string;
-                }
-            >();
-            const pushNamedVariable = (child: CanvasBlock) => {
-                const actionId = (child.action as any)?.id || "";
-                const rawKey = (child.values as any)?.key;
-                const name =
-                    typeof rawKey === "string" ? rawKey.trim() : "";
-                if (actionId === "clear-variable") {
-                    if (name) namedVariables.delete(name);
-                    return;
-                }
-                if (actionId !== "set-variable" && actionId !== "increment-variable") return;
-                if (!name || name.includes("{{") || name.includes("}}")) return;
-                namedVariables.set(name, {
-                    id: name,
-                    label: name,
-                    sourceBlockId: child.id,
-                    sourceName: child.action.name,
-                    icon: "data_object",
-                    type: "string",
-                });
-            };
-            const visitInOrder = (list: CanvasBlock[]): boolean => {
-                for (const child of list) {
-                    if (child.id === blockId) return true;
-                    pushActionOutput(child);
-                    pushNamedVariable(child);
-                    if (child.children && visitInOrder(child.children)) return true;
-                    if (child.elseChildren && visitInOrder(child.elseChildren)) return true;
-                }
-                return false;
-            };
-            visitInOrder(trig.children || []);
-            for (const item of namedVariables.values()) available.push(item);
-            break;
-        }
-
-        const labelCounts = new Map<string, number>();
-        for (const v of available) {
-            const k = v.label.toLowerCase();
-            labelCounts.set(k, (labelCounts.get(k) || 0) + 1);
-        }
-        const labelSeen = new Map<string, number>();
-        for (const v of available) {
-            const k = v.label.toLowerCase();
-            if ((labelCounts.get(k) || 0) > 1) {
-                const n = (labelSeen.get(k) || 0) + 1;
-                labelSeen.set(k, n);
-                v.label = `${v.label} ${n}`;
-            }
-        }
-
-        // an empty result still opens: the menu's empty state is the
-        // feedback, a silent no-op reads as a broken control
-        const filtered = filterPickerItems(available, expectedType);
-
-        setVariablePicker({
-            open: true,
-            blockId,
-            paramKey,
-            x,
-            y,
-            availableVariables: filtered,
-            onInsert,
-            anchor: anchor ?? null,
-        });
-    };
-
-    const selectVariable = (v: { id: string; label: string; icon?: string }) => {
-        const picker = variablePicker();
-        if (picker.onInsert) {
-            picker.onInsert(v.id, v.label, v.icon || "bolt");
-        } else if (picker.blockId && picker.paramKey) {
-            handleValueChange(picker.blockId, picker.paramKey, `{{${v.id}:${v.label}:${v.icon || "bolt"}}}`);
-        }
-        // the picker stays up while its field is being edited: inserting a
-        // second variable must not cost another click on the field
-    };
-
-    const [optionPicker, setOptionPicker] = createSignal<{
-        open: boolean;
-        blockId?: string;
-        paramKey?: string;
-        x: number;
-        y: number;
-        options: { label: string; value: any; icon?: string; description?: string }[];
-        selectedValue?: any;
-        onSelect?: (value: any) => void;
-        anchor?: HTMLElement;
-    }>({
-        open: false,
-        x: 0,
-        y: 0,
-        options: [],
-    });
-
-    const handleRequestOptionPicker = (
-        blockId: string,
-        paramKey: string,
-        x: number,
-        y: number,
-        options: { label: string; value: any; icon?: string; description?: string }[],
-        selectedValue: any,
-        onSelect: (value: any) => void,
-        anchor?: HTMLElement,
-    ) => {
-        setOptionPicker({
-            open: true,
-            blockId,
-            paramKey,
-            x,
-            y,
-            options,
-            selectedValue,
-            onSelect,
-            anchor,
-        });
-    };
-
-    const contextBlock = () => {
-        const id = contextBlockId();
-        return id ? findBlock(blocks, id) : null;
-    };
-
-    const [blocks, setBlocks] = createStore<CanvasBlock[]>([]);
-    const [notes, setNotes] = createStore<CanvasNote[]>([]);
-    const [consoleLogs, setConsoleLogs] = createStore<
-        { id: string; time: string; message: string; level?: "error" }[]
-    >([]);
-
-    const worldSize = createMemo(() => {
-        let maxX = 0;
-        let maxY = 0;
-        const visit = (list: CanvasBlock[]) => {
-            for (const b of list) {
-                if (b.pos) {
-                    maxX = Math.max(maxX, b.pos.x);
-                    maxY = Math.max(maxY, b.pos.y);
-                }
-                if (b.children) visit(b.children);
-                if (b.elseChildren) visit(b.elseChildren);
-            }
-        };
-        visit(blocks);
-        for (const n of notes) {
-            maxX = Math.max(maxX, n.pos.x);
-            maxY = Math.max(maxY, n.pos.y);
-        }
-        return {
-            w: Math.max(maxX + 600, 2400),
-            h: Math.max(maxY + 600, 1600),
-        };
-    });
-
-    const setBlockRunning = (id: string, isRunning: boolean) => {
-        setRunningBlockIds((prev) => {
-            const next = new Set(prev);
-            if (isRunning) next.add(id);
-            else next.delete(id);
-            return next;
-        });
-    };
-
-    const handleTestRunFlow = async (triggerBlock: CanvasBlock, payload: any) => {
-        try {
-            const synced = await canvasSync.flush();
-            if (!synced.ok) throw new Error(synced.message);
-            const log = await actionsApi.call<any>(
-                ACTIONS_PANEL_ID,
-                "test-run-flow",
-                { triggerBlockId: triggerBlock.id, payload: payload || {} },
-            );
-            // only failures reach the console; a clean run shows nothing and
-            // the flow's own Log to Console actions speak for themselves.
-            // An error status with no message still announces itself: a
-            // failed run that logs nothing is silent success.
-            if (log?.status === "error") {
-                appendConsoleLog({
-                    time: new Date().toLocaleTimeString(),
-                    message: log.message || `Flow failed (status: ${log.status})`,
-                    level: "error",
-                });
-            }
-        } catch (err: any) {
-            appendConsoleLog({
-                time: new Date().toLocaleTimeString(),
-                message: err?.message || String(err ?? "Flow run failed"),
-                level: "error",
-            });
-        }
-    };
-
-    const handlePlayAllFlows = () => {
-        // only on-play triggers run here — silently running OTHER triggers
-        // as a stand-in would be a surprising side effect, not a fallback
-        const onPlay = blocks.filter(
-            (b) => b.isTrigger && b.action?.id === "on-play",
-        );
-        if (onPlay.length === 0) {
-            appendConsoleLog({
-                time: new Date().toLocaleTimeString(),
-                message: "No on-play flows on the canvas. Nothing ran (play button only runs on-play triggers).",
-            });
-            return;
-        }
-        for (const b of onPlay) {
-            handleTestRunFlow(b, {});
-        }
-    };
-
-    const [syncState, setSyncState] = createSignal<CanvasSyncState>({ status: "applied" });
-    const [conflictNotice, setConflictNotice] = createSignal<string | null>(null);
-    const [canvasLoaded, setCanvasLoaded] = createSignal(false);
-    const [canvasLoadError, setCanvasLoadError] = createSignal<string | null>(null);
-    let disposed = false;
-
-    // The service owns the canvas document; this window saves through it
-    // with the revision its edits were made on, and follows revisions other
-    // windows (on any computer) save. Edits stay this window's until saved.
-    const clientId = crypto.randomUUID();
-    let canvasRevision = 0;
-    let lastSave: CanvasSaveResult | null = null;
-    // a refused save made only of a schema refresh loses nothing: the
-    // reload and the next refresh redo it, so it is not reported
-    let userEditUnsaved = false;
-    let conflicted = false;
-    const canvasSync = createCanvasSync<CanvasDocument>({
-        save: async (snapshot) => {
-            try {
-                lastSave = await actionsApi.call<CanvasSaveResult>(ACTIONS_PANEL_ID, "save-canvas", {
-                    canvas: snapshot,
-                    baseRevision: canvasRevision,
-                    clientId,
-                });
-                canvasRevision = lastSave.revision;
-            } catch (err) {
-                if (!isCanvasConflict(err)) throw err;
-                conflicted = true;
-                throw new Error("the canvas changed in another window first");
-            }
-        },
-        // the service applied the flows as it saved them; report what it said
-        apply: async () => {
-            if (lastSave?.applyError) throw new Error(lastSave.applyError);
-        },
-        onState: (state) => {
-            if (state.status === "applied") {
-                userEditUnsaved = false;
-                setSyncState(state);
-                void follower.idle();
-                return;
-            }
-            if (state.status === "error" && conflicted) {
-                conflicted = false;
-                if (userEditUnsaved) {
-                    setConflictNotice("This canvas was changed in another window at the same moment, so your last change was not saved. It now shows the latest version.");
-                }
-                userEditUnsaved = false;
-                setSyncState({ status: "applied" });
-                void follower.reload().then(() => refreshBlockSchemas());
-                return;
-            }
-            setSyncState(state);
-        },
-    });
-    const showCanvas = (snapshot: CanvasSnapshot) => {
-        // stored flows are executable content: drop malformed blocks
-        // loudly instead of rendering them into the canvas
-        const clean = snapshot.canvas.flows.filter(isCanvasBlock);
-        if (clean.length !== snapshot.canvas.flows.length) {
-            throw new Error("Stored canvas contains malformed blocks; repair the document before applying flows");
-        }
-        setFunctions(snapshot.canvas.functions);
-        // keyed by id, so blocks and notes update in place instead of remounting
-        setBlocks(reconcile(clean, { key: "id" }));
-        setNotes(reconcile(snapshot.canvas.notes as CanvasNote[], { key: "id" }));
-        canvasRevision = snapshot.revision;
-    };
-    const fetchCanvas = () => actionsApi.call<CanvasSnapshot>(ACTIONS_PANEL_ID, "get-canvas");
-    const follower = createCanvasFollower<CanvasSnapshot>({
-        clientId,
-        fetch: fetchCanvas,
-        revision: () => canvasRevision,
-        busy: () => !canvasLoaded() || syncState().status === "pending" || syncState().status === "saving",
-        show: (snapshot) => {
-            try {
-                showCanvas(snapshot);
-            } catch (err) {
-                setSyncState({ status: "error", message: `Changes from another window could not be shown: ${err instanceof Error ? err.message : String(err)}` });
-            }
-        },
-        onError: (message) => setSyncState({ status: "error", message }),
-    });
-    onCleanup(() => { disposed = true; canvasSync.dispose(); follower.dispose(); });
-    onMount(() => {
-        const off = actionsApi.on(ACTIONS_PANEL_ID, CANVAS_CHANGED_EVENT, (change: any) => {
-            void follower.changed(change);
-        });
-        onCleanup(off);
-    });
-    const scheduleCanvas = (currentBlocks?: CanvasBlock[], currentNotes?: CanvasNote[]) => {
-        if (!canvasLoaded() || disposed) return;
-        try {
-            canvasSync.schedule({ flows: currentBlocks ?? blocks, notes: currentNotes ?? notes, functions: functions() });
-        } catch (err) {
-            setSyncState({ status: "error", message: `Canvas could not be prepared for saving: ${String(err)}` });
-        }
-    };
-    const saveFlows = (currentBlocks?: CanvasBlock[], currentNotes?: CanvasNote[]) => {
-        if (!canvasLoaded() || disposed) return;
-        userEditUnsaved = true;
-        setConflictNotice(null);
-        scheduleCanvas(currentBlocks, currentNotes);
-    };
-
+    const blockMenu = useContextMenuState("mouse");
+    const [menuBlockId, setMenuBlockId] = createSignal<string | null>(null);
     const [fileNotice, setFileNotice] = createSignal<CanvasNotice | null>(null);
-    // an imported flow file goes beside what is on the canvas, with new ids
+
+    const worldSize = createMemo(() => canvasWorldSize(doc.blocks, doc.notes));
+
+    // an imported file lands below everything, often off screen: scroll to it
     const addFile = (file: CanvasDocument) => {
-        const had = new Set<string>([...blocks.map((b) => b.id), ...notes.map((n) => n.id)]);
-        // the open Library covers the canvas's left edge
-        const library = containerRef?.querySelector(".library-sidebar")?.getBoundingClientRect();
-        const covered = library && containerRef ? Math.max(0, Math.round(library.right - containerRef.getBoundingClientRect().left)) : 0;
-        const merged = addFlowFile(
-            { flows: unwrap(blocks), notes: unwrap(notes), functions: functions() },
-            file,
-            (kind) => `${kind}_${crypto.randomUUID()}`,
-            covered ? covered + REVEAL_MARGIN : 0,
-        );
-        setFunctions(merged.functions);
-        setBlocks(reconcile(merged.flows, { key: "id" }));
-        setNotes(reconcile(merged.notes as CanvasNote[], { key: "id" }));
-        saveFlows();
-        void refreshBlockSchemas();
-        // the import lands below everything, often off screen: scroll to it
-        const added = [...merged.flows, ...(merged.notes as CanvasNote[])].filter((i) => !had.has(i.id));
+        const covered = canvas.libraryInset();
+        const added = doc.addFile(file, covered ? covered + REVEAL_MARGIN : 0);
         const target = revealScroll(added, covered);
-        if (target && containerRef) containerRef.scrollTo(target);
+        if (target) canvas.scrollTo(target);
     };
 
-    const handleCreateFunction = (name: string, params: { name: string; type: string }[]) => {
-        const def: FunctionDef = {
-            id: createFunctionId(),
-            name: name.trim(),
-            params: params.map((p) => ({ name: p.name.trim(), type: p.type })),
-        };
-        setFunctions((prev) => [...prev, def]);
-        saveFlows();
-    };
-
-    const handleDeleteFunction = (fid: string) => {
-        setFunctions((prev) => prev.filter((f) => f.id !== fid));
-        saveFlows();
-    };
-
-    const handleRenameFunction = (fid: string, name: string) => {
-        const clean = name.trim().replace(/[{}:]/g, "");
-        if (!clean) return;
-        const def = functions().find((f) => f.id === fid);
-        if (!def || def.name === clean) return;
-        const renamed: FunctionDef = { ...def, name: clean };
-        setFunctions((prev) => prev.map((f) => (f.id === fid ? renamed : f)));
-
-        const callSchema = buildCallSchema(renamed);
-        const trigSchema = buildTriggerSchema(renamed);
-        const refresh = (list: CanvasBlock[]): CanvasBlock[] =>
-            list.map((b) => {
-                const callFid = functionIdFromCallAction(b.action?.id || "");
-                const trigFid = functionIdFromTriggerAction(b.action?.id || "");
-                let nb = b;
-                if (callFid === fid) {
-                    nb = { ...nb, action: { ...callSchema } };
-                } else if (trigFid === fid) {
-                    nb = { ...nb, action: { ...trigSchema } };
-                }
-                return {
-                    ...nb,
-                    children: nb.children ? refresh(nb.children) : nb.children,
-                    elseChildren: nb.elseChildren ? refresh(nb.elseChildren) : nb.elseChildren,
-                };
-            });
-        const refreshed = refresh(blocks);
-        let relabeled = refreshed;
-        const walkRelabel = (list: CanvasBlock[]) => {
-            for (const b of list) {
-                if (
-                    functionIdFromCallAction(b.action?.id || "") === fid &&
-                    b.action?.output
-                ) {
-                    const outLabel =
-                        typeof b.action.output === "string"
-                            ? b.action.output
-                            : (b.action.output as any).label || "Result";
-                    relabeled = relabelVariableRefs(relabeled, b.id, outLabel);
-                }
-                if (b.children) walkRelabel(b.children);
-                if (b.elseChildren) walkRelabel(b.elseChildren);
-            }
-        };
-        walkRelabel(refreshed);
-        setBlocks(reconcile(relabeled, { key: "id" }));
-        saveFlows(relabeled);
-    };
-
-
-
-    let loadingCanvas = false;
-    const loadCanvas = async () => {
-        if (loadingCanvas || disposed) return;
-        loadingCanvas = true;
-        setCanvasLoadError(null);
-        try {
-            const snapshot = await fetchCanvas();
-            if (disposed) return;
-            showCanvas(snapshot);
-            // Hydrate the entire document before any refresh can save it.
-            setCanvasLoaded(true);
-            await refreshBlockSchemas();
-        } catch (err) {
-            if (!disposed) setCanvasLoadError(`Canvas could not be loaded: ${String(err)}`);
-        } finally {
-            loadingCanvas = false;
-        }
-    };
-    onMount(() => { void loadCanvas(); });
-
-    let refreshPending = false;
-    let refreshing: Promise<void> | undefined;
-    const refreshBlockSchemas = (): Promise<void> => {
-        if (!canvasLoaded() || disposed) return Promise.resolve();
-        refreshPending = true;
-        if (!refreshing) refreshing = (async () => {
-            while (refreshPending && !disposed) {
-                refreshPending = false;
-                try {
-                    const acts = await actionsApi.list();
-                    if (disposed) return;
-                    updateTypeCatalog(acts.flatMap((act) => (act.schema ? [act.schema] : [])));
-                    // Merge into the current canvas after the request, so
-                    // edits made while listing cannot be overwritten.
-                    const merged = mergeActionSchemas(blocks, [...acts, ...BUILTIN_SCHEMA_ENTRIES]);
-                    // every window refreshes on a registry change; only a
-                    // refresh that changed something is saved, so windows do
-                    // not race each other to write the same canvas
-                    if (JSON.stringify(merged) === JSON.stringify(blocks)) continue;
-                    setBlocks(reconcile(merged, { key: "id" }));
-                    scheduleCanvas();
-                } catch (err) {
-                    if (!disposed) setSyncState({ status: "error", message: `Action schemas could not be refreshed: ${String(err)}` });
-                    return;
-                }
-            }
-        })().finally(() => { refreshing = undefined; });
-        return refreshing;
-    };
-
-    onMount(() => {
-        // panels register after this panel may have loaded, so schemas are
-        // refreshed whenever the registry changes
-        const unsubscribe = actionsApi.onRegistryChange(() => {
-            void refreshBlockSchemas();
-        });
-        onCleanup(unsubscribe);
-    });
-
-    onMount(() => {
-        // internal flow-state triggers belong to THIS panel: explicit
-        // two-arg subscriptions (each filters its own trigger name) —
-        // no wildcard; cross-panel flows live in the service's trigger
-        // subscriptions instead
-        const handler = (output: any, data: any) => {
-            if (!data) return;
-            if (data.trigger === "flow-step" && output?.blockId) {
-                setBlockRunning(output.blockId, output.status === "start");
-                return;
-            }
-            if (data.trigger === "flow-start" && output?.triggerBlockId) {
-                setBlockRunning(output.triggerBlockId, true);
-                return;
-            }
-            if (data.trigger === "flow-end" && output?.triggerBlockId) {
-                setBlockRunning(output.triggerBlockId, false);
-                return;
-            }
-            if (data.trigger === "flow-log" && output) {
-                appendConsoleLog({
-                    time: output.time || new Date().toLocaleTimeString(),
-                    message: String(output.message ?? ""),
-                    level: output.status === "error" ? "error" : undefined,
-                });
-                return;
-            }
-        };
-        const unsubs = (["flow-step", "flow-start", "flow-end", "flow-log"] as const).map(
-            (trigger) => actionsApi.onTrigger(trigger, handler),
-        );
-
-        onCleanup(() => {
-            for (const unsub of unsubs) unsub();
-        });
-    });
-
-    onMount(() => {
-        const handleGlobalKeyDown = (e: KeyboardEvent) => {
-            if (e.key === "Escape" && variablePicker().open) {
-                closeVariablePicker();
-            }
-        };
-        window.addEventListener("keydown", handleGlobalKeyDown);
-        onCleanup(() => {
-            window.removeEventListener("keydown", handleGlobalKeyDown);
-        });
-    });
-
-    let dragStart = { x: 0, y: 0 };
-    let scrollStart = { x: 0, y: 0 };
-    let rightClickDownPos = { x: 0, y: 0 };
-    let lastContextMenuPos = { x: 0, y: 0 };
-    let containerRef: HTMLDivElement | undefined;
-    let consoleBodyRef: HTMLDivElement | undefined;
-
-    const bringToFront = (id: string) => {
-        maxZIndex += 1;
-        setBlocks((b) => b.id === id, "zIndex", maxZIndex);
-    };
-
-    const checkDropTarget = (
-        clientX: number,
-        clientY: number,
-    ): { parentId: string; insertIndex: number } | null => {
-        try {
-            const zones = document.querySelectorAll<HTMLElement>("[data-drop-parent]");
-            for (const zone of zones) {
-                const rect = zone.getBoundingClientRect();
-                if (
-                    clientX >= rect.left - 16 &&
-                    clientX <= rect.right + 16 &&
-                    clientY >= rect.top - 16 &&
-                    clientY <= rect.bottom + 16
-                ) {
-                    const parentId = zone.getAttribute("data-drop-parent");
-                    const rawIdx = zone.getAttribute("data-drop-index");
-                    if (parentId !== null && rawIdx !== null) {
-                        return { parentId, insertIndex: parseInt(rawIdx, 10) };
-                    }
-                }
-            }
-        } catch (err) {
-            console.debug("[actions] drop-zone lookup failed:", String(err));
-        }
-        return null;
-    };
-
-    const checkTrashTarget = (clientX: number, clientY: number): boolean => {
-        const trashEl = document.getElementById("canvas-trash-zone");
-        if (!trashEl) return false;
-        const rect = trashEl.getBoundingClientRect();
-        return (
-            clientX >= rect.left - 16 &&
-            clientX <= rect.right + 16 &&
-            clientY >= rect.top - 16 &&
-            clientY <= rect.bottom + 16
-        );
-    };
-
-    const isDropOnCanvas = (clientX: number): boolean => {
-        const sidebarEl = document.querySelector(".library-sidebar");
-        const sidebarRight = sidebarEl ? sidebarEl.getBoundingClientRect().right : 0;
-        return clientX > sidebarRight;
-    };
-
-    const handlePointerDown = (e: PointerEvent) => {
-        const isBackgroundTarget =
-            e.target === containerRef ||
-            (e.target as HTMLElement).classList.contains("canvas-viewport") ||
-            (e.target as HTMLElement).classList.contains("canvas-world");
-
-        if (e.button === 1 || e.button === 2 || (e.button === 0 && isBackgroundTarget)) {
-            if (e.button === 2) {
-                e.preventDefault();
-                rightClickDownPos = { x: e.clientX, y: e.clientY };
-            }
-            setIsPanning(true);
-            dragStart = { x: e.clientX, y: e.clientY };
-            scrollStart = { ...viewportScroll() };
-
-            if (containerRef) {
-                try {
-                    containerRef.setPointerCapture(e.pointerId);
-                } catch (err) {
-                    console.debug("[actions] pointer capture failed:", String(err));
-                }
-            }
-        }
-    };
-
-    const handlePointerMove = (e: PointerEvent) => {
-        const pending = pendingChildDrag();
-        if (pending && !ghostDrag()) {
-            const distance = Math.hypot(
-                e.clientX - pending.startClient.x,
-                e.clientY - pending.startClient.y,
-            );
-            if (distance >= DRAG_START_THRESHOLD_PX) {
-                setPendingChildDrag(null);
-                beginChildDrag(pending, e.clientX, e.clientY);
-            }
-            // a press that has not travelled yet is still a click: do not pan
-            return;
-        }
-
-        if (ghostDrag()) {
-            setGhostDrag({
-                ...ghostDrag()!,
-                pos: { x: e.clientX, y: e.clientY },
-            });
-
-            const overTrash = checkTrashTarget(e.clientX, e.clientY);
-            setIsOverTrash(overTrash);
-
-            if (!overTrash && !ghostDrag()!.isTrigger) {
-                const target = checkDropTarget(e.clientX, e.clientY);
-                setHoverDropTarget(target);
-            } else {
-                setHoverDropTarget(null);
-            }
-            return;
-        }
-
-        if (draggingCanvasBlockId()) {
-            setIsOverTrash(checkTrashTarget(e.clientX, e.clientY));
-        }
-
-        if (!isPanning()) return;
-
-        const dx = e.clientX - dragStart.x;
-        const dy = e.clientY - dragStart.y;
-
-        if (containerRef) {
-            containerRef.scrollLeft = Math.round(scrollStart.x - dx);
-            containerRef.scrollTop = Math.round(scrollStart.y - dy);
-        }
-    };
-
-    const handlePointerUp = (e: PointerEvent) => {
-        // a press that never crossed the drag threshold was a click; the
-        // block was never removed, so there is nothing to restore
-        if (pendingChildDrag()) {
-            setPendingChildDrag(null);
-            return;
-        }
-        const dropTarget = hoverDropTarget();
-        setHoverDropTarget(null);
-
-        const overTrash = isOverTrash();
-        setIsOverTrash(false);
-
-        if (ghostDrag()) {
-            const drag = ghostDrag()!;
-            setGhostDrag(null);
-
-            if (overTrash) {
-                saveFlows();
-                return;
-            }
-
-            maxZIndex += 1;
-            const actionId =
-                (drag.item as any)?.action ||
-                (drag.item as any)?.trigger ||
-                (drag.item as any)?.schema?.id ||
-                (drag as any).action?.id;
-
-            const isContainer =
-                actionId === "repeat" ||
-                actionId === "if" ||
-                actionId === "if-else";
-
-            const droppedBlock: CanvasBlock = {
-                id: drag.id || `block_${Date.now()}`,
-                panelId: drag.panelId,
-                pos: { x: 0, y: 0 },
-                isTrigger: drag.isTrigger,
-                zIndex: maxZIndex,
-                action: drag.item
-                    ? (drag.item.schema || {
-                          id: actionId || "action",
-                          name: actionId || "action",
-                          description: "",
-                      })
-                    : (drag as any).action,
-                iconSrc: drag.iconSrc,
-                values: drag.values || {},
-                children: drag.children || (drag.isTrigger || isContainer ? [] : undefined),
-                elseChildren:
-                    (drag as any).elseChildren || (actionId === "if-else" ? [] : undefined),
-            };
-
-            if (dropTarget && !drag.isTrigger) {
-                // reject self-calls
-                const droppedFid = functionIdFromCallAction(actionId || "");
-                if (droppedFid) {
-                    const owner = findOwnerTrigger(
-                        blocks,
-                        dropTarget.parentId.replace(/:else$/, ""),
-                    );
-                    const ownerFid = owner
-                        ? functionIdFromTriggerAction((owner.action as any)?.id || "")
-                        : null;
-                    if (ownerFid && ownerFid === droppedFid) {
-                        console.warn(
-                            `[Actions] A function cannot call itself; "${droppedBlock.action.name}" was not added.`,
-                        );
-                        return;
-                    }
-                }
-                const updated = insertBlock(
-                    blocks,
-                    dropTarget.parentId,
-                    dropTarget.insertIndex,
-                    droppedBlock,
-                );
-                setBlocks(updated);
-                saveFlows(updated);
-                return;
-            }
-
-            if (isDropOnCanvas(e.clientX)) {
-                const rect = containerRef?.getBoundingClientRect();
-                const sc = viewportScroll();
-                const worldX = Math.round(
-                    e.clientX - (rect ? rect.left : 0) + sc.x - drag.grabOffset.x,
-                );
-                const worldY = Math.round(
-                    e.clientY - (rect ? rect.top : 0) + sc.y - drag.grabOffset.y,
-                );
-                droppedBlock.pos = { x: worldX, y: worldY };
-
-                const updated = insertBlock(
-                    blocks,
-                    null,
-                    blocks.length,
-                    droppedBlock,
-                );
-                setBlocks(updated);
-                saveFlows(updated);
-                return;
-            }
-
-            if (drag.detachedFrom) {
-                const restored = insertBlock(
-                    blocks,
-                    drag.detachedFrom.originalParentId,
-                    drag.detachedFrom.originalIndex,
-                    drag.detachedFrom.block,
-                );
-                setBlocks(restored);
-                saveFlows(restored);
-            }
-            return;
-        }
-
-        if (isPanning()) {
-            setIsPanning(false);
-            if (containerRef && containerRef.hasPointerCapture(e.pointerId)) {
-                containerRef.releasePointerCapture(e.pointerId);
-            }
-        }
-    };
-
-    const handleContextMenu = (e: MouseEvent) => {
-        e.preventDefault();
-        const isBackgroundTarget =
-            e.target === containerRef ||
-            (e.target as HTMLElement).classList.contains("canvas-viewport") ||
-            (e.target as HTMLElement).classList.contains("canvas-world");
-
-        if (isBackgroundTarget && isDropOnCanvas(e.clientX)) {
-            const dist = Math.hypot(
-                e.clientX - rightClickDownPos.x,
-                e.clientY - rightClickDownPos.y,
-            );
-            if (dist < 6) {
-                setCanvasContextMenuPos({ x: e.clientX, y: e.clientY });
-                canvasContextMenu.openAtCursor(e);
-            }
-        }
-    };
-
-    const handleAddNoteAtCursor = () => {
-        const pos = canvasContextMenuPos();
-        const rect = containerRef?.getBoundingClientRect();
-        const sc = viewportScroll();
-        const worldX = Math.round(pos.x - (rect ? rect.left : 0) + sc.x);
-        const worldY = Math.round(pos.y - (rect ? rect.top : 0) + sc.y);
-
-        maxZIndex += 1;
-        const newNote: CanvasNote = {
-            id: `note_${Date.now()}`,
-            pos: { x: worldX, y: worldY },
-            zIndex: maxZIndex,
-            text: "",
-        };
-
-        const updated = [...notes, newNote];
-        setNotes(updated);
-        saveFlows(undefined, updated);
-    };
-
-    const handleDeleteNote = (id: string) => {
-        const updated = notes.filter((n) => n.id !== id);
-        setNotes(updated);
-        saveFlows(undefined, updated);
-    };
-
-    const handleNoteTextChange = (id: string, text: string) => {
-        setNotes((n) => n.id === id, "text", text);
-        saveFlows();
-    };
-
-    const handleMoveNote = (
-        id: string,
-        newPos: { x: number; y: number },
-        clientX?: number,
-        clientY?: number,
-    ) => {
-        setDraggingCanvasBlockId(id);
-        setNotes((n) => n.id === id, "pos", newPos);
-
-        if (clientX !== undefined && clientY !== undefined) {
-            setIsOverTrash(checkTrashTarget(clientX, clientY));
-        } else {
-            setIsOverTrash(false);
-        }
-    };
-
-    const handleNoteDragEnd = (id: string) => {
-        const overTrash = isOverTrash();
-        setIsOverTrash(false);
-        setDraggingCanvasBlockId(null);
-
-        if (overTrash) {
-            handleDeleteNote(id);
-            return;
-        }
-
-        saveFlows();
-    };
-
-    const bringNoteToFront = (id: string) => {
-        maxZIndex += 1;
-        setNotes((n) => n.id === id, "zIndex", maxZIndex);
-    };
-
-    const handleMoveTopBlock = (
-        id: string,
-        newPos: { x: number; y: number },
-        clientX?: number,
-        clientY?: number,
-    ) => {
-        setDraggingCanvasBlockId(id);
-        setBlocks((b) => b.id === id, "pos", newPos);
-
-        if (clientX !== undefined && clientY !== undefined) {
-            const overTrash = checkTrashTarget(clientX, clientY);
-            setIsOverTrash(overTrash);
-
-            const currentBlock = blocks.find((b) => b.id === id);
-            if (!overTrash && currentBlock && !currentBlock.isTrigger) {
-                const target = checkDropTarget(clientX, clientY);
-                setHoverDropTarget(target?.parentId !== id ? target : null);
-            } else {
-                setHoverDropTarget(null);
-            }
-        } else {
-            setHoverDropTarget(null);
-            setIsOverTrash(false);
-        }
-    };
-
-    const handleCanvasBlockDragEnd = (id: string) => {
-        const dropTarget = hoverDropTarget();
-        const overTrash = isOverTrash();
-        setHoverDropTarget(null);
-        setIsOverTrash(false);
-        setDraggingCanvasBlockId(null);
-
-        if (overTrash) {
-            const { blocks: updated } = removeBlock(blocks, id);
-            setBlocks(updated);
-            saveFlows(updated);
-            return;
-        }
-
-        if (dropTarget && dropTarget.parentId !== id) {
-            const blockToInsert = blocks.find((b) => b.id === id);
-            if (blockToInsert && !blockToInsert.isTrigger) {
-                const { blocks: updated, removed } = removeBlock(blocks, id);
-                if (removed) {
-                    const finalTree = insertBlock(
-                        updated,
-                        dropTarget.parentId,
-                        dropTarget.insertIndex,
-                        removed,
-                    );
-                    setBlocks(finalTree);
-                    saveFlows(finalTree);
-                    return;
-                }
-            }
-        }
-
-        saveFlows();
-    };
-
-    const handleStartDragFromLibrary = (
-        item: ActionInfo,
-        isTrigger: boolean,
-        screenPos: { x: number; y: number },
-        grabOffset: { x: number; y: number },
-        iconSrc?: string,
-    ) => {
-        setGhostDrag({
-            item,
-            panelId: item.panelId,
-            isTrigger,
-            iconSrc,
-            pos: screenPos,
-            grabOffset,
-        });
-    };
-
-    const beginChildDrag = (
-        pending: PendingChildDrag,
-        clientX: number,
-        clientY: number,
-    ) => {
-        const { blocks: updated, removed } = removeBlock(
-            blocks,
-            pending.child.id,
-        );
-        if (!removed) return;
-        setBlocks(updated);
-        setGhostDrag({
-            id: removed.id,
-            panelId: removed.panelId,
-            item: {
-                panelId: removed.panelId,
-                action: (removed.action as any).id || "action",
-                schema: removed.action,
-            },
-            isTrigger: removed.isTrigger,
-            iconSrc: removed.iconSrc,
-            pos: { x: clientX, y: clientY },
-            grabOffset: pending.grabOffset,
-            values: removed.values,
-            children: removed.children,
-            detachedFrom: {
-                originalParentId: pending.originalParentId,
-                originalIndex: pending.originalIndex,
-                block: removed,
-            },
-        });
-    };
-
-    const handleStartDragChild = (
-        child: CanvasBlock,
-        grabOffset: { x: number; y: number },
-        e: PointerEvent,
-    ) => {
-        let originalParentId: string | null = null;
-        let originalIndex = 0;
-        for (const b of blocks) {
-            if (b.children) {
-                const idx = b.children.findIndex((c) => c.id === child.id);
-                if (idx >= 0) {
-                    originalParentId = b.id;
-                    originalIndex = idx;
-                    break;
-                }
-            }
-        }
-
-        setPendingChildDrag({
-            child,
-            grabOffset,
-            startClient: { x: e.clientX, y: e.clientY },
-            originalParentId,
-            originalIndex,
-        });
-    };
-
-    const handleDeleteBlock = (id: string) => {
-        const { blocks: updated } = removeBlock(blocks, id);
-        setBlocks(updated);
-        saveFlows(updated);
-    };
-
-    const handleValueChange = (blockId: string, key: string, value: any) => {
-        const updated = updateBlockValue(blocks, blockId, key, value);
-        setBlocks(reconcile(updated, { key: "id" }));
-        saveFlows(updated);
-    };
-
-    const handleBlockContextMenu = (
-        blockId: string,
-        _clientX: number,
-        _clientY: number,
-        e: MouseEvent,
-    ) => {
-        setContextBlockId(blockId);
-        blockContextMenu.openAtCursor(e);
-    };
-
-    const [renameTargetId, setRenameTargetId] = createSignal<string | null>(null);
-    const [renameDraft, setRenameDraft] = createSignal("");
-
-    const openRenameModal = (blockId: string) => {
-        const block = findBlock(blocks, blockId);
-        if (!block) return;
-        setRenameTargetId(blockId);
-        setRenameDraft(blockVariableName(block) || "");
-    };
-
-    const handleConfirmRename = () => {
-        const id = renameTargetId();
-        if (id) {
-            const renamed = renameBlockVariable(blocks, id, renameDraft());
-            const renamedBlock = findBlock(renamed, id);
-            const displayLabel = (renamedBlock && blockVariableName(renamedBlock)) || "Result";
-            const updated = relabelVariableRefs(renamed, id, displayLabel);
-            setBlocks(reconcile(updated, { key: "id" }));
-            saveFlows(updated);
-        }
-        setRenameTargetId(null);
+    const runFromMenu = (blockId: string, payload: any) => {
+        const block = findBlock(doc.blocks, blockId);
+        if (block) void runs.testRun(block, payload);
     };
 
     return (
-        <Show when={canvasLoaded()} fallback={
+        <Show when={doc.loaded()} fallback={
             <div class="paperui-root canvas-sync-status" role="status">
-                <PaperText>{canvasLoadError() ?? "Loading canvas…"}</PaperText>
-                <Show when={canvasLoadError()}>
-                    <PaperButton onClick={() => { void loadCanvas(); }}>Retry loading canvas</PaperButton>
+                <PaperText>{doc.loadError() ?? "Loading canvas…"}</PaperText>
+                <Show when={doc.loadError()}>
+                    <PaperButton onClick={() => { void doc.load(); }}>Retry loading canvas</PaperButton>
                 </Show>
             </div>
         }>
         <div
-            ref={containerRef}
-            class={`paperui-root unselectable canvas-viewport ${isPanning() ? "panning" : ""}`}
-            onPointerDown={handlePointerDown}
-            onPointerMove={handlePointerMove}
-            onPointerUp={handlePointerUp}
-            onPointerCancel={handlePointerUp}
-            onContextMenu={handleContextMenu}
-            onScroll={(e) => {
-                setScroll({
-                    x: e.currentTarget.scrollLeft,
-                    y: e.currentTarget.scrollTop,
-                });
-            }}
+            ref={canvas.setViewport}
+            class={`paperui-root unselectable canvas-viewport ${canvas.isPanning() ? "panning" : ""}`}
+            onPointerDown={canvas.onPointerDown}
+            onPointerMove={canvas.onPointerMove}
+            onPointerUp={canvas.onPointerUp}
+            onPointerCancel={canvas.onPointerUp}
+            onContextMenu={canvas.onContextMenu}
+            onScroll={(e) => canvas.onScroll(e.currentTarget)}
             style={{
-                "background-position": `${-scroll().x}px ${-scroll().y}px`,
+                "background-position": `${-canvas.scroll().x}px ${-canvas.scroll().y}px`,
             }}
         >
             <ActionLibrary
-                onStartDrag={handleStartDragFromLibrary}
-                functions={functions()}
-                onCreateFunction={handleCreateFunction}
-                onRenameFunction={handleRenameFunction}
-                onDeleteFunction={handleDeleteFunction}
+                onStartDrag={canvas.startLibraryDrag}
+                functions={doc.functions()}
+                onCreateFunction={doc.createFunction}
+                onRenameFunction={doc.renameFunction}
+                onDeleteFunction={doc.deleteFunction}
             />
 
             <div class="canvas-top-right-controls">
-                <Show when={conflictNotice()}>
-                    {(notice) => (
-                        <div role="status" class="canvas-sync-status">
-                            <PaperText size={1}>{notice()}</PaperText>
-                            <PaperButton size="tiny" onClick={() => setConflictNotice(null)}>Dismiss</PaperButton>
-                        </div>
-                    )}
-                </Show>
-                <Show when={syncState().status === "error"}>
-                    <div role="status" class="canvas-sync-status">
-                        <PaperText size={1}>{(syncState() as { message: string }).message}</PaperText>
-                        <PaperButton size="tiny" onClick={() => { userEditUnsaved = true; scheduleCanvas(); }}>Retry saving</PaperButton>
-                    </div>
-                </Show>
-                <Show when={fileNotice()}>
-                    {(notice) => (
-                        <div role="status" class="canvas-sync-status">
-                            <PaperText size={1} color={notice().kind === "failed" ? "danger" : undefined}>{notice().text}</PaperText>
-                            <PaperButton size="tiny" onClick={() => setFileNotice(null)}>Dismiss</PaperButton>
-                        </div>
-                    )}
-                </Show>
+                <Notices doc={doc} fileNotice={fileNotice()} onDismissFile={() => setFileNotice(null)} />
                 <div class="canvas-run-controls">
                     <CanvasFileMenu
-                        clientId={clientId}
-                        loaded={canvasLoaded}
-                        canvas={() => ({ flows: unwrap(blocks), notes: unwrap(notes), functions: functions() })}
+                        clientId={doc.clientId}
+                        loaded={doc.loaded}
+                        canvas={doc.snapshot}
                         add={addFile}
-                        flush={() => canvasSync.flush()}
-                        reload={async () => {
-                            const result = await follower.reload();
-                            if (result.ok) await refreshBlockSchemas();
-                            return result;
-                        }}
+                        flush={doc.flush}
+                        reload={doc.reload}
                         onNotice={setFileNotice}
                     />
                     <PaperEffect variant="success">
                         <PaperButton
                             variant="success"
                             icon
-                            onClick={handlePlayAllFlows}
+                            onClick={runs.playAll}
                             title="Run On-Play Flows">
                             <PaperIcon>play_arrow</PaperIcon>
                         </PaperButton>
                     </PaperEffect>
                 </div>
 
-                <Show when={consoleLogs.length > 0}>
-                    <div class="canvas-console-panel">
-                        <div class="canvas-console-header">
-                            <div class="canvas-console-title">
-                                <PaperIcon class="canvas-console-icon">terminal</PaperIcon>
-                                <PaperText size={1} weight={700}>Console</PaperText>
-                            </div>
-                            <PaperButton size="tiny"
-                                icon
-                                onClick={() => setConsoleLogs([])}
-                                title="Clear Console">
-                                <PaperIcon>delete_sweep</PaperIcon>
-                            </PaperButton>
-                        </div>
-                        <div class="canvas-console-body" ref={consoleBodyRef}>
-                            <For each={consoleLogs}>
-                                {(log) => (
-                                    <div
-                                        class="canvas-console-line"
-                                        classList={{
-                                            "is-error": log.level === "error",
-                                        }}
-                                    >
-                                        <span class="canvas-console-time">{log.time}</span>
-                                        <span class="canvas-console-text">{log.message}</span>
-                                    </div>
-                                )}
-                            </For>
-                        </div>
-                    </div>
-                </Show>
+                <ConsolePanel log={log} />
             </div>
 
             <div
@@ -1527,7 +120,7 @@ export default function App() {
                     height: `${worldSize().h}px`,
                 }}
             >
-                <For each={blocks}>
+                <For each={doc.blocks}>
                     {(block) => (
                         <ActionBlock
                             id={block.id}
@@ -1538,201 +131,91 @@ export default function App() {
                             values={block.values}
                             children={block.children}
                             elseChildren={block.elseChildren}
-                            activeDropTarget={hoverDropTarget()}
+                            activeDropTarget={canvas.hoverDropTarget()}
                             iconSrc={block.iconSrc}
-                            runningBlockIds={runningBlockIds}
+                            runningBlockIds={runs.runningBlockIds}
                             variableName={blockVariableName(block)}
-                            onInteract={() => bringToFront(block.id)}
-                            onContextMenu={(bId, cx, cy, e) => handleBlockContextMenu(bId, cx, cy, e)}
+                            onInteract={() => doc.bringToFront(block.id)}
+                            onContextMenu={(bId, _cx, _cy, e) => {
+                                setMenuBlockId(bId);
+                                blockMenu.openAtCursor(e);
+                            }}
                             onMove={(newPos, clientX, clientY) =>
-                                handleMoveTopBlock(block.id, newPos, clientX, clientY)
+                                canvas.moveTopBlock(block.id, newPos, clientX, clientY)
                             }
-                            onDragEnd={() => handleCanvasBlockDragEnd(block.id)}
-                            onStartDragChild={handleStartDragChild}
-                            onValueChange={handleValueChange}
-                            onRequestVariablePicker={handleRequestVariablePicker}
-                            onRequestOptionPicker={handleRequestOptionPicker}
-                            highlightedSourceBlockId={hoveredSourceBlockId}
+                            onDragEnd={() => canvas.endTopBlockDrag(block.id)}
+                            onStartDragChild={canvas.startChildDrag}
+                            onValueChange={doc.setValue}
+                            onRequestVariablePicker={pickers.openVariablePicker}
+                            onRequestOptionPicker={pickers.openOptionPicker}
+                            highlightedSourceBlockId={pickers.hoveredSourceBlockId}
                         />
                     )}
                 </For>
 
-                <For each={notes}>
+                <For each={doc.notes}>
                     {(note) => (
                         <NoteBlock
                             id={note.id}
                             pos={note.pos}
                             zIndex={note.zIndex}
                             text={note.text}
-                            onInteract={() => bringNoteToFront(note.id)}
-                            onMove={(newPos, cx, cy) =>
-                                handleMoveNote(note.id, newPos, cx, cy)
-                            }
-                            onDragEnd={() => handleNoteDragEnd(note.id)}
-                            onChangeText={(txt) => handleNoteTextChange(note.id, txt)}
-                            onDelete={() => handleDeleteNote(note.id)}
+                            onInteract={() => doc.bringNoteToFront(note.id)}
+                            onMove={(newPos, cx, cy) => canvas.moveNote(note.id, newPos, cx, cy)}
+                            onDragEnd={() => canvas.endNoteDrag(note.id)}
+                            onChangeText={(txt) => doc.setNoteText(note.id, txt)}
+                            onDelete={() => doc.deleteNote(note.id)}
                         />
                     )}
                 </For>
             </div>
 
-            <Show when={ghostDrag()}>
-                <div
-                    class="ghostDragContainer"
-                    style={{
-                        position: "fixed",
-                        left: `${ghostDrag()!.pos.x - ghostDrag()!.grabOffset.x}px`,
-                        top: `${ghostDrag()!.pos.y - ghostDrag()!.grabOffset.y}px`,
-                        width: "max-content",
-                        "pointer-events": "none",
-                        "z-index": "var(--paper-z-ghost)",
-                        opacity: "var(--paper-opacity-soft)",
-                        filter: "drop-shadow(var(--paper-lifted-shadow))",
-                    }}
-                >
-                    <ActionBlock
-                        action={
-                            ghostDrag()!.item.schema || {
-                                id:
-                                    (ghostDrag()!.item as any).action ||
-                                    (ghostDrag()!.item as any).trigger,
-                                name:
-                                    (ghostDrag()!.item as any).action ||
-                                    (ghostDrag()!.item as any).trigger,
-                                description: "",
-                            }
-                        }
-                        isTrigger={ghostDrag()!.isTrigger}
-                        iconSrc={ghostDrag()!.iconSrc}
-                        values={ghostDrag()!.values}
-                        children={ghostDrag()!.children}
-                        elseChildren={(ghostDrag() as any)?.elseChildren}
-                    />
-                </div>
+            <Show when={canvas.ghostDrag()}>
+                {(drag) => <GhostBlock drag={drag()} />}
             </Show>
 
             <div
                 id="canvas-trash-zone"
-                class={`trash-zone ${ghostDrag() || draggingCanvasBlockId() ? "is-dragging" : ""} ${isOverTrash() ? "active-hover" : ""}`}
+                class={`trash-zone ${canvas.dragging() ? "is-dragging" : ""} ${canvas.isOverTrash() ? "active-hover" : ""}`}
                 title="Drop block here to delete"
             >
-                <PaperIcon>{isOverTrash() ? "delete_forever" : "delete"}</PaperIcon>
+                <PaperIcon>{canvas.isOverTrash() ? "delete_forever" : "delete"}</PaperIcon>
             </div>
 
             <VariableMenu
-                open={variablePicker().open}
-                x={variablePicker().x}
-                y={variablePicker().y}
-                items={variablePicker().availableVariables}
-                anchor={variablePicker().anchor}
-                onSelect={selectVariable}
-                onClose={closeVariablePicker}
-                onHoverItem={(sourceId) => setHoveredSourceBlockId(sourceId)}
+                open={pickers.variablePicker().open}
+                x={pickers.variablePicker().x}
+                y={pickers.variablePicker().y}
+                items={pickers.variablePicker().availableVariables}
+                anchor={pickers.variablePicker().anchor}
+                onSelect={pickers.selectVariable}
+                onClose={pickers.closeVariablePicker}
+                onHoverItem={(sourceId) => pickers.setHoveredSourceBlockId(sourceId)}
             />
 
             <ActionDropdownMenu
-                open={optionPicker().open}
-                x={optionPicker().x}
-                y={optionPicker().y}
-                items={optionPicker().options}
-                selectedValue={optionPicker().selectedValue}
-                onSelect={(val) => {
-                    optionPicker().onSelect?.(val);
-                    setOptionPicker((prev) => ({ ...prev, open: false }));
-                }}
-                onClose={() => setOptionPicker((prev) => ({ ...prev, open: false }))}
+                open={pickers.optionPicker().open}
+                x={pickers.optionPicker().x}
+                y={pickers.optionPicker().y}
+                items={pickers.optionPicker().options}
+                selectedValue={pickers.optionPicker().selectedValue}
+                onSelect={pickers.selectOption}
+                onClose={pickers.closeOptionPicker}
             />
 
-            <PaperContextMenu
-                open={blockContextMenu.isOpen()}
-                target={blockContextMenu.target()}
-                placement={blockContextMenu.placement()}
-                onClose={blockContextMenu.close}
-            >
-                <Show when={contextBlock()?.isTrigger}>
-                    <PaperContextMenuItem
-                        icon="play_arrow"
-                        onClick={() => {
-                            const b = contextBlock();
-                            blockContextMenu.close();
-                            if (b) {
-                                const testPayload = b.values?.output || b.values?.player || "TestPlayer";
-                                handleTestRunFlow(b, testPayload);
-                            }
-                        }}
-                    >
-                        Run
-                    </PaperContextMenuItem>
-                </Show>
-                <Show when={(() => {
-                    const b = contextBlock();
-                    return b && blockVariableName(b);
-                })()}>
-                    <PaperContextMenuItem
-                        icon="edit"
-                        onClick={() => {
-                            const id = contextBlockId();
-                            blockContextMenu.close();
-                            if (id) openRenameModal(id);
-                        }}
-                    >
-                        Edit Name
-                    </PaperContextMenuItem>
-                </Show>
-                <PaperContextMenuItem
-                    icon="delete"
-                    danger
-                    onClick={() => {
-                        const id = contextBlockId();
-                        blockContextMenu.close();
-                        if (id) handleDeleteBlock(id);
-                    }}
-                >
-                    Delete Block
-                </PaperContextMenuItem>
-            </PaperContextMenu>
-
-            <PaperModal
-                open={renameTargetId() !== null}
-                onClose={() => setRenameTargetId(null)}
-                title="Edit Name"
-                footer={
-                    <PaperFlex direction="row" justify="flex-end" gap="half" fullWidth>
-                        <PaperButton
-                            variant="text"
-                            onClick={() => setRenameTargetId(null)}>
-                            Cancel
-                        </PaperButton>
-                        <PaperButton
-                            variant="brand"
-                            onClick={handleConfirmRename}>
-                            Save
-                        </PaperButton>
-                    </PaperFlex>
-                }
-            >
-                <PaperInput
-                    fullWidth
-                    label="Variable name"
-                    value={renameDraft()}
-                    onInput={(e) => setRenameDraft(e.currentTarget.value)}
-                    onKeyDown={(e) => {
-                        if (e.key === "Enter") handleConfirmRename();
-                    }}
-                />
-            </PaperModal>
+            <BlockMenu doc={doc} menu={blockMenu} blockId={menuBlockId()} onRun={runFromMenu} />
 
             <PaperContextMenu
-                open={canvasContextMenu.isOpen()}
-                target={canvasContextMenu.target()}
-                placement={canvasContextMenu.placement()}
-                onClose={canvasContextMenu.close}
+                open={canvas.canvasMenu.isOpen()}
+                target={canvas.canvasMenu.target()}
+                placement={canvas.canvasMenu.placement()}
+                onClose={canvas.canvasMenu.close}
             >
                 <PaperContextMenuItem
                     icon="note_add"
                     onClick={() => {
-                        canvasContextMenu.close();
-                        handleAddNoteAtCursor();
+                        canvas.canvasMenu.close();
+                        canvas.addNoteAtMenu();
                     }}
                 >
                     Add Note

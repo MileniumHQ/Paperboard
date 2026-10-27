@@ -1,4 +1,5 @@
 import type { ActionSchema } from "@mileniumhq/paperapi";
+import { type CanvasBlock, relabelVariableRefs } from "./tree";
 
 export interface FunctionParam {
     name: string;
@@ -86,4 +87,46 @@ export function buildTriggerSchema(def: FunctionDef): ActionSchema {
         },
         eventOnly: true,
     } as ActionSchema;
+}
+
+/**
+ * The flows after a function is renamed: its call and trigger blocks carry
+ * the new schemas, and every chip naming a call's result is relabeled.
+ */
+export function renameFunctionInFlows(blocks: CanvasBlock[], renamed: FunctionDef): CanvasBlock[] {
+    const callSchema = buildCallSchema(renamed);
+    const trigSchema = buildTriggerSchema(renamed);
+    const refresh = (list: CanvasBlock[]): CanvasBlock[] =>
+        list.map((b) => {
+            const callFid = functionIdFromCallAction(b.action?.id || "");
+            const trigFid = functionIdFromTriggerAction(b.action?.id || "");
+            let nb = b;
+            if (callFid === renamed.id) {
+                nb = { ...nb, action: { ...callSchema } };
+            } else if (trigFid === renamed.id) {
+                nb = { ...nb, action: { ...trigSchema } };
+            }
+            return {
+                ...nb,
+                children: nb.children ? refresh(nb.children) : nb.children,
+                elseChildren: nb.elseChildren ? refresh(nb.elseChildren) : nb.elseChildren,
+            };
+        });
+    const refreshed = refresh(blocks);
+    let relabeled = refreshed;
+    const walkRelabel = (list: CanvasBlock[]) => {
+        for (const b of list) {
+            if (functionIdFromCallAction(b.action?.id || "") === renamed.id && b.action?.output) {
+                const outLabel =
+                    typeof b.action.output === "string"
+                        ? b.action.output
+                        : (b.action.output as any).label || "Result";
+                relabeled = relabelVariableRefs(relabeled, b.id, outLabel);
+            }
+            if (b.children) walkRelabel(b.children);
+            if (b.elseChildren) walkRelabel(b.elseChildren);
+        }
+    };
+    walkRelabel(refreshed);
+    return relabeled;
 }
