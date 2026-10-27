@@ -21,6 +21,8 @@ export interface PanelRecord {
     sizeBytes?: number;
     updatedAt?: string;
     trashedAt?: string;
+    /** taken off the store: out of `panels:index`, but the record and its archive stay for the installs that have it */
+    unlistedAt?: string;
     author?: string;
     homepage?: string;
     manifest?: Record<string, unknown>;
@@ -80,7 +82,8 @@ async function listRecordsByPrefix(
 
         for (const record of records) {
             if (walked >= MAX_WALK_KEYS) break;
-            if (record && record.id) {
+            // an unlisted panel stays out of the store even when the index is rebuilt from the records
+            if (record && record.id && !record.unlistedAt) {
                 index[record.id] = record;
                 walked++;
             }

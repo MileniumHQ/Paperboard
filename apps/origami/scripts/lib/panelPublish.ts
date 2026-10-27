@@ -12,6 +12,10 @@
 // writer, so the index is maintained by reading and upserting it (the
 // worker's live mutators are gone); a missing/unreadable index refuses the
 // publish rather than writing a partial projection.
+//
+// Unlisting takes a panel off the store (out of `panels:index`) and leaves
+// its record and archive: installs that have it keep it, and stop getting
+// updates. Publishing it again lists it again.
 import { execFile } from "node:child_process";
 import { writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -411,4 +415,26 @@ export async function publishPanel(
     await storage.putJson(PANELS_INDEX_KEY, index);
 
     return record;
+}
+
+/**
+ * Take a panel off the store. Its record is marked and kept, its archive stays, and only the index loses it.
+ * Refuses an id the registry has no record of, or one the store doesn't list.
+ */
+export async function unlistPanel(id: string, ctx: { storage: PanelStorage }): Promise<PanelRecord> {
+    if (!isValidPanelId(id)) throw new PanelPublishError(`invalid panel id: ${JSON.stringify(id)}`);
+    const { storage } = ctx;
+    const record = await storage.getJson<PanelRecord>(`${PANEL_KEY_PREFIX}${id}`);
+    if (!record) throw new PanelPublishError(`the registry has no panel ${id}`);
+    const index = await storage.getJson<Record<string, PanelRecord>>(PANELS_INDEX_KEY);
+    if (!index || typeof index !== "object" || Array.isArray(index)) {
+        throw new PanelPublishError("panels:index is missing or unreadable; refusing to write a partial index");
+    }
+    if (!(id in index)) throw new PanelPublishError(`${id} isn't on the store`);
+    // the record first: an index rebuilt from the records leaves it out from here on
+    const unlisted: PanelRecord = { ...record, unlistedAt: new Date().toISOString() };
+    await storage.putJson(`${PANEL_KEY_PREFIX}${id}`, unlisted);
+    delete index[id];
+    await storage.putJson(PANELS_INDEX_KEY, index);
+    return unlisted;
 }

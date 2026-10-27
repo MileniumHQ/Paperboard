@@ -80,8 +80,10 @@ import { RELEASE_PUBLIC_KEY, verifyRelease } from "../apps/paperboard/papercrane
 import {
     createWranglerStorage,
     publishPanel,
+    unlistPanel,
     type PanelUpload,
 } from "../apps/origami/scripts/lib/panelPublish";
+import { PANELS_INDEX_KEY, type PanelRecord } from "../apps/origami/src/panels";
 import type { KeyObject } from "node:crypto";
 
 // signs one release fact and proves the signature verifies against the
@@ -980,6 +982,35 @@ async function flowPublishPanels(): Promise<void> {
     p.outro("Registry updated. Previous panel versions are retained server-side.");
 }
 
+// ─── Flow: unlist panels ────────────────────────────────────────────────────
+
+// Takes panels off the store. Their records and archives stay: installs that
+// have one keep it and stop getting updates. Picked from what the registry
+// lists, since an unlisted panel may no longer be under panels/.
+async function flowUnlistPanels(): Promise<void> {
+    p.intro("Unlist panels");
+    const storage = createWranglerStorage();
+    const index = await storage.getJson<Record<string, PanelRecord>>(PANELS_INDEX_KEY);
+    if (!index || typeof index !== "object") fail("The registry's panels:index is missing or unreadable.");
+    const listed = Object.values(index);
+    if (!listed.length) fail("The store lists no panels.");
+    const pickedIds = checkCancel(
+        await p.multiselect({
+            message: "Which panels to take off the store?",
+            options: listed.map((x) => ({ value: x.id, label: x.name, hint: `${x.id} v${x.version}` })),
+            required: true,
+        }),
+    ) as string[];
+    if (!checkCancel(await p.confirm({ message: `Take ${pickedIds.length} panel(s) off the store? Installs keep them, without updates.`, initialValue: false }))) {
+        cancelled();
+    }
+    for (const id of pickedIds) {
+        await unlistPanel(id, { storage });
+        p.log.success(`${id} is off the store; ${ORIGAMI_URL}/panel/${id} still serves its record.`);
+    }
+    p.outro("Store updated. Publishing a panel again lists it again.");
+}
+
 // ─── Flow: publish npm packages ─────────────────────────────────────────────
 
 interface NpmPackage {
@@ -1397,6 +1428,7 @@ async function main(): Promise<void> {
                 { value: "build", label: "Build binaries", hint: "local only — pick app/server targets" },
                 { value: "publish-bin", label: "Publish binaries", hint: "build all, confirm twice, upload" },
                 { value: "panels", label: "Publish panels", hint: "pick panels, pack, upload to registry" },
+                { value: "unlist", label: "Unlist panels", hint: "take panels off the store, keep their records" },
                 { value: "packages", label: "Publish packages", hint: "pick npm packages, build, npm publish" },
                 { value: "usb", label: "Build USB test bundle", hint: "sneakernet testing, never uploads" },
             ],
@@ -1412,6 +1444,9 @@ async function main(): Promise<void> {
             break;
         case "panels":
             await flowPublishPanels();
+            break;
+        case "unlist":
+            await flowUnlistPanels();
             break;
         case "packages":
             await flowPublishPackages();
