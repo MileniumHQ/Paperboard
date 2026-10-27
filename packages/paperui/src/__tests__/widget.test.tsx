@@ -84,4 +84,11 @@ describe("PaperWidgetMessage", () => {
         const empty = render(() => <PaperWidgetMessage title="No one is online" />);
         expect(empty.getByRole("status").textContent).toContain("No one is online");
     });
+
+    test("a hint is the message's tooltip", () => {
+        const { getByRole } = render(() => (
+            <PaperWidgetMessage title="Not answering" tone="danger" hint="connect ECONNREFUSED" />
+        ));
+        expect(getByRole("alert").getAttribute("title")).toBe("connect ECONNREFUSED");
+    });
 });

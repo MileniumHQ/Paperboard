@@ -2,6 +2,7 @@ import styles from "./index.module.css";
 import { splitProps, Show, type JSX, type ParentProps } from "solid-js";
 import { PaperIcon } from "../PaperIcon";
 import { PaperText } from "../PaperText";
+import { PaperButton } from "../PaperButton";
 import { roleVars, isPaperRole } from "../../utils/colors";
 import type { PaperRole } from "../../types";
 
@@ -11,6 +12,8 @@ export interface PaperQuoteProps extends Omit<JSX.HTMLAttributes<HTMLDivElement>
     variant?: PaperQuoteVariant;
     icon?: JSX.Element | string;
     title?: JSX.Element | string;
+    /** shows a close button: for a notice that outlives the moment it reports */
+    onDismiss?: () => void;
 }
 
 export function PaperQuote(props: ParentProps<PaperQuoteProps>) {
@@ -18,6 +21,7 @@ export function PaperQuote(props: ParentProps<PaperQuoteProps>) {
         "variant",
         "icon",
         "title",
+        "onDismiss",
         "class",
         "classList",
         "children",
@@ -60,6 +64,21 @@ export function PaperQuote(props: ParentProps<PaperQuoteProps>) {
                     {local.children}
                 </PaperText>
             </div>
+            <Show when={local.onDismiss}>
+                {(dismiss) => (
+                    <PaperButton
+                        size="tiny"
+                        variant="text"
+                        icon
+                        class={styles.dismiss}
+                        aria-label="Dismiss"
+                        title="Dismiss"
+                        onClick={() => dismiss()()}
+                    >
+                        <PaperIcon>close</PaperIcon>
+                    </PaperButton>
+                )}
+            </Show>
         </div>
     );
 }

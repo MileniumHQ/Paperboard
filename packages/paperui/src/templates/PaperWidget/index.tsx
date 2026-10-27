@@ -198,6 +198,8 @@ export interface PaperWidgetMessageProps extends Omit<JSX.HTMLAttributes<HTMLDiv
     description?: JSX.Element | string;
     /** danger and warning mark a failure; omit for an empty or loading state */
     tone?: PaperRole;
+    /** the full reason as a tooltip, for a tile too small to show a description */
+    hint?: string;
 }
 
 /**
@@ -205,12 +207,13 @@ export interface PaperWidgetMessageProps extends Omit<JSX.HTMLAttributes<HTMLDiv
  * be. Children are the way out: Retry, Open, Start. An alert when toned.
  */
 export function PaperWidgetMessage(props: ParentProps<PaperWidgetMessageProps>) {
-    const [local, rest] = splitProps(props, ["title", "description", "tone", "class", "children"]);
+    const [local, rest] = splitProps(props, ["title", "description", "tone", "hint", "class", "children"]);
     const alert = () => local.tone === "danger" || local.tone === "warning";
     return (
         <div
             role={alert() ? "alert" : "status"}
             {...rest}
+            title={local.hint || undefined}
             class={[styles.message, local.class].filter(Boolean).join(" ")}
             data-tone={local.tone}
             style={toneStyle(local.tone)}
