@@ -1,6 +1,6 @@
 .page {
     display: grid;
-    grid-template-columns: 1fr minmax(var(--agents-playground-controls-min), var(--agents-playground-controls-max));
+    grid-template-columns: 1fr minmax(var(--paper-size-card-min), var(--paper-size-split-side));
     height: 100%;
     background: var(--paper-surface-app);
     color: var(--paper-text);
@@ -27,7 +27,7 @@
 }
 
 .bubble {
-    max-width: var(--agents-playground-line-max);
+    max-width: var(--paper-size-panel-small);
     /* two lines held open, so the stage doesn't jump as lines come and go */
     min-height: 2lh;
     margin: 0;

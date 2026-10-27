@@ -216,4 +216,14 @@ describe("UI standards", () => {
         }
         expect(offenders).toEqual([]);
     });
+
+    test("the panel's own tokens size nothing PaperUI's size tokens should", () => {
+        // a window share, a time or a scale is the panel's own; a length is
+        // one of PaperUI's sizes
+        const offenders = withoutComments(readFileSync(TOKENS, "utf8"))
+            .split("\n")
+            .filter((line) => /(?<![\w-])\d*\.?\d+(px|rem|em)\b/.test(line))
+            .map((line) => `tokens.css: ${line.trim()}`);
+        expect(offenders).toEqual([]);
+    });
 });

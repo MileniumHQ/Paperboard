@@ -16,7 +16,7 @@
 }
 
 .flow > * {
-    width: min(100%, var(--agents-column-width));
+    width: min(100%, var(--paper-size-panel-medium));
     box-sizing: border-box;
 }
 

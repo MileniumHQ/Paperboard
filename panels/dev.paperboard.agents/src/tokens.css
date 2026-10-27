@@ -1,13 +1,9 @@
 /* Footprints and motion particular to this panel. PaperUI has no token for
-   a chat bubble, the onboarding's column or the face's speech, so they are
-   named once here and nowhere else. */
+   them, so they are named once here and nowhere else. Sizes are PaperUI's
+   own tokens, used directly; these are window shares, motion and scales. */
 :root {
     /* the menu's modal: the sidebar and the page, a fixed share of the window */
     --agents-workspace-height: 75vh;
-    /* a bubble, a sign-in card and the onboarding's column read like a phone's */
-    --agents-bubble-max: 40rem;
-    --agents-card-width: 28rem;
-    --agents-column-width: 40rem;
     /* the free space kept above and below the onboarding's column */
     --agents-column-margin: 12vh;
     /* the composer's text grows to this many lines' worth, then scrolls */
@@ -18,8 +14,4 @@
     --agents-speaker-leave-scale: 0.3;
     /* a speech bubble between lines */
     --agents-speech-hidden-scale: 0.85;
-    /* the face playground's controls */
-    --agents-playground-controls-min: 260px;
-    --agents-playground-controls-max: 340px;
-    --agents-playground-line-max: 30rem;
 }

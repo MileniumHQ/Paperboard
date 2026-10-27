@@ -35,7 +35,7 @@
     position: relative;
     display: flex;
     flex-direction: column;
-    max-width: min(80%, var(--agents-bubble-max));
+    max-width: min(80%, var(--paper-size-panel-medium));
     /* a vertical drag still scrolls the chat; a sideways one is the bubble's, to reply */
     touch-action: pan-y;
 }
