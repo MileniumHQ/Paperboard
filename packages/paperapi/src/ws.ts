@@ -64,8 +64,10 @@ async function getWebSocketImpl(): Promise<any> {
             // Adapt native events to the ws-package shape
         return class NativeAdapter {
             private _ws: WebSocket;
+            private _url: string;
             private _wrapped = new Map<(arg?: any) => void, { event: string; fn: EventListener }>();
             constructor(url: string) {
+                this._url = url;
                 this._ws = new g.WebSocket(url);
             }
             get readyState() {
@@ -88,10 +90,14 @@ async function getWebSocketImpl(): Promise<any> {
                 this._ws.close();
             }
             on(event: string, cb: (arg?: any) => void) {
+                // a native error event carries no reason; the ws package
+                // hands its listeners an Error, so this one does too
                 const wrapped: EventListener =
                     event === "message"
                         ? (e) => cb((e as MessageEvent).data)
-                        : () => cb();
+                        : event === "error"
+                          ? () => cb(new Error(`Couldn't reach PaperCrane at ${this._url}`))
+                          : () => cb();
                 this._wrapped.set(cb, { event, fn: wrapped });
                 this._ws.addEventListener(event, wrapped);
             }
