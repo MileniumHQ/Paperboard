@@ -86,6 +86,12 @@ export function Example() {
                         <td>When true, formats the button as a square icon button without horizontal text padding.</td>
                     </tr>
                     <tr>
+                        <td><PaperCode>fullWidth</PaperCode></td>
+                        <td><PaperCode>boolean</PaperCode></td>
+                        <td><PaperCode>false</PaperCode></td>
+                        <td>Stretches the button across its container.</td>
+                    </tr>
+                    <tr>
                         <td><PaperCode>href</PaperCode></td>
                         <td><PaperCode>string</PaperCode></td>
                         <td><PaperCode>undefined</PaperCode></td>
