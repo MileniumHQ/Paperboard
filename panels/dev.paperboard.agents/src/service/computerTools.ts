@@ -19,7 +19,7 @@ export const COMPUTER_INSTRUCTIONS = `How to use your computer:
 - Your computer is a web browser (Helium); each window is a tab. \`open\` a web address, \`go\` to another one (or back, forward, reload) in the same window.
 - \`look\` at a window, act on a numbered mark (\`click\` with mark, then \`type\`/\`key\`), then \`look\` again to check what happened. Marks are only valid for the latest look.
 - When something isn't marked, is tiny, or the text is too small to read (canvas, games, custom widgets), \`zoom\` into that region and click with the x/y its grid shows. \`hover\` opens hover menus; \`drag\` moves sliders and drags things.
-- What the browser downloads goes to ~/Downloads in your home folder; \`files\` lists it. To upload, click the page's upload button, then \`upload\` files from your home folder.
+- What the browser downloads goes to ~/Downloads in your home folder. To upload, click the page's upload button, then \`upload\` files from your home folder.
 - It can't reach this computer or its local network, only the internet. You can search the web directly, too.
 - Don't claim you did something you didn't verify.`;
 
@@ -138,10 +138,5 @@ export const COMPUTER_TOOLS: ToolSpec[] = [
             properties: { window: win, files: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 10 } },
             required: ["window", "files"],
         },
-    },
-    {
-        name: "files",
-        description: "List a folder in your home folder: downloads go to ~/Downloads, files you're given go where they're put.",
-        inputSchema: { type: "object", properties: { folder: { type: "string", description: "Defaults to ~." } } },
     },
 ];

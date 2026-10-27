@@ -31,8 +31,9 @@ describe("the service's agent", () => {
         if (dir) fs.rmSync(dir, { recursive: true, force: true });
     });
 
-    async function start(installed: string[], saved: unknown = null, readSettings?: () => Promise<unknown>) {
+    async function start(installed: string[], saved: unknown = null, readSettings?: () => Promise<unknown>, plant?: (storage: string) => void) {
         dir = fs.mkdtempSync(path.join(os.tmpdir(), "ai-app-"));
+        plant?.(dir);
         const procs = new FakeProcesses();
         const writes: Settings[] = [];
         const vault = new Map<string, string>();
@@ -180,6 +181,34 @@ describe("the service's agent", () => {
         // it was answered in that turn: no second turn, no error
         expect(procs.started.length).toBe(1);
         expect(app.conversation.history().some((e) => e.kind === "error")).toBe(false);
+    });
+
+    test("the agent's files are a shell over its home folder, and a home folder kept in the browser's moves out", async () => {
+        const plant = (storage: string) => {
+            fs.mkdirSync(path.join(storage, "browser", "home", "Downloads"), { recursive: true });
+            fs.writeFileSync(path.join(storage, "browser", "home", "Downloads", "ticket.txt"), "Oslo, seat 12A");
+        };
+        const { app, procs } = await start(["codex"], { name: "Pip", harness: "codex", model: null }, undefined, plant);
+        expect(fs.existsSync(path.join(dir, "browser", "home"))).toBe(false);
+        app.conversation.send("where am I sitting?");
+        await until(() => procs.started.length === 1);
+        const turn = procs.started[0]!;
+        const url = JSON.parse(turn.args.find((a) => a.startsWith("mcp_servers.paperboard.url="))!.split("=").slice(1).join("="));
+        const rpc = async (method: string, params?: unknown) => {
+            const res = await fetch(url, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", Authorization: `Bearer ${turn.env!.PAPERBOARD_COMPUTER_MCP_TOKEN}` },
+                body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+            });
+            return ((await res.json()) as { result: { tools?: { name: string }[]; content?: { text: string }[] } }).result;
+        };
+        const names = (await rpc("tools/list")).tools!.map((t) => t.name);
+        expect(names).toContain("bash");
+        expect(names).not.toContain("files");
+        const read = await rpc("tools/call", { name: "bash", arguments: { command: "cat ~/Downloads/ticket.txt && echo noted > ~/seat.txt" } });
+        expect(read.content![0]!.text).toBe("Oslo, seat 12A");
+        expect(fs.readFileSync(path.join(dir, "home", "seat.txt"), "utf8")).toBe("noted\n");
+        procs.exit(TURN_PROC_ID, 0);
     });
 
     test("while it summarizes the conversation, the agent's tools are refused: it writes from what it knows", async () => {

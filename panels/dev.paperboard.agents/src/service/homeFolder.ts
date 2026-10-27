@@ -1,14 +1,16 @@
 // The agent's home folder: a real folder in the panel's storage holding its
-// downloads and the files it's given. The agent names files as ~/…; every
-// path is resolved inside the folder, links included, and nothing outside it
-// is ever read or written. The host's own path is never shown to the agent.
+// downloads, the files it's given and whatever it makes in its shell. The
+// agent names files as ~/… (its shell's /home/user is the same folder);
+// every path is resolved inside the folder, links included, and nothing
+// outside it is ever read or written. The host's own path is never shown to
+// the agent.
 
 import fs from "node:fs";
 import path from "node:path";
 import { LIMITS } from "../contract";
-import { sizeText } from "./attachments";
 
-const LIST_MAX = 200;
+/** Where the home folder is in the agent's shell: its $HOME. */
+export const SHELL_HOME = "/home/user";
 
 export class HomeFolder {
     constructor(readonly root: string) {}
@@ -21,8 +23,9 @@ export class HomeFolder {
     resolve(p: unknown): string {
         if (typeof p !== "string" || !p.trim() || p.includes("\0")) throw new Error("give the file's path");
         let rel = p.trim().replace(/\\/g, "/");
-        if (rel === "~") rel = "";
+        if (rel === "~" || rel === SHELL_HOME) rel = "";
         else if (rel.startsWith("~/")) rel = rel.slice(2);
+        else if (rel.startsWith(`${SHELL_HOME}/`)) rel = rel.slice(SHELL_HOME.length + 1);
         else if (rel.startsWith("/")) throw new Error("paths are in your home folder: ~/…");
         const root = fs.realpathSync(this.root);
         const full = path.resolve(root, rel);
@@ -63,20 +66,12 @@ export class HomeFolder {
         return this.shown(full);
     }
 
-    /** A folder's contents, folders first, for the agent to find its downloads and files. */
-    list(p: unknown = "~"): string {
-        const full = this.resolve(p);
-        const st = fs.statSync(full, { throwIfNoEntry: false });
-        if (!st?.isDirectory()) throw new Error(`there's no folder at ${this.shown(full)}`);
-        const entries = fs.readdirSync(full, { withFileTypes: true }).filter((e) => !e.name.endsWith(".partial"));
-        entries.sort((a, b) => Number(b.isDirectory()) - Number(a.isDirectory()) || a.name.localeCompare(b.name));
-        const lines = entries.slice(0, LIST_MAX).map((e) => {
-            if (e.isDirectory()) return `${e.name}/`;
-            const size = fs.statSync(path.join(full, e.name), { throwIfNoEntry: false })?.size ?? 0;
-            return `${e.name} (${sizeText(size)})`;
-        });
-        if (entries.length > LIST_MAX) lines.push(`… and ${entries.length - LIST_MAX} more`);
-        return `${this.shown(full)}:\n${lines.length ? lines.join("\n") : "(empty)"}`;
+    /** Delete everything in it, links as links (never what they point to), and start it again empty. */
+    erase() {
+        for (const name of fs.existsSync(this.root) ? fs.readdirSync(this.root) : []) {
+            fs.rmSync(path.join(this.root, name), { recursive: true, force: true });
+        }
+        this.ensure();
     }
 
     /** A name in ~/Downloads no file has yet, from what a site suggested. */
@@ -93,3 +88,26 @@ export class HomeFolder {
     }
 }
 
+
+/**
+ * The home folder used to be inside the browser's folder (`from`); it's its
+ * own now (`to`), beside it. Moved once, whole. If both exist (an older version ran
+ * after the move), the older one goes inside the new one as "Earlier home
+ * folder", so nothing in either is lost or overwritten.
+ */
+export function moveHomeFolder(from: string, to: string): void {
+    if (!fs.existsSync(from)) return;
+    if (!fs.existsSync(to)) {
+        fs.mkdirSync(path.dirname(to), { recursive: true });
+        fs.renameSync(from, to);
+        return;
+    }
+    for (let n = 0; n < 1000; n++) {
+        const into = path.join(to, n ? `Earlier home folder (${n})` : "Earlier home folder");
+        if (fs.existsSync(into)) continue;
+        fs.renameSync(from, into);
+        console.warn(`[ai] two home folders: the one from ${from} is now ${into}`);
+        return;
+    }
+    throw new Error(`the old home folder at ${from} couldn't be moved into ${to}: too many earlier ones`);
+}

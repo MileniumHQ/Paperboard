@@ -51,7 +51,11 @@ class FakePackages implements PackageHost {
 
 function setup(o: { platform?: NodeJS.Platform; arch?: string } = {}) {
     const procs = new FakeProcesses();
-    const dir = tempDir();
+    // the panel's storage: the browser's folder and the home folder side by side
+    const storage = tempDir();
+    const dir = path.join(storage, "browser");
+    fs.mkdirSync(dir);
+    const home = new HomeFolder(path.join(storage, "home"));
     const states: ComputerState[] = [];
     const packages = new FakePackages();
     const host: ComputerHost = {
@@ -62,8 +66,8 @@ function setup(o: { platform?: NodeJS.Platform; arch?: string } = {}) {
         onStderr: procs.onStderr,
         packages,
     };
-    const computer = new BrowserComputer({ host, dir, storagePath: "browser", onState: (s) => states.push(s), platform: o.platform ?? "linux", arch: o.arch ?? "x64", startMs: 300 });
-    return { procs, dir, states, packages, computer, host };
+    const computer = new BrowserComputer({ host, dir, home, storagePath: "browser", onState: (s) => states.push(s), platform: o.platform ?? "linux", arch: o.arch ?? "x64", startMs: 300 });
+    return { procs, dir, home, states, packages, computer, host };
 }
 
 /** a DevTools endpoint that answers like Helium's, opened when the fake browser starts */
@@ -216,8 +220,8 @@ describe("the browser computer's lifecycle", () => {
         fs.writeFileSync(path.join(t.dir, "browser.json"), JSON.stringify({ version: 1, installed: true, helium: "0.20.1.1" }));
         fs.mkdirSync(path.join(t.dir, "helium-0.20.1.1"), { recursive: true });
         fs.writeFileSync(path.join(t.dir, "helium-0.20.1.1", "helium"), "");
-        fs.mkdirSync(path.join(t.dir, "home", "Downloads"), { recursive: true });
-        fs.writeFileSync(path.join(t.dir, "home", "Downloads", "kept.txt"), "x");
+        fs.mkdirSync(path.join(t.home.root, "Downloads"), { recursive: true });
+        fs.writeFileSync(path.join(t.home.root, "Downloads", "kept.txt"), "x");
         t.packages.install = async () => void t.packages.putHelium();
         const devtools = fakeDevtools(t);
         try {
@@ -225,7 +229,7 @@ describe("the browser computer's lifecycle", () => {
             expect(t.computer.state.phase).toBe("ready");
             expect(t.packages.downloads).toEqual(["helium"]);
             expect(fs.existsSync(path.join(t.dir, "helium-0.20.1.1"))).toBe(false);
-            expect(fs.readFileSync(path.join(t.dir, "home", "Downloads", "kept.txt"), "utf8")).toBe("x");
+            expect(fs.readFileSync(path.join(t.home.root, "Downloads", "kept.txt"), "utf8")).toBe("x");
         } finally {
             await t.computer.shutdown();
             devtools.close();
@@ -235,8 +239,12 @@ describe("the browser computer's lifecycle", () => {
     test("setting up again erases what was on it, only after the browser is observed stopped", async () => {
         const t = setup();
         await t.computer.init();
-        fs.mkdirSync(path.join(t.dir, "home", "Downloads"), { recursive: true });
-        fs.writeFileSync(path.join(t.dir, "home", "Downloads", "kept.txt"), "x");
+        fs.mkdirSync(path.join(t.home.root, "Downloads"), { recursive: true });
+        fs.writeFileSync(path.join(t.home.root, "Downloads", "kept.txt"), "x");
+        // a link in the home folder to the user's own files: erased as a link, never followed
+        const theirs = tempDir();
+        fs.writeFileSync(path.join(theirs, "mine.txt"), "theirs");
+        fs.symlinkSync(theirs, path.join(t.home.root, "theirs"));
         fs.mkdirSync(path.join(t.dir, "profile"), { recursive: true });
         t.procs.alive.add(BROWSER_PROC_ID); // a browser the last service left running
         let seenWhileRunning = false;
@@ -250,7 +258,10 @@ describe("the browser computer's lifecycle", () => {
         await until(() => t.computer.state.phase === "failed");
         expect(seenWhileRunning).toBe(false);
         expect(t.procs.killed[0]).toMatchObject({ id: BROWSER_PROC_ID, signal: "SIGTERM" });
-        expect(fs.existsSync(path.join(t.dir, "home"))).toBe(false);
+        // its files go with it; the home folder is there again, empty
+        expect(fs.readdirSync(t.home.root)).toEqual(["Downloads"]);
+        expect(fs.readdirSync(path.join(t.home.root, "Downloads"))).toEqual([]);
+        expect(fs.readFileSync(path.join(theirs, "mine.txt"), "utf8")).toBe("theirs");
         expect(fs.existsSync(path.join(t.dir, "profile"))).toBe(false);
         expect(t.packages.downloads).toEqual(["helium"]);
         expect(t.computer.state).toMatchObject({ phase: "failed", installed: false });

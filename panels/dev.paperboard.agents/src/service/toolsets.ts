@@ -1,4 +1,4 @@
-// The agent's tools come in toolsets: its computer, its messages, its
+// The agent's tools come in toolsets: its computer, its shell, its messages, its
 // memory, MCP servers and Paperboard actions. Each is its own module and
 // says what it adds to the agent's instructions; the service's one MCP
 // endpoint serves them all through a Toolbox.

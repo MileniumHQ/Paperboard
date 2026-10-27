@@ -20,7 +20,7 @@ import { LIMITS, PANEL_ID, SETUP_STEPS, type PageDialog, type ComputerPhase, typ
 import { Cdp } from "./cdp";
 import type { ToolResult } from "./computerMcp";
 import { HELIUM_PACKAGE, chromiumMajor, findExecutable, heliumSupported, userAgent } from "./helium";
-import { HomeFolder } from "./homeFolder";
+import type { HomeFolder } from "./homeFolder";
 import { chord } from "./keys";
 import {
     EDITABLE_JS,
@@ -101,6 +101,8 @@ export interface BrowserDeps {
     host: ComputerHost;
     /** absolute path of the computer's folder in the panel's storage */
     dir: string;
+    /** the agent's home folder: where downloads go and uploads come from. Erasing the computer empties it */
+    home: HomeFolder;
     /** the same folder relative to the panel's storage, for downloads */
     storagePath: string;
     onState: (s: ComputerState) => void;
@@ -176,7 +178,7 @@ export class BrowserComputer {
     private control: ReturnType<typeof setTimeout> | null = null;
 
     constructor(private deps: BrowserDeps) {
-        this.home = new HomeFolder(path.join(deps.dir, "home"));
+        this.home = deps.home;
     }
 
     private get platform() {
@@ -297,6 +299,8 @@ export class BrowserComputer {
             for (const name of fs.readdirSync(this.deps.dir)) {
                 if (name !== RECORD_FILE) fs.rmSync(path.join(this.deps.dir, name), { recursive: true, force: true });
             }
+            // the computer's files are its home folder's: erasing it erases them too
+            this.home.erase();
         }
         const abort = (this.abort = new AbortController());
         const steps: SetupStep[] = SETUP_STEPS.map((id) => ({ id, status: "waiting", percent: null }));
@@ -1207,10 +1211,6 @@ export class BrowserComputer {
         return { text: `Picked ${paths.map((p) => this.home.shown(p)).join(", ")}.` + this.changes(before, tab) };
     }
 
-    files(args: Record<string, unknown>): ToolResult {
-        return { text: this.home.list(args.folder ?? "~") };
-    }
-
     // ------------------------------------------------------------- sign-in
 
     /** The agent's picks for a sign-in, checked against its latest look: the page's site and a picture of them. */
@@ -1443,7 +1443,6 @@ const TOOLS: Record<string, { call: (c: BrowserComputer, args: Record<string, un
     place: { call: (c, a) => c.place(a) },
     close: { call: (c, a) => c.close(a) },
     upload: { call: (c, a) => c.upload(a) },
-    files: { call: (c, a) => c.files(a) },
     // the service's half of a sign-in; the agent reaches it only through ask_to_sign_in
     sign_in_prepare: { call: (c, a) => c.signInPrepare(a) },
 };

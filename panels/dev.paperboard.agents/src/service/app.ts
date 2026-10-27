@@ -17,6 +17,8 @@ import {
     type HarnessInfo,
     type Settings,
 } from "../contract";
+import { HomeFolder, moveHomeFolder } from "./homeFolder";
+import { shellToolset } from "./shell";
 import { BrowserComputer, type ComputerHost } from "./browser";
 import { startComputerMcp, type ComputerMcp } from "./computerMcp";
 import { Conversation, type TurnHost } from "./conversation";
@@ -129,9 +131,14 @@ export class AiApp {
             post: (entry) => this.conversation.post(entry),
             notice: (text) => this.conversation.notice(text),
         });
+        // its own folder beside the browser's, where it used to be inside it
+        moveHomeFolder(path.join(root, "browser", "home"), path.join(root, "home"));
+        const home = new HomeFolder(path.join(root, "home"));
+        home.ensure();
         const tools = toolbox([
             { id: "computer", tools: () => COMPUTER_TOOLS, call: (name, args) => this.computer.callTool(name, args), instructions: () => COMPUTER_INSTRUCTIONS },
             messagesToolset({ say: (text, replyTo) => this.conversation.say(text, replyTo) }),
+            shellToolset(home),
             filesToolset({
                 files: () => this.conversation.attachments,
                 getFile: (p) => this.computer.getFile(p),
@@ -161,6 +168,7 @@ export class AiApp {
         this.computer = new BrowserComputer({
             host: this.host,
             dir: path.join(root, "browser"),
+            home,
             storagePath: "browser",
             onState: (computer) => this.ctx.setState({ computer }),
         });
