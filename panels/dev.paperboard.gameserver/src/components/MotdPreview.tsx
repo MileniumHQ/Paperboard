@@ -1,11 +1,9 @@
 // The server-list MOTD preview. Kept apart from the editor in Motd.tsx so
 // the widget page can draw it without loading the panel's bridge.
 import { createEffect, createSignal, For, onCleanup, Show } from "solid-js";
-import { getVarCss } from "@mileniumhq/paperui";
 import { MOTD_COLOR_HEX, parseMotd, type MotdStyle } from "../core/motd";
+import styles from "./Motd.module.css";
 
-// paper-literal-ok: Minecraft's own text colour, not a theme colour
-const LIST_GRAY = "#AAAAAA";
 const OBFUSCATED_GLYPHS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 const OBFUSCATED_FRAME_MS = 80;
 
@@ -21,26 +19,18 @@ function scramble(text: string): string {
     return out;
 }
 
-// the text sits on the panel's own surface, not the game's black list box
-export const listBox = () => ({
-    "font-family": getVarCss("font-family-code"),
-    "line-height": getVarCss("leading-normal"),
-    "white-space": "pre",
-    overflow: "hidden",
-});
-
-// obfuscated text scrambles in the preview; in the editor it is blurred so
-// the real characters stay editable
-export function cssFor(style: MotdStyle, editing: boolean): Record<string, string | undefined> {
-    return {
-        color: (style.color && MOTD_COLOR_HEX.get(style.color)) || LIST_GRAY,
-        "font-weight": style.bold ? getVarCss("weight-bold") : undefined,
-        "font-style": style.italic ? "italic" : undefined,
-        "text-decoration":
-            [style.underline && "underline", style.strikethrough && "line-through"].filter(Boolean).join(" ") ||
-            undefined,
-        filter: editing && style.obfuscated ? `blur(${getVarCss("uigap-sixth")})` : undefined,
-    };
+/** the classes that draw one run of MOTD text; `editing` blurs obfuscated text */
+export function motdClasses(style: MotdStyle, editing: boolean): string {
+    return [
+        style.color && MOTD_COLOR_HEX.has(style.color) ? styles[`color-${style.color}`] : styles.plain,
+        style.bold && styles.bold,
+        style.italic && styles.italic,
+        style.underline && styles.underline,
+        style.strikethrough && styles.strikethrough,
+        editing && style.obfuscated && styles.blurred,
+    ]
+        .filter(Boolean)
+        .join(" ");
 }
 
 /**
@@ -60,7 +50,7 @@ export function MotdPreview(props: { motd: string; paused?: boolean; class?: str
     });
 
     return (
-        <div class={props.class} style={listBox()}>
+        <div class={[styles.listBox, props.class].filter(Boolean).join(" ")}>
             {/* one block for the text, so a flex or grid box can centre it */}
             <div>
             <For each={lines()}>
@@ -71,7 +61,7 @@ export function MotdPreview(props: { motd: string; paused?: boolean; class?: str
                         </Show>
                         <For each={line}>
                             {(segment) => (
-                                <span style={cssFor(segment, false)}>
+                                <span class={motdClasses(segment, false)}>
                                     {segment.obfuscated ? (frame(), scramble(segment.text)) : segment.text}
                                 </span>
                             )}

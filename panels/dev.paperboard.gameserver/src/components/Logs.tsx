@@ -7,12 +7,10 @@ import {
     PaperFlex,
     PaperIcon,
     PaperInput,
-    PaperPage,
     PaperPageHeader,
     PaperQuote,
     PaperSelectMenu,
     PaperSelectMenuItem,
-    getVarCss,
 } from "@mileniumhq/paperui";
 import {
     listLogFiles,
@@ -21,6 +19,7 @@ import {
     type LogFileInfo,
 } from "../lib/logFiles";
 import { logLabel } from "../core/logs";
+import { errorMessage, type Outcome } from "../lib/failure";
 
 // Historical server logs: pick an archive (or latest.log), filter, read.
 // Logs rotate on server start, so the list can change under us — a manual
@@ -30,11 +29,11 @@ export default function Logs() {
     const [selected, setSelected] = createSignal("");
     const [content, setContent] = createSignal<LogFileContent | null>(null);
     const [loading, setLoading] = createSignal(false);
-    const [error, setError] = createSignal("");
+    const [error, setError] = createSignal<Outcome | null>(null);
     const [filter, setFilter] = createSignal("");
 
     const loadFiles = async (selectName?: string) => {
-        setError("");
+        setError(null);
         try {
             const list = await listLogFiles();
             setFiles(list);
@@ -46,21 +45,21 @@ export default function Logs() {
             else setContent(null);
         } catch (err) {
             console.error("[Logs] Failed to list log files:", err);
-            setError("Could not list log files. Check the console for details.");
+            setError({ title: "Couldn't list the logs", message: errorMessage(err) });
         }
     };
 
     const selectFile = async (name: string) => {
         setSelected(name);
         setLoading(true);
-        setError("");
+        setError(null);
         try {
             setContent(await readLogFile(name));
         } catch (err) {
-            const message = err instanceof Error ? err.message : String(err);
+            const message = errorMessage(err);
             console.error(`[Logs] Failed to read "${name}":`, message);
             setContent(null);
-            setError(message);
+            setError({ title: "Couldn't read this log", message });
         } finally {
             setLoading(false);
         }
@@ -81,7 +80,7 @@ export default function Logs() {
     };
 
     return (
-        <PaperPage fullWidth fullHeight gap="full">
+        <>
             <PaperPageHeader icon="description" title="Logs">
                 <PaperButton
                     disabled={loading()}
@@ -92,14 +91,16 @@ export default function Logs() {
             </PaperPageHeader>
 
             <Show when={error()}>
-                <PaperQuote variant="danger" icon="warning" title="Error">
-                    {error()}
-                </PaperQuote>
+                {(failure) => (
+                    <PaperQuote variant="danger" icon="warning" title={failure().title}>
+                        {failure().message}
+                    </PaperQuote>
+                )}
             </Show>
 
             <PaperCard padding="full">
                 <PaperFlex direction="row" gap="half" align="center" wrap>
-                    <PaperFlex grow minWidth={getVarCss("size-card-min")}>
+                    <PaperFlex grow minWidth="card-min">
                         <PaperSelectMenu
                             name="logFile"
                             fullWidth
@@ -115,7 +116,7 @@ export default function Logs() {
                             </For>
                         </PaperSelectMenu>
                     </PaperFlex>
-                    <PaperFlex grow={2} minWidth={getVarCss("size-card-min")}>
+                    <PaperFlex grow={2} minWidth="card-min">
                         <PaperInput
                             fullWidth
                             icon="search"
@@ -149,6 +150,6 @@ export default function Logs() {
                     />
                 </Show>
             </PaperCard>
-        </PaperPage>
+        </>
     );
 }

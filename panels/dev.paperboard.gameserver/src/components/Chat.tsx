@@ -8,14 +8,12 @@ import {
 } from "solid-js";
 import {
     PaperFlex,
-    PaperPage,
     PaperCard,
     PaperEmptyState,
     PaperText,
     PaperInput,
     PaperButton,
     PaperIcon,
-    getVarCss,
 } from "@mileniumhq/paperui";
 import {
     chatMessages,
@@ -42,7 +40,7 @@ function renderChatMessageContent(text: string): JSX.Element {
         return (
             <PaperFlex direction="row" gap="half" align="flex-start">
                 <PlayerAvatar name={chatMatch[1]} />
-                <PaperText breakWord>
+                <PaperText size={3} breakWord>
                     <strong>{chatMatch[1]}</strong> {chatMatch[2]}
                 </PaperText>
             </PaperFlex>
@@ -52,11 +50,9 @@ function renderChatMessageContent(text: string): JSX.Element {
     const serverMatch = text.match(/^\[Server(?::\s*[^\]]+)?\]\s*(.*)$/);
     if (serverMatch) {
         return (
-            <PaperFlex direction="row" gap="half" align="flex-start">
-                <span style={{ "word-break": "break-word" }}>
-                    <strong>[Server]</strong> {serverMatch[1]}
-                </span>
-            </PaperFlex>
+            <PaperText size={3} breakWord>
+                <strong>[Server]</strong> {serverMatch[1]}
+            </PaperText>
         );
     }
 
@@ -65,9 +61,9 @@ function renderChatMessageContent(text: string): JSX.Element {
         return (
             <PaperFlex direction="row" gap="half" align="center">
                 <PlayerAvatar name={joinMatch[1]} />
-                <span style={{ color: getVarCss("success"), "word-break": "break-word" }}>
+                <PaperText size={3} color="success" breakWord>
                     <strong>{joinMatch[1]}</strong> {joinMatch[2]}
-                </span>
+                </PaperText>
             </PaperFlex>
         );
     }
@@ -77,14 +73,14 @@ function renderChatMessageContent(text: string): JSX.Element {
         return (
             <PaperFlex direction="row" gap="half" align="center">
                 <PlayerAvatar name={leaveMatch[1]} />
-                <span style={{ color: getVarCss("danger"), "word-break": "break-word" }}>
+                <PaperText size={3} color="danger" breakWord>
                     <strong>{leaveMatch[1]}</strong> {leaveMatch[2]}
-                </span>
+                </PaperText>
             </PaperFlex>
         );
     }
 
-    return <span>{text}</span>;
+    return <PaperText size={3} breakWord>{text}</PaperText>;
 }
 
 export default function Chat() {
@@ -111,7 +107,7 @@ export default function Chat() {
     };
 
     return (
-        <PaperPage fullWidth fullHeight gap="full">
+        <>
             <PaperCard grow minHeight={0}>
                 <PaperFlex
                     ref={(el) => (scrollRef = el)}
@@ -134,12 +130,8 @@ export default function Chat() {
                     >
                         <For each={chatMessages()}>
                             {(msg) => (
-                                <PaperFlex direction="row" gap="half" align="flex-start">
-                                    <PaperFlex grow minWidth={0}>
-                                        <PaperText size={3} breakWord>
-                                            {renderChatMessageContent(msg.text)}
-                                        </PaperText>
-                                    </PaperFlex>
+                                <PaperFlex minWidth={0}>
+                                    {renderChatMessageContent(msg.text)}
                                 </PaperFlex>
                             )}
                         </For>
@@ -147,7 +139,7 @@ export default function Chat() {
                 </PaperFlex>
             </PaperCard>
 
-            <form onSubmit={handleSend} style={{ width: "100%" }}>
+            <form onSubmit={handleSend}>
                 <PaperFlex direction="row" gap="half" align="center" fullWidth>
                     <PaperFlex grow>
                         <PaperInput
@@ -164,6 +156,6 @@ export default function Chat() {
                     </PaperButton>
                 </PaperFlex>
             </form>
-        </PaperPage>
+        </>
     );
 }

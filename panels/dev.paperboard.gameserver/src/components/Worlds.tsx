@@ -22,7 +22,6 @@ import {
     PaperSettingList,
     PaperTable,
     PaperText,
-    getVarCss,
     PaperCard,
     PaperAvatar,
 } from "@mileniumhq/paperui";
@@ -45,6 +44,7 @@ import {
 import { serverStatus } from "../lib/server";
 import { PANEL_ID } from "../service/contract";
 import { WORLD_TRANSFER_DIR, worldNameFromFile } from "../core/worldArchive";
+import { errorMessage, type Outcome } from "../lib/failure";
 
 const ZIP_FILTERS = [{ name: "World zips", extensions: ["zip"] }];
 
@@ -62,11 +62,7 @@ function WorldTile(props: { active: boolean }) {
             shape="square"
             size="large"
             fallbackIcon="public"
-            style={{
-                background: props.active
-                    ? `color-mix(in srgb, ${getVarCss("success")} 16%, transparent)`
-                    : `color-mix(in srgb, ${getVarCss("contrast")} 8%, transparent)`,
-            }}
+            accent={props.active ? "success" : undefined}
         />
     );
 }
@@ -81,7 +77,7 @@ export default function Worlds() {
     const [createValues, setCreateValues] = createSignal<Record<string, string>>({});
     const [createError, setCreateError] = createSignal("");
     const [mutating, setMutating] = createSignal(false);
-    const [actionError, setActionError] = createSignal("");
+    const [actionError, setActionError] = createSignal<Outcome | null>(null);
     const [deleteConfirmOpen, setDeleteConfirmOpen] = createSignal(false);
 
     const online = () => serverStatus() !== "offline";
@@ -95,7 +91,7 @@ export default function Worlds() {
             setListError("");
         } catch (err) {
             console.error("[Worlds] Failed to list worlds:", err);
-            setListError("Could not list world directories. Check the console for details.");
+            setListError(errorMessage(err));
         }
     };
 
@@ -136,15 +132,15 @@ export default function Worlds() {
 
     const runActivate = async (name: string, seed?: string) => {
         setMutating(true);
-        setActionError("");
+        setActionError(null);
         try {
             await setActiveWorld(name, seed || undefined);
             await refresh();
             return true;
         } catch (err) {
-            const message = err instanceof Error ? err.message : String(err);
+            const message = errorMessage(err);
             console.error(`[Worlds] Failed to activate "${name}":`, message);
-            setActionError(message);
+            setActionError({ title: "World not switched", message });
             return false;
         } finally {
             setMutating(false);
@@ -162,15 +158,15 @@ export default function Worlds() {
         setDeleteConfirmOpen(false);
         if (!target) return;
         setMutating(true);
-        setActionError("");
+        setActionError(null);
         try {
             await deleteActiveWorldDirs(target.name);
             setSelected(null);
             await refresh();
         } catch (err) {
-            const message = err instanceof Error ? err.message : String(err);
+            const message = errorMessage(err);
             console.error(`[Worlds] Failed to delete "${target.name}":`, message);
-            setActionError(message);
+            setActionError({ title: "World not deleted", message });
         } finally {
             setMutating(false);
         }
@@ -187,7 +183,7 @@ export default function Worlds() {
                 // merged file and writes level-name/level-seed on top
                 await writeServerProperties(createValues());
             } catch (err) {
-                const message = err instanceof Error ? err.message : String(err);
+                const message = errorMessage(err);
                 console.error("[Worlds] Failed to write generation settings:", message);
                 setCreateError(message);
                 return;
@@ -197,7 +193,7 @@ export default function Worlds() {
                 // degrading into a silent switch when the listing above was stale
                 await setActiveWorld(name, createValue("level-seed", "").trim() || undefined, true);
             } catch (err) {
-                const message = err instanceof Error ? err.message : String(err);
+                const message = errorMessage(err);
                 console.error(`[Worlds] Failed to create "${name}":`, message);
                 setCreateError(message);
                 return;
@@ -215,17 +211,17 @@ export default function Worlds() {
     const [downloading, setDownloading] = createSignal(false);
     const downloadWorld = async (name: string) => {
         setDownloading(true);
-        setActionError("");
+        setActionError(null);
         let file: string | null = null;
         try {
             file = (await exportWorld(name)).file;
             await fileApi.exportFile(`${WORLD_TRANSFER_DIR}/${file}`, PANEL_ID, { suggestedName: `${name}.zip`, filters: ZIP_FILTERS });
         } catch (err) {
-            setActionError(`The world was not downloaded: ${err instanceof Error ? err.message : String(err)}`);
+            setActionError({ title: "World not downloaded", message: errorMessage(err) });
         } finally {
             if (file) {
                 await discardWorldTransfer(file).catch((err) =>
-                    setActionError(`The world's temporary zip could not be removed: ${err instanceof Error ? err.message : String(err)}`));
+                    setActionError({ title: "Cleanup incomplete", message: `The world's temporary zip could not be removed: ${errorMessage(err)}` }));
             }
             setDownloading(false);
         }
@@ -241,7 +237,7 @@ export default function Worlds() {
     const uploadNameValid = () => WORLD_NAME_PATTERN.test(uploadName().trim()) && !isWorldNameTaken(takenNames(), uploadName());
 
     const chooseUpload = async () => {
-        setActionError("");
+        setActionError(null);
         const file = `upload-${crypto.randomUUID()}.zip`;
         try {
             const result = await fileApi.importFile(`${WORLD_TRANSFER_DIR}/${file}`, PANEL_ID, { filters: ZIP_FILTERS });
@@ -249,7 +245,7 @@ export default function Worlds() {
             setUploadName(worldNameFromFile(result.name, takenNames()));
             setUpload({ file });
         } catch (err) {
-            setActionError(`The world was not uploaded: ${err instanceof Error ? err.message : String(err)}`);
+            setActionError({ title: "World not uploaded", message: errorMessage(err) });
         }
     };
 
@@ -260,7 +256,7 @@ export default function Worlds() {
         try {
             await discardWorldTransfer(current.file);
         } catch (err) {
-            setActionError(`The uploaded zip could not be removed: ${err instanceof Error ? err.message : String(err)}`);
+            setActionError({ title: "Cleanup incomplete", message: `The uploaded zip could not be removed: ${errorMessage(err)}` });
         }
     };
 
@@ -275,7 +271,7 @@ export default function Worlds() {
         } catch (err) {
             // the service removed the zip; choosing again starts over
             setUpload(null);
-            setActionError(`The world was not added: ${err instanceof Error ? err.message : String(err)}`);
+            setActionError({ title: "World not added", message: errorMessage(err) });
         } finally {
             setUploading(false);
         }
@@ -313,12 +309,14 @@ export default function Worlds() {
                         </PaperQuote>
                     </Show>
                     <Show when={actionError()}>
-                        <PaperQuote variant="danger" icon="warning" title="Error">
-                            {actionError()}
-                        </PaperQuote>
+                        {(failure) => (
+                            <PaperQuote variant="danger" icon="warning" title={failure().title}>
+                                {failure().message}
+                            </PaperQuote>
+                        )}
                     </Show>
                     <Show when={listError()}>
-                        <PaperQuote variant="danger" icon="warning" title="Error">
+                        <PaperQuote variant="danger" icon="warning" title="Couldn't list the worlds">
                             {listError()}
                         </PaperQuote>
                     </Show>
@@ -353,7 +351,7 @@ export default function Worlds() {
                         >
                             <PaperCard>
                                 <PaperFlex padding="full">
-                                    <PaperMediaCardGroup minCardWidth={getVarCss("size-card-min")}>
+                                    <PaperMediaCardGroup minCardWidth="card-min">
                                         <For each={worlds() ?? []}>
                                             {(world) => (
                                                 <PaperMediaCard
@@ -552,7 +550,7 @@ export default function Worlds() {
                             </PaperText>
                         </Show>
                         <Show when={createError()}>
-                            <PaperQuote variant="danger" icon="warning" title="Error">
+                            <PaperQuote variant="danger" icon="warning" title="World not created">
                                 {createError()}
                             </PaperQuote>
                         </Show>

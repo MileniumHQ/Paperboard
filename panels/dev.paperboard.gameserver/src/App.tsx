@@ -3,7 +3,7 @@ import {
     PaperPanel,
     PaperMenu,
     PaperMenuItem,
-    PaperText,
+    PaperMenuLabel,
     PaperInterfaceGroup,
     PaperInterfaceItem,
 } from "@mileniumhq/paperui";
@@ -33,7 +33,6 @@ import Backups from "./components/Backups";
 import type { PaperFileReveal } from "@mileniumhq/paperui";
 import "@mileniumhq/paperui/style.css";
 import "@mileniumhq/paperui/panel.css";
-import styles from "./App.module.css";
 
 export default function App() {
     const [configured, setConfigured] = createSignal<boolean | null>(null);
@@ -105,9 +104,7 @@ export default function App() {
                         <PaperMenuItem value="overview" icon="dashboard">
                             Overview
                         </PaperMenuItem>
-                        <PaperText as="div" preset="section" class={styles.menuLabel}>
-                            Play
-                        </PaperText>
+                        <PaperMenuLabel>Play</PaperMenuLabel>
                         <PaperMenuItem value="chat" icon="chat">
                             Chat
                         </PaperMenuItem>
@@ -121,9 +118,7 @@ export default function App() {
                                 Map
                             </PaperMenuItem>
                         </Show>
-                        <PaperText as="div" preset="section" class={styles.menuLabel}>
-                            World
-                        </PaperText>
+                        <PaperMenuLabel>World</PaperMenuLabel>
                         <Show when={showWorlds()}>
                             <PaperMenuItem value="worlds" icon="public">
                                 Worlds
@@ -137,9 +132,7 @@ export default function App() {
                                 Datapacks
                             </PaperMenuItem>
                         </Show>
-                        <PaperText as="div" preset="section" class={styles.menuLabel}>
-                            Software
-                        </PaperText>
+                        <PaperMenuLabel>Software</PaperMenuLabel>
                         <PaperMenuItem value="versions" icon="deployed_code">
                             Versions
                         </PaperMenuItem>
@@ -158,9 +151,7 @@ export default function App() {
                                 Modpacks
                             </PaperMenuItem>
                         </Show>
-                        <PaperText as="div" preset="section" class={styles.menuLabel}>
-                            Server
-                        </PaperText>
+                        <PaperMenuLabel>Server</PaperMenuLabel>
                         <PaperMenuItem value="options" icon="tune">
                             Options
                         </PaperMenuItem>
@@ -179,14 +170,14 @@ export default function App() {
                     </PaperMenu>
 
                     <PaperInterfaceGroup value={activeTab()}>
-                        <PaperInterfaceItem value="overview" variant="full">
+                        <PaperInterfaceItem value="overview" variant="fill">
                             <Overview
                                 active={activeTab() === "overview"}
                                 hasPlayersTab={showPlayers()}
                                 onOpenTab={setActiveTab}
                             />
                         </PaperInterfaceItem>
-                        <PaperInterfaceItem value="chat" variant="full">
+                        <PaperInterfaceItem value="chat" variant="fill">
                             <Chat />
                         </PaperInterfaceItem>
                         <PaperInterfaceItem value="options">
@@ -201,7 +192,7 @@ export default function App() {
                             </PaperInterfaceItem>
                         </Show>
                         <Show when={showPlayers()}>
-                            <PaperInterfaceItem value="players" variant="full">
+                            <PaperInterfaceItem value="players" variant="fill" width="full">
                                 <Players />
                             </PaperInterfaceItem>
                         </Show>
@@ -240,10 +231,10 @@ export default function App() {
                                 <Datapacks active={activeTab() === "datapacks"} />
                             </PaperInterfaceItem>
                         </Show>
-                        <PaperInterfaceItem value="files" variant="full">
+                        <PaperInterfaceItem value="files" variant="fill">
                             <Files reveal={filesReveal()} />
                         </PaperInterfaceItem>
-                        <PaperInterfaceItem value="logs" variant="full">
+                        <PaperInterfaceItem value="logs" variant="fill">
                             <Logs />
                         </PaperInterfaceItem>
                         <PaperInterfaceItem value="backups">

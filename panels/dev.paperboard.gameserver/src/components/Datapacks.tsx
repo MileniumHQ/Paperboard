@@ -17,7 +17,6 @@ import {
     PaperSelectMenu,
     PaperSelectMenuItem,
     PaperText,
-    getVarCss,
 } from "@mileniumhq/paperui";
 import { serverBridge, serverStatus, serverVersion } from "../lib/server";
 import { ACTION_IDS } from "../service/contract";
@@ -238,7 +237,7 @@ export default function Datapacks(props: { active: boolean }) {
                                     Showing the first {listing()!.packs.length} entries of the folder.
                                 </PaperText>
                             </Show>
-                            <PaperMediaCardGroup minCardWidth={getVarCss("size-card-min")}>
+                            <PaperMediaCardGroup minCardWidth="card-min">
                                 <For each={listing()!.packs}>
                                     {(pack) => (
                                         <PaperMediaCard
@@ -325,7 +324,7 @@ export default function Datapacks(props: { active: boolean }) {
                         >
                             <PaperCard>
                                 <PaperFlex padding="full">
-                                    <PaperMediaCardGroup minCardWidth={getVarCss("size-card-min")}>
+                                    <PaperMediaCardGroup minCardWidth="card-min">
                                         <For each={hits()}>
                                             {(hit) => (
                                                 <PaperMediaCard

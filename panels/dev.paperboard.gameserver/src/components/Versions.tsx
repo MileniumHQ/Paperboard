@@ -11,7 +11,6 @@ import {
     PaperSelectorItem,
     PaperText,
     PaperCard,
-    getVarCss,
 } from "@mileniumhq/paperui";
 import { config } from "@mileniumhq/paperapi";
 import InstallLoaders from "./InstallLoaders";
@@ -28,6 +27,7 @@ import {
 import { isServerSoftware } from "../software/catalog";
 import { listInstalledPlugins, uninstallAllPlugins } from "../lib/plugins";
 import VersionPicker from "./VersionPicker";
+import { errorMessage, type Outcome } from "../lib/failure";
 
 // Versions: swap the server software for a different software/version. This is a
 // destructive boundary (world format and plugin compatibility can change),
@@ -39,7 +39,7 @@ export default function Versions(props: { onRequestPluginUpdate?: () => void }) 
         createSignal<ServerSoftwareType>("paper");
     const [installedVersion, setInstalledVersion] = createSignal("");
     const [switching, setSwitching] = createSignal(false);
-    const [error, setError] = createSignal("");
+    const [error, setError] = createSignal<Outcome | null>(null);
     const [postSwitchOpen, setPostSwitchOpen] = createSignal(false);
     const [postSwitchCount, setPostSwitchCount] = createSignal(0);
     const [uninstallingAll, setUninstallingAll] = createSignal(false);
@@ -76,13 +76,13 @@ export default function Versions(props: { onRequestPluginUpdate?: () => void }) 
         (software() !== installedSoftware() || selectedVersion() !== installedVersion());
 
     const switchVersion = async () => {
-        setError("");
+        setError(null);
         if (online()) {
-            setError("Stop the server before switching versions.");
+            setError({ title: "Server running", message: "Stop the server before switching versions." });
             return;
         }
         if (!getRequiredJavaVersion(selectedVersion())) {
-            setError(`Could not determine the Java runtime for ${selectedVersion()}.`);
+            setError({ title: "Can't switch versions", message: `Could not determine the Java runtime for ${selectedVersion()}.` });
             return;
         }
         setInstallFailed(false);
@@ -104,9 +104,9 @@ export default function Versions(props: { onRequestPluginUpdate?: () => void }) 
             setInstallOpen(false);
             setPostSwitchOpen(true);
         } catch (err) {
-            const message = err instanceof Error ? err.message : String(err);
+            const message = errorMessage(err);
             console.error("[Versions] Failed to switch version:", err);
-            setError(message);
+            setError({ title: "Switch failed", message });
             setInstallFailed(true);
         } finally {
             setSwitching(false);
@@ -120,9 +120,9 @@ export default function Versions(props: { onRequestPluginUpdate?: () => void }) 
             setPostSwitchCount(0);
             setPostSwitchOpen(false);
         } catch (err) {
-            const message = err instanceof Error ? err.message : String(err);
+            const message = errorMessage(err);
             console.error("[Versions] Failed to uninstall plugins:", err);
-            setError(message);
+            setError({ title: "Couldn't uninstall", message });
         } finally {
             setUninstallingAll(false);
         }
@@ -135,9 +135,11 @@ export default function Versions(props: { onRequestPluginUpdate?: () => void }) 
                     <RecoveryNotice />
 
                     <Show when={error()}>
-                        <PaperQuote variant="danger" icon="warning" title="Error">
-                            {error()}
-                        </PaperQuote>
+                        {(failure) => (
+                            <PaperQuote variant="danger" icon="warning" title={failure().title}>
+                                {failure().message}
+                            </PaperQuote>
+                        )}
                     </Show>
 
                     <PaperCard>
@@ -230,7 +232,7 @@ export default function Versions(props: { onRequestPluginUpdate?: () => void }) 
                         {SOFTWARE_NAMES[software()]} {selectedVersion()}. If the
                         install fails, the current server is kept as it was.
                     </PaperText>
-                    <PaperQuote variant="warning" icon="warning" title="Heads up">
+                    <PaperQuote variant="warning" icon="warning" title="Back up first">
                         Worlds and plugins may not survive every update. Success
                         varies by version, and there is no undo. Back up your world
                         first.
@@ -259,11 +261,11 @@ export default function Versions(props: { onRequestPluginUpdate?: () => void }) 
                 }
             >
                 <PaperFlex fullWidth center>
-                    <PaperFlex fullWidth maxWidth={getVarCss("size-panel-small")}>
+                    <PaperFlex fullWidth maxWidth="panel-small">
                         <InstallLoaders items={install.rows(software())} />
                         <Show when={installFailed() && error()}>
                             <PaperQuote variant="danger" icon="warning" title="Switch failed">
-                                {error()}
+                                {error()?.message}
                             </PaperQuote>
                         </Show>
                     </PaperFlex>

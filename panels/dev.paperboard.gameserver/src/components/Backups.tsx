@@ -23,6 +23,7 @@ import {
     type BackupStatus,
 } from "@mileniumhq/paperapi";
 import { PANEL_ID } from "../service/contract";
+import { errorMessage, type Outcome } from "../lib/failure";
 
 // Backups of the whole server folder (worlds, settings, plugins, mods),
 // made now or routinely by this computer's Paperboard Server, which makes
@@ -46,14 +47,13 @@ function sizeText(bytes: number): string {
 }
 
 const dateText = (iso: string) => new Date(iso).toLocaleString();
-const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
 export default function Backups(props: { active: boolean }) {
     const [status, setStatus] = createSignal<BackupStatus | null>(null);
     const [backups, setBackups] = createSignal<BackupRecord[] | null>(null);
     const [loadError, setLoadError] = createSignal("");
-    const [error, setError] = createSignal("");
-    const [notice, setNotice] = createSignal("");
+    const [error, setError] = createSignal<Outcome | null>(null);
+    const [notice, setNotice] = createSignal<Outcome | null>(null);
     const [busy, setBusy] = createSignal<"create" | "schedule" | null>(null);
 
     const load = async () => {
@@ -63,7 +63,7 @@ export default function Backups(props: { active: boolean }) {
             setStatus(now);
             setBackups(now.location ? await backupApi.list(PANEL_ID) : []);
         } catch (err) {
-            setLoadError(`Backups could not be loaded: ${message(err)}`);
+            setLoadError(`Backups could not be loaded: ${errorMessage(err)}`);
         }
     };
 
@@ -73,16 +73,16 @@ export default function Backups(props: { active: boolean }) {
         if (props.active) void load();
     });
 
-    const act = async (kind: "create" | "schedule", work: () => Promise<string | null>) => {
+    const act = async (kind: "create" | "schedule", failTitle: string, work: () => Promise<Outcome | null>) => {
         if (busy()) return;
         setBusy(kind);
-        setError("");
-        setNotice("");
+        setError(null);
+        setNotice(null);
         try {
             const done = await work();
             if (done) setNotice(done);
         } catch (err) {
-            setError(message(err));
+            setError({ title: failTitle, message: errorMessage(err) });
         } finally {
             setBusy(null);
             await load();
@@ -95,18 +95,20 @@ export default function Backups(props: { active: boolean }) {
         return (await backupApi.chooseLocation(PANEL_ID)).status === "chosen";
     };
 
-    const changeLocation = () => act("schedule", async () => {
+    const changeLocation = () => act("schedule", "Location not changed", async () => {
         const result = await backupApi.chooseLocation(PANEL_ID);
-        return result.status === "chosen" ? `Backups now go to ${result.location.label}.` : null;
+        return result.status === "chosen"
+            ? { title: "Location changed", message: `Backups now go to ${result.location.label}.` }
+            : null;
     });
 
-    const backUpNow = () => act("create", async () => {
+    const backUpNow = () => act("create", "Backup failed", async () => {
         if (!(await ensureLocation())) return null;
         const record = await backupApi.create(PANEL_ID);
-        return `Backed up the server (${sizeText(record.size)}).`;
+        return { title: "Backed up", message: `Backed up the server (${sizeText(record.size)}).` };
     });
 
-    const setSchedule = (next: { everyHours: BackupSchedule["everyHours"]; keep: number } | null) => act("schedule", async () => {
+    const setSchedule = (next: { everyHours: BackupSchedule["everyHours"]; keep: number } | null) => act("schedule", "Schedule not saved", async () => {
         if (next && !(await ensureLocation())) return null;
         await backupApi.setSchedule(PANEL_ID, next);
         return null;
@@ -140,14 +142,18 @@ export default function Backups(props: { active: boolean }) {
             if (target.kind === "restore") await backupApi.restore(PANEL_ID, target.record.id);
             else await backupApi.delete(PANEL_ID, target.record.id);
         } catch (err) {
-            setConfirmError(`${target.kind === "restore" ? "The backup was not restored" : "The backup was not deleted"}: ${message(err)}`);
+            setConfirmError(`${target.kind === "restore" ? "The backup was not restored" : "The backup was not deleted"}: ${errorMessage(err)}`);
             return;
         } finally {
             setConfirmBusy(false);
         }
         setConfirmOpen(false);
-        setError("");
-        setNotice(target.kind === "restore" ? `Restored the backup from ${dateText(target.record.createdAt)}.` : "Deleted the backup.");
+        setError(null);
+        setNotice(
+            target.kind === "restore"
+                ? { title: "Restored", message: `Restored the backup from ${dateText(target.record.createdAt)}.` }
+                : { title: "Deleted", message: "Deleted the backup." },
+        );
         await load();
     };
 
@@ -173,10 +179,14 @@ export default function Backups(props: { active: boolean }) {
                 </PaperQuote>
             </Show>
             <Show when={error()}>
-                <PaperQuote variant="danger" icon="warning" title="Error">{error()}</PaperQuote>
+                {(failure) => (
+                    <PaperQuote variant="danger" icon="warning" title={failure().title}>{failure().message}</PaperQuote>
+                )}
             </Show>
             <Show when={notice()}>
-                <PaperQuote variant="success" icon="check" title="Done">{notice()}</PaperQuote>
+                {(done) => (
+                    <PaperQuote variant="success" icon="check" title={done().title}>{done().message}</PaperQuote>
+                )}
             </Show>
 
             <PaperSettingList autoHeight>

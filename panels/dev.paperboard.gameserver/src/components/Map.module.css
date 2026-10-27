@@ -1,0 +1,71 @@
+/* the map is a canvas with controls floating over its corners */
+.map {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: var(--paper-surface-inset);
+}
+
+.canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    cursor: grab;
+}
+
+.canvas.grabbing {
+    cursor: grabbing;
+}
+
+.topLeft,
+.topRight,
+.bottomLeft {
+    position: absolute;
+    display: flex;
+    gap: var(--paper-uigap-half);
+}
+
+.topLeft {
+    top: var(--paper-uigap);
+    left: var(--paper-uigap);
+    align-items: center;
+}
+
+.topRight {
+    top: var(--paper-uigap);
+    right: var(--paper-uigap);
+    flex-direction: column;
+    align-items: flex-end;
+}
+
+.bottomLeft {
+    bottom: var(--paper-uigap);
+    left: var(--paper-uigap);
+    max-width: var(--paper-size-panel-small);
+}
+
+/* a frosted chip, so the terrain stays visible behind the controls */
+.glass {
+    display: flex;
+    align-items: center;
+    gap: var(--paper-uigap-onefourth);
+    padding: var(--paper-uigap-half);
+    border-radius: var(--paper-border-radius);
+    border: var(--paper-border-width) solid var(--paper-border);
+    background: color-mix(in srgb, var(--paper-surface-raised) 72%, transparent);
+    backdrop-filter: var(--paper-blur-medium);
+}
+
+.readout {
+    padding: var(--paper-uigap-half) var(--paper-uigap-threefourths);
+}
+
+.empty {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+}

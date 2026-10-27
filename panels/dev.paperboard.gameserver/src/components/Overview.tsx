@@ -6,7 +6,7 @@ import {
     PaperIcon,
     PaperSeparator,
     PaperConsole,
-    PaperPage,
+    PaperCopyButton,
     PaperCard,
     PaperBadge,
     PaperEffect,
@@ -47,7 +47,6 @@ export default function Overview(props: {
     /** whether this version has a Players tab */
     hasPlayersTab: boolean;
 }) {
-    const [copied, setCopied] = createSignal(false);
     const [motdOpen, setMotdOpen] = createSignal(false);
     const [restriction, setRestriction] = createSignal<JoinRestriction>(null);
 
@@ -79,61 +78,29 @@ export default function Overview(props: {
         initServerListeners();
     });
 
-    const handleCopyAddress = async () => {
-        const addr = `${localIp()}:${serverPort()}`;
-        try {
-            if (navigator.clipboard?.writeText) {
-                await navigator.clipboard.writeText(addr);
-            }
-        } catch (err) {
-            console.debug("[overview] clipboard write failed, falling back:", String(err));
-            const textarea = document.createElement("textarea");
-            textarea.value = addr;
-            textarea.style.position = "fixed";
-            textarea.style.opacity = "0";
-            document.body.appendChild(textarea);
-            textarea.select();
-            document.execCommand("copy");
-            document.body.removeChild(textarea);
-        }
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-    };
-
     const badge = () => getStatusBadge(serverStatus());
 
     return (
-        <PaperPage fullWidth fullHeight gap="full">
-            <PaperCard shrink={false}>
-                <PaperFlex fullWidth padding="full">
-                    <PaperFlex direction="row" justify="space-between" align="center">
-                        <PaperFlex gap="onefourth">
-                            <PaperFlex direction="row" gap="half" align="center">
-                                <PaperText weight={700} size={8}>
-                                    {localIp()}:{serverPort()}
-                                </PaperText>
-                                <PaperButton size="tiny"
-                                    icon
-                                    onClick={handleCopyAddress}
-                                    title={copied() ? "Copied!" : "Copy address"}>
-                                    {copied() ? "check" : "content_copy"}
-                                </PaperButton>
-                                <PaperBadge variant={badge().variant}>
-                                    {badge().label}
-                                </PaperBadge>
-                            </PaperFlex>
-                            <PaperFlex direction="row" gap="half" align="center">
-                                <MotdPreview motd={serverMotd()} />
-                                <PaperButton size="tiny"
-                                    icon
-                                    onClick={() => setMotdOpen(true)}
-                                    title="Edit server list message"
-                                    aria-label="Edit server list message">
-                                    edit
-                                </PaperButton>
-                            </PaperFlex>
-                        </PaperFlex>
-                    </PaperFlex>
+        <>
+            <PaperCard shrink={false} padding="full" gap="onefourth">
+                <PaperFlex direction="row" gap="half" align="center">
+                    <PaperText weight={700} size={8}>
+                        {localIp()}:{serverPort()}
+                    </PaperText>
+                    <PaperCopyButton text={`${localIp()}:${serverPort()}`} title="Copy address" />
+                    <PaperBadge variant={badge().variant}>
+                        {badge().label}
+                    </PaperBadge>
+                </PaperFlex>
+                <PaperFlex direction="row" gap="half" align="center">
+                    <MotdPreview motd={serverMotd()} />
+                    <PaperButton size="tiny"
+                        icon
+                        onClick={() => setMotdOpen(true)}
+                        title="Edit server list message"
+                        aria-label="Edit server list message">
+                        edit
+                    </PaperButton>
                 </PaperFlex>
             </PaperCard>
 
@@ -219,6 +186,6 @@ export default function Overview(props: {
 
             <MotdEditor open={motdOpen()} onClose={() => setMotdOpen(false)} />
             <ServerIssueModal />
-        </PaperPage>
+        </>
     );
 }

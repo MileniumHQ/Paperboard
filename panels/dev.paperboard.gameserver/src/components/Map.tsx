@@ -36,6 +36,8 @@ import {
     serverStatus,
 } from "../lib/server";
 import { loadHead } from "../lib/skins";
+import styles from "./Map.module.css";
+import { errorMessage, type Outcome } from "../lib/failure";
 
 const MIN_SCALE = 0.05;
 const MAX_SCALE = 3;
@@ -59,9 +61,10 @@ interface TileState {
 // the cursor, and refreshes both tiles and positions on its own.
 export default function MapView() {
     const [info, setInfo] = createSignal<MapRegionsResult | null>(null);
-    const [error, setError] = createSignal("");
+    const [error, setError] = createSignal<Outcome | null>(null);
     const [dimension, setDimension] = createSignal<MapDimension>("overworld");
     const [pendingCount, setPendingCount] = createSignal(0);
+    const [grabbing, setGrabbing] = createSignal(false);
     const [scale, setScale] = createSignal(1);
     const [offsetX, setOffsetX] = createSignal(0);
     const [offsetY, setOffsetY] = createSignal(0);
@@ -149,7 +152,7 @@ export default function MapView() {
                 pending.delete(key);
                 setPendingCount(pending.size);
                 console.error(`[Map] Failed to render tile ${key}:`, err);
-                setError("A map tile failed to render. Check the console for details.");
+                setError({ title: "A map tile didn't render", message: errorMessage(err) });
             });
     };
 
@@ -294,7 +297,7 @@ export default function MapView() {
         try {
             const result = await listMapRegions();
             setInfo(result);
-            setError("");
+            setError(null);
             const dims = result.dimensions;
             if (dims.length === 0) return;
             // keep the user's dimension on a refresh; fall back to the
@@ -314,11 +317,7 @@ export default function MapView() {
             centeredView = true;
         } catch (err) {
             console.error("[Map] Failed to list regions:", err);
-            setError(
-                err instanceof Error
-                    ? `Could not read the world's region files: ${err.message}`
-                    : "Could not read the world's region files.",
-            );
+            setError({ title: "Couldn't read the world's region files", message: errorMessage(err) });
         }
     };
 
@@ -352,7 +351,7 @@ export default function MapView() {
             dragging = true;
             lastX = e.clientX;
             lastY = e.clientY;
-            if (canvas) canvas.style.cursor = "grabbing";
+            setGrabbing(true);
             canvas?.setPointerCapture(e.pointerId);
         };
         const onPointerMove = (e: PointerEvent) => {
@@ -365,7 +364,7 @@ export default function MapView() {
         };
         const onPointerUp = (e: PointerEvent) => {
             dragging = false;
-            if (canvas) canvas.style.cursor = "grab";
+            setGrabbing(false);
             canvas?.releasePointerCapture(e.pointerId);
         };
         const onPointerLeave = () => setCursor(null);
@@ -444,33 +443,12 @@ export default function MapView() {
     });
 
     return (
-        <div
-            ref={wrapper}
-            style={{
-                position: "relative",
-                width: "100%",
-                height: "100%",
-                overflow: "hidden",
-                background: `${getVarCss("surface-inset")}`,
-            }}
-        >
-            <canvas
-                ref={canvas}
-                style={{ display: "block", width: "100%", height: "100%", cursor: "grab" }}
-            />
+        <div ref={wrapper} class={styles.map}>
+            <canvas ref={canvas} class={styles.canvas} classList={{ [styles.grabbing]: grabbing() }} />
 
-            <div
-                style={{
-                    position: "absolute",
-                    top: `${getVarCss("uigap")}`,
-                    left: `${getVarCss("uigap")}`,
-                    display: "flex",
-                    gap: `${getVarCss("uigap-half")}`,
-                    "align-items": "center",
-                }}
-            >
+            <div class={styles.topLeft}>
                 <Show when={availableDimensions().length > 1}>
-                    <PaperFlex minWidth={getVarCss("size-field")}>
+                    <PaperFlex minWidth="field">
                         <PaperSelectMenu
                             name="mapDimension"
                             value={dimension()}
@@ -489,7 +467,7 @@ export default function MapView() {
                     </PaperFlex>
                 </Show>
                 <Show when={playerKeys().length > 0}>
-                    <PaperFlex minWidth={getVarCss("size-field")}>
+                    <PaperFlex minWidth="field">
                         <PaperSelectMenu
                             name="mapPlayer"
                             value={selectedPlayer()}
@@ -507,30 +485,8 @@ export default function MapView() {
                 </Show>
             </div>
 
-            <div
-                style={{
-                    position: "absolute",
-                    top: `${getVarCss("uigap")}`,
-                    right: `${getVarCss("uigap")}`,
-                    display: "flex",
-                    "flex-direction": "column",
-                    "align-items": "flex-end",
-                    gap: `${getVarCss("uigap-half")}`,
-                }}
-            >
-                <div
-                    style={{
-                        display: "flex",
-                        "align-items": "center",
-                        gap: `${getVarCss("uigap-onefourth")}`,
-                        padding: `${getVarCss("uigap-half")} ${getVarCss("uigap-threefourths")}`,
-                        "border-radius": `${getVarCss("border-radius")}`,
-                        background:
-                            `color-mix(in srgb, ${getVarCss("surface-raised")} 72%, transparent)`,
-                        "backdrop-filter": `${getVarCss("blur-medium")}`,
-                        border: `${getVarCss("border-width")} solid ${getVarCss("border")}`,
-                    }}
-                >
+            <div class={styles.topRight}>
+                <div class={[styles.glass, styles.readout].join(" ")}>
                     <PaperIcon>my_location</PaperIcon>
                     <PaperText size={2} color="text-subtle">
                         {Math.round((cursor() ?? centerCoords()).x)},{" "}
@@ -544,20 +500,8 @@ export default function MapView() {
                     </Show>
                 </div>
 
-                <div
-                    style={{
-                        display: "flex",
-                        "align-items": "center",
-                        gap: `${getVarCss("uigap-onefourth")}`,
-                        padding: `${getVarCss("uigap-half")}`,
-                        "border-radius": `${getVarCss("border-radius")}`,
-                        background:
-                            `color-mix(in srgb, ${getVarCss("surface-raised")} 72%, transparent)`,
-                        "backdrop-filter": `${getVarCss("blur-medium")}`,
-                        border: `${getVarCss("border-width")} solid ${getVarCss("border")}`,
-                    }}
-                >
-                    <PaperFlex minWidth={getVarCss("size-field-small")}>
+                <div class={styles.glass}>
+                    <PaperFlex minWidth="field-small">
                         <PaperInput
                             placeholder="X"
                             size={9}
@@ -571,7 +515,7 @@ export default function MapView() {
                             }}
                         />
                     </PaperFlex>
-                    <PaperFlex minWidth={getVarCss("size-field-small")}>
+                    <PaperFlex minWidth="field-small">
                         <PaperInput
                             placeholder="Z"
                             size={9}
@@ -592,18 +536,13 @@ export default function MapView() {
             </div>
 
             <Show when={error()}>
-                <div
-                    style={{
-                        position: "absolute",
-                        bottom: `${getVarCss("uigap")}`,
-                        left: `${getVarCss("uigap")}`,
-                        "max-width": getVarCss("size-panel-small"),
-                    }}
-                >
-                    <PaperQuote variant="danger" icon="warning" title="Error">
-                        {error()}
-                    </PaperQuote>
-                </div>
+                {(failure) => (
+                    <div class={styles.bottomLeft}>
+                        <PaperQuote variant="danger" icon="warning" title={failure().title}>
+                            {failure().message}
+                        </PaperQuote>
+                    </div>
+                )}
             </Show>
 
             <Show
@@ -613,16 +552,7 @@ export default function MapView() {
                     !error()
                 }
             >
-                <div
-                    style={{
-                        position: "absolute",
-                        inset: "0",
-                        display: "flex",
-                        "align-items": "center",
-                        "justify-content": "center",
-                        "pointer-events": "none",
-                    }}
-                >
+                <div class={styles.empty}>
                     <PaperText size={3} color="text-subtle">
                         No generated terrain to map yet. Start the server once.
                     </PaperText>

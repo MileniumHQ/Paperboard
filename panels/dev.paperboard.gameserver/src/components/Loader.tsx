@@ -128,7 +128,7 @@ export default function Loader(props: { active: boolean }) {
                             </PaperQuote>
                         }
                     >
-                        <PaperQuote variant="warning" icon="warning" title="Note">
+                        <PaperQuote variant="warning" icon="info" title="Applies after a restart">
                             These are {name()}'s own settings files. Changes take effect the next time the server
                             starts{serverStatus() !== "offline" ? ", so restart it to apply them" : ""}.
                         </PaperQuote>

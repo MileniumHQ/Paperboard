@@ -20,36 +20,12 @@ export default function SoftwareIcon(props: { software: ServerSoftwareType }) {
         return "symbol" in value ? value.symbol : "";
     };
     return (
-        <Switch fallback={<PaperIcon aria-hidden="true">{symbol()}</PaperIcon>}>
+        <Switch fallback={<PaperIcon>{symbol()}</PaperIcon>}>
             <Match when={mask()}>
-                {(path) => (
-                    // the logo's alpha cut out of the text color
-                    <PaperIcon aria-hidden="true">
-                        <span
-                            style={{
-                                display: "inline-block",
-                                width: "var(--paper-icon-em)",
-                                height: "var(--paper-icon-em)",
-                                "background-color": "currentColor",
-                                "mask-image": `url("${path()}")`,
-                                "mask-size": "contain",
-                                "mask-repeat": "no-repeat",
-                                "mask-position": "center",
-                            }}
-                        />
-                    </PaperIcon>
-                )}
+                {(path) => <PaperIcon src={path()} tint />}
             </Match>
             <Match when={image()}>
-                {(value) => (
-                    <PaperIcon aria-hidden="true">
-                        <img
-                            src={value().src}
-                            alt=""
-                            style={{ "image-rendering": value().pixelated ? "pixelated" : "auto" }}
-                        />
-                    </PaperIcon>
-                )}
+                {(value) => <PaperIcon src={value().src} pixelated={value().pixelated} />}
             </Match>
         </Switch>
     );

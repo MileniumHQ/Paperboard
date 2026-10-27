@@ -5,7 +5,6 @@ import {
     PaperModal,
     PaperQuote,
     PaperSwatch,
-    getVarCss,
 } from "@mileniumhq/paperui";
 import {
     applyCode,
@@ -25,7 +24,8 @@ import {
 } from "../core/motd";
 import { readServerPropertiesStrict, writeServerProperties } from "../lib/properties";
 import { loadServerConfig } from "../lib/server";
-import { cssFor, listBox } from "./MotdPreview";
+import { motdClasses } from "./MotdPreview";
+import styles from "./Motd.module.css";
 
 export { MotdPreview } from "./MotdPreview";
 
@@ -67,9 +67,7 @@ function renderDoc(root: HTMLElement, doc: MotdDoc) {
         if (!run || !sameStyle(run.style, cell.style)) {
             const span = document.createElement("span");
             span.setAttribute(STYLE_ATTR, encodeStyle(cell.style));
-            for (const [name, value] of Object.entries(cssFor(cell.style, true))) {
-                if (value !== undefined) span.style.setProperty(name, value);
-            }
+            span.className = motdClasses(cell.style, true);
             lines[lines.length - 1].append(span);
             run = { span, style: cell.style };
         }
@@ -143,7 +141,6 @@ export function MotdEditor(props: { open: boolean; onClose: () => void }) {
     const [loadError, setLoadError] = createSignal(false);
     const [saveError, setSaveError] = createSignal(false);
     const [saving, setSaving] = createSignal(false);
-    const [focused, setFocused] = createSignal(false);
     const [active, setActive] = createSignal<MotdStyle>(plainStyle());
 
     let root: HTMLDivElement | undefined;
@@ -400,18 +397,7 @@ export function MotdEditor(props: { open: boolean; onClose: () => void }) {
                         onBeforeInput={onBeforeInput}
                         onKeyDown={onKeyDown}
                         onCompositionEnd={onCompositionEnd}
-                        onFocus={() => setFocused(true)}
-                        onBlur={() => setFocused(false)}
-                        style={{
-                            ...listBox(),
-                            padding: `${getVarCss("uigap-onefourth")} ${getVarCss("uigap-half")}`,
-                            border: `${getVarCss("border-width")} solid ${getVarCss("border")}`,
-                            "border-radius": getVarCss("border-radius-half"),
-                            "min-height": `calc(2em * ${getVarCss("leading-normal")})`,
-                            "overflow-x": "auto",
-                            outline: focused() ? getVarCss("focus-ring") : "none",
-                            cursor: "text",
-                        }}
+                        class={[styles.listBox, styles.editor].join(" ")}
                     />
 
                     <Show when={saveError()}>

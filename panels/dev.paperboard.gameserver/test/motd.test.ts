@@ -1,6 +1,7 @@
 // The Overview's server list message: § codes render instead of being
 // stripped, and the editor writes back what the game reads.
 import { describe, expect, mock, test } from "bun:test";
+import { readFileSync } from "node:fs";
 
 let propertiesFile: string | null = null;
 mock.module("@mileniumhq/paperapi", () => ({
@@ -9,7 +10,7 @@ mock.module("@mileniumhq/paperapi", () => ({
     system: { getLocalIP: async () => "127.0.0.1" },
 }));
 
-const { applyCode, docFromMotd, MAX_MOTD_CHARS, motdFromDoc, parseMotd, replaceRange, styleAt } = await import(
+const { applyCode, docFromMotd, MAX_MOTD_CHARS, MOTD_COLORS, motdFromDoc, parseMotd, replaceRange, styleAt } = await import(
     "../src/core/motd"
 );
 const { loadConfigAndProperties } = await import("../src/service/config");
@@ -83,5 +84,14 @@ describe("the service's MOTD", () => {
         expect(await load("motd=\\u00A76Gold\\nTwo\n")).toBe("§6Gold\nTwo");
         expect(await load("motd=\n")).toBe("");
         expect(await load("server-port=25565\n")).toBe("A Minecraft Server");
+    });
+});
+
+describe("the MOTD stylesheet", () => {
+    test("draws every colour code in the game's own colour", () => {
+        const css = readFileSync(new URL("../src/components/Motd.module.css", import.meta.url), "utf8");
+        for (const color of MOTD_COLORS) {
+            expect(css).toContain(`.color-${color.code} {\n    color: ${color.hex};\n}`);
+        }
     });
 });

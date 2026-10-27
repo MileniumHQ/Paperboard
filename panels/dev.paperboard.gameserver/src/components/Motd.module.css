@@ -1,0 +1,121 @@
+/* paper-literal-ok-file: Minecraft's own text colours, not theme colours */
+
+/* The server-list message as the Multiplayer list draws it: the text sits on
+   the panel's own surface, not the game's black list box. */
+.listBox {
+    font-family: var(--paper-font-family-code);
+    line-height: var(--paper-leading-normal);
+    white-space: pre;
+    overflow: hidden;
+}
+
+/* the editable box in the MOTD editor */
+.editor {
+    padding: var(--paper-uigap-onefourth) var(--paper-uigap-half);
+    border: var(--paper-border-width) solid var(--paper-border);
+    border-radius: var(--paper-border-radius-half);
+    min-height: calc(2em * var(--paper-leading-normal));
+    overflow-x: auto;
+    outline: none;
+    cursor: text;
+}
+
+.editor:focus {
+    outline: var(--paper-focus-ring);
+}
+
+/* text with no colour code is the list's gray */
+.plain {
+    color: #AAAAAA;
+}
+
+/* one class per colour code (core/motd.ts MOTD_COLORS) */
+.color-0 {
+    color: #000000;
+}
+
+.color-1 {
+    color: #0000AA;
+}
+
+.color-2 {
+    color: #00AA00;
+}
+
+.color-3 {
+    color: #00AAAA;
+}
+
+.color-4 {
+    color: #AA0000;
+}
+
+.color-5 {
+    color: #AA00AA;
+}
+
+.color-6 {
+    color: #FFAA00;
+}
+
+.color-7 {
+    color: #AAAAAA;
+}
+
+.color-8 {
+    color: #555555;
+}
+
+.color-9 {
+    color: #5555FF;
+}
+
+.color-a {
+    color: #55FF55;
+}
+
+.color-b {
+    color: #55FFFF;
+}
+
+.color-c {
+    color: #FF5555;
+}
+
+.color-d {
+    color: #FF55FF;
+}
+
+.color-e {
+    color: #FFFF55;
+}
+
+.color-f {
+    color: #FFFFFF;
+}
+
+.bold {
+    font-weight: var(--paper-weight-bold);
+}
+
+.italic {
+    font-style: italic;
+}
+
+.underline {
+    text-decoration-line: underline;
+}
+
+.strikethrough {
+    text-decoration-line: line-through;
+}
+
+.underline.strikethrough {
+    text-decoration-line: underline line-through;
+}
+
+/* obfuscated text scrambles in the preview; in the editor it is blurred so
+   the real characters stay editable */
+.blurred {
+    filter: blur(var(--paper-uigap-sixth));
+}

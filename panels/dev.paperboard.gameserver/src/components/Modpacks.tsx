@@ -18,7 +18,6 @@ import {
     PaperSelectMenu,
     PaperSelectMenuItem,
     PaperText,
-    getVarCss,
 } from "@mileniumhq/paperui";
 import { modpackProgress, serverSoftware, serverStatus, serverVersion } from "../lib/server";
 import { SOFTWARE } from "../software/catalog";
@@ -252,7 +251,7 @@ export default function Modpacks(props: { active: boolean }) {
                                 <PaperText size={5} weight={700}>
                                     Installed Modpack
                                 </PaperText>
-                                <PaperMediaCardGroup minCardWidth={getVarCss("size-card-min")}>
+                                <PaperMediaCardGroup minCardWidth="card-min">
                                     <PaperMediaCard
                                         icon={packIcon(pack().iconUrl)}
                                         title={pack().title}
@@ -355,7 +354,7 @@ export default function Modpacks(props: { active: boolean }) {
                         >
                             <PaperCard>
                                 <PaperFlex padding="full">
-                                    <PaperMediaCardGroup minCardWidth={getVarCss("size-card-min")}>
+                                    <PaperMediaCardGroup minCardWidth="card-min">
                                         <For each={hits()}>
                                             {(hit) => (
                                                 <PaperMediaCard

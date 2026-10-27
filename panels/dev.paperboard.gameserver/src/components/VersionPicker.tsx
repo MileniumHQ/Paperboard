@@ -9,7 +9,6 @@ import {
     PaperListItem,
     PaperQuote,
     PaperText,
-    getVarCss,
 } from "@mileniumhq/paperui";
 import type { ServerSoftwareType, VersionItem } from "../lib/software";
 import { serverBridge } from "../lib/server";
@@ -85,17 +84,17 @@ export default function VersionPicker(props: {
             gap="full"
             align="stretch"
             fullWidth
-            style={
-                props.fill
-                    ? { flex: 1, "min-height": 0 }
-                    : { height: getVarCss("size-panel-height-small"), "min-height": 0 }
-            }
+            flex={props.fill || undefined}
+            height={props.fill ? undefined : "panel-height-small"}
+            minHeight={0}
         >
             <PaperFlex
                 direction="column"
                 gap="half"
                 fullWidth
-                style={{ flex: 1, "min-width": 0, "min-height": 0 }}
+                flex
+                minWidth={0}
+                minHeight={0}
             >
                 <PaperInput
                     fullWidth
@@ -117,12 +116,12 @@ export default function VersionPicker(props: {
                     </PaperQuote>
                 </Show>
 
-                <PaperCard grow minHeight={0} scrollable="y">
+                <PaperCard grow minHeight={0}>
                     <Show
                         when={!loading()}
                         fallback={
                             <PaperFlex padding="full" center>
-                                <PaperText preset="body" color={getVarCss("text-subtle")}>
+                                <PaperText preset="body" color="text-subtle">
                                     Loading versions...
                                 </PaperText>
                             </PaperFlex>
@@ -132,7 +131,7 @@ export default function VersionPicker(props: {
                             when={filteredVersions().length > 0}
                             fallback={
                                 <PaperFlex padding="full" center>
-                                    <PaperText preset="body" color={getVarCss("text-subtle")}>
+                                    <PaperText preset="body" color="text-subtle">
                                         No versions matching your filters.
                                     </PaperText>
                                 </PaperFlex>
@@ -144,7 +143,8 @@ export default function VersionPicker(props: {
                                 onValueChange={(val) => props.onSelectVersion(String(val))}
                                 fullWidth
                                 borderless
-                                style={{ height: "auto", background: "transparent" }}
+                                flex
+                                background="transparent"
                             >
                                 <For each={filteredVersions()}>
                                     {(item) => (
@@ -166,7 +166,7 @@ export default function VersionPicker(props: {
                 </PaperCard>
             </PaperFlex>
 
-            <PaperCard shrink={false} scrollable="y" style={{ width: "auto" }}>
+            <PaperCard shrink={false} scrollable="y" fullWidth={false}>
                     <PaperFlex direction="column" gap="full" padding="full">
                         <PaperText preset="title">Version Types</PaperText>
                         <PaperFlex direction="column" gap="threefourths">

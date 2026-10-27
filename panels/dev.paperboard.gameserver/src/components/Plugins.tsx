@@ -27,7 +27,6 @@ import {
     PaperTable,
     PaperMarkdown,
     PaperText,
-    getVarCss,
     PaperCard,
 } from "@mileniumhq/paperui";
 import { serverSoftware, serverVersion } from "../lib/server";
@@ -55,6 +54,7 @@ import {
     type PluginUpdateCheck,
     type ProjectVersionOption,
 } from "../lib/plugins";
+import { errorMessage } from "../lib/failure";
 
 // Third-party markdown goes through PaperMarkdown, which renders PaperUI
 // elements instead of HTML; images are allowed because Modrinth bodies are
@@ -136,6 +136,7 @@ export default function Plugins(props: {
     const [project, setProject] = createSignal<ModrinthProject | null>(null);
     const [projectLoading, setProjectLoading] = createSignal(false);
     const [error, setError] = createSignal("");
+    const [listError, setListError] = createSignal("");
 
     const [updating, setUpdating] = createSignal(false);
     const [updateError, setUpdateError] = createSignal("");
@@ -240,12 +241,11 @@ export default function Plugins(props: {
             const { plugins, warning } = await listInstalledPlugins();
             setInstalled(plugins);
             setListWarning(warning ?? "");
+            setListError("");
         } catch (err) {
             console.error("[Plugins] Failed to list installed plugins:", err);
             setListWarning("");
-            setError(
-                `Failed to read the ${pluginDirName(serverSoftware())}/ directory. Check the console for details.`,
-            );
+            setListError(errorMessage(err));
         }
     };
 
@@ -265,7 +265,7 @@ export default function Plugins(props: {
         } catch (err) {
             if (controller.signal.aborted) return;
             console.error("[Plugins] Modrinth search failed:", err);
-            setError(err instanceof Error ? err.message : String(err));
+            setError(errorMessage(err));
         } finally {
             if (searchController === controller) setSearching(false);
         }
@@ -482,8 +482,14 @@ export default function Plugins(props: {
                                 Projects provided by{" "}
                                 <PaperLink href="https://modrinth.com" target="_blank">Modrinth</PaperLink>.
                             </PaperText>
+                            <Show when={listError()}>
+                                <PaperQuote variant="danger" icon="warning" title={`Couldn't read ${pluginDirName(serverSoftware())}/`}>
+                                    {listError()}
+                                    <PaperButton onClick={() => void reloadInstalled()}>Try again</PaperButton>
+                                </PaperQuote>
+                            </Show>
                             <Show when={error()}>
-                                <PaperQuote variant="danger" icon="warning" title="Error">
+                                <PaperQuote variant="danger" icon="warning" title="Search failed">
                                     {error()}
                                     <PaperButton onClick={() => void runSearch()} disabled={searching()}>
                                         Retry search
@@ -491,7 +497,7 @@ export default function Plugins(props: {
                                 </PaperQuote>
                             </Show>
                             <Show when={listWarning()}>
-                                <PaperQuote variant="warning" icon="warning" title="Warning">
+                                <PaperQuote variant="warning" icon="warning" title={`Couldn't list ${pluginDirName(serverSoftware())}/`}>
                                     {listWarning()}
                                 </PaperQuote>
                             </Show>
@@ -510,7 +516,7 @@ export default function Plugins(props: {
                             <PaperText size={5} weight={700}>
                                 Installed {kindLabel() === "mod" ? "Mods" : "Plugins"}
                             </PaperText>
-                            <PaperMediaCardGroup minCardWidth={getVarCss("size-card-min")}>
+                            <PaperMediaCardGroup minCardWidth="card-min">
                                 <For each={installed()}>
                                     {(entry) => (
                                         <PaperMediaCard
@@ -598,7 +604,7 @@ export default function Plugins(props: {
                         >
                             <PaperCard>
                             <PaperFlex padding="full">
-                            <PaperMediaCardGroup minCardWidth={getVarCss("size-card-min")}>
+                            <PaperMediaCardGroup minCardWidth="card-min">
                                     <For each={results()}>
                                         {(hit) => (
                                             <PaperMediaCard
@@ -646,7 +652,8 @@ export default function Plugins(props: {
                                 <PaperFlex
                                     direction="column"
                                     gap="onefourth"
-                                    style={{ flex: 1, "min-width": 0 }}
+                                    flex
+                                    minWidth={0}
                                 >
                                     <PaperLink href={`https://modrinth.com/project/${target.slug}`}>
                                         Open at Modrinth.com
@@ -1046,7 +1053,7 @@ export default function Plugins(props: {
                                 <PaperFlex
                                     direction="column"
                                     gap="onefourth"
-                                    style={{ "min-width": 0 }}
+                                    minWidth={0}
                                 >
                                     <PaperText size={3} weight={600}>
                                         {failure.title}

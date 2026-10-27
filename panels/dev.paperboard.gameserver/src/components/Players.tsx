@@ -13,6 +13,7 @@ import {
     PaperInput,
     PaperList,
     PaperListItem,
+    PaperListLabel,
     PaperModal,
     PaperPageHeader,
     PaperSelectMenu,
@@ -25,7 +26,7 @@ import {
     PaperSwatch,
     PaperText,
     PaperToggle,
-    getVarCss,
+    type PaperColor,
 } from "@mileniumhq/paperui";
 import { fileApi } from "@mileniumhq/paperapi";
 import {
@@ -436,155 +437,149 @@ export default function Players() {
 
     return (
         <>
-            <PaperFlex direction="column" gap="full" padding="full" fullHeight fullWidth>
-                <PaperPageHeader icon="group" title="Players">
-                    <PaperFlex direction="row" gap="half" align="center">
-                        <PaperFlex minWidth={getVarCss("size-field")}>
-                            <PaperSelectMenu
-                                name="playersSort"
-                                value={sortBy()}
-                                onValueChange={(val) => setSortBy(String(val) as SortKey)}
-                            >
-                                <For each={Object.keys(SORT_LABELS) as SortKey[]}>
-                                    {(key) => (
-                                        <PaperSelectMenuItem value={key}>
-                                            {SORT_LABELS[key]}
-                                        </PaperSelectMenuItem>
-                                    )}
-                                </For>
-                            </PaperSelectMenu>
-                        </PaperFlex>
-                        <PaperButton
-                            variant="primary"
-                            disabled={!isOnline()}
-                            onClick={() => {
-                                setWhitelistError("");
-                                setWhitelistOpen(true);
-                            }}
+            <PaperPageHeader icon="group" title="Players">
+                <PaperFlex direction="row" gap="half" align="center">
+                    <PaperFlex minWidth="field">
+                        <PaperSelectMenu
+                            name="playersSort"
+                            value={sortBy()}
+                            onValueChange={(val) => setSortBy(String(val) as SortKey)}
                         >
-                            <PaperIcon>how_to_reg</PaperIcon>Whitelist
-                        </PaperButton>
+                            <For each={Object.keys(SORT_LABELS) as SortKey[]}>
+                                {(key) => (
+                                    <PaperSelectMenuItem value={key}>
+                                        {SORT_LABELS[key]}
+                                    </PaperSelectMenuItem>
+                                )}
+                            </For>
+                        </PaperSelectMenu>
                     </PaperFlex>
-                </PaperPageHeader>
-
-                <PaperFlex grow minHeight={0} fullWidth>
-                    <PaperSplit
-                        detailActive={openPlayer() !== undefined}
-                        onDetailClose={() => setOpenPlayerName(undefined)}
-                        detailTitle={openPlayer()?.name}
-                        onCollapsedChange={setCompact}
-                        side={
-                        <PaperCard fullHeight>
-                            <PaperFlex direction="column" gap="half" padding="full" shrink={false}>
-                                <PaperInput
-                                    fullWidth
-                                    icon="search"
-                                    placeholder="Search players"
-                                    value={searchQuery()}
-                                    onInput={(e) => setSearchQuery(e.currentTarget.value)}
-                                />
-                                <PaperFlex direction="row" gap="half" wrap>
-                                    <PaperChip
-                                        selected={showOnline()}
-                                        count={onlineCount()}
-                                        onClick={() => setShowOnline((v) => !v)}
-                                    >
-                                        Online
-                                    </PaperChip>
-                                    <PaperChip
-                                        selected={showWhitelisted()}
-                                        count={whitelistedCount()}
-                                        onClick={() => setShowWhitelisted((v) => !v)}
-                                    >
-                                        Whitelisted
-                                    </PaperChip>
-                                    <PaperChip
-                                        selected={showOp()}
-                                        count={opCount()}
-                                        onClick={() => setShowOp((v) => !v)}
-                                    >
-                                        OP
-                                    </PaperChip>
-                                </PaperFlex>
-                                <Show when={feedback()}>
-                                    <PaperText size={2} color="danger">
-                                        {feedback()}
-                                    </PaperText>
-                                </Show>
-                            </PaperFlex>
-                            <PaperSeparator />
-                            <Show
-                                when={sortedPlayers().length > 0}
-                                fallback={
-                                    <PaperFlex padding="full" center>
-                                        <PaperText size={3}>
-                                            No players match these filters.
-                                        </PaperText>
-                                    </PaperFlex>
-                                }
-                            >
-                                <PaperList
-                                    name="playersList"
-                                    style={{ background: "var(--paper-surface-raised)" }}
-                                    value={openPlayerName()}
-                                    onValueChange={(val) => setOpenPlayerName(String(val))}
-                                    borderless
-                                    fullWidth
-                                    flex={1}
-                                    scrollable
-                                >
-                                    <Show when={onlineSorted().length > 0}>
-                                        <PaperText preset="section" as="h3" color="text-subtle" style={{ padding: "var(--paper-uigap-threefourths)", margin: "0" }}>
-                                            Online ({onlineSorted().length})
-                                        </PaperText>
-                                        <For each={onlineSorted()}>
-                                            {(player) => (
-                                                <PlayerRow
-                                                    player={player}
-                                                    banned={bannedNames().has(
-                                                        player.name.toLowerCase(),
-                                                    )}
-                                                    statusText={`Playing · ${statText(player, "playtime")}`}
-                                                    compact={compact()}
-                                                    onOpen={setOpenPlayerName}
-                                                />
-                                            )}
-                                        </For>
-                                    </Show>
-                                    <Show when={offlineSorted().length > 0}>
-                                        <PaperText preset="section" as="h3" color="text-subtle" style={{ padding: "var(--paper-uigap-threefourths)", margin: "0" }}>
-                                            Offline ({offlineSorted().length})
-                                        </PaperText>
-                                        <For each={offlineSorted()}>
-                                            {(player) => (
-                                                <PlayerRow
-                                                    player={player}
-                                                    banned={bannedNames().has(
-                                                        player.name.toLowerCase(),
-                                                    )}
-                                                    statusText={`Played ${statText(player, "playtime")}`}
-                                                    compact={compact()}
-                                                    onOpen={setOpenPlayerName}
-                                                />
-                                            )}
-                                        </For>
-                                    </Show>
-                                </PaperList>
-                            </Show>
-                        </PaperCard>
-                    }
-                >
-                    <PlayerInspector
-                        player={openPlayer()}
-                        banned={openIsBanned()}
-                        onToggleFlag={togglePlayerFlag}
-                        onAction={(action) => setActionModal(action)}
-                        onDeleteRequest={() => setDeleteConfirmOpen(true)}
-                        onPardon={pardonOpenPlayer}
-                        onKill={killOpenPlayer}
-                    />
-                </PaperSplit>
+                    <PaperButton
+                        variant="primary"
+                        disabled={!isOnline()}
+                        onClick={() => {
+                            setWhitelistError("");
+                            setWhitelistOpen(true);
+                        }}
+                    >
+                        <PaperIcon>how_to_reg</PaperIcon>Whitelist
+                    </PaperButton>
                 </PaperFlex>
+            </PaperPageHeader>
+
+            <PaperFlex grow minHeight={0} fullWidth>
+                <PaperSplit
+                    detailActive={openPlayer() !== undefined}
+                    onDetailClose={() => setOpenPlayerName(undefined)}
+                    detailTitle={openPlayer()?.name}
+                    onCollapsedChange={setCompact}
+                    side={
+                    <PaperCard fullHeight>
+                        <PaperFlex direction="column" gap="half" padding="full" shrink={false}>
+                            <PaperInput
+                                fullWidth
+                                icon="search"
+                                placeholder="Search players"
+                                value={searchQuery()}
+                                onInput={(e) => setSearchQuery(e.currentTarget.value)}
+                            />
+                            <PaperFlex direction="row" gap="half" wrap>
+                                <PaperChip
+                                    selected={showOnline()}
+                                    count={onlineCount()}
+                                    onClick={() => setShowOnline((v) => !v)}
+                                >
+                                    Online
+                                </PaperChip>
+                                <PaperChip
+                                    selected={showWhitelisted()}
+                                    count={whitelistedCount()}
+                                    onClick={() => setShowWhitelisted((v) => !v)}
+                                >
+                                    Whitelisted
+                                </PaperChip>
+                                <PaperChip
+                                    selected={showOp()}
+                                    count={opCount()}
+                                    onClick={() => setShowOp((v) => !v)}
+                                >
+                                    OP
+                                </PaperChip>
+                            </PaperFlex>
+                            <Show when={feedback()}>
+                                <PaperText size={2} color="danger">
+                                    {feedback()}
+                                </PaperText>
+                            </Show>
+                        </PaperFlex>
+                        <PaperSeparator />
+                        <Show
+                            when={sortedPlayers().length > 0}
+                            fallback={
+                                <PaperFlex padding="full" center>
+                                    <PaperText size={3}>
+                                        No players match these filters.
+                                    </PaperText>
+                                </PaperFlex>
+                            }
+                        >
+                            <PaperList
+                                name="playersList"
+                                background="surface-raised"
+                                value={openPlayerName()}
+                                onValueChange={(val) => setOpenPlayerName(String(val))}
+                                borderless
+                                fullWidth
+                                flex={1}
+                                scrollable
+                            >
+                                <Show when={onlineSorted().length > 0}>
+                                    <PaperListLabel as="h3">Online ({onlineSorted().length})</PaperListLabel>
+                                    <For each={onlineSorted()}>
+                                        {(player) => (
+                                            <PlayerRow
+                                                player={player}
+                                                banned={bannedNames().has(
+                                                    player.name.toLowerCase(),
+                                                )}
+                                                statusText={`Playing · ${statText(player, "playtime")}`}
+                                                compact={compact()}
+                                                onOpen={setOpenPlayerName}
+                                            />
+                                        )}
+                                    </For>
+                                </Show>
+                                <Show when={offlineSorted().length > 0}>
+                                    <PaperListLabel as="h3">Offline ({offlineSorted().length})</PaperListLabel>
+                                    <For each={offlineSorted()}>
+                                        {(player) => (
+                                            <PlayerRow
+                                                player={player}
+                                                banned={bannedNames().has(
+                                                    player.name.toLowerCase(),
+                                                )}
+                                                statusText={`Played ${statText(player, "playtime")}`}
+                                                compact={compact()}
+                                                onOpen={setOpenPlayerName}
+                                            />
+                                        )}
+                                    </For>
+                                </Show>
+                            </PaperList>
+                        </Show>
+                    </PaperCard>
+                }
+            >
+                <PlayerInspector
+                    player={openPlayer()}
+                    banned={openIsBanned()}
+                    onToggleFlag={togglePlayerFlag}
+                    onAction={(action) => setActionModal(action)}
+                    onDeleteRequest={() => setDeleteConfirmOpen(true)}
+                    onPardon={pardonOpenPlayer}
+                    onKill={killOpenPlayer}
+                />
+            </PaperSplit>
             </PaperFlex>
 
             <ReasonActionModal
@@ -683,9 +678,9 @@ export default function Players() {
     );
 }
 
-function statusColor(online: boolean, banned: boolean): string {
-    if (banned) return getVarCss("danger");
-    return online ? getVarCss("success") : getVarCss("border-emphasis");
+function statusColor(online: boolean, banned: boolean): PaperColor {
+    if (banned) return "danger";
+    return online ? "success" : "border-emphasis";
 }
 
 function PlayerRow(props: {
@@ -898,7 +893,7 @@ function PlayerInspector(props: {
                     <PaperText size={2} weight={700} color="text-subtle">
                         Status
                     </PaperText>
-                    <PaperGrid min={getVarCss("size-field")}>
+                    <PaperGrid min="field">
                         <PaperStatTile
                             icon="favorite"
                             label="Health"
