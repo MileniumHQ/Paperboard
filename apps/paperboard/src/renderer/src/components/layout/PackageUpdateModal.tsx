@@ -33,10 +33,10 @@ export default function PackageUpdateModal(props: {
         onClose={props.onClose}
         title="Package updates waiting"
         size="medium"
-        footer={<PaperFlex direction="row" gap="full" justify="flex-end">
+        footer={<>
             <PaperButton variant="text" onClick={props.onRefresh}>Check again</PaperButton>
             <PaperButton onClick={props.onClose}>Close</PaperButton>
-        </PaperFlex>}
+        </>}
     >
         <PaperFlex direction="column" gap="full">
             <Show when={props.state.notices.length === 0 && !props.error}>
@@ -46,12 +46,12 @@ export default function PackageUpdateModal(props: {
                 {(notice) => <PaperFlex direction="column" gap="half">
                     <PaperText>{noticeText(notice, showComputer())}</PaperText>
                     <Show when={notice.error}>
-                        <PaperText color="danger" style={{ "overflow-wrap": "anywhere" }}>{notice.error}</PaperText>
+                        <PaperText color="danger" breakWord>{notice.error}</PaperText>
                     </Show>
                 </PaperFlex>}
             </For>
             <For each={props.state.failures}>
-                {(failure) => <PaperText color="danger" style={{ "overflow-wrap": "anywhere" }}>Could not check {failure.computerName}: {failure.error}</PaperText>}
+                {(failure) => <PaperText color="danger" breakWord>Could not check {failure.computerName}: {failure.error}</PaperText>}
             </For>
             <Show when={props.error}><PaperText role="alert" color="danger">{props.error}</PaperText></Show>
         </PaperFlex>

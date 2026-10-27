@@ -1010,17 +1010,18 @@ const HomeView: Component<HomeViewProps> = (props) => {
                 </Show>
             </div>
 
-            <Show when={phone}>
-                <PaperModal
-                    open={sheetOpen() && galleryOpen()}
-                    concealed={sheetConcealed()}
-                    onClose={closeSheet}
-                    placement="bottom"
-                    size="full"
-                    noHeader
-                    noPadding
-                    aria-label="Add widgets"
-                >
+            <PaperModal
+                open={phone && sheetOpen() && galleryOpen()}
+                concealed={sheetConcealed()}
+                onClose={closeSheet}
+                placement="bottom"
+                size="full"
+                noHeader
+                noPadding
+                aria-label="Add widgets"
+            >
+                {/* the phone's gallery; a desktop's slides in beside Home */}
+                <Show when={phone}>
                     <div ref={holdSheetScroll} class={styles.sheetBody}>
                         <WidgetLibrary
                             sheet
@@ -1043,8 +1044,8 @@ const HomeView: Component<HomeViewProps> = (props) => {
                             onDone={closeSheet}
                         />
                     </div>
-                </PaperModal>
-            </Show>
+                </Show>
+            </PaperModal>
             <PaperPresence when={galleryOpen() && !phone} motion="slide-end">
                 <WidgetLibrary
                     onWidth={setGalleryWidth}

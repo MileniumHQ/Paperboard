@@ -63,12 +63,12 @@ const AddLocationModal: Component<{
             title="Add Backup Location"
             size="small"
             footer={
-                <PaperFlex direction="row" justify="flex-end" gap="half" fullWidth>
+                <>
                     <PaperButton variant="text" disabled={busy()} onClick={close}>Cancel</PaperButton>
                     <PaperButton disabled={busy() || blocked()} onClick={() => void submit()}>
                         {busy() ? provider().busyLabel : provider().submitLabel}
                     </PaperButton>
-                </PaperFlex>
+                </>
             }
         >
             <PaperFlex direction="column" gap="full">

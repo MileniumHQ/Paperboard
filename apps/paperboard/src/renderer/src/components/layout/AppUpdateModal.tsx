@@ -18,16 +18,16 @@ export default function AppUpdateModal(props: { state: AppUpdateState; open: boo
         onClose={props.onClose}
         title={failed() ? "Paperboard update failed" : ready() ? "Paperboard update ready" : "Paperboard update available"}
         size="medium"
-        footer={<PaperFlex direction="row" gap="full" justify="flex-end" style={{ "flex-wrap": "wrap" }}>
+        footer={<>
             <PaperButton variant="text" onClick={props.onClose}>Later</PaperButton>
             <Show when={failed()}>
                 <Show when={!packageManaged()}><PaperButton variant="text" onClick={openDownload}>Download manually</PaperButton></Show>
                 <PaperButton onClick={() => shellIpc().send("relaunch-for-update")}>{packageManaged() ? "Retry check" : "Retry update"}</PaperButton>
             </Show>
             <Show when={ready()}>
-                <PaperButton variant="text" onClick={() => shellIpc().send("quit-and-install")}>Restart to update</PaperButton>
+                <PaperButton onClick={() => shellIpc().send("quit-and-install")}>Restart to update</PaperButton>
             </Show>
-        </PaperFlex>}
+        </>}
     >
         <PaperFlex direction="column" gap="full">
             <PaperText>
@@ -37,7 +37,7 @@ export default function AppUpdateModal(props: { state: AppUpdateState; open: boo
                     : `Downloading Paperboard ${props.state.version ?? ""}${props.state.percent === null ? "…" : `: ${props.state.percent}%`}`}
             </PaperText>
             <Show when={failed() && props.state.error}>
-                <PaperText color="danger" style={{ "overflow-wrap": "anywhere" }}>{props.state.error}</PaperText>
+                <PaperText color="danger" breakWord>{props.state.error}</PaperText>
             </Show>
             <Show when={props.state.status === "downloading"}>
                 <PaperProgress value={props.state.percent ?? undefined} max={100} />

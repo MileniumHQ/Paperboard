@@ -75,14 +75,14 @@ const BackupLocationChooser: Component<{ computerId: string; computerName: strin
             size="small"
             onClose={dismiss}
             footer={
-                <PaperFlex direction="row" justify="flex-end" gap="half" fullWidth>
+                <>
                     <PaperButton variant="text" disabled={saving()} onClick={dismiss}>Cancel</PaperButton>
                     <Show when={error() && !locations()} fallback={
                         <PaperButton disabled={saving() || !selected()} onClick={() => void choose()}>{saving() ? "Saving..." : "Use this location"}</PaperButton>
                     }>
                         <PaperButton onClick={() => void load()}>Try again</PaperButton>
                     </Show>
-                </PaperFlex>
+                </>
             }
         >
             <PaperFlex direction="column" gap="half">

@@ -60,7 +60,7 @@ export const OfflineComputerModal: Component<OfflineComputerModalProps> = (
             title={`Can't reach ${props.computer?.name ?? "computer"}`}
             size="small"
             footer={
-                <PaperFlex direction="row" justify="flex-end" gap="half" fullWidth>
+                <>
                     <PaperButton
                         variant="danger"
                         onClick={props.onForget}>
@@ -70,7 +70,7 @@ export const OfflineComputerModal: Component<OfflineComputerModalProps> = (
                         <PaperIcon>restart_alt</PaperIcon>
                         {isProbing() ? "Checking…" : "Try Again"}
                     </PaperButton>
-                </PaperFlex>
+                </>
             }
         >
             <PaperFlex direction="column" gap="half">

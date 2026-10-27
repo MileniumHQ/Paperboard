@@ -78,13 +78,9 @@ const ComputerSettings: Component<ComputerSettingsProps> = (props) => {
                 title="Forget Computer"
                 size="small"
                 footer={
-                    <PaperFlex
-                        direction="row"
-                        justify="flex-end"
-                        gap="half"
-                        fullWidth
-                    >
+                    <>
                         <PaperButton
+                            variant="text"
                             onClick={() => setIsConfirmOpen(false)}
                             disabled={isRemoving()}>
                             Cancel
@@ -95,7 +91,7 @@ const ComputerSettings: Component<ComputerSettingsProps> = (props) => {
                             onClick={handleConfirmRemove}>
                             {isRemoving() ? "Removing..." : "Forget Computer"}
                         </PaperButton>
-                    </PaperFlex>
+                    </>
                 }
             >
                 <PaperText preset="body">

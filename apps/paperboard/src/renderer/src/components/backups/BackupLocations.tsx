@@ -172,10 +172,10 @@ const BackupLocations: Component<{ computerId: string; computerName: string }> =
                 title="Remove Backup Location"
                 size="small"
                 footer={
-                    <PaperFlex direction="row" justify="flex-end" gap="half" fullWidth>
+                    <>
                         <PaperButton variant="text" disabled={removeBusy()} onClick={() => setRemoving(null)}>Cancel</PaperButton>
                         <PaperButton variant="danger" disabled={removeBusy()} onClick={() => void remove()}>{removeBusy() ? "Removing..." : "Remove"}</PaperButton>
-                    </PaperFlex>
+                    </>
                 }
             >
                 <PaperFlex direction="column" gap="half">

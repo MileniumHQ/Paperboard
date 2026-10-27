@@ -33,12 +33,7 @@ const UninstallPanelModal: Component<UninstallPanelModalProps> = (props) => {
             title="Uninstall Panel"
             size="small"
             footer={
-                <PaperFlex
-                    direction="row"
-                    justify="flex-end"
-                    gap="half"
-                    fullWidth
-                >
+                <>
                     <PaperButton
                         onClick={() => props.onClose()}
                         variant="text"
@@ -51,7 +46,7 @@ const UninstallPanelModal: Component<UninstallPanelModalProps> = (props) => {
                         disabled={props.isBusy}>
                         {props.isBusy ? "Uninstalling..." : "Uninstall"}
                     </PaperButton>
-                </PaperFlex>
+                </>
             }
         >
             <Show when={props.target}>

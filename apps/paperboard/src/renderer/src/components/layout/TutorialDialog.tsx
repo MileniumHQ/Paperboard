@@ -6,10 +6,12 @@ import {
     PaperText,
     PaperWizard,
     PaperWizardStep,
-    getVarCss,
 } from "@mileniumhq/paperui";
 import type { TutorialImage, TutorialStep } from "@mileniumhq/paperapi";
 import type { AppSettingsData } from "../settings/AppSettings";
+import { createShownWhileClosing } from "../../lib/openings";
+import frameStyles from "../wizard/wizardFrame.module.css";
+import styles from "./TutorialDialog.module.css";
 
 export interface OpenTutorial {
     /** what the tutorial welcomes you to: Paperboard, or a panel's name */
@@ -36,85 +38,82 @@ const isDark = (theme: AppSettingsData["darkMode"]) =>
 // says so in its alt text rather than leaving an empty frame.
 const StepImage: Component<{ src: string; image: TutorialImage; compact?: boolean }> = (props) => {
     const [failed, setFailed] = createSignal(false);
-    const frame = {
-        ...(props.compact
-            ? { width: "100%", "max-width": getVarCss("size-panel-small"), "aspect-ratio": "4 / 3", height: "auto" }
-            : { width: "420px", height: "315px" }),
-        "flex-shrink": "0",
-        "border-radius": getVarCss("border-radius"),
-        border: `${getVarCss("border-width")} solid ${getVarCss("border")}`,
-    };
+    const picture = () => `${styles.picture} ${props.compact ? styles.compact : ""}`;
     return (
         <Show
             when={!failed()}
             fallback={
-                <PaperFlex center padding="full" style={{ ...frame, background: getVarCss("surface-inset") }}>
+                <PaperFlex center padding="full" class={`${picture()} ${styles.missing}`}>
                     <PaperText preset="body" color="text-muted">
                         Picture unavailable: {props.image.alt}
                     </PaperText>
                 </PaperFlex>
             }
         >
-            <img src={props.src} alt={props.image.alt} onError={() => setFailed(true)} style={{ ...frame, display: "block", "object-fit": "cover" }} />
+            <img src={props.src} alt={props.image.alt} onError={() => setFailed(true)} class={picture()} />
         </Show>
     );
 };
 
 // A first-open tutorial, Paperboard's own or the steps a panel's manifest
 // declares, clicked through in the same wizard dialog that connects a computer.
-const TutorialDialog: Component<TutorialDialogProps> = (props) => (
-    <PaperModal
-        open={props.tutorial !== null}
-        aria-label={`Welcome to ${props.tutorial?.name ?? "Paperboard"}`}
-        onClose={props.onDone}
-        noHeader
-        noPadding
-        size="large"
-    >
-        <Show when={props.tutorial} keyed>
-            {(tutorial) => (
-                <PaperWizard
-                    onComplete={props.onDone}
-                    finishLabel="Get started"
-                    finishVariant="success"
-                    style={{ width: "100%", height: "var(--paperboard-wizard-height)" }}
-                >
-                    <For each={tutorial.steps}>
-                        {(step, index) => (
-                            <PaperWizardStep index={index()}>
-                                <PaperFlex direction={step.image && !props.compact ? "row" : "column"} center fullWidth fullHeight padding="full" gap="full">
-                                    <Show when={step.image}>
-                                        {(image) => (
-                                            <StepImage
-                                                image={image()}
-                                                compact={props.compact}
-                                                src={tutorial.imageSrc((isDark(props.theme) && image().dark) || image().light)}
-                                            />
-                                        )}
-                                    </Show>
-                                    <PaperFlex
-                                        direction="column"
-                                        gap="full"
-                                        style={{ width: "100%", "max-width": getVarCss("size-panel-small") }}
-                                    >
-                                        <Show when={!step.image && step.icon}>
-                                            <PaperIcon style={{ "align-self": "flex-start", "font-size": getVarCss("icon-size-huge"), color: getVarCss("primary") }}>
-                                                {step.icon}
-                                            </PaperIcon>
+const TutorialDialog: Component<TutorialDialogProps> = (props) => {
+    const shown = createShownWhileClosing(() => props.tutorial);
+    return (
+        <PaperModal
+            open={props.tutorial !== null}
+            aria-label={`Welcome to ${shown()?.value.name ?? "Paperboard"}`}
+            onClose={props.onDone}
+            noHeader
+            noPadding
+            size="large"
+        >
+            <Show when={shown()} keyed>
+                {({ value: tutorial }) => (
+                    <PaperWizard
+                        onComplete={props.onDone}
+                        finishLabel="Get started"
+                        finishVariant="success"
+                        class={frameStyles.wizard}
+                    >
+                        <For each={tutorial.steps}>
+                            {(step, index) => (
+                                <PaperWizardStep index={index()}>
+                                    <PaperFlex direction={step.image && !props.compact ? "row" : "column"} center fullWidth fullHeight padding="full" gap="full">
+                                        <Show when={step.image}>
+                                            {(image) => (
+                                                <StepImage
+                                                    image={image()}
+                                                    compact={props.compact}
+                                                    src={tutorial.imageSrc((isDark(props.theme) && image().dark) || image().light)}
+                                                />
+                                            )}
                                         </Show>
-                                        <PaperFlex direction="column" gap="half">
-                                            <PaperText preset="title">{step.title}</PaperText>
-                                            <PaperText preset="body">{step.body}</PaperText>
+                                        <PaperFlex
+                                            direction="column"
+                                            gap="full"
+                                            fullWidth
+                                            maxWidth="panel-small"
+                                        >
+                                            <Show when={!step.image && step.icon}>
+                                                <PaperIcon class={styles.stepIcon}>
+                                                    {step.icon}
+                                                </PaperIcon>
+                                            </Show>
+                                            <PaperFlex direction="column" gap="half">
+                                                <PaperText preset="title">{step.title}</PaperText>
+                                                <PaperText preset="body">{step.body}</PaperText>
+                                            </PaperFlex>
                                         </PaperFlex>
                                     </PaperFlex>
-                                </PaperFlex>
-                            </PaperWizardStep>
-                        )}
-                    </For>
-                </PaperWizard>
-            )}
-        </Show>
-    </PaperModal>
-);
+                                </PaperWizardStep>
+                            )}
+                        </For>
+                    </PaperWizard>
+                )}
+            </Show>
+        </PaperModal>
+    );
+};
 
 export default TutorialDialog;
