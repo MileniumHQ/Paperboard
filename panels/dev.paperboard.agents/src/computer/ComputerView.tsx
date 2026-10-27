@@ -7,10 +7,11 @@
 
 import { For, Match, Show, Switch, createEffect, createSignal, on, onCleanup } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
-import { PaperButton, PaperEmptyState, PaperIcon, PaperList, PaperListItem, PaperLoader, PaperText } from "@mileniumhq/paperui";
+import { PaperButton, PaperEmptyState, PaperFlex, PaperIcon, PaperList, PaperListItem, PaperLoader, PaperQuote, PaperText } from "@mileniumhq/paperui";
 import type { ComputerWindow } from "../contract";
 import type { Agent } from "../lib/agent";
 import { SetupProgress } from "./Computer";
+import { errorText, failure, type Failure } from "../lib/failure";
 import { clip } from "../lib/text";
 import { WindowView } from "./WindowView";
 import styles from "./ComputerView.module.css";
@@ -21,7 +22,6 @@ const RENEW_MS = 6000;
 // how long after the user's last click or key the agent gets its computer back
 const IDLE_MS = 5000;
 
-const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 /** a tab shows this much of a window's title; the rest is an ellipsis, and the whole title its tooltip */
 const TITLE_CHARS = 32;
@@ -34,15 +34,15 @@ export default function ComputerView(props: { agent: Agent }) {
     const ready = () => c().phase === "ready";
 
     const [busy, setBusy] = createSignal(false);
-    const [error, setError] = createSignal<string | null>(null);
-    const act = async (fn: () => Promise<unknown>) => {
+    const [error, setError] = createSignal<Failure | null>(null);
+    const act = async (title: string, fn: () => Promise<unknown>) => {
         setBusy(true);
         setError(null);
         try {
             await fn();
             return true;
         } catch (e) {
-            setError(message(e));
+            setError(failure(title, e));
             return false;
         } finally {
             setBusy(false);
@@ -68,7 +68,7 @@ export default function ComputerView(props: { agent: Agent }) {
                 setListed(true);
             } catch (e) {
                 // shown once, until the user tries again; polling a failure would only repeat it
-                setListError(message(e));
+                setListError(errorText(e));
                 return;
             }
         }
@@ -98,7 +98,7 @@ export default function ComputerView(props: { agent: Agent }) {
     const shown = () => (windows.some((w) => w.id === chosen()) ? chosen() : (windows[0]?.id ?? null));
 
     const closeWindow = (w: ComputerWindow) =>
-        void act(async () => {
+        void act("Window not closed", async () => {
             await agent.closeWindow(w.id);
             setWindows(windows.filter((x) => x.id !== w.id));
         });
@@ -112,7 +112,7 @@ export default function ComputerView(props: { agent: Agent }) {
         clearTimeout(idle);
         if (!holding()) return;
         setHolding(false);
-        void agent.control(false).catch((e) => setError(`Couldn't hand the computer back: ${message(e)}`));
+        void agent.control(false).catch((e) => setError(failure("Computer not handed back", e)));
     };
     const use = async () => {
         clearTimeout(idle);
@@ -132,7 +132,7 @@ export default function ComputerView(props: { agent: Agent }) {
             () =>
                 void agent.control(true).catch((e) => {
                     setHolding(false);
-                    setError(`You lost control of the computer: ${message(e)}`);
+                    setError(failure("Control lost", e));
                 }),
             RENEW_MS,
         );
@@ -156,9 +156,13 @@ export default function ComputerView(props: { agent: Agent }) {
                 </PaperList>
             </Show>
             <Show when={error()}>
-                <PaperText size={1} color="danger" role="alert" class={styles.error}>
-                    {error()}
-                </PaperText>
+                {(shown) => (
+                    <PaperFlex paddingX="full" paddingY="half">
+                        <PaperQuote variant="danger" icon="error" title={shown().title} role="alert" onDismiss={() => setError(null)}>
+                            {shown().message}
+                        </PaperQuote>
+                    </PaperFlex>
+                )}
             </Show>
 
             <div class={styles.content}>
@@ -170,11 +174,11 @@ export default function ComputerView(props: { agent: Agent }) {
                         <div class={styles.setup}>
                             <SetupProgress computer={c()} />
                             <Show when={c().phase === "failed"}>
-                                <div>
-                                    <PaperButton variant="primary" disabled={busy()} onClick={() => void act(agent.installComputer)}>
+                                <PaperFlex direction="row">
+                                    <PaperButton variant="primary" disabled={busy()} onClick={() => void act("Computer not set up", agent.installComputer)}>
                                         <PaperIcon>restart_alt</PaperIcon> Set up again
                                     </PaperButton>
-                                </div>
+                                </PaperFlex>
                             </Show>
                         </div>
                     </Match>
@@ -183,28 +187,28 @@ export default function ComputerView(props: { agent: Agent }) {
                             <PaperText size={3}>
                                 A web browser of its own that {name()} uses for its work, about 400 MB of storage. It reaches the internet, never your files or your network.
                             </PaperText>
-                            <div>
-                                <PaperButton variant="primary" disabled={busy()} onClick={() => void act(agent.installComputer)}>
+                            <PaperFlex direction="row">
+                                <PaperButton variant="primary" disabled={busy()} onClick={() => void act("Computer not set up", agent.installComputer)}>
                                     <PaperIcon>computer</PaperIcon> Set up {name()}'s computer
                                 </PaperButton>
-                            </div>
+                            </PaperFlex>
                         </div>
                     </Match>
                     <Match when={c().phase === "starting" || c().phase === "stopping"}>
-                        <div class={styles.center}>
+                        <PaperFlex center>
                             <PaperLoader loaderStatus="indeterminate" label={c().phase === "starting" ? "Starting" : "Stopping"} />
-                        </div>
+                        </PaperFlex>
                     </Match>
                     <Match when={c().phase === "stopped"}>
                         <PaperEmptyState icon="power_settings_new" title="The computer is off" description={`${name()} turns it on when it needs it, or you can now.`}>
-                            <PaperButton variant="primary" disabled={busy()} onClick={() => void act(agent.startComputer)}>
+                            <PaperButton variant="primary" disabled={busy()} onClick={() => void act("Computer not turned on", agent.startComputer)}>
                                 Turn on
                             </PaperButton>
                         </PaperEmptyState>
                     </Match>
                     <Match when={c().phase === "failed"}>
                         <PaperEmptyState icon="error" title="The computer stopped" description={c().error ?? undefined}>
-                            <PaperButton variant="primary" disabled={busy()} onClick={() => void act(agent.startComputer)}>
+                            <PaperButton variant="primary" disabled={busy()} onClick={() => void act("Computer not turned on", agent.startComputer)}>
                                 Try again
                             </PaperButton>
                         </PaperEmptyState>
@@ -217,9 +221,9 @@ export default function ComputerView(props: { agent: Agent }) {
                         </PaperEmptyState>
                     </Match>
                     <Match when={!listed()}>
-                        <div class={styles.center}>
+                        <PaperFlex center>
                             <PaperLoader loaderStatus="indeterminate" label="Looking" />
-                        </div>
+                        </PaperFlex>
                     </Match>
                     <Match when={windows.length === 0}>
                         <PaperEmptyState icon="web_asset" title="Nothing is open" description={`When ${name()} opens a page, you can watch it here.`} />

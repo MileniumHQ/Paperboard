@@ -2,9 +2,8 @@
 // from the service's state.
 
 import { Index, Show } from "solid-js";
-import { PaperLoader, PaperLoaderGroup, type LoaderStatus } from "@mileniumhq/paperui";
+import { PaperFlex, PaperLoader, PaperLoaderGroup, PaperQuote, type LoaderStatus } from "@mileniumhq/paperui";
 import { type ComputerState, type SetupStepId, type StepStatus } from "../contract";
-import styles from "./Computer.module.css";
 
 const LABELS: Record<SetupStepId, string> = {
     download: "Downloading Helium...",
@@ -29,7 +28,7 @@ const rows = (c: ComputerState) => c.steps.map((s) => ({ label: LABELS[s.id], st
 /** The setup's steps as the service reports them, and its error when it stopped. */
 export function SetupProgress(props: { computer: ComputerState }) {
     return (
-        <div class={styles.progress}>
+        <PaperFlex gap="full">
             <PaperLoaderGroup>
                 {/* each update is a new list of new rows, so the loaders are kept by position: recreating them would
                     replay every finished one's success animation and skip the running one's transition */}
@@ -38,12 +37,15 @@ export function SetupProgress(props: { computer: ComputerState }) {
                 </Index>
             </PaperLoaderGroup>
             <Show when={props.computer.phase === "failed" || props.computer.phase === "unsupported"}>
-                <p class={styles.error} role="alert">
+                <PaperQuote
+                    variant="danger"
+                    icon="error"
+                    title={props.computer.phase === "unsupported" ? "No computer on this machine" : "Setup stopped"}
+                    role="alert"
+                >
                     {props.computer.error}
-                </p>
+                </PaperQuote>
             </Show>
-        </div>
+        </PaperFlex>
     );
 }
-
-export { styles as computerStyles };

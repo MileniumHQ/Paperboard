@@ -5,9 +5,10 @@
 // takes control of the computer first (onUse), and the input follows.
 
 import { Show, createEffect, createSignal, on, onCleanup } from "solid-js";
-import { PaperButton, PaperEmptyState, PaperIcon, PaperInput, PaperLoader, PaperText } from "@mileniumhq/paperui";
+import { PaperButton, PaperEmptyState, PaperFlex, PaperIcon, PaperInput, PaperLoader, PaperQuote, PaperText } from "@mileniumhq/paperui";
 import type { ComputerWindow, InputEvent, PageDialog } from "../contract";
 import type { Agent } from "../lib/agent";
+import { errorText, failure, type Failure } from "../lib/failure";
 import { enqueue, keyEvent } from "./input";
 import styles from "./WindowView.module.css";
 
@@ -30,7 +31,7 @@ export function WindowView(props: {
     const [src, setSrc] = createSignal<string | null>(null);
     const [size, setSize] = createSignal({ width: props.window.width, height: props.window.height });
     const [error, setError] = createSignal<string | null>(null);
-    const [inputError, setInputError] = createSignal<string | null>(null);
+    const [inputError, setInputError] = createSignal<Failure | null>(null);
     const [dialog, setDialog] = createSignal<PageDialog | null>(null);
     let img: HTMLImageElement | undefined;
     let hash: string | null = null;
@@ -74,7 +75,7 @@ export function WindowView(props: {
                 await nap(props.holding ? DRIVING_MS : WATCHING_MS);
             }
         } catch (e) {
-            if (!disposed) setError(e instanceof Error ? e.message : String(e));
+            if (!disposed) setError(errorText(e));
         } finally {
             polling = false;
         }
@@ -89,7 +90,7 @@ export function WindowView(props: {
     const send = (ev: InputEvent, takes = false) => {
         if (!props.holding && !takes) return;
         if (!enqueue(pending, ev)) {
-            setInputError("Too much input at once; some was dropped.");
+            setInputError({ title: "Input dropped", message: "Too much input at once; some of it didn't reach the window." });
             return;
         }
         void flush();
@@ -108,7 +109,7 @@ export function WindowView(props: {
             }
         } catch (e) {
             pending = [];
-            setInputError(e instanceof Error ? e.message : String(e));
+            setInputError(failure("Input not sent", e));
         } finally {
             sending = false;
         }
@@ -128,7 +129,7 @@ export function WindowView(props: {
             setInputError(null);
             wake?.();
         } catch (e) {
-            setInputError(e instanceof Error ? e.message : String(e));
+            setInputError(failure("Page not opened", e));
         }
     };
     const [answer, setAnswer] = createSignal("");
@@ -196,7 +197,7 @@ export function WindowView(props: {
                         </Show>
                         <div class={styles.dialogActions}>
                             <Show when={d().type !== "alert"}>
-                                <PaperButton size="small" type="button" onClick={() => reply(false)}>
+                                <PaperButton size="small" variant="text" type="button" onClick={() => reply(false)}>
                                     {d().type === "beforeunload" ? "Stay" : "Cancel"}
                                 </PaperButton>
                             </Show>
@@ -262,9 +263,13 @@ export function WindowView(props: {
                 </Show>
             </div>
             <Show when={inputError()}>
-                <PaperText size={1} color="danger" role="alert" class={styles.inputError}>
-                    {inputError()}
-                </PaperText>
+                {(shown) => (
+                    <PaperFlex paddingX="full" paddingY="half">
+                        <PaperQuote variant="danger" icon="error" title={shown().title} role="alert" onDismiss={() => setInputError(null)}>
+                            {shown().message}
+                        </PaperQuote>
+                    </PaperFlex>
+                )}
             </Show>
         </div>
     );

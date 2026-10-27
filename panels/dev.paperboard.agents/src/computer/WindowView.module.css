@@ -37,10 +37,6 @@
     margin-left: auto;
 }
 
-.inputError {
-    padding: 0 var(--paper-uigap) var(--paper-uigap-half);
-}
-
 /* the window, scaled down to fit and never up */
 .stage {
     flex: 1;

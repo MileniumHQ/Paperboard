@@ -16,7 +16,7 @@
 }
 
 .flow > * {
-    width: min(100%, 40rem);
+    width: min(100%, var(--agents-column-width));
     box-sizing: border-box;
 }
 
@@ -31,7 +31,7 @@
    step shows sits in the middle of the page. */
 .above,
 .below {
-    flex: 1 0 12vh;
+    flex: 1 0 var(--agents-column-margin);
 }
 
 /* the face and its bubble, side by side */
@@ -55,7 +55,7 @@
 }
 
 .leaving {
-    transform: translateY(calc(var(--paper-uigap-double) * -2)) scale(0.3);
+    transform: translateY(calc(var(--paper-uigap-double) * -2)) scale(var(--agents-speaker-leave-scale));
     opacity: 0;
 }
 
@@ -71,7 +71,7 @@
     background: var(--paper-surface-sunken);
     font-family: var(--paper-font-family-rounded);
     font-size: var(--paper-text-size-3);
-    line-height: 1.4;
+    line-height: var(--paper-leading-normal);
     /* one line tall before the first word arrives, so it grows from a line, not from nothing */
     min-height: calc(1lh + var(--paper-uigap) * 2);
     overflow: hidden;
@@ -87,7 +87,7 @@
 /* going out is quicker than coming in (the speaker waits SWAP_MS for it) */
 .bubble.hidden {
     opacity: 0;
-    transform: scale(0.85);
+    transform: scale(var(--agents-speech-hidden-scale));
     transition-duration: calc(var(--paper-medium-transition) / 2);
 }
 
@@ -126,34 +126,9 @@
     }
 }
 
-.note {
-    margin: 0;
-    font-size: var(--paper-text-size-1);
-    color: var(--paper-text-subtle);
-}
-
-.title {
-    margin: 0;
-    font-size: var(--paper-text-size-3);
-}
-
-
 .install {
     display: flex;
     flex-direction: column;
     gap: var(--paper-uigap);
     animation: rise var(--paper-medium-transition) var(--paper-ease-emphasized) both;
-}
-
-
-.error {
-    margin: 0;
-    font-size: var(--paper-text-size-2);
-    color: var(--paper-danger);
-    overflow-wrap: anywhere;
-}
-
-.actions {
-    display: flex;
-    gap: var(--paper-uigap);
 }

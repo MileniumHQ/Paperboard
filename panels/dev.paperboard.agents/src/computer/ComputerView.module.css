@@ -8,10 +8,6 @@
     background: var(--paper-surface-app);
 }
 
-.error {
-    padding: 0 var(--paper-uigap);
-}
-
 .content {
     flex: 1;
     min-height: 0;
@@ -36,12 +32,6 @@
     padding: var(--paper-uigap) var(--paper-uigap-half);
     overflow-x: hidden;
     overflow-y: auto;
-}
-
-.center {
-    display: flex;
-    align-items: center;
-    justify-content: center;
 }
 
 .pane {

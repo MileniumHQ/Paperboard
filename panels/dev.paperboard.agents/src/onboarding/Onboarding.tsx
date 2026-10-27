@@ -1,10 +1,15 @@
 import { For, Match, Show, Switch, createEffect, createSignal, on, onCleanup, type JSX } from "solid-js";
 import {
     PaperButton,
+    PaperFlex,
     PaperInput,
+    PaperLoader,
+    PaperQuote,
+    PaperSectionHeader,
     PaperSelector,
     PaperSelectorItem,
     PaperWizard,
+    PaperText,
     PaperWizardStep,
     useWizard,
 } from "@mileniumhq/paperui";
@@ -18,6 +23,7 @@ import BrainLogo from "../lib/BrainLogo";
 import { SetupProgress } from "../computer/Computer";
 import { LIMITS, characterOf, type Harness, type HarnessInfo } from "../contract";
 import type { Agent } from "../lib/agent";
+import { errorText } from "../lib/failure";
 import styles from "./Onboarding.module.css";
 
 // The first meeting: name, brain, and (if the user wants it now) the agent's
@@ -68,7 +74,7 @@ function Flow(props: { agent: Agent; onSaving: () => void; onDone: () => void })
             if (computer() === "setup") await agent.installComputer();
             return true;
         } catch (e) {
-            setSaveError(e instanceof Error ? e.message : String(e));
+            setSaveError(errorText(e));
             return false;
         } finally {
             setSaving(false);
@@ -150,7 +156,7 @@ function Scenes(props: {
         try {
             setHarnesses(await agent.detect());
         } catch (e) {
-            setDetectError(e instanceof Error ? e.message : String(e));
+            setDetectError(errorText(e));
         }
     };
     void detect();
@@ -297,18 +303,18 @@ function Scenes(props: {
                 <Reveal when={revealed()}>
                     <Switch>
                         <Match when={detectError()}>
-                            <p class={styles.error} role="alert">
-                                Couldn't look for harnesses: {detectError()}
-                            </p>
+                            <PaperQuote variant="danger" icon="error" title="Harnesses not looked for" role="alert">
+                                {detectError()}
+                            </PaperQuote>
                             <PaperButton onClick={() => void detect()}>Look again</PaperButton>
                         </Match>
                         <Match when={harnesses() === null}>
-                            <p class={styles.note}>Looking for harnesses…</p>
+                            <PaperLoader loaderStatus="indeterminate" label="Looking for harnesses" />
                         </Match>
                         <Match when={installed().length === 0}>
-                            <p class={styles.note}>
+                            <PaperText size={1} color="text-subtle">
                                 I didn't find Codex, Claude or OpenCode on this computer. Install one and sign in to it, then look again.
-                            </p>
+                            </PaperText>
                             <PaperButton onClick={() => void detect()}>Look again</PaperButton>
                         </Match>
                         <Match when={true}>
@@ -325,7 +331,9 @@ function Scenes(props: {
                                     )}
                                 </For>
                             </PaperSelector>
-                            <p class={styles.note}>You can change this later.</p>
+                            <PaperText size={1} color="text-subtle">
+                                You can change this later.
+                            </PaperText>
                         </Match>
                     </Switch>
                 </Reveal>
@@ -333,7 +341,7 @@ function Scenes(props: {
 
             <PaperWizardStep class={styles.step} index={STEP.model} canProceed={ready()}>
                 <Reveal when={revealed()}>
-                    <h2 class={styles.title}>Choose a model</h2>
+                    <PaperSectionHeader title="Choose a model" role="heading" aria-level={2} />
                     <Show when={(loadedModels(models)?.length ?? 0) >= SEARCH_MODELS_FROM}>
                         <PaperInput label="Search" icon="search" fullWidth placeholder="Search models" value={search()} onInput={(e) => setSearch(e.currentTarget.value)} />
                     </Show>
@@ -350,7 +358,9 @@ function Scenes(props: {
                         </For>
                     </PaperSelector>
                     <Show when={models.error}>
-                        <p class={styles.note}>{models.error instanceof Error ? models.error.message : String(models.error)} You can pick one later in settings.</p>
+                        <PaperQuote variant="danger" icon="error" title="Models not listed" role="alert">
+                            {errorText(models.error)} You can pick one later in settings.
+                        </PaperQuote>
                     </Show>
                 </Reveal>
             </PaperWizardStep>
@@ -368,7 +378,9 @@ function Scenes(props: {
                         </PaperSelectorItem>
                     </PaperSelector>
                     <Show when={machine().phase === "unsupported"}>
-                        <p class={styles.note}>This computer can't run mine yet: {machine().error}</p>
+                        <PaperText size={1} color="text-subtle">
+                            This computer can't run mine yet: {machine().error}
+                        </PaperText>
                     </Show>
                 </Reveal>
             </PaperWizardStep>
@@ -376,19 +388,19 @@ function Scenes(props: {
             {/* always there, so the computer's step is never taken for the last one before it's answered */}
             <PaperWizardStep class={styles.step} index={STEP.last} canProceed={ready()}>
                 <Show when={props.computer() === "later" && props.saveError()}>
-                    <p class={styles.error} role="alert">
-                        Couldn't save: {props.saveError()}
-                    </p>
+                    <PaperQuote variant="danger" icon="error" title="Settings not saved" role="alert">
+                        {props.saveError()}
+                    </PaperQuote>
                 </Show>
                 <Show when={props.computer() === "setup"}>
                     <Show when={revealed()}>
                         <div class={styles.install}>
-                            <h2 class={styles.title}>Setting up {name()}'s computer</h2>
+                            <PaperSectionHeader title={`Setting up ${name()}'s computer`} role="heading" aria-level={2} />
                             <Switch>
                                 <Match when={props.saveError()}>
-                                    <p class={styles.error} role="alert">
-                                        Couldn't get started: {props.saveError()}
-                                    </p>
+                                    <PaperQuote variant="danger" icon="error" title="Setup not started" role="alert">
+                                        {props.saveError()}
+                                    </PaperQuote>
                                     <PaperButton disabled={props.saving()} onClick={() => void props.save()}>
                                         Try again
                                     </PaperButton>
@@ -396,7 +408,7 @@ function Scenes(props: {
                                 <Match when={true}>
                                     <SetupProgress computer={machine()} />
                                     <Show when={machine().phase === "failed" || machine().phase === "unsupported"}>
-                                        <div class={styles.actions}>
+                                        <PaperFlex direction="row" wrap gap="full">
                                             <Show when={machine().phase === "failed"}>
                                                 <PaperButton disabled={props.saving()} onClick={() => void props.save()}>
                                                     Try again
@@ -405,7 +417,7 @@ function Scenes(props: {
                                             <PaperButton variant="text" onClick={props.onDone}>
                                                 Chat without it for now
                                             </PaperButton>
-                                        </div>
+                                        </PaperFlex>
                                     </Show>
                                 </Match>
                             </Switch>
