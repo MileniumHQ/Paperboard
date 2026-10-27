@@ -4,7 +4,6 @@ import {
     PaperButton,
     PaperContextMenu,
     PaperContextMenuItem,
-    PaperFlex,
     PaperInput,
     PaperModal,
     useContextMenuState,
@@ -89,22 +88,19 @@ export default function BlockMenu(props: {
                 onClose={() => setRenameTargetId(null)}
                 title="Edit Name"
                 footer={
-                    <PaperFlex direction="row" justify="flex-end" gap="half" fullWidth>
-                        <PaperButton
-                            variant="text"
-                            onClick={() => setRenameTargetId(null)}>
+                    <>
+                        <PaperButton variant="text" onClick={() => setRenameTargetId(null)}>
                             Cancel
                         </PaperButton>
-                        <PaperButton
-                            variant="brand"
-                            onClick={confirmRename}>
+                        <PaperButton variant="brand" onClick={confirmRename}>
                             Save
                         </PaperButton>
-                    </PaperFlex>
+                    </>
                 }
             >
                 <PaperInput
                     fullWidth
+                    autofocus
                     label="Variable name"
                     value={renameDraft()}
                     onInput={(e) => setRenameDraft(e.currentTarget.value)}

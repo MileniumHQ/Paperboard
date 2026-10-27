@@ -190,15 +190,3 @@
     left: var(--paper-uigap);
     z-index: var(--paper-z-sticky);
 }
-
-/* the panels' blocks couldn't be read: what went wrong, with Retry */
-.library-error {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--paper-uigap-half);
-    margin: var(--paper-uigap-half) var(--paper-uigap);
-    padding: var(--paper-uigap-half) var(--paper-uigap);
-    border-radius: var(--paper-border-radius-half);
-    background: var(--paper-surface-inset);
-}

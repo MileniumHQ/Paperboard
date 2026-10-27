@@ -19,6 +19,7 @@ import {
     PaperInput,
     PaperButton,
     PaperIcon,
+    PaperQuote,
     PaperSelectMenu,
     PaperSelectMenuItem,
 } from "@mileniumhq/paperui";
@@ -299,12 +300,14 @@ export default function ActionLibrary(props: ActionLibraryProps) {
 
                     <div class="library-content">
                         <Show when={loadError()}>
-                            <div class="library-error" role="alert">
-                                <PaperText size={2}>Couldn't load the panels' blocks: {loadError()}</PaperText>
-                                <PaperButton size="tiny" onClick={() => void loadLibrary()}>
-                                    Retry
-                                </PaperButton>
-                            </div>
+                            <PaperQuote variant="danger" icon="warning" title="Panels' blocks not loaded" role="alert">
+                                <PaperFlex direction="column" gap="half">
+                                    {loadError()}
+                                    <PaperButton size="tiny" onClick={() => void loadLibrary()}>
+                                        Retry
+                                    </PaperButton>
+                                </PaperFlex>
+                            </PaperQuote>
                         </Show>
                         <div class="library-header">
                             <PaperFlex direction="column" gap="half" fullWidth>

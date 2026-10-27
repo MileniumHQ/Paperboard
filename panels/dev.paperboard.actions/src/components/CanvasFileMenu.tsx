@@ -5,7 +5,9 @@ import {
     PaperContextMenuItem,
     PaperFlex,
     PaperIcon,
+    PaperLoader,
     PaperModal,
+    PaperQuote,
     PaperSelector,
     PaperSelectorItem,
     PaperText,
@@ -34,7 +36,8 @@ const addedText = (file: CanvasDocument) =>
 const dateText = (iso: string) => new Date(iso).toLocaleString();
 const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
-export type CanvasNotice = { kind: "done" | "failed"; text: string };
+// what finished or failed: a title naming the operation, and what happened
+export type CanvasNotice = { kind: "done" | "failed"; title: string; text: string };
 
 // The menu beside Run: the canvas out to a file and back in, and backups of
 // everything Actions keeps (flows, notes, functions, variables).
@@ -54,14 +57,14 @@ export default function CanvasFileMenu(props: {
     const menu = useContextMenuState("below-right");
     const [busy, setBusy] = createSignal(false);
 
-    const run = async (work: () => Promise<string | null>) => {
+    const run = async (titles: { done: string; failed: string }, work: () => Promise<string | null>) => {
         if (busy()) return;
         setBusy(true);
         try {
             const done = await work();
-            if (done) props.onNotice({ kind: "done", text: done });
+            if (done) props.onNotice({ kind: "done", title: titles.done, text: done });
         } catch (err) {
-            props.onNotice({ kind: "failed", text: message(err) });
+            props.onNotice({ kind: "failed", title: titles.failed, text: message(err) });
         } finally {
             setBusy(false);
         }
@@ -69,7 +72,7 @@ export default function CanvasFileMenu(props: {
 
     // the export and import copy through a file in Actions' own storage,
     // which is removed again whatever happens
-    const exportFlows = () => run(async () => {
+    const exportFlows = () => run({ done: "Flows exported", failed: "Flows not exported" }, async () => {
         const path = `flows-export-${props.clientId}.json`;
         await fileApi.write(path, flowFileText(props.canvas()), ACTIONS_PANEL_ID);
         try {
@@ -80,7 +83,7 @@ export default function CanvasFileMenu(props: {
         }
     });
 
-    const importFlows = () => run(async () => {
+    const importFlows = () => run({ done: "Flows imported", failed: "Flows not imported" }, async () => {
         if (!props.loaded()) throw new Error("The canvas has not loaded yet, so nothing can be added to it.");
         const path = `flows-import-${props.clientId}.json`;
         const result = await fileApi.importFile(path, ACTIONS_PANEL_ID, { filters: FLOW_FILE_FILTERS });
@@ -105,7 +108,7 @@ export default function CanvasFileMenu(props: {
         return (await backupApi.chooseLocation(ACTIONS_PANEL_ID)).status === "chosen";
     };
 
-    const createBackup = () => run(async () => {
+    const createBackup = () => run({ done: "Backup made", failed: "Backup not made" }, async () => {
         if (!(await ensureLocation())) return null;
         const saved = await props.flush();
         if (!saved.ok) throw new Error(`Your latest changes are not saved, so the backup would miss them: ${saved.message}`);
@@ -119,11 +122,11 @@ export default function CanvasFileMenu(props: {
     const [backups, setBackups] = createSignal<BackupRecord[] | null>(null);
     const [status, setStatus] = createSignal<BackupStatus | null>(null);
     const [selected, setSelected] = createSignal("");
-    const [loadError, setLoadError] = createSignal("");
+    const [loadError, setLoadError] = createSignal<{ title: string; text: string } | null>(null);
     const [restoring, setRestoring] = createSignal(false);
 
     const loadBackups = async () => {
-        setLoadError("");
+        setLoadError(null);
         setBackups(null);
         try {
             const [now, list] = await Promise.all([backupApi.status(ACTIONS_PANEL_ID), backupApi.list(ACTIONS_PANEL_ID)]);
@@ -131,7 +134,7 @@ export default function CanvasFileMenu(props: {
             setBackups(list);
             setSelected(list[0]?.id ?? "");
         } catch (err) {
-            setLoadError(`Backups could not be listed: ${message(err)}`);
+            setLoadError({ title: "Backups not listed", text: message(err) });
         }
     };
 
@@ -141,7 +144,7 @@ export default function CanvasFileMenu(props: {
         try {
             if (!(await ensureLocation())) return;
         } catch (err) {
-            props.onNotice({ kind: "failed", text: message(err) });
+            props.onNotice({ kind: "failed", title: "Backups not opened", text: message(err) });
             return;
         }
         setLoadOpen(true);
@@ -152,7 +155,7 @@ export default function CanvasFileMenu(props: {
         try {
             if ((await backupApi.chooseLocation(ACTIONS_PANEL_ID)).status === "chosen") void loadBackups();
         } catch (err) {
-            setLoadError(message(err));
+            setLoadError({ title: "Backup location not changed", text: message(err) });
         }
     };
 
@@ -160,11 +163,11 @@ export default function CanvasFileMenu(props: {
         const record = backups()?.find((b) => b.id === selected());
         if (!record) return;
         setRestoring(true);
-        setLoadError("");
+        setLoadError(null);
         try {
             await backupApi.restore(ACTIONS_PANEL_ID, record.id);
         } catch (err) {
-            setLoadError(`The backup was not loaded: ${message(err)}`);
+            setLoadError({ title: "Backup not loaded", text: message(err) });
             setRestoring(false);
             return;
         }
@@ -173,9 +176,9 @@ export default function CanvasFileMenu(props: {
         try {
             const reloaded = await props.reload();
             if (!reloaded.ok) throw new Error(reloaded.message);
-            props.onNotice({ kind: "done", text: `Loaded the backup from ${dateText(record.createdAt)}.` });
+            props.onNotice({ kind: "done", title: "Backup loaded", text: `Loaded the backup from ${dateText(record.createdAt)}.` });
         } catch (err) {
-            props.onNotice({ kind: "failed", text: `The backup was loaded, but the canvas could not show it: ${message(err)}` });
+            props.onNotice({ kind: "failed", title: "Backup not shown", text: `The backup was loaded, but the canvas could not show it: ${message(err)}` });
         }
     };
 
@@ -197,7 +200,7 @@ export default function CanvasFileMenu(props: {
                 size="small"
                 onClose={() => { if (!restoring()) setLoadOpen(false); }}
                 footer={
-                    <PaperFlex direction="row" justify="flex-end" gap="half" fullWidth>
+                    <>
                         <PaperButton variant="text" disabled={restoring()} onClick={() => setLoadOpen(false)}>Cancel</PaperButton>
                         <Show when={loadError() && !backups()} fallback={
                             <PaperButton variant="danger" disabled={restoring() || !selected()} onClick={() => void restore()}>
@@ -206,12 +209,12 @@ export default function CanvasFileMenu(props: {
                         }>
                             <PaperButton onClick={() => void loadBackups()}>Try again</PaperButton>
                         </Show>
-                    </PaperFlex>
+                    </>
                 }
             >
                 <PaperFlex direction="column" gap="half">
                     <PaperText preset="body">Loading a backup replaces all flows, notes, functions and variables with the backup's. Flows running now stop.</PaperText>
-                    <Show when={backups()} fallback={<Show when={!loadError()}><PaperText size={2} color="text-subtle">Loading backups…</PaperText></Show>}>
+                    <Show when={backups()} fallback={<Show when={!loadError()}><PaperLoader loaderStatus="indeterminate" size="small" label="Loading backups" /></Show>}>
                         {(list) => (
                             <Show when={list().length > 0} fallback={<PaperText size={2} color="text-subtle">No backups here yet. Make one with Create Backup.</PaperText>}>
                                 <PaperSelector name="actions-backup" value={selected()} onValueChange={(value) => setSelected(String(value))}>
@@ -235,7 +238,11 @@ export default function CanvasFileMenu(props: {
                         )}
                     </Show>
                     <Show when={loadError()}>
-                        <PaperText size={2} color="danger">{loadError()}</PaperText>
+                        {(failure) => (
+                            <PaperQuote variant="danger" icon="warning" title={failure().title} role="alert">
+                                {failure().text}
+                            </PaperQuote>
+                        )}
                     </Show>
                 </PaperFlex>
             </PaperModal>

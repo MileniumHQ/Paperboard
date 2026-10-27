@@ -18,7 +18,7 @@ export default function FunctionList(props: {
     return (
         <>
             <Show when={props.functions.length > 0}>
-                <PaperButton onClick={props.onCreate} style={{ width: "100%" }}>
+                <PaperButton fullWidth onClick={props.onCreate}>
                     <PaperIcon>add</PaperIcon>
                     Create Function
                 </PaperButton>

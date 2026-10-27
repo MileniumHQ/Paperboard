@@ -9,7 +9,7 @@
     --actions-menu-max: 340px;
     --actions-menu-height: 300px;
     --actions-library-width: 400px;
-    --actions-sync-status-max: 360px;
+    --actions-notice-max: 360px;
     --actions-console-width: 320px;
     --actions-console-height: 240px;
     --actions-console-body-height: 180px;
@@ -61,6 +61,16 @@ body,
     /* block z-indices (raised while editing) stay inside the canvas, so
        menus rendered after it always stack above every flow */
     isolation: isolate;
+}
+
+/* the block under the pointer while it's dragged; only its position is
+   set inline, because it follows the pointer */
+.ghostDragContainer {
+    position: fixed;
+    width: max-content;
+    z-index: var(--paper-z-ghost);
+    opacity: var(--paper-opacity-soft);
+    filter: drop-shadow(var(--paper-lifted-shadow));
 }
 
 .ghostDragContainer,
@@ -129,15 +139,9 @@ body,
     gap: var(--paper-uigap-half);
 }
 
-.canvas-sync-status {
-    display: flex;
-    flex-direction: column;
-    gap: var(--paper-uigap-half);
-    max-width: var(--actions-sync-status-max);
-    padding: var(--paper-uigap);
-    color: var(--paper-text);
-    background: var(--paper-surface);
-    border-radius: var(--paper-border-radius);
+/* a notice in the top-right stack stays narrow beside the canvas */
+.canvas-notice {
+    max-width: var(--actions-notice-max);
 }
 
 /* what a phone sees instead of the canvas */

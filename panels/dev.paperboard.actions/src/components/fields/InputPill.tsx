@@ -1,6 +1,7 @@
 // The field for one input on a block, picked by what the input declares:
 // a toggle, a dropdown, a list, a variable-only pill, a colour, or text.
 import { Show } from "solid-js";
+import { PaperSwatch } from "@mileniumhq/paperui";
 import { innerTypeOf, isTypedOnlyInput, isLiteralListInput, expectedTypeOf } from "../../lib/inputTypes";
 import type { TemplateToken } from "../../lib/template";
 import type { ActionBlockProps } from "../actionBlockProps";
@@ -137,11 +138,7 @@ export default function InputPill(props: InputPillProps) {
         return (
             <span class="actionColorWrap">
                 <Show when={isHex()}>
-                    <span
-                        class="actionColorDot"
-                        style={{ background: hexValue() }}
-                        title={hexValue()}
-                    />
+                    <PaperSwatch size="small" class="actionColorDot" color={hexValue()} title={hexValue()} />
                 </Show>
                 <ActionEditableField
                     blockId={block.id}

@@ -68,8 +68,8 @@ export default function FunctionModal(props: {
             title={editingId() ? "Rename Function" : "Create Function"}
             size="large"
             footer={
-                <PaperFlex direction="row" justify="flex-end" gap="half" fullWidth>
-                    <PaperButton onClick={props.onClose}>
+                <>
+                    <PaperButton variant="text" onClick={props.onClose}>
                         Cancel
                     </PaperButton>
                     <PaperButton
@@ -81,13 +81,14 @@ export default function FunctionModal(props: {
                         </PaperIcon>
                         {editingId() ? "Save" : "Create"}
                     </PaperButton>
-                </PaperFlex>
+                </>
             }
         >
             <PaperFlex direction="column" gap="full">
                 <PaperFlex direction="column" gap="half">
                     <PaperInput
                         fullWidth
+                        autofocus
                         placeholder="Function"
                         maxLength={64}
                         value={draftName()}

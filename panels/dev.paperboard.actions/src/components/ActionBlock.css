@@ -344,12 +344,10 @@
     display: inline-flex;
 }
 
+/* the ring keeps a light colour visible on the light pill */
 .actionColorDot {
-    width: var(--paper-text-size-1);
-    height: var(--paper-text-size-1);
-    border-radius: 50%;
+    box-sizing: border-box;
     border: var(--paper-border-width) solid var(--paper-border);
-    flex-shrink: 0;
 }
 
 .actionInput.actionEditable[data-placeholder]:empty::before {

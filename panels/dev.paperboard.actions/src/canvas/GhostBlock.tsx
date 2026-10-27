@@ -9,14 +9,8 @@ export default function GhostBlock(props: { drag: GhostDrag }) {
         <div
             class="ghostDragContainer"
             style={{
-                position: "fixed",
                 left: `${props.drag.pos.x - props.drag.grabOffset.x}px`,
                 top: `${props.drag.pos.y - props.drag.grabOffset.y}px`,
-                width: "max-content",
-                "pointer-events": "none",
-                "z-index": "var(--paper-z-ghost)",
-                opacity: "var(--paper-opacity-soft)",
-                filter: "drop-shadow(var(--paper-lifted-shadow))",
             }}
         >
             <ActionBlock

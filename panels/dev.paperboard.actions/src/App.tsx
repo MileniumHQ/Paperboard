@@ -12,7 +12,9 @@ import {
     PaperIcon,
     PaperButton,
     PaperEffect,
-    PaperText,
+    PaperEmptyState,
+    PaperFlex,
+    PaperLoader,
 } from "@mileniumhq/paperui";
 import ActionBlock from "./components/ActionBlock";
 import NoteBlock from "./components/NoteBlock";
@@ -62,12 +64,15 @@ export default function App() {
 
     return (
         <Show when={doc.loaded()} fallback={
-            <div class="paperui-root canvas-sync-status" role="status">
-                <PaperText>{doc.loadError() ?? "Loading canvas…"}</PaperText>
-                <Show when={doc.loadError()}>
-                    <PaperButton onClick={() => { void doc.load(); }}>Retry loading canvas</PaperButton>
+            <PaperFlex fullWidth fullHeight align="center" justify="center">
+                <Show when={doc.loadError()} fallback={<PaperLoader loaderStatus="indeterminate" label="Loading canvas" />}>
+                    {(reason) => (
+                        <PaperEmptyState icon="error" title="Canvas could not be loaded" description={reason()} role="alert">
+                            <PaperButton onClick={() => { void doc.load(); }}>Retry loading canvas</PaperButton>
+                        </PaperEmptyState>
+                    )}
                 </Show>
-            </div>
+            </PaperFlex>
         }>
         <div
             ref={canvas.setViewport}

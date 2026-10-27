@@ -162,7 +162,8 @@ export function createCanvasDocument() {
             setLoaded(true);
             await refreshSchemas();
         } catch (err) {
-            if (!disposed) setLoadError(`Canvas could not be loaded: ${String(err)}`);
+            // the reason alone: the page around it says what failed
+            if (!disposed) setLoadError(err instanceof Error ? err.message : String(err));
         } finally {
             loading = false;
         }

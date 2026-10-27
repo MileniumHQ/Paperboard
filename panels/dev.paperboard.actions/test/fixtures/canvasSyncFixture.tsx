@@ -4,7 +4,7 @@ import App from "../../src/App";
 import { fixture } from "./canvasSyncApi";
 
 const root = document.getElementById("app")!;
-const dispose = render(() => <PaperProvider><App /></PaperProvider>, root);
+const dispose = render(() => <PaperProvider fullWidth fullHeight><App /></PaperProvider>, root);
 Object.assign(window, {
     canvasFixture: {
         fixture,
@@ -17,9 +17,9 @@ Object.assign(window, {
             button.click();
         },
         checkRetry() {
-            const status = root.querySelector('[role="status"]');
+            const alert = root.querySelector('[role="alert"]');
             const button = [...root.querySelectorAll("button")].find((b) => b.textContent?.includes("Retry saving"));
-            if (!status?.textContent?.includes("Canvas saved, but flows were not applied")) throw new Error("Apply failure is invisible");
+            if (!alert?.textContent?.includes("Canvas saved, but flows were not applied")) throw new Error("Apply failure is invisible");
             if (!button || button.disabled) throw new Error("No enabled retry action");
             fixture.failApply = false;
             button.click();

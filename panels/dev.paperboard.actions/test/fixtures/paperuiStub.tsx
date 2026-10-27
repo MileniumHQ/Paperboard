@@ -27,6 +27,11 @@ export function PaperButton(props: any): JSX.Element {
     return <Box tag="button" {...props} />;
 }
 
+export function PaperSwatch(props: any): JSX.Element {
+    const { color, size: _size, ...rest } = props;
+    return <Box tag="span" {...rest} style={{ background: color }} />;
+}
+
 export function PaperSelectMenu(props: any): JSX.Element {
     return <Box tag="div" {...props} />;
 }
