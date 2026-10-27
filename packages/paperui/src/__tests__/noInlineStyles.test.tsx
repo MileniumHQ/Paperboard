@@ -1,19 +1,25 @@
 // The props that let a panel lay out and tint its UI without a style tag.
-import { describe, test, expect } from "vitest";
+import { describe, test, expect, vi, afterEach } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { render } from "@solidjs/testing-library";
+import { render, fireEvent, waitFor } from "@solidjs/testing-library";
 import { PaperFlex } from "../templates/PaperFlex";
 import { PaperCard } from "../components/PaperCard";
 import { PaperList, PaperListItem, PaperListLabel } from "../components/PaperList";
 import { PaperMenu, PaperMenuItem, PaperMenuLabel } from "../components/PaperMenu";
 import { PaperAvatar } from "../components/PaperAvatar";
 import { PaperIcon } from "../components/PaperIcon";
+import { PaperCopyButton } from "../components/PaperCopyButton";
 import { PaperInterfaceGroup, PaperInterfaceItem } from "../templates/PaperInterfaceGroup";
 import { PaperGrid } from "../components/PaperGrid";
 import { PaperMediaCardGroup } from "../components/PaperMediaCard";
 import { PaperSwatch } from "../components/PaperSwatch";
 import { paperSizes } from "../types";
+
+afterEach(() => {
+    vi.restoreAllMocks();
+    Object.defineProperty(navigator, "clipboard", { value: undefined, configurable: true });
+});
 
 describe("size tokens", () => {
     test("every size name is a token the stylesheet defines", () => {
@@ -129,5 +135,22 @@ describe("PaperInterfaceItem fill", () => {
         const page = container.querySelector('[class*="PaperPage"]') as HTMLElement;
         expect(page.className).toContain("full");
         expect(page.style.height).toBe("100%");
+    });
+});
+
+describe("PaperCopyButton", () => {
+    test("says so when the copy fails", async () => {
+        Object.defineProperty(navigator, "clipboard", {
+            value: { writeText: vi.fn().mockRejectedValue(new Error("denied")) },
+            configurable: true,
+        });
+        document.execCommand = vi.fn().mockReturnValue(false);
+        vi.spyOn(console, "debug").mockImplementation(() => {});
+        vi.spyOn(console, "error").mockImplementation(() => {});
+        const { getByRole } = render(() => <PaperCopyButton text="10.0.0.2:25565" title="Copy address" />);
+        const button = getByRole("button");
+        fireEvent.click(button);
+        await waitFor(() => expect(button.title).toBe("Couldn't copy"));
+        expect(button.textContent).toContain("error");
     });
 });

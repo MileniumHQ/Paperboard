@@ -1,5 +1,5 @@
 import styles from "./index.module.css";
-import { createSignal, splitProps, Show, type JSX } from "solid-js";
+import { createSignal, onCleanup, splitProps, Show, type JSX } from "solid-js";
 import { PaperButton } from "../PaperButton";
 import { PaperIcon } from "../PaperIcon";
 import { copyText } from "../../utils/clipboard";
@@ -25,15 +25,21 @@ export function PaperCopyButton(props: PaperCopyButtonProps) {
         "class",
         "classList",
     ]);
-    const [copied, setCopied] = createSignal(false);
+    // a failed copy says so: the button never looks like it worked when it didn't
+    const [outcome, setOutcome] = createSignal<"copied" | "failed" | null>(null);
+    let resetTimer: ReturnType<typeof setTimeout> | undefined;
+    onCleanup(() => clearTimeout(resetTimer));
 
     const handleCopy = async () => {
         const ok = await copyText(local.text);
-        if (!ok) return;
-        haptic("success");
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
+        haptic(ok ? "success" : "error");
+        setOutcome(ok ? "copied" : "failed");
+        clearTimeout(resetTimer);
+        resetTimer = setTimeout(() => setOutcome(null), 2000);
     };
+
+    const statusText = () =>
+        outcome() === "copied" ? "Copied" : outcome() === "failed" ? "Couldn't copy" : null;
 
     return (
         <PaperButton size={local.label ? "medium" : "tiny"}
@@ -41,11 +47,13 @@ export function PaperCopyButton(props: PaperCopyButtonProps) {
             icon={!local.label}
             class={[styles.PaperCopyButton, local.class].filter(Boolean).join(" ")}
             classList={local.classList}
-            title={local.title ?? (copied() ? "Copied" : "Copy")}
+            title={statusText() ?? local.title ?? "Copy"}
             onClick={() => void handleCopy()}>
-            <PaperIcon>{copied() ? "check" : "content_copy"}</PaperIcon>
+            <PaperIcon>
+                {outcome() === "copied" ? "check" : outcome() === "failed" ? "error" : "content_copy"}
+            </PaperIcon>
             <Show when={local.label}>
-                {copied() ? "Copied" : local.label}
+                {statusText() ?? local.label}
             </Show>
         </PaperButton>
     );
