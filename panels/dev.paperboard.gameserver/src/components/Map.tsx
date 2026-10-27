@@ -15,7 +15,6 @@ import {
     PaperSelectMenu,
     PaperSelectMenuItem,
     PaperText,
-    getVarCss,
     getVar,
 } from "@mileniumhq/paperui";
 import {
@@ -208,11 +207,12 @@ export default function MapView() {
         const s = scale();
         const dim = dimension();
         const size = Math.max(18, Math.min(30, 22 * Math.max(0.8, s)));
-        // colors come from the token set, not hardcoded hex
-        const strokeColor = getVarCss("on-color");
-        const markerColor = getVarCss("danger");
-        const labelBg = getVarCss("scrim");
-        const labelText = getVarCss("on-color");
+        // colors come from the token set, resolved to values: a canvas
+        // ignores a var() string and keeps its previous colour
+        const strokeColor = getVar("on-color");
+        const markerColor = getVar("danger");
+        const labelBg = getVar("scrim");
+        const labelText = getVar("on-color");
         for (const [key, pos] of playerPositions()) {
             if (pos.dimension !== `minecraft:${dim}`) continue;
             const screenX = pos.x * s + offsetX();
