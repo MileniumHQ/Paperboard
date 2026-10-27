@@ -7,11 +7,21 @@ import {
     type AppSettingsData,
 } from "../components/settings/AppSettings";
 
+export interface SettingsFailure {
+    /** which way it failed: settings that didn't load leave the defaults showing */
+    kind: "load" | "save";
+    message: string;
+}
+
+const messageOf = (err: unknown) => (err instanceof Error ? err.message : String(err));
+
 // App-wide settings: load, mirror reduced motion onto the document, persist
-// before notifying main.
+// before notifying main. A load or save that fails stays as a failure for
+// App Settings to show, until it's retried or dismissed.
 export function useAppSettings() {
     const [appSettings, setAppSettings] =
         createSignal<AppSettingsData>(APP_SETTINGS_DEFAULTS);
+    const [settingsFailure, setSettingsFailure] = createSignal<SettingsFailure | null>(null);
 
     // Mirrors the motion preference onto the document for PaperUI tokens
     createEffect(() => {
@@ -29,7 +39,8 @@ export function useAppSettings() {
         }
     });
 
-    const loadAppSettings = async () => {
+    /** true when the stored settings were read */
+    const loadAppSettings = async (): Promise<boolean> => {
         try {
             const stored = await config.get<Partial<AppSettingsData>>(
                 APP_SETTINGS_ID,
@@ -38,7 +49,17 @@ export function useAppSettings() {
                 const merged = { ...APP_SETTINGS_DEFAULTS, ...stored };
                 setAppSettings(merged);
             }
-        } catch (err) { console.error("[useAppSettings] load failed:", err); }
+            return true;
+        } catch (err) {
+            logToMain("error", "Failed to load app settings; showing the defaults:", err);
+            setSettingsFailure({ kind: "load", message: messageOf(err) });
+            return false;
+        }
+    };
+
+    const retryLoadAppSettings = async () => {
+        setSettingsFailure(null);
+        await loadAppSettings();
     };
 
     const handleAppSettingsChange = async (next: AppSettingsData) => {
@@ -51,9 +72,12 @@ export function useAppSettings() {
             await config.set(next, APP_SETTINGS_ID);
         } catch (err) {
             logToMain("error", "Failed to persist app settings; native side not notified:", err);
-            await loadAppSettings();
+            // the save's failure is what to show, even if the re-read fails too
+            if (await loadAppSettings()) setSettingsFailure({ kind: "save", message: messageOf(err) });
+            else setSettingsFailure({ kind: "save", message: `${messageOf(err)}. The saved settings couldn't be read back either.` });
             return;
         }
+        if (settingsFailure()?.kind === "save") setSettingsFailure(null);
         // commit to renderer state: PaperSelectMenu/PaperToggle are controlled
         // (their display follows the value prop), and the theme/motion effects
         // read this signal, so a successful persist must update it or the UI
@@ -62,5 +86,12 @@ export function useAppSettings() {
         notifyAppSettingsChanged();
     };
 
-    return { appSettings, loadAppSettings, handleAppSettingsChange };
+    return {
+        appSettings,
+        loadAppSettings,
+        handleAppSettingsChange,
+        settingsFailure,
+        retryLoadAppSettings,
+        dismissSettingsFailure: () => setSettingsFailure(null),
+    };
 }

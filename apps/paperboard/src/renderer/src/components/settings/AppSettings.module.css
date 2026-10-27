@@ -80,3 +80,9 @@ button.row:active {
 .chevron {
     color: var(--paper-text-subtle);
 }
+
+/* a license keeps its own line breaks and wraps long lines */
+.licenseText {
+    margin: 0;
+    white-space: pre-wrap;
+}

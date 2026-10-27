@@ -6,15 +6,16 @@ import {
     PaperSelectorItem,
     PaperInput,
     PaperFlex,
+    PaperQuote,
     PaperText,
     useWizard,
-    getVarCss,
 } from "@mileniumhq/paperui";
 import {
     computersApi as computers,
     discoveryApi,
     type DiscoveredComputer,
 } from "../../lib/shell";
+import frameStyles from "./wizardFrame.module.css";
 
 export interface ComputerSetupWizardProps {
     onClose: () => void;
@@ -43,11 +44,15 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
     const suggestionKey = (c: { host: string; port: number }) =>
         `${c.host}:${c.port}`;
 
+    // nearby computers couldn't be listed; one can still be added by address
+    const [discoveryError, setDiscoveryError] = createSignal("");
     onMount(() => {
-        discoveryApi.list().then((list) => {
-            setDiscovered(list ?? []);
-        });
+        discoveryApi.list().then(
+            (list) => setDiscovered(list ?? []),
+            (err) => setDiscoveryError(err instanceof Error ? err.message : String(err)),
+        );
         const off = discoveryApi.onChanged((list) => {
+            setDiscoveryError("");
             setDiscovered(list ?? []);
         });
         onCleanup(() => off());
@@ -213,7 +218,7 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
             onComplete={handleFinish}
             finishLabel="Add Computer"
             finishVariant="success"
-            style={{ width: "100%", height: "var(--paperboard-wizard-height)" }}
+            class={frameStyles.wizard}
         >
             <WizardStepRouter />
 
@@ -222,7 +227,8 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
                     <PaperFlex
                         direction="column"
                         gap="full"
-                        style={{ width: "100%", "max-width": getVarCss("size-panel-small") }}
+                        fullWidth
+                        maxWidth="panel-small"
                     >
                         <PaperFlex direction="column" gap="half">
                             <PaperText preset="title">
@@ -233,6 +239,14 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
                                 your computer.
                             </PaperText>
                         </PaperFlex>
+
+                        <Show when={discoveryError()}>
+                            <PaperQuote variant="warning" icon="wifi_find" title="Nearby computers not listed" role="alert">
+                                <PaperText breakWord>
+                                    {discoveryError()}. You can still connect by address.
+                                </PaperText>
+                            </PaperQuote>
+                        </Show>
 
                         <PaperSelector
                             name="connection-method"
@@ -269,7 +283,8 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
                     <PaperFlex
                         direction="column"
                         gap="full"
-                        style={{ width: "100%", "max-width": getVarCss("size-panel-small") }}
+                        fullWidth
+                        maxWidth="panel-small"
                     >
                         <PaperFlex direction="column" gap="half">
                             <PaperText preset="title">
@@ -325,7 +340,8 @@ export const ComputerSetupWizard: Component<ComputerSetupWizardProps> = (
                     <PaperFlex
                         direction="column"
                         gap="full"
-                        style={{ width: "100%", "max-width": getVarCss("size-panel-small") }}
+                        fullWidth
+                        maxWidth="panel-small"
                     >
                         <PaperFlex direction="column" gap="half">
                             <PaperText preset="title">

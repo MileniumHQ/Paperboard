@@ -6,14 +6,17 @@ import {
     PaperSelectMenuItem,
     PaperToggle,
     PaperEffect,
+    PaperFlex,
     PaperButton,
     PaperIcon,
     PaperModal,
     PaperPage,
     PaperPageHeader,
+    PaperQuote,
     PaperText,
 } from "@mileniumhq/paperui";
 import { isBrowserShell, shellIpc } from "../../lib/shell";
+import type { SettingsFailure } from "../../hooks/useAppSettings";
 import styles from "./AppSettings.module.css";
 // Inlined at build time: the viewer always shows the exact files shipped
 // in this repo, so the text cannot drift from the license on disk.
@@ -59,41 +62,71 @@ export default function AppSettings(props: {
     onShowTutorial: () => void;
     /** the phone layout: grouped rows, the way phones lay out settings */
     compact?: boolean;
+    /** a load or save that didn't go through */
+    failure?: SettingsFailure | null;
+    onRetryLoad?: () => void;
+    onDismissFailure?: () => void;
 }) {
-    const [license, setLicense] = createSignal<LicenseKind | null>(null);
+    // the license stays in the modal after it closes, so it fades out whole
+    const [license, setLicense] = createSignal<LicenseKind>("paperboard");
+    const [licenseOpen, setLicenseOpen] = createSignal(false);
+    const viewLicense = (kind: LicenseKind) => {
+        setLicense(kind);
+        setLicenseOpen(true);
+    };
 
     const handleChange = (next: Record<string, any>) => {
         props.onChange({ ...props.settings, ...next });
     };
 
-    const licenseModal = () => (
+    // one modal for both layouts, built once and opened through licenseOpen
+    const licenseModal = (
         <PaperModal
-            open={license() !== null}
-            onClose={() => setLicense(null)}
-            title={license() ? LICENSE_TITLES[license()!] : ""}
+            open={licenseOpen()}
+            onClose={() => setLicenseOpen(false)}
+            title={LICENSE_TITLES[license()]}
             size="large"
         >
-            <Show when={license()}>
-                <PaperText
-                    as="pre"
-                    family="code"
-                    size={2}
-                    style={{ "white-space": "pre-wrap", margin: 0 }}
-                >
-                    {LICENSE_TEXTS[license()!]}
-                </PaperText>
-            </Show>
+            <PaperText as="pre" family="code" size={2} class={styles.licenseText}>
+                {LICENSE_TEXTS[license()]}
+            </PaperText>
         </PaperModal>
+    );
+
+    const failureNotice = (
+        <Show when={props.failure}>
+            {(failure) => (
+                <PaperQuote
+                    variant="danger"
+                    icon="warning"
+                    title={failure().kind === "load" ? "Settings not loaded" : "Settings not saved"}
+                    role="alert"
+                    onDismiss={props.onDismissFailure}
+                >
+                    <PaperFlex direction="column" gap="half" align="flex-start">
+                        <PaperText breakWord>
+                            {failure().kind === "load"
+                                ? `These are the defaults, not your settings: ${failure().message}`
+                                : `Your change was not kept: ${failure().message}`}
+                        </PaperText>
+                        <Show when={failure().kind === "load" && props.onRetryLoad}>
+                            <PaperButton size="tiny" onClick={() => props.onRetryLoad?.()}>Retry loading</PaperButton>
+                        </Show>
+                    </PaperFlex>
+                </PaperQuote>
+            )}
+        </Show>
     );
 
     if (props.compact) {
         return (
             <CompactSettings
+                notice={failureNotice}
                 settings={props.settings}
                 onChange={handleChange}
                 onShowTutorial={props.onShowTutorial}
-                onViewLicense={setLicense}
-                licenseModal={licenseModal()}
+                onViewLicense={viewLicense}
+                licenseModal={licenseModal}
             />
         );
     }
@@ -105,6 +138,7 @@ export default function AppSettings(props: {
                 title="App Settings"
                 subtitle="Appearance, startup, updates, and licenses."
             />
+            {failureNotice}
 
             <PaperSettingList
                 autoHeight
@@ -201,7 +235,7 @@ export default function AppSettings(props: {
                 >
                     <PaperButton
                         size="small"
-                        onClick={() => setLicense("paperboard")}
+                        onClick={() => viewLicense("paperboard")}
                         aria-label="View PolyForm Noncommercial 1.0.0 license"
                     >
                         View
@@ -210,7 +244,7 @@ export default function AppSettings(props: {
                 <PaperSettingItem title="MIT license" description="Applies to SDKs">
                     <PaperButton
                         size="small"
-                        onClick={() => setLicense("mit")}
+                        onClick={() => viewLicense("mit")}
                         aria-label="View MIT license"
                     >
                         View
@@ -218,7 +252,7 @@ export default function AppSettings(props: {
                 </PaperSettingItem>
             </PaperSettingList>
 
-            {licenseModal()}
+            {licenseModal}
         </PaperPage>
     );
 }
@@ -231,6 +265,7 @@ function CompactSettings(props: {
     onShowTutorial: () => void;
     onViewLicense: (kind: LicenseKind) => void;
     licenseModal: JSX.Element;
+    notice: JSX.Element;
 }) {
     const ActionRow = (row: { label: string; onClick: () => void; chevron?: boolean }) => (
         <button
@@ -247,6 +282,7 @@ function CompactSettings(props: {
 
     return (
         <div class={styles.compact}>
+            {props.notice}
             <PaperSettingList
                 flat
                 autoHeight

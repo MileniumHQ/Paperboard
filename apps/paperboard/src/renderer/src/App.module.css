@@ -1,0 +1,57 @@
+/* The shell's frame. Layers in the main area stay mounted while another
+ * one shows, so an open panel or the library keeps its frame and comes
+ * back as it was left. */
+.window {
+    width: 100vw;
+    height: 100vh;
+}
+
+.main {
+    height: 100vh;
+}
+
+.main.underTopBar {
+    height: calc(100vh - var(--paperboard-titlebar-height));
+}
+
+/* visibility, not display: a hidden iframe keeps its compositor state, so
+ * switching back does not repaint a white frame */
+.frameLayer {
+    position: absolute;
+    inset: 0;
+}
+
+.frameLayer.away {
+    visibility: hidden;
+    pointer-events: none;
+}
+
+.computerArea {
+    position: relative;
+}
+
+.sidebar {
+    width: var(--paper-size-sidebar);
+    border-right: var(--paper-border-width) solid var(--paper-border);
+}
+
+/* the phone layout's whole screen beside the rail */
+.sidebar.phone {
+    flex: 1;
+    width: auto;
+    min-width: 0;
+}
+
+/* the header and list sit on the border colour, so the gap between
+ * them reads as a rule */
+.computerColumn {
+    background: var(--paper-border);
+}
+
+.panelList {
+    flex: 1;
+    width: 100%;
+    height: 100%;
+    border-right: none;
+    overflow-y: auto;
+}

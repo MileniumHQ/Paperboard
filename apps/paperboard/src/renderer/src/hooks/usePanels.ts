@@ -1,4 +1,4 @@
-import { createSignal } from "solid-js";
+import { createMemo, createSignal } from "solid-js";
 import { panelsApi, type PanelItem } from "@mileniumhq/paperapi";
 import { logToMain } from "../lib/shell";
 import { isShellTab } from "../lib/shellTabs";
@@ -22,10 +22,13 @@ export function usePanels() {
     const [reloadTokens, setReloadTokens] = createSignal<
         Record<string, number>
     >({});
-    // failed refresh keeps prior list and flags retry
-    const [panelsLoadFailed, setPanelsLoadFailed] = createSignal<
-        Record<string, boolean>
+    // a failed refresh keeps the prior list and holds why it failed, for a retry
+    const [panelsLoadError, setPanelsLoadError] = createSignal<
+        Record<string, string>
     >({});
+    const panelsLoadFailed = createMemo(() =>
+        Object.fromEntries(Object.entries(panelsLoadError()).map(([id, error]) => [id, error !== ""])),
+    );
 
     const getSelectedTab = (compId: string) => {
         return activeTabByComputer()[compId] || "landing";
@@ -63,11 +66,11 @@ export function usePanels() {
                     ...prev,
                     [compId]: installed,
                 }));
-                setPanelsLoadFailed((prev) => ({ ...prev, [compId]: false }));
+                setPanelsLoadError((prev) => ({ ...prev, [compId]: "" }));
             }
         } catch (err) {
             logToMain("error", "Failed to load installed panels for", compId, err);
-            setPanelsLoadFailed((prev) => ({ ...prev, [compId]: true }));
+            setPanelsLoadError((prev) => ({ ...prev, [compId]: err instanceof Error ? err.message : String(err) }));
         }
     };
 
@@ -81,7 +84,7 @@ export function usePanels() {
         reloadTokens,
         setReloadTokens,
         panelsLoadFailed,
-        setPanelsLoadFailed,
+        panelsLoadError,
         getSelectedTab,
         setComputerTab,
         refreshPanelsForComputer,

@@ -6,6 +6,7 @@ import {
     PaperListItem,
     PaperModal,
     PaperButton,
+    PaperQuote,
     PaperText,
     useContextMenuState,
     getVarCss,
@@ -42,6 +43,7 @@ import ComputerSetupWizard from "./components/wizard/ComputerSetupWizard";
 import ComputerHeader from "./components/computer/ComputerHeader";
 import ComputerSettings from "./components/computer/ComputerSettings";
 import { isShellTab } from "./lib/shellTabs";
+import { createShownWhileClosing } from "./lib/openings";
 import ConnectionLostOverlay from "./components/computer/ConnectionLostOverlay";
 import OfflineComputerModal from "./components/computer/OfflineComputerModal";
 import ComputerRail from "./components/computer/ComputerRail";
@@ -56,6 +58,8 @@ import { computerIcon } from "./components/computer/computerIcon";
 import MobileWelcome from "./components/computer/MobileWelcome";
 import { shownComputers, showsWelcome } from "./lib/phoneComputers";
 import libraryIcon from "./assets/PanelLibrary.png";
+import styles from "./App.module.css";
+import iconStyles from "./components/computer/panelIcon.module.css";
 import { useAppSettings } from "./hooks/useAppSettings";
 import { useComputers } from "./hooks/useComputers";
 import { usePanels } from "./hooks/usePanels";
@@ -86,11 +90,14 @@ const App: Component = () => {
         reloadTokens,
         setReloadTokens,
         panelsLoadFailed,
+        panelsLoadError,
         getSelectedTab,
         setComputerTab,
         refreshPanelsForComputer,
     } = usePanels();
     const [isSetupOpen, setIsSetupOpen] = createSignal<boolean>(false);
+    // the wizard stays through the fade and starts over on the next open
+    const setupShown = createShownWhileClosing(isSetupOpen);
     // which first-open tutorials were shown; null until the record loads,
     // and it stays null if it can't be read or --no-tutorial is set, so
     // nothing opens by itself (an unreadable record never replays them all)
@@ -120,8 +127,14 @@ const App: Component = () => {
     const [uninstallError, setUninstallError] = createSignal<string | null>(
         null,
     );
-    const { appSettings, loadAppSettings, handleAppSettingsChange } =
-        useAppSettings();
+    const {
+        appSettings,
+        loadAppSettings,
+        handleAppSettingsChange,
+        settingsFailure,
+        retryLoadAppSettings,
+        dismissSettingsFailure,
+    } = useAppSettings();
     // what the main area shows: Home (where Paperboard opens), app
     // settings, or the active computer's panels
     const [railMode, setRailMode] = createSignal<"home" | "settings" | "computer">("home");
@@ -376,15 +389,23 @@ const App: Component = () => {
             }
         }
 
-        // UI restore only; fetches below name the computer explicitly
-        computersApi
-            .switch(compId)
-            .then(async () => {
-                await refreshPanelsForComputer(compId);
-            })
-            .catch((err) => {
-                logToMain("error", "Failed to switch computer:", err);
-            });
+        void connectComputer(compId);
+    };
+
+    // why a computer couldn't be made the active one, shown in its panel list
+    const [switchError, setSwitchError] = createSignal<Record<string, string>>({});
+    // makes the computer the one main talks to and Paperboard reopens, then
+    // lists its panels
+    const connectComputer = async (compId: string) => {
+        setSwitchError((prev) => ({ ...prev, [compId]: "" }));
+        try {
+            if (!(await computersApi.switch(compId))) throw new Error("Paperboard doesn't know this computer anymore.");
+        } catch (err) {
+            logToMain("error", "Failed to switch computer:", err);
+            setSwitchError((prev) => ({ ...prev, [compId]: err instanceof Error ? err.message : String(err) }));
+            return;
+        }
+        await refreshPanelsForComputer(compId);
     };
 
     const handleComputerSelect = async (compId: string) => {
@@ -518,23 +539,16 @@ const App: Component = () => {
         setComputerTab(activeComputerId(), panelId);
     };
 
-    const panelIconStyle = {
-        width: getVarCss("icon-size-large"),
-        height: getVarCss("icon-size-large"),
-        "border-radius": getVarCss("border-radius-half"),
-        "object-fit": "contain" as const,
-    };
     const renderPanelIcon = (panel: PanelItem, compId: string) => {
-        const style = panelIconStyle;
         if (panel.iconUrl) {
-            return <img src={panel.iconUrl} alt={panel.name} style={style} />;
+            return <img src={panel.iconUrl} alt={panel.name} class={iconStyles.panelIcon} />;
         }
         if (panel.icon?.includes(".")) {
             return (
                 <img
                     src={panelUrl(compId, panel.id, panel.icon)}
                     alt={panel.name}
-                    style={style}
+                    class={iconStyles.panelIcon}
                 />
             );
         }
@@ -552,7 +566,7 @@ const App: Component = () => {
         if (tab === "library") {
             return {
                 title: "Panel Library",
-                icon: <img src={libraryIcon} alt="" style={panelIconStyle} />,
+                icon: <img src={libraryIcon} alt="" class={iconStyles.panelIcon} />,
             };
         }
         if (isShellTab(tab)) {
@@ -572,7 +586,8 @@ const App: Component = () => {
             <PaperFlex
                 direction="column"
                 inert={mobileSettingsOpen()}
-                style={{ width: "100vw", height: "100vh", overflow: "hidden" }}
+                class={styles.window}
+                overflow="hidden"
             >
                 {/* a phone has no window title to show: the bar comes only to say an update is waiting */}
                 <Show when={showTopBar()}>
@@ -589,11 +604,10 @@ const App: Component = () => {
                 </Show>
                 <PaperFlex
                     direction="row"
-                    style={{
-                        flex: 1,
-                        height: showTopBar() ? "calc(100vh - var(--paperboard-titlebar-height))" : "100vh",
-                        overflow: "hidden",
-                    }}
+                    flex={1}
+                    overflow="hidden"
+                    class={styles.main}
+                    classList={{ [styles.underTopBar]: showTopBar() }}
                 >
                     <Show
                         when={!mobileWelcome()}
@@ -635,30 +649,29 @@ const App: Component = () => {
                                 direction="column"
                                 fullWidth
                                 fullHeight
-                                style={{
-                                    flex: 1,
-                                    "overflow-y": "auto",
-                                }}
+                                flex={1}
+                                overflowY="auto"
                             >
                                 <AppSettings
                                     settings={appSettings()}
                                     onChange={handleAppSettingsChange}
                                     onShowTutorial={() => setOpenTutorial("app")}
+                                    failure={settingsFailure()}
+                                    onRetryLoad={() => void retryLoadAppSettings()}
+                                    onDismissFailure={dismissSettingsFailure}
                                 />
                             </PaperFlex>
                         }
                     >
+                    {/* hidden, not unmounted, while Home shows: open
+                        panels keep their frames and come back as left */}
                     <PaperFlex
                         direction="row"
                         fullHeight
-                        style={{
-                            flex: 1,
-                            overflow: "hidden",
-                            position: "relative",
-                            // hidden, not unmounted, while Home shows: open
-                            // panels keep their frames and come back as left
-                            display: railMode() === "computer" ? "flex" : "none",
-                        }}
+                        flex={1}
+                        overflow="hidden"
+                        class={styles.computerArea}
+                        hidden={railMode() !== "computer"}
                     >
                         <Show
                             when={
@@ -677,14 +690,11 @@ const App: Component = () => {
                             direction="column"
                             background="surface-inset"
                             inert={mobilePageOpen()}
-                            style={{
-                                // the phone layout's whole screen beside the rail
-                                ...(mobile() ? { flex: 1, "min-width": 0 } : { width: getVarCss("size-sidebar") }),
-                                height: "100%",
-                                "border-right": `${getVarCss("border-width")} solid ${getVarCss("border")}`,
-                                "flex-shrink": 0,
-                                overflow: "hidden",
-                            }}
+                            fullHeight
+                            shrink={0}
+                            overflow="hidden"
+                            class={styles.sidebar}
+                            classList={{ [styles.phone]: mobile() }}
                         >
                             <For each={listedComputers()}>
                                 {(comp) => {
@@ -701,14 +711,9 @@ const App: Component = () => {
                                             fullWidth
                                             fullHeight
                                             gap={getVarCss("border-width")}
-                                            style={{
-                                                display: isActive()
-                                                    ? "flex"
-                                                    : "none",
-                                                overflow: "hidden",
-                                                background:
-                                                    getVarCss("border"),
-                                            }}
+                                            overflow="hidden"
+                                            class={styles.computerColumn}
+                                            hidden={!isActive()}
                                         >
                                             <ComputerHeader
                                                 computer={comp}
@@ -735,13 +740,7 @@ const App: Component = () => {
                                                         String(val),
                                                     )
                                                 }
-                                                style={{
-                                                    width: "100%",
-                                                    height: "100%",
-                                                    "border-right": "none",
-                                                    flex: 1,
-                                                    "overflow-y": "auto",
-                                                }}
+                                                class={styles.panelList}
                                             >
                                                 <For each={compPanels()}>
                                                     {(panel) => (
@@ -772,32 +771,28 @@ const App: Component = () => {
                                                         </PaperListItem>
                                                     )}
                                                 </For>
-                                                <Show
-                                                    when={
-                                                        panelsLoadFailed()[comp.id] &&
-                                                        compPanels().length === 0
-                                                    }
-                                                >
-                                                    <PaperFlex
-                                                        direction="column"
-                                                        gap="half"
-                                                        style={{
-                                                            padding: getVarCss("uigap"),
-                                                            "align-items": "flex-start",
-                                                        }}
-                                                    >
-                                                        <PaperText size={1} color="text-subtle">
-                                                            Couldn't load panels for this computer.
-                                                        </PaperText>
-                                                        <PaperButton size="tiny"
-                                                            variant="text"
-                                                            onClick={() =>
-                                                                void refreshPanelsForComputer(
-                                                                    comp.id,
-                                                                )
-                                                            }>
-                                                            Retry
-                                                        </PaperButton>
+                                                <Show when={switchError()[comp.id]}>
+                                                    <PaperFlex direction="column" padding="half">
+                                                        <PaperQuote variant="danger" icon="warning" title="Computer not switched" role="alert">
+                                                            <PaperFlex direction="column" gap="half" align="flex-start">
+                                                                <PaperText size={1} breakWord>{switchError()[comp.id]}</PaperText>
+                                                                <PaperButton size="tiny" onClick={() => void connectComputer(comp.id)}>
+                                                                    Retry
+                                                                </PaperButton>
+                                                            </PaperFlex>
+                                                        </PaperQuote>
+                                                    </PaperFlex>
+                                                </Show>
+                                                <Show when={!switchError()[comp.id] && panelsLoadError()[comp.id] && compPanels().length === 0}>
+                                                    <PaperFlex direction="column" padding="half">
+                                                        <PaperQuote variant="danger" icon="warning" title="Panels not loaded" role="alert">
+                                                            <PaperFlex direction="column" gap="half" align="flex-start">
+                                                                <PaperText size={1} breakWord>{panelsLoadError()[comp.id]}</PaperText>
+                                                                <PaperButton size="tiny" onClick={() => void refreshPanelsForComputer(comp.id)}>
+                                                                    Retry
+                                                                </PaperButton>
+                                                            </PaperFlex>
+                                                        </PaperQuote>
                                                     </PaperFlex>
                                                 </Show>
                                             </PaperList>
@@ -818,11 +813,9 @@ const App: Component = () => {
                         <PaperFlex
                             direction="column"
                             fullHeight
-                            style={{
-                                flex: 1,
-                                overflow: "hidden",
-                                position: "relative",
-                            }}
+                            flex={1}
+                            overflow="hidden"
+                            class={styles.computerArea}
                         >
                             <For each={listedComputers()}>
                                 {(comp) => {
@@ -833,13 +826,9 @@ const App: Component = () => {
                                         <PaperFlex
                                             direction="column"
                                             fullHeight
-                                            style={{
-                                                flex: 1,
-                                                overflow: "hidden",
-                                                display: isVisible()
-                                                    ? "flex"
-                                                    : "none",
-                                            }}
+                                            flex={1}
+                                            overflow="hidden"
+                                            hidden={!isVisible()}
                                         >
                                             <LandingView computer={comp} />
                                         </PaperFlex>
@@ -850,25 +839,9 @@ const App: Component = () => {
                             <PaperFlex
                                 direction="column"
                                 fullHeight
-                                style={{
-                                    position: "absolute",
-                                    inset: "0",
-                                    overflow: "hidden",
-                                    display: "flex",
-                                    // visibility, not display: a hidden iframe
-                                    // keeps its compositor state, so switching
-                                    // back does not repaint a white frame
-                                    visibility:
-                                        getSelectedTab(activeComputerId()) ===
-                                        "library"
-                                            ? "visible"
-                                            : "hidden",
-                                    "pointer-events":
-                                        getSelectedTab(activeComputerId()) ===
-                                        "library"
-                                            ? "auto"
-                                            : "none",
-                                }}
+                                overflow="hidden"
+                                class={styles.frameLayer}
+                                classList={{ [styles.away]: getSelectedTab(activeComputerId()) !== "library" }}
                             >
                                 <LibraryFrame
                                     active={
@@ -898,13 +871,9 @@ const App: Component = () => {
                                         <PaperFlex
                                             direction="column"
                                             fullHeight
-                                            style={{
-                                                flex: 1,
-                                                "overflow-y": "auto",
-                                                display: isVisible()
-                                                    ? "flex"
-                                                    : "none",
-                                            }}
+                                            flex={1}
+                                            overflowY="auto"
+                                            hidden={!isVisible()}
                                         >
                                             <ComputerSettings
                                                 computer={comp}
@@ -915,28 +884,14 @@ const App: Component = () => {
                                 }}
                             </For>
 
+                            {/* like the library layer: never tear down a live
+                                panel iframe on a tab switch */}
                             <PaperFlex
                                 direction="column"
                                 fullHeight
-                                style={{
-                                    position: "absolute",
-                                    inset: "0",
-                                    overflow: "hidden",
-                                    display: "flex",
-                                    // visibility, not display, for the same
-                                    // reason as the library layer: never tear
-                                    // down a live panel iframe on a tab switch
-                                    visibility: isShellTab(
-                                        getSelectedTab(activeComputerId()),
-                                    )
-                                        ? "hidden"
-                                        : "visible",
-                                    "pointer-events": isShellTab(
-                                        getSelectedTab(activeComputerId()),
-                                    )
-                                        ? "none"
-                                        : "auto",
-                                }}
+                                overflow="hidden"
+                                class={styles.frameLayer}
+                                classList={{ [styles.away]: isShellTab(getSelectedTab(activeComputerId())) }}
                             >
                                 <PanelView
                                     activePanel={getSelectedTab(
@@ -986,14 +941,17 @@ const App: Component = () => {
                     icon="settings"
                     onBack={() => setMobileSettingsOpen(false)}
                 >
-                    <div style={{ flex: 1, "min-height": 0, "overflow-y": "auto" }}>
+                    <PaperFlex direction="column" flex={1} minHeight={0} overflowY="auto">
                         <AppSettings
                             compact
                             settings={appSettings()}
                             onChange={handleAppSettingsChange}
                             onShowTutorial={() => setOpenTutorial("app")}
+                            failure={settingsFailure()}
+                            onRetryLoad={() => void retryLoadAppSettings()}
+                            onDismissFailure={dismissSettingsFailure}
                         />
-                    </div>
+                    </PaperFlex>
                 </PaperSlidePage>
             </Show>
 
@@ -1035,7 +993,7 @@ const App: Component = () => {
                 noPadding
                 size="large"
             >
-                <Show when={isSetupOpen()}>
+                <Show when={setupShown()} keyed>
                     <ComputerSetupWizard
                         onClose={() => setIsSetupOpen(false)}
                         onComplete={handleComputerAdded}
@@ -1086,13 +1044,9 @@ const App: Component = () => {
                 title="Forget Computer"
                 size="small"
                 footer={
-                    <PaperFlex
-                        direction="row"
-                        justify="flex-end"
-                        gap="half"
-                        fullWidth
-                    >
+                    <>
                         <PaperButton
+                            variant="text"
                             onClick={() => {
                                 setIsForgetConfirmOpen(false);
                                 setContextMenuComputerId(null);
@@ -1106,7 +1060,7 @@ const App: Component = () => {
                             onClick={handleConfirmForget}>
                             {isForgetting() ? "Removing..." : "Forget Computer"}
                         </PaperButton>
-                    </PaperFlex>
+                    </>
                 }
             >
                 <PaperText preset="body">
