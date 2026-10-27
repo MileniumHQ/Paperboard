@@ -22,6 +22,10 @@
     text-overflow: ellipsis;
 }
 
+.PaperButton.fullWidth {
+    width: 100%;
+}
+
 @media (hover: hover) {
     .PaperButton:focus-visible {
         outline: var(--paper-focus-ring);

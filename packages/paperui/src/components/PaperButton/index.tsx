@@ -12,6 +12,8 @@ export interface PaperButtonProps extends JSX.ButtonHTMLAttributes<HTMLButtonEle
     /** medium is the default; large is the hero CTA, tiny a low-emphasis control */
     size?: PaperButtonSize;
     variant?: PaperButtonVariant;
+    /** stretches across its container, like PaperInput's fullWidth */
+    fullWidth?: boolean;
     ref?: HTMLButtonElement | ((el: HTMLButtonElement) => void);
     /** When set, renders an anchor styled as a button instead of a button. */
     href?: string;
@@ -24,6 +26,7 @@ export function PaperButton(props: PaperButtonProps) {
         "icon",
         "size",
         "variant",
+        "fullWidth",
         "disabled",
         "class",
         "classList",
@@ -44,6 +47,7 @@ export function PaperButton(props: PaperButtonProps) {
             local.variant === "outline" ? styles.outline : "",
             local.disabled ? styles.disabled : "",
             local.icon ? styles.icon : "",
+            local.fullWidth ? styles.fullWidth : "",
             local.class,
         ]
             .filter(Boolean)

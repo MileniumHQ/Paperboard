@@ -106,6 +106,27 @@ describe("PaperButton", () => {
             anchor.remove();
         }
     });
+
+    test("fullWidth fills the row it sits in", () => {
+        const css = readFileSync(
+            join(__dirname, "../components/PaperButton/index.module.css"),
+            "utf8",
+        );
+        const style = document.createElement("style");
+        style.textContent = css;
+        document.head.append(style);
+        const { container } = render(() => <PaperButton fullWidth>Create Function</PaperButton>);
+        const button = container.firstElementChild as HTMLElement;
+        // CSS modules hash class names under test; the sheet read here has
+        // the plain ones, so each hashed class gets its plain twin
+        button.classList.add(...[...button.classList].map((c) => c.replace(/^_(.+)_[0-9a-f]+$/, "$1")));
+        try {
+            expect(button.hasAttribute("fullwidth")).toBe(false);
+            expect(getComputedStyle(button).width).toBe("100%");
+        } finally {
+            style.remove();
+        }
+    });
 });
 
 describe("PaperEmptyState", () => {
