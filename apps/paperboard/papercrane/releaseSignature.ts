@@ -44,8 +44,11 @@ function message(kind: string, fields: string[]): Buffer {
 
 export const releaseMessage = {
     panel: (id: string, version: string, sha256: string) => message("panel", [id, version, sha256.toLowerCase()]),
-    package: (name: string, version: string, platform: string, sha256: string) =>
-        message("package", [name, version, platform, sha256.toLowerCase()]),
+    // a recipe entry (packageRecipe.ts) adds its recipe's digest, so the
+    // steps are signed with the bytes; daemons that predate recipes then
+    // refuse the entry rather than install it without running the recipe
+    package: (name: string, version: string, platform: string, sha256: string, recipeSha256?: string) =>
+        message("package", [name, version, platform, sha256.toLowerCase(), ...(recipeSha256 === undefined ? [] : [recipeSha256.toLowerCase()])]),
     // daemon archives are identified by sha256, app builds by the sha512 the
     // electron-updater feed carries (base64, as the feed writes it)
     crane: (version: string, sha256: string) => message("crane", [version, sha256.toLowerCase()]),

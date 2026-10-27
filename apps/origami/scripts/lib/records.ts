@@ -2,6 +2,9 @@
 // updater scripts (never by a worker route). The daemon consumes these in
 // papercrane/engine.ts: it installs platforms[<os>-<arch>] and refuses any
 // entry without a sha256.
+import { parsePackageRecipe, type PackageRecipe } from "../../../paperboard/papercrane/packageRecipe";
+
+export type { PackageRecipe };
 
 export const PLATFORM_KEYS = [
     "linux-x64",
@@ -28,7 +31,14 @@ export interface PlatformDownload {
     sha256: string;
     size?: number;
     layout?: PackageLayout;
-    // offline release-key signature over (name, version, platform, sha256);
+    /**
+     * Steps the daemon runs on the user's computer to turn a vendor's own
+     * release into the package (papercrane/packageRecipe.ts). Replaces
+     * layout; the signature covers it.
+     */
+    recipe?: PackageRecipe;
+    // offline release-key signature over (name, version, platform, sha256,
+    // and the recipe's digest when there is one);
     // added at write time by kv.putRecord, verified by every daemon
     signature?: string;
 }
@@ -70,6 +80,14 @@ export function assertValidRecord(record: PackageRecord): void {
         }
         if (!SHA256_RE.test(dl.sha256)) {
             throw new Error(`${record.name}/${key}: missing or malformed sha256`);
+        }
+        if (dl.recipe !== undefined) {
+            if (dl.layout !== undefined) throw new Error(`${record.name}/${key}: a recipe replaces the layout; declare one or the other`);
+            try {
+                parsePackageRecipe(dl.recipe);
+            } catch (err) {
+                throw new Error(`${record.name}/${key}: ${err instanceof Error ? err.message : String(err)}`);
+            }
         }
     }
 }

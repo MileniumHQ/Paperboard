@@ -26,7 +26,8 @@ import { getSocketsDir, getPaperboardDir } from "./paths";
 import { logger } from "./logger";
 import { spawnSupervisedClient } from "./engineSupervisor";
 import { getDefaultShell } from "./pty";
-import { extractArchive, extractPackageArchive, findBinDir, packageArchiveSuffix, parsePackageLayout } from "./engineArchives";
+import { applyPackageRecipe, extractArchive, extractPackageArchive, findBinDir, packageArchiveSuffix, parsePackageLayout, RECIPE_SUFFIX } from "./engineArchives";
+import { assertRecipeRunsHere, parsePackageRecipe, recipeDigest } from "./packageRecipe";
 import { panelServices, PanelServicesManager } from "./panelServices";
 import { CredentialStore } from "./credentials";
 import { RpcError } from "./rpc/errors";
@@ -1127,8 +1128,13 @@ export class PaperCraneEngine {
                 `Install refused for package "${packageName}": checksum mismatch between update plan and registry metadata`,
             );
         }
+        // a recipe is part of what is signed: parse it before verifying
+        const recipe = downloadInfo.recipe === undefined ? null : parsePackageRecipe(downloadInfo.recipe);
+        if (recipe && downloadInfo.layout !== undefined) {
+            throw new Error(`Install refused for package "${packageName}": a recipe entry cannot also declare a layout`);
+        }
         requireReleaseSignature(
-            releaseMessage.package(packageName, meta.version, platformKey, downloadInfo.sha256),
+            releaseMessage.package(packageName, meta.version, platformKey, downloadInfo.sha256, recipe ? recipeDigest(recipe) : undefined),
             downloadInfo.signature,
             `package "${packageName}"`,
             this.releaseKey,
@@ -1155,8 +1161,9 @@ export class PaperCraneEngine {
         // refused before any download: a layout this daemon does not know
         // would install binaries where no caller looks for them
         const layout = parsePackageLayout(downloadInfo.layout);
+        if (recipe) assertRecipeRunsHere(recipe);
         // keep the URL extension so extraction dispatches on format
-        const urlExt = packageArchiveSuffix(downloadInfo.url);
+        const urlExt = recipe ? RECIPE_SUFFIX[recipe.unpack] : packageArchiveSuffix(downloadInfo.url);
         const tempArchive = path.join(
             this.packagesDir,
             `${packageName}-archive.tmp-${Date.now()}${urlExt}`,
@@ -1200,7 +1207,8 @@ export class PaperCraneEngine {
             });
 
             if (!fs.existsSync(pkgDir)) fs.mkdirSync(pkgDir, { recursive: true });
-            await extractPackageArchive(tempArchive, pkgDir, layout, urlExt);
+            if (recipe) await applyPackageRecipe(tempArchive, pkgDir, recipe);
+            else await extractPackageArchive(tempArchive, pkgDir, layout, urlExt);
             log(
                 `extraction complete; bin present: ${this.findBinDir(pkgDir, 4) !== null}`,
             );

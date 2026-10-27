@@ -14,7 +14,8 @@
         "test": "bun test ./test",
         "test:library": "bun run --cwd library test",
         "update:java": "bun scripts/update-java.ts",
-        "update:ollama": "bun scripts/update-ollama.ts"
+        "update:ollama": "bun scripts/update-ollama.ts",
+        "update:helium": "bun scripts/update-helium.ts"
     },
     "devDependencies": {
         "@cloudflare/workers-types": "^5.20261005.1",

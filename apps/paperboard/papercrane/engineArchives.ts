@@ -4,7 +4,9 @@ import { logger } from "./logger";
 import fs from "fs";
 import * as tar from "tar";
 import AdmZip from "adm-zip";
-import { moveFileSafe, makeSafeTarFilter, scanTarMembers } from "./storage";
+import { spawn } from "child_process";
+import { moveFileSafe, makeSafeTarFilter, scanTarMembers, TAR_BUDGET } from "./storage";
+import type { PackageRecipe } from "./packageRecipe";
 
 // Extracts .tar.gz, .tgz, .zip or single files
 export async function extractArchive(
@@ -156,4 +158,114 @@ export async function extractPackageArchive(
     fs.mkdirSync(pkgDir, { recursive: true });
     await scanTarMembers(archivePath, path.resolve(pkgDir));
     await tar.extract({ file: archivePath, cwd: pkgDir, strip: 0, filter: makeSafeTarFilter(path.resolve(pkgDir)) });
+}
+
+// ─── Package recipes ─────────────────────────────────────────────────────────
+// See packageRecipe.ts. The archive is unpacked into a hidden scratch dir
+// inside the staging dir, each take moves one path out of it, and the
+// scratch dir goes. Nothing in the archive runs.
+
+/** archive file suffix for a recipe's unpack step (extractArchive dispatches on it) */
+export const RECIPE_SUFFIX: Record<PackageRecipe["unpack"], string> = {
+    zip: ".zip",
+    tar: ".tar",
+    "tar.xz": ".tar.xz",
+    dmg: ".dmg",
+};
+
+// a system tool, with its stderr in the error when it fails
+function runTool(command: string, args: string[], stdout?: fs.WriteStream, limit?: number): Promise<void> {
+    return new Promise((resolve, reject) => {
+        const child = spawn(command, args, { stdio: ["ignore", stdout ? "pipe" : "ignore", "pipe"] });
+        let stderr = "";
+        let written = 0;
+        let refused: Error | null = null;
+        child.stderr!.on("data", (chunk: Buffer) => {
+            if (stderr.length < 4000) stderr += chunk.toString();
+        });
+        if (stdout) {
+            child.stdout!.on("data", (chunk: Buffer) => {
+                written += chunk.length;
+                if (limit !== undefined && written > limit && !refused) {
+                    refused = new Error("Archive exceeds extraction budget");
+                    child.kill();
+                }
+            });
+            child.stdout!.pipe(stdout);
+        }
+        child.on("error", (err: NodeJS.ErrnoException) => {
+            reject(err.code === "ENOENT" ? new Error(`${command} is needed to unpack this package but was not found on this computer`) : err);
+        });
+        child.on("close", (code) => {
+            const finish = () => {
+                if (refused) reject(refused);
+                else if (code === 0) resolve();
+                else reject(new Error(`${command} failed (exit ${code}): ${stderr.trim() || "no output"}`));
+            };
+            if (stdout && !stdout.writableFinished) stdout.on("finish", finish).end();
+            else finish();
+        });
+    });
+}
+
+async function extractTar(archivePath: string, dest: string): Promise<void> {
+    await scanTarMembers(archivePath, path.resolve(dest));
+    await tar.extract({ file: archivePath, cwd: dest, strip: 0, filter: makeSafeTarFilter(path.resolve(dest)) });
+}
+
+// a take's source must be inside the unpacked tree after symlinks resolve
+function insideTree(tree: string, source: string): string {
+    const full = path.join(tree, ...source.split("/"));
+    if (!fs.existsSync(full)) throw new Error(`Package recipe source ${source} is not in the archive`);
+    const root = fs.realpathSync(tree);
+    const real = fs.realpathSync(full);
+    if (real !== root && !real.startsWith(root + path.sep)) throw new Error(`Package recipe source ${source} leaves the archive`);
+    return full;
+}
+
+export async function applyPackageRecipe(archivePath: string, pkgDir: string, recipe: PackageRecipe): Promise<void> {
+    const scratch = path.join(pkgDir, ".unpack");
+    fs.mkdirSync(scratch, { recursive: true });
+    let mounted: string | null = null;
+    try {
+        let tree = scratch;
+        if (recipe.unpack === "zip") {
+            await extractArchive(archivePath, scratch);
+        } else if (recipe.unpack === "tar") {
+            await extractTar(archivePath, scratch);
+        } else if (recipe.unpack === "tar.xz") {
+            const plain = path.join(pkgDir, ".unpack.tar");
+            try {
+                await runTool("xz", ["-dc", "--", archivePath], fs.createWriteStream(plain), TAR_BUDGET.maxBytes);
+                await extractTar(plain, scratch);
+            } finally {
+                await fs.promises.rm(plain, { force: true });
+            }
+        } else {
+            if (process.platform !== "darwin") throw new Error("This package unpacks a macOS disk image, which only macOS can open");
+            tree = path.join(scratch, "volume");
+            fs.mkdirSync(tree);
+            await runTool("hdiutil", ["attach", "-readonly", "-nobrowse", "-noautoopen", "-mountpoint", tree, archivePath]);
+            mounted = tree;
+        }
+        for (const [dest, source] of Object.entries(recipe.take)) {
+            const from = insideTree(tree, source);
+            const to = path.join(pkgDir, ...dest.split("/"));
+            if (fs.existsSync(to)) throw new Error(`Package recipe writes ${dest} twice`);
+            fs.mkdirSync(path.dirname(to), { recursive: true });
+            // a mounted image is read-only: ditto copies it out with its
+            // signatures and attributes intact
+            if (mounted) await runTool("ditto", [from, to]);
+            else await fs.promises.rename(from, to);
+        }
+    } finally {
+        if (mounted) {
+            await runTool("hdiutil", ["detach", mounted]).catch(async (err) => {
+                logger.warn("[engineArchives.ts] disk image detach failed; forcing:", err);
+                await runTool("hdiutil", ["detach", "-force", mounted!]);
+            });
+        }
+        await fs.promises.rm(scratch, { recursive: true, force: true });
+    }
+    if (!fs.existsSync(path.join(pkgDir, "bin"))) throw new Error("Package recipe left no bin/ directory");
 }

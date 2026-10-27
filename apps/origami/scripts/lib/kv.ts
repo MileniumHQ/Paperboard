@@ -7,6 +7,7 @@ import type { KeyObject } from "node:crypto";
 import { assertValidRecord, type PackageRecord, type PlatformKey } from "./records";
 import { releaseMessage, signRelease } from "../../../../scripts/releaseSigning";
 import { RELEASE_PUBLIC_KEY, verifyRelease } from "../../../paperboard/papercrane/releaseSignature";
+import { parsePackageRecipe, recipeDigest } from "../../../paperboard/papercrane/packageRecipe";
 
 const ORIGAMI_DIR = path.resolve(import.meta.dir, "..", "..");
 
@@ -44,7 +45,8 @@ export function signRecord(
     const platforms: PackageRecord["platforms"] = {};
     for (const [platform, dl] of Object.entries(record.platforms)) {
         if (!dl) continue;
-        const msg = releaseMessage.package(record.name, record.version, platform, dl.sha256);
+        const recipe = dl.recipe === undefined ? undefined : recipeDigest(parsePackageRecipe(dl.recipe));
+        const msg = releaseMessage.package(record.name, record.version, platform, dl.sha256, recipe);
         const signature = signRelease(key, msg);
         if (!verifyRelease(msg, signature, publicKey)) {
             throw new Error("the release signing key does not match RELEASE_PUBLIC_KEY; refusing to write records");

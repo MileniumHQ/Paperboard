@@ -11,6 +11,9 @@ import {
     parseSha256Sums,
     type GithubRelease,
 } from "../scripts/update-ollama";
+import { buildHeliumRecord, buildLatestHeliumRecord, REPOS, type HeliumRepo } from "../scripts/update-helium";
+import { recipeDigest } from "../../paperboard/papercrane/packageRecipe";
+import { assertValidRecord } from "../scripts/lib/records";
 import { writeRecords } from "../scripts/lib/cli";
 import { putRecord, wranglerPutArgs } from "../scripts/lib/kv";
 import type { PackageRecord } from "../scripts/lib/records";
@@ -137,6 +140,102 @@ describe("update-ollama", () => {
         const fetchFn = (async (url: string) =>
             String(url).endsWith("sha256sum.txt") ? new Response(sums) : Response.json(release())) as unknown as typeof fetch;
         expect((await buildLatestOllamaRecord(fetchFn)).version).toBe("0.34.4");
+    });
+});
+
+function heliumReleases(tags: Partial<Record<HeliumRepo, string>> = {}, drop?: string): Record<HeliumRepo, GithubRelease> {
+    const v = (repo: HeliumRepo) => tags[repo] ?? "0.20.1.1";
+    const asset = (name: string, i: number) => ({
+        name,
+        size: 100 + i,
+        digest: name === drop ? null : `sha256:${sha(String(i))}`,
+        browser_download_url: `https://github.com/imputnet/x/releases/download/v/${name}`,
+    });
+    return {
+        "helium-linux": {
+            tag_name: v("helium-linux"),
+            assets: [`helium-${v("helium-linux")}-x86_64_linux.tar.xz`, `helium-${v("helium-linux")}-arm64_linux.tar.xz`, "helium-0.20.1.1-x86_64.AppImage"].map(asset),
+        },
+        "helium-macos": {
+            tag_name: v("helium-macos"),
+            assets: [`helium_${v("helium-macos")}_x86_64-macos.dmg`, `helium_${v("helium-macos")}_arm64-macos.dmg`].map((n, i) => asset(n, i + 3)),
+        },
+        "helium-windows": {
+            tag_name: v("helium-windows"),
+            assets: [`helium_${v("helium-windows")}_x64-windows.zip`, `helium_${v("helium-windows")}_arm64-windows.zip`].map((n, i) => asset(n, i + 5)),
+        },
+    };
+}
+
+describe("update-helium", () => {
+    it("points every platform at imputnet's own asset with the recipe that unpacks it", () => {
+        const record = buildHeliumRecord(heliumReleases());
+        expect(record).toMatchObject({ name: "helium", version: "0.20.1.1" });
+        expect(record.platforms["linux-x64"]).toMatchObject({
+            url: expect.stringContaining("helium-0.20.1.1-x86_64_linux.tar.xz"),
+            sha256: sha("0"),
+            recipe: { unpack: "tar.xz", take: { bin: "helium-0.20.1.1-x86_64_linux" } },
+        });
+        expect(record.platforms["macos-arm64"]).toMatchObject({
+            url: expect.stringContaining("helium_0.20.1.1_arm64-macos.dmg"),
+            recipe: { unpack: "dmg", take: { "bin/Helium.app": "Helium.app" } },
+        });
+        expect(record.platforms["windows-arm64"]).toMatchObject({
+            recipe: { unpack: "zip", take: { bin: "helium_0.20.1.1_arm64-windows" } },
+        });
+        // an AppImage is not what a package installs
+        expect(JSON.stringify(record)).not.toContain("AppImage");
+        for (const dl of Object.values(record.platforms)) expect(dl!.layout).toBeUndefined();
+    });
+
+    it("writes nothing while the platform repos are on different versions", () => {
+        expect(() => buildHeliumRecord(heliumReleases({ "helium-macos": "0.20.2.1" }))).toThrow(/different versions/);
+    });
+
+    it("refuses an asset without a digest instead of publishing a partial record", () => {
+        expect(() => buildHeliumRecord(heliumReleases({}, "helium_0.20.1.1_x64-windows.zip"))).toThrow(/x64-windows.zip has no sha256/);
+    });
+
+    it("refuses prereleases", () => {
+        const releases = heliumReleases();
+        releases["helium-linux"].prerelease = true;
+        expect(() => buildHeliumRecord(releases)).toThrow(/not a stable/);
+    });
+
+    it("fetches the latest release of each repo", async () => {
+        const all = heliumReleases();
+        const fetchFn = (async (url: string) => {
+            const repo = REPOS.find((r) => String(url).includes(`/${r}/`))!;
+            return Response.json(all[repo]);
+        }) as unknown as typeof fetch;
+        expect((await buildLatestHeliumRecord(fetchFn)).version).toBe("0.20.1.1");
+    });
+});
+
+describe("package recipes in records", () => {
+    const base: PackageRecord = {
+        name: "helium",
+        version: "1.0.0",
+        platforms: { "linux-x64": { url: "https://x.test/a.tar.xz", sha256: sha("a"), recipe: { unpack: "tar.xz", take: { bin: "a" } } } },
+    };
+
+    it("refuses a recipe that climbs out of the package, or one beside a layout", () => {
+        const climbing = { ...base, platforms: { "linux-x64": { ...base.platforms["linux-x64"]!, recipe: { unpack: "zip" as const, take: { bin: "../.." } } } } };
+        expect(() => assertValidRecord(climbing)).toThrow(/linux-x64: .*plain relative path/);
+        const both = { ...base, platforms: { "linux-x64": { ...base.platforms["linux-x64"]!, layout: "bin" as const } } };
+        expect(() => assertValidRecord(both)).toThrow(/declare one or the other/);
+    });
+
+    it("signs the recipe with the archive, so other steps do not verify", async () => {
+        let written: PackageRecord | null = null;
+        await putRecord(base, keys.privateKey, async (_command, args) => {
+            written = JSON.parse(args[5]!);
+            return { stdout: "", stderr: "" };
+        }, PUBLIC);
+        const entry = written!.platforms["linux-x64"]!;
+        const signed = releaseMessage.package("helium", "1.0.0", "linux-x64", entry.sha256, recipeDigest(entry.recipe!));
+        expect(verifyRelease(signed, entry.signature, PUBLIC)).toBe(true);
+        expect(verifyRelease(releaseMessage.package("helium", "1.0.0", "linux-x64", entry.sha256), entry.signature, PUBLIC)).toBe(false);
     });
 });
 
