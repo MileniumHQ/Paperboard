@@ -14,6 +14,7 @@ import { typeDisplayName } from "../lib/typeCatalog";
 import { actionParams, formatFallbackLabel, parseTemplateTokens, type TemplateToken } from "../lib/template";
 import type { ActionBlockProps } from "./actionBlockProps";
 import InputPill from "./fields/InputPill";
+import "./ActionBlock.css";
 
 export type { ActionBlockProps };
 

@@ -1,5 +1,6 @@
 import { Show, For, onMount, onCleanup } from "solid-js";
 import { PaperIcon } from "@mileniumhq/paperui";
+import "./menus.css";
 
 export interface ActionDropdownMenuItem {
     label: string;

@@ -1,0 +1,69 @@
+/* A note on the canvas. */
+
+.canvas-note {
+    position: absolute;
+    pointer-events: auto;
+    background: var(--paper-surface-sunken);
+    border: var(--paper-border-width) solid var(--paper-border);
+    border-top: var(--paper-thickest-border-width) solid var(--paper-warning);
+    border-radius: var(--paper-border-radius);
+    width: var(--actions-note-width);
+    user-select: none;
+    -webkit-user-select: none;
+    cursor: grab;
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+    transition: border-color var(--paper-tiny-transition) var(--paper-ease-standard);
+}
+
+.canvas-note.dragging {
+    cursor: grabbing;
+    z-index: var(--paper-z-drag);
+    border-color: var(--paper-warning);
+}
+
+.canvas-note-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--paper-uigap-half) var(--paper-uigap-threefourths);
+    border-bottom: var(--paper-border-width) solid var(--paper-border-subtle);
+}
+
+.canvas-note-title {
+    display: flex;
+    align-items: center;
+    gap: var(--paper-uigap-half);
+    color: var(--paper-warning);
+}
+
+.canvas-note-icon {
+    font-size: var(--paper-icon-size-small);
+    width: var(--paper-icon-size-small);
+    height: var(--paper-icon-size-small);
+}
+
+.canvas-note-textarea {
+    width: 100%;
+    min-height: var(--actions-note-min-height);
+    max-height: var(--actions-note-max-height);
+    box-sizing: border-box;
+    padding: var(--paper-uigap-threefourths);
+    border: 0;
+    outline: none;
+    background: transparent;
+    color: var(--paper-text);
+    font-family: inherit;
+    font-size: var(--paper-text-size-2);
+    line-height: var(--paper-leading-normal);
+    resize: vertical;
+    user-select: text;
+    -webkit-user-select: text;
+    cursor: text;
+}
+
+.canvas-note-textarea::placeholder {
+    color: var(--paper-text-subtle);
+    opacity: var(--paper-opacity-disabled);
+}

@@ -38,6 +38,7 @@ import FunctionList from "./library/FunctionList";
 import FunctionModal from "./library/FunctionModal";
 import SearchResults from "./library/SearchResults";
 import CategoryItems from "./library/CategoryItems";
+import "./ActionLibrary.css";
 
 export interface ActionLibraryProps {
     onStartDrag: (

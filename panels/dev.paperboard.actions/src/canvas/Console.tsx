@@ -2,6 +2,7 @@
 import { For, Show } from "solid-js";
 import { createStore } from "solid-js/store";
 import { PaperButton, PaperIcon, PaperText } from "@mileniumhq/paperui";
+import "./Console.css";
 
 // console log ring: newest entries win, oldest drop past the cap
 const MAX_CONSOLE_LOGS = 500;

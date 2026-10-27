@@ -1,6 +1,9 @@
 // The Actions editor: the Library, the canvas of flows and notes, and the
 // controls over it. The document, runs, pickers and pointer work each live
 // in src/canvas; this puts them on screen.
+// PaperUI's rules load before every panel stylesheet the components below
+// import, so the panel's own rules win where they meet
+import "@mileniumhq/paperui/style.css";
 import { createMemo, createSignal, For, Show } from "solid-js";
 import {
     PaperContextMenu,
@@ -28,7 +31,7 @@ import ConsolePanel, { createConsoleLog } from "./canvas/Console";
 import BlockMenu from "./canvas/BlockMenu";
 import Notices from "./canvas/Notices";
 import GhostBlock from "./canvas/GhostBlock";
-import "@mileniumhq/paperui/style.css";
+// the canvas shell loads last: the dragged ghost's rules beat the block's
 import "./style.css";
 
 export default function App() {

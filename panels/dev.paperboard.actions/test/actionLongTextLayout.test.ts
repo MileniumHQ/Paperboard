@@ -51,11 +51,14 @@ function readStyle(name: string): string {
 }
 
 // Rebuild the exact cascade the panel ships: PaperUI tokens/rules followed by
-// the panel stylesheet. @import lines are resolved here so the fixture does not
-// depend on a build or on the font files being present.
+// the panel's footprints and the block's own stylesheet. @import lines are
+// resolved here so the fixture does not depend on a build or on the font
+// files being present.
 function fixtureCss(): string {
     const styles = readStyle("styles.css").replace(/^\s*@import\s+[^;]+;\s*$/gm, "");
-    const panel = readFileSync(join(panelDir, "src/style.css"), "utf8");
+    const panel = ["src/style.css", "src/components/ActionBlock.css"]
+        .map((file) => readFileSync(join(panelDir, file), "utf8"))
+        .join("\n");
     return [readStyle("colors.css"), readStyle("effects.css"), readStyle("rules.css"), styles, panel].join(
         "\n",
     );

@@ -1,0 +1,181 @@
+/* The popups a block field opens: the variable picker and the option
+   picker share one look. */
+
+.actionVariableMenu {
+    position: fixed;
+    transform-origin: top left;
+    background: var(--paper-surface);
+    border: var(--paper-border-width) solid var(--paper-border);
+    border-radius: var(--paper-border-radius);
+    min-width: var(--actions-menu-min);
+    max-width: var(--actions-menu-max);
+    max-height: var(--actions-menu-height);
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: var(--paper-uigap-onefourth);
+    z-index: calc(var(--paper-z-menu) + 2);
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap-sixth);
+    animation: scaleInVariableMenu var(--paper-tiny-transition) var(--paper-ease-standard);
+}
+
+.actionVariableMenuGroups {
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap-half);
+}
+
+.actionVariableMenuGroup {
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap-onefourth);
+    background: color-mix(in srgb, var(--paper-contrast) 5%, transparent);
+    border-radius: var(--paper-border-radius-half);
+    padding: var(--paper-uigap-onefourth);
+}
+
+.actionVariableMenuGroup .actionVariableMenuItem {
+    margin-left: var(--paper-uigap-half);
+}
+
+.actionVariableMenuGroupHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--paper-uigap-half);
+    padding: var(--paper-uigap-onefourth) var(--paper-uigap-half) 0;
+}
+
+.actionVariableMenuGroupName {
+    font-size: var(--paper-text-size-1);
+    font-weight: var(--paper-weight-bold);
+    text-transform: uppercase;
+    color: var(--paper-text-subtle);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.actionVariableMenuGroupCount {
+    font-size: var(--paper-text-size-1);
+    font-weight: var(--paper-weight-bold);
+    color: var(--paper-text-subtle);
+    background: color-mix(in srgb, var(--paper-contrast) 10%, transparent);
+    border-radius: var(--paper-border-radius);
+    padding: 0 var(--paper-uigap-half);
+    line-height: var(--paper-leading-relaxed);
+    flex-shrink: 0;
+}
+
+.actionVariableMenuTypeBadge {
+    font-size: var(--paper-text-size-1);
+    font-weight: var(--paper-weight-bold);
+    text-transform: uppercase;
+    color: var(--paper-primary-deep);
+    background: color-mix(in srgb, var(--paper-primary) 14%, transparent);
+    border-radius: var(--paper-border-radius);
+    padding: 0 var(--paper-uigap-half);
+    line-height: var(--paper-leading-relaxed);
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.actionVariableMenuItem.isActive {
+    background: color-mix(in srgb, var(--paper-primary) 14%, transparent);
+}
+
+@keyframes scaleInVariableMenu {
+    from {
+        opacity: 0;
+        transform: translateY(calc(var(--paper-uigap-third) * -1)) scale(var(--paper-scale-press));
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.actionVariableMenu::-webkit-scrollbar {
+    width: var(--paper-uigap-third);
+}
+
+.actionVariableMenu::-webkit-scrollbar-thumb {
+    background: var(--paper-border);
+    border-radius: var(--paper-uigap-sixth);
+}
+
+.actionVariableMenuItem {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--paper-uigap-half);
+    padding: var(--paper-uigap-onefourth) var(--paper-uigap-half);
+    border-radius: var(--paper-border-radius-half);
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
+    transition: background var(--paper-tiny-transition) var(--paper-ease-standard);
+}
+
+@media (hover: hover) {
+    .actionVariableMenuItem:hover {
+        background: color-mix(in srgb, var(--paper-primary) 14%, transparent);
+    }
+}
+@media (hover: none) {
+    .actionVariableMenuItem:active {
+        background: color-mix(in srgb, var(--paper-primary) 14%, transparent);
+    }
+}
+
+.actionVariableMenuItemLeft {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--paper-uigap-half);
+    min-width: 0;
+    flex-shrink: 0;
+}
+
+.actionVariableMenuItemLeft [class*="PaperIcon"] {
+    font-size: var(--paper-text-size-3);
+    width: var(--paper-icon-size-tiny);
+    height: var(--paper-icon-size-tiny);
+    color: var(--paper-primary-deep);
+    flex-shrink: 0;
+}
+
+.actionVariableMenuItemLabel {
+    font-size: var(--paper-text-size-2);
+    font-weight: var(--paper-weight-medium);
+    color: var(--paper-text);
+    white-space: nowrap;
+}
+
+/* the option popup hugs its widest value instead of the shared min-width */
+.actionVariableMenu.actionOptionMenu {
+    min-width: 0;
+    width: max-content;
+    max-width: var(--actions-menu-max);
+}
+
+.actionVariableMenuEmpty {
+    padding: var(--paper-uigap-threefourths) var(--paper-uigap);
+    font-size: var(--paper-text-size-2);
+    color: var(--paper-text-subtle);
+    text-align: center;
+}
+
+.actionVariableMenuItem.selectedOption {
+    background: color-mix(in srgb, var(--paper-primary) 18%, transparent);
+    color: var(--paper-primary);
+    font-weight: var(--paper-weight-semibold);
+}
+
+.actionOptionCheck {
+    font-size: var(--paper-icon-size-small);
+    width: var(--paper-icon-size-small);
+    height: var(--paper-icon-size-small);
+    color: var(--paper-primary);
+}

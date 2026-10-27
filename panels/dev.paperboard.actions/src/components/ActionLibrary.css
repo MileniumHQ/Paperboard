@@ -1,0 +1,204 @@
+/* The Library sidebar: the category rail, header, search and the blocks
+   offered for dragging. */
+
+.library-sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: auto;
+    height: 100%;
+    z-index: var(--paper-z-sticky);
+    background: var(--paper-surface);
+    border-right: var(--paper-border-width) solid var(--paper-border);
+    display: flex;
+    flex-direction: row;
+    overflow: hidden;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.library-rail-container {
+    height: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior-y: contain;
+    background: var(--paper-surface-raised);
+    flex-shrink: 0;
+    scrollbar-width: none;
+}
+
+.library-rail-container::-webkit-scrollbar {
+    display: none;
+}
+
+.library-rail-separator {
+    height: var(--paper-border-width);
+    width: 60%;
+    margin: var(--paper-uigap-onefourth) auto;
+    background-color: var(--paper-border);
+    opacity: var(--paper-opacity-disabled);
+}
+
+.library-content {
+    width: var(--actions-library-width);
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--paper-surface);
+}
+
+.library-header {
+    padding: var(--paper-uigap);
+    border-bottom: var(--paper-border-width) solid var(--paper-border);
+    background: var(--paper-surface-raised);
+    flex-shrink: 0;
+}
+
+.library-header-top-row {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+}
+
+.library-scroll {
+    position: relative;
+    flex: 1;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    padding: var(--paper-uigap);
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap);
+}
+
+.library-search-group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap-half);
+}
+
+.library-section-header {
+    display: flex;
+    align-items: center;
+    gap: var(--paper-uigap-half);
+    padding: var(--paper-uigap-onefourth) 0;
+    color: var(--paper-text-subtle);
+}
+
+/* panel-declared categories: in-flow headers, navigated with the select
+   above the list */
+.library-category-section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap-half);
+}
+
+.library-category-header {
+    padding: var(--paper-uigap-half) 0 0;
+}
+
+.library-section-header [class*="PaperIcon"] {
+    font-size: var(--paper-icon-size-medium);
+    width: var(--paper-icon-size-medium);
+    height: var(--paper-icon-size-medium);
+}
+
+.library-function-group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap-half);
+    padding: var(--paper-uigap-half);
+    border-radius: var(--paper-border-radius-half);
+    background: color-mix(in srgb, var(--paper-contrast) 5%, transparent);
+}
+
+.library-function-header {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--paper-uigap-half);
+}
+
+.library-function-title {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: var(--paper-uigap-half);
+    min-width: 0;
+}
+
+.library-function-title [class*="PaperIcon"] {
+    color: var(--paper-text-subtle);
+    flex-shrink: 0;
+}
+
+.library-function-caption {
+    margin-bottom: calc(var(--paper-uigap-onefourth) * -1);
+}
+
+.library-param-row {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: var(--paper-uigap-half);
+    width: 100%;
+}
+
+.library-param-row > :first-child {
+    flex: 1;
+    min-width: 0;
+}
+
+.library-function-actions {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: var(--paper-uigap-onefourth);
+}
+
+.library-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--paper-uigap-half);
+    padding: var(--paper-uigap-quadruple) 0;
+    opacity: var(--paper-opacity-disabled);
+}
+
+.library-block-wrapper {
+    position: relative;
+    cursor: grab;
+    width: fit-content;
+    max-width: 100%;
+}
+
+.library-block-wrapper .action {
+    position: relative;
+    top: 0;
+    left: 0;
+    transform: none;
+}
+
+.library-toggle-collapsed {
+    position: fixed;
+    top: var(--paper-uigap);
+    left: var(--paper-uigap);
+    z-index: var(--paper-z-sticky);
+}
+
+/* the panels' blocks couldn't be read: what went wrong, with Retry */
+.library-error {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--paper-uigap-half);
+    margin: var(--paper-uigap-half) var(--paper-uigap);
+    padding: var(--paper-uigap-half) var(--paper-uigap);
+    border-radius: var(--paper-border-radius-half);
+    background: var(--paper-surface-inset);
+}

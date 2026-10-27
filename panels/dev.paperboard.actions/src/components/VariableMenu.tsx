@@ -2,6 +2,7 @@ import { Show, For, createSignal, createMemo, createEffect, onMount, onCleanup }
 import { PaperIcon } from "@mileniumhq/paperui";
 import { variableFieldIcon } from "../lib/variableTypes";
 import { typeDisplayName } from "../lib/typeCatalog";
+import "./menus.css";
 
 export interface VariableMenuItem {
     id: string;

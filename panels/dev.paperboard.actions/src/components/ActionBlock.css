@@ -1,0 +1,641 @@
+/* A block on the canvas and in the Library: its card, nesting, fields,
+   chips, problems, extra options and the drop targets inside a flow. */
+
+.action.isContainer {
+    min-width: var(--actions-container-min);
+}
+
+.ifElsePlain {
+    display: block;
+    width: 100%;
+    text-align: center;
+}
+
+.action {
+    position: absolute;
+    pointer-events: auto;
+    background: var(--paper-surface-sunken);
+    border: var(--paper-border-width) solid var(--paper-border);
+    border-radius: var(--paper-border-radius);
+    padding: var(--paper-uigap-threefourths) var(--paper-uigap);
+    user-select: none;
+    -webkit-user-select: none;
+    cursor: grab;
+    width: max-content;
+    max-width: var(--actions-action-max);
+    box-sizing: border-box;
+    display: flex;
+    gap: var(--paper-uigap-half);
+    transition: border-color var(--paper-tiny-transition) var(--paper-ease-standard);
+}
+
+.action.dragging {
+    cursor: grabbing;
+    z-index: var(--paper-z-drag);
+    border-color: var(--paper-primary);
+}
+
+.actionHeaderRow {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: var(--paper-uigap-half);
+    width: 100%;
+}
+
+.triggerAction {
+    min-width: var(--actions-trigger-min);
+    width: fit-content;
+}
+
+.triggerNestedActions {
+    display: flex;
+    flex-direction: column;
+    gap: var(--paper-uigap-half);
+    width: calc(100% - var(--paper-uigap-half));
+    margin-left: var(--paper-uigap-half);
+    padding-left: var(--paper-uigap-half);
+    border-left: var(--paper-border-width) solid var(--paper-border-subtle);
+    box-sizing: border-box;
+}
+
+/* nesting deepens per level, capped at 15% */
+.triggerNestedActions .action {
+    background: color-mix(
+        in srgb,
+        var(--paper-contrast) 3%,
+        var(--paper-surface-sunken)
+    );
+}
+
+.triggerNestedActions .triggerNestedActions .action {
+    background: color-mix(
+        in srgb,
+        var(--paper-contrast) 6%,
+        var(--paper-surface-sunken)
+    );
+}
+
+.triggerNestedActions .triggerNestedActions .triggerNestedActions .action {
+    background: color-mix(
+        in srgb,
+        var(--paper-contrast) 9%,
+        var(--paper-surface-sunken)
+    );
+}
+
+.triggerNestedActions
+    .triggerNestedActions
+    .triggerNestedActions
+    .triggerNestedActions
+    .action {
+    background: color-mix(
+        in srgb,
+        var(--paper-contrast) 12%,
+        var(--paper-surface-sunken)
+    );
+}
+
+.triggerNestedActions
+    .triggerNestedActions
+    .triggerNestedActions
+    .triggerNestedActions
+    .triggerNestedActions
+    .action {
+    background: color-mix(
+        in srgb,
+        var(--paper-contrast) 15%,
+        var(--paper-surface-sunken)
+    );
+}
+
+.nestedActionWrapper {
+    width: 100%;
+    position: relative;
+}
+
+.nestedActionWrapper .action {
+    position: relative;
+    top: 0;
+    left: 0;
+    transform: none;
+    width: 100%;
+    max-width: 100%;
+}
+
+.actionText {
+    font-weight: var(--paper-weight-medium);
+    font-size: var(--paper-text-size-3);
+    line-height: var(--paper-leading-normal);
+    word-break: normal;
+    overflow-wrap: break-word;
+    flex: 1;
+    min-width: 0;
+}
+
+.actionHeaderIcon {
+    font-size: var(--paper-icon-size-medium);
+    width: var(--paper-icon-size-medium);
+    height: var(--paper-icon-size-medium);
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--paper-text);
+    margin-right: var(--paper-uigap-half);
+}
+
+.actionHeaderIcon img {
+    width: var(--paper-icon-size-medium);
+    height: var(--paper-icon-size-medium);
+    object-fit: contain;
+}
+
+.action.runningFlow {
+    border-color: var(--paper-primary);
+}
+
+.actionInput {
+    background: color-mix(in srgb, var(--paper-primary) 20%, transparent);
+    color: var(--paper-primary);
+    padding: 0 var(--paper-uigap-onefourth);
+    border-radius: var(--paper-border-radius-half);
+    font-weight: var(--paper-weight-regular);
+    cursor: pointer;
+    transition: background var(--paper-tiny-transition) var(--paper-ease-standard), color var(--paper-tiny-transition) var(--paper-ease-standard);
+    display: inline;
+    vertical-align: baseline;
+    font-size: inherit;
+    line-height: inherit;
+    border: none;
+    box-sizing: border-box;
+}
+
+@media (hover: hover) {
+    .actionInput:hover {
+        background: color-mix(in srgb, var(--paper-primary) 35%, transparent);
+    }
+}
+@media (hover: none) {
+    .actionInput:active {
+        background: color-mix(in srgb, var(--paper-primary) 35%, transparent);
+    }
+}
+
+.actionInput.colorless {
+    background: color-mix(in srgb, var(--paper-contrast) 8%, transparent);
+    color: var(--paper-text-subtle);
+}
+
+@media (hover: hover) {
+    .actionInput.colorless:hover {
+        background: color-mix(in srgb, var(--paper-contrast) 14%, transparent);
+    }
+}
+@media (hover: none) {
+    .actionInput.colorless:active {
+        background: color-mix(in srgb, var(--paper-contrast) 14%, transparent);
+    }
+}
+
+.actionInput.requiredError {
+    background: color-mix(in srgb, var(--paper-danger) 16%, transparent);
+    color: var(--paper-danger);
+}
+
+@media (hover: hover) {
+    .actionInput.requiredError:hover {
+        background: color-mix(in srgb, var(--paper-danger) 25%, transparent);
+    }
+}
+@media (hover: none) {
+    .actionInput.requiredError:active {
+        background: color-mix(in srgb, var(--paper-danger) 25%, transparent);
+    }
+}
+
+/* the wrap is the pill's box in the row: it hugs the value up to the cap,
+   so the pill never takes a line of its own */
+.actionEditableWrap {
+    display: inline-flex;
+    /* as a flex item the wrap must not take the focused value's width as
+       its automatic minimum; that would defeat the locked footprint */
+    min-width: 0;
+    /* a plain length: a percentage cap is ignored when the card measures
+       its content, so a long hidden value would still widen the flow */
+    max-width: var(--actions-editable-max);
+    vertical-align: middle;
+}
+
+.actionEditableWrap.isMultiline {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+}
+
+.actionInput.actionEditable {
+    flex: none;
+    min-width: 1ch;
+    max-width: 100%;
+    display: block;
+    outline: none;
+    cursor: text;
+    /* one line forever: a long value ellipsizes instead of wrapping the
+       card into extra rows (which used to push options/footers around) */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding: 0 var(--paper-uigap-third);
+    border-radius: var(--paper-border-radius-half);
+    font-weight: var(--paper-weight-regular);
+    line-height: var(--paper-control-size-inline);
+    height: var(--paper-control-size-inline);
+    font-size: inherit;
+    border: none;
+    box-sizing: border-box;
+    transition:
+        background var(--paper-tiny-transition) var(--paper-ease-standard),
+        color var(--paper-tiny-transition) var(--paper-ease-standard);
+}
+
+/* the chip rides the pill's top edge; middle alignment shoved it down and
+   clipped it against the pill's fixed height */
+.actionInput.actionEditable .actionVariableChip {
+    vertical-align: top;
+}
+
+/* editing keeps the pill in the row at its blurred footprint (the component
+   locks the wrap width); a longer value spills over the card, and the
+   screen if it must, instead of reflowing the flow. Long inputs belong in
+   a multiline Text action */
+.actionInput.actionEditable:not(.actionEditableMultiline):focus {
+    position: relative;
+    z-index: var(--paper-z-raised);
+    width: max-content;
+    min-width: 100%;
+    max-width: none;
+    overflow: visible;
+    text-overflow: clip;
+}
+
+.actionInput.actionEditable:focus {
+    background: var(--paper-surface-raised);
+    color: var(--paper-text);
+    outline: var(--paper-focus-ring);
+    outline-offset: var(--paper-focus-offset);
+}
+
+/* multiline inputs (the builtin Text action) wrap in their own full-width
+   row; they are the one field that is allowed to grow downwards */
+.action:has(.actionEditableMultiline) {
+    min-width: calc(var(--paper-uigap) * 22);
+}
+
+.actionDeprecated {
+    display: flex;
+    align-items: center;
+    gap: var(--paper-uigap-half);
+    margin-top: var(--paper-uigap-onefourth);
+    color: var(--paper-warning-deep);
+}
+
+.actionProblem {
+    display: flex;
+    align-items: center;
+    gap: var(--paper-uigap-half);
+    margin-top: var(--paper-uigap-onefourth);
+    color: var(--paper-danger);
+}
+
+.actionMultilineRow {
+    width: 100%;
+    margin-top: var(--paper-uigap-onefourth);
+}
+
+.actionInput.actionEditableMultiline {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    min-height: calc(var(--paper-uigap) * 5);
+    line-height: var(--paper-leading-normal);
+    white-space: pre-wrap;
+    overflow: visible;
+    overflow-wrap: anywhere;
+    text-overflow: clip;
+    text-align: left;
+    cursor: text;
+}
+
+.actionColorWrap {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--paper-uigap-onefourth);
+}
+
+.actionListItems {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--paper-uigap-onefourth);
+}
+
+.actionListItem {
+    display: inline-flex;
+}
+
+.actionColorDot {
+    width: var(--paper-text-size-1);
+    height: var(--paper-text-size-1);
+    border-radius: 50%;
+    border: var(--paper-border-width) solid var(--paper-border);
+    flex-shrink: 0;
+}
+
+.actionInput.actionEditable[data-placeholder]:empty::before {
+    content: attr(data-placeholder);
+    opacity: var(--paper-opacity-muted);
+    pointer-events: none;
+}
+
+.actionVariableChip {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--paper-uigap-onefourth);
+    background: var(--paper-primary);
+    color: var(--paper-on-color);
+    padding: 0 var(--paper-uigap-third);
+    border-radius: var(--paper-border-radius-half);
+    margin: 0;
+    font-size: var(--paper-badge-font-scale);
+    min-height: var(--paper-control-size-inline);
+    line-height: var(--paper-control-size-inline);
+    font-weight: var(--paper-weight-medium);
+    vertical-align: middle;
+    user-select: none;
+    -webkit-user-select: none;
+    box-sizing: border-box;
+    cursor: text;
+}
+
+.actionVariableChip .chipIcon {
+    /* Icon font via the PaperUI token (single source of truth in
+       paperui/src/styles). */
+    font-family: var(--paper-icon-font-family) !important;
+    font-size: var(--paper-text-size-1);
+    width: var(--paper-text-size-1);
+    height: var(--paper-text-size-1);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: var(--paper-leading-none);
+    font-variation-settings: "FILL" 1, "wght" 500, "GRAD" 0, "opsz" 14;
+}
+
+.actionVariableChip .chipLabel {
+    font-family: inherit;
+    font-size: var(--paper-text-size-1);
+    line-height: var(--paper-leading-none);
+    font-weight: var(--paper-weight-semibold);
+}
+
+/* hover recolors only the hovered action, not subblocks */
+.action.sourceHighlight > .actionHeaderRow > .actionText,
+.action.sourceHighlight > .actionHeaderRow > .actionHeaderIcon {
+    color: var(--paper-primary) !important;
+    transition: color var(--paper-tiny-transition) var(--paper-ease-standard);
+}
+
+.actionInputBool {
+    user-select: none;
+    -webkit-user-select: none;
+    font-weight: var(--paper-weight-medium);
+    display: inline-block;
+    transition: background-color var(--paper-tiny-transition) var(--paper-ease-standard), color var(--paper-tiny-transition) var(--paper-ease-standard);
+}
+
+.actionInputBool.isTrue {
+    background: color-mix(in srgb, var(--paper-success) 25%, transparent);
+    color: var(--paper-success);
+}
+
+@media (hover: hover) {
+    .actionInputBool.isTrue:hover {
+        background: color-mix(in srgb, var(--paper-success) 35%, transparent);
+    }
+}
+@media (hover: none) {
+    .actionInputBool.isTrue:active {
+        background: color-mix(in srgb, var(--paper-success) 35%, transparent);
+    }
+}
+
+.actionInputBool.isFalse {
+    background: color-mix(in srgb, var(--paper-contrast) 10%, transparent);
+    color: var(--paper-text-subtle);
+}
+
+@media (hover: hover) {
+    .actionInputBool.isFalse:hover {
+        background: color-mix(in srgb, var(--paper-contrast) 18%, transparent);
+    }
+}
+@media (hover: none) {
+    .actionInputBool.isFalse:active {
+        background: color-mix(in srgb, var(--paper-contrast) 18%, transparent);
+    }
+}
+
+/* a boolean bound to a variable: the chip carries the meaning, the close
+   button is the only way back to a literal (there is no caret to delete it) */
+.actionInputBool.hasVariable {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--paper-uigap-onefourth);
+    background: transparent;
+    padding: 0;
+}
+
+.actionInputBool.hasVariable [class*="PaperIcon"] {
+    font-size: var(--paper-text-size-2);
+}
+
+.actionBoolClear {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: var(--paper-text-subtle);
+    border-radius: var(--paper-border-radius-half);
+    padding: 0 var(--paper-uigap-onefourth);
+    transition: background var(--paper-tiny-transition) var(--paper-ease-standard);
+}
+
+@media (hover: hover) {
+    .actionBoolClear:hover {
+        color: var(--paper-text);
+        background: color-mix(in srgb, var(--paper-contrast) 14%, transparent);
+    }
+}
+@media (hover: none) {
+    .actionBoolClear:active {
+        color: var(--paper-text);
+        background: color-mix(in srgb, var(--paper-contrast) 14%, transparent);
+    }
+}
+
+.actionInputOption {
+    position: relative;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--paper-uigap-sixth);
+    padding-right: var(--paper-uigap-half);
+    user-select: none;
+    -webkit-user-select: none;
+    transition: filter var(--paper-tiny-transition) var(--paper-ease-standard);
+}
+
+@media (hover: hover) {
+    .actionInputOption:hover {
+        filter: brightness(1.2);
+    }
+}
+@media (hover: none) {
+    .actionInputOption:active {
+        filter: brightness(1.2);
+    }
+}
+
+/* variable-only pill, padding only when empty */
+.actionInput.actionVariableOnly {
+    min-width: 1ch;
+    display: inline-flex;
+    align-items: center;
+    vertical-align: middle;
+    gap: var(--paper-uigap-onefourth);
+    height: var(--paper-control-size-inline);
+    line-height: var(--paper-control-size-inline);
+    padding: 0;
+    cursor: pointer;
+    outline: none;
+}
+
+.actionInput.actionVariableOnly[data-has-value="false"] {
+    padding: 0 var(--paper-uigap-third);
+}
+
+/* array pills keep padding as click target */
+.actionInput.actionVariableOnly[data-array="true"] {
+    padding: 0 var(--paper-uigap-third);
+    cursor: text;
+}
+
+.actionInput.actionVariableOnly:focus {
+    outline: var(--paper-focus-ring);
+    outline-offset: var(--paper-focus-offset);
+}
+
+.actionInput.actionVariableOnly[data-has-value="false"]:empty::before {
+    content: attr(data-placeholder);
+    opacity: var(--paper-opacity-muted);
+    pointer-events: none;
+}
+
+.actionMoreOptions {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--paper-uigap-half);
+    width: 100%;
+    margin-top: var(--paper-uigap-half);
+}
+
+.actionMoreOptionsRow {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: var(--paper-uigap-half);
+    width: 100%;
+}
+
+.actionMoreOptionsRow > :first-child {
+    flex: 1;
+    min-width: 0;
+}
+
+/* variable footer overlays, reserved space below */
+.action:has(.actionVariableFooter) {
+    padding-bottom: calc(var(--paper-uigap-threefourths) + var(--paper-text-size-1));
+}
+
+.actionVariableFooter {
+    position: absolute;
+    left: var(--paper-uigap);
+    bottom: var(--paper-uigap-onefourth);
+    display: flex;
+    align-items: center;
+    max-width: calc(100% - var(--paper-uigap-double));
+    cursor: default;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.actionVariableFooterText {
+    font-family: var(--paper-font-family-code);
+    font-size: var(--paper-text-size-1);
+    line-height: var(--paper-leading-none);
+    color: var(--paper-text-subtle);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.dropdownChevronIcon {
+    font-size: var(--paper-icon-size-small);
+    width: var(--paper-icon-size-small);
+    height: var(--paper-icon-size-small);
+    opacity: var(--paper-opacity-muted);
+    pointer-events: none;
+}
+
+.actionInsertLine {
+    width: 100%;
+    height: var(--paper-uigap-half);
+    border-radius: calc(var(--paper-uigap-half) * 0.5);
+    background: transparent;
+    margin: calc(var(--paper-uigap-half) * -0.5) 0;
+    position: relative;
+    z-index: var(--paper-z-float);
+    transition: background-color var(--paper-tiny-transition) var(--paper-ease-standard);
+}
+
+.actionInsertLine.activeHover {
+    background: var(--paper-primary);
+}
+
+.actionDropZone {
+    width: 100%;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--paper-uigap-half);
+    margin-top: var(--paper-uigap-half);
+    padding: var(--paper-uigap-threefourths) var(--paper-uigap);
+    border: var(--paper-thick-border-width) dashed
+        color-mix(in srgb, var(--paper-text-subtle) 35%, transparent);
+    border-radius: var(--paper-border-radius-half);
+    color: var(--paper-text-subtle);
+    font-size: var(--paper-text-size-2);
+    font-weight: var(--paper-weight-medium);
+    cursor: pointer;
+    transition: border-color var(--paper-tiny-transition) var(--paper-ease-standard), color var(--paper-tiny-transition) var(--paper-ease-standard), background-color var(--paper-tiny-transition) var(--paper-ease-standard), transform var(--paper-tiny-transition) var(--paper-ease-standard);
+}
+
+.actionDropZone.activeHover {
+    border-color: var(--paper-primary);
+    color: var(--paper-primary);
+    background-color: color-mix(in srgb, var(--paper-primary) 18%, transparent);
+    transform: scale(var(--paper-scale-hover));
+}
