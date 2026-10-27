@@ -63,6 +63,8 @@ async function waitFor(cond: () => boolean, ms = 3000): Promise<void> {
 
 import { initPaperApi, getTransport } from "../src/ipc";
 import { terminalApi } from "../src/index";
+// the WebSocket each test swaps a mock in for, put back after it
+const NATIVE_WEBSOCKET = (globalThis as any).WebSocket;
 
 // a keystroke or resize the daemon refused must reach the terminal that sent
 // it: swallowed, typing into a dead session just vanishes
@@ -74,7 +76,7 @@ describe("terminal write and resize failures", () => {
 
     afterEach(() => {
         getTransport("local").close();
-        (globalThis as any).WebSocket = undefined;
+        (globalThis as any).WebSocket = NATIVE_WEBSOCKET;
     });
 
     for (const [name, send, action] of [

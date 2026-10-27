@@ -69,6 +69,8 @@ import { CraneTransport } from "../src/ws";
 import { initPaperApi, getTransport, closeTransport, on, send } from "../src/ipc";
 import { fileApi } from "../src/file";
 import { actionsApi } from "../src/actions";
+// the WebSocket each test swaps a mock in for, put back after it
+const NATIVE_WEBSOCKET = (globalThis as any).WebSocket;
 
 describe("status listener lifetime", () => {
     let t: CraneTransport;
@@ -81,7 +83,7 @@ describe("status listener lifetime", () => {
 
     afterEach(() => {
         t.close();
-        (globalThis as any).WebSocket = undefined;
+        (globalThis as any).WebSocket = NATIVE_WEBSOCKET;
     });
 
     test("offStatus removes a listener", async () => {
@@ -144,7 +146,7 @@ describe("refused invokes clean up progress listeners", () => {
 
     afterEach(() => {
         closeTransport("local");
-        (globalThis as any).WebSocket = undefined;
+        (globalThis as any).WebSocket = NATIVE_WEBSOCKET;
     });
 
     async function connect(): Promise<void> {
@@ -205,7 +207,7 @@ describe("onTrigger two-arg form resolves own panel, never wildcard", () => {
 
     afterEach(() => {
         closeTransport("local");
-        (globalThis as any).WebSocket = undefined;
+        (globalThis as any).WebSocket = NATIVE_WEBSOCKET;
     });
 
     async function connect(panelId?: string): Promise<void> {
@@ -261,7 +263,7 @@ describe("stream attach refcounting", () => {
 
     afterEach(() => {
         closeTransport("local");
-        (globalThis as any).WebSocket = undefined;
+        (globalThis as any).WebSocket = NATIVE_WEBSOCKET;
     });
 
     async function connect(): Promise<CraneTransport> {

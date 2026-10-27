@@ -69,6 +69,8 @@ async function waitFor(cond: () => boolean, ms = 3000): Promise<void> {
 import { initPaperApi, getTransport } from "../src/ipc";
 import { actionsApi } from "../src/actions";
 import { checkActionInput, defineAction, defineType } from "../src/schema";
+// the WebSocket each test swaps a mock in for, put back after it
+const NATIVE_WEBSOCKET = (globalThis as any).WebSocket;
 
 describe("registered schemas carry the panel's types", () => {
     beforeEach(() => {
@@ -78,7 +80,7 @@ describe("registered schemas carry the panel's types", () => {
 
     afterEach(() => {
         getTransport("local").close();
-        (globalThis as any).WebSocket = undefined;
+        (globalThis as any).WebSocket = NATIVE_WEBSOCKET;
     });
 
     test("every named custom type, and the types its fields name, reach the wire", async () => {
@@ -137,7 +139,7 @@ describe("declared input limits", () => {
 
     afterEach(() => {
         getTransport("local").close();
-        (globalThis as any).WebSocket = undefined;
+        (globalThis as any).WebSocket = NATIVE_WEBSOCKET;
     });
 
     test("name the input and the broken limit; unknown and empty values break none", () => {

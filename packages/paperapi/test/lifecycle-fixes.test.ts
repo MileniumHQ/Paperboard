@@ -74,6 +74,8 @@ import {
 } from "../src/ipc";
 import { actionsApi } from "../src/actions";
 import { processApi } from "../src/process";
+// the WebSocket each test swaps a mock in for, put back after it
+const NATIVE_WEBSOCKET = (globalThis as any).WebSocket;
 
 beforeEach(() => {
     MockWebSocket.instances = [];
@@ -82,7 +84,7 @@ beforeEach(() => {
 
 afterEach(() => {
     (CraneTransport.prototype as any).call = CraneTransport.prototype.call;
-    (globalThis as any).WebSocket = undefined;
+    (globalThis as any).WebSocket = NATIVE_WEBSOCKET;
     closeTransport("local");
 });
 

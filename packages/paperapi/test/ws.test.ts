@@ -1,5 +1,7 @@
 // CraneTransport regression tests (bun test); mocks globalThis.WebSocket
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
+// the WebSocket each test swaps a mock in for, put back after it
+const NATIVE_WEBSOCKET = (globalThis as any).WebSocket;
 
 type Listener = (e?: any) => void;
 
@@ -106,6 +108,7 @@ describe("CraneTransport computer scoping", () => {
         } catch (err) {
             console.debug("[test] transport already closed:", String(err));
         }
+        (globalThis as any).WebSocket = NATIVE_WEBSOCKET;
     });
 
     /** Connects the transport and completes its tunnel handshake. */

@@ -68,6 +68,8 @@ async function waitFor(cond: () => boolean, ms = 3000): Promise<void> {
 
 import { initPaperApi, getTransport } from "../src/ipc";
 import { actionsApi } from "../src/actions";
+// the WebSocket each test swaps a mock in for, put back after it
+const NATIVE_WEBSOCKET = (globalThis as any).WebSocket;
 
 describe("actionsApi.call timeout", () => {
     beforeEach(() => {
@@ -77,7 +79,7 @@ describe("actionsApi.call timeout", () => {
 
     afterEach(() => {
         getTransport("local").close();
-        (globalThis as any).WebSocket = undefined;
+        (globalThis as any).WebSocket = NATIVE_WEBSOCKET;
     });
 
     async function connected(port: number): Promise<void> {

@@ -81,6 +81,8 @@ async function ackAll(ws: MockWebSocket): Promise<void> {
 }
 
 import { initPaperApi, getTransport } from "../src/ipc";
+// the WebSocket each test swaps a mock in for, put back after it
+const NATIVE_WEBSOCKET = (globalThis as any).WebSocket;
 
 let port = 7001;
 
@@ -104,7 +106,7 @@ describe("events:subscribe auto-sync", () => {
 
     afterEach(() => {
         getTransport("local").close();
-        (globalThis as any).WebSocket = undefined;
+        (globalThis as any).WebSocket = NATIVE_WEBSOCKET;
     });
 
     test("the listener set is announced on connect, grown, and shrunk", async () => {

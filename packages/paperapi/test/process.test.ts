@@ -64,6 +64,8 @@ async function waitFor(cond: () => boolean, ms = 3000): Promise<void> {
 
 import { initPaperApi, getTransport } from "../src/ipc";
 import { processApi } from "../src/process";
+// the WebSocket each test swaps a mock in for, put back after it
+const NATIVE_WEBSOCKET = (globalThis as any).WebSocket;
 
 describe("process.run timeout", () => {
     beforeEach(() => {
@@ -73,7 +75,7 @@ describe("process.run timeout", () => {
 
     afterEach(() => {
         getTransport("local").close();
-        (globalThis as any).WebSocket = undefined;
+        (globalThis as any).WebSocket = NATIVE_WEBSOCKET;
     });
 
     test("timeout kills the child (process:kill) and reports RUN_TIMEOUT", async () => {

@@ -67,6 +67,8 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 import { initPaperApi, getTransport } from "../src/ipc";
 import { fileApi } from "../src/file";
 import { packageApi } from "../src/package";
+// the WebSocket each test swaps a mock in for, put back after it
+const NATIVE_WEBSOCKET = (globalThis as any).WebSocket;
 
 async function connect(): Promise<void> {
     const connecting = initPaperApi({ port: 1234, token: "tok" });
@@ -91,7 +93,7 @@ describe("download progress listener lifetime", () => {
 
     afterEach(() => {
         getTransport("local").close();
-        (globalThis as any).WebSocket = undefined;
+        (globalThis as any).WebSocket = NATIVE_WEBSOCKET;
     });
 
     test("fileApi.download stops forwarding progress after completed", async () => {
