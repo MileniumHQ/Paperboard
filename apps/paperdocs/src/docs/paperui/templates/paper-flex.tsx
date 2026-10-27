@@ -107,10 +107,10 @@ export function Example() {
                             <td>Renders an interactive drag handle on the container edge.</td>
                         </tr>
                         <tr>
-                            <td><PaperCode>height</PaperCode></td>
+                            <td><PaperCode>width / height</PaperCode></td>
                             <td><PaperCode>PaperSize</PaperCode></td>
                             <td><PaperCode>undefined</PaperCode></td>
-                            <td>A fixed height, always a size token such as "panel-height-small".</td>
+                            <td>A fixed width or height, always a size token such as "field" or "panel-height-small".</td>
                         </tr>
                         <tr>
                             <td><PaperCode>minWidth / maxWidth / minHeight / maxHeight</PaperCode></td>

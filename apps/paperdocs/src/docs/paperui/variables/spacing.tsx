@@ -183,7 +183,7 @@ export default function SpacingDoc() {
 
             <PaperText preset="subheader" id="size-tokens">Size tokens</PaperText>
             <PaperText preset="body">
-                Fixed sizes are never px or rem. Layout props that take a size (height, minWidth, maxWidth, minHeight, maxHeight, PaperGrid min, PaperMediaCardGroup minCardWidth) accept these names and resolve them to their variables.
+                Fixed sizes are never px or rem. Layout props that take a size (width, height, minWidth, maxWidth, minHeight, maxHeight, PaperGrid min, PaperMediaCardGroup minCardWidth) accept these names and resolve them to their variables.
             </PaperText>
             <PaperCode block language="tsx">
 {`<PaperFlex height="panel-height-small" minHeight={0}>
