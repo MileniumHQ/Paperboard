@@ -49,7 +49,6 @@ export default function App() {
                 <PaperPanel>
                     <PaperMenu
                         name="botMenu"
-                        spacing="half"
                         value={activeTab()}
                         onValueChange={(val) => setActiveTab(String(val))}
                     >

@@ -6,15 +6,17 @@ import {
     PaperButton,
     PaperAvatar,
     PaperBadge,
-    PaperIcon,
     PaperTable,
-    PaperCard, getVarCss } from "@mileniumhq/paperui";
+    PaperCard,
+    PaperCopyButton,
+} from "@mileniumhq/paperui";
 import { actionsApi, config } from "@mileniumhq/paperapi";
 import {
     appendCapped,
     DEFAULT_DISCORD_AVATAR,
     formatDuration,
     RECENT_MESSAGE_CAP,
+    errorToMessage,
 } from "../types";
 
 const PANEL_ID = "dev.paperboard.botcreator";
@@ -46,34 +48,38 @@ export default function Overview() {
     const [tag, setTag] = createSignal("");
     const [avatar, setAvatar] = createSignal(DEFAULT_DISCORD_AVATAR);
     const [appId, setAppId] = createSignal("");
-    const [connected, setConnected] = createSignal(false);
+    // null until the bot's details answer: unknown is not offline
+    const [connected, setConnected] = createSignal<boolean | null>(null);
     const [connectionError, setConnectionError] = createSignal<string | null>(null);
-    const [copied, setCopied] = createSignal(false);
+    const [infoError, setInfoError] = createSignal("");
+    const [healthError, setHealthError] = createSignal("");
     const [recent, setRecent] = createSignal<RecentMessage[]>([]);
     const [health, setHealth] = createSignal<Health | null>(null);
 
     const loadBotInfo = async () => {
+        setInfoError("");
         try {
             const saved = await config.get<any>(PANEL_ID);
             if (saved?.applicationId) setAppId(saved.applicationId);
         } catch (err) {
             console.error("[Overview] saved application id read failed:", err);
+            setInfoError(errorToMessage(err));
         }
 
         try {
             const info = await actionsApi.call<any>(PANEL_ID, "get-bot-info");
-            if (info) {
-                if (info.name) setName(info.name);
-                if (info.tag) setTag(info.tag);
-                if (info.avatar) setAvatar(info.avatar);
-                if (info.applicationId) setAppId(info.applicationId);
-                if (typeof info.connected === "boolean") setConnected(info.connected);
-                if (typeof info.lastError === "string") setConnectionError(info.lastError);
-                else if (info.connected) setConnectionError(null);
-                if (Array.isArray(info.recentMessages)) setRecent(info.recentMessages);
-            }
+            if (!info || typeof info !== "object") throw new Error("get-bot-info returned no bot details");
+            if (info.name) setName(info.name);
+            if (info.tag) setTag(info.tag);
+            if (info.avatar) setAvatar(info.avatar);
+            if (info.applicationId) setAppId(info.applicationId);
+            if (typeof info.connected === "boolean") setConnected(info.connected);
+            if (typeof info.lastError === "string") setConnectionError(info.lastError);
+            else if (info.connected) setConnectionError(null);
+            if (Array.isArray(info.recentMessages)) setRecent(info.recentMessages);
         } catch (err) {
             console.error("[Overview] bot info read failed:", err);
+            setInfoError(errorToMessage(err));
         }
     };
 
@@ -84,20 +90,11 @@ export default function Overview() {
                 throw new Error("get-health returned no health payload");
             }
             setHealth(next);
+            setHealthError("");
         } catch (err) {
+            // the last good reading stays on screen under the error
             console.error("[Overview] health read failed:", err);
-        }
-    };
-
-    const copyAppId = async () => {
-        if (!appId()) return;
-        try {
-            await navigator.clipboard.writeText(appId());
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
-        } catch (err) {
-            // a failed copy must not falsely claim "Copied"
-            console.error("[Overview] clipboard copy failed:", err);
+            setHealthError(errorToMessage(err));
         }
     };
 
@@ -145,6 +142,8 @@ export default function Overview() {
         ),
     );
 
+    const unknownText = () => (infoError() ? "Unknown" : "Checking…");
+
     const pingText = () => {
         const h = health();
         if (!h || !h.connected || h.wsPing < 0) return "—";
@@ -167,11 +166,7 @@ export default function Overview() {
                                 size="xlarge"
                             />
 
-                            <PaperFlex
-                                direction="column"
-                                gap="onefourth"
-                                style={{ flex: 1, "min-width": 0 }}
-                            >
+                            <PaperFlex direction="column" gap="onefourth" flex minWidth={0}>
                                 <PaperFlex direction="row" gap="half" align="baseline" wrap>
                                     <PaperText weight={700} size={6}>
                                         {name()}
@@ -181,8 +176,8 @@ export default function Overview() {
                                             @{tag()}
                                         </PaperText>
                                     </Show>
-                                    <PaperBadge variant={connected() ? "success" : "danger"}>
-                                        {connected() ? "Online" : "Offline"}
+                                    <PaperBadge variant={connected() === null ? "monochrome" : connected() ? "success" : "danger"}>
+                                        {connected() === null ? unknownText() : connected() ? "Online" : "Offline"}
                                     </PaperBadge>
                                 </PaperFlex>
 
@@ -191,19 +186,18 @@ export default function Overview() {
                                         <PaperText size={2} color="text-subtle" family="code">
                                             {appId()}
                                         </PaperText>
-                                        <PaperButton size="tiny"
-                                            icon
-                                            onClick={() => void copyAppId()}
-                                            title={copied() ? "Copied!" : "Copy application ID"}>
-                                            <PaperIcon>
-                                                {copied() ? "check" : "content_copy"}
-                                            </PaperIcon>
-                                        </PaperButton>
+                                        <PaperCopyButton text={appId()} title="Copy application ID" />
                                     </PaperFlex>
                                 </Show>
                             </PaperFlex>
                 </PaperFlex>
             </PaperCard>
+
+            <Show when={infoError()}>
+                <PaperQuote variant="danger" icon="warning" title="Couldn't read the bot's details">
+                    {infoError()}
+                </PaperQuote>
+            </Show>
 
             <Show when={connectionError()}>
                         <PaperQuote variant="danger" icon="warning" title="Connection error">
@@ -222,41 +216,60 @@ export default function Overview() {
                                 </PaperText>
                             </PaperFlex>
 
-                            <PaperTable>
-                                <tbody>
-                                    <tr>
-                                        <th>Gateway status</th>
-                                        <td>{connected() ? "Connected" : "Disconnected"}</td>
-                                    </tr>
-                                    <tr>
-                                        <th>Gateway latency</th>
-                                        <td>{pingText()}</td>
-                                    </tr>
-                                    <tr>
-                                        <th>Uptime</th>
-                                        <td>{uptimeText()}</td>
-                                    </tr>
-                                    <tr>
-                                        <th>Servers</th>
-                                        <td>{health()?.guildCount ?? 0}</td>
-                                    </tr>
-                                    <tr>
-                                        <th>Cached users / channels</th>
-                                        <td>
-                                            {health()?.cachedUsers ?? 0} /{" "}
-                                            {health()?.cachedChannels ?? 0}
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <th>Commands received</th>
-                                        <td>{health()?.commandsReceived ?? 0}</td>
-                                    </tr>
-                                    <tr>
-                                        <th>Pending replies</th>
-                                        <td>{health()?.pendingInteractions ?? 0}</td>
-                                    </tr>
-                                </tbody>
-                            </PaperTable>
+                            <Show when={healthError()}>
+                                <PaperQuote variant="danger" icon="warning" title="Couldn't check health">
+                                    {healthError()}
+                                </PaperQuote>
+                            </Show>
+
+                            <Show
+                                when={health()}
+                                fallback={
+                                    <Show when={!healthError()}>
+                                        <PaperText size={2} color="text-subtle">
+                                            Checking health…
+                                        </PaperText>
+                                    </Show>
+                                }
+                            >
+                                {(h) => (
+                                <PaperTable>
+                                    <tbody>
+                                        <tr>
+                                            <th>Gateway status</th>
+                                            <td>{connected() === null ? unknownText() : connected() ? "Connected" : "Disconnected"}</td>
+                                        </tr>
+                                        <tr>
+                                            <th>Gateway latency</th>
+                                            <td>{pingText()}</td>
+                                        </tr>
+                                        <tr>
+                                            <th>Uptime</th>
+                                            <td>{uptimeText()}</td>
+                                        </tr>
+                                        <tr>
+                                            <th>Servers</th>
+                                            <td>{h().guildCount}</td>
+                                        </tr>
+                                        <tr>
+                                            <th>Cached users / channels</th>
+                                            <td>
+                                                {h().cachedUsers} /{" "}
+                                                {h().cachedChannels}
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <th>Commands received</th>
+                                            <td>{h().commandsReceived}</td>
+                                        </tr>
+                                        <tr>
+                                            <th>Pending replies</th>
+                                            <td>{h().pendingInteractions}</td>
+                                        </tr>
+                                    </tbody>
+                                </PaperTable>
+                                )}
+                            </Show>
 
                             <Show when={health()?.commandSyncError}>
                                 <PaperQuote
@@ -279,9 +292,9 @@ export default function Overview() {
                         <For each={recent()}>
                             {(msg) => (
                                 <PaperText size={3}>
-                                    <span style={{ color: `${getVarCss("text-subtle")}` }}>
+                                    <PaperText as="span" size={3} color="text-subtle">
                                         {msg.author}:
-                                    </span>{" "}
+                                    </PaperText>{" "}
                                     {msg.content || "(no text)"}
                                 </PaperText>
                             )}

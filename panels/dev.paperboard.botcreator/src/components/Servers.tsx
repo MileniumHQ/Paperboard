@@ -15,7 +15,9 @@ import {
     PaperSelectMenu,
     PaperSelectMenuItem,
     PaperSwatch,
-    PaperTable, getVarCss } from "@mileniumhq/paperui";
+    PaperTable,
+    PaperCopyButton,
+} from "@mileniumhq/paperui";
 import { actionsApi } from "@mileniumhq/paperapi";
 import {
     CHANNEL_KIND_LABELS,
@@ -55,8 +57,9 @@ function formatCreated(iso: string): string {
     return date.toLocaleDateString();
 }
 
-function roleColor(color: number): string | null {
-    if (!color) return null;
+function roleColor(color: number): string | undefined {
+    // 0 is Discord's "no colour": the swatch shows its neutral tone
+    if (!color) return undefined;
     return `#${color.toString(16).padStart(6, "0")}`;
 }
 
@@ -68,7 +71,9 @@ interface ChannelGroup {
 
 export default function Servers() {
     const [guilds, setGuilds] = createSignal<GuildSummary[]>([]);
-    const [connected, setConnected] = createSignal(false);
+    // null until the first health read answers: unknown is not offline
+    const [connected, setConnected] = createSignal<boolean | null>(null);
+    const [healthError, setHealthError] = createSignal("");
     const [listError, setListError] = createSignal("");
     const [loadingList, setLoadingList] = createSignal(true);
 
@@ -82,18 +87,19 @@ export default function Servers() {
     const [membersLoading, setMembersLoading] = createSignal(false);
     const [membersError, setMembersError] = createSignal("");
 
-    const [copiedId, setCopiedId] = createSignal(false);
     const [channelId, setChannelId] = createSignal("");
     const [content, setContent] = createSignal("Hello from Paperboard!");
     const [sending, setSending] = createSignal(false);
     const [sendError, setSendError] = createSignal("");
+    const [sentTo, setSentTo] = createSignal("");
 
     const loadGuilds = async () => {
         setLoadingList(true);
         setListError("");
         try {
             const list = await actionsApi.call<GuildSummary[]>(PANEL_ID, "list-guilds");
-            setGuilds(Array.isArray(list) ? list : []);
+            if (!Array.isArray(list)) throw new Error("list-guilds returned no server list");
+            setGuilds(list);
         } catch (err) {
             console.error("[Servers] guild list read failed:", err);
             setListError(errorToMessage(err));
@@ -101,11 +107,16 @@ export default function Servers() {
             setLoadingList(false);
         }
 
+        setHealthError("");
         try {
             const health = await actionsApi.call<Health>(PANEL_ID, "get-health");
-            setConnected(Boolean(health?.connected));
+            if (!health || typeof health !== "object") {
+                throw new Error("get-health returned no health payload");
+            }
+            setConnected(Boolean(health.connected));
         } catch (err) {
             console.error("[Servers] health read failed:", err);
+            setHealthError(errorToMessage(err));
         }
     };
 
@@ -126,6 +137,7 @@ export default function Servers() {
         setMembersError("");
         setMemberQuery("");
         setSendError("");
+        setSentTo("");
         setDetailLoading(true);
         try {
             const next = await actionsApi.call<GuildDetail>(
@@ -160,31 +172,20 @@ export default function Servers() {
                 "search-guild-members",
                 { guildId: id, query: memberQuery() },
             );
-            setMembers(Array.isArray(found) ? found : []);
+            if (!Array.isArray(found)) throw new Error("search-guild-members returned no member list");
+            setMembers(found);
         } catch (err) {
             console.error("[Servers] member search failed:", err);
-            setMembers([]);
+            setMembers(null);
             setMembersError(errorToMessage(err));
         } finally {
             setMembersLoading(false);
         }
     };
 
-    const copyGuildId = async () => {
-        const id = detail()?.id;
-        if (!id) return;
-        try {
-            await navigator.clipboard.writeText(id);
-            setCopiedId(true);
-            setTimeout(() => setCopiedId(false), 2000);
-        } catch (err) {
-            // a failed copy must not falsely claim "Copied"
-            console.error("[Servers] clipboard copy failed:", err);
-        }
-    };
-
     const sendTest = async () => {
         setSendError("");
+        setSentTo("");
         if (!channelId()) {
             setSendError("Pick a channel first.");
             return;
@@ -199,6 +200,8 @@ export default function Servers() {
                 channel: channelId(),
                 content: content().trim(),
             });
+            const channel = textChannels().find((c) => c.id === channelId());
+            setSentTo(channel ? `#${channel.name}` : "the channel");
         } catch (err) {
             console.error("[Servers] test message send failed:", err);
             setSendError(errorToMessage(err));
@@ -263,21 +266,27 @@ export default function Servers() {
                         </PaperButton>
                     </PaperPageHeader>
 
-                    <Show when={!connected()}>
+                    <Show when={connected() === false}>
                         <PaperQuote variant="warning" icon="cloud_off" title="Bot offline">
                             Servers appear here while the bot is connected.
                         </PaperQuote>
                     </Show>
 
+                    <Show when={healthError()}>
+                        <PaperQuote variant="danger" icon="warning" title="Couldn't check the bot's connection">
+                            {healthError()}
+                        </PaperQuote>
+                    </Show>
+
                     <Show when={listError()}>
-                        <PaperQuote variant="danger" icon="warning" title="Server list failed">
+                        <PaperQuote variant="danger" icon="warning" title="Couldn't list the servers">
                             {listError()}
                         </PaperQuote>
                     </Show>
 
                     <Show when={!selectedId()}>
                         <Show
-                            when={guilds().length > 0}
+                            when={guilds().length > 0 || listError()}
                             fallback={
                                 <PaperCard>
                                     <PaperFlex padding="double" center direction="column" gap="half">
@@ -292,7 +301,7 @@ export default function Servers() {
                                 </PaperCard>
                             }
                         >
-                            <PaperMediaCardGroup minCardWidth={getVarCss("size-card-min")}>
+                            <PaperMediaCardGroup>
                                 <For each={guilds()}>
                                     {(guild) => (
                                         <PaperMediaCard
@@ -320,7 +329,7 @@ export default function Servers() {
                         </Show>
 
                         <Show when={detailError()}>
-                            <PaperQuote variant="danger" icon="warning" title="Server details failed">
+                            <PaperQuote variant="danger" icon="warning" title="Couldn't load this server">
                                 {detailError()}
                             </PaperQuote>
                         </Show>
@@ -336,11 +345,7 @@ export default function Servers() {
                                                 size="xlarge"
                                             />
 
-                                            <PaperFlex
-                                                direction="column"
-                                                gap="half"
-                                                style={{ flex: 1, "min-width": 0 }}
-                                            >
+                                            <PaperFlex direction="column" gap="half" flex minWidth={0}>
                                                 <PaperText weight={700} size={6}>
                                                     {guild().name}
                                                 </PaperText>
@@ -348,14 +353,7 @@ export default function Servers() {
                                                     <PaperText size={2} color="text-subtle" family="code">
                                                         {guild().id}
                                                     </PaperText>
-                                                    <PaperButton size="tiny"
-                                                        icon
-                                                        title={copiedId() ? "Copied!" : "Copy server ID"}
-                                                        onClick={() => void copyGuildId()}>
-                                                        <PaperIcon>
-                                                            {copiedId() ? "check" : "content_copy"}
-                                                        </PaperIcon>
-                                                    </PaperButton>
+                                                    <PaperCopyButton text={guild().id} title="Copy server ID" />
                                                 </PaperFlex>
                                                 <PaperFlex direction="row" gap="half" wrap>
                                                     <PaperBadge>
@@ -383,12 +381,7 @@ export default function Servers() {
                                             <For each={channelGroups()}>
                                                 {(group) => (
                                                     <PaperFlex direction="column" gap="onefourth">
-                                                        <PaperText
-                                                            size={2}
-                                                            weight={700}
-                                                            color="text-subtle"
-                                                            style={{ "text-transform": "uppercase" }}
-                                                        >
+                                                        <PaperText as="h3" preset="section">
                                                             {group.name}
                                                         </PaperText>
                                                         <For each={group.channels}>
@@ -432,12 +425,7 @@ export default function Servers() {
                                                                         gap="half"
                                                                         align="center"
                                                                     >
-                                                                        <PaperSwatch
-                                                                            color={
-                                                                                roleColor(role.color) ??
-                                                                                `${getVarCss("border")}`
-                                                                            }
-                                                                        />
+                                                                        <PaperSwatch color={roleColor(role.color)} />
                                                                         {role.name}
                                                                     </PaperFlex>
                                                                 </th>
@@ -462,7 +450,7 @@ export default function Servers() {
                                                 Members
                                             </PaperText>
                                             <PaperFlex direction="row" gap="half" align="center">
-                                                <PaperFlex style={{ flex: 1, "min-width": 0 }}>
+                                                <PaperFlex flex minWidth={0}>
                                                     <PaperInput
                                                         fullWidth
                                                         icon="search"
@@ -509,11 +497,7 @@ export default function Servers() {
                                                                     fullWidth
                                                                 >
                                                                     <PaperAvatar src={member.avatar} size="medium" fallbackIcon="person" />
-                                                                    <PaperFlex
-                                                                        direction="column"
-                                                                        gap="onefourth"
-                                                                        style={{ flex: 1, "min-width": 0 }}
-                                                                    >
+                                                                    <PaperFlex direction="column" gap="onefourth" flex minWidth={0}>
                                                                         <PaperFlex
                                                                             direction="row"
                                                                             gap="half"
@@ -566,7 +550,7 @@ export default function Servers() {
                                                     </For>
                                                 </PaperSelectMenu>
                                                 <PaperFlex direction="row" gap="half" align="center">
-                                                    <PaperFlex style={{ flex: 1, "min-width": 0 }}>
+                                                    <PaperFlex flex minWidth={0}>
                                                         <PaperInput
                                                             fullWidth
                                                             placeholder="Message"
@@ -588,8 +572,13 @@ export default function Servers() {
                                                     </PaperButton>
                                                 </PaperFlex>
                                                 <Show when={sendError()}>
-                                                    <PaperQuote variant="danger" icon="warning" title="Error">
+                                                    <PaperQuote variant="danger" icon="warning" title="Message not sent">
                                                         {sendError()}
+                                                    </PaperQuote>
+                                                </Show>
+                                                <Show when={sentTo()}>
+                                                    <PaperQuote variant="success" icon="check_circle" title="Message sent">
+                                                        Posted to {sentTo()}.
                                                     </PaperQuote>
                                                 </Show>
                                             </PaperFlex>

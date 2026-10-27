@@ -15,7 +15,9 @@ import {
     PaperSettingItem,
     PaperSelectMenu,
     PaperSelectMenuItem,
-    PaperCheckbox, getVarCss } from "@mileniumhq/paperui";
+    PaperCheckbox,
+    PaperCopyButton,
+} from "@mileniumhq/paperui";
 import { actionsApi, config } from "@mileniumhq/paperapi";
 import {
     GLOBAL_SCOPE,
@@ -42,6 +44,13 @@ import {
 
 const PANEL_ID = "dev.paperboard.botcreator";
 
+interface Outcome {
+    title: string;
+    message: string;
+}
+
+const syncProblem = (message: string): Outcome => ({ title: "Not live on Discord yet", message });
+
 // local-only ids for builder rows; never sent to Discord
 let nextOptionId = 1;
 function newOptionId(): string {
@@ -51,9 +60,12 @@ function newOptionId(): string {
 export default function Commands() {
     const [commands, setCommands] = createSignal<SlashCommandDefinition[]>([]);
     const [guilds, setGuilds] = createSignal<GuildSummary[]>([]);
-    const [connected, setConnected] = createSignal(false);
+    // null until the first health read answers: unknown is not offline
+    const [connected, setConnected] = createSignal<boolean | null>(null);
     const [loadError, setLoadError] = createSignal("");
-    const [actionError, setActionError] = createSignal("");
+    const [guildsError, setGuildsError] = createSignal("");
+    const [healthError, setHealthError] = createSignal("");
+    const [actionError, setActionError] = createSignal<Outcome | null>(null);
 
     const [createOpen, setCreateOpen] = createSignal(false);
     const [name, setName] = createSignal("");
@@ -70,6 +82,8 @@ export default function Commands() {
 
     const load = async () => {
         setLoadError("");
+        setGuildsError("");
+        setHealthError("");
         try {
             const saved = await config.get<any>(PANEL_ID);
             setCommands(normalizeCommandDefinitions(saved?.commands));
@@ -80,25 +94,35 @@ export default function Commands() {
 
         try {
             const list = await actionsApi.call<GuildSummary[]>(PANEL_ID, "list-guilds");
-            setGuilds(Array.isArray(list) ? list : []);
+            if (!Array.isArray(list)) throw new Error("list-guilds returned no server list");
+            setGuilds(list);
         } catch (err) {
             console.error("[Commands] guild list read failed:", err);
+            setGuildsError(errorToMessage(err));
         }
 
         try {
             const health = await actionsApi.call<Health>(PANEL_ID, "get-health");
-            if (health) {
-                setConnected(Boolean(health.connected));
-                if (health.commandSyncError) setActionError(health.commandSyncError);
+            if (!health || typeof health !== "object") {
+                throw new Error("get-health returned no health payload");
             }
+            setConnected(Boolean(health.connected));
+            if (health.commandSyncError) setActionError(syncProblem(health.commandSyncError));
         } catch (err) {
             console.error("[Commands] health read failed:", err);
+            setHealthError(errorToMessage(err));
         }
     };
 
     onMount(() => {
         void load();
     });
+
+    const mutationProblem = (result: CommandMutationResult): Outcome | null => {
+        if (result.triggerError) return { title: "Flow trigger not registered", message: result.triggerError };
+        if (result.syncError) return syncProblem(result.syncError);
+        return null;
+    };
 
     const scopeLabel = (value: string) => {
         if (value === GLOBAL_SCOPE) return "Global";
@@ -200,7 +224,7 @@ export default function Commands() {
         }
         setBusy(true);
         setFormError("");
-        setActionError("");
+        setActionError(null);
         try {
             const result = await actionsApi.call<CommandMutationResult>(
                 PANEL_ID,
@@ -215,8 +239,7 @@ export default function Commands() {
             );
             setCommands((prev) => [...prev, result.command]);
             setCreateOpen(false);
-            if (result.triggerError) setActionError(result.triggerError);
-            else if (result.syncError) setActionError(result.syncError);
+            setActionError(mutationProblem(result));
         } catch (err) {
             console.error("[Commands] create-command failed:", err);
             setFormError(errorToMessage(err));
@@ -230,7 +253,7 @@ export default function Commands() {
         setDeleteTarget(null);
         if (!target) return;
         setBusy(true);
-        setActionError("");
+        setActionError(null);
         try {
             const result = await actionsApi.call<CommandMutationResult>(
                 PANEL_ID,
@@ -238,22 +261,12 @@ export default function Commands() {
                 { id: target.id },
             );
             setCommands((prev) => prev.filter((c) => c.id !== target.id));
-            if (result.triggerError) setActionError(result.triggerError);
-            else if (result.syncError) setActionError(result.syncError);
+            setActionError(mutationProblem(result));
         } catch (err) {
             console.error("[Commands] delete-command failed:", err);
-            setActionError(errorToMessage(err));
+            setActionError({ title: `/${target.name} not deleted`, message: errorToMessage(err) });
         } finally {
             setBusy(false);
-        }
-    };
-
-    const copyCommand = async (command: SlashCommandDefinition) => {
-        try {
-            await navigator.clipboard.writeText(`/${command.name}`);
-        } catch (err) {
-            console.error("[Commands] clipboard copy failed:", err);
-            setActionError(errorToMessage(err));
         }
     };
 
@@ -272,7 +285,7 @@ export default function Commands() {
                         </PaperEffect>
                     </PaperPageHeader>
 
-                    <Show when={!connected()}>
+                    <Show when={connected() === false}>
                         <PaperQuote variant="warning" icon="cloud_off" title="Bot offline">
                             Commands are stored here and register the next time the bot
                             connects.
@@ -285,10 +298,24 @@ export default function Commands() {
                         </PaperQuote>
                     </Show>
 
-                    <Show when={actionError()}>
-                        <PaperQuote variant="danger" icon="warning" title="Command problem">
-                            {actionError()}
+                    <Show when={healthError()}>
+                        <PaperQuote variant="danger" icon="warning" title="Couldn't check the bot's connection">
+                            {healthError()}
                         </PaperQuote>
+                    </Show>
+
+                    <Show when={guildsError()}>
+                        <PaperQuote variant="danger" icon="warning" title="Couldn't list the bot's servers">
+                            {guildsError()}. New commands can only be global until the list loads.
+                        </PaperQuote>
+                    </Show>
+
+                    <Show when={actionError()}>
+                        {(problem) => (
+                            <PaperQuote variant="danger" icon="warning" title={problem().title}>
+                                {problem().message}
+                            </PaperQuote>
+                        )}
                     </Show>
 
                     <Show
@@ -339,12 +366,10 @@ export default function Commands() {
                                                 >
                                                     {scopeLabel(command.scope)}
                                                 </PaperBadge>
-                                                <PaperButton size="tiny"
-                                                    icon
+                                                <PaperCopyButton
+                                                    text={`/${command.name}`}
                                                     title="Copy command"
-                                                    onClick={() => void copyCommand(command)}>
-                                                    <PaperIcon>content_copy</PaperIcon>
-                                                </PaperButton>
+                                                />
                                                 <PaperButton size="tiny"
                                                     icon
                                                     variant="danger"
@@ -366,7 +391,7 @@ export default function Commands() {
                 title="Create Slash Command"
                 size="large"
                 footer={
-                    <PaperFlex direction="row" justify="flex-end" gap="half" fullWidth>
+                    <>
                         <PaperButton onClick={() => setCreateOpen(false)}>
                             Cancel
                         </PaperButton>
@@ -377,7 +402,7 @@ export default function Commands() {
                             <PaperIcon>{busy() ? "hourglass_top" : "add"}</PaperIcon>
                             {busy() ? "Creating…" : "Create"}
                         </PaperButton>
-                    </PaperFlex>
+                    </>
                 }
             >
                 <PaperFlex direction="column" gap="full">
@@ -477,7 +502,7 @@ export default function Commands() {
                                 return (
                                     <PaperCard padding="full" gap="half">
                                             <PaperFlex direction="row" gap="half" align="end" wrap>
-                                                <div style={{ width: `${getVarCss("size-field")}` }}>
+                                                <PaperFlex width="field">
                                                     <PaperSelectMenu
                                                         name={`optionType-${option().id}`}
                                                         value={option().type}
@@ -498,10 +523,8 @@ export default function Commands() {
                                                             )}
                                                         </For>
                                                     </PaperSelectMenu>
-                                                </div>
-                                                <PaperFlex
-                                                    style={{ flex: 1, "min-width": getVarCss("size-field-medium") }}
-                                                >
+                                                </PaperFlex>
+                                                <PaperFlex flex minWidth="field-medium">
                                                     <PaperInput
                                                         fullWidth
                                                         label="Parameter name"
@@ -574,7 +597,7 @@ export default function Commands() {
                     </PaperFlex>
 
                     <Show when={formError()}>
-                        <PaperQuote variant="danger" icon="warning" title="Cannot create">
+                        <PaperQuote variant="danger" icon="warning" title="Command not created">
                             {formError()}
                         </PaperQuote>
                     </Show>
@@ -587,7 +610,7 @@ export default function Commands() {
                 title={`Delete /${deleteTarget()?.name ?? ""}`}
                 size="small"
                 footer={
-                    <PaperFlex direction="row" justify="flex-end" gap="half" fullWidth>
+                    <>
                         <PaperButton onClick={() => setDeleteTarget(null)}>
                             Cancel
                         </PaperButton>
@@ -597,7 +620,7 @@ export default function Commands() {
                             onClick={() => void confirmDelete()}>
                             Delete
                         </PaperButton>
-                    </PaperFlex>
+                    </>
                 }
             >
                 <PaperText preset="body">

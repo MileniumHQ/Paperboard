@@ -1,4 +1,4 @@
-import { createSignal, onMount, For } from "solid-js";
+import { createSignal, onMount, For, Show } from "solid-js";
 import {
     PaperFlex,
     PaperText,
@@ -7,52 +7,64 @@ import {
     PaperCopyButton,
     PaperGrid,
     PaperPageHeader,
+    PaperQuote,
     PaperSeparator,
 } from "@mileniumhq/paperui";
 import { actionsApi } from "@mileniumhq/paperapi";
 import {
     PERMISSION_DEFINITIONS,
     DEFAULT_SELECTED_PERMISSIONS,
+    errorToMessage,
 } from "../types";
 
 export default function Invite() {
     const [inviteUrl, setInviteUrl] = createSignal("");
+    const [inviteError, setInviteError] = createSignal("");
     const [userInstallUrl, setUserInstallUrl] = createSignal("");
+    const [userInstallError, setUserInstallError] = createSignal("");
     const [selectedPermissions, setSelectedPermissions] = createSignal<string[]>(
         DEFAULT_SELECTED_PERMISSIONS,
     );
 
+    // toggles fire requests back to back: only the latest one may land
+    let inviteRequest = 0;
     const updateInviteUrl = async (perms: string[]) => {
+        const request = ++inviteRequest;
+        setInviteError("");
         try {
             const url = await actionsApi.call<string>(
                 "dev.paperboard.botcreator",
                 "get-invite-url",
                 perms,
             );
-            if (url) {
-                setInviteUrl(url);
-            }
+            if (!url) throw new Error("get-invite-url returned no link");
+            if (request === inviteRequest) setInviteUrl(url);
         } catch (err) {
             console.error("[Invite] invite URL generation failed:", err);
+            if (request !== inviteRequest) return;
+            // a link for the old permissions must not be copied as the new one
+            setInviteUrl("");
+            setInviteError(errorToMessage(err));
         }
     };
 
     const updateUserInstallUrl = async () => {
+        setUserInstallError("");
         try {
             const url = await actionsApi.call<string>(
                 "dev.paperboard.botcreator",
                 "get-user-install-url",
             );
-            if (url) {
-                setUserInstallUrl(url);
-            }
+            if (!url) throw new Error("get-user-install-url returned no link");
+            setUserInstallUrl(url);
         } catch (err) {
             console.error("[Invite] user install URL generation failed:", err);
+            setUserInstallError(errorToMessage(err));
         }
     };
 
     onMount(() => {
-        updateInviteUrl(selectedPermissions());
+        void updateInviteUrl(selectedPermissions());
         void updateUserInstallUrl();
     });
 
@@ -68,7 +80,7 @@ export default function Invite() {
             updated = current.filter((p) => p !== permId);
         }
         setSelectedPermissions(updated);
-        updateInviteUrl(updated);
+        void updateInviteUrl(updated);
     };
 
     const permissionGroup = (
@@ -100,16 +112,19 @@ export default function Invite() {
                 subtitle="Add the bot to a server with the permissions it needs"
             />
 
+            <Show when={inviteError()}>
+                <PaperQuote variant="danger" icon="warning" title="Couldn't make the invite link">
+                    {inviteError()}
+                </PaperQuote>
+            </Show>
+
             <PaperCard>
                 <PaperFlex direction="row" padding="full" gap="full" align="center">
-                    <PaperText
-                        size={3}
-                        weight={500}
-                        truncate
-                        style={{ flex: 1, "min-width": 0 }}
-                    >
-                        {inviteUrl() || "Generating invite link..."}
-                    </PaperText>
+                    <PaperFlex flex minWidth={0}>
+                        <PaperText size={3} weight={500} truncate>
+                            {inviteUrl() || (inviteError() ? "No invite link" : "Generating invite link…")}
+                        </PaperText>
+                    </PaperFlex>
 
                     <PaperCopyButton
                         label="Copy"
@@ -145,15 +160,17 @@ export default function Invite() {
                         group chats. Needs User Install enabled in the Discord
                         developer portal.
                     </PaperText>
+                    <Show when={userInstallError()}>
+                        <PaperQuote variant="danger" icon="warning" title="Couldn't make the install link">
+                            {userInstallError()}
+                        </PaperQuote>
+                    </Show>
                     <PaperFlex direction="row" gap="full" align="center">
-                        <PaperText
-                            size={3}
-                            weight={500}
-                            truncate
-                            style={{ flex: 1, "min-width": 0 }}
-                        >
-                            {userInstallUrl() || "Generating user install link..."}
-                        </PaperText>
+                        <PaperFlex flex minWidth={0}>
+                            <PaperText size={3} weight={500} truncate>
+                                {userInstallUrl() || (userInstallError() ? "No install link" : "Generating user install link…")}
+                            </PaperText>
+                        </PaperFlex>
 
                         <PaperCopyButton
                             label="Copy"
