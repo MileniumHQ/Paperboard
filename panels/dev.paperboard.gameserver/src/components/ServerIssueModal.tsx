@@ -1,5 +1,5 @@
 import { PANEL_ID } from "../service/types";
-import { type Component, createSignal, For, Show } from "solid-js";
+import { type Component, createMemo, createSignal, For, Show } from "solid-js";
 import {
     PaperFlex,
     PaperModal,
@@ -9,11 +9,13 @@ import {
     PaperQuote,
 } from "@mileniumhq/paperui";
 import { files as fileApi } from "@mileniumhq/paperapi";
-import { activeIssue, clearActiveIssue, killConflictingProcess, resetWorldFiles } from "../lib/diagnostics";
+import { activeIssue, clearActiveIssue, killConflictingProcess, resetWorldFiles, type ServerIssue } from "../lib/diagnostics";
 import { serverPort, startServer } from "../lib/server";
 
 const ServerIssueModal: Component = () => {
     const [actionError, setActionError] = createSignal("");
+    // the last issue stays on the modal while it closes, so it animates out instead of vanishing
+    const shownIssue = createMemo<ServerIssue | null>((prev) => activeIssue() ?? prev, null);
 
     // pty/repair failures arrive as developer-speak; the customer needs
     // "what happened to my data, retry or do it manually", not shell
@@ -78,10 +80,10 @@ const ServerIssueModal: Component = () => {
     };
 
     return (
-        <Show when={activeIssue()}>
+        <Show when={shownIssue()}>
             {(issue) => (
                 <PaperModal
-                    open={true}
+                    open={activeIssue() !== null}
                     onClose={clearActiveIssue}
                     title={issue().title}
                     size="small"
