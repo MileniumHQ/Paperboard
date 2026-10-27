@@ -1,7 +1,8 @@
 // The canvas as a person meets it (real browser): the real App on real
 // PaperUI over a fake Actions service. It proves a canvas that can't load
-// says why and can be retried, and that a failed apply is shown with its
-// reason and a retry.
+// says why and can be retried, that a function's call is never lost or
+// nested when dropped into its own body, and that a failed apply is shown
+// with its reason and a retry.
 //
 // Without Chrome the test is skipped with a visible reason.
 import { describe, test, expect } from "bun:test";
@@ -13,8 +14,8 @@ const behaviorTest = chrome ? test : test.skip;
 describe("canvas behavior", () => {
     behaviorTest(
         chrome
-            ? "loading and sync failures (headless Chrome)"
-            : "loading and sync failures (skipped: no Chrome)",
+            ? "loading, refused drops and sync failures (headless Chrome)"
+            : "loading, refused drops and sync failures (skipped: no Chrome)",
         async () => {
             if (!chrome) return;
             const results = await runBrowserFixture(chrome, "test/fixtures/canvasBehaviorFixture.html", {
@@ -26,6 +27,18 @@ describe("canvas behavior", () => {
             expect(c.loadFailureTitled, "a canvas that can't load needs a titled alert").toBe(true);
             expect(c.loadFailureReason, "the alert must give the reason on its own").toBe(true);
             expect(c.loadFailureRetry, "a canvas that can't load needs a retry").toBe(true);
+
+            expect(c.topRefusalShown, "dropping a call into its own function must say why").toBe(true);
+            expect(c.topRefusalReason).toContain("\"Greet\" can't go inside its own function");
+            expect(c.topCallerStaysOnCanvas, "the refused call must stay on the canvas").toBe(true);
+            expect(c.topCallerBackWhereItWas, "the refused call must go back where it was").toEqual({ x: 420, y: 440 });
+            expect(c.topBodyStaysEmpty, "the function must not call itself").toBe(true);
+            expect(c.topRefusalDismissed, "the refusal must dismiss").toBe(true);
+
+            expect(c.childRefusalShown, "a refused call from a flow must say why").toBe(true);
+            expect(c.childReturnedToFlow, "the refused call must go back to its flow").toEqual(["nested"]);
+            expect(c.childBodyStaysEmpty, "the function must not call itself").toBe(true);
+            expect(c.childStillOnScreen, "the refused call vanished from the flow").toBe(true);
 
             expect(c.syncErrorTitled, "a failed apply needs a titled alert").toBe(true);
             expect(c.syncErrorReason, "the alert must say what failed").toBe(true);

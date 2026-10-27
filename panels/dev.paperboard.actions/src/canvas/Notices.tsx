@@ -1,5 +1,6 @@
 // What the canvas needs to tell you: a save another window beat, a save or
-// apply that failed, and how a file import or restore went.
+// apply that failed, a drop that was refused, and how a file import or
+// restore went.
 import { Show } from "solid-js";
 import { PaperButton, PaperFlex, PaperQuote } from "@mileniumhq/paperui";
 import type { CanvasNotice } from "../components/CanvasFileMenu";
@@ -7,6 +8,8 @@ import type { CanvasDocumentState } from "./document";
 
 export default function Notices(props: {
     doc: CanvasDocumentState;
+    dropRefusal: string | null;
+    onDismissDrop: () => void;
     fileNotice: CanvasNotice | null;
     onDismissFile: () => void;
 }) {
@@ -33,6 +36,20 @@ export default function Notices(props: {
                         <PaperButton size="tiny" onClick={() => props.doc.retrySave()}>Retry saving</PaperButton>
                     </PaperFlex>
                 </PaperQuote>
+            </Show>
+            <Show when={props.dropRefusal}>
+                {(reason) => (
+                    <PaperQuote
+                        class="canvas-notice"
+                        variant="warning"
+                        icon="block"
+                        title="Block not added"
+                        role="alert"
+                        onDismiss={() => props.onDismissDrop()}
+                    >
+                        {reason()}
+                    </PaperQuote>
+                )}
             </Show>
             <Show when={props.fileNotice}>
                 {(notice) => (

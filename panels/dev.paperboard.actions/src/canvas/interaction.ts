@@ -63,6 +63,8 @@ export function createCanvasInteraction(doc: CanvasDocumentState) {
     const [isOverTrash, setIsOverTrash] = createSignal(false);
     const [draggingCanvasBlockId, setDraggingCanvasBlockId] = createSignal<string | null>(null);
     const [ghostDrag, setGhostDrag] = createSignal<GhostDrag | null>(null);
+    // why the last drop was refused, until it's dismissed
+    const [dropRefusal, setDropRefusal] = createSignal<string | null>(null);
     const [pendingChildDrag, setPendingChildDrag] = createSignal<PendingChildDrag | null>(null);
 
     const canvasMenu = useContextMenuState("mouse");
@@ -191,6 +193,30 @@ export function createCanvasInteraction(doc: CanvasDocumentState) {
         }
     };
 
+    // a function can't call itself: a call block dropped inside its own
+    // function is refused, with the reason
+    const selfCallRefusal = (block: CanvasBlock, parentId: string): string | null => {
+        const calledFid = functionIdFromCallAction((block.action as any)?.id || "");
+        if (!calledFid) return null;
+        const owner = findOwnerTrigger(doc.blocks, parentId.replace(/:else$/, ""));
+        const ownerFid = owner ? functionIdFromTriggerAction((owner.action as any)?.id || "") : null;
+        if (ownerFid !== calledFid) return null;
+        return `"${block.action.name}" can't go inside its own function: a function can't call itself.`;
+    };
+
+    // a block lifted out of a flow that lands nowhere goes back to its place
+    const restoreDetached = (drag: GhostDrag) => {
+        if (!drag.detachedFrom) return;
+        const restored = insertBlock(
+            doc.blocks,
+            drag.detachedFrom.originalParentId,
+            drag.detachedFrom.originalIndex,
+            drag.detachedFrom.block,
+        );
+        doc.setBlocks(restored);
+        doc.save(restored);
+    };
+
     const dropGhost = (drag: GhostDrag, dropTarget: DropTarget | null, overTrash: boolean, clientX: number, clientY: number) => {
         if (overTrash) {
             doc.save();
@@ -224,15 +250,12 @@ export function createCanvasInteraction(doc: CanvasDocumentState) {
         };
 
         if (dropTarget && !drag.isTrigger) {
-            // reject self-calls
-            const droppedFid = functionIdFromCallAction(actionId || "");
-            if (droppedFid) {
-                const owner = findOwnerTrigger(doc.blocks, dropTarget.parentId.replace(/:else$/, ""));
-                const ownerFid = owner ? functionIdFromTriggerAction((owner.action as any)?.id || "") : null;
-                if (ownerFid && ownerFid === droppedFid) {
-                    console.warn(`[Actions] A function cannot call itself; "${droppedBlock.action.name}" was not added.`);
-                    return;
-                }
+            // the block goes back where it came from, and the refusal says why
+            const refusal = selfCallRefusal(droppedBlock, dropTarget.parentId);
+            if (refusal) {
+                setDropRefusal(refusal);
+                restoreDetached(drag);
+                return;
             }
             const updated = insertBlock(doc.blocks, dropTarget.parentId, dropTarget.insertIndex, droppedBlock);
             doc.setBlocks(updated);
@@ -248,16 +271,7 @@ export function createCanvasInteraction(doc: CanvasDocumentState) {
             return;
         }
 
-        if (drag.detachedFrom) {
-            const restored = insertBlock(
-                doc.blocks,
-                drag.detachedFrom.originalParentId,
-                drag.detachedFrom.originalIndex,
-                drag.detachedFrom.block,
-            );
-            doc.setBlocks(restored);
-            doc.save(restored);
-        }
+        restoreDetached(drag);
     };
 
     const onPointerUp = (e: PointerEvent) => {
@@ -320,7 +334,14 @@ export function createCanvasInteraction(doc: CanvasDocumentState) {
         doc.save();
     };
 
+    // where the dragged flow was picked up, for a drop that's refused
+    let pickedUpAt: { x: number; y: number } | null = null;
+
     const moveTopBlock = (id: string, newPos: { x: number; y: number }, clientX?: number, clientY?: number) => {
+        if (draggingCanvasBlockId() !== id) {
+            const pos = doc.blocks.find((b) => b.id === id)?.pos;
+            pickedUpAt = pos ? { ...pos } : null;
+        }
         setDraggingCanvasBlockId(id);
         doc.setBlocks((b) => b.id === id, "pos", newPos);
 
@@ -354,6 +375,14 @@ export function createCanvasInteraction(doc: CanvasDocumentState) {
 
         if (dropTarget && dropTarget.parentId !== id) {
             const blockToInsert = doc.blocks.find((b) => b.id === id);
+            const refusal = blockToInsert ? selfCallRefusal(blockToInsert, dropTarget.parentId) : null;
+            if (refusal) {
+                // it goes back to where it was picked up, and the refusal says why
+                setDropRefusal(refusal);
+                if (pickedUpAt) doc.setBlocks((b) => b.id === id, "pos", pickedUpAt);
+                doc.save();
+                return;
+            }
             if (blockToInsert && !blockToInsert.isTrigger) {
                 const { blocks: updated, removed } = removeBlock(doc.blocks, id);
                 if (removed) {
@@ -422,6 +451,8 @@ export function createCanvasInteraction(doc: CanvasDocumentState) {
         moveTopBlock,
         endTopBlockDrag,
         startLibraryDrag,
+        dropRefusal,
+        dismissDropRefusal: () => setDropRefusal(null),
         startChildDrag,
     };
 }

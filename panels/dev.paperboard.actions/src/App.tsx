@@ -96,7 +96,13 @@ export default function App() {
             />
 
             <div class="canvas-top-right-controls">
-                <Notices doc={doc} fileNotice={fileNotice()} onDismissFile={() => setFileNotice(null)} />
+                <Notices
+                    doc={doc}
+                    dropRefusal={canvas.dropRefusal()}
+                    onDismissDrop={canvas.dismissDropRefusal}
+                    fileNotice={fileNotice()}
+                    onDismissFile={() => setFileNotice(null)}
+                />
                 <div class="canvas-run-controls">
                     <CanvasFileMenu
                         clientId={doc.clientId}

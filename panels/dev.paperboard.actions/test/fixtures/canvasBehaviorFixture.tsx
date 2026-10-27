@@ -1,6 +1,7 @@
 // The real Actions App on real PaperUI, over the fake service in
 // canvasSyncApi.ts, driven through what a person does on the canvas: a
-// canvas that won't load, and a save whose flows were not applied. Results are base64
+// canvas that won't load, dropping a function's call into its own body
+// from the canvas and from a flow, and a save whose flows were not applied. Results are base64
 // JSON in #results so the test can read them from Chrome's --dump-dom output.
 import { render } from "solid-js/web";
 import { PaperProvider } from "@mileniumhq/paperui";
@@ -47,6 +48,18 @@ const alertTitled = (title: string) =>
 const hasExactText = (el: Element | undefined, text: string) =>
     Boolean(el && [...el.querySelectorAll("*")].some((c) => c.textContent?.trim() === text));
 const topBlocks = () => [...root.querySelectorAll<HTMLElement>(".canvas-world > .action")];
+const center = (el: Element) => {
+    const r = el.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+};
+const pointer = (el: Element, type: string, at: { x: number; y: number }) =>
+    el.dispatchEvent(new PointerEvent(type, {
+        bubbles: true, cancelable: true, composed: true,
+        pointerId: 1, pointerType: "mouse", isPrimary: true,
+        button: 0, buttons: type === "pointerup" ? 0 : 1,
+        clientX: at.x, clientY: at.y,
+    }));
+const savedFlow = (id: string) => (fixture.saved?.flows ?? []).find((b: any) => b.id === id);
 
 async function run() {
     const c = out.checks;
@@ -64,6 +77,46 @@ async function run() {
     await sleep(500);
     c.loadedAfterRetry = topBlocks().length;
     if (topBlocks().length !== 3) throw new Error(`canvas did not load after retry: ${root.innerHTML.slice(0, 300)}`);
+
+    const [, , caller] = topBlocks();
+
+    // a call moved from the canvas into its own function goes back where it was
+    const bodyZone = topBlocks()[0].querySelector("[data-drop-parent]")!;
+    const callerHeader = caller.querySelector(".actionHeaderRow")!;
+    const from = center(callerHeader);
+    pointer(callerHeader, "pointerdown", from);
+    pointer(callerHeader, "pointermove", { x: from.x + 20, y: from.y - 20 });
+    pointer(callerHeader, "pointermove", center(bodyZone));
+    pointer(callerHeader, "pointerup", center(bodyZone));
+    await sleep(300);
+    const topRefusal = alertTitled("Block not added");
+    c.topRefusalShown = Boolean(topRefusal);
+    c.topRefusalReason = topRefusal?.textContent ?? "";
+    c.topCallerStaysOnCanvas = topBlocks().length === 3 && Boolean(savedFlow("caller"));
+    c.topCallerBackWhereItWas = savedFlow("caller")?.pos;
+    c.topBodyStaysEmpty = (savedFlow("body")?.children ?? ["unsaved"]).length === 0;
+    topRefusal?.querySelector<HTMLButtonElement>('button[aria-label="Dismiss"]')?.click();
+    await sleep(50);
+    c.topRefusalDismissed = !alertTitled("Block not added");
+
+    // a call lifted out of a flow into its own function goes back to the flow
+    const viewport = root.querySelector<HTMLElement>(".canvas-viewport")!;
+    const nested = topBlocks()[1].querySelector(".nestedActionWrapper")!;
+    const start = center(nested);
+    pointer(nested, "pointerdown", start);
+    pointer(viewport, "pointermove", { x: start.x - 30, y: start.y + 30 });
+    await sleep(50);
+    // lifting the call out re-renders the canvas: find the body's zone again
+    const zone = topBlocks()[0].querySelector("[data-drop-parent]")!;
+    pointer(viewport, "pointermove", center(zone));
+    await sleep(50);
+    pointer(viewport, "pointerup", center(zone));
+    await sleep(300);
+    const childRefusal = alertTitled("Block not added");
+    c.childRefusalShown = Boolean(childRefusal);
+    c.childReturnedToFlow = (savedFlow("play")?.children ?? []).map((b: any) => b.id);
+    c.childBodyStaysEmpty = (savedFlow("body")?.children ?? ["unsaved"]).length === 0;
+    c.childStillOnScreen = Boolean(topBlocks()[1].querySelector(".nestedActionWrapper"));
 
     // a save whose flows weren't applied says so, with a way to retry
     fixture.failApply = true;
