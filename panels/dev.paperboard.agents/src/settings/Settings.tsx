@@ -8,6 +8,7 @@ import {
     PaperIcon,
     PaperInput,
     PaperModal,
+    PaperQuote,
     PaperSelectMenu,
     PaperSelectMenuItem,
     PaperSeparator,
@@ -44,7 +45,8 @@ function AgentSettings(props: { agent: Agent }) {
     const [name, setName] = createSignal(current().name);
     const [model, setModel] = createSignal(current().model ?? "");
     const [error, setError] = createSignal<string | null>(null);
-    const [installed] = createResource(() => props.agent.detect());
+    // a failed look leaves the saved brain choosable, and says why
+    const [installed, { refetch: detectAgain }] = createResource(() => props.agent.detect());
     const models = createModels(props.agent, () => current().harness);
     // as the harness lists them: its current models, then its older ones
     const listed = () => loadedModels(models) ?? [];
@@ -83,7 +85,7 @@ function AgentSettings(props: { agent: Agent }) {
         }
         save({ name: n });
     };
-    const isInstalled = (h: Harness) => installed()?.find((i) => i.id === h)?.installed ?? h === current().harness;
+    const isInstalled = (h: Harness) => (installed.error ? undefined : installed.latest)?.find((i) => i.id === h)?.installed ?? h === current().harness;
 
     return (
         <section class={styles.group} aria-label="Agent">
@@ -167,6 +169,14 @@ function AgentSettings(props: { agent: Agent }) {
                     </Show>
                 </PaperSettingItem>
             </PaperSettingList>
+            <Show when={installed.error}>
+                <PaperQuote variant="danger" icon="error" title="Brains not found" role="alert">
+                    {message(installed.error)}
+                </PaperQuote>
+                <div>
+                    <PaperButton onClick={() => void detectAgain()}>Look again</PaperButton>
+                </div>
+            </Show>
             <Show when={error()}>
                 <PaperText size={2} color="danger" role="alert">
                     {error()}
