@@ -1,42 +1,53 @@
 import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import {
+    PaperButton,
     PaperFlex,
+    PaperPageHeader,
     PaperQuote,
     PaperSettingItem,
     PaperSettingList,
     PaperText,
 } from "@mileniumhq/paperui";
 import { FieldControl } from "./PropertyFieldControl";
-import { PaperPageHeader } from "@mileniumhq/paperui";
 import { serverBridge } from "../lib/server";
 import { ACTION_IDS } from "../service/contract";
 import {
     defaultValueFor,
-    readServerProperties,
+    readServerPropertiesStrict,
     visiblePropertyFields,
     writeServerProperties,
     type PropertyField,
 } from "../lib/properties";
+import { errorMessage } from "../lib/failure";
 
 const SAVE_DEBOUNCE_MS = 400;
 
 export default function Options() {
     const [values, setValues] = createSignal<Record<string, string> | null>(null);
-    const [saveError, setSaveError] = createSignal(false);
+    const [loadError, setLoadError] = createSignal("");
+    const [saveError, setSaveError] = createSignal("");
 
     let saveTimer: ReturnType<typeof setTimeout> | null = null;
     // keys edited since the last successful save; only these are offered for
     // live application so an unrelated edit doesn't re-issue commands
     const dirty = new Set<string>();
 
-    onMount(async () => {
-        const props = await readServerProperties();
-        const next: Record<string, string> = {};
-        for (const field of visiblePropertyFields()) {
-            next[field.key] = props[field.key] ?? defaultValueFor(field);
+    // an unreadable file shows the error, never a form of defaults: saving
+    // that form would write the defaults over the real settings
+    const load = async () => {
+        setLoadError("");
+        try {
+            const props = await readServerPropertiesStrict();
+            const next: Record<string, string> = {};
+            for (const field of visiblePropertyFields()) {
+                next[field.key] = props[field.key] ?? defaultValueFor(field);
+            }
+            setValues(next);
+        } catch (err) {
+            setLoadError(errorMessage(err));
         }
-        setValues(next);
-    });
+    };
+    onMount(() => void load());
 
     onCleanup(() => {
         // a debounced edit made just before leaving the tab must not be
@@ -91,10 +102,9 @@ export default function Options() {
                 });
             }
             dirty.clear();
-            setSaveError(false);
+            setSaveError("");
         } catch (err) {
-            console.debug("[options] server.properties save failed:", String(err));
-            setSaveError(true);
+            setSaveError(errorMessage(err));
         }
     };
 
@@ -108,35 +118,41 @@ export default function Options() {
 
     return (
         <>
-                    <PaperPageHeader icon="tune" title="Options" />
-                        <PaperSettingList autoHeight>
-                            <PaperFlex padding="full" gap="half">
-                                <PaperQuote variant="warning" icon="warning" title="Note">
-                                    World generation, network and whitelist settings apply after a restart. Difficulty and game mode apply immediately while the server is running.
-                                </PaperQuote>
-                                <Show when={saveError()}>
-                                    <PaperQuote variant="danger" icon="warning" title="Error">
-                                        Failed to save changes. Check the console for details.
-                                    </PaperQuote>
-                                </Show>
-                            </PaperFlex>
-                            <Show when={values()} fallback={
-                                <PaperSettingItem title="Loading settings...">
-                                    <span />
-                                </PaperSettingItem>
-                            }>
-                                <For each={visiblePropertyFields()}>
-                                    {(field) => (
-                                        <PaperSettingItem
-                                            title={field.title}
-                                            description={field.description}
-                                        >
-                                            {renderControl(field)}
-                                        </PaperSettingItem>
-                                    )}
-                                </For>
-                            </Show>
-                        </PaperSettingList>
+            <PaperPageHeader icon="tune" title="Options" />
+            <PaperQuote variant="warning" icon="info" title="When changes apply">
+                World generation, network and whitelist settings apply after a restart. Difficulty and game mode apply immediately while the server is running.
+            </PaperQuote>
+            <Show when={loadError()}>
+                <PaperQuote variant="danger" icon="warning" title="Couldn't read server.properties">
+                    <PaperFlex direction="column" gap="half">
+                        <PaperText>{loadError()}</PaperText>
+                        <PaperButton size="tiny" onClick={() => void load()}>Try again</PaperButton>
+                    </PaperFlex>
+                </PaperQuote>
+            </Show>
+            <Show when={saveError()}>
+                <PaperQuote variant="danger" icon="warning" title="Options not saved">
+                    {saveError()}
+                </PaperQuote>
+            </Show>
+            <Show
+                when={values()}
+                fallback={
+                    <Show when={!loadError()}>
+                        <PaperText size={2} color="text-subtle">Loading settings…</PaperText>
+                    </Show>
+                }
+            >
+                <PaperSettingList autoHeight>
+                    <For each={visiblePropertyFields()}>
+                        {(field) => (
+                            <PaperSettingItem title={field.title} description={field.description}>
+                                {renderControl(field)}
+                            </PaperSettingItem>
+                        )}
+                    </For>
+                </PaperSettingList>
+            </Show>
         </>
     );
 }

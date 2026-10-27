@@ -9,9 +9,10 @@ import {
     PaperSettingList,
     PaperText,
     PaperCard,
+    PaperButton,
+    PaperPageHeader,
 } from "@mileniumhq/paperui";
 import { FieldControl } from "./PropertyFieldControl";
-import { PaperPageHeader } from "@mileniumhq/paperui";
 import { supports } from "../lib/capabilities";
 import {
     MAX_RAM_GB,
@@ -22,10 +23,11 @@ import {
 } from "../lib/server";
 import {
     defaultValueFor,
-    readServerProperties,
+    readServerPropertiesStrict,
     writeServerProperties,
 } from "../lib/properties";
 import type { PropertyField } from "../lib/properties";
+import { errorMessage } from "../lib/failure";
 
 const SAVE_DEBOUNCE_MS = 400;
 
@@ -191,23 +193,32 @@ function visibleAdvancedFields(
 
 export default function Advanced() {
     const [values, setValues] = createSignal<Record<string, string> | null>(null);
-    const [saveError, setSaveError] = createSignal(false);
+    const [loadError, setLoadError] = createSignal("");
+    const [saveError, setSaveError] = createSignal("");
     const [search, setSearch] = createSignal("");
 
-    const [ramError, setRamError] = createSignal(false);
+    const [ramError, setRamError] = createSignal("");
     const [ramSaved, setRamSaved] = createSignal(false);
 
     let saveTimer: ReturnType<typeof setTimeout> | null = null;
     let ramSavedTimer: ReturnType<typeof setTimeout> | null = null;
 
-    onMount(async () => {
-        const props = await readServerProperties();
-        const next: Record<string, string> = {};
-        for (const field of visibleAdvancedFields(props)) {
-            next[field.key] = props[field.key] ?? defaultValueFor(field);
+    // an unreadable file shows the error, never a form of defaults: saving
+    // that form would write the defaults over the real settings
+    const load = async () => {
+        setLoadError("");
+        try {
+            const props = await readServerPropertiesStrict();
+            const next: Record<string, string> = {};
+            for (const field of visibleAdvancedFields(props)) {
+                next[field.key] = props[field.key] ?? defaultValueFor(field);
+            }
+            setValues(next);
+        } catch (err) {
+            setLoadError(errorMessage(err));
         }
-        setValues(next);
-    });
+    };
+    onMount(() => void load());
 
     onCleanup(() => {
         if (saveTimer) clearTimeout(saveTimer);
@@ -221,14 +232,14 @@ export default function Advanced() {
         setRamAllocation(gb);
         try {
             await updatePanelConfig({ ramGB: gb });
-            setRamError(false);
+            setRamError("");
             setRamSaved(true);
             if (ramSavedTimer) clearTimeout(ramSavedTimer);
             ramSavedTimer = setTimeout(() => setRamSaved(false), 3000);
         } catch (err) {
             console.error("[Advanced] Failed to persist memory allocation:", err);
             setRamAllocation(previous);
-            setRamError(true);
+            setRamError(errorMessage(err));
         }
     };
 
@@ -257,10 +268,9 @@ export default function Advanced() {
         if (!snapshot) return;
         try {
             await writeServerProperties(snapshot);
-            setSaveError(false);
+            setSaveError("");
         } catch (err) {
-            console.debug("[advanced] server.properties save failed:", String(err));
-            setSaveError(true);
+            setSaveError(errorMessage(err));
         }
     };
 
@@ -286,72 +296,72 @@ export default function Advanced() {
 
     return (
         <>
-                    <PaperPageHeader icon="settings" title="Advanced" />
-                    <PaperCard>
-                        <PaperFlex padding="full">
-                            <PaperInput
-                                fullWidth
-                                icon="search"
-                                placeholder="Search advanced settings..."
-                                value={search()}
-                                onInput={(e) => setSearch(e.currentTarget.value)}
-                            />
-                        </PaperFlex>
-                    </PaperCard>
-                        <PaperSettingList autoHeight>
-                            <PaperFlex direction="column" gap="half" padding="full">
-                                <Show when={ramSaved()}>
-                                    <PaperQuote variant="success" icon="check" title="Saved">
-                                        Memory allocation saved. It applies the next time the server starts.
-                                    </PaperQuote>
-                                </Show>
-                                <Show
-                                    when={ramError() || saveError()}
-                                    fallback={
-                                        <PaperQuote variant="warning" icon="info" title="Note">
-                                            Changes won't be applied until the server is restarted.
-                                        </PaperQuote>
-                                    }
-                                >
-                                    <PaperQuote variant="danger" icon="warning" title="Error">
-                                        {ramError()
-                                            ? "Failed to save the memory allocation. Check the console for details."
-                                            : "Failed to save changes. Check the console for details."}
-                                    </PaperQuote>
-                                </Show>
-                            </PaperFlex>
-                            <PaperSettingItem
-                                title="Memory Allocation"
-                                description={`Java heap size (-Xmx/-Xms) for the server process, from ${MIN_RAM_GB} GB to ${MAX_RAM_GB} GB.`}
-                            >
-                                <PaperSelectMenu
-                                    name="ramAllocation"
-                                    value={String(ramAllocation())}
-                                    onValueChange={(val) => void changeRam(String(val))}
-                                >
-                                    <For each={RAM_CHOICES}>
-                                        {(gb) => (
-                                            <PaperSelectMenuItem value={String(gb)}>
-                                                {gb} GB
-                                            </PaperSelectMenuItem>
-                                        )}
-                                    </For>
-                                </PaperSelectMenu>
-                            </PaperSettingItem>
+            <PaperPageHeader icon="settings" title="Advanced" />
+            <PaperCard padding="full">
+                <PaperInput
+                    fullWidth
+                    icon="search"
+                    placeholder="Search advanced settings..."
+                    value={search()}
+                    onInput={(e) => setSearch(e.currentTarget.value)}
+                />
+            </PaperCard>
+            <PaperQuote variant="warning" icon="info" title="Applies after a restart">
+                Changes here take effect the next time the server starts.
+            </PaperQuote>
+            <Show when={ramSaved()}>
+                <PaperQuote variant="success" icon="check" title="Memory allocation saved">
+                    It applies the next time the server starts.
+                </PaperQuote>
+            </Show>
+            <Show when={ramError()}>
+                <PaperQuote variant="danger" icon="warning" title="Memory allocation not saved">
+                    {ramError()}
+                </PaperQuote>
+            </Show>
+            <Show when={loadError()}>
+                <PaperQuote variant="danger" icon="warning" title="Couldn't read server.properties">
+                    <PaperFlex direction="column" gap="half">
+                        <PaperText>{loadError()}</PaperText>
+                        <PaperButton size="tiny" onClick={() => void load()}>Try again</PaperButton>
+                    </PaperFlex>
+                </PaperQuote>
+            </Show>
+            <Show when={saveError()}>
+                <PaperQuote variant="danger" icon="warning" title="Settings not saved">
+                    {saveError()}
+                </PaperQuote>
+            </Show>
+            <PaperSettingList autoHeight>
+                <PaperSettingItem
+                    title="Memory Allocation"
+                    description={`Java heap size (-Xmx/-Xms) for the server process, from ${MIN_RAM_GB} GB to ${MAX_RAM_GB} GB.`}
+                >
+                    <PaperSelectMenu
+                        name="ramAllocation"
+                        value={String(ramAllocation())}
+                        onValueChange={(val) => void changeRam(String(val))}
+                    >
+                        <For each={RAM_CHOICES}>
+                            {(gb) => (
+                                <PaperSelectMenuItem value={String(gb)}>
+                                    {gb} GB
+                                </PaperSelectMenuItem>
+                            )}
+                        </For>
+                    </PaperSelectMenu>
+                </PaperSettingItem>
 
-                            <Show when={values()}>
-                                <For each={visibleFields()}>
-                                    {(field) => (
-                                        <PaperSettingItem
-                                            title={field.title}
-                                            description={field.description}
-                                        >
-                                            {renderControl(field)}
-                                        </PaperSettingItem>
-                                    )}
-                                </For>
-                            </Show>
-                        </PaperSettingList>
+                <Show when={values()}>
+                    <For each={visibleFields()}>
+                        {(field) => (
+                            <PaperSettingItem title={field.title} description={field.description}>
+                                {renderControl(field)}
+                            </PaperSettingItem>
+                        )}
+                    </For>
+                </Show>
+            </PaperSettingList>
         </>
     );
 }
