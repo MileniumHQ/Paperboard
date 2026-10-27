@@ -1,11 +1,12 @@
 import { For, createSignal, onCleanup } from "solid-js";
-import { PaperButton, PaperToggle } from "@mileniumhq/paperui";
+import { PaperButton, PaperFlex, PaperSectionHeader, PaperText, PaperToggle } from "@mileniumhq/paperui";
 import { Face } from "./face/Face";
 import { SPOTS, createFace, type Spot } from "./face/controller";
 import { EXPRESSION_NAMES, type Expression } from "./face/expressions";
 import { orientationToward } from "./face/geometry";
 import "@mileniumhq/paperui/style.css";
 import "@mileniumhq/paperui/panel.css";
+import "./tokens.css";
 import styles from "./App.module.css";
 
 // Scratch playground for the AI's face: the identity comes first, the
@@ -110,8 +111,8 @@ export default function App() {
             </section>
 
             <aside class={styles.controls}>
-                <h2>Expression</h2>
-                <div class={styles.row}>
+                <PaperSectionHeader title="Expression" role="heading" aria-level={2} />
+                <PaperFlex direction="row" wrap gap="onefourth">
                     <For each={EXPRESSION_NAMES}>
                         {(name) => (
                             <PaperButton
@@ -126,10 +127,10 @@ export default function App() {
                             </PaperButton>
                         )}
                     </For>
-                </div>
+                </PaperFlex>
 
-                <h2>Look</h2>
-                <div class={styles.row}>
+                <PaperSectionHeader title="Look" role="heading" aria-level={2} />
+                <PaperFlex direction="row" wrap gap="onefourth">
                     <For each={Object.keys(SPOTS) as Spot[]}>
                         {(spot) => (
                             <PaperButton size="small" variant="text" onClick={() => face.look(spot)}>
@@ -137,22 +138,26 @@ export default function App() {
                             </PaperButton>
                         )}
                     </For>
-                </div>
+                </PaperFlex>
 
-                <h2>Behaviour</h2>
+                <PaperSectionHeader title="Behaviour" role="heading" aria-level={2} />
                 <label class={styles.toggle}>
-                    <PaperToggle checked={face.talking()} onChange={(on) => face.talk(on)} /> Talking
+                    <PaperToggle checked={face.talking()} onChange={(on) => face.talk(on)} />
+                    <PaperText>Talking</PaperText>
                 </label>
                 <label class={styles.toggle}>
-                    <PaperToggle checked={face.shaking()} onChange={(on) => face.shake(on)} /> Shaking
+                    <PaperToggle checked={face.shaking()} onChange={(on) => face.shake(on)} />
+                    <PaperText>Shaking</PaperText>
                 </label>
                 <label class={styles.toggle}>
-                    <PaperToggle checked={face.pondering()} onChange={(on) => face.ponder(on)} /> Pondering
+                    <PaperToggle checked={face.pondering()} onChange={(on) => face.ponder(on)} />
+                    <PaperText>Pondering</PaperText>
                 </label>
                 <label class={styles.toggle}>
-                    <PaperToggle checked={follow()} onChange={setFollow} /> Follow the cursor
+                    <PaperToggle checked={follow()} onChange={setFollow} />
+                    <PaperText>Follow the cursor</PaperText>
                 </label>
-                <div class={styles.row}>
+                <PaperFlex direction="row" wrap gap="onefourth">
                     <PaperButton size="small" onClick={() => face.blink()}>
                         Blink
                     </PaperButton>
@@ -162,14 +167,14 @@ export default function App() {
                     <PaperButton size="small" variant="primary" disabled={saying()} onClick={sayHello}>
                         Say hello
                     </PaperButton>
-                </div>
+                </PaperFlex>
 
-                <h2>Small sizes</h2>
-                <div class={styles.sizes}>
+                <PaperSectionHeader title="Small sizes" role="heading" aria-level={2} />
+                <PaperFlex direction="row" align="end" gap="full">
                     <Face face={small} size={96} />
                     <Face face={small} size={48} />
                     <Face face={small} size={24} />
-                </div>
+                </PaperFlex>
             </aside>
         </div>
     );

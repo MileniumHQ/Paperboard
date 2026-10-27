@@ -1,6 +1,6 @@
 .page {
     display: grid;
-    grid-template-columns: 1fr minmax(260px, 340px);
+    grid-template-columns: 1fr minmax(var(--agents-playground-controls-min), var(--agents-playground-controls-max));
     height: 100%;
     background: var(--paper-surface-app);
     color: var(--paper-text);
@@ -27,8 +27,9 @@
 }
 
 .bubble {
-    max-width: 30rem;
-    min-height: 3em;
+    max-width: var(--agents-playground-line-max);
+    /* two lines held open, so the stage doesn't jump as lines come and go */
+    min-height: 2lh;
     margin: 0;
     text-align: center;
     font-family: var(--paper-font-family-rounded);
@@ -46,28 +47,8 @@
     overflow-y: auto;
 }
 
-.controls h2 {
-    margin: var(--paper-uigap) 0 0;
-    font-size: var(--paper-text-size-1);
-    color: var(--paper-text-subtle);
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-}
-
-.row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--paper-uigap-onefourth);
-}
-
 .toggle {
     display: flex;
     align-items: center;
     gap: var(--paper-uigap-half);
-}
-
-.sizes {
-    display: flex;
-    align-items: end;
-    gap: var(--paper-uigap);
 }
