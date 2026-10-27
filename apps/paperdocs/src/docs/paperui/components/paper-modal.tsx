@@ -133,6 +133,7 @@ export function Example() {
                 PaperModal mounts into a portal layer appended to the document body.
                 While open, focus is trapped inside the dialog and restored to the prior element upon dismissal.
                 Opening focuses the dialog, or the field marked <PaperCode>autofocus</PaperCode> when it holds one, on every open.
+                Once closed it fades out without taking input, so a press during the fade reaches the page underneath.
             </PaperText>
 
             <PaperText preset="subheader" id="recipes">Recipes</PaperText>
