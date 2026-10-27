@@ -501,7 +501,7 @@ export class Conversation {
         this.typing = batch.length > 0;
         this.running = this.turn(message)
             .catch((e: Error) => {
-                this.put({ id: this.newId(), at: Date.now(), kind: "error", text: e.message });
+                this.put({ id: this.newId(), at: Date.now(), kind: "error", title: "Not answered", text: e.message });
             })
             .then(() => this.compactIfLong())
             .finally(() => {
@@ -719,6 +719,7 @@ export class Conversation {
                 id: this.newId(),
                 at: Date.now(),
                 kind: "error",
+                title: "Conversation not compacted",
                 text: `Couldn't summarize the conversation to save space: ${e instanceof Error ? e.message : e}. It tries again after the next reply; if this keeps happening, set Compaction to Forget in settings.`,
             });
         } finally {

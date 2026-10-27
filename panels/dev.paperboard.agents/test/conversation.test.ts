@@ -123,7 +123,7 @@ describe("the conversation", () => {
         host.stdout(TURN_PROC_ID, `{"type":"turn.failed","error":{"message":"usage limit reached"}}\n`);
         host.exit(TURN_PROC_ID, 1);
         await until(() => busy(states) === false);
-        expect(emitted.at(-1)).toMatchObject({ kind: "error", text: "usage limit reached" });
+        expect(emitted.at(-1)).toMatchObject({ kind: "error", title: "Not answered", text: "usage limit reached" });
 
         conv.send("again");
         await until(() => host.started.length === 2);
@@ -811,7 +811,7 @@ describe("compaction", () => {
         host.stdout(TURN_PROC_ID, `{"type":"turn.failed","error":{"message":"usage limit reached"}}\n`);
         host.exit(TURN_PROC_ID, 1);
         await until(() => states.at(-1)?.compacting === false && busy(states) === false && emitted.at(-1)?.kind === "error");
-        expect(emitted.at(-1)).toMatchObject({ kind: "error", text: expect.stringMatching(/^Couldn't summarize the conversation to save space: usage limit reached\..*Forget in settings\.$/) });
+        expect(emitted.at(-1)).toMatchObject({ kind: "error", title: "Conversation not compacted", text: expect.stringMatching(/^Couldn't summarize the conversation to save space: usage limit reached\..*Forget in settings\.$/) });
         conv.send("still there?");
         await until(() => host.started.length === 3);
         expect(host.started[2]!.args.slice(0, 2)).toEqual(["exec", "resume"]);

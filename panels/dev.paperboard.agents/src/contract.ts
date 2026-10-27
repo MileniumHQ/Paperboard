@@ -321,7 +321,8 @@ export type ChatEntry =
     // replyTo: the id of an earlier user or agent entry this bubble answers
     | { id: string; at: number; kind: "user"; text: string; replyTo?: string; attachments?: Attachment[] }
     | { id: string; at: number; kind: "agent"; text: string; replyTo?: string }
-    | { id: string; at: number; kind: "error"; text: string }
+    // title: the operation that didn't happen, like "Not answered"; entries written before it have none
+    | { id: string; at: number; kind: "error"; title?: string; text: string }
     | SignInEntry;
 
 /**
