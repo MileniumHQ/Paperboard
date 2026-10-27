@@ -1,7 +1,8 @@
 // The real Actions App on real PaperUI, over the fake service in
 // canvasSyncApi.ts, driven through what a person does on the canvas: a
-// canvas that won't load, dropping a function's call into its own body
-// from the canvas and from a flow, and a save whose flows were not applied. Results are base64
+// canvas that won't load, pressing and editing blocks stacked under saved
+// layers, dropping a function's call into its own body from the canvas and
+// from a flow, and a save whose flows were not applied. Results are base64
 // JSON in #results so the test can read them from Chrome's --dump-dom output.
 import { render } from "solid-js/web";
 import { PaperProvider } from "@mileniumhq/paperui";
@@ -48,6 +49,7 @@ const alertTitled = (title: string) =>
 const hasExactText = (el: Element | undefined, text: string) =>
     Boolean(el && [...el.querySelectorAll("*")].some((c) => c.textContent?.trim() === text));
 const topBlocks = () => [...root.querySelectorAll<HTMLElement>(".canvas-world > .action")];
+const layer = (el: HTMLElement | undefined) => Number(el?.style.zIndex);
 const center = (el: Element) => {
     const r = el.getBoundingClientRect();
     return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
@@ -78,7 +80,25 @@ async function run() {
     c.loadedAfterRetry = topBlocks().length;
     if (topBlocks().length !== 3) throw new Error(`canvas did not load after retry: ${root.innerHTML.slice(0, 300)}`);
 
-    const [, , caller] = topBlocks();
+    // pressing a block lifts it over every saved layer
+    const [, play, caller] = topBlocks();
+    const playHeader = play.querySelector(".actionHeaderRow")!;
+    pointer(playHeader, "pointerdown", center(playHeader));
+    pointer(playHeader, "pointerup", center(playHeader));
+    await sleep(50);
+    c.pressedLayer = layer(play);
+
+    // editing a field lifts its block, and it stays lifted after
+    const field = caller.querySelector<HTMLElement>('[contenteditable="true"]');
+    if (!field) throw new Error("the call block has no editable field");
+    field.focus();
+    await sleep(50);
+    field.blur();
+    await sleep(50);
+    c.editedLayer = layer(caller);
+    c.editedAbovePressed = layer(caller) > layer(play);
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    await sleep(100);
 
     // a call moved from the canvas into its own function goes back where it was
     const bodyZone = topBlocks()[0].querySelector("[data-drop-parent]")!;

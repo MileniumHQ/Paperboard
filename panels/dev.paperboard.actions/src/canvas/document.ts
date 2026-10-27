@@ -91,6 +91,9 @@ export function createCanvasDocument() {
             setSyncState(state);
         },
     });
+    // the highest layer given out; a loaded canvas raises it to its own top,
+    // so bringing a block forward clears everything already stacked
+    let maxZIndex = 10;
     const show = (snapshot: CanvasSnapshot) => {
         // stored flows are executable content: drop malformed blocks
         // loudly instead of rendering them into the canvas
@@ -102,6 +105,9 @@ export function createCanvasDocument() {
         // keyed by id, so blocks and notes update in place instead of remounting
         setBlocks(reconcile(clean, { key: "id" }));
         setNotes(reconcile(snapshot.canvas.notes as CanvasNote[], { key: "id" }));
+        for (const placed of [...clean, ...(snapshot.canvas.notes as CanvasNote[])]) {
+            if (typeof placed.zIndex === "number") maxZIndex = Math.max(maxZIndex, placed.zIndex);
+        }
         canvasRevision = snapshot.revision;
     };
     const fetchCanvas = () => actionsApi.call<CanvasSnapshot>(ACTIONS_PANEL_ID, "get-canvas");
@@ -258,7 +264,6 @@ export function createCanvasDocument() {
     };
 
     // stacking: whatever was touched last is drawn on top
-    let maxZIndex = 10;
     const nextZ = () => ++maxZIndex;
     const bringToFront = (id: string) => setBlocks((b) => b.id === id, "zIndex", nextZ());
     const bringNoteToFront = (id: string) => setNotes((n) => n.id === id, "zIndex", nextZ());

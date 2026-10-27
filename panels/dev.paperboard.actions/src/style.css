@@ -58,7 +58,7 @@ body,
     top: 0;
     left: 0;
     pointer-events: none;
-    /* block z-indices (raised while editing) stay inside the canvas, so
+    /* block z-indices stay inside the canvas, so
        menus rendered after it always stack above every flow */
     isolation: isolate;
 }

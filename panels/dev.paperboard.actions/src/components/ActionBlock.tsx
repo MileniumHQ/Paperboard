@@ -20,7 +20,6 @@ export type { ActionBlockProps };
 
 export default function ActionBlock(props: ActionBlockProps) {
     const [isDragging, setIsDragging] = createSignal(false);
-    const [isEditing, setIsEditing] = createSignal(false);
     const [showMoreOptions, setShowMoreOptions] = createSignal(false);
     let dragStart = { x: 0, y: 0 };
     let posStart = { x: 0, y: 0 };
@@ -172,15 +171,8 @@ export default function ActionBlock(props: ActionBlockProps) {
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
             onPointerCancel={handlePointerUp}
-            onFocusIn={() => setIsEditing(true)}
-            onFocusOut={(e) => {
-                // focus moves between the card's own fields while editing;
-                // only a focus leaving the card ends the editing state
-                const next = e.relatedTarget as Node | null;
-                if (!next || !(e.currentTarget as HTMLElement).contains(next)) {
-                    setIsEditing(false);
-                }
-            }}
+            // a field being edited, by pointer or by tab, sits above the rest
+            onFocusIn={() => props.onInteract?.()}
             onContextMenu={(e) => {
                 if (props.static || !props.id) return;
                 e.preventDefault();
@@ -191,11 +183,7 @@ export default function ActionBlock(props: ActionBlockProps) {
                 ...(props.pos
                     ? {
                           transform: `translate3d(${props.pos.x}px, ${props.pos.y}px, 0)`,
-                          "z-index": isEditing()
-                              ? 999999
-                              : props.zIndex !== undefined
-                                ? props.zIndex
-                                : "auto",
+                          "z-index": props.zIndex ?? "auto",
                       }
                     : {}),
             }}
