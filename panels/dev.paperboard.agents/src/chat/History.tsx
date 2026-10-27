@@ -74,7 +74,7 @@ export default function History(props: { agent: Agent; open: boolean; onClose: (
                                             onClick={() => void act(() => props.agent.openConversation(c.id), props.onClose)}
                                         >
                                             <PaperText class={styles.title}>{c.title}</PaperText>
-                                            <PaperText size={1} color="muted">
+                                            <PaperText size={1} color="text-muted">
                                                 {when(c.endedAt)} · {c.messages === 1 ? "1 message" : `${c.messages} messages`}
                                             </PaperText>
                                         </button>

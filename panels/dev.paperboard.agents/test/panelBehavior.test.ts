@@ -1,7 +1,8 @@
 // The panel as a person meets it (real browser): the real Main on real
 // PaperUI over a fake Agents service. It proves settings stand and say why
-// when the brains can't be looked for, and that a refused erase or tool
-// server removal is explained inside the confirmation that's still open.
+// when the brains can't be looked for, that a refused erase or tool server
+// removal is explained inside the confirmation that's still open, and that
+// quiet text reads in PaperUI's muted colour.
 //
 // Without Chrome the test is skipped with a visible reason.
 import { describe, test, expect } from "bun:test";
@@ -13,8 +14,8 @@ const behaviorTest = chrome ? test : test.skip;
 describe("panel behavior", () => {
     behaviorTest(
         chrome
-            ? "settings and refused confirmations (headless Chrome)"
-            : "settings and refused confirmations (skipped: no Chrome)",
+            ? "settings, refused confirmations and quiet text (headless Chrome)"
+            : "settings, refused confirmations and quiet text (skipped: no Chrome)",
         async () => {
             if (!chrome) return;
             const results = await runBrowserFixture(chrome, "test/fixtures/panelBehaviorFixture.html", {
@@ -31,6 +32,9 @@ describe("panel behavior", () => {
             expect(c.eraseRefusalInModal, "a refused erase must say why where the person is looking").toBe(true);
             expect(c.removeStillAsking, "a refused removal keeps its confirmation open").toBe(true);
             expect(c.removeRefusalInModal, "a refused removal must say why where the person is looking").toBe(true);
+
+            expect(c.routineScheduleColor, "a routine's schedule must be in the muted colour").toBe(c.mutedColor);
+            expect(c.routineTextColor, "the routine itself stays in the text colour").not.toBe(c.mutedColor);
         },
         90_000,
     );

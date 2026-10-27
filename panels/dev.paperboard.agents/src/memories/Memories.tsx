@@ -65,7 +65,7 @@ export default function Memories(props: { agent: Agent }) {
                         {(n) => (
                             <button type="button" class={styles.note} onClick={() => setOpen(n.key)}>
                                 <PaperText size={2}>{n.key}</PaperText>
-                                <PaperText size={1} color="muted">
+                                <PaperText size={1} color="text-muted">
                                     {n.when}
                                 </PaperText>
                             </button>
@@ -156,7 +156,7 @@ function Note(props: { agent: Agent; noteKey: string; onDone: () => void }) {
                 {(n) => (
                     <>
                         <PaperSectionHeader icon="description" title={props.noteKey} />
-                        <PaperText size={1} color="muted">
+                        <PaperText size={1} color="text-muted">
                             Read {n().when}
                         </PaperText>
                         <PaperMarkdown text={n().body} />

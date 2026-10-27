@@ -1,7 +1,7 @@
 // The real Agents panel (Main) on real PaperUI, over the fake service in
 // agentsApi.ts, driven through what a person does in its menu: settings
-// while the brains can't be looked for, and erasing the computer and
-// removing a tool server when the service refuses. Results
+// while the brains can't be looked for, erasing the computer and removing a
+// tool server when the service refuses, and reading the routines. Results
 // are base64 JSON in #results so the test can read them from Chrome's
 // --dump-dom output.
 import { render } from "solid-js/web";
@@ -19,6 +19,8 @@ window.addEventListener("error", (e) => uncaught.push(String(e.message)));
 window.addEventListener("unhandledrejection", (e) => uncaught.push(String(e.reason)));
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+const HOUR = 60 * 60 * 1000;
+service.routines = [{ id: "r1", what: "Text a flag fact", schedule: { kind: "every", minutes: 60 }, created: 0, lastRun: null, lastError: null, next: Date.now() + HOUR }];
 service.refuse[UI_ACTION_IDS.detect] = "harness detection is down";
 
 const root = document.getElementById("app")!;
@@ -80,6 +82,18 @@ async function run() {
     c.removeRefusalInModal = alertSaying(dialogTitled("Remove notes?"), "the vault is locked");
     button(confirmRemove, "Keep it")?.click();
     await sleep(300);
+
+    // a routine's schedule reads quieter than what it does
+    await page("routines");
+    const what = [...document.querySelectorAll<HTMLElement>("*")].find((el) => el.children.length === 0 && el.textContent === "Text a flag fact");
+    const when = [...document.querySelectorAll<HTMLElement>("*")].find((el) => el.children.length === 0 && el.textContent?.startsWith("every"));
+    const muted = document.createElement("span");
+    muted.style.color = "var(--paper-text-muted)";
+    root.appendChild(muted);
+    c.routineScheduleColor = when ? getComputedStyle(when).color : null;
+    c.routineTextColor = what ? getComputedStyle(what).color : null;
+    c.mutedColor = getComputedStyle(muted).color;
+    muted.remove();
 
     c.uncaught = uncaught;
 }

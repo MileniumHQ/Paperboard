@@ -137,7 +137,7 @@ function AgentSettings(props: { agent: Agent }) {
                                     onChange={() => save({ model: model().trim() || null })}
                                     onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
                                 />
-                                <PaperText size={1} color="muted">
+                                <PaperText size={1} color="text-muted">
                                     {message(models.error)} Type a model's id instead.
                                 </PaperText>
                             </div>
