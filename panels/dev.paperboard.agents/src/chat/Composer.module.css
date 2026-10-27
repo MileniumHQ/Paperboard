@@ -39,6 +39,7 @@
     border: none;
     outline: none;
     resize: none;
+    max-height: var(--agents-composer-max);
     overflow-y: auto;
     background: transparent;
     color: var(--paper-text);

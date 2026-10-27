@@ -1,8 +1,9 @@
 // The real Agents panel (Main) on real PaperUI, over the fake service in
 // agentsApi.ts, driven through what a person does in its menu: settings
 // while the brains can't be looked for, erasing the computer and removing a
-// tool server when the service refuses, and reading the routines. Results
-// are base64 JSON in #results so the test can read them from Chrome's
+// tool server when the service refuses, and reading the routines.
+// The chat opens on a turn that failed, which must say what didn't happen.
+// Results are base64 JSON in #results so the test can read them from Chrome's
 // --dump-dom output.
 import { render } from "solid-js/web";
 import { PaperProvider } from "@mileniumhq/paperui";
@@ -22,6 +23,10 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const HOUR = 60 * 60 * 1000;
 service.routines = [{ id: "r1", what: "Text a flag fact", schedule: { kind: "every", minutes: 60 }, created: 0, lastRun: null, lastError: null, next: Date.now() + HOUR }];
 service.refuse[UI_ACTION_IDS.detect] = "harness detection is down";
+service.history = [
+    { id: "m1", at: Date.now() - 1000, kind: "user", text: "hi" },
+    { id: "m2", at: Date.now(), kind: "error", title: "Not answered", text: "usage limit reached" },
+];
 
 const root = document.getElementById("app")!;
 render(() => <PaperProvider fullWidth fullHeight><Main /></PaperProvider>, root);
@@ -44,6 +49,10 @@ async function run() {
     await sleep(300);
     const menu = document.querySelector<HTMLButtonElement>('button[aria-label="Menu"]');
     if (!menu) throw new Error("the chat never showed");
+    // a failed turn in the conversation names what didn't happen, beside why
+    const failed = [...document.querySelectorAll('[role="alert"]')].find((a) => a.textContent?.includes("usage limit reached"));
+    c.chatFailureTitled = Boolean(failed?.textContent?.includes("Not answered"));
+
     menu.click();
     await sleep(300);
 

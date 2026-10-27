@@ -1,6 +1,7 @@
 // The panel as a person meets it (real browser): the real Main on real
 // PaperUI over a fake Agents service. It proves settings stand and say why
-// when the brains can't be looked for, that a refused erase or tool server
+// when the brains can't be looked for, that a failed turn names what didn't
+// happen, that a refused erase or tool server
 // removal is explained inside the confirmation that's still open, and that
 // quiet text reads in PaperUI's muted colour.
 //
@@ -25,6 +26,7 @@ describe("panel behavior", () => {
             const c = results.checks;
 
             expect(c.uncaught, "nothing may fail out of sight").toEqual([]);
+            expect(c.chatFailureTitled, "a failed turn must name what didn't happen").toBe(true);
             expect(c.settingsShown, "settings must show while the brains can't be looked for").toBe(true);
             expect(c.detectFailureShown, "a failed look for the brains must say why").toBe(true);
 

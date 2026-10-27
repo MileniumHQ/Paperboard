@@ -4,17 +4,15 @@
 // (the model, the computer) lives in the menu and settings.
 
 import { For, Show, createEffect, createSignal } from "solid-js";
-import { PaperButton, PaperEffect, PaperIcon, PaperText } from "@mileniumhq/paperui";
+import { PaperButton, PaperEffect, PaperIcon, PaperQuote } from "@mileniumhq/paperui";
 import { LIMITS, type ChatEntry } from "../contract";
 import type { Agent } from "../lib/agent";
+import { failure, type Failure } from "../lib/failure";
 import type { Tray } from "./tray";
 import styles from "./Composer.module.css";
 
-const MAX_HEIGHT = "calc(var(--paper-uigap) * 12)";
 /** how often typing is told to the service; it waits a second after the last time */
 const TYPING_EVERY_MS = 300;
-
-const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 export default function Composer(props: {
     agent: Agent;
@@ -29,7 +27,7 @@ export default function Composer(props: {
     const { agent } = props;
     const name = () => agent.state.settings?.name ?? "your agent";
 
-    const [error, setError] = createSignal<string | null>(null);
+    const [error, setError] = createSignal<Failure | null>(null);
     const [dragging, setDragging] = createSignal(false);
     let field!: HTMLTextAreaElement;
     let picker!: HTMLInputElement;
@@ -37,7 +35,9 @@ export default function Composer(props: {
     const tray = () => props.tray;
     const ready = () => !tray().uploading() && !tray().failed() && (!!props.draft.trim() || tray().ids().length > 0);
     const attach = (files: File[]) => {
-        if (files.length) setError(tray().add(files));
+        if (!files.length) return;
+        const refused = tray().add(files);
+        setError(refused ? { title: "Not every file added", message: refused } : null);
     };
 
     // while sent messages wait to be read, typing more holds them, so they're read together
@@ -45,7 +45,7 @@ export default function Composer(props: {
     const tellTyping = () => {
         if (agent.state.chat.waiting.length === 0 || Date.now() - toldTyping < TYPING_EVERY_MS) return;
         toldTyping = Date.now();
-        agent.typing().catch((e) => setError(message(e)));
+        agent.typing().catch((e) => setError(failure("Messages not held", e)));
     };
 
     const send = async () => {
@@ -58,14 +58,14 @@ export default function Composer(props: {
             tray().clear();
             props.onCancelReply();
         } catch (e) {
-            setError(message(e));
+            setError(failure("Message not sent", e));
         }
     };
 
-    // grows with the text up to a bound; a sent message clears it from outside
+    // grows with the text up to its max-height, then scrolls; a sent message clears it from outside
     const resize = () => {
-        field.style.height = "auto";
-        field.style.height = `min(${field.scrollHeight}px, ${MAX_HEIGHT})`;
+        field.style.height = ""; // its own height again, to measure the text
+        field.style.height = `${field.scrollHeight}px`;
     };
     createEffect(() => {
         void props.draft;
@@ -189,9 +189,11 @@ export default function Composer(props: {
             </div>
 
             <Show when={error()}>
-                <PaperText size={1} color="danger" role="alert">
-                    {error()}
-                </PaperText>
+                {(shown) => (
+                    <PaperQuote variant="danger" icon="error" title={shown().title} role="alert" onDismiss={() => setError(null)}>
+                        {shown().message}
+                    </PaperQuote>
+                )}
             </Show>
         </div>
     );

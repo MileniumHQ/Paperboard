@@ -1,7 +1,8 @@
 import { For, Match, Show, Switch, createSignal, onMount } from "solid-js";
-import { PaperButton, PaperIcon, PaperInput } from "@mileniumhq/paperui";
+import { PaperButton, PaperFlex, PaperIcon, PaperInput, PaperLoader, PaperQuote, PaperText } from "@mileniumhq/paperui";
 import { LIMITS, type SignInEntry } from "../contract";
 import type { Agent } from "../lib/agent";
+import { errorText } from "../lib/failure";
 import styles from "./SignIn.module.css";
 
 /**
@@ -26,7 +27,7 @@ export default function SignIn(props: { agent: Agent; entry: SignInEntry; name: 
         setShotError(null);
         props.agent.signInShot(e().id).then(
             (r) => setImage((props.draft.image = r.image)),
-            (err) => setShotError(err instanceof Error ? err.message : String(err)),
+            (err) => setShotError(errorText(err)),
         );
     };
     onMount(() => {
@@ -45,7 +46,7 @@ export default function SignIn(props: { agent: Agent; entry: SignInEntry; name: 
         setBusy(true);
         run().then(
             () => undefined,
-            (err) => setError(err instanceof Error ? err.message : String(err)),
+            (err) => setError(errorText(err)),
         ).finally(() => {
             setBusy(false);
             // whatever happened, the values go: the request is used once
@@ -56,28 +57,34 @@ export default function SignIn(props: { agent: Agent; entry: SignInEntry; name: 
 
     return (
         <section class={styles.card} aria-label={`Sign in on ${e().site}`} data-message={e().id}>
-            <div class={styles.head}>
+            <PaperFlex direction="row" align="start" gap="half">
                 <PaperIcon>lock</PaperIcon>
-                <div>
-                    <p class={styles.title}>
+                <PaperFlex gap="onefourth">
+                    <PaperText size={3}>
                         Sign in on <strong>{e().site}</strong>
-                    </p>
-                    <p class={styles.sub}>{props.name} picked these fields in its browser. It never sees what you type here.</p>
-                </div>
-            </div>
+                    </PaperText>
+                    <PaperText size={1} color="text-muted">
+                        {props.name} picked these fields in its browser. It never sees what you type here.
+                    </PaperText>
+                </PaperFlex>
+            </PaperFlex>
 
             <Switch>
                 <Match when={e().status === "waiting"}>
                     <Show
                         when={image()}
                         fallback={
-                            <Show when={shotError()} fallback={<div class={styles.shotLoading}>Loading the page's picture…</div>}>
-                                <p class={styles.error} role="alert">
-                                    <PaperIcon>error</PaperIcon> {shotError()}
-                                    <PaperButton variant="text" onClick={loadShot}>
-                                        Try again
-                                    </PaperButton>
-                                </p>
+                            <Show when={shotError()} fallback={<PaperLoader loaderStatus="indeterminate" label="Loading the page's picture" />}>
+                                <PaperFlex gap="half">
+                                    <PaperQuote variant="danger" icon="error" title="Picture not loaded" role="alert">
+                                        {shotError()}
+                                    </PaperQuote>
+                                    <PaperFlex direction="row">
+                                        <PaperButton size="small" onClick={loadShot}>
+                                            Try again
+                                        </PaperButton>
+                                    </PaperFlex>
+                                </PaperFlex>
                             </Show>
                         }
                     >
@@ -88,60 +95,64 @@ export default function SignIn(props: { agent: Agent; entry: SignInEntry; name: 
                         />
                     </Show>
                     <form
-                        class={styles.form}
                         onSubmit={(ev) => {
                             ev.preventDefault();
                             answer(() => props.agent.signIn(e().id, values()));
                         }}
                     >
-                        <For each={e().fields}>
-                            {(f, i) => (
-                                <PaperInput
-                                    name={`sign-in-${i()}`}
-                                    label={`${i() + 1}. ${f.label}`}
-                                    type={f.secret ? "password" : "text"}
-                                    autocomplete="off"
-                                    maxLength={LIMITS.signIn.valueChars}
-                                    value={values()[i()] ?? ""}
-                                    onInput={(ev) => setValue(i(), ev.currentTarget.value)}
-                                    disabled={busy()}
-                                />
-                            )}
-                        </For>
-                        <div class={styles.actions}>
-                            <PaperButton variant="text" type="button" disabled={busy()} onClick={() => answer(() => props.agent.declineSignIn(e().id))}>
-                                Not now
-                            </PaperButton>
-                            <PaperButton type="submit" disabled={busy()}>
-                                Sign in
-                            </PaperButton>
-                        </div>
+                        <PaperFlex gap="half">
+                            <For each={e().fields}>
+                                {(f, i) => (
+                                    <PaperInput
+                                        name={`sign-in-${i()}`}
+                                        label={`${i() + 1}. ${f.label}`}
+                                        type={f.secret ? "password" : "text"}
+                                        autocomplete="off"
+                                        maxLength={LIMITS.signIn.valueChars}
+                                        value={values()[i()] ?? ""}
+                                        onInput={(ev) => setValue(i(), ev.currentTarget.value)}
+                                        disabled={busy()}
+                                    />
+                                )}
+                            </For>
+                            <PaperFlex direction="row" justify="flex-end" gap="half">
+                                <PaperButton variant="text" type="button" disabled={busy()} onClick={() => answer(() => props.agent.declineSignIn(e().id))}>
+                                    Not now
+                                </PaperButton>
+                                <PaperButton type="submit" disabled={busy()}>
+                                    Sign in
+                                </PaperButton>
+                            </PaperFlex>
+                        </PaperFlex>
                     </form>
                 </Match>
                 <Match when={e().status === "submitting"}>
-                    <p class={styles.status}>Signing in…</p>
+                    <PaperLoader loaderStatus="indeterminate" label="Signing in" />
                 </Match>
                 <Match when={e().status === "submitted"}>
-                    <p class={styles.status}>
-                        <PaperIcon>check</PaperIcon> Sent to {e().site}. {props.name} will check whether it worked.
-                    </p>
+                    <PaperFlex direction="row" align="center" gap="half">
+                        <PaperIcon>check</PaperIcon>
+                        <PaperText color="text-muted">
+                            Sent to {e().site}. {props.name} will check whether it worked.
+                        </PaperText>
+                    </PaperFlex>
                 </Match>
                 <Match when={e().status === "declined"}>
-                    <p class={styles.status}>You said no.</p>
+                    <PaperText color="text-muted">You said no.</PaperText>
                 </Match>
                 <Match when={e().status === "expired"}>
-                    <p class={styles.status}>This request lapsed. {props.name} can ask again.</p>
+                    <PaperText color="text-muted">This request lapsed. {props.name} can ask again.</PaperText>
                 </Match>
                 <Match when={e().status === "failed"}>
-                    <p class={styles.error} role="alert">
-                        <PaperIcon>error</PaperIcon> Couldn't sign in: {e().error}. {props.name} was told and can ask again.
-                    </p>
+                    <PaperQuote variant="danger" icon="error" title="Not signed in" role="alert">
+                        {e().error}. {props.name} was told and can ask again.
+                    </PaperQuote>
                 </Match>
             </Switch>
             <Show when={error()}>
-                <p class={styles.error} role="alert">
-                    <PaperIcon>error</PaperIcon> {error()}
-                </p>
+                <PaperQuote variant="danger" icon="error" title="Answer not sent" role="alert">
+                    {error()}
+                </PaperQuote>
             </Show>
         </section>
     );

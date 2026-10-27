@@ -29,27 +29,13 @@
     padding: var(--paper-uigap-double);
 }
 
-.empty {
-    margin: auto;
-    color: var(--paper-text-muted);
-    font-size: var(--paper-text-size-2);
-}
-
-.stamp {
-    align-self: center;
-    margin: var(--paper-uigap) 0 var(--paper-uigap-half);
-    color: var(--paper-text-subtle);
-    font-size: var(--paper-text-size-1);
-    font-weight: var(--paper-weight-medium);
-}
-
 /* ---- rows: one bubble, on its side */
 
 .row {
     position: relative;
     display: flex;
     flex-direction: column;
-    max-width: min(80%, 40rem);
+    max-width: min(80%, var(--agents-bubble-max));
     /* a vertical drag still scrolls the chat; a sideways one is the bubble's, to reply */
     touch-action: pan-y;
 }
@@ -141,34 +127,6 @@
     opacity: var(--paper-opacity-muted);
 }
 
-.waitingNote {
-    display: flex;
-    gap: var(--paper-uigap-half);
-    margin-top: var(--paper-uigap-onefourth);
-    color: var(--paper-text-subtle);
-    font-size: var(--paper-text-size-1);
-}
-
-.takeBack {
-    padding: 0;
-    border: none;
-    background: none;
-    color: var(--paper-primary);
-    font: inherit;
-    cursor: pointer;
-}
-
-@media (hover: hover) {
-    .takeBack:hover {
-        text-decoration: underline;
-    }
-}
-@media (hover: none) {
-    .takeBack:active {
-        text-decoration: underline;
-    }
-}
-
 /* the message a bubble answers */
 .quote {
     display: flex;
@@ -255,15 +213,15 @@
     height: var(--paper-uigap-half);
     border-radius: var(--paper-border-radius-pill);
     background: var(--paper-text-subtle);
-    animation: bounce 1.2s var(--paper-ease-standard) infinite;
+    animation: bounce var(--agents-typing-cycle) var(--paper-ease-standard) infinite;
 }
 
 .dot:nth-child(2) {
-    animation-delay: 0.15s;
+    animation-delay: calc(var(--agents-typing-cycle) / 8);
 }
 
 .dot:nth-child(3) {
-    animation-delay: 0.3s;
+    animation-delay: calc(var(--agents-typing-cycle) / 4);
 }
 
 @keyframes bounce {
@@ -287,13 +245,4 @@
     .bubbleWrap {
         transition: none;
     }
-}
-
-.error {
-    display: flex;
-    align-items: center;
-    gap: var(--paper-uigap-half);
-    margin: 0;
-    color: var(--paper-danger);
-    font-size: var(--paper-text-size-2);
 }

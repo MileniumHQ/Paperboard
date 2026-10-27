@@ -2,7 +2,7 @@
 // calls the UI makes (actionsApi and createPanelBridge). The service's own
 // answers are covered by its suites; this lets a fixture drive the real UI
 // into the service's refusals and read what the person is shown.
-import { DEFAULT_STATE, UI_ACTION_IDS, type AiState, type Routine } from "../../src/contract";
+import { DEFAULT_STATE, UI_ACTION_IDS, type AiState, type ChatEntry, type Routine } from "../../src/contract";
 import { TOOLS_ACTION_IDS, type ToolsView } from "../../src/toolsContract";
 
 export const service = {
@@ -15,6 +15,7 @@ export const service = {
     refuse: {} as Record<string, string>,
     calls: [] as string[],
     routines: [] as Routine[],
+    history: [] as ChatEntry[],
     tools: {
         config: { actions: false, servers: [{ name: "notes", where: "host", enabled: true, transport: "stdio", command: "notes-mcp", args: [], env: {} }] },
         status: [{ name: "notes", phase: "running", error: null, tools: 3 }],
@@ -24,7 +25,7 @@ export const service = {
 };
 
 const answers: Record<string, () => unknown> = {
-    [UI_ACTION_IDS.history]: () => [],
+    [UI_ACTION_IDS.history]: () => service.history,
     [UI_ACTION_IDS.detect]: () => [{ id: "codex", installed: true, version: "1.0.0" }],
     [UI_ACTION_IDS.models]: () => ({ models: [] }),
     [UI_ACTION_IDS.windows]: () => ({ windows: [] }),

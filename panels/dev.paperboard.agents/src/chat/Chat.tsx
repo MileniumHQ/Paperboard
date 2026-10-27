@@ -1,5 +1,5 @@
 import { For, Show, createEffect, createMemo, createSignal, on, type JSX } from "solid-js";
-import { PaperButton, PaperIcon, haptic, PaperMarkdown, PaperPageHeader, PaperProgress, type MarkdownImage } from "@mileniumhq/paperui";
+import { PaperButton, PaperFlex, PaperIcon, haptic, PaperMarkdown, PaperPageHeader, PaperProgress, PaperQuote, PaperText, type MarkdownImage } from "@mileniumhq/paperui";
 import { Face } from "../face/Face";
 import { skinFor } from "../face/skins";
 import type { FaceController } from "../face/controller";
@@ -12,6 +12,7 @@ import { createTray } from "./tray";
 import History from "./History";
 import { createSwipeReply } from "./swipeReply";
 import SignIn, { type SignInDraft } from "./SignIn";
+import { failure, type Failure } from "../lib/failure";
 import styles from "./Chat.module.css";
 
 /** A message someone can reply to, and be quoted. */
@@ -72,7 +73,7 @@ export default function Chat(props: { agent: Agent; face: FaceController; onMenu
     const [draft, setDraft] = createSignal("");
     const tray = createTray(agent);
     const agentImage = renderAgentImage(agent.files);
-    const [notice, setNotice] = createSignal<string | null>(null);
+    const [notice, setNotice] = createSignal<Failure | null>(null);
     const [historyOpen, setHistoryOpen] = createSignal(false);
     const [startingNew, setStartingNew] = createSignal(false);
     const byId = (id: string) => agent.entries.find((e): e is Said => e.id === id && (e.kind === "user" || e.kind === "agent"));
@@ -169,7 +170,7 @@ export default function Chat(props: { agent: Agent; face: FaceController; onMenu
                             setStartingNew(true);
                             agent
                                 .newConversation()
-                                .catch((e) => setNotice(e instanceof Error ? e.message : String(e)))
+                                .catch((e) => setNotice(failure("Conversation not started", e)))
                                 .finally(() => setStartingNew(false));
                         }}
                     >
@@ -191,18 +192,24 @@ export default function Chat(props: { agent: Agent; face: FaceController; onMenu
                 aria-live="polite"
             >
                 <Show when={rows().length === 0}>
-                    <p class={styles.empty}>Say hi to {name()}.</p>
+                    <PaperFlex flex center>
+                        <PaperText color="text-muted">Say hi to {name()}.</PaperText>
+                    </PaperFlex>
                 </Show>
                 <For each={visible()}>
                     {(row) => (
                         <>
                             <Show when={row.stamp !== null}>
-                                <p class={styles.stamp}>{stampText(row.stamp!)}</p>
+                                <PaperFlex align="center" paddingY="half">
+                                    <PaperText size={1} weight={500} color="text-subtle">
+                                        {stampText(row.stamp!)}
+                                    </PaperText>
+                                </PaperFlex>
                             </Show>
                             <Show when={row.side === "note"}>
-                                <p class={styles.error} role="alert">
-                                    <PaperIcon>error</PaperIcon> {(row.entry as { text: string }).text}
-                                </p>
+                                <PaperQuote variant="danger" icon="error" title={(row.entry as Extract<ChatEntry, { kind: "error" }>).title} role="alert">
+                                    {(row.entry as Extract<ChatEntry, { kind: "error" }>).text}
+                                </PaperQuote>
                             </Show>
                             <Show when={row.side === "card"}>
                                 <SignIn
@@ -231,7 +238,7 @@ export default function Chat(props: { agent: Agent; face: FaceController; onMenu
                                                 if (!draft().trim()) setDraft(w.text);
                                                 if (w.attachments?.length) tray.restore(w.attachments);
                                             },
-                                            (e) => setNotice(e instanceof Error ? e.message : String(e)),
+                                            (e) => setNotice(failure("Message not taken back", e)),
                                         );
                                     }}
                                 />
@@ -252,9 +259,13 @@ export default function Chat(props: { agent: Agent; face: FaceController; onMenu
             </div>
 
             <Show when={notice()}>
-                <p class={styles.error} role="alert">
-                    <PaperIcon>error</PaperIcon> {notice()}
-                </p>
+                {(shown) => (
+                    <PaperFlex paddingX="double">
+                        <PaperQuote variant="danger" icon="error" title={shown().title} role="alert" onDismiss={() => setNotice(null)}>
+                            {shown().message}
+                        </PaperQuote>
+                    </PaperFlex>
+                )}
             </Show>
 
             <Composer
@@ -347,12 +358,14 @@ function Bubble(props: {
                 </Show>
             </div>
             <Show when={waiting()}>
-                <div class={styles.waitingNote}>
-                    <span>Waiting</span>
-                    <button type="button" class={styles.takeBack} onClick={() => props.onTakeBack(waiting()!)}>
+                <PaperFlex direction="row" align="center" gap="half">
+                    <PaperText size={1} color="text-subtle">
+                        Waiting
+                    </PaperText>
+                    <PaperButton size="tiny" variant="text" onClick={() => props.onTakeBack(waiting()!)}>
                         Take back
-                    </button>
-                </div>
+                    </PaperButton>
+                </PaperFlex>
             </Show>
         </div>
     );
