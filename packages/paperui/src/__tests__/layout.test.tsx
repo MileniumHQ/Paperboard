@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { createSignal } from "solid-js";
 import { render } from "@solidjs/testing-library";
 import { PaperFlex } from "../templates/PaperFlex";
 import { PaperText } from "../components/PaperText";
@@ -26,6 +27,23 @@ describe("PaperLayout and Components Layout Enhancements", () => {
         expect(el.style.flexGrow).toBe("1");
         expect(el.style.minHeight).toBe("0px");
         expect(el.style.width).toBe("100%");
+    });
+
+    it("hides PaperFlex with the hidden attribute, and shows it again", () => {
+        const [hidden, setHidden] = createSignal(true);
+        const { getByTestId } = render(() => (
+            <PaperFlex data-testid="layer" hidden={hidden()} direction="row">
+                Child
+            </PaperFlex>
+        ));
+
+        const el = getByTestId("layer");
+        expect(el.hidden).toBe(true);
+        expect(el.style.display).toBe("none");
+        setHidden(false);
+        expect(el.hidden).toBe(false);
+        expect(el.style.display).toBe("flex");
+        expect(el.style.flexDirection).toBe("row");
     });
 
     it("renders PaperText with breakWord and truncate", () => {

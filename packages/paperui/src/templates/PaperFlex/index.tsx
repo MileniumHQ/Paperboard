@@ -158,7 +158,9 @@ export function PaperFlex(props: ParentProps<PaperFlexProps>) {
         const layoutStyle = resolveLayoutStyles(local, parentLayoutCtx);
 
         const base: JSX.CSSProperties = {
-            display: "flex",
+            // the hidden attribute hides it, as it would any element: the
+            // inline display would otherwise win over the browser's own rule
+            display: props.hidden ? "none" : "flex",
             "flex-direction": local.direction || "column",
             "align-items": local.align ?? (local.center ? "center" : undefined),
             "justify-content":

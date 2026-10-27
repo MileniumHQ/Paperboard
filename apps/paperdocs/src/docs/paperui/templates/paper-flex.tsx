@@ -130,6 +130,12 @@ export function Example() {
                             <td><PaperCode>false</PaperCode></td>
                             <td>Takes the remaining space along the parent's axis.</td>
                         </tr>
+                        <tr>
+                            <td><PaperCode>hidden</PaperCode></td>
+                            <td><PaperCode>boolean</PaperCode></td>
+                            <td><PaperCode>false</PaperCode></td>
+                            <td>Hides the container while keeping it and its children mounted.</td>
+                        </tr>
                     </tbody>
                 </PaperTable>
 
@@ -137,6 +143,7 @@ export function Example() {
             <PaperText preset="body">
                 PaperFlex provides a layout context that allows nested children to inherit flex parent awareness.
                 When resizable is active, dragging the handle updates dimensions and triggers onResize.
+                PaperFlex sets its display inline, so a class can't hide it: use hidden for a layer that stays mounted while another one shows, such as an open iframe that should come back as it was left.
                 PaperCard and PaperPage take the same sizing props. Layout is set through these props, never a style tag; see the size tokens under Spacing.
             </PaperText>
 
