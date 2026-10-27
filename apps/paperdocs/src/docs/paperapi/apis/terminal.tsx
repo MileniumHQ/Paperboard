@@ -59,12 +59,12 @@ await terminalApi.write(termId, "ls -la\\n");`}
                     <tr>
                         <td><PaperCode>write</PaperCode></td>
                         <td><PaperCode>write(id, data): Promise&lt;void&gt;</PaperCode></td>
-                        <td>Sends input text or control characters to the terminal stdin.</td>
+                        <td>Sends input text or control characters to the terminal stdin. Rejects when the daemon refuses it, for example a session that is gone.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>resize</PaperCode></td>
                         <td><PaperCode>resize(id, cols, rows): Promise&lt;void&gt;</PaperCode></td>
-                        <td>Notifies the pty process of viewport row and column dimension changes.</td>
+                        <td>Notifies the pty process of viewport row and column dimension changes. Rejects when the daemon refuses it.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>destroy</PaperCode></td>
@@ -101,7 +101,9 @@ await terminalApi.write(termId, "ls -la\\n");`}
             </PaperText>
             <PaperCode block language="tsx">
 {`window.addEventListener("resize", () => {
-    terminalApi.resize("main-shell", terminal.cols, terminal.rows);
+    terminalApi
+        .resize("main-shell", terminal.cols, terminal.rows)
+        .catch((err) => terminal.write(\`Resize failed: \${err.message}\\r\\n\`));
 });`}
             </PaperCode>
         </PaperFlex>

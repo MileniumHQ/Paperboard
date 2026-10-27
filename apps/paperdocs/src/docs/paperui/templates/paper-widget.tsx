@@ -97,8 +97,8 @@ export function Disk(props: { freeBytes: number; used: number }) {
                     </tr>
                     <tr>
                         <td><PaperCode>PaperWidgetMessage</PaperCode></td>
-                        <td><PaperCode>title, description, tone, children</PaperCode></td>
-                        <td>Loading, empty, and failed states. Danger and warning make it an alert; children are the way out.</td>
+                        <td><PaperCode>title, description, tone, hint, children</PaperCode></td>
+                        <td>Loading, empty, and failed states. Danger and warning make it an alert; children are the way out. A hint is the full reason as a tooltip, for a tile too small for a description.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>PaperWidgetDot</PaperCode></td>

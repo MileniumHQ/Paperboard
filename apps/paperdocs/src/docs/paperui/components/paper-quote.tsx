@@ -84,6 +84,12 @@ export function Example() {
                             <td><PaperCode>undefined</PaperCode></td>
                             <td>Bold summary title above the quote text.</td>
                         </tr>
+                        <tr>
+                            <td><PaperCode>onDismiss</PaperCode></td>
+                            <td><PaperCode>() =&gt; void</PaperCode></td>
+                            <td><PaperCode>undefined</PaperCode></td>
+                            <td>Shows a close button. For a notice that outlives the moment it reports, like a failed action over a full-bleed view.</td>
+                        </tr>
                     </tbody>
                 </PaperTable>
 
