@@ -3,7 +3,7 @@
 import { render, fireEvent, cleanup } from "@solidjs/testing-library";
 import { createRoot, createSignal } from "solid-js";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { HAPTIC_EVENT, haptic, playHaptic } from "../utils/haptics";
+import { HAPTIC_EVENT, haptic, playHaptic, setHapticPlayer } from "../utils/haptics";
 import { PaperEffect } from "../components/PaperEffect";
 import { PaperToggle } from "../components/PaperToggle";
 import { PaperRange } from "../components/PaperRange";
@@ -28,6 +28,22 @@ describe("haptics", () => {
         expect(playHaptic([10000])).toBe(false);
         expect(playHaptic("toString")).toBe(false);
         expect(vibrate).toHaveBeenCalledTimes(1);
+    });
+
+    it("a native host's player plays named kinds instead of the vibrator", () => {
+        const played: string[] = [];
+        setHapticPlayer((kind) => { played.push(kind); return true; });
+        try {
+            expect(playHaptic("paper")).toBe(true);
+            expect(playHaptic("forever")).toBe(false);
+            haptic("success");
+        } finally {
+            setHapticPlayer(null);
+        }
+        expect(played).toEqual(["paper", "success"]);
+        expect(vibrate).not.toHaveBeenCalled();
+        expect(playHaptic("light")).toBe(true);
+        expect(vibrate).toHaveBeenLastCalledWith([10]);
     });
 
     it("a framed document reports the kind on window instead of vibrating", () => {

@@ -41,13 +41,28 @@ export function isHapticKind(value: unknown): value is HapticKind {
     return typeof value === "string" && Object.prototype.hasOwnProperty.call(PATTERNS, value);
 }
 
+/** plays a kind with a native host's own feedback; returns whether it played */
+export type HapticPlayer = (kind: HapticKind) => boolean;
+
+let player: HapticPlayer | null = null;
+
 /**
- * Plays `kind` on this document's device, if it has a vibrator. The shell
+ * A native shell (an iOS app has no navigator.vibrate) plays every kind
+ * through its own feedback generators instead. Pass null to vibrate again.
+ */
+export function setHapticPlayer(next: HapticPlayer | null): void {
+    player = next;
+}
+
+/**
+ * Plays `kind` on this document's device: through the native host's player
+ * when one is set, else its vibrator, if it has one. The shell
  * calls it for kinds its panel frames forward; anything not in the table is
  * ignored. Returns whether a vibration was started.
  */
 export function playHaptic(kind: unknown): boolean {
     if (!isHapticKind(kind)) return false;
+    if (player) return player(kind);
     if (typeof navigator === "undefined" || typeof navigator.vibrate !== "function") return false;
     // a new pattern replaces one still playing; nothing queues
     return navigator.vibrate(PATTERNS[kind] as unknown as number[]);
