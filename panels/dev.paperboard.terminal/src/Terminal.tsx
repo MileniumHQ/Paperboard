@@ -1,22 +1,31 @@
 import { onMount, onCleanup, createEffect, on } from "solid-js";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
-import { copyText, getVar, getVarCss, pasteText } from "@mileniumhq/paperui";
+import { copyText, getVar, pasteText } from "@mileniumhq/paperui";
 import { terminalApi, actions as actionsApi } from "@mileniumhq/paperapi";
 import { terminalKeyAction } from "./keys";
+import { errorMessage, type Outcome } from "./lib/failure";
+import styles from "./Terminal.module.css";
 import "@xterm/xterm/css/xterm.css";
 
 const TERMINAL_PANEL_ID = "dev.paperboard.terminal";
 
 export const activeTerminals = new Map<string, Terminal>();
 
+// xterm paints a canvas, so it needs the theme's resolved values; a token
+// that isn't defined is a broken stylesheet, not a reason to guess a color
+function token(name: string): string {
+    const value = getVar(name);
+    if (!value) throw new Error(`PaperUI token --paper-${name} is not defined`);
+    return value;
+}
+
 export async function copySelection(id: string) {
     const term = activeTerminals.get(id);
     const selection = term?.getSelection() || window.getSelection()?.toString() || "";
     if (!selection) return;
     // copyText owns the async-clipboard-plus-fallback path, same as PaperCopyButton
-    const ok = await copyText(selection);
-    if (!ok) console.error(`[Terminal] copy failed for ${id}`);
+    if (!(await copyText(selection))) throw new Error("The clipboard refused the selection.");
 }
 
 export async function pasteClipboard(id: string) {
@@ -26,16 +35,15 @@ export async function pasteClipboard(id: string) {
     activeTerminals.get(id)?.focus();
     const text = await pasteText();
     // null is unavailable, "" is an empty clipboard: neither writes to the shell
-    if (text === null) {
-        console.error(`[Terminal] paste unavailable for ${id}`);
-        return;
-    }
-    if (text) terminalApi.write(id, text);
+    if (text === null) throw new Error("The clipboard couldn't be read here. Paste with the keyboard instead.");
+    if (text) await terminalApi.write(id, text);
 }
 
 export interface TerminalComponentProps {
     id: string;
     onContextMenu?: (e: MouseEvent | PointerEvent) => void;
+    /** a copy that failed, said where the panel can show it */
+    onFailure: (failure: Outcome) => void;
 }
 
 export function TerminalComponent(props: TerminalComponentProps) {
@@ -49,24 +57,24 @@ export function TerminalComponent(props: TerminalComponentProps) {
             console.debug("[terminal] font-ready fit failed:", String(err));
         });
 
-        const bg = getVar("surface-app", "#0d0e12");
-        const fg = getVar("text", "#ffffff");
-        const blue = getVar("primary", "#2981e5");
-        const red = getVar("danger", "#e73648");
-        const green = getVar("success", "#0d9d0d");
-        const yellow = getVar("warning", "#d7a51d");
-        const lightText = getVar("text-subtle", "#a0a0a0");
+        const bg = token("surface-app");
+        const fg = token("text");
+        const blue = token("primary");
+        const red = token("danger");
+        const green = token("success");
+        const yellow = token("warning");
+        const lightText = token("text-subtle");
 
         term = new Terminal({
-            fontFamily: getVar("font-family-code", "monospace"),
-            fontSize: Number.parseFloat(getVar("text-size-2", "14px")),
+            fontFamily: token("font-family-code"),
+            fontSize: Number.parseFloat(token("text-size-2")),
             cursorBlink: true,
             theme: {
                 background: bg,
                 foreground: fg,
                 cursor: blue,
-                selectionBackground: getVar("selection", "#2981e54d"),
-                black: getVar("surface-sunken", "#1d1d1d"),
+                selectionBackground: token("selection"),
+                black: token("surface-sunken"),
                 red,
                 green,
                 yellow,
@@ -130,7 +138,9 @@ export function TerminalComponent(props: TerminalComponentProps) {
         term.attachCustomKeyEventHandler((arg) => {
             // paste is left to the native paste event (see keys.ts)
             if (terminalKeyAction(arg) === "copy") {
-                void copySelection(props.id);
+                copySelection(props.id).catch((err) =>
+                    props.onFailure({ title: "Nothing copied", message: errorMessage(err) }),
+                );
                 return false;
             }
             return true;
@@ -140,12 +150,26 @@ export function TerminalComponent(props: TerminalComponentProps) {
         // set while the session could not be opened: the next keypress
         // retries instead of typing into a shell that does not exist
         let failedId: string | null = null;
+        const fail = (id: string, line: string) => {
+            if (props.id !== id || failedId === id) return;
+            failedId = id;
+            term?.write(`\x1b[31m${line}\x1b[0m\r\n` + "Press any key to try again.\r\n");
+        };
+        // a keystroke the daemon refused means the session is gone: say so,
+        // and let the next key reconnect instead of typing into nothing
+        const send = (data: string) => {
+            const id = props.id;
+            terminalApi.write(id, data).catch((err) => {
+                console.error("[terminal] write failed:", err);
+                fail(id, `Lost this terminal: ${errorMessage(err)}`);
+            });
+        };
         term.onData((data) => {
             if (failedId !== null) {
                 connect(failedId);
                 return;
             }
-            terminalApi.write(props.id, data);
+            send(data);
         });
 
         // A native paste with focus outside xterm (for example the context
@@ -164,7 +188,7 @@ export function TerminalComponent(props: TerminalComponentProps) {
                 connect(failedId);
                 return;
             }
-            terminalApi.write(props.id, text);
+            send(text);
         };
         document.addEventListener("paste", onPaste);
 
@@ -186,13 +210,7 @@ export function TerminalComponent(props: TerminalComponentProps) {
                     // the session's shell could not start (or the computer
                     // is unreachable): say so in the terminal itself
                     console.error("[terminal] could not open session:", err);
-                    if (props.id !== id) return;
-                    failedId = id;
-                    const reason = err instanceof Error ? err.message : String(err);
-                    term?.write(
-                        `\x1b[31mCould not open this terminal: ${reason}\x1b[0m\r\n` +
-                            "Press any key to try again.\r\n",
-                    );
+                    fail(id, `Could not open this terminal: ${errorMessage(err)}`);
                 });
         };
         createEffect(
@@ -226,16 +244,7 @@ export function TerminalComponent(props: TerminalComponentProps) {
                 e.preventDefault();
                 props.onContextMenu?.(e);
             }}
-            style={{
-                width: "100%",
-                height: "100%",
-                flex: "1",
-                background: getVarCss("surface-app"),
-                color: getVarCss("text"),
-                padding: getVarCss("uigap-half"),
-                "box-sizing": "border-box",
-                overflow: "hidden",
-            }}
+            class={styles.screen}
         />
     );
 }

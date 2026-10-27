@@ -115,15 +115,13 @@ function PinnedCommand(props: { widget: WidgetContext }) {
     const notice = (title: string, description: string, tone: PaperRole | undefined, action?: () => void, actionLabel?: string) => (
         <PaperWidget title="Pinned command" icon="terminal">
             {/* the tile has room for a title and one action; the reason is the tooltip */}
-            <div title={description || undefined} style={{ display: "contents" }}>
-            <PaperWidgetMessage title={title} tone={tone}>
+            <PaperWidgetMessage title={title} tone={tone} hint={description}>
                 {action ? (
                     <PaperButton size="tiny" onClick={action}>
                         {actionLabel}
                     </PaperButton>
                 ) : undefined}
             </PaperWidgetMessage>
-            </div>
         </PaperWidget>
     );
 

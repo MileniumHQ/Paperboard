@@ -3,23 +3,31 @@
 import { createSignal, For, Show } from "solid-js";
 import {
     PaperButton,
+    PaperCard,
     PaperEmptyState,
     PaperFlex,
     PaperIcon,
     PaperInput,
     PaperModal,
+    PaperQuote,
     PaperText,
+    type PaperColor,
 } from "@mileniumhq/paperui";
 import { actions as actionsApi } from "@mileniumhq/paperapi";
 import type { CommandRun, SavedCommand } from "./lib/savedCommands";
 import { MAX_LABEL_LENGTH, MAX_SAVED_COMMANDS } from "./lib/savedCommands";
-import { describeRun } from "./lib/runStatus";
+import { describeRun, type RunTone } from "./lib/runStatus";
+import { errorMessage, type Outcome } from "./lib/failure";
 
 const PANEL_ID = "dev.paperboard.terminal";
 
-function message(err: unknown): string {
-    return err instanceof Error ? err.message : String(err);
-}
+const TONE_COLOR: Record<RunTone, PaperColor> = {
+    idle: "text-subtle",
+    running: "text-subtle",
+    success: "success",
+    danger: "danger",
+    warning: "warning",
+};
 
 export default function SavedCommandsModal(props: {
     open: boolean;
@@ -32,33 +40,37 @@ export default function SavedCommandsModal(props: {
 }) {
     const [label, setLabel] = createSignal("");
     const [command, setCommand] = createSignal("");
-    const [error, setError] = createSignal("");
+    const [error, setError] = createSignal<Outcome | null>(null);
     const [busy, setBusy] = createSignal(false);
 
-    const call = async (action: string, inputs: Record<string, unknown>) => {
-        setError("");
+    const call = async (title: string, action: string, inputs: Record<string, unknown>) => {
+        setError(null);
         setBusy(true);
         try {
             return await actionsApi.call(PANEL_ID, action, inputs);
         } catch (err) {
-            setError(message(err));
+            setError({ title, message: errorMessage(err) });
             return undefined;
         } finally {
             setBusy(false);
         }
     };
 
+    const full = () => props.commands.length >= MAX_SAVED_COMMANDS;
+    const canSave = () => !busy() && !props.loadError && !full() && command().trim() !== "";
+
     const save = async () => {
-        if (!command().trim()) {
-            setError("Type a command to save");
-            return;
-        }
-        const id = await call("save-command", { label: label(), command: command() });
+        if (!canSave()) return;
+        const id = await call("Command not saved", "save-command", { label: label(), command: command() });
         if (id) {
             setLabel("");
             setCommand("");
         }
     };
+
+    // this modal's own failure, else the dropdown's run that brought it open
+    const shownError = (): Outcome | null =>
+        error() ?? (props.runError ? { title: "Command not started", message: props.runError } : null);
 
     return (
         <PaperModal open={props.open} onClose={props.onClose} title="Saved commands" size="medium">
@@ -67,7 +79,9 @@ export default function SavedCommandsModal(props: {
                     Run these from here, or pin one to Home with the Pinned command widget.
                 </PaperText>
                 <Show when={props.loadError}>
-                    <PaperText color="danger">{props.loadError}</PaperText>
+                    <PaperQuote variant="danger" icon="warning" title="Saved commands unreadable" role="alert">
+                        {props.loadError}
+                    </PaperQuote>
                 </Show>
                 <Show
                     when={props.commands.length > 0}
@@ -82,35 +96,37 @@ export default function SavedCommandsModal(props: {
                             {(saved) => {
                                 const status = () => describeRun(props.runs[saved.id], Date.now());
                                 return (
-                                    <PaperFlex direction="row" align="center" gap="half" fullWidth class="saved-command-row">
-                                        <PaperFlex direction="column" style={{ flex: 1, "min-width": 0 }}>
-                                            <PaperText truncate class="saved-command-label">{saved.label}</PaperText>
-                                            <PaperText truncate family="code" color="text-subtle" title={saved.command}>
-                                                {saved.command}
+                                    <PaperCard surface="element" borderless paddingX="full" paddingY="half">
+                                        <PaperFlex direction="row" align="center" gap="half" fullWidth>
+                                            <PaperFlex direction="column" flex minWidth={0}>
+                                                <PaperText truncate weight={600}>{saved.label}</PaperText>
+                                                <PaperText truncate family="code" color="text-subtle" title={saved.command}>
+                                                    {saved.command}
+                                                </PaperText>
+                                            </PaperFlex>
+                                            <PaperText truncate color={TONE_COLOR[status().tone]} title={status().detail}>
+                                                {status().text}
                                             </PaperText>
+                                            <PaperButton
+                                                size="small"
+                                                disabled={busy() || props.runs[saved.id]?.state === "running"}
+                                                onClick={() => void call("Command not started", "run-saved-command", { id: saved.id })}
+                                            >
+                                                <PaperIcon>play_arrow</PaperIcon> Run
+                                            </PaperButton>
+                                            <PaperButton
+                                                size="small"
+                                                variant="text"
+                                                icon
+                                                disabled={busy()}
+                                                title={`Remove ${saved.label}`}
+                                                aria-label={`Remove ${saved.label}`}
+                                                onClick={() => void call("Command not removed", "remove-saved-command", { id: saved.id })}
+                                            >
+                                                <PaperIcon>delete</PaperIcon>
+                                            </PaperButton>
                                         </PaperFlex>
-                                        <PaperText class={`run-status tone-${status().tone}`} title={status().detail}>
-                                            {status().text}
-                                        </PaperText>
-                                        <PaperButton
-                                            size="small"
-                                            disabled={busy() || props.runs[saved.id]?.state === "running"}
-                                            onClick={() => void call("run-saved-command", { id: saved.id })}
-                                        >
-                                            <PaperIcon>play_arrow</PaperIcon> Run
-                                        </PaperButton>
-                                        <PaperButton
-                                            size="small"
-                                            variant="text"
-                                            icon
-                                            disabled={busy()}
-                                            title={`Remove ${saved.label}`}
-                                            aria-label={`Remove ${saved.label}`}
-                                            onClick={() => void call("remove-saved-command", { id: saved.id })}
-                                        >
-                                            <PaperIcon>delete</PaperIcon>
-                                        </PaperButton>
-                                    </PaperFlex>
+                                    </PaperCard>
                                 );
                             }}
                         </For>
@@ -135,17 +151,22 @@ export default function SavedCommandsModal(props: {
                                 if (e.key === "Enter") void save();
                             }}
                         />
-                        <PaperButton
-                            variant="primary"
-                            disabled={busy() || !!props.loadError || props.commands.length >= MAX_SAVED_COMMANDS}
-                            onClick={() => void save()}
-                        >
+                        <PaperButton variant="primary" disabled={!canSave()} onClick={() => void save()}>
                             <PaperIcon>bookmark_add</PaperIcon> Save
                         </PaperButton>
                     </PaperFlex>
+                    <Show when={full()}>
+                        <PaperText color="text-subtle">
+                            Terminal keeps {MAX_SAVED_COMMANDS} saved commands at most. Remove one to save another.
+                        </PaperText>
+                    </Show>
                 </PaperFlex>
-                <Show when={error() || props.runError}>
-                    <PaperText color="danger" role="alert">{error() || props.runError}</PaperText>
+                <Show when={shownError()}>
+                    {(shown) => (
+                        <PaperQuote variant="danger" icon="warning" title={shown().title} role="alert">
+                            {shown().message}
+                        </PaperQuote>
+                    )}
                 </Show>
             </PaperFlex>
         </PaperModal>

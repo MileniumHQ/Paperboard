@@ -10,7 +10,7 @@ import {
     PaperIcon,
     PaperModal,
     PaperInput,
-    getVarCss,
+    PaperQuote,
     useContextMenuState,
     PaperContextMenu,
     PaperContextMenuItem,
@@ -21,11 +21,13 @@ import "@mileniumhq/paperui/panel.css";
 import "@xterm/xterm/css/xterm.css";
 import "./style.css";
 import TerminalComponent, { copySelection, pasteClipboard } from "./Terminal";
+import styles from "./Terminal.module.css";
 import { actions as actionsApi, createPanelBridge } from "@mileniumhq/paperapi";
 import { onMount } from "solid-js";
 import SavedCommandsModal from "./SavedCommands";
 import type { CommandRun, SavedCommand } from "./lib/savedCommands";
 import { describeRun } from "./lib/runStatus";
+import { errorMessage, type Outcome } from "./lib/failure";
 
 const TERMINAL_PANEL_ID = "dev.paperboard.terminal";
 
@@ -54,6 +56,15 @@ export default function App() {
     const [renameValue, setRenameValue] = createSignal("");
     const [hydration, setHydration] = createSignal<"loading" | "ready" | "failed">("loading");
     const [hydrationError, setHydrationError] = createSignal("");
+    const [renaming, setRenaming] = createSignal(false);
+    const [renameError, setRenameError] = createSignal("");
+    // a tab action the service refused: shown over the terminals until
+    // dismissed, or until the next action replaces it
+    const [failure, setFailure] = createSignal<Outcome | null>(null);
+    const report = (title: string, after = "") => (err: unknown) => {
+        console.error(`[terminal] ${title}:`, err);
+        setFailure({ title, message: errorMessage(err) + after });
+    };
 
     // the tab list is the service's: every window on every computer mirrors
     // it, so a tab opened, renamed, moved or closed anywhere shows up here.
@@ -95,7 +106,7 @@ export default function App() {
         } catch (err) {
             // unavailable is not empty: never open a fresh tab over a
             // service that did not answer
-            setHydrationError(err instanceof Error ? err.message : String(err));
+            setHydrationError(errorMessage(err));
             setHydration("failed");
         }
     };
@@ -124,33 +135,46 @@ export default function App() {
 
         // the tab leaves when the service says it closed; a failed close
         // leaves it in place, where closing it again retries
-        actionsApi.call(TERMINAL_PANEL_ID, "close-tab", { id: closedId }).catch((err) =>
-            console.error("[terminal] close-tab failed:", String(err)),
-        );
+        setFailure(null);
+        actionsApi
+            .call(TERMINAL_PANEL_ID, "close-tab", { id: closedId })
+            .catch(report("Tab not closed"));
     };
 
     const addTab = async () => {
+        setFailure(null);
         try {
             const id = await actionsApi.call<string>(
                 TERMINAL_PANEL_ID,
                 "create-tab",
                 {},
             );
-            if (!id) return;
+            if (!id) throw new Error("The terminal service answered without a tab.");
             // the state push travels beside this answer; pull it so the new
             // tab is listed before it is shown
             applyTabs((await bridge.refreshState()).tabs);
             setActiveTab(id);
         } catch (err) {
-            console.warn("[terminal] create-tab failed:", String(err));
+            report("Tab not opened")(err);
         }
     };
 
     const handleSwitchTab = (id: string) => {
         setActiveTab(id);
-        actionsApi.call(TERMINAL_PANEL_ID, "touch-tab", { id }).catch((err) =>
-            console.debug("[terminal] touch-tab failed:", String(err)),
-        );
+        // the last used tab is what the next window opens on
+        actionsApi
+            .call(TERMINAL_PANEL_ID, "touch-tab", { id })
+            .catch(report("Tab not remembered", ". The next window may open on another tab."));
+    };
+
+    const copy = () => {
+        setFailure(null);
+        copySelection(activeTab()).catch(report("Nothing copied"));
+    };
+
+    const paste = () => {
+        setFailure(null);
+        pasteClipboard(activeTab()).catch(report("Nothing pasted"));
     };
 
     const terminalMenu = useContextMenuState();
@@ -162,7 +186,7 @@ export default function App() {
         try {
             await actionsApi.call(TERMINAL_PANEL_ID, "run-saved-command", { id });
         } catch (err) {
-            setSavedRunError(err instanceof Error ? err.message : String(err));
+            setSavedRunError(errorMessage(err));
             setIsSavedOpen(true);
         }
     };
@@ -173,22 +197,33 @@ export default function App() {
         tabMenu.close();
         const currentTab = tabs().find((t) => t.id === tid);
         setRenameValue(currentTab?.label || "");
+        setRenameError("");
         setIsRenameOpen(true);
     };
 
-    const handleSaveRename = () => {
-        const tid = contextTabId();
-        const newName = renameValue().trim();
-        if (tid && newName) {
-            // the new label arrives through the service's state
-            actionsApi
-                .call(TERMINAL_PANEL_ID, "rename-tab", { id: tid, label: newName })
-                .catch((err) =>
-                    console.error("[terminal] rename-tab failed:", String(err)),
-                );
-        }
+    const closeRename = () => {
         setIsRenameOpen(false);
         setContextTabId(null);
+    };
+
+    const canRename = () => renameValue().trim() !== "" && !renaming();
+
+    // the modal stays open until the service has the new name, so a refusal
+    // is shown beside the field that caused it
+    const handleSaveRename = async () => {
+        const tid = contextTabId();
+        if (!tid || !canRename()) return;
+        setRenameError("");
+        setRenaming(true);
+        try {
+            // the new label arrives through the service's state
+            await actionsApi.call(TERMINAL_PANEL_ID, "rename-tab", { id: tid, label: renameValue().trim() });
+            closeRename();
+        } catch (err) {
+            setRenameError(errorMessage(err));
+        } finally {
+            setRenaming(false);
+        }
     };
 
     return (
@@ -198,9 +233,6 @@ export default function App() {
                 fullWidth
                 fullHeight
                 direction="column"
-                style={{
-                    background: getVarCss("surface-app", "#0d0e12"),
-                }}
             >
                 <Show when={tabs().length > 0}>
                 <PaperList
@@ -217,6 +249,7 @@ export default function App() {
                         // shown at once; the service's order is the truth, so a
                         // failed reorder pulls it back
                         setMirror("tabs", reordered);
+                        setFailure(null);
                         actionsApi
                             .call(
                                 TERMINAL_PANEL_ID,
@@ -224,13 +257,11 @@ export default function App() {
                                 { orderedIds: reordered.map((t) => t.id) },
                             )
                             .catch((err) => {
-                                console.error("[Terminal] reorder persist failed:", err);
+                                report("Tab order not saved", ". The tabs are back in their saved order.")(err);
                                 void bridge
                                     .refreshState()
                                     .then((state) => applyTabs(state.tabs))
-                                    .catch((refreshErr) =>
-                                        console.error("[Terminal] tab list refresh failed:", refreshErr),
-                                    );
+                                    .catch(report("Tabs not reloaded", ". This window may show an order the service doesn't have."));
                             });
                     }}
                 >
@@ -255,9 +286,7 @@ export default function App() {
                         icon
                         onClick={addTab}
                         title="New Tab"
-                        style={{
-                            "margin-left": getVarCss("uigap-half"),
-                        }}>
+                        aria-label="New Tab">
                         <PaperIcon>add</PaperIcon>
                     </PaperButton>
                     <PaperButton size="tiny"
@@ -266,23 +295,29 @@ export default function App() {
                         title="Saved commands"
                         aria-label="Saved commands"
                         aria-haspopup="menu"
-                        aria-expanded={savedMenu.isOpen()}
-                        style={{
-                            "margin-left": getVarCss("uigap-half"),
-                        }}>
+                        aria-expanded={savedMenu.isOpen()}>
                         <PaperIcon>bookmarks</PaperIcon>
                     </PaperButton>
                 </PaperList>
                 </Show>
 
-                <PaperFlex
-                    fullWidth
-                    style={{
-                        flex: 1,
-                        position: "relative",
-                        overflow: "hidden",
-                    }}
-                >
+                <Show when={failure()}>
+                    {(shown) => (
+                        <PaperFlex direction="column" fullWidth padding="half">
+                            <PaperQuote
+                                variant="danger"
+                                icon="warning"
+                                title={shown().title}
+                                role="alert"
+                                onDismiss={() => setFailure(null)}
+                            >
+                                {shown().message}
+                            </PaperQuote>
+                        </PaperFlex>
+                    )}
+                </Show>
+
+                <PaperFlex fullWidth flex minHeight={0} overflow="hidden" class={styles.stack}>
                     <Show when={hydration() === "failed"}>
                         <PaperFlex fullWidth fullHeight align="center" justify="center">
                             <PaperEmptyState
@@ -313,17 +348,11 @@ export default function App() {
                     </Show>
                     <For each={tabs()}>
                         {(tab) => (
-                            <div
-                                style={{
-                                    position: "absolute",
-                                    inset: 0,
-                                    display: activeTab() === tab.id ? "flex" : "none",
-                                    "flex-direction": "column",
-                                }}
-                            >
+                            <div classList={{ [styles.layer]: true, [styles.hidden]: activeTab() !== tab.id }}>
                                 <TerminalComponent
                                     id={tab.id}
                                     onContextMenu={terminalMenu.openAtMouse}
+                                    onFailure={(shown) => setFailure(shown)}
                                 />
                             </div>
                         )}
@@ -353,13 +382,13 @@ export default function App() {
             >
                 <PaperContextMenuItem
                     icon="content_copy"
-                    onClick={() => copySelection(activeTab())}
+                    onClick={copy}
                 >
                     Copy
                 </PaperContextMenuItem>
                 <PaperContextMenuItem
                     icon="content_paste"
-                    onClick={() => pasteClipboard(activeTab())}
+                    onClick={paste}
                 >
                     Paste
                 </PaperContextMenuItem>
@@ -423,46 +452,35 @@ export default function App() {
 
             <PaperModal
                 open={isRenameOpen()}
-                onClose={() => {
-                    setIsRenameOpen(false);
-                    setContextTabId(null);
-                }}
+                onClose={closeRename}
                 title="Rename Tab"
                 size="small"
                 footer={
-                    <PaperFlex direction="row" justify="flex-end" gap="half" fullWidth>
-                        <PaperButton
-                            onClick={() => {
-                                setIsRenameOpen(false);
-                                setContextTabId(null);
-                            }}
-                            variant="text">
-                            Cancel
+                    <>
+                        <PaperButton variant="text" onClick={closeRename}>Cancel</PaperButton>
+                        <PaperButton disabled={!canRename()} onClick={() => void handleSaveRename()}>
+                            {renaming() ? "Saving…" : "Save"}
                         </PaperButton>
-                        <PaperButton onClick={handleSaveRename}>
-                            Save
-                        </PaperButton>
-                    </PaperFlex>
+                    </>
                 }
             >
-                <Show when={isRenameOpen()}>
-                    <PaperFlex direction="column" gap="half">
-                        <PaperInput
-                            fullWidth
-                            label="Tab name"
-                            value={renameValue()}
-                            onInput={(e) => setRenameValue(e.currentTarget.value)}
-                            onKeyDown={(e) => {
-                                if (e.key === "Enter") handleSaveRename();
-                                if (e.key === "Escape") {
-                                    setIsRenameOpen(false);
-                                    setContextTabId(null);
-                                }
-                            }}
-                            autofocus
-                        />
-                    </PaperFlex>
-                </Show>
+                <PaperFlex direction="column" gap="half">
+                    <PaperInput
+                        fullWidth
+                        label="Tab name"
+                        value={renameValue()}
+                        onInput={(e) => setRenameValue(e.currentTarget.value)}
+                        onKeyDown={(e) => {
+                            if (e.key === "Enter") void handleSaveRename();
+                        }}
+                        autofocus
+                    />
+                    <Show when={renameError()}>
+                        <PaperQuote variant="danger" icon="warning" title="Tab not renamed" role="alert">
+                            {renameError()}
+                        </PaperQuote>
+                    </Show>
+                </PaperFlex>
             </PaperModal>
         </>
     );
