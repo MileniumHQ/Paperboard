@@ -3,6 +3,7 @@ import { render, fireEvent, screen } from "@solidjs/testing-library";
 import { createSignal } from "solid-js";
 import { PaperModal } from "../components/PaperModal";
 import { PaperButton } from "../components/PaperButton";
+import { PaperInput } from "../components/PaperInput";
 
 describe("PaperModal - Accessibility & Focus Trapping Tests", () => {
     test("renders dialog with role='dialog' and aria-modal='true'", () => {
@@ -104,6 +105,26 @@ describe("PaperModal - Accessibility & Focus Trapping Tests", () => {
         await new Promise((resolve) => requestAnimationFrame(resolve));
         expect(dialog.isConnected).toBe(true);
         expect(dialog.getAttribute("aria-modal")).toBe("true");
+    });
+
+    test("every open hands focus to the field marked autofocus", async () => {
+        const [open, setOpen] = createSignal(false);
+        render(() => (
+            <PaperModal open={open()} onClose={() => setOpen(false)} title="Rename">
+                <PaperInput label="Name" autofocus />
+            </PaperModal>
+        ));
+        const frame = () => new Promise((resolve) => requestAnimationFrame(resolve));
+        for (const attempt of ["first", "second"]) {
+            setOpen(true);
+            await frame();
+            await frame();
+            expect(document.activeElement, `the ${attempt} open left the field unfocused`).toBe(
+                screen.getByLabelText("Name"),
+            );
+            setOpen(false);
+            await frame();
+        }
     });
 
     test("focus traversal skips disabled first and last controls", async () => {

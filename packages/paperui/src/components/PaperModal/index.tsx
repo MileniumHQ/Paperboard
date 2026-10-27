@@ -97,10 +97,11 @@ export function PaperModal(props: ParentProps<PaperModalProps>) {
 
         const previousActiveElement = document.activeElement as HTMLElement | null;
 
+        // the modal stays mounted, so a field's own autofocus fires once at
+        // mount: the modal hands focus to it on every open instead
         const focusFrame = requestAnimationFrame(() => {
-            if (modalRef) {
-                modalRef.focus();
-            }
+            if (!modalRef) return;
+            (modalRef.querySelector<HTMLElement>("[autofocus]") ?? modalRef).focus();
         });
 
         const handleKeyDown = (e: KeyboardEvent) => {
