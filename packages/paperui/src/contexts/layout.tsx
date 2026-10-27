@@ -12,6 +12,8 @@ export interface PaperLayoutProps {
     minHeight?: PaperSize | JSX.CSSProperties["min-height"] | number;
     maxWidth?: PaperSize | JSX.CSSProperties["max-width"] | number;
     maxHeight?: PaperSize | JSX.CSSProperties["max-height"] | number;
+    /** a fixed width, always a size token */
+    width?: PaperSize;
     /** a fixed height, always a size token */
     height?: PaperSize;
     /** true fills the parent's width; false sizes to content, over a
@@ -80,6 +82,10 @@ export function resolveLayoutStyles(
 
     if (props.maxHeight !== undefined) {
         styles["max-height"] = resolveSize(props.maxHeight);
+    }
+
+    if (props.width !== undefined) {
+        styles.width = resolveSize(props.width);
     }
 
     if (props.height !== undefined) {

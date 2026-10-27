@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { render, fireEvent, waitFor } from "@solidjs/testing-library";
 import { PaperFlex } from "../templates/PaperFlex";
+import { PaperPage } from "../templates/PaperPage";
 import { PaperCard } from "../components/PaperCard";
 import { PaperList, PaperListItem, PaperListLabel } from "../components/PaperList";
 import { PaperMenu, PaperMenuItem, PaperMenuLabel } from "../components/PaperMenu";
@@ -39,6 +40,19 @@ describe("size tokens", () => {
         expect(el.style.height).toBe("var(--paper-size-panel-height-small)");
         expect(el.style.minWidth).toBe("var(--paper-size-field)");
         expect(el.style.minHeight).toBe("0px");
+    });
+
+    test("width takes a size token, and a page's width still names its column", () => {
+        const { getByTestId } = render(() => (
+            <>
+                <PaperFlex data-testid="box" width="field">body</PaperFlex>
+                <PaperPage data-testid="page" width="wide">body</PaperPage>
+            </>
+        ));
+        expect(getByTestId("box").style.width).toBe("var(--paper-size-field)");
+        const page = getByTestId("page");
+        expect(page.className).toContain("wide");
+        expect(page.style.width).toBe("");
     });
 
     test("grids take a size token for their column width", () => {

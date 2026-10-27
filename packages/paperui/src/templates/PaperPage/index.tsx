@@ -12,7 +12,7 @@ export type PaperPageWidth = "standard" | "wide" | "full";
 
 export interface PaperPageProps
     extends JSX.HTMLAttributes<HTMLDivElement>,
-        PaperLayoutProps {
+        Omit<PaperLayoutProps, "width"> {
     /** column width; standard keeps content readable at 62rem */
     width?: PaperPageWidth;
     padding?: PaperSpacing;
@@ -60,7 +60,8 @@ export function PaperPage(props: ParentProps<PaperPageProps>) {
             .join(" ");
 
     const pageStyle = () => ({
-        ...resolveLayoutStyles(local, layoutCtx),
+        // width names the column here, not a size token
+        ...resolveLayoutStyles({ ...local, width: undefined }, layoutCtx),
         padding: resolveSpacing(local.padding ?? "full"),
         gap: resolveSpacing(local.gap ?? "full"),
         ...(typeof local.style === "object" ? local.style : {}),
