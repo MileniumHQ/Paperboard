@@ -1,8 +1,9 @@
-import { PaperFlex, getVarCss, playHaptic, swipeFromFrame } from "@mileniumhq/paperui";
+import { PaperFlex, playHaptic, swipeFromFrame } from "@mileniumhq/paperui";
 import { HAPTIC_MESSAGE, SWIPE_BACK_MESSAGE } from "@mileniumhq/paperapi";
 import { type Component, createEffect, createSignal, For, Show, onCleanup, onMount } from "solid-js";
 import { recordUse, liveKeys, MAX_LIVE_IFRAMES } from "./panelLru";
 import LoadingOverlay from "./LoadingOverlay";
+import styles from "./frame.module.css";
 import { panelUrl } from "../../lib/shell";
 import { FILE_TRANSFER_RESULT, parseFileTransferMessage, runPanelFileTransfer } from "../../lib/panelFileTransfer";
 import BackupLocationChooser, { type BackupLocationChoice } from "../backups/BackupLocationChooser";
@@ -72,12 +73,12 @@ const PanelFrame: Component<{ panelKey: string; computerName: string; current: b
         onCleanup(() => { if (frame) swipeFromFrame(frame, { phase: "cancel", dx: 0, velocity: 0 }); clearTimeout(timer); window.removeEventListener("message", receive); setChooser(null); });
     });
     onMount(() => { if (frame) frame.src = panelUrl(computerId, panelId, `?_r=${props.reload}&generation=${generation}`); });
-    return <div style={{ position: "absolute", inset: "0", visibility: props.current ? "visible" : "hidden", "pointer-events": props.current ? "auto" : "none" }}>
+    return <div class={styles.panelLayer} classList={{ [styles.away]: !props.current }}>
         <iframe ref={frame} data-panel-key={props.panelKey} title={panelId}
             sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
             allow="clipboard-read; clipboard-write"
             onLoad={() => frame?.contentWindow?.postMessage({ type: "paperboard:initialize", generation, computerName: props.computerName }, "*")}
-            style={{ display: "block", width: "100%", height: "100%", border: "none", "border-left": `${getVarCss("border-width")} solid ${getVarCss("border")}`, opacity: ready() && !failure() && !props.restart ? "1" : "0", "pointer-events": ready() && !failure() && !props.restart ? "auto" : "none" }} />
+            class={`${styles.frame} ${styles.panelFrame}`} classList={{ [styles.unpainted]: !ready() || Boolean(failure()) || Boolean(props.restart) }} />
         <BackupLocationChooser computerId={computerId} computerName={props.computerName} panelId={panelId} open={chooser() !== null} onDone={(result) => {
             const request = chooser();
             setChooser(null);
@@ -107,7 +108,7 @@ const PanelView: Component<PanelViewProps> = (props) => {
     const currentKey = () => `${props.activeComputerId}::${props.activePanel}`;
     createEffect(() => setUsageOrder((prev) => recordUse(prev, props.openedPanels, currentKey())));
     const live = () => liveKeys(props.openedPanels, usageOrder(), currentKey(), MAX_LIVE_IFRAMES);
-    return <PaperFlex fullWidth fullHeight background="surface-raised" style={{ flex: "1", position: "relative", overflow: "hidden" }}>
+    return <PaperFlex fullWidth fullHeight background="surface-raised" flex={1} overflow="hidden" class={styles.area}>
         <For each={props.openedPanels}>{(key) => <Show when={live().has(key)}>
             <PanelFrame panelKey={key} computerName={props.computerName(key.split("::")[0])} current={key === currentKey()} reload={props.reloadTokens?.[key] || 0} retry={() => props.onReloadPanel?.(key)}
                 restart={props.restartStates?.[key]} retryRestart={() => props.onRestartPanel?.(key)} />

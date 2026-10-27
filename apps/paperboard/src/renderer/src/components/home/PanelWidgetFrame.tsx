@@ -119,7 +119,7 @@ const PanelWidgetFrame: Component<PanelWidgetFrameProps> = (props) => {
                 class={styles.frame}
                 title={props.label}
                 sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-                style={{ opacity: ready() && !failure() ? "1" : "0" }}
+                classList={{ [styles.unpainted]: !ready() || Boolean(failure()) }}
                 onLoad={() => {
                     // a load of an earlier attempt's document, before this one's src is set
                     if (!frame?.src || !attempt || attempt.cancelled || !frame.src.includes(attempt.generation)) return;

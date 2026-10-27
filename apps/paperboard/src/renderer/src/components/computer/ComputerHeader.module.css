@@ -1,3 +1,15 @@
+.header {
+    border-bottom: var(--paper-border-width) solid var(--paper-border);
+}
+
+/* the computer and the library sit on the header's own surface */
+.tabs {
+    width: 100%;
+    height: auto;
+    border-right: none;
+    background: transparent;
+}
+
 .computerItem {
     background-color: var(--paper-surface-inset) !important;
     /* Keep the OS tint over PaperList's hover and selected backgrounds. */

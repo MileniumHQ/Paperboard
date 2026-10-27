@@ -1,0 +1,49 @@
+/* Shell-owned frames: the panel library and each open panel fill their
+ * area, with a loading surface laid over them until they're painted. */
+.area {
+    position: relative;
+}
+
+.frame {
+    display: block;
+    width: 100%;
+    height: 100%;
+    border: none;
+}
+
+/* the library stays mounted while another layer shows */
+.frame.away {
+    display: none;
+}
+
+/* Loaded is not painted: a frame stays transparent until it reports ready.
+ * Opacity, not visibility: a hidden iframe stops rendering, which freezes
+ * the page's rAF and font loading and stalls that report. */
+.frame.unpainted {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.panelFrame {
+    border-left: var(--paper-border-width) solid var(--paper-border);
+}
+
+/* every opened panel stays mounted; only the current one shows */
+.panelLayer {
+    position: absolute;
+    inset: 0;
+}
+
+.panelLayer.away {
+    visibility: hidden;
+    pointer-events: none;
+}
+
+.overlay {
+    position: absolute;
+    inset: 0;
+}
+
+.overlayProgress {
+    width: var(--paper-size-field);
+}

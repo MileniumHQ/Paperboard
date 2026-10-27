@@ -1,0 +1,47 @@
+/* A location kind's logo, sized to the icon slot it sits in. */
+.logo {
+    display: inline-flex;
+    flex-shrink: 0;
+    color: var(--paper-primary);
+}
+
+.logo.small {
+    width: var(--paper-icon-size-small);
+    height: var(--paper-icon-size-small);
+}
+
+.logo.medium {
+    width: var(--paper-icon-size-medium);
+    height: var(--paper-icon-size-medium);
+}
+
+.logo.large {
+    width: var(--paper-icon-size-large);
+    height: var(--paper-icon-size-large);
+}
+
+img.logo {
+    object-fit: contain;
+}
+
+.mark {
+    width: 100%;
+    height: 100%;
+}
+
+/* a symbol from the icon font is sized by its font, not its box */
+.symbol {
+    color: var(--paper-primary);
+}
+
+.symbol.small {
+    font-size: var(--paper-icon-size-small);
+}
+
+.symbol.medium {
+    font-size: var(--paper-icon-size-medium);
+}
+
+.symbol.large {
+    font-size: var(--paper-icon-size-large);
+}

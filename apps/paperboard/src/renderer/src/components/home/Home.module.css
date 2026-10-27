@@ -1,10 +1,16 @@
 .home {
+    display: flex;
     flex: 1;
     min-width: 0;
     height: 100%;
     position: relative;
     overflow: hidden;
     background: var(--paper-surface-sunken);
+}
+
+/* Home stays mounted while another layer shows */
+.home.away {
+    display: none;
 }
 
 .canvasArea {
@@ -76,6 +82,10 @@
     background: transparent;
     /* hidden until its document answers ready, then eased in */
     transition: opacity var(--paper-medium-transition) var(--paper-ease-standard);
+}
+
+.frame.unpainted {
+    opacity: 0;
 }
 
 /* a widget's content eases in as it mounts instead of popping onto its

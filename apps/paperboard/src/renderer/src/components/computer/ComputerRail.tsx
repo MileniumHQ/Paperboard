@@ -5,7 +5,6 @@ import {
     PaperRailItem,
     PaperRailAction,
     PaperSeparator,
-    getVarCss,
 } from "@mileniumhq/paperui";
 import styles from "./ComputerRail.module.css";
 import { computerIcon } from "./computerIcon";
@@ -45,14 +44,7 @@ const ComputerRail = (props: ComputerRailProps): JSX.Element => {
             onValueChange={(val) => props.onSelect(String(val))}
         >
             <PaperRailItem value="__home" icon="home" label="Home" />
-            <PaperSeparator
-                direction="vertical"
-                style={{
-                    height: getVarCss("border-width"),
-                    width: "70%",
-                    margin: `${getVarCss("uigap-third")} auto`,
-                }}
-            />
+            <PaperSeparator class={styles.separator} />
             <For each={props.computers}>
                 {(comp) => (
                     <PaperRailItem
@@ -77,14 +69,7 @@ const ComputerRail = (props: ComputerRailProps): JSX.Element => {
                     onClick={() => props.onRetryLoad?.()}
                 />
             </Show>
-            <PaperSeparator
-                direction="vertical"
-                style={{
-                    height: getVarCss("border-width"),
-                    width: "70%",
-                    margin: `${getVarCss("uigap-third")} auto`,
-                }}
-            />
+            <PaperSeparator class={styles.separator} />
             <PaperRailItem
                 value="__settings"
                 icon="settings"

@@ -1,0 +1,7 @@
+/* a panel's picture in a list, sized and rounded like a list item's icon */
+.panelIcon {
+    width: var(--paper-icon-size-large);
+    height: var(--paper-icon-size-large);
+    border-radius: var(--paper-border-radius-half);
+    object-fit: contain;
+}

@@ -1,6 +1,6 @@
 import { type Component, createSignal, Show } from "solid-js";
-import { createReducedMotion } from "../../utils/reducedMotion";
-import { PaperFlex, PaperText, PaperButton, PaperIcon, getVarCss } from "@mileniumhq/paperui";
+import { PaperFlex, PaperText, PaperButton, PaperIcon } from "@mileniumhq/paperui";
+import styles from "./ConnectionLostOverlay.module.css";
 import type { ComputerItem } from "../../App";
 import { computersApi, logToMain } from "../../lib/shell";
 
@@ -14,14 +14,6 @@ export const ConnectionLostOverlay: Component<ConnectionLostOverlayProps> = (
 ) => {
     const [isReconnecting, setIsReconnecting] = createSignal(false);
     const [lastError, setLastError] = createSignal<string | null>(null);
-    const reducedMotion = createReducedMotion();
-
-    // PaperProvider publishes theme on <body>; fall back to OS preference
-    const isDark = () => {
-        const forced = document.body?.getAttribute("data-paperui-theme");
-        if (forced === "dark" || forced === "light") return forced === "dark";
-        return window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? true;
-    };
 
     const handleReconnect = async () => {
         if (isReconnecting()) return;
@@ -51,38 +43,10 @@ export const ConnectionLostOverlay: Component<ConnectionLostOverlayProps> = (
             center
             direction="column"
             gap="full"
-            style={{
-                position: "absolute",
-                top: 0,
-                left: 0,
-                width: "100%",
-                height: "100%",
-                // Reduced motion removes blur; fall back opaque to stay legible
-                "background-color": reducedMotion()
-                    ? isDark()
-                        ? getVarCss("surface-inset")
-                        : getVarCss("surface-raised")
-                    : isDark()
-                      ? getVarCss("scrim")
-                      : getVarCss("scrim-light"),
-                "backdrop-filter": reducedMotion()
-                    ? "none"
-                    : getVarCss("blur-medium"),
-                "-webkit-backdrop-filter": reducedMotion()
-                    ? "none"
-                    : getVarCss("blur-medium"),
-                "z-index": getVarCss("z-drag"),
-                padding: getVarCss("uigap-triple"),
-            }}
+            class={styles.overlay}
         >
             <PaperFlex center direction="column" gap="half">
-                <PaperIcon
-                    style={{
-                        "font-size": getVarCss("text-size-13"),
-                        color: getVarCss("danger"),
-                        opacity: getVarCss("opacity-soft"),
-                    }}
-                >
+                <PaperIcon class={styles.icon}>
                     cloud_off
                 </PaperIcon>
                 <PaperText size={6} weight={700}>
@@ -91,10 +55,7 @@ export const ConnectionLostOverlay: Component<ConnectionLostOverlayProps> = (
                 <PaperText
                     size={3}
                     color="text-subtle"
-                    style={{
-                        "text-align": "center",
-                        "max-width": getVarCss("size-panel-small"),
-                    }}
+                    class={styles.message}
                 >
                     Cannot communicate with{" "}
                     <strong>{props.computer.name}</strong> at{" "}
@@ -106,7 +67,7 @@ export const ConnectionLostOverlay: Component<ConnectionLostOverlayProps> = (
                     <PaperText
                         size={2}
                         color="text-subtle"
-                        style={{ "text-align": "center", "max-width": getVarCss("size-panel-small") }}
+                        class={styles.message}
                     >
                         {props.computer.status?.error}
                     </PaperText>

@@ -2,7 +2,8 @@
 // form and how to connect it; the add-location window lists them in order,
 // so a new kind is one more entry here.
 import type { JSX } from "solid-js";
-import { PaperIcon, getVarCss } from "@mileniumhq/paperui";
+import { PaperIcon } from "@mileniumhq/paperui";
+import styles from "./providers.module.css";
 import { backupLocationsApi, type BackupLocation } from "@mileniumhq/paperapi";
 import { shellIpc } from "../../lib/shell";
 import googleDriveLogo from "../../assets/providers/google-drive.svg";
@@ -40,7 +41,7 @@ export interface BackupProvider {
 function S3Logo(): JSX.Element {
     // a bucket: the S3 kind covers AWS, R2, B2 and MinIO, so no one brand's mark
     return (
-        <svg viewBox="0 0 24 24" aria-hidden="true" style={{ width: "100%", height: "100%" }}>
+        <svg viewBox="0 0 24 24" aria-hidden="true" class={styles.mark}>
             <ellipse cx="12" cy="6" rx="8" ry="2.6" fill="none" stroke="currentColor" stroke-width="1.8" />
             <path d="M4 6l1.9 12.6c.3 1.9 2.9 3 6.1 3s5.8-1.1 6.1-3L20 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" />
             <path d="M5.2 11.2c1.5 1 3.9 1.6 6.8 1.6s5.3-.6 6.8-1.6" fill="none" stroke="currentColor" stroke-width="1.4" opacity="0.55" />
@@ -50,11 +51,10 @@ function S3Logo(): JSX.Element {
 
 /** A location kind's logo, sized to the icon slot it sits in. */
 export function LocationLogo(props: { kind: BackupLocation["kind"]; size?: "small" | "medium" | "large" }): JSX.Element {
-    const size = () => getVarCss(`icon-size-${props.size ?? "medium"}`);
-    const box = (): JSX.CSSProperties => ({ width: size(), height: size(), display: "inline-flex", "flex-shrink": 0 });
-    if (props.kind === "gdrive") return <img src={googleDriveLogo} alt="" style={{ ...box(), "object-fit": "contain" }} />;
-    if (props.kind === "s3") return <span style={{ ...box(), color: getVarCss("primary") }}><S3Logo /></span>;
-    return <PaperIcon style={{ "font-size": size(), color: getVarCss("primary") }}>computer</PaperIcon>;
+    const size = () => styles[props.size ?? "medium"];
+    if (props.kind === "gdrive") return <img src={googleDriveLogo} alt="" class={`${styles.logo} ${size()}`} />;
+    if (props.kind === "s3") return <span class={`${styles.logo} ${size()}`}><S3Logo /></span>;
+    return <PaperIcon class={`${styles.symbol} ${size()}`}>computer</PaperIcon>;
 }
 
 export const BACKUP_PROVIDERS: readonly BackupProvider[] = [

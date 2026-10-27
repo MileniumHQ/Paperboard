@@ -1,5 +1,6 @@
 import "@mileniumhq/paperui/style.css";
 import "./shell.css";
+import styles from "./updater.module.css";
 import { render } from "solid-js/web";
 import { createSignal, onMount, onCleanup, Show } from "solid-js";
 import {
@@ -8,7 +9,8 @@ import {
     PaperFlex,
     PaperText,
     PaperProgress,
-    PaperButton, getVarCss } from "@mileniumhq/paperui";
+    PaperButton,
+} from "@mileniumhq/paperui";
 
 function PaperUpdater() {
     const [progress, setProgress] = createSignal<number | null>(null);
@@ -66,16 +68,11 @@ function PaperUpdater() {
         <PaperProvider
             fullHeight
             fullWidth
-            style={{ background: "transparent" }}
+            class={styles.provider}
         >
             <PaperCard
                 surface="frontest"
-                style={{
-                    width: "100vw",
-                    height: "100vh",
-                    "box-sizing": "border-box",
-                    "border-radius": `calc(${getVarCss("border-radius")} * 2)`,
-                }}
+                class={styles.card}
             >
                 <PaperFlex
                     gap="full"

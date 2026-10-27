@@ -1,0 +1,7 @@
+/* the location's logo on a sunken tile, like an app icon */
+.logoTile {
+    display: inline-flex;
+    padding: var(--paper-uigap-threefourths);
+    border-radius: var(--paper-border-radius);
+    background: var(--paper-surface-inset);
+}

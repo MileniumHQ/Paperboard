@@ -6,6 +6,7 @@ import {
     getVarCss,
 } from "@mileniumhq/paperui";
 import styles from "./ComputerHeader.module.css";
+import iconStyles from "./panelIcon.module.css";
 import libraryIcon from "../../assets/PanelLibrary.png";
 import type { ComputerItem } from "../../App";
 
@@ -134,21 +135,14 @@ const ComputerHeader: Component<ComputerHeaderProps> = (props) => {
         <PaperFlex
             direction="column"
             background="surface-inset"
-            style={{
-                "flex-shrink": 0,
-                "border-bottom": `${getVarCss("border-width")} solid ${getVarCss("border")}`,
-            }}
+            shrink={0}
+            class={styles.header}
         >
             <PaperList
                 name="computer-system-selection"
                 value={props.selectedTab}
                 onValueChange={(val) => props.onSelectTab(String(val))}
-                style={{
-                    width: "100%",
-                    "border-right": "none",
-                    height: "auto",
-                    background: "transparent",
-                }}
+                class={styles.tabs}
             >
                 <PaperListItem
                     value="settings"
@@ -169,17 +163,7 @@ const ComputerHeader: Component<ComputerHeaderProps> = (props) => {
                         props.onLibraryContextMenu?.(e);
                     }}
                     icon={
-                        <img
-                            src={libraryIcon}
-                            alt="Panel Library"
-                            style={{
-                                width: getVarCss("icon-size-large"),
-                                height: getVarCss("icon-size-large"),
-                                "border-radius":
-                                    getVarCss("border-radius-half"),
-                                "object-fit": "contain",
-                            }}
-                        />
+                        <img src={libraryIcon} alt="Panel Library" class={iconStyles.panelIcon} />
                     }
                 >
                     Panel Library

@@ -1,10 +1,11 @@
 import { type Component, createSignal, For, onMount, Show } from "solid-js";
-import { PaperButton, PaperCard, PaperFlex, PaperModal, PaperSectionHeader, PaperText, getVarCss } from "@mileniumhq/paperui";
+import { PaperButton, PaperCard, PaperFlex, PaperModal, PaperSectionHeader, PaperText } from "@mileniumhq/paperui";
 import { backupLocationLabel, backupLocationsApi, type BackupLocation } from "@mileniumhq/paperapi";
 import { isBrowserShell, shellIpc } from "../../lib/shell";
 import { loadUsage, usageText, type UsageState } from "./locationUsage";
 import { LocationLogo } from "./providers";
 import AddLocationModal from "./AddLocationModal";
+import styles from "./BackupLocations.module.css";
 
 // The Backups section of a computer's Computer Info: the locations its
 // panels can keep backups in, what each holds and has free, adding one, and
@@ -129,17 +130,10 @@ const BackupLocations: Component<{ computerId: string; computerName: string }> =
                     {(location) => (
                         <PaperCard surface="front" padding="full">
                             <PaperFlex direction="row" gap="full" align="center">
-                                <span
-                                    style={{
-                                        display: "inline-flex",
-                                        padding: getVarCss("uigap-threefourths"),
-                                        "border-radius": getVarCss("border-radius"),
-                                        background: getVarCss("surface-inset"),
-                                    }}
-                                >
+                                <span class={styles.logoTile}>
                                     <LocationLogo kind={location.kind} size="large" />
                                 </span>
-                                <PaperFlex direction="column" style={{ flex: 1, "min-width": 0 }}>
+                                <PaperFlex direction="column" flex={1} minWidth={0}>
                                     <PaperText size={3} weight={700} truncate>{backupLocationLabel(location, props.computerName)}</PaperText>
                                     <PaperText size={2} color="text-subtle" truncate>{location.detail}</PaperText>
                                     <PaperText size={2} color={usage()[location.id]?.kind === "failed" ? "danger" : "text-subtle"}>

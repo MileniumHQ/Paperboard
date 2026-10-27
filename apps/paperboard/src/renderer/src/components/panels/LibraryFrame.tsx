@@ -23,6 +23,7 @@ import {
     shellToLibrary,
 } from "../../lib/libraryFrame";
 import LoadingOverlay from "./LoadingOverlay";
+import styles from "./frame.module.css";
 
 // Bounded retry window: an embedded library answers the hello in
 // milliseconds. Silence means the page never loaded (offline, blocked), and
@@ -223,7 +224,9 @@ const LibraryFrame: Component<LibraryFrameProps> = (props) => {
             direction="column"
             fullWidth
             fullHeight
-            style={{ flex: "1", position: "relative", overflow: "hidden" }}
+            flex={1}
+            overflow="hidden"
+            class={styles.area}
         >
             <Show when={mounted()}>
                 <iframe
@@ -231,18 +234,10 @@ const LibraryFrame: Component<LibraryFrameProps> = (props) => {
                     title="Panel Library"
                     src={libraryFrameSrc(libraryUrl(), props.reloadToken ?? 0)}
                     sandbox="allow-scripts allow-same-origin allow-downloads"
-                    style={{
-                        width: "100%",
-                        height: "100%",
-                        border: "none",
-                        display: props.active ? "block" : "none",
-                        // loaded is not painted: stay transparent until the
-                        // library reports ready. opacity, not visibility —
-                        // a hidden iframe stops rendering, which freezes the
-                        // page's rAF/font loading and stalls that report.
-                        opacity: phase() === "ready" ? "1" : "0",
-                        "pointer-events":
-                            phase() === "ready" ? "auto" : "none",
+                    class={styles.frame}
+                    classList={{
+                        [styles.away]: !props.active,
+                        [styles.unpainted]: phase() !== "ready",
                     }}
                 />
             </Show>

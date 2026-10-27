@@ -5,6 +5,12 @@
     overflow-y: auto;
 }
 
+/* a short rule between the rail's groups, narrower than the rail's items */
+.rail .separator {
+    width: 70%;
+    margin: var(--paper-uigap-third) auto;
+}
+
 .updateAction.updateAvailable,
 .updateAction.updateAvailable:active {
     color: var(--paper-success);

@@ -858,7 +858,7 @@ const HomeView: Component<HomeViewProps> = (props) => {
     };
 
     return (
-        <div class={styles.home} classList={{ [styles.phone]: phone }} style={{ display: props.visible ? "flex" : "none" }}>
+        <div class={styles.home} classList={{ [styles.phone]: phone, [styles.away]: !props.visible }}>
             <div class={styles.canvasArea}>
                 <div
                     ref={scroller}

@@ -1,11 +1,11 @@
-import { type Component, type JSX, Show } from "solid-js";
+import { type Component, Show } from "solid-js";
 import {
     PaperButton,
     PaperFlex,
     PaperProgress,
     PaperText,
-    getVarCss,
 } from "@mileniumhq/paperui";
+import styles from "./frame.module.css";
 
 export interface LoadingOverlayProps {
     /** Accessible name for the bar; never rendered as visible text. */
@@ -14,7 +14,6 @@ export interface LoadingOverlayProps {
     error?: string;
     retryLabel?: string;
     onRetry?: () => void;
-    style?: JSX.CSSProperties;
 }
 
 // The one loading surface for shell-owned frames: panels and the panel
@@ -26,12 +25,12 @@ const LoadingOverlay: Component<LoadingOverlayProps> = (props) => (
         fullWidth
         fullHeight
         gap="half"
-        style={{ position: "absolute", inset: "0", ...props.style }}
+        class={styles.overlay}
     >
         <Show when={!props.error}>
             <PaperProgress
                 aria-label={props.label ?? "Loading"}
-                style={{ width: getVarCss("size-field") }}
+                class={styles.overlayProgress}
             />
         </Show>
         <Show when={props.error}>
