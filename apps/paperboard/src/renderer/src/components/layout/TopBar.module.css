@@ -1,0 +1,38 @@
+/* The window's title bar. On the desktop it drags the window and sits
+ * above the content; on a phone the open page slides over it. */
+.bar {
+    position: relative;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: var(--paperboard-titlebar-height);
+    background: var(--paper-surface-sunken);
+    border-bottom: var(--paper-border-width) solid var(--paper-border);
+    user-select: none;
+    -webkit-app-region: no-drag;
+}
+
+.bar.desktop {
+    -webkit-app-region: drag;
+    z-index: var(--paper-z-chrome);
+}
+
+.title {
+    pointer-events: none;
+}
+
+/* the version label and the controls sit at the bar's edges, clear of
+ * the window's own caption buttons */
+.version,
+.controls {
+    position: absolute;
+    display: flex;
+    align-items: center;
+    -webkit-app-region: no-drag;
+}
+
+.controls {
+    gap: var(--paper-uigap-half);
+}

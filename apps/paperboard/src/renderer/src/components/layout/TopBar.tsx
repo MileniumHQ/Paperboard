@@ -1,10 +1,11 @@
 import { type Component, createSignal, onMount, onCleanup, Show } from "solid-js";
-import { PaperText, PaperButton, PaperIcon, getVarCss } from "@mileniumhq/paperui";
+import { PaperText, PaperButton, PaperIcon, PaperModal } from "@mileniumhq/paperui";
 import { shellApi, logToMain, isBrowserShell } from "../../lib/shell";
 import { versionLabel as formatVersionLabel } from "../../lib/versionLabel";
 import { isShellTab } from "../../lib/shellTabs";
 import type { AppUpdateState } from "../../../../shared/appUpdate";
 import { leftReserve, rightReserve, type OverlayLike } from "./titlebarInsets";
+import styles from "./TopBar.module.css";
 
 
 const TopBar: Component<{
@@ -22,6 +23,13 @@ const TopBar: Component<{
     const [captionReserve, setCaptionReserve] = createSignal(0);
     const [labelInset, setLabelInset] = createSignal(12);
     const [versionLabel, setVersionLabel] = createSignal<string | null>(null);
+    // why the last folder didn't open; it stays in the modal as it fades out
+    const [folderError, setFolderError] = createSignal("");
+    const [folderErrorOpen, setFolderErrorOpen] = createSignal(false);
+    const showFolderError = (message: string) => {
+        setFolderError(message);
+        setFolderErrorOpen(true);
+    };
 
     onMount(() => {
         // browser mode has no updater: the app updates when it next runs
@@ -61,91 +69,82 @@ const TopBar: Component<{
         const panelId = isShellTab(tab) ? undefined : tab;
         shellApi
             .openPanelFolder(computerId, panelId)
-            .then((ok) => {
-                if (!ok) logToMain("warn", `Folder open failed for computer "${computerId}"`);
+            .then((result) => {
+                if (result.opened) return;
+                logToMain("warn", `Folder open failed for computer "${computerId}":`, result.error);
+                showFolderError(result.error ?? "The folder couldn't be opened.");
             })
-            .catch((err) => logToMain("error", "Failed to open panel folder:", err));
+            .catch((err) => {
+                logToMain("error", "Failed to open panel folder:", err);
+                showFolderError(err instanceof Error ? err.message : String(err));
+            });
     };
 
     return (
-        <header
-            inert={props.inert}
-            style={{
-                height: "var(--paperboard-titlebar-height)",
-                width: "100%",
-                display: "flex",
-                "align-items": "center",
-                "justify-content": "center",
-                "-webkit-app-region": props.mobile ? "no-drag" : "drag",
-                "user-select": "none",
-                background: getVarCss("surface-sunken"),
-                "border-bottom": `${getVarCss("border-width")} solid ${getVarCss("border")}`,
-                position: "relative",
-                "flex-shrink": 0,
-                // the phone layout's open page slides over the bar
-                "z-index": props.mobile ? "auto" : getVarCss("z-chrome"),
-            }}
-        >
-            <PaperText
-                weight={800}
-                size={2}
-                color="text-subtle"
-                style={{ "pointer-events": "none" }}
+        <>
+            <header
+                inert={props.inert}
+                class={styles.bar}
+                classList={{ [styles.desktop]: !props.mobile }}
             >
-                Paperboard
-            </PaperText>
-            <Show when={!props.mobile && versionLabel() !== null}>
-                <div
-                    style={{
-                        position: "absolute",
-                        left: `${labelInset()}px`,
-                        display: "flex",
-                        "align-items": "center",
-                        "-webkit-app-region": "no-drag",
-                    }}
+                <PaperText
+                    weight={800}
+                    size={2}
+                    color="text-subtle"
+                    class={styles.title}
                 >
-                    <PaperText size={1} color="text-subtle">
-                        {versionLabel()}
-                    </PaperText>
+                    Paperboard
+                </PaperText>
+                <Show when={!props.mobile && versionLabel() !== null}>
+                    <div class={styles.version} style={{ left: `${labelInset()}px` }}>
+                        <PaperText size={1} color="text-subtle">
+                            {versionLabel()}
+                        </PaperText>
+                    </div>
+                </Show>
+                <div
+                    class={styles.controls}
+                    style={{ right: `calc(var(--paper-uigap-threefourths) + ${props.mobile ? 0 : captionReserve()}px)` }}
+                >
+                    <Show when={!props.mobile}>
+                        <PaperButton size="tiny"
+                            icon
+                            title="Open panel folder"
+                            aria-label="Open panel folder"
+                            onClick={handleFolder}>
+                            <PaperIcon>folder_open</PaperIcon>
+                        </PaperButton>
+                    </Show>
+                    <Show when={props.packageUpdatesWaiting > 0}>
+                        <PaperButton
+                            size="tiny"
+                            title="Package updates are waiting for panels to stop"
+                            onClick={props.onOpenPackageUpdates}>
+                            {props.packageUpdatesWaiting === 1 ? "1 update waiting" : `${props.packageUpdatesWaiting} updates waiting`}
+                        </PaperButton>
+                    </Show>
+                    <Show when={props.updateState.status === "ready"}>
+                        <PaperButton
+                            size="tiny"
+                            title={`Install ${props.updateState.version}`}
+                            onClick={props.onOpenUpdate}>
+                            Restart to update
+                        </PaperButton>
+                    </Show>
                 </div>
-            </Show>
-            <div
-                style={{
-                    position: "absolute",
-                    right: `calc(${getVarCss("uigap-threefourths")} + ${props.mobile ? 0 : captionReserve()}px)`,
-                    display: "flex",
-                    gap: getVarCss("uigap-half"),
-                    "align-items": "center",
-                    "-webkit-app-region": "no-drag",
-                }}
+            </header>
+            <PaperModal
+                open={folderErrorOpen()}
+                onClose={() => setFolderErrorOpen(false)}
+                title="Folder not opened"
+                size="small"
+                footer={<>
+                    <PaperButton onClick={() => setFolderErrorOpen(false)}>Close</PaperButton>
+                </>}
             >
-                <Show when={!props.mobile}>
-                    <PaperButton size="tiny"
-                        icon
-                        title="Open panel folder"
-                        aria-label="Open panel folder"
-                        onClick={handleFolder}>
-                        <PaperIcon>folder_open</PaperIcon>
-                    </PaperButton>
-                </Show>
-                <Show when={props.packageUpdatesWaiting > 0}>
-                    <PaperButton
-                        size="tiny"
-                        title="Package updates are waiting for panels to stop"
-                        onClick={props.onOpenPackageUpdates}>
-                        {props.packageUpdatesWaiting === 1 ? "1 update waiting" : `${props.packageUpdatesWaiting} updates waiting`}
-                    </PaperButton>
-                </Show>
-                <Show when={props.updateState.status === "ready"}>
-                    <PaperButton
-                        size="tiny"
-                        title={`Install ${props.updateState.version}`}
-                        onClick={props.onOpenUpdate}>
-                        Restart to update
-                    </PaperButton>
-                </Show>
-            </div>
-        </header>
+                <PaperText role="alert" breakWord>{folderError()}</PaperText>
+            </PaperModal>
+        </>
     );
 };
 

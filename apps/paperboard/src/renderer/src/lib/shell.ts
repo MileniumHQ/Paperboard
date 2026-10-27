@@ -145,8 +145,9 @@ export const discoveryApi = {
 
 // Opens the local data dir (or a panel's files dir) in the OS file manager
 export const shellApi = {
-    openPanelFolder: (computerId: string, panelId?: string): Promise<boolean> =>
-        requireIpc().invoke<boolean>("open-panel-folder", {
+    /** an unopened folder answers why */
+    openPanelFolder: (computerId: string, panelId?: string): Promise<{ opened: boolean; error?: string }> =>
+        requireIpc().invoke<{ opened: boolean; error?: string }>("open-panel-folder", {
             computerId,
             panelId,
         }),

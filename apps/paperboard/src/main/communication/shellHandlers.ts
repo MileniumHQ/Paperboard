@@ -140,28 +140,29 @@ export function createShellInvokeHandlers(
             if (panelId && !cleanPanelId) {
                 throw new Error("Invalid parameter: panelId");
             }
+            // an unopened folder answers why, so the shell can say so
             if (computerId !== "local") {
                 const res = await openRemoteFolder(computerId, cleanPanelId ?? undefined);
                 if (!res.ok) {
                     logger.warn(`[Shell] open-panel-folder (remote ${computerId}) failed:`, res.error);
+                    return { opened: false, error: res.error ?? "The folder couldn't be opened." };
                 }
-                return res.ok;
+                return { opened: true };
             }
             const dir = cleanPanelId ? path.join(getFilesDir(), cleanPanelId) : getPaperboardDir();
             try {
                 ensureDir(dir);
             } catch (err: any) {
                 logger.warn("[Shell] open-panel-folder failed:", err?.message ?? err);
-                return false;
+                return { opened: false, error: `${dir} couldn't be created: ${err?.message ?? err}` };
             }
-            // the file manager reports failure as a message, not a throw:
-            // an unopened folder must answer false, not true
+            // the file manager reports failure as a message, not a throw
             const failure = await deps.openPath(dir);
             if (failure) {
                 logger.warn("[Shell] open-panel-folder could not open", dir, failure);
-                return false;
+                return { opened: false, error: failure };
             }
-            return true;
+            return { opened: true };
         },
 
         // app version for shell label

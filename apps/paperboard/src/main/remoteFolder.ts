@@ -177,16 +177,16 @@ export async function openRemoteFolder(
     panelId?: string,
 ): Promise<{ ok: boolean; error?: string }> {
     // checked before a DAV session is minted: nothing to mount it with
-    if (!remoteFolderSupported(process.platform)) return { ok: false, error: "unsupported-platform" };
+    if (!remoteFolderSupported(process.platform)) return { ok: false, error: "This system can't open another computer's files as a folder." };
     const client = connectionPool.getClient(computerId);
     const status = client.getStatus();
-    if (!status.isRemote) return { ok: false, error: "not-remote" };
+    if (!status.isRemote) return { ok: false, error: "This computer isn't connected as a remote computer." };
     const mainToken = client.getToken();
-    if (!mainToken) return { ok: false, error: "not-paired" };
+    if (!mainToken) return { ok: false, error: "This computer isn't paired. Pair it again from its settings." };
     const host = client.getHost();
     const port = client.getPort();
     const cert = client.getCert();
-    if (!cert) return { ok: false, error: "not-paired" };
+    if (!cert) return { ok: false, error: "This computer isn't paired. Pair it again from its settings." };
     const origin = `https://${bracket(host)}:${port}`;
 
     await closeRemoteFolder(computerId);
@@ -199,11 +199,11 @@ export async function openRemoteFolder(
             body: JSON.stringify({ idleMs: IDLE_MS }),
             timeoutMs: 20_000,
         });
-        if (!res.ok) return { ok: false, error: `session-${res.status}` };
+        if (!res.ok) return { ok: false, error: `The computer refused a file session (HTTP ${res.status}).` };
         session = JSON.parse(res.body.toString("utf8")) as { user: string; pass: string };
-        if (!session?.user || !session?.pass) return { ok: false, error: "bad-session" };
+        if (!session?.user || !session?.pass) return { ok: false, error: "The computer answered with an unreadable file session." };
     } catch (err: any) {
-        return { ok: false, error: `unreachable: ${err?.message ?? err}` };
+        return { ok: false, error: `The computer can't be reached: ${err?.message ?? err}` };
     }
 
     const rec: ActiveSession = {
@@ -271,7 +271,7 @@ export async function openRemoteFolder(
             const drive = /([A-Z]:)/i.exec(out.stdout)?.[1]?.toUpperCase();
             if (!drive) {
                 logger.warn("[RemoteFolder] mount output:", out.stdout);
-                return await fail("mount-parse");
+                return await fail("Windows mounted the folder but didn't say which drive it used.");
             }
             rec.mount = drive;
             active.set(computerId, rec);
@@ -310,10 +310,10 @@ export async function openRemoteFolder(
 
         // linux: no window API to watch, so the relay's own idle timer ends it
         const opened = await openWithDesktop(relayFolderUrl(process.env.XDG_CURRENT_DESKTOP, rec.relay.port, subDir));
-        if (!opened) return await fail("no-file-manager");
+        if (!opened) return await fail("No file manager opened the folder.");
         return { ok: true };
     } catch (err: any) {
         logger.warn("[RemoteFolder] open failed:", err?.message ?? err);
-        return await fail(`mount: ${err?.message ?? err}`);
+        return await fail(`The folder couldn't be mounted: ${err?.message ?? err}`);
     }
 }
