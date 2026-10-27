@@ -11,6 +11,7 @@ import {
     PaperIcon,
     PaperInput,
     PaperModal,
+    PaperQuote,
     PaperSelectMenu,
     PaperSelectMenuItem,
     PaperSeparator,
@@ -117,17 +118,19 @@ function Servers(props: { tools: ToolsClient; agent: Agent }) {
     // the editor stays mounted with the last form while it closes, so it animates out instead of vanishing
     const lastForm = createMemo<Form | null>((prev) => form() ?? prev, null);
     const [removing, setRemoving] = createSignal<ServerSpec | null>(null);
+    // a refused removal is told in the confirmation, which stays open over the page
+    const [removeError, setRemoveError] = createSignal<string | null>(null);
     const [busy, setBusy] = createSignal<string | null>(null);
     const [error, setError] = createSignal<string | null>(null);
 
-    const act = async (key: string, fn: () => Promise<unknown>) => {
+    const act = async (key: string, fn: () => Promise<unknown>, fail: (why: string | null) => void = setError) => {
         setBusy(key);
-        setError(null);
+        fail(null);
         try {
             await fn();
             return true;
         } catch (e) {
-            setError(message(e));
+            fail(message(e));
             return false;
         } finally {
             setBusy(null);
@@ -184,7 +187,14 @@ function Servers(props: { tools: ToolsClient; agent: Agent }) {
                                 <PaperButton disabled={busy() !== null || locked()} onClick={() => void act(`toggle:${server.name}`, () => props.tools.save({ ...server, enabled: !server.enabled }))}>
                                     <PaperIcon>{server.enabled ? "pause" : "play_arrow"}</PaperIcon> {server.enabled ? "Switch off" : "Switch on"}
                                 </PaperButton>
-                                <PaperButton variant="danger" disabled={busy() !== null || locked()} onClick={() => setRemoving(server)}>
+                                <PaperButton
+                                    variant="danger"
+                                    disabled={busy() !== null || locked()}
+                                    onClick={() => {
+                                        setRemoveError(null);
+                                        setRemoving(server);
+                                    }}
+                                >
                                     <PaperIcon>delete</PaperIcon> Remove
                                 </PaperButton>
                             </div>
@@ -222,7 +232,7 @@ function Servers(props: { tools: ToolsClient; agent: Agent }) {
                             disabled={busy() !== null}
                             onClick={async () => {
                                 const s = removing();
-                                if (s && (await act(`remove:${s.name}`, () => props.tools.remove(s.name)))) setRemoving(null);
+                                if (s && (await act(`remove:${s.name}`, () => props.tools.remove(s.name), setRemoveError))) setRemoving(null);
                             }}
                         >
                             Remove
@@ -231,6 +241,11 @@ function Servers(props: { tools: ToolsClient; agent: Agent }) {
                 }
             >
                 <PaperText>It stops, and the secrets saved for it are deleted. {name()} can't use its tools anymore.</PaperText>
+                <Show when={removeError()}>
+                    <PaperQuote variant="danger" icon="error" title="Server not removed" role="alert">
+                        {removeError()}
+                    </PaperQuote>
+                </Show>
             </PaperModal>
         </section>
     );

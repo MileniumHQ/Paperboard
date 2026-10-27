@@ -192,6 +192,8 @@ function ComputerSettings(props: { agent: Agent }) {
     const [busy, setBusy] = createSignal(false);
     const [error, setError] = createSignal<string | null>(null);
     const [confirming, setConfirming] = createSignal(false);
+    // a refused erase is told in the confirmation, which stays open over the page
+    const [eraseError, setEraseError] = createSignal<string | null>(null);
 
     const act = async (fn: () => Promise<unknown>) => {
         setBusy(true);
@@ -202,6 +204,18 @@ function ComputerSettings(props: { agent: Agent }) {
         } catch (e) {
             setError(message(e));
             return false;
+        } finally {
+            setBusy(false);
+        }
+    };
+    const erase = async () => {
+        setBusy(true);
+        setEraseError(null);
+        try {
+            await props.agent.installComputer();
+            setConfirming(false);
+        } catch (e) {
+            setEraseError(message(e));
         } finally {
             setBusy(false);
         }
@@ -258,7 +272,10 @@ function ComputerSettings(props: { agent: Agent }) {
                             <PaperButton
                                 variant="danger"
                                 disabled={busy() || c().phase === "installing"}
-                                onClick={() => setConfirming(true)}
+                                onClick={() => {
+                                    setEraseError(null);
+                                    setConfirming(true);
+                                }}
                             >
                                 <PaperIcon>restart_alt</PaperIcon> Set up again
                             </PaperButton>
@@ -285,9 +302,7 @@ function ComputerSettings(props: { agent: Agent }) {
                         <PaperButton
                             variant="danger"
                             disabled={busy()}
-                            onClick={async () => {
-                                if (await act(() => props.agent.installComputer())) setConfirming(false);
-                            }}
+                            onClick={() => void erase()}
                         >
                             Erase and set up
                         </PaperButton>
@@ -295,6 +310,11 @@ function ComputerSettings(props: { agent: Agent }) {
                 }
             >
                 <PaperText>Everything on it is deleted: its files, downloads and sign-ins. This can't be undone.</PaperText>
+                <Show when={eraseError()}>
+                    <PaperQuote variant="danger" icon="error" title="Computer not erased" role="alert">
+                        {eraseError()}
+                    </PaperQuote>
+                </Show>
             </PaperModal>
         </section>
     );
