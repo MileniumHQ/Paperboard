@@ -4,8 +4,8 @@ import { describe, test, expect } from "bun:test";
 import type { ActionInfo, PanelItem } from "@mileniumhq/paperapi";
 import { loadLibraryLists } from "../src/lib/libraryLoad";
 
-const panels = [{ id: "dev.paperboard.ai", name: "AI" }] as PanelItem[];
-const actions = [{ panelId: "dev.paperboard.ai", action: "ask" }] as ActionInfo[];
+const panels = [{ id: "dev.paperboard.agents", name: "AI" }] as PanelItem[];
+const actions = [{ panelId: "dev.paperboard.agents", action: "ask" }] as ActionInfo[];
 
 describe("loadLibraryLists", () => {
     test("returns both lists when both reads succeed", async () => {

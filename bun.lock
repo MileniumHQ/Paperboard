@@ -175,8 +175,8 @@
         "vite-plugin-solid": "^2.11.14",
       },
     },
-    "panels/dev.paperboard.ai": {
-      "name": "dev.paperboard.ai",
+    "panels/dev.paperboard.agents": {
+      "name": "dev.paperboard.agents",
       "dependencies": {
         "@mileniumhq/paperapi": "workspace:*",
         "@mileniumhq/paperui": "workspace:*",
@@ -877,7 +877,7 @@
 
     "dev.paperboard.actions": ["dev.paperboard.actions@workspace:panels/dev.paperboard.actions"],
 
-    "dev.paperboard.ai": ["dev.paperboard.ai@workspace:panels/dev.paperboard.ai"],
+    "dev.paperboard.agents": ["dev.paperboard.agents@workspace:panels/dev.paperboard.agents"],
 
     "dev.paperboard.botcreator": ["dev.paperboard.botcreator@workspace:panels/dev.paperboard.botcreator"],
 

@@ -182,7 +182,7 @@ describe("system:gpus over the wire", () => {
         server.listen(0, "127.0.0.1");
         await once(server, "listening");
         const port = (server.address() as { port: number }).port;
-        const token = auth.issuePanelToken("dev.paperboard.ai");
+        const token = auth.issuePanelToken("dev.paperboard.agents");
         try {
             await initPaperApi({ port, token });
             const report = await systemApi.getGpus();

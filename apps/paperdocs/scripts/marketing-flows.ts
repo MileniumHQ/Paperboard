@@ -4,7 +4,7 @@ import { BUILTIN_DEFS } from "../../../panels/dev.paperboard.actions/src/lib/bui
 import { isCanvasBlock, type CanvasBlock } from "../../../panels/dev.paperboard.actions/src/lib/tree";
 import { isTypedOnlyInput } from "../../../panels/dev.paperboard.actions/src/lib/inputTypes";
 
-const GAME = "dev.paperboard.gameserver", BOT = "dev.paperboard.botcreator", AI = "dev.paperboard.ai";
+const GAME = "dev.paperboard.gameserver", BOT = "dev.paperboard.botcreator", AI = "dev.paperboard.agents";
 export const demoChannel = "124800000000000010";
 export const demoUser = "124800000000000020";
 export const demoInteraction = "124800000000000030";

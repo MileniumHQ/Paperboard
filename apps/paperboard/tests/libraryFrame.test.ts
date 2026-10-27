@@ -115,11 +115,11 @@ describe("library frame message boundary", () => {
         expect(
             parseLibraryMessage(
                 event({
-                    data: { type: "paperboard:library-open", panelId: "dev.paperboard.ai" },
+                    data: { type: "paperboard:library-open", panelId: "dev.paperboard.agents" },
                 }),
                 identity,
             ),
-        ).toEqual({ type: "paperboard:library-open", panelId: "dev.paperboard.ai" });
+        ).toEqual({ type: "paperboard:library-open", panelId: "dev.paperboard.agents" });
     });
 
     it("ignores unknown message types and malformed payloads", () => {
@@ -137,7 +137,7 @@ describe("library media requests", () => {
                     data: {
                         type: "paperboard:library-media",
                         requestId: "m1",
-                        panelId: "dev.paperboard.ai",
+                        panelId: "dev.paperboard.agents",
                         full: true,
                         path: "../../etc/passwd",
                     },
@@ -147,7 +147,7 @@ describe("library media requests", () => {
         ).toEqual({
             type: "paperboard:library-media",
             requestId: "m1",
-            panelId: "dev.paperboard.ai",
+            panelId: "dev.paperboard.agents",
             full: true,
         });
         expect(
@@ -158,7 +158,7 @@ describe("library media requests", () => {
         ).toBeNull();
         expect(
             parseLibraryMessage(
-                event({ data: { type: "paperboard:library-media", panelId: "dev.paperboard.ai" } }),
+                event({ data: { type: "paperboard:library-media", panelId: "dev.paperboard.agents" } }),
                 identity,
             ),
         ).toBeNull();

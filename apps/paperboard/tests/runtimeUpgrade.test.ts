@@ -62,10 +62,10 @@ test("a runtime update waits for the workloads running from that runtime, then i
         expect(installed()).toBe("0.2.0");
 
         // one that does: the verified release is staged, the installed one stays
-        started.push(await workload(engine, "dev.paperboard.ai.ollama", runtimeCommand(), "dev.paperboard.ai", root));
+        started.push(await workload(engine, "dev.paperboard.agents.ollama", runtimeCommand(), "dev.paperboard.agents", root));
         await release("0.3.0");
         const outcome = await engine.downloadPackage("runtime", "in-use", undefined, digest);
-        expect(outcome.waiting).toEqual({ name: "runtime", version: "0.3.0", blockedBy: [{ processId: "dev.paperboard.ai.ollama", owner: "dev.paperboard.ai" }] });
+        expect(outcome.waiting).toEqual({ name: "runtime", version: "0.3.0", blockedBy: [{ processId: "dev.paperboard.agents.ollama", owner: "dev.paperboard.agents" }] });
         expect(installed()).toBe("0.2.0");
         expect(engine.getPackageIndex().runtime.version).toBe("0.2.0");
         expect(engine.pendingPackageUpdates()).toEqual([outcome.waiting!]);
@@ -82,11 +82,11 @@ test("a runtime update waits for the workloads running from that runtime, then i
             return result.updates;
         };
         expect(await pending(null)).toEqual([outcome.waiting]);
-        expect(await pending("dev.paperboard.ai")).toEqual([outcome.waiting]);
+        expect(await pending("dev.paperboard.agents")).toEqual([outcome.waiting]);
         expect(await pending("dev.paperboard.terminal")).toEqual([]);
 
         // the last user stops: the staged release installs without being asked
-        await engine.killProcess("dev.paperboard.ai.ollama");
+        await engine.killProcess("dev.paperboard.agents.ollama");
         await engine.applyReadyStagedPackages();
         expect(installed()).toBe("0.3.0");
         expect(engine.getPackageIndex().runtime).toMatchObject({ version: "0.3.0", sha256: digest });
@@ -95,7 +95,7 @@ test("a runtime update waits for the workloads running from that runtime, then i
 
         // a staged update outlives the daemon: the next one installs it once
         // nothing runs from the old release
-        started.push(await workload(engine, "dev.paperboard.ai.ollama", runtimeCommand(), "dev.paperboard.ai", root));
+        started.push(await workload(engine, "dev.paperboard.agents.ollama", runtimeCommand(), "dev.paperboard.agents", root));
         await release("0.4.0");
         expect((await engine.downloadPackage("runtime", "before-restart", undefined, digest)).waiting?.version).toBe("0.4.0");
         const next = new PaperCraneEngine(host, undefined, base, FIXTURE_RELEASE_PUBLIC_KEY);

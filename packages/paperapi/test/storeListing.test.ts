@@ -81,7 +81,7 @@ describe("loadInstalledPanelMedia", () => {
     const { readFileSync } = require("fs") as typeof import("fs");
     const { join } = require("path") as typeof import("path");
     const aiDir = (require("url") as typeof import("url")).fileURLToPath(
-        new URL("../../../panels/dev.paperboard.ai", import.meta.url),
+        new URL("../../../panels/dev.paperboard.agents", import.meta.url),
     );
     const readFrom = (files: Record<string, Uint8Array>) => async (path: string) => {
         const bytes = files[path.replace(/^\.\//, "")];

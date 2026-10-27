@@ -11,7 +11,7 @@ import { PaperCraneAuth } from "../papercrane/auth";
 import { PanelServicesManager } from "../papercrane/panelServices";
 import { setupWebSocketServer } from "../papercrane/ws";
 import { CraneTransport } from "../../../packages/paperapi/src/ws";
-import { PANEL_ID, UI_ACTION_IDS, type AiState, type Settings } from "../../../panels/dev.paperboard.ai/src/contract";
+import { PANEL_ID, UI_ACTION_IDS, type AiState, type Settings } from "../../../panels/dev.paperboard.agents/src/contract";
 
 test("the agent's settings persist and hydrate through the running AI service", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "ai-settings-wire-"));
@@ -32,7 +32,7 @@ test("the agent's settings persist and hydrate through the running AI service", 
         const panelDir = path.join(root, "panels", PANEL_ID);
         fs.mkdirSync(panelDir, { recursive: true });
         const build = await Bun.build({
-            entrypoints: [path.resolve(import.meta.dir, "../../../panels/dev.paperboard.ai/src/service.ts")],
+            entrypoints: [path.resolve(import.meta.dir, "../../../panels/dev.paperboard.agents/src/service.ts")],
             outdir: panelDir,
             target: "node",
             external: ["@mileniumhq/paperui"],
@@ -51,7 +51,8 @@ test("the agent's settings persist and hydrate through the running AI service", 
 
         expect((await state()).settings).toBeNull();
 
-        const settings: Settings = { name: "Pixel", harness: "codex", model: null };
+        // what onboarding saves
+        const settings: Settings = { name: "Pixel", harness: "codex", model: null, compaction: "summarize" };
         expect(await call(UI_ACTION_IDS.setup, { settings })).toEqual({ saved: true });
         expect((await state()).settings).toEqual(settings);
         expect(await engine.getConfig(PANEL_ID)).toEqual(settings);

@@ -19,7 +19,7 @@
 #     origami-library  library UI: tests, build, silent-catches
 #     pbd            pbd.lc short-link worker: typecheck, tests, silent-catches
 #     scripts        root dev/publish scripts: tests, silent-catches
-#     actions ai botcreator gameserver terminal   first-party panels
+#     actions agents botcreator gameserver terminal   first-party panels
 #   e.g. `bun run gate terminal`, `bun run gate paperapi paperui`
 #
 # Repo-wide checks (changelog-existence, todo-expiry) run only in the full
@@ -55,7 +55,7 @@ run_in() {
 # Every selectable target. The *-build names are prerequisites, not
 # user-facing: they exist so a filtered run can pull in the shared library
 # artifact a consumer needs without running that library's whole suite.
-KNOWN_TARGETS="packages paperapi paperui create-panel paperapi-build paperui-build create-panel-build paperboard paperdocs origami origami-library pbd scripts actions ai botcreator gameserver terminal"
+KNOWN_TARGETS="packages paperapi paperui create-panel paperapi-build paperui-build create-panel-build paperboard paperdocs origami origami-library pbd scripts actions agents botcreator gameserver terminal"
 
 # Prerequisites per target, expanded transitively. A panel (and any app that
 # bundles the SDK/design system) needs paperapi/paperui dist present; the
@@ -67,7 +67,7 @@ target_deps() {
         create-panel) echo "create-panel-build" ;;
         packages) echo "paperapi-build paperui-build create-panel-build" ;;
         paperboard | paperdocs | origami-library) echo "paperapi-build paperui-build" ;;
-        actions | ai | botcreator | gameserver | terminal) echo "paperapi-build paperui-build" ;;
+        actions | agents | botcreator | gameserver | terminal) echo "paperapi-build paperui-build" ;;
         *) echo "" ;;
     esac
 }
@@ -195,7 +195,7 @@ gwarn origami-library "origami library styling literals" bash "$ROOT/scripts/che
 # The daemon runs the built dist/service.js, not the TypeScript source, so the
 # gate rebuilds every panel: tests and typechecks prove the source, the build
 # proves the artifact that actually ships. ───────────────────────────────────
-for short in actions ai botcreator gameserver terminal; do
+for short in actions agents botcreator gameserver terminal; do
     panel="panels/dev.paperboard.$short"
     gstep "$short" "$panel tests" run_in "$ROOT/$panel" bun run test
     gstep "$short" "$panel typecheck" run_in "$ROOT/$panel" bunx tsc --noEmit

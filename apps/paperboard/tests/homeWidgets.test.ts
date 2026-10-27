@@ -149,9 +149,9 @@ describe("panel run state", () => {
     it("is running only with live processes, and unknown without a report rather than stopped", () => {
         const live = new Set(["dev.paperboard.gameserver"]);
         expect(panelRunState(true, live, "dev.paperboard.gameserver")).toBe("running");
-        expect(panelRunState(true, live, "dev.paperboard.ai")).toBe("stopped");
-        expect(panelRunState(false, live, "dev.paperboard.ai")).toBe("no-service");
-        expect(panelRunState(true, null, "dev.paperboard.ai")).toBe("unknown");
+        expect(panelRunState(true, live, "dev.paperboard.agents")).toBe("stopped");
+        expect(panelRunState(false, live, "dev.paperboard.agents")).toBe("no-service");
+        expect(panelRunState(true, null, "dev.paperboard.agents")).toBe("unknown");
     });
 });
 

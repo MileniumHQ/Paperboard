@@ -37,7 +37,7 @@ describe("panel tutorial record", () => {
     it("records Paperboard's own tutorial apart from the panels'", () => {
         const seen = { panels: ["dev.paperboard.terminal"], app: false };
         expect(withSeen(seen, "app")).toEqual({ panels: ["dev.paperboard.terminal"], app: true });
-        expect(withSeen(seen, { panelId: "dev.paperboard.ai" }))
-            .toEqual({ panels: ["dev.paperboard.terminal", "dev.paperboard.ai"], app: false });
+        expect(withSeen(seen, { panelId: "dev.paperboard.agents" }))
+            .toEqual({ panels: ["dev.paperboard.terminal", "dev.paperboard.agents"], app: false });
     });
 });

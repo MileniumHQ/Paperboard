@@ -2,7 +2,7 @@
 // supervisor processes). The old endpoint name replaced "." with "_", so
 // "a.b" and "a_b" shared one socket, and a daemon restart re-keyed recovered
 // workloads under the substituted name, out of reach of kill and uninstall
-// (the AI panel's dev.paperboard.ai.ollama hit exactly this).
+// (the AI panel's dev.paperboard.agents.ollama hit exactly this).
 import { describe, it, expect, afterEach } from "bun:test";
 import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import * as fs from "node:fs";

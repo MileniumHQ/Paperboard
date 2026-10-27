@@ -15,7 +15,7 @@ import {
     supervisorPresent,
 } from "../papercrane/supervisor";
 
-const ID = "dev.paperboard.ai.ollama";
+const ID = "dev.paperboard.agents.ollama";
 
 describe("supervisor endpoint presence", () => {
     beforeEach(() => {

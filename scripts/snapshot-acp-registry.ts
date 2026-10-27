@@ -3,7 +3,7 @@
  * snapshot-acp-registry.ts — Captures the ACP agent registry for the AI panel
  *
  * Usage: bun scripts/snapshot-acp-registry.ts
- * Output: panels/dev.paperboard.ai/src/data/acp-agents.json
+ * Output: panels/dev.paperboard.agents/src/data/acp-agents.json
  *
  * The panel never downloads agent code: it runs agents the user installed
  * themselves. So the snapshot records, per agent, the command an install
@@ -16,7 +16,7 @@ import { join } from "node:path";
 
 const REGISTRY_URL = "https://cdn.agentclientprotocol.com/registry/v1/latest/registry.json";
 const NPM_URL = "https://registry.npmjs.org";
-const OUT_FILE = join(import.meta.dir, "..", "panels", "dev.paperboard.ai", "src", "data", "acp-agents.json");
+const OUT_FILE = join(import.meta.dir, "..", "panels", "dev.paperboard.agents", "src", "data", "acp-agents.json");
 const MAX_AGENTS = 200;
 
 interface RegistryAgent {

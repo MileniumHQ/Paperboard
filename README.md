@@ -22,7 +22,7 @@ And of course, the panels:
 - **Game Server** (`dev.paperboard.gameserver`) is a great example of what a Paperboard panel should be. It's currently a Minecraft server manager (with support for other games planned) with rich features like player management, plugin search, and even a world map. And more. Usually when you say "and more" that means you ran out of things to say, but this panel keeps on giving.
 - **Actions** (`dev.paperboard.actions`) is a powerful visual interface to create entire workflows using Paperboard's Actions API. Taking design inspiration from Apple Shortcuts and Scratch, this panel lets you automate all your other panels to work with each other as easily as dragging a block onto a canvas.
 - **Bot Creator** (`dev.paperboard.botcreator`) has a basic interface for creating and viewing the state of a Discord bot, but where it really shines is in its Actions. When combined with the Actions panel, fully interactive Discord bots can be created.
-- **AI** (`dev.paperboard.ai`) is incomplete, but will provide an interface for using AI language models locally with the capability to trigger actions (with the user's consent) through tool calls.
+- **Agents** (`dev.paperboard.agents`) is an agent you text, with a web browser of its own. It thinks with the Codex, Claude or OpenCode you already have.
 - **Terminal** (`dev.paperboard.terminal`) is a basic Terminal for when you want to use a Terminal in Paperboard. There isn't much to this one.
 
 ## Development

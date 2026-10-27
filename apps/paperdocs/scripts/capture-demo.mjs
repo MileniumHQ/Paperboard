@@ -288,7 +288,7 @@ function fake(req) {
             };
         }
     }
-    if (panel === "dev.paperboard.ai" && a === "ui-get-conversation") return { result: chat };
+    if (panel === "dev.paperboard.agents" && a === "ui-get-conversation") return { result: chat };
     return undefined;
 }
 (async () => {
@@ -318,7 +318,7 @@ function fake(req) {
                     }
                     if (
                         req.action === "actions:call" &&
-                        req.params?.panelId === "dev.paperboard.ai" &&
+                        req.params?.panelId === "dev.paperboard.agents" &&
                         req.params.action === "__getState"
                     ) {
                         if (pending.size >= 128) throw new Error("Too many screenshot requests");
@@ -407,7 +407,7 @@ function fake(req) {
         for (const [name, id] of [
             ["Game Server", "gameserver"],
             ["Bot Creator", "botcreator"],
-            ["AI", "ai"],
+            ["Agents", "agents"],
         ]) {
             await page.getByText(name, { exact: true }).click();
             const frame = await (
