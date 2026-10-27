@@ -163,7 +163,11 @@ export function PaperModal(props: ParentProps<PaperModalProps>) {
             >
                 <div
                     class={styles.backdrop}
-                    classList={{ [styles.bottom]: local.placement === "bottom", [styles.concealed]: !!local.concealed }}
+                    classList={{
+                        [styles.bottom]: local.placement === "bottom",
+                        [styles.concealed]: !!local.concealed,
+                        [styles.closing]: !local.open,
+                    }}
                     aria-hidden={local.concealed ? "true" : undefined}
                     onClick={handleBackdropClick}
                 >

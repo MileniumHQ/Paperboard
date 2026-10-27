@@ -31,6 +31,12 @@
     pointer-events: none;
 }
 
+/* a closed modal lingers for a frame and its fade: a press made then
+   belongs to the page underneath, not the backdrop on its way out */
+.closing {
+    pointer-events: none;
+}
+
 .modalBox {
     background: var(--paper-surface-raised);
     border: var(--paper-border-width) solid var(--paper-border);
