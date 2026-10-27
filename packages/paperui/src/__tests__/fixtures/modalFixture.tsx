@@ -6,7 +6,7 @@
 // :focus-visible on the container and paints `outline: auto 1px` in the system
 // accent (orange on Ubuntu), which wrapped the whole modal. jsdom cannot see
 // this because it does not apply the bundled CSS.
-import { createSignal } from "solid-js";
+import { createSignal, Show } from "solid-js";
 import { render } from "solid-js/web";
 import { PaperModal, PaperButton } from "../../index";
 import "../../styles/styles.css";
@@ -27,6 +27,9 @@ function nextFrame(): Promise<void> {
     return new Promise((resolve) => requestAnimationFrame(() => resolve()));
 }
 
+// a modal that only exists while it's shown: mounted already open, it must still animate in
+const [mountedOpen, setMountedOpen] = createSignal(false);
+
 function Fixture() {
     const [open, setOpen] = createSignal(false);
 
@@ -40,6 +43,11 @@ function Fixture() {
             >
                 <p>Modal content</p>
             </PaperModal>
+            <Show when={mountedOpen()}>
+                <PaperModal open title="Mounted open">
+                    <p>Shown by a Show</p>
+                </PaperModal>
+            </Show>
         </div>
     );
 }
@@ -57,6 +65,12 @@ async function run(): Promise<void> {
     if (dialog) {
         out.checks.outlineStyle = getComputedStyle(dialog).outlineStyle;
     }
+
+    setMountedOpen(true);
+    // a timer, not a frame: what's checked is the class the mount applied, not a painted frame
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const mounted = [...document.querySelectorAll('[role="dialog"]')].find((d) => d.textContent?.includes("Shown by a Show"));
+    out.checks.mountedOpenEnterAnimation = mounted?.parentElement ? getComputedStyle(mounted.parentElement).animationName : "";
 }
 
 try {

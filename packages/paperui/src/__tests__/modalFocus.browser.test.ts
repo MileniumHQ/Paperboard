@@ -40,6 +40,11 @@ describe("modal focus styling in a real browser", () => {
                 checks.outlineStyle,
                 "the dialog container painted a UA focus ring",
             ).toBe("none");
+            // a modal shown by mounting it (open from the start) still plays its entrance
+            expect(
+                checks.mountedOpenEnterAnimation,
+                "a modal mounted already open appeared without animating in",
+            ).not.toMatch(/^(none)?$/);
         },
         60_000,
     );

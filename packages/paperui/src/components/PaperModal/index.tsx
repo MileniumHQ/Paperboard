@@ -132,8 +132,10 @@ export function PaperModal(props: ParentProps<PaperModalProps>) {
 
     return (
         <Portal>
+            {/* appear: a modal mounted already open (shown by a <Show>) still rises in */}
             <PaperPresence
                 when={local.open}
+                appear
                 enterClass={styles.backdropTransitionIn}
                 exitClass={styles.backdropTransitionOut}
             >
