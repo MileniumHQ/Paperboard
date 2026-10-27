@@ -489,14 +489,12 @@ export function send(channel: string, ...args: unknown[]): Promise<void> {
                 .then(() => t.trackTerminal(p.id))
                 .catch((err) => debugErr(`terminal-create ${p?.id}`, err));
         }
+        // a refused keystroke or resize must reach the terminal that sent
+        // it, which can say the session is gone and retry
         case "terminal-write":
-            return t.call("term:write", args[0] as any).catch((err) =>
-                debugErr("terminal-write", err),
-            );
+            return t.call("term:write", args[0] as any).then(() => undefined);
         case "terminal-resize":
-            return t.call("term:resize", args[0] as any).catch((err) =>
-                debugErr("terminal-resize", err),
-            );
+            return t.call("term:resize", args[0] as any).then(() => undefined);
         case "terminal-destroy": {
             const { id } = args[0] as any;
             t.untrackTerminal(id);
