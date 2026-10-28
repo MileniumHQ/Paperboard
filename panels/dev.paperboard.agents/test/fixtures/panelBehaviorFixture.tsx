@@ -89,6 +89,17 @@ async function run() {
     c.frameAfterClose = Boolean(frame());
     c.chatFullAfterClose = !chatInert();
 
+    // the conversations: the current one is listed, and marked
+    document.querySelector<HTMLButtonElement>('button[aria-label="Past conversations"]')!.click();
+    await sleep(300);
+    const marked = () => [...document.querySelectorAll<HTMLInputElement>('input[name="agents-history"]')].filter((i) => i.checked).map((i) => i.value);
+    c.conversationsListed = [...document.querySelectorAll<HTMLInputElement>('input[name="agents-history"]')].map((i) => i.value);
+    c.currentMarked = marked();
+    // choosing it again just goes back to it
+    document.querySelector<HTMLInputElement>('input[name="agents-history"][value="current"]')!.closest("label")!.click();
+    await sleep(300);
+    c.historyClosedOnCurrent = !dialogTitled("Conversations");
+
     menu.click();
     await sleep(300);
 
@@ -96,6 +107,7 @@ async function run() {
     await page("apps");
     const appsList = () => [...document.querySelectorAll<HTMLInputElement>('input[name="agents-apps"]')].map((i) => i.value);
     c.appsListed = appsList();
+    c.appsMarked = [...document.querySelectorAll<HTMLInputElement>('input[name="agents-apps"]')].filter((i) => i.checked).map((i) => i.value);
     const deleteClock = document.querySelector<HTMLButtonElement>('button[aria-label="Delete “Clock”"]');
     if (!deleteClock) throw new Error("no way to delete an app");
     deleteClock.click();
@@ -112,6 +124,13 @@ async function run() {
     await sleep(400);
     c.menuClosedOnOpen = !dialogTitled("Apps");
     c.frameFromList = frame()?.getAttribute("src") ?? null;
+    // back in the list, the open one is marked
+    menu.click();
+    await sleep(300);
+    await page("apps");
+    c.openAppMarked = [...document.querySelectorAll<HTMLInputElement>('input[name="agents-apps"]')].filter((i) => i.checked).map((i) => i.value);
+    document.querySelector<HTMLButtonElement>('[role="dialog"] button[aria-label="Close"]')?.click();
+    await sleep(300);
     [...frame()!.previousElementSibling!.querySelectorAll<HTMLButtonElement>('button[aria-label="Close"]')][0]!.click();
     await sleep(500);
 

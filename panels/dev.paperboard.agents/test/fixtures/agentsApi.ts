@@ -35,6 +35,10 @@ const answers: Record<string, () => unknown> = {
     [UI_ACTION_IDS.routines]: () => service.routines,
     [UI_ACTION_IDS.memory]: () => ({ facts: [], notes: [] }),
     [UI_ACTION_IDS.apps]: () => service.apps,
+    [UI_ACTION_IDS.conversations]: () => ({
+        current: { id: "current", title: "hi", startedAt: 0, endedAt: 0, messages: 1 },
+        past: [{ id: "0123456789ab", title: "plan my trip to Oslo", startedAt: 0, endedAt: 0, messages: 4 }],
+    }),
     // a 1×1 picture
     [UI_ACTION_IDS.appPicture]: () => ({ image: "R0lGODlhAQABAIAAAP///wAAACwAAAAAAQABAAACAkQBADs=" }),
     [TOOLS_ACTION_IDS.get]: () => service.tools,

@@ -18,8 +18,11 @@ export default function Apps(props: { apps: Launcher; name: string; onOpened: ()
     const [deleteError, setDeleteError] = createSignal<string | null>(null);
     const [busy, setBusy] = createSignal(false);
     const [deleting, setDeleting] = createSignal<AppInfo | null>(null);
+    // one being opened is marked until it's open (then it's the one shown) or wasn't
+    const [chosen, setChosen] = createSignal<string | null>(null);
 
     const open = async (name: string) => {
+        setChosen(name);
         setBusy(true);
         setOpenError(null);
         try {
@@ -28,6 +31,7 @@ export default function Apps(props: { apps: Launcher; name: string; onOpened: ()
         } catch (e) {
             setOpenError(failure("App not opened", e));
         } finally {
+            setChosen(null);
             setBusy(false);
         }
     };
@@ -55,27 +59,43 @@ export default function Apps(props: { apps: Launcher; name: string; onOpened: ()
             <Switch>
                 <Match when={apps.list() === null && apps.listError()}>
                     {(why) => (
-                        <PaperEmptyState icon="error" title="The apps can't be read" description={why()}>
-                            <PaperButton onClick={() => apps.reload()}>Try again</PaperButton>
-                        </PaperEmptyState>
+                        <PaperFlex padding="double">
+                            <PaperEmptyState icon="error" title="The apps can't be read" description={why()}>
+                                <PaperButton onClick={() => apps.reload()}>Try again</PaperButton>
+                            </PaperEmptyState>
+                        </PaperFlex>
                     )}
                 </Match>
                 <Match when={apps.list() === null}>
-                    <PaperLoader loaderStatus="indeterminate" label="Reading the apps" />
+                    <PaperFlex padding="double">
+                        <PaperLoader loaderStatus="indeterminate" label="Reading the apps" />
+                    </PaperFlex>
                 </Match>
                 <Match when={apps.list()!.length === 0}>
-                    <PaperEmptyState icon="apps" title="No apps yet" description={`Ask ${props.name} for one, like a planner for your assignments, and it shows up here.`} />
+                    <PaperFlex padding="double">
+                        <PaperEmptyState icon="apps" title="No apps yet" description={`Ask ${props.name} for one, like a planner for your assignments, and it shows up here.`} />
+                    </PaperFlex>
                 </Match>
                 <Match when={true}>
-                    <PaperFlex gap="half">
+                    <PaperFlex flex minHeight={0}>
                         <Show when={openError()}>
                             {(shown) => (
-                                <PaperQuote variant="danger" icon="error" title={shown().title} role="alert">
-                                    {shown().message}
-                                </PaperQuote>
+                                <PaperFlex padding="full">
+                                    <PaperQuote variant="danger" icon="error" title={shown().title} role="alert">
+                                        {shown().message}
+                                    </PaperQuote>
+                                </PaperFlex>
                             )}
                         </Show>
-                        <PaperList name="agents-apps" value={apps.shown()?.name ?? ""} onValueChange={(v) => void open(String(v))}>
+                        {/* the app open beside the chat is marked */}
+                        <PaperList
+                            name="agents-apps"
+                            value={chosen() ?? apps.shown()?.name ?? ""}
+                            onValueChange={(v) => void open(String(v))}
+                            borderless
+                            fullWidth
+                            fullHeight
+                        >
                             <For each={apps.list()}>
                                 {(a) => (
                                     <PaperListItem

@@ -106,7 +106,7 @@ export function createAgent() {
         sendNow: () => call(UI_ACTION_IDS.sendNow),
         startOver: () => call(UI_ACTION_IDS.startOver),
         newConversation: () => call(UI_ACTION_IDS.newConversation),
-        conversations: () => call<PastConversation[]>(UI_ACTION_IDS.conversations),
+        conversations: () => call<{ current: PastConversation | null; past: PastConversation[] }>(UI_ACTION_IDS.conversations),
         openConversation: (id: string) => call(UI_ACTION_IDS.openConversation, { id }),
         deleteConversation: (id: string) => call(UI_ACTION_IDS.deleteConversation, { id }),
         memory: () => call<MemoryList>(UI_ACTION_IDS.memory),

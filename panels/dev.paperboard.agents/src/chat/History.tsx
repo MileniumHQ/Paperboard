@@ -1,27 +1,30 @@
-// Past conversations: open one to continue it (the current one takes its
-// place in the list), or delete one for good after saying so.
+// The conversations: the current one, marked, and the past ones. Open one to
+// continue it (the current one takes its place in the list), or delete one
+// for good after saying so.
 
 import { For, Match, Show, Switch, createEffect, createSignal, on } from "solid-js";
 import { PaperButton, PaperEmptyState, PaperFlex, PaperIcon, PaperList, PaperListItem, PaperLoader, PaperModal, PaperQuote, PaperText } from "@mileniumhq/paperui";
-import type { PastConversation } from "../contract";
+import { CURRENT_CONVERSATION as CURRENT, type PastConversation } from "../contract";
 import type { Agent } from "../lib/agent";
 import { errorText, failure, type Failure } from "../lib/failure";
 const when = (at: number) => new Date(at).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
 
 export default function History(props: { agent: Agent; open: boolean; onClose: () => void }) {
-    const [list, setList] = createSignal<PastConversation[] | null>(null);
+    const [list, setList] = createSignal<{ current: PastConversation | null; past: PastConversation[] } | null>(null);
     const [readError, setReadError] = createSignal<string | null>(null);
     const [openError, setOpenError] = createSignal<Failure | null>(null);
     const [deleteError, setDeleteError] = createSignal<string | null>(null);
     const [busy, setBusy] = createSignal(false);
     const [deleting, setDeleting] = createSignal<PastConversation | null>(null);
-    // the one being opened; none once it's open or wasn't, so choosing it again tries again
-    const [chosen, setChosen] = createSignal("");
+    // the current one is marked; one being opened is, until it's open or wasn't
+    const [chosen, setChosen] = createSignal(CURRENT);
+    const all = () => (list() ? [...(list()!.current ? [list()!.current!] : []), ...list()!.past] : []);
 
     const load = async () => {
         setReadError(null);
         setOpenError(null);
         setList(null);
+        setChosen(CURRENT);
         try {
             setList(await props.agent.conversations());
         } catch (e) {
@@ -42,7 +45,7 @@ export default function History(props: { agent: Agent; open: boolean; onClose: (
         } catch (e) {
             setOpenError(failure("Conversation not opened", e));
         } finally {
-            setChosen("");
+            setChosen(CURRENT);
             setBusy(false);
         }
     };
@@ -59,7 +62,7 @@ export default function History(props: { agent: Agent; open: boolean; onClose: (
         try {
             await props.agent.deleteConversation(c.id);
             setDeleting(null);
-            setList((l) => l?.filter((x) => x.id !== c.id) ?? null);
+            setList((l) => l && { ...l, past: l.past.filter((x) => x.id !== c.id) });
         } catch (e) {
             setDeleteError(errorText(e));
         } finally {
@@ -72,38 +75,56 @@ export default function History(props: { agent: Agent; open: boolean; onClose: (
             <PaperModal
                 open={props.open}
                 onClose={() => !busy() && props.onClose()}
-                title="Past conversations"
+                title="Conversations"
                 size="medium"
+                noPadding
             >
                 <Switch>
                     <Match when={list() === null && readError()}>
-                        <PaperEmptyState icon="error" title="The history can't be read" description={readError()!}>
-                            <PaperButton onClick={() => void load()}>Try again</PaperButton>
-                        </PaperEmptyState>
+                        <PaperFlex padding="double">
+                            <PaperEmptyState icon="error" title="The history can't be read" description={readError()!}>
+                                <PaperButton onClick={() => void load()}>Try again</PaperButton>
+                            </PaperEmptyState>
+                        </PaperFlex>
                     </Match>
                     <Match when={list() === null}>
-                        <PaperLoader loaderStatus="indeterminate" label="Reading the history" />
+                        <PaperFlex padding="double">
+                            <PaperLoader loaderStatus="indeterminate" label="Reading the history" />
+                        </PaperFlex>
                     </Match>
-                    <Match when={list()!.length === 0}>
-                        <PaperEmptyState icon="history" title="No past conversations" description="Start a new conversation with the plus button, and this one will wait here." />
+                    <Match when={all().length === 0}>
+                        <PaperFlex padding="double">
+                            <PaperEmptyState icon="history" title="No conversations yet" description="Say hi, and your conversation shows up here." />
+                        </PaperFlex>
                     </Match>
                     <Match when={true}>
-                        <PaperFlex gap="half">
-                            <Show when={openError()}>
-                                {(shown) => (
+                        <Show when={openError()}>
+                            {(shown) => (
+                                <PaperFlex padding="full">
                                     <PaperQuote variant="danger" icon="error" title={shown().title} role="alert">
                                         {shown().message}
                                     </PaperQuote>
-                                )}
-                            </Show>
-                            <PaperList name="agents-history" value={chosen()} onValueChange={(v) => void reopen(list()!.find((c) => c.id === v)!)}>
-                                <For each={list()}>
-                                    {(c) => (
-                                        <PaperListItem
-                                            value={c.id}
-                                            disabled={busy()}
-                                            description={`${when(c.endedAt)} · ${c.messages === 1 ? "1 message" : `${c.messages} messages`}`}
-                                            actions={
+                                </PaperFlex>
+                            )}
+                        </Show>
+                        <PaperList
+                            name="agents-history"
+                            value={chosen()}
+                            onValueChange={(v) => v !== CURRENT && void reopen(list()!.past.find((c) => c.id === v)!)}
+                            borderless
+                            fullWidth
+                            fullHeight
+                        >
+                            <For each={all()}>
+                                {(c) => (
+                                    <PaperListItem
+                                        value={c.id}
+                                        disabled={busy()}
+                                        // the marked one is chosen already: choosing it goes back to it
+                                        onClick={() => c.id === CURRENT && props.onClose()}
+                                        description={`${c.id === CURRENT ? "Now" : when(c.endedAt)} · ${c.messages === 1 ? "1 message" : `${c.messages} messages`}`}
+                                        actions={
+                                            <Show when={c.id !== CURRENT}>
                                                 <PaperButton
                                                     icon
                                                     size="small"
@@ -116,14 +137,14 @@ export default function History(props: { agent: Agent; open: boolean; onClose: (
                                                 >
                                                     <PaperIcon>delete</PaperIcon>
                                                 </PaperButton>
-                                            }
-                                        >
-                                            {c.title}
-                                        </PaperListItem>
-                                    )}
-                                </For>
-                            </PaperList>
-                        </PaperFlex>
+                                            </Show>
+                                        }
+                                    >
+                                        {c.title}
+                                    </PaperListItem>
+                                )}
+                            </For>
+                        </PaperList>
                     </Match>
                 </Switch>
             </PaperModal>

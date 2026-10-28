@@ -38,12 +38,17 @@ describe("panel behavior", () => {
             expect(c.chatBackFromExtended, "and back").toBe(true);
             expect(c.frameAfterClose, "closing takes the app away").toBe(false);
             expect(c.chatFullAfterClose).toBe(true);
+            expect(c.conversationsListed, "the current conversation is listed with the past ones").toEqual(["current", "0123456789ab"]);
+            expect(c.currentMarked, "and it's the one marked").toEqual(["current"]);
+            expect(c.historyClosedOnCurrent).toBe(true);
+            expect(c.appsMarked, "with no app open, none is marked").toEqual([]);
             expect(c.appsListed, "the Apps page lists every app, newest first").toEqual(["planner", "clock"]);
             expect(c.deleteAsked, "deleting an app asks first, naming its folder").toBe(true);
             expect(c.deleteCalled).toBe(true);
             expect(c.appsAfterDelete).toEqual(["planner"]);
             expect(c.menuClosedOnOpen, "opening an app from the list closes the menu").toBe(true);
             expect(c.frameFromList).toBe("about:blank#planner");
+            expect(c.openAppMarked, "the app open beside the chat is marked").toEqual(["planner"]);
 
             expect(c.settingsShown, "settings must show while the brains can't be looked for").toBe(true);
             expect(c.detectFailureShown, "a failed look for the brains must say why").toBe(true);

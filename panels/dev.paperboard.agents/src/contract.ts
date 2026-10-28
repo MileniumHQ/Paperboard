@@ -145,6 +145,9 @@ export const LIMITS = {
 } as const;
 
 /** A conversation put away in the history. */
+/** the current conversation's id where it's listed with the past ones, whose ids are 12 hex digits */
+export const CURRENT_CONVERSATION = "current";
+
 export interface PastConversation {
     id: string;
     /** its first message, cut short */

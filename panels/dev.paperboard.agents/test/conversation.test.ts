@@ -231,9 +231,12 @@ describe("the conversation", () => {
         expect(first.states.at(-1)).toEqual({ busy: false, typing: false, waiting: [], compacting: false });
         const [oslo] = first.conv.past();
         expect(oslo).toMatchObject({ title: "plan my trip to Oslo", messages: 2 });
+        // an empty one isn't listed; once it has a message it is, as it will be when it's put away
+        expect(first.conv.current()).toBeNull();
 
         // the new one starts a new thread
         first.conv.send("what's 2+2");
+        expect(first.conv.current()).toMatchObject({ id: "current", title: "what's 2+2", messages: 1 });
         await until(() => first.host.started.length === 2);
         expect(first.host.started[1]!.args.slice(0, 2)).not.toEqual(["exec", "resume"]);
         first.host.stdout(TURN_PROC_ID, `{"type":"thread.started","thread_id":"t-math"}\n` + reply("4"));

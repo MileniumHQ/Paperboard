@@ -27,7 +27,7 @@
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { LIMITS, PANEL_ID, type AppEntry, type Attachment, type ChatEntry, type ChatState, type Harness, type PastConversation, type Settings, type SignInEntry, type WaitingMessage } from "../contract";
+import { CURRENT_CONVERSATION, LIMITS, PANEL_ID, type AppEntry, type Attachment, type ChatEntry, type ChatState, type Harness, type PastConversation, type Settings, type SignInEntry, type WaitingMessage } from "../contract";
 import type { StartOptions } from "./browser";
 import { Attachments, sizeText } from "./attachments";
 import { AcpTurn, type AcpEvent } from "./acp";
@@ -255,6 +255,11 @@ export class Conversation {
         }).then(() => ({ started: true }));
     }
 
+    /** The conversation going on now, listed with the history; none while it's empty. Its id is no past one's. */
+    current(): PastConversation | null {
+        return this.entries.length ? this.summary(CURRENT_CONVERSATION) : null;
+    }
+
     /** The history, newest first. */
     past(): PastConversation[] {
         return this.pastIds()
@@ -400,22 +405,27 @@ export class Conversation {
         }
     }
 
-    /**
-     * Move the current conversation into the history. Its summary goes in first, then the files are moved,
-     * so an interruption at any point leaves every message somewhere, never nowhere.
-     */
-    private putAway() {
+    /** The current conversation as the history will list it once it's put away. */
+    private summary(id: string): PastConversation {
         const said = this.entries.filter((e): e is Extract<ChatEntry, { kind: "user" | "agent" }> => e.kind === "user" || e.kind === "agent");
         const first = said.find((e) => e.kind === "user") ?? said[0];
         const text = first?.text.replace(/\s+/g, " ").trim() ?? "";
-        const id = randomUUID().replace(/-/g, "").slice(0, 12);
-        const meta: PastConversation = {
+        return {
             id,
             title: text.length > TITLE_CHARS ? `${text.slice(0, TITLE_CHARS - 1).trimEnd()}…` : text || "A conversation",
             startedAt: this.entries[0]!.at,
             endedAt: this.entries.at(-1)!.at,
             messages: said.length,
         };
+    }
+
+    /**
+     * Move the current conversation into the history. Its summary goes in first, then the files are moved,
+     * so an interruption at any point leaves every message somewhere, never nowhere.
+     */
+    private putAway() {
+        const id = randomUUID().replace(/-/g, "").slice(0, 12);
+        const meta = this.summary(id);
         const tmp = path.join(this.pastDir(), `.${id}`);
         fs.mkdirSync(tmp, { recursive: true });
         fs.writeFileSync(path.join(tmp, PAST_META), JSON.stringify(meta));

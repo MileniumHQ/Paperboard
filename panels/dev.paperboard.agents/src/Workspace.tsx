@@ -86,7 +86,7 @@ export default function Workspace(props: { agent: Agent }) {
                             )}
                         </For>
                     </PaperMenu>
-                    <PaperFlex flex minWidth={0} minHeight={0} scrollable="y" padding={page() === "computer" ? undefined : "double"}>
+                    <PaperFlex flex minWidth={0} minHeight={0} scrollable="y" padding={page() === "computer" || page() === "apps" ? undefined : "double"}>
                         <Switch>
                             <Match when={page() === "computer"}>
                                 <ComputerView agent={agent} />
