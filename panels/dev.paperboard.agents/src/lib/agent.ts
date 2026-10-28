@@ -104,7 +104,6 @@ export function createAgent() {
         files,
         unqueue: (id: string) => call(UI_ACTION_IDS.unqueue, { id }),
         sendNow: () => call(UI_ACTION_IDS.sendNow),
-        typing: () => call<{ held: boolean }>(UI_ACTION_IDS.typing),
         startOver: () => call(UI_ACTION_IDS.startOver),
         newConversation: () => call(UI_ACTION_IDS.newConversation),
         conversations: () => call<PastConversation[]>(UI_ACTION_IDS.conversations),

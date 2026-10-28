@@ -27,7 +27,6 @@ export const UI_ACTION_IDS = {
     unqueue: "ui-unqueue",
     sendNow: "ui-send-now",
     // the user is typing: waiting messages wait for them to finish
-    typing: "ui-typing",
     startOver: "ui-start-over",
     // past conversations: start a new one (the current one is kept), list, reopen or delete them
     newConversation: "ui-new-conversation",
@@ -293,8 +292,6 @@ export interface ChatState {
     typing: boolean;
     /** messages the agent hasn't read yet: it reads them with its next tool's result, or on its next turn; they join the conversation then */
     waiting: WaitingMessage[];
-    /** the waiting messages are held while the user keeps typing, to be read together once they stop; no turn is running */
-    held: boolean;
     /** the conversation is being compacted (see Settings.compaction): messages sent meanwhile wait for it */
     compacting: boolean;
 }
@@ -386,7 +383,7 @@ export const SETUP_STEPS: SetupStepId[] = ["download", "unpack"];
 export const DEFAULT_STATE: AiState = {
     settings: null,
     computer: { phase: "none", installed: false, steps: [], error: null, userControl: false },
-    chat: { busy: false, typing: false, waiting: [], held: false, compacting: false },
+    chat: { busy: false, typing: false, waiting: [], compacting: false },
     memory: { revision: 0, error: null },
     routines: { revision: 0, error: null },
     apps: { revision: 0 },

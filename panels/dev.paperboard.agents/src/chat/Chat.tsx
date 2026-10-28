@@ -230,7 +230,6 @@ export default function Chat(props: { agent: Agent; face: FaceController; apps: 
                                     files={agent.files}
                                     renderImage={agentImage}
                                     row={row}
-                                    held={agent.state.chat.held}
                                     quoted={(id) => byId(id)}
                                     nameOf={(m) => (m.kind === "user" ? "You" : name())}
                                     onReply={(m) => setReplyTo(m)}
@@ -296,8 +295,6 @@ const sideOf = (e: ChatEntry): Row["side"] => SIDES[e.kind] ?? "note";
 
 function Bubble(props: {
     row: Row;
-    /** waiting messages are held for the user to finish typing: as good as sent, so they show as sent */
-    held: boolean;
     quoted: (id: string) => Said | undefined;
     nameOf: (m: Said) => string;
     onReply: (m: Said) => void;
@@ -311,7 +308,7 @@ function Bubble(props: {
     const replyId = () => entry()?.replyTo ?? props.row.waiting?.replyTo;
     const quote = () => (replyId() ? props.quoted(replyId()!) : undefined);
     const me = () => props.row.side === "me";
-    const waiting = () => (props.row.waiting && !props.held ? props.row.waiting : null);
+    const waiting = () => props.row.waiting;
     // a finger drags a bubble toward the middle to answer it
     const swipe = createSwipeReply({
         toward: () => (me() ? -1 : 1),

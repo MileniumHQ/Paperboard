@@ -21,7 +21,6 @@ function setup(
         installed?: boolean;
         turnMs?: number;
         onToolsListed?: (cb: () => void) => () => void;
-        quietMs?: number;
         codexHome?: string;
         contextBudget?: number;
     } = {},
@@ -42,7 +41,6 @@ function setup(
         emit: (e) => emitted.push(e),
         onState: (s) => states.push(s),
         turnMs: o.turnMs,
-        quietMs: o.quietMs ?? 0,
         codexHome: o.codexHome ?? null,
         contextBudget: o.contextBudget,
     });
@@ -107,7 +105,7 @@ describe("the conversation", () => {
         await until(() => host.started.length === 1);
         const two = conv.send("two");
         const three = conv.send("three");
-        expect(states.at(-1)).toEqual({ busy: true, typing: true, waiting: [expect.objectContaining({ text: "two" }), expect.objectContaining({ text: "three" })], held: false, compacting: false });
+        expect(states.at(-1)).toEqual({ busy: true, typing: true, waiting: [expect.objectContaining({ text: "two" }), expect.objectContaining({ text: "three" })], compacting: false });
         host.stdout(TURN_PROC_ID, `{"type":"thread.started","thread_id":"t-1"}\n` + reply("ok"));
         host.exit(TURN_PROC_ID, 0);
         await until(() => host.started.length === 2);
@@ -148,7 +146,7 @@ describe("the conversation", () => {
         await conv.stop();
         await until(() => busy(states) === false);
         expect(host.killed[0]).toEqual({ id: TURN_PROC_ID, signal: "SIGTERM" });
-        expect(states.at(-1)).toEqual({ busy: false, typing: false, waiting: [], held: false, compacting: false });
+        expect(states.at(-1)).toEqual({ busy: false, typing: false, waiting: [], compacting: false });
         // never read, so never part of the conversation
         expect(emitted.filter((e) => e.kind === "user").map((e) => (e as { text: string }).text)).toEqual(["long task"]);
         expect(host.started.length).toBe(1);
@@ -207,7 +205,7 @@ describe("the conversation", () => {
         await first.conv.clear();
         expect(first.host.killed[0]).toEqual({ id: TURN_PROC_ID, signal: "SIGTERM" });
         expect(first.conv.history()).toEqual([]);
-        expect(first.states.at(-1)).toEqual({ busy: false, typing: false, waiting: [], held: false, compacting: false });
+        expect(first.states.at(-1)).toEqual({ busy: false, typing: false, waiting: [], compacting: false });
 
         first.conv.send("hello again");
         await until(() => first.host.started.length === 2);
@@ -230,7 +228,7 @@ describe("the conversation", () => {
         await first.conv.newConversation();
         expect(first.host.killed[0]).toEqual({ id: TURN_PROC_ID, signal: "SIGTERM" });
         expect(first.conv.history()).toEqual([]);
-        expect(first.states.at(-1)).toEqual({ busy: false, typing: false, waiting: [], held: false, compacting: false });
+        expect(first.states.at(-1)).toEqual({ busy: false, typing: false, waiting: [], compacting: false });
         const [oslo] = first.conv.past();
         expect(oslo).toMatchObject({ title: "plan my trip to Oslo", messages: 2 });
 
@@ -695,30 +693,6 @@ describe("an OpenCode turn", () => {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-describe("a quiet second before reading", () => {
-    test("messages sent in parts, typing between them, are read together once the user stops", async () => {
-        const { conv, host, states } = setup({ quietMs: 150 });
-        const one = conv.send("so");
-        // as good as sent: held, not waiting on a turn
-        expect(states.at(-1)).toMatchObject({ busy: false, held: true, waiting: [expect.objectContaining({ text: "so" })] });
-        await sleep(100);
-        expect(conv.userTyping()).toEqual({ held: true });
-        await sleep(100);
-        expect(host.started.length).toBe(0);
-        const two = conv.send("I was thinking");
-        await until(() => host.started.length === 1);
-        expect(host.started[0]!.args.at(-1)).toBe(`[${one.id}] so\n\n[${two.id}] I was thinking`);
-        expect(states.at(-1)).toMatchObject({ busy: true, held: false, waiting: [] });
-    });
-
-    test("typing with nothing waiting holds nothing, and a routine's notice isn't held", async () => {
-        const { conv, host } = setup({ quietMs: 60_000 });
-        expect(conv.userTyping()).toEqual({ held: false });
-        conv.notice("check the weather");
-        await until(() => host.started.length === 1);
-    });
-});
-
 describe("compaction", () => {
     /** what Codex writes as it works: each request's token count, in the thread's rollout */
     function rollout(home: string, thread: string, used: number) {
@@ -753,7 +727,7 @@ describe("compaction", () => {
 
         // the user keeps talking: it waits for the compaction, it isn't handed to it
         const weekend = conv.send("next weekend");
-        expect(states.at(-1)).toMatchObject({ compacting: true, held: false, waiting: [expect.objectContaining({ text: "next weekend" })] });
+        expect(states.at(-1)).toMatchObject({ compacting: true, waiting: [expect.objectContaining({ text: "next weekend" })] });
         expect(conv.news()).toBeNull();
         host.stdout(TURN_PROC_ID, reply("The user is planning a trip to Oslo; I asked when."));
         rollout(home, "t-1", 1600);

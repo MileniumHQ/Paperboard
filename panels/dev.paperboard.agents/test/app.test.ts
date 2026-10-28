@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { DEFAULT_STATE, type AiState, type Settings } from "../src/contract";
 import { AiApp, parseSettings, type AppHost } from "../src/service/app";
-import { CONTEXT_BUDGET, QUIET_MS, TURN_PROC_ID } from "../src/service/conversation";
+import { CONTEXT_BUDGET, TURN_PROC_ID } from "../src/service/conversation";
 import { FakeProcesses, until } from "./fakeHost";
 
 describe("settings are validated by the service", () => {
@@ -158,11 +158,8 @@ describe("the service's agent", () => {
         const train = app.conversation.send("actually, make it a train");
         expect(train.waiting).toBe(true);
         expect(state().chat.waiting.map((m) => m.text)).toEqual(["actually, make it a train"]);
-        // the user may still be typing: it's held for them to finish
-        expect(await call("Looking")).toMatch(/^sent \[\w+\]$/);
-        await new Promise((r) => setTimeout(r, QUIET_MS));
-
-        const read = await call("On it, looking for flights");
+        // read straight away, with the agent's very next tool's result
+        const read = await call("Looking");
         expect(read).toMatch(/^sent \[\w+\]\n\n\[new messages from the user, sent while you were working\]\n/);
         expect(read).toEndWith(`[${train.id}] actually, make it a train`);
         // read now: no longer waiting, and part of the conversation
@@ -170,7 +167,6 @@ describe("the service's agent", () => {
         expect(app.conversation.history().map((e) => (e.kind === "user" || e.kind === "agent" ? e.text : e.kind))).toEqual([
             "find me a flight to Oslo",
             "Looking",
-            "On it, looking for flights",
             "actually, make it a train",
         ]);
         // read once: the next result carries nothing new

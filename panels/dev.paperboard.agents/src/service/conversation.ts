@@ -12,10 +12,6 @@
 // can start a turn too, with a notice (a routine is due): the agent reads it
 // like a message that isn't from the user, and texts only if it has
 // something to say.
-// A message isn't read the moment it's sent: the agent waits until the user
-// has been quiet for a second (see userTyping()), so a thought sent in parts is
-// read whole.
-//
 // A long conversation costs the user tokens on every turn, and in the end
 // overflows the model. After a turn that left the thread past its budget,
 // the conversation compacts itself, as the settings say: the agent
@@ -58,8 +54,6 @@ const TOOLS_MS = 30_000; // how long OpenCode gets to connect to the panel's too
 const TOOLS_SETTLE_MS = 300; // OpenCode reloads its tools 100 ms after they change; then the next step has them
 const QUOTE_CHARS = 80;
 const SHORT_ID = 6;
-/** how long the user has to be quiet before their messages are read */
-export const QUIET_MS = 1000;
 /** tokens of context a thread can fill before it's compacted; or 3/4 of the model's window, if that's less */
 export const CONTEXT_BUDGET = 100_000;
 const WINDOW_SHARE = 0.75;
@@ -114,7 +108,6 @@ export interface ConversationDeps {
     /** Codex's home, where its rollouts say how long a thread is; null leaves Codex's threads unmeasured */
     codexHome: string | null;
     turnMs?: number;
-    quietMs?: number;
     contextBudget?: number;
 }
 
@@ -139,8 +132,6 @@ export class Conversation {
     /** the agent is writing to the user right now, not working: only then does the typing bubble show */
     private typing = false;
     /** waiting messages aren't read before this: the user was typing */
-    private holdUntil = 0;
-    private holdTimer: ReturnType<typeof setTimeout> | null = null;
     private context: Context | null = null;
     private carry: Carry | null = null;
     private compactingNow = false;
@@ -182,30 +173,13 @@ export class Conversation {
         if (replyTo !== null) this.checkReplyTarget(replyTo);
         const id = this.newId();
         this.queue.push({ id, text: message, ...(replyTo === null ? {} : { replyTo }), ...(files.length ? { attachments: files } : {}) });
-        this.hold();
         const waiting = this.running !== null;
         this.pump();
         return { id, waiting };
     }
 
-    /** The user is typing: messages still waiting wait until they stop, so they're read with what comes next. */
-    userTyping() {
-        if (this.queue.length === 0) return { held: false };
-        this.hold();
-        this.state();
-        return { held: true };
-    }
-
     get compacting() {
         return this.compactingNow;
-    }
-
-    private hold() {
-        this.holdUntil = Date.now() + (this.deps.quietMs ?? QUIET_MS);
-    }
-
-    private held() {
-        return this.queue.length > 0 && Date.now() < this.holdUntil;
     }
 
     /** The files a message carries: finished uploads in this conversation, each once, up to the limit. */
@@ -247,7 +221,6 @@ export class Conversation {
     /** Stop the running turn so the waiting messages are read now. */
     async sendNow() {
         if (this.queue.length === 0) throw new Error("no messages are waiting");
-        this.holdUntil = 0;
         if (!this.running) {
             this.pump();
             return { interrupted: false };
@@ -362,7 +335,7 @@ export class Conversation {
      * or null when there are none. Handed over, they're read: they join the conversation and the turn answers them.
      */
     news(): string | null {
-        if (!this.running || this.switching || this.closed || this.compactingNow || this.queue.length === 0 || this.held()) return null;
+        if (!this.running || this.switching || this.closed || this.compactingNow || this.queue.length === 0) return null;
         const batch = this.queue.splice(0);
         this.read(batch);
         this.answering.push(...batch.map((m) => m.id));
@@ -395,7 +368,6 @@ export class Conversation {
 
     async shutdown() {
         this.closed = true;
-        if (this.holdTimer) clearTimeout(this.holdTimer);
         this.queue = [];
         this.attachments.closeUploads();
         this.notices = [];
@@ -479,15 +451,6 @@ export class Conversation {
     private pump() {
         this.state();
         if (this.running || this.closed || this.switching || (this.queue.length === 0 && this.notices.length === 0)) return;
-        // the user may say more: read it all once they've stopped
-        if (this.held()) {
-            if (this.holdTimer) clearTimeout(this.holdTimer);
-            this.holdTimer = setTimeout(() => {
-                this.holdTimer = null;
-                this.pump();
-            }, this.holdUntil - Date.now());
-            return;
-        }
         const batch = this.queue.splice(0);
         const notices = this.notices.splice(0);
         this.stopRequested = false; // a stop asked of an earlier turn doesn't silence this one
@@ -829,7 +792,6 @@ export class Conversation {
             busy: this.running !== null && this.answering.length > 0,
             typing: this.running !== null && this.typing,
             waiting: this.queue.map((m) => ({ ...m })),
-            held: this.running === null && this.held(),
             compacting: this.compactingNow,
         });
     }

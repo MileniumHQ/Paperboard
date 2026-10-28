@@ -11,9 +11,6 @@ import { failure, type Failure } from "../lib/failure";
 import type { Tray } from "./tray";
 import styles from "./Composer.module.css";
 
-/** how often typing is told to the service; it waits a second after the last time */
-const TYPING_EVERY_MS = 300;
-
 export default function Composer(props: {
     agent: Agent;
     draft: string;
@@ -38,14 +35,6 @@ export default function Composer(props: {
         if (!files.length) return;
         const refused = tray().add(files);
         setError(refused ? { title: "Not every file added", message: refused } : null);
-    };
-
-    // while sent messages wait to be read, typing more holds them, so they're read together
-    let toldTyping = 0;
-    const tellTyping = () => {
-        if (agent.state.chat.waiting.length === 0 || Date.now() - toldTyping < TYPING_EVERY_MS) return;
-        toldTyping = Date.now();
-        agent.typing().catch((e) => setError(failure("Messages not held", e)));
     };
 
     const send = async () => {
@@ -156,7 +145,6 @@ export default function Composer(props: {
                     onInput={(e) => {
                         props.onDraft(e.currentTarget.value);
                         resize();
-                        tellTyping();
                     }}
                     onPaste={(e) => {
                         const files = [...(e.clipboardData?.files ?? [])];

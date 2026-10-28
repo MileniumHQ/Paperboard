@@ -95,7 +95,6 @@ export const aiService = definePanelService({
         ui(UI_ACTION_IDS.closeWindow, "Close one of the computer's windows", (i) => app.closeWindow(i)),
         ui(UI_ACTION_IDS.go, "Go somewhere in one of the computer's windows", (i) => app.go(i)),
         ui(UI_ACTION_IDS.unqueue, "Take back a waiting message", (i) => app.conversation.unqueue(String(i.id ?? ""))),
-        ui(UI_ACTION_IDS.typing, "Say the user is typing", () => app.conversation.userTyping()),
         ui(UI_ACTION_IDS.sendNow, "Interrupt the agent to read waiting messages", () => app.conversation.sendNow()),
         ui(UI_ACTION_IDS.startOver, "Start the conversation over", () => app.startOver()),
         ui(UI_ACTION_IDS.newConversation, "Start a new conversation, keeping this one in the history", () => app.newConversation()),
