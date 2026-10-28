@@ -203,7 +203,7 @@ describe("the service's agent", () => {
             return ((await res.json()) as { result: { tools?: { name: string }[]; content?: { text: string }[] } }).result;
         };
         const names = (await rpc("tools/list")).tools!.map((t) => t.name);
-        expect(names).toContain("bash");
+        for (const tool of ["bash", "start_app", "add_package"]) expect(names).toContain(tool);
         expect(names).not.toContain("files");
         const read = await rpc("tools/call", { name: "bash", arguments: { command: "cat ~/Downloads/ticket.txt && echo noted > ~/seat.txt" } });
         expect(read.content![0]!.text).toBe("Oslo, seat 12A");

@@ -19,6 +19,7 @@ import {
 } from "../contract";
 import { HomeFolder, moveHomeFolder } from "./homeFolder";
 import { shellToolset } from "./shell";
+import { Apps } from "./apps";
 import { BrowserComputer, type ComputerHost } from "./browser";
 import { startComputerMcp, type ComputerMcp } from "./computerMcp";
 import { Conversation, type TurnHost } from "./conversation";
@@ -76,6 +77,7 @@ export class AiApp {
     routines!: Routines;
     signIns!: SignIns;
     private mcp: ComputerMcp | null = null;
+    private apps: Apps | null = null;
     private tools: Toolbox | null = null;
     servers!: McpServers;
     private settle!: (failure: Error | null) => void;
@@ -135,10 +137,13 @@ export class AiApp {
         moveHomeFolder(path.join(root, "browser", "home"), path.join(root, "home"));
         const home = new HomeFolder(path.join(root, "home"));
         home.ensure();
+        const apps = new Apps({ home, portFile: path.join(root, "apps.json") });
+        this.apps = apps;
         const tools = toolbox([
             { id: "computer", tools: () => COMPUTER_TOOLS, call: (name, args) => this.computer.callTool(name, args), instructions: () => COMPUTER_INSTRUCTIONS },
             messagesToolset({ say: (text, replyTo) => this.conversation.say(text, replyTo) }),
             shellToolset(home),
+            apps.toolset(),
             filesToolset({
                 files: () => this.conversation.attachments,
                 getFile: (p) => this.computer.getFile(p),
@@ -170,6 +175,7 @@ export class AiApp {
             dir: path.join(root, "browser"),
             home,
             storagePath: "browser",
+            apps: (host, port) => apps.serves(host, port),
             onState: (computer) => this.ctx.setState({ computer }),
         });
         this.conversation = new Conversation({
@@ -198,7 +204,7 @@ export class AiApp {
         this.signIns?.shutdown();
         const stops = await Promise.allSettled([this.routines?.shutdown(), this.conversation?.shutdown(), this.computer?.shutdown(), this.servers?.shutdown()]);
         for (const r of stops) if (r.status === "rejected") console.error("[ai] shutdown:", String(r.reason));
-        await this.mcp?.close();
+        await Promise.all([this.mcp?.close(), this.apps?.close()]);
     }
 
     // ------------------------------------------------------------- actions

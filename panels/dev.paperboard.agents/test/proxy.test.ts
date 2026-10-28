@@ -105,6 +105,20 @@ describe("the proxy", () => {
         expect(reached).toBe(0);
     });
 
+    test("the agent's apps are the one thing on this machine it opens, and only over plain HTTP at their own names", async () => {
+        const port = await localService();
+        proxy = await startProxy({ lookup: async () => [{ address: "127.0.0.1" }], local: (host, p) => p === port && host.endsWith(".localhost") });
+        const app = await get(proxy.port, `http://planner.localhost:${port}/`);
+        expect(app).toEqual({ status: 200, body: "secret" });
+        expect(reached).toBe(1);
+        // the same server by any other name, or another port on this machine, stays refused
+        for (const url of [`http://127.0.0.1:${port}/`, `http://localhost:${port}/`, `http://planner.localhost:${port + 1}/`]) {
+            expect((await get(proxy.port, url)).status, url).toBe(403);
+        }
+        expect(await connect(proxy.port, `planner.localhost:${port}`)).toStartWith("HTTP/1.1 403");
+        expect(reached).toBe(1);
+    });
+
     test("a request that isn't for the proxy is turned away", async () => {
         proxy = await startProxy();
         expect((await get(proxy.port, "/")).status).toBe(400);

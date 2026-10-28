@@ -4,7 +4,9 @@
 // name's owner could answer differently). The browser is told to send
 // loopback through it too (`--proxy-bypass-list=<-loopback>`), so this
 // machine, its local network and their services are refused here, by name
-// or by number.
+// or by number. The one exception is the agent's own apps (apps.ts): plain
+// HTTP to <name>.localhost on the apps' port goes to that server, and only
+// there.
 //
 // HTTPS and WebSockets arrive as CONNECT tunnels, plain HTTP as requests in
 // absolute form. Connections, header time and idle time are bounded; piping
@@ -58,7 +60,13 @@ function target(authority: string): { host: string; port: number } | null {
     return port >= 1 && port <= 65535 ? { host: m[1]!, port } : null;
 }
 
-export async function startProxy(o: { lookup?: (h: string) => Promise<{ address: string }[]> } = {}): Promise<Proxy> {
+export async function startProxy(
+    o: {
+        lookup?: (h: string) => Promise<{ address: string }[]>;
+        /** a host and port on this computer the browser may open: the agent's apps */
+        local?: (host: string, port: number) => boolean;
+    } = {},
+): Promise<Proxy> {
     const lookup = o.lookup ?? defaultLookup;
     const sockets = new Set<net.Socket>();
     const server = http.createServer();
@@ -150,7 +158,8 @@ export async function startProxy(o: { lookup?: (h: string) => Promise<{ address:
         const port = url.port ? Number(url.port) : 80;
         const headers = { ...req.headers };
         for (const h of HOP_HEADERS) delete headers[h];
-        resolvePublic(url.hostname, lookup).then(
+        const address = o.local?.(url.hostname, port) ? Promise.resolve("127.0.0.1") : resolvePublic(url.hostname, lookup);
+        address.then(
             (address) => {
                 const up = http.request({ host: address, port, method: req.method, path: url.pathname + url.search, headers, setHost: false, timeout: DIAL_MS });
                 up.on("response", (r) => {

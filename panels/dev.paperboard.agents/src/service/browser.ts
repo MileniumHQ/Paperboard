@@ -106,6 +106,8 @@ export interface BrowserDeps {
     /** the same folder relative to the panel's storage, for downloads */
     storagePath: string;
     onState: (s: ComputerState) => void;
+    /** the agent's apps, the one thing on this computer its browser may open */
+    apps?: (host: string, port: number) => boolean;
     platform?: NodeJS.Platform;
     arch?: string;
     controlLeaseMs?: number;
@@ -418,7 +420,7 @@ export class BrowserComputer {
         const portFile = path.join(this.profileDir(), "DevToolsActivePort");
         fs.rmSync(portFile, { force: true });
         this.stderrTail = "";
-        this.proxy = await startProxy();
+        this.proxy = await startProxy({ local: this.deps.apps });
         const args = [
             "--headless",
             `--user-data-dir=${this.profileDir()}`,

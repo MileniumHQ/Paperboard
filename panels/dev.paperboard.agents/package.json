@@ -5,7 +5,7 @@
     "type": "module",
     "scripts": {
         "dev": "vite",
-        "build": "tsc && vite build && bun build ./src/service.ts --outfile ./dist/service.js --target=node --external @mileniumhq/paperui",
+        "build": "tsc && vite build && bun build ./src/service.ts --outdir ./dist --entry-naming [name].[ext] --target=node --external @mileniumhq/paperui",
         "pack": "bunx paperapi pack",
         "preview": "vite preview",
         "test": "bun test"
@@ -13,11 +13,14 @@
     "dependencies": {
         "@mileniumhq/paperapi": "workspace:*",
         "@mileniumhq/paperui": "workspace:*",
+        "esbuild-wasm": "0.28.2",
         "just-bash": "3.6.0",
+        "semver": "^7.8.5",
         "solid-js": "^1.9.17"
     },
     "devDependencies": {
         "@types/node": "^22.20.5",
+        "@types/semver": "^7.8.0",
         "typescript": "~6.0.3",
         "vite": "^8.3.2",
         "vite-plugin-solid": "^2.11.14"
