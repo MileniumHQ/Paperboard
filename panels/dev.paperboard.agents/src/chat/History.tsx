@@ -2,7 +2,7 @@
 // place in the list), or delete one for good after saying so.
 
 import { For, Match, Show, Switch, createEffect, createSignal, on } from "solid-js";
-import { PaperButton, PaperEmptyState, PaperFlex, PaperIcon, PaperLoader, PaperMediaCard, PaperModal, PaperQuote, PaperText } from "@mileniumhq/paperui";
+import { PaperButton, PaperEmptyState, PaperFlex, PaperIcon, PaperList, PaperListItem, PaperLoader, PaperModal, PaperQuote, PaperText } from "@mileniumhq/paperui";
 import type { PastConversation } from "../contract";
 import type { Agent } from "../lib/agent";
 import { errorText, failure, type Failure } from "../lib/failure";
@@ -15,6 +15,8 @@ export default function History(props: { agent: Agent; open: boolean; onClose: (
     const [deleteError, setDeleteError] = createSignal<string | null>(null);
     const [busy, setBusy] = createSignal(false);
     const [deleting, setDeleting] = createSignal<PastConversation | null>(null);
+    // the one being opened; none once it's open or wasn't, so choosing it again tries again
+    const [chosen, setChosen] = createSignal("");
 
     const load = async () => {
         setReadError(null);
@@ -31,6 +33,7 @@ export default function History(props: { agent: Agent; open: boolean; onClose: (
     createEffect(on(() => props.open, (open) => open && void load()));
 
     const reopen = async (c: PastConversation) => {
+        setChosen(c.id);
         setBusy(true);
         setOpenError(null);
         try {
@@ -39,6 +42,7 @@ export default function History(props: { agent: Agent; open: boolean; onClose: (
         } catch (e) {
             setOpenError(failure("Conversation not opened", e));
         } finally {
+            setChosen("");
             setBusy(false);
         }
     };
@@ -92,23 +96,33 @@ export default function History(props: { agent: Agent; open: boolean; onClose: (
                                     </PaperQuote>
                                 )}
                             </Show>
-                            <For each={list()}>
-                                {(c) => (
-                                    <PaperFlex direction="row" align="center" gap="half">
-                                        <PaperFlex flex minWidth={0}>
-                                            <PaperMediaCard
-                                                title={c.title}
-                                                subtitle={`${when(c.endedAt)} · ${c.messages === 1 ? "1 message" : `${c.messages} messages`}`}
-                                                disabled={busy()}
-                                                onClick={() => void reopen(c)}
-                                            />
-                                        </PaperFlex>
-                                        <PaperButton icon size="small" variant="text" disabled={busy()} aria-label={`Delete “${c.title}”`} title="Delete" onClick={() => askDelete(c)}>
-                                            <PaperIcon>delete</PaperIcon>
-                                        </PaperButton>
-                                    </PaperFlex>
-                                )}
-                            </For>
+                            <PaperList name="agents-history" value={chosen()} onValueChange={(v) => void reopen(list()!.find((c) => c.id === v)!)}>
+                                <For each={list()}>
+                                    {(c) => (
+                                        <PaperListItem
+                                            value={c.id}
+                                            disabled={busy()}
+                                            description={`${when(c.endedAt)} · ${c.messages === 1 ? "1 message" : `${c.messages} messages`}`}
+                                            actions={
+                                                <PaperButton
+                                                    icon
+                                                    size="small"
+                                                    variant="text"
+                                                    disabled={busy()}
+                                                    aria-label={`Delete “${c.title}”`}
+                                                    title="Delete"
+                                                    onPointerDown={(e) => e.stopPropagation()}
+                                                    onClick={() => askDelete(c)}
+                                                >
+                                                    <PaperIcon>delete</PaperIcon>
+                                                </PaperButton>
+                                            }
+                                        >
+                                            {c.title}
+                                        </PaperListItem>
+                                    )}
+                                </For>
+                            </PaperList>
                         </PaperFlex>
                     </Match>
                 </Switch>
