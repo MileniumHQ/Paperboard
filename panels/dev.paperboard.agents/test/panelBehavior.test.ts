@@ -41,6 +41,9 @@ describe("panel behavior", () => {
             expect(c.conversationsListed, "the current conversation is listed with the past ones").toEqual(["current", "0123456789ab"]);
             expect(c.currentMarked, "and it's the one marked").toEqual(["current"]);
             expect(c.historyClosedOnCurrent).toBe(true);
+            expect(c.bubbleSelectable, "a message's text can be selected").toBe("text");
+            expect(c.bubbleMenu, "a right click on a message offers to answer it or copy it").toEqual(["Reply", "Copy"]);
+            expect(c.replyFromMenu, "Reply in that menu answers the message").toBe(true);
             expect(c.appsMarked, "with no app open, none is marked").toEqual([]);
             expect(c.appsListed, "the Apps page lists every app, newest first").toEqual(["planner", "clock"]);
             expect(c.deleteAsked, "deleting an app asks first, naming its folder").toBe(true);

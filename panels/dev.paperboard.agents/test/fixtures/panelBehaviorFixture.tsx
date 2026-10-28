@@ -100,6 +100,17 @@ async function run() {
     await sleep(300);
     c.historyClosedOnCurrent = !dialogTitled("Conversations");
 
+    // a message: its text can be selected, and a right click offers Reply and Copy
+    const said = document.querySelector<HTMLElement>('[data-message="m1"] [data-selectable="true"]')!;
+    c.bubbleSelectable = getComputedStyle(said).userSelect;
+    said.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 40, clientY: 40 }));
+    await sleep(300);
+    const items = () => [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')];
+    c.bubbleMenu = items().map((i) => i.textContent?.replace(/^\w+(?=[A-Z])/, "").trim());
+    items().find((i) => i.textContent?.endsWith("Reply"))!.click();
+    await sleep(300);
+    c.replyFromMenu = document.body.innerText.includes("Replying to");
+
     menu.click();
     await sleep(300);
 

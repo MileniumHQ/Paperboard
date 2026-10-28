@@ -1,5 +1,5 @@
 import { For, Show, createEffect, createMemo, createSignal, on, type JSX } from "solid-js";
-import { PaperButton, PaperFlex, PaperIcon, haptic, PaperMarkdown, PaperPageHeader, PaperProgress, PaperQuote, PaperText, type MarkdownImage } from "@mileniumhq/paperui";
+import { PaperButton, PaperContextMenu, PaperContextMenuItem, PaperFlex, PaperIcon, copyText, haptic, PaperMarkdown, useContextMenuState, PaperPageHeader, PaperProgress, PaperQuote, PaperText, type MarkdownImage } from "@mileniumhq/paperui";
 import { Face } from "../face/Face";
 import { skinFor } from "../face/skins";
 import type { FaceController } from "../face/controller";
@@ -78,6 +78,22 @@ export default function Chat(props: { agent: Agent; face: FaceController; apps: 
     const [notice, setNotice] = createSignal<Failure | null>(null);
     const [historyOpen, setHistoryOpen] = createSignal(false);
     const [startingNew, setStartingNew] = createSignal(false);
+    // a bubble's menu, on a right click: answer it, or copy what's selected in it (or all of it)
+    const menu = useContextMenuState();
+    const [menuOn, setMenuOn] = createSignal<{ said: Said | null; text: string } | null>(null);
+    const openMenu = (e: MouseEvent, said: Said | null, text: string, bubble: HTMLElement) => {
+        const sel = getSelection();
+        const picked = sel && !sel.isCollapsed && bubble.contains(sel.anchorNode) && bubble.contains(sel.focusNode) ? sel.toString() : "";
+        setMenuOn({ said, text: picked || text });
+        menu.openAtMouse(e);
+    };
+    const copy = (text: string) => {
+        setNotice(null);
+        copyText(text).then(
+            (ok) => !ok && setNotice({ title: "Message not copied", message: "The clipboard refused it." }),
+            (e) => setNotice(failure("Message not copied", e)),
+        );
+    };
     const byId = (id: string) => agent.entries.find((e): e is Said => e.id === id && (e.kind === "user" || e.kind === "agent"));
 
     // a waiting sign-in's typed values outlive the row redraws; the card drops them when it's answered
@@ -234,6 +250,7 @@ export default function Chat(props: { agent: Agent; face: FaceController; apps: 
                                     nameOf={(m) => (m.kind === "user" ? "You" : name())}
                                     onReply={(m) => setReplyTo(m)}
                                     onJump={jumpTo}
+                                    onMenu={openMenu}
                                 />
                             </Show>
                         </>
@@ -270,6 +287,28 @@ export default function Chat(props: { agent: Agent; face: FaceController; apps: 
                 onCancelReply={() => setReplyTo(null)}
                 tray={tray}
             />
+            <PaperContextMenu open={menu.isOpen()} target={menu.target()} placement={menu.placement()} onClose={() => menu.close()}>
+                <Show when={menuOn()?.said}>
+                    <PaperContextMenuItem
+                        icon="reply"
+                        onClick={() => {
+                            setReplyTo(menuOn()!.said);
+                            menu.close();
+                        }}
+                    >
+                        Reply
+                    </PaperContextMenuItem>
+                </Show>
+                <PaperContextMenuItem
+                    icon="content_copy"
+                    onClick={() => {
+                        copy(menuOn()!.text);
+                        menu.close();
+                    }}
+                >
+                    Copy
+                </PaperContextMenuItem>
+            </PaperContextMenu>
             <History
                 agent={agent}
                 open={historyOpen()}
@@ -288,6 +327,8 @@ function Bubble(props: {
     nameOf: (m: Said) => string;
     onReply: (m: Said) => void;
     onJump: (id: string) => void;
+    /** a right click on the bubble: its message, if it's been read, and its text */
+    onMenu: (e: MouseEvent, said: Said | null, text: string, bubble: HTMLElement) => void;
     files: Files;
     renderImage: (image: MarkdownImage) => JSX.Element | undefined;
 }) {
@@ -319,7 +360,11 @@ function Bubble(props: {
                 </PaperIcon>
             </Show>
             <div class={styles.bubbleWrap} classList={{ [styles.swiping!]: swipe.active() }} style={{ transform: `translateX(${swipe.offset()}px)` }}>
-                <div class={styles.bubble} classList={{ [styles.joinsPrev!]: props.row.joinsPrev, [styles.joinsNext!]: props.row.joinsNext }}>
+                <div
+                    class={styles.bubble}
+                    data-selectable="true"
+                    onContextMenu={(e) => props.onMenu(e, entry(), text(), e.currentTarget)}
+                    classList={{ [styles.joinsPrev!]: props.row.joinsPrev, [styles.joinsNext!]: props.row.joinsNext }}>
                     <Show when={replyId()}>
                         <button
                             type="button"
