@@ -153,37 +153,23 @@ describe("the conversation", () => {
         expect(emitted.some((e) => e.kind === "error")).toBe(false);
     });
 
-    test("a waiting message joins the conversation only when read, and can be taken back before that", async () => {
+    test("the user chimes in: a message sent mid-turn stops it quietly, and the next turn picks the thread up with it", async () => {
         const { conv, host, emitted, states } = setup();
-        conv.send("one");
-        await until(() => host.started.length === 1);
-        const two = conv.send("two");
-        const three = conv.send("three");
-        expect(two.waiting).toBe(true);
-        const users = () => emitted.filter((e) => e.kind === "user").map((e) => (e as { text: string }).text);
-        expect(users()).toEqual(["one"]);
-
-        conv.unqueue(two.id);
-        expect(states.at(-1)?.waiting).toEqual([{ id: three.id, text: "three" }]);
-        expect(() => conv.unqueue(two.id)).toThrow(/isn't waiting/);
-
-        host.stdout(TURN_PROC_ID, reply("ok"));
-        host.exit(TURN_PROC_ID, 0);
-        await until(() => host.started.length === 2);
-        expect(host.started[1]!.args.at(-1)).toBe(`[${three.id}] three`);
-        expect(users()).toEqual(["one", "three"]);
-        expect(emitted.find((e) => e.kind === "user" && e.text === "three")?.id).toBe(three.id);
-    });
-
-    test("send now interrupts the turn quietly and reads what was waiting", async () => {
-        const { conv, host, emitted } = setup();
         conv.send("long task");
         await until(() => host.started.length === 1);
-        await expect(conv.sendNow()).rejects.toThrow(/no messages/);
-        conv.send("actually, stop and do this");
-        expect(await conv.sendNow()).toEqual({ interrupted: true });
+        host.stdout(TURN_PROC_ID, `{"type":"thread.started","thread_id":"t-1"}\n`);
+        const two = conv.send("progress?");
+        const three = conv.send("and make it quick");
+        expect(two.waiting).toBe(true);
         await until(() => host.started.length === 2);
-        expect(host.started[1]!.args.at(-1)).toMatch(/^\[\w+\] actually, stop and do this$/);
+        // stopped once, however many are sent while it stops
+        expect(host.killed).toEqual([{ id: TURN_PROC_ID, signal: "SIGTERM" }]);
+        const next = host.started[1]!.args;
+        expect(next.slice(0, 2)).toEqual(["exec", "resume"]);
+        expect(next.at(-2)).toBe("t-1");
+        expect(next.at(-1)).toBe(`[${two.id}] progress?\n\n[${three.id}] and make it quick`);
+        expect(emitted.filter((e) => e.kind === "user").map((e) => (e as { text: string }).text)).toEqual(["long task", "progress?", "and make it quick"]);
+        expect(busy(states)).toBe(true);
         expect(emitted.some((e) => e.kind === "error")).toBe(false);
     });
 
@@ -502,46 +488,17 @@ describe("texting", () => {
         expect(emitted.some((e) => e.kind === "error")).toBe(false);
     });
 
-    test("a message read mid-turn must be answered: plain output after it is the answer, silence is an error", async () => {
-        const { conv, host, emitted, states } = setup();
-        const hi = conv.send("hi");
-        await until(() => host.started.length === 1);
-        expect(conv.news()).toBeNull();
-        await send(conv, "hey!", hi.id);
-        host.stdout(TURN_PROC_ID, reply("recap: I said hey"));
-        const more = conv.send("what's the weather?");
-        expect(conv.news()).toContain(`[${more.id}] what's the weather?`);
-        expect(busy(states)).toBe(true);
-        expect(states.at(-1)?.typing).toBe(true);
-        host.stdout(TURN_PROC_ID, reply("Sunny all day"));
-        host.exit(TURN_PROC_ID, 0);
-        await until(() => busy(states) === false);
-        // the recap from before it read the message stays hidden; what came after answers it
-        expect(bubbles(emitted).map((b) => b.text)).toEqual(["hey!", "Sunny all day"]);
-        expect(emitted.some((e) => e.kind === "error")).toBe(false);
-
-        conv.send("and tomorrow?");
-        await until(() => host.started.length === 2);
-        await send(conv, "checking");
-        conv.send("hello?");
-        expect(conv.news()).not.toBeNull();
-        host.exit(TURN_PROC_ID, 0);
-        await until(() => emitted.some((e) => e.kind === "error"));
-        expect(emitted.at(-1)).toMatchObject({ kind: "error", text: "the turn ended without a reply" });
-    });
-
-    test("a routine's turn that reads a message from the user answers it, and shows busy", async () => {
+    test("a message stops a routine's turn too: the next turn answers it, shows busy, and still has the routine", async () => {
         const { conv, host, states } = setup();
         conv.notice("a routine is due");
         await until(() => host.started.length === 1);
         expect(busy(states)).toBe(false);
-        conv.send("hey");
-        expect(conv.news()).not.toBeNull();
+        const hey = conv.send("hey");
+        await until(() => host.started.length === 2);
+        expect(host.started[1]!.args.at(-1)).toBe(`[${hey.id}] hey\n\n[from Paperboard, not the user] a routine is due`);
         expect(busy(states)).toBe(true);
-        host.exit(TURN_PROC_ID, 0);
-        await until(() => busy(states) === false);
-        expect(conv.history().at(-1)).toMatchObject({ kind: "error", text: "the turn ended without a reply" });
     });
+
 });
 
 describe("notices (a routine is due)", () => {
@@ -728,10 +685,10 @@ describe("compaction", () => {
         expect(summarize.at(-2)).toBe("t-1");
         expect(summarize.at(-1)).toStartWith("[from Paperboard, not the user] This conversation has grown long");
 
-        // the user keeps talking: it waits for the compaction, it isn't handed to it
+        // the user keeps talking: it waits for the compaction, which isn't stopped for it
         const weekend = conv.send("next weekend");
         expect(states.at(-1)).toMatchObject({ compacting: true, waiting: [expect.objectContaining({ text: "next weekend" })] });
-        expect(conv.news()).toBeNull();
+        expect(host.killed).toEqual([]);
         host.stdout(TURN_PROC_ID, reply("The user is planning a trip to Oslo; I asked when."));
         rollout(home, "t-1", 1600);
         host.exit(TURN_PROC_ID, 0);

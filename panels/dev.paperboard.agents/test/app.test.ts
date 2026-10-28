@@ -140,43 +140,28 @@ describe("the service's agent", () => {
         expect(vault.size).toBe(0);
     });
 
-    test("a message sent mid-turn reaches the agent with its next tool's result, and that turn answers it", async () => {
+    test("a message sent mid-turn stops the agent's work, and the next turn reads it at once", async () => {
         const { app, procs, state } = await start(["codex"], { name: "Pip", harness: "codex", model: null });
         app.conversation.send("find me a flight to Oslo");
         await until(() => procs.started.length === 1);
-        const turn = procs.started[0]!;
-        const url = JSON.parse(turn.args.find((a) => a.startsWith("mcp_servers.paperboard.url="))!.split("=").slice(1).join("="));
-        const call = async (text: string) => {
-            const res = await fetch(url, {
-                method: "POST",
-                headers: { "Content-Type": "application/json", Authorization: `Bearer ${turn.env!.PAPERBOARD_COMPUTER_MCP_TOKEN}` },
-                body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "send_message", arguments: { text } } }),
-            });
-            return ((await res.json()) as { result: { content: { text: string }[] } }).result.content[0]!.text;
-        };
 
         const train = app.conversation.send("actually, make it a train");
         expect(train.waiting).toBe(true);
-        expect(state().chat.waiting.map((m) => m.text)).toEqual(["actually, make it a train"]);
-        // read straight away, with the agent's very next tool's result
-        const read = await call("Looking");
-        expect(read).toMatch(/^sent \[\w+\]\n\n\[new messages from the user, sent while you were working\]\n/);
-        expect(read).toEndWith(`[${train.id}] actually, make it a train`);
-        // read now: no longer waiting, and part of the conversation
+        await until(() => procs.started.length === 2);
+        expect(procs.killed.map((k) => k.id)).toEqual([TURN_PROC_ID]);
+        const next = procs.started[1]!.args;
+        expect(next.at(-1)).toBe(`[${train.id}] actually, make it a train`);
         expect(state().chat.waiting).toEqual([]);
         expect(app.conversation.history().map((e) => (e.kind === "user" || e.kind === "agent" ? e.text : e.kind))).toEqual([
             "find me a flight to Oslo",
-            "Looking",
             "actually, make it a train",
         ]);
-        // read once: the next result carries nothing new
-        expect(await call("Trains it is!")).toMatch(/^sent \[\w+\]$/);
 
+        procs.stdout(TURN_PROC_ID, JSON.stringify({ type: "item.completed", item: { type: "agent_message", text: "Trains it is!" } }) + "\n");
         procs.exit(TURN_PROC_ID, 0);
         await until(() => state().chat.busy === false);
-        // it was answered in that turn: no second turn, no error
-        expect(procs.started.length).toBe(1);
-        expect(app.conversation.history().some((e) => e.kind === "error")).toBe(false);
+        // the stopped turn isn't an error
+        expect(app.conversation.history().filter((e) => e.kind === "error")).toEqual([]);
     });
 
     test("the agent's files are a shell over its home folder, and a home folder kept in the browser's moves out", async () => {

@@ -166,17 +166,14 @@ export class AiApp {
             mcpToolset(this.servers),
             actionsToolset({ host: t.actions, enabled: () => this.servers.config.actions }),
         ]);
-        // any tool but its messages means the agent is working, not typing, whatever its harness reports.
-        // What the user sent meanwhile comes back with the result, so the agent reads it as it works
+        // any tool but its messages means the agent is working, not typing, whatever its harness reports
         this.tools = {
             ...tools,
             call: async (name, args) => {
                 // a summary is written from what it already knows: no texting, no work
                 if (this.conversation?.compacting) return { text: "You're writing a summary of the conversation: no texts and no tools until it's done.", isError: true };
                 if (name !== "send_message") this.conversation?.working();
-                const result = await tools.call(name, args);
-                const news = this.conversation?.news();
-                return news ? { ...result, text: result.text + news } : result;
+                return tools.call(name, args);
             },
         };
         this.mcp = await startComputerMcp(this.tools);

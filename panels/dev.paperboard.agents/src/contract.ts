@@ -24,8 +24,6 @@ export const UI_ACTION_IDS = {
     go: "ui-go",
     control: "ui-control",
     // waiting messages: take one back, or interrupt the turn to read them now
-    unqueue: "ui-unqueue",
-    sendNow: "ui-send-now",
     // the user is typing: waiting messages wait for them to finish
     startOver: "ui-start-over",
     // past conversations: start a new one (the current one is kept), list, reopen or delete them

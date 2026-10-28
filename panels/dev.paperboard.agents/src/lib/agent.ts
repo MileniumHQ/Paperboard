@@ -102,8 +102,6 @@ export function createAgent() {
         send: (text: string, replyTo?: string, attachments: string[] = []) =>
             call<{ id: string; waiting: boolean }>(UI_ACTION_IDS.send, { text, replyTo, attachments }),
         files,
-        unqueue: (id: string) => call(UI_ACTION_IDS.unqueue, { id }),
-        sendNow: () => call(UI_ACTION_IDS.sendNow),
         startOver: () => call(UI_ACTION_IDS.startOver),
         newConversation: () => call(UI_ACTION_IDS.newConversation),
         conversations: () => call<{ current: PastConversation | null; past: PastConversation[] }>(UI_ACTION_IDS.conversations),

@@ -234,17 +234,6 @@ export default function Chat(props: { agent: Agent; face: FaceController; apps: 
                                     nameOf={(m) => (m.kind === "user" ? "You" : name())}
                                     onReply={(m) => setReplyTo(m)}
                                     onJump={jumpTo}
-                                    onTakeBack={(w) => {
-                                        // taken back into the box, so it can be edited and sent again
-                                        setNotice(null);
-                                        agent.unqueue(w.id).then(
-                                            () => {
-                                                if (!draft().trim()) setDraft(w.text);
-                                                if (w.attachments?.length) tray.restore(w.attachments);
-                                            },
-                                            (e) => setNotice(failure("Message not taken back", e)),
-                                        );
-                                    }}
                                 />
                             </Show>
                         </>
@@ -299,7 +288,6 @@ function Bubble(props: {
     nameOf: (m: Said) => string;
     onReply: (m: Said) => void;
     onJump: (id: string) => void;
-    onTakeBack: (w: WaitingMessage) => void;
     files: Files;
     renderImage: (image: MarkdownImage) => JSX.Element | undefined;
 }) {
@@ -308,7 +296,6 @@ function Bubble(props: {
     const replyId = () => entry()?.replyTo ?? props.row.waiting?.replyTo;
     const quote = () => (replyId() ? props.quoted(replyId()!) : undefined);
     const me = () => props.row.side === "me";
-    const waiting = () => props.row.waiting;
     // a finger drags a bubble toward the middle to answer it
     const swipe = createSwipeReply({
         toward: () => (me() ? -1 : 1),
@@ -332,7 +319,7 @@ function Bubble(props: {
                 </PaperIcon>
             </Show>
             <div class={styles.bubbleWrap} classList={{ [styles.swiping!]: swipe.active() }} style={{ transform: `translateX(${swipe.offset()}px)` }}>
-                <div class={styles.bubble} classList={{ [styles.waiting!]: !!waiting(), [styles.joinsPrev!]: props.row.joinsPrev, [styles.joinsNext!]: props.row.joinsNext }}>
+                <div class={styles.bubble} classList={{ [styles.joinsPrev!]: props.row.joinsPrev, [styles.joinsNext!]: props.row.joinsNext }}>
                     <Show when={replyId()}>
                         <button
                             type="button"
@@ -360,16 +347,6 @@ function Bubble(props: {
                     </PaperButton>
                 </Show>
             </div>
-            <Show when={waiting()}>
-                <PaperFlex direction="row" align="center" gap="half">
-                    <PaperText size={1} color="text-subtle">
-                        Waiting
-                    </PaperText>
-                    <PaperButton size="tiny" variant="text" onClick={() => props.onTakeBack(waiting()!)}>
-                        Take back
-                    </PaperButton>
-                </PaperFlex>
-            </Show>
         </div>
     );
 }

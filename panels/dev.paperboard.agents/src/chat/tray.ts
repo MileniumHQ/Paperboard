@@ -60,10 +60,6 @@ export function createTray(agent: Agent) {
             if (c) release(c);
             setChips((cs) => cs.filter((x) => x.key !== key));
         },
-        /** A message's files back in the tray, already uploaded. */
-        restore(files: Attachment[]) {
-            setChips((cs) => [...cs, ...files.map((file) => ({ key: `chip${++keys}`, name: file.name, preview: null, kind: file.kind, progress: 1, file, error: null }))]);
-        },
         uploading: () => chips().some((c) => !c.file && !c.error),
         failed: () => chips().some((c) => c.error),
         ids: () => chips().flatMap((c) => (c.file ? [c.file.id] : [])),

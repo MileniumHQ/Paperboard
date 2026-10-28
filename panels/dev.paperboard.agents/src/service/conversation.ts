@@ -3,11 +3,10 @@
 // the old one goes into the history (its transcript and harness threads,
 // moved as they are) and can be reopened and continued. Starting over is
 // different: it forgets the current conversation.
-// Messages sent while the agent is busy wait until it reads them, and can be
-// taken back until then. It reads them as it works, like a text arriving
-// mid-task: they come with the result of its next tool call (see news()), so
-// it can answer and change course without the turn ending. Any it didn't get
-// to are read together on its next turn. The agent talks through send_message (see
+// The user can chime in at any time: a message sent while the agent works
+// stops its turn there, and the next turn picks the same thread up with the
+// message, so it answers and changes course at once rather than whenever it
+// next calls a tool. Only a compaction finishes first. The agent talks through send_message (see
 // messages.ts): each call is a bubble, added at once, mid-turn. The service
 // can start a turn too, with a notice (a routine is due): the agent reads it
 // like a message that isn't from the user, and texts only if it has
@@ -117,16 +116,17 @@ export class Conversation {
     private queue: WaitingMessage[] = [];
     /** the service's notices for the agent's next turn; not the user's, so not in the conversation */
     private notices: string[] = [];
+    /** the notices the running turn was started with: a turn the user stops hands them on to the next */
+    private turnNotices: string[] = [];
     private running: Promise<void> | null = null;
     private stopRequested = false;
     private closed = false;
     /** set while conversations are swapped: no turn starts until the files are in place */
     private switching: Promise<unknown> | null = null;
-    /** the user's latest messages in the running turn have no text after them yet; until they do, plain output is the answer */
+    /** the user's messages in the running turn have no text after them yet; until they do, plain output is the answer */
     private unanswered = false;
-    /** the running turn's plain output, and where the part written since the user's latest messages begins */
+    /** the running turn's plain output */
     private plain: string[] = [];
-    private plainFrom = 0;
     /** ids of the user's messages the running turn is answering */
     private answering: string[] = [];
     /** the agent is writing to the user right now, not working: only then does the typing bubble show */
@@ -162,7 +162,7 @@ export class Conversation {
         return this.entries.slice(-Math.max(1, Math.min(limit, LIMITS.history)));
     }
 
-    /** Send a message: read now, or waiting for the running turn (then it can be taken back until it's read). */
+    /** Send a message: read now, stopping what the agent was doing, or once a compaction is done. */
     send(text: string, replyTo: string | null = null, attachmentIds: unknown = []): { id: string; waiting: boolean } {
         const message = text.trim();
         const files = this.sentFiles(attachmentIds);
@@ -174,6 +174,7 @@ export class Conversation {
         const id = this.newId();
         this.queue.push({ id, text: message, ...(replyTo === null ? {} : { replyTo }), ...(files.length ? { attachments: files } : {}) });
         const waiting = this.running !== null;
+        if (waiting) this.interrupt();
         this.pump();
         return { id, waiting };
     }
@@ -209,25 +210,22 @@ export class Conversation {
         this.put(entry);
     }
 
-    /** Take back a message the agent hasn't read yet. */
-    unqueue(id: string) {
-        const i = this.queue.findIndex((m) => m.id === id);
-        if (i < 0) throw new Error("that message isn't waiting anymore");
-        this.queue.splice(i, 1);
-        this.state();
-        return { removed: true };
-    }
-
-    /** Stop the running turn so the waiting messages are read now. */
-    async sendNow() {
-        if (this.queue.length === 0) throw new Error("no messages are waiting");
-        if (!this.running) {
-            this.pump();
-            return { interrupted: false };
-        }
+    /**
+     * Stop the running turn quietly, so the next one reads what the user just said. A compaction isn't stopped
+     * (what's sent meanwhile waits for it), and a turn already stopping isn't stopped twice.
+     */
+    private interrupt() {
+        if (!this.running || this.compactingNow || this.switching || this.stopRequested) return;
         this.stopRequested = true;
-        await this.killTurn();
-        return { interrupted: true };
+        // a routine's notice it was on isn't lost: the next turn has it too
+        const handedOn = this.turnNotices.splice(0);
+        this.notices.unshift(...handedOn);
+        this.killTurn().catch((e: Error) => {
+            // still running: it has its notices already
+            this.notices = this.notices.filter((n) => !handedOn.includes(n));
+            this.turnNotices = handedOn;
+            this.put({ id: this.newId(), at: Date.now(), kind: "error", title: "Not interrupted", text: `${e.message}. Your message is read once the agent finishes.` });
+        });
     }
 
     /** Start over: stop, forget the conversation and the harness's threads. Asked for explicitly; it can't be undone. */
@@ -333,22 +331,6 @@ export class Conversation {
         this.setTyping(false);
         this.put(entry);
         return { id: entry.id };
-    }
-
-    /**
-     * The messages sent since the running turn read the last ones, as the agent reads them after a tool's result,
-     * or null when there are none. Handed over, they're read: they join the conversation and the turn answers them.
-     */
-    news(): string | null {
-        if (!this.running || this.switching || this.closed || this.compactingNow || this.queue.length === 0) return null;
-        const batch = this.queue.splice(0);
-        this.read(batch);
-        this.answering.push(...batch.map((m) => m.id));
-        this.unanswered = true;
-        this.plainFrom = this.plain.length;
-        this.setTyping(true);
-        this.state();
-        return `\n\n[new messages from the user, sent while you were working]\n${batch.map((m) => this.forAgent(m)).join("\n\n")}`;
     }
 
     /** The agent is using a tool other than its messages: it's working, not typing. */
@@ -463,12 +445,12 @@ export class Conversation {
         if (this.running || this.closed || this.switching || (this.queue.length === 0 && this.notices.length === 0)) return;
         const batch = this.queue.splice(0);
         const notices = this.notices.splice(0);
+        this.turnNotices = notices;
         this.stopRequested = false; // a stop asked of an earlier turn doesn't silence this one
         this.read(batch);
         const message = [...batch.map((m) => this.forAgent(m)), ...notices.map((n) => `[from Paperboard, not the user] ${n}`)].join("\n\n");
         this.unanswered = batch.length > 0;
         this.plain = [];
-        this.plainFrom = 0;
         this.answering = batch.map((m) => m.id);
         // answering the user begins with writing to them; a routine's turn shows nothing until it writes
         this.typing = batch.length > 0;
@@ -479,6 +461,7 @@ export class Conversation {
             .then(() => this.compactIfLong())
             .finally(() => {
                 this.running = null;
+                this.turnNotices = [];
                 this.answering = [];
                 this.typing = false;
                 this.stopRequested = false;
@@ -655,7 +638,7 @@ export class Conversation {
         // note to itself
         const forUser = this.answering.length > 0;
         if (this.unanswered && forUser) {
-            for (const text of plain.slice(this.plainFrom)) {
+            for (const text of plain) {
                 if (!text.trim()) continue;
                 this.unanswered = false;
                 this.put({ id: this.newId(), at: Date.now(), kind: "agent", text: text.trim() });
@@ -704,7 +687,6 @@ export class Conversation {
     /** The agent's summary of the conversation, written in its own thread (so it knows everything the thread does). */
     private async summarize(): Promise<string> {
         this.plain = [];
-        this.plainFrom = 0;
         this.unanswered = false;
         await this.turn(SUMMARIZE);
         const summary = this.plain.join("\n\n").trim();
