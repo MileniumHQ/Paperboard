@@ -13,7 +13,14 @@ import { LIMITS } from "../contract";
 export const SHELL_HOME = "/home/user";
 
 export class HomeFolder {
+    private erasers: (() => void)[] = [];
+
     constructor(readonly root: string) {}
+
+    /** What else goes when the folder is erased: what's kept of it elsewhere, like its checkpoints. */
+    onErase(erase: () => void) {
+        this.erasers.push(erase);
+    }
 
     ensure() {
         fs.mkdirSync(path.join(this.root, "Downloads"), { recursive: true });
@@ -71,6 +78,7 @@ export class HomeFolder {
         for (const name of fs.existsSync(this.root) ? fs.readdirSync(this.root) : []) {
             fs.rmSync(path.join(this.root, name), { recursive: true, force: true });
         }
+        for (const erase of this.erasers) erase();
         this.ensure();
     }
 

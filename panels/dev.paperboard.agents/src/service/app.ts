@@ -18,6 +18,7 @@ import {
     type Settings,
 } from "../contract";
 import { HomeFolder, moveHomeFolder } from "./homeFolder";
+import { Checkpoints } from "./checkpoints";
 import { shellToolset } from "./shell";
 import { Apps } from "./apps";
 import { BrowserComputer, type ComputerHost } from "./browser";
@@ -139,11 +140,13 @@ export class AiApp {
         home.ensure();
         const apps = new Apps({ home, portFile: path.join(root, "apps.json") });
         this.apps = apps;
+        const checkpoints = new Checkpoints({ home, dir: path.join(root, "checkpoints") });
         const tools = toolbox([
             { id: "computer", tools: () => COMPUTER_TOOLS, call: (name, args) => this.computer.callTool(name, args), instructions: () => COMPUTER_INSTRUCTIONS },
             messagesToolset({ say: (text, replyTo) => this.conversation.say(text, replyTo) }),
             shellToolset(home),
             apps.toolset(),
+            checkpoints.toolset(),
             filesToolset({
                 files: () => this.conversation.attachments,
                 getFile: (p) => this.computer.getFile(p),
