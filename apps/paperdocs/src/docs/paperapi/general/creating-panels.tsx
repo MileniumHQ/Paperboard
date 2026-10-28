@@ -188,6 +188,22 @@ export default function CreatingPanelsDoc() {
 {`npx @mileniumhq/paperapi unlink dev.paperboard.my-panel`}
             </PaperCode>
 
+            <PaperText preset="subheader" id="local-pages">Showing a local page</PaperText>
+            <PaperText preset="body">
+                A panel can show a web page its own service serves on loopback, in an iframe.
+                The panel's policy allows frames from http://127.0.0.1, http://localhost and http://*.localhost on any port, and from no web page.
+                The page keeps its own origin, so it can't reach into the panel, nor the panel into it.
+            </PaperText>
+            <PaperText preset="body">
+                The page decides who may frame it. Send a frame-ancestors directive that names the shell and the panel around it, in Electron, its development shell and browser mode:
+            </PaperText>
+            <PaperCode block language="text">
+{`Content-Security-Policy: frame-ancestors paperboard: panel: http://localhost:* http://paperboard.localhost:* http://*.paperboard.localhost:*`}
+            </PaperCode>
+            <PaperQuote variant="attention" icon="desktop_access_disabled" title="Only on its own computer">
+                Loopback is the computer the panel is shown on. A panel shown from another computer can't reach its service's loopback, so check grantedComputerId() and say so when it isn't "local".
+            </PaperQuote>
+
             <PaperText preset="subheader" id="panel-review">Panel review and submission</PaperText>
             <PaperText preset="body">
                 Paperboard does not offer an open self-serve upload registry.

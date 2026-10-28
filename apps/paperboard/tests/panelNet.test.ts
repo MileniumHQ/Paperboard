@@ -26,4 +26,11 @@ describe("buildPanelCsp", () => {
         expect(directive(csp, "connect-src")).toContain("ws://127.0.0.1:*");
         expect(directive(csp, "img-src")).toContain("http://*.paperboard.localhost:*");
     });
+
+    it("lets a panel show a page its service serves on loopback, and no web page", () => {
+        const frames = directive(buildPanelCsp(), "frame-src");
+        expect(frames).toContain("http://*.localhost:*");
+        expect(frames).toContain("http://127.0.0.1:*");
+        expect(frames).not.toContain("https:");
+    });
 });

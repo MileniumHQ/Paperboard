@@ -14,5 +14,7 @@ export function buildPanelCsp(): string {
         "font-src 'self' data:",
         "connect-src 'self' panel: ws://127.0.0.1:* ws://localhost:* http://127.0.0.1:* http://localhost:* https:",
         "media-src 'self' panel: blob:",
+        // a local web page shown in a panel (a page its service serves on loopback); it gets its own origin
+        "frame-src 'self' panel: http://127.0.0.1:* http://localhost:* http://*.localhost:*",
     ].join("; ");
 }
