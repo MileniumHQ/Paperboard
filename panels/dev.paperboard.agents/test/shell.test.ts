@@ -62,10 +62,39 @@ describe("the agent's shell", () => {
         expect(fs.existsSync(path.join(home.root, "root"))).toBe(false);
     });
 
-    test("there's no network and no program beyond the shell's own", async () => {
+    test("there's no program beyond the shell's own", async () => {
         const { run } = setup();
-        for (const c of ["curl https://example.com", "node -v", "python3 -c 1", "git status", "sqlite3 :memory: 'select 1'", "npm -v"]) {
+        for (const c of ["python3 -c 1", "git status", "sqlite3 :memory: 'select 1'", "npm -v"]) {
             expect(await run(c)).toMatch(/\[exit code 127\]$/);
+        }
+        // node is a pointer to js-exec, not node
+        expect(await run("node -v")).toStartWith("node: this sandbox uses js-exec instead of node");
+    });
+
+    test("js-exec runs JavaScript on the home folder, importing its other files by path", async () => {
+        const { home, run } = setup();
+        home.write("~/lib.mjs", Buffer.from("export const days = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / 864e5);"));
+        home.write("~/due.mjs", Buffer.from("import { days } from './lib.mjs'; import fs from 'fs'; fs.writeFileSync('left.txt', String(days('2026-10-27', '2026-11-03')));"));
+        expect(await run("js-exec due.mjs && cat left.txt")).toBe("7");
+        expect(home.read("~/left.txt").data.toString()).toBe("7");
+    });
+
+    test("fetch and curl never reach this computer or its local network, by number or by name", async () => {
+        const { run } = setup();
+        const local = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: () => new Response("this computer's secret") });
+        try {
+            const at = `127.0.0.1:${local.port}`;
+            const out = [
+                await run(`curl -s http://${at}/`),
+                // a public name that resolves to loopback is refused as well
+                await run(`curl -s http://localtest.me:${local.port}/`),
+                await run(`curl -s http://192.168.1.1/`),
+                await run(`js-exec -c "try { console.log(await (await fetch('http://${at}/')).text()) } catch (e) { console.log(e.message) }"`),
+            ];
+            expect(out.join("\n")).not.toContain("secret");
+            expect(out[3]).toContain("private/loopback IP address blocked");
+        } finally {
+            local.stop(true);
         }
     });
 

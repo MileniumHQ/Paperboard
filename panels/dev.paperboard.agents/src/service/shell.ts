@@ -1,12 +1,15 @@
 // The agent's shell: bash over its home folder, run by just-bash, a bash
 // interpreter written in TypeScript. Its commands (ls, cat, grep, sed, awk,
 // find, jq, tar…) are JavaScript working on the home folder through
-// ReadWriteFs. No program on this computer runs and nothing reaches the
-// network; links are refused, so nothing outside the folder is read or
-// written. ~ is /home/user; the rest of its file system (/tmp) is scratch
-// in memory, gone when the command ends.
+// ReadWriteFs, and js-exec runs JavaScript in QuickJS, compiled to
+// WebAssembly. No program on this computer runs; links are refused, so
+// nothing outside the folder is read or written. curl and fetch reach the
+// internet, never this computer or its local network: every name is
+// resolved, checked and pinned before it's dialled. ~ is /home/user; the
+// rest of its file system (/tmp) is scratch in memory, gone when the
+// command ends.
 
-import { Bash, type CommandName, type DefenseInDepthConfig, getCommandNames, InMemoryFs, MountableFs, ReadWriteFs } from "just-bash";
+import { Bash, type CommandName, type DefenseInDepthConfig, getCommandNames, InMemoryFs, MountableFs, type NetworkConfig, ReadWriteFs } from "just-bash";
 import type { ToolResult } from "./computerMcp";
 import type { ToolSpec } from "./computerTools";
 import { type HomeFolder, SHELL_HOME } from "./homeFolder";
@@ -25,22 +28,30 @@ const COMMANDS = getCommandNames().filter((c) => c !== "sqlite3") as CommandName
 // shell shares: its settings are this one object
 const DEFENSE: DefenseInDepthConfig = {
     enabled: true,
-    // Bun's file handles register themselves for cleanup: blocked, every write under Bun fails
-    excludeViolationTypes: ["finalization_registry"],
+    // Bun's file handles register themselves for cleanup, and its HTTP client
+    // reads performance: blocked, every write and every fetch under Bun fails.
+    // Neither reaches js-exec's code, which runs in QuickJS with its own globals.
+    excludeViolationTypes: ["finalization_registry", "performance_timing"],
     // a blocked call reaches the agent only as an EIO: the service's log says what it was
     onViolation: (v) => console.error(`[ai] the shell blocked ${v.path}: ${v.message}`),
 };
 
+// any site and method, as the agent's browser can; denyPrivateRanges keeps
+// loopback and the local network out even with full internet access
+const NETWORK: NetworkConfig = { dangerouslyAllowFullInternetAccess: true, denyPrivateRanges: true };
+
 export const SHELL_INSTRUCTIONS = `How to use your shell: \`bash\` runs a bash command in your home folder (~, which is ${SHELL_HOME}). It's the same folder the browser downloads to and \`upload\`, \`share_file\` and \`put_file_on_computer\` use.
 - Read, search, write and sort out files there with the usual tools: ls, cat, head, tail, grep, rg, sed, awk, find, sort, diff, jq, yq, xan (CSV), tar, gzip and more. Any command takes --help.
-- It's a shell for files, not a whole computer: no network, nothing to install, and no other programs (no node, python, git or sqlite3).
+- For a calculation, data work or a web API, run JavaScript: \`js-exec -c 'console.log(2 ** 10)'\` or \`js-exec script.mjs\`. It has fetch, top-level await and Node's fs, path and a few more (js-exec --help); a script imports other files by their path (./lib.mjs), not packages.
+- fetch and curl reach the internet, never this computer or its local network.
+- It's a shell, not a whole computer: nothing to install and no other programs (no node, npm, python, git or sqlite3).
 - Each call starts in ~ with a fresh shell: cd and variables don't carry over to the next call, files do. Chain the steps of one job with && in one call.
 - Only ~ is kept. Anything written elsewhere, like /tmp, is gone when the command ends.`;
 
 export const SHELL_TOOLS: ToolSpec[] = [
     {
         name: "bash",
-        description: `Run a bash command in your home folder (~ is ${SHELL_HOME}) and get what it printed and its exit code. For files: no network, no programs beyond the shell's own.`,
+        description: `Run a bash command in your home folder (~ is ${SHELL_HOME}) and get what it printed and its exit code. For files, JavaScript (js-exec) and the web (curl); no programs beyond the shell's own.`,
         inputSchema: {
             type: "object",
             properties: { command: { type: "string", description: "The command, e.g. `ls -la ~/Downloads` or `grep -rn invoice ~ | head`." } },
@@ -84,6 +95,8 @@ export function shellToolset(home: HomeFolder): Toolset {
                 executionLimitProfile: "hardened",
                 executionLimits: { maxExecutionTimeMs: COMMAND_MS },
                 defenseInDepth: DEFENSE,
+                javascript: true,
+                network: NETWORK,
             });
             try {
                 return { text: shellOutput(await bash.exec(args.command)) };
