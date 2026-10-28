@@ -21,6 +21,7 @@ export const COMPUTER_INSTRUCTIONS = `How to use your computer:
 - When something isn't marked, is tiny, or the text is too small to read (canvas, games, custom widgets), \`zoom\` into that region and click with the x/y its grid shows. \`hover\` opens hover menus; \`drag\` moves sliders and drags things.
 - What the browser downloads goes to ~/Downloads in your home folder. To upload, click the page's upload button, then \`upload\` files from your home folder.
 - It can't reach this computer or its local network, only the internet. You can search the web directly, too.
+- \`close\` each window once you're done with it, so the browser holds only what you're still using.
 - Don't claim you did something you didn't verify.`;
 
 export const COMPUTER_TOOLS: ToolSpec[] = [

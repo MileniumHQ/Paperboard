@@ -20,7 +20,7 @@ const LIVE_KEYS = new Set(["transform", "opacity", "height"]);
 const LIVE_VALUE = /\$\{|props\.|\w\(\)/;
 // the pages a person reads and fills in are plain PaperUI; the face, the chat's bubbles and
 // composer, the computer's windows and the face playground draw their own
-const PLAIN = ["Main.tsx", "Workspace.tsx", "settings", "tools", "memories", "routines", "onboarding", "lib", "chat/History.tsx", "chat/SignIn.tsx"];
+const PLAIN = ["Main.tsx", "Workspace.tsx", "settings", "tools", "memories", "routines", "onboarding", "lib", "chat/History.tsx", "chat/SignIn.tsx", "apps/Apps.tsx"];
 // a button that backs out of a question sits quietly next to the coloured one that answers it
 const BACK_OUT = new Set(["Cancel", "Keep it", "Keep talking", "Not now", "Stay"]);
 

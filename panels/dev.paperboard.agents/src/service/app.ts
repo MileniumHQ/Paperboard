@@ -78,7 +78,7 @@ export class AiApp {
     routines!: Routines;
     signIns!: SignIns;
     private mcp: ComputerMcp | null = null;
-    private apps: Apps | null = null;
+    apps!: Apps;
     private tools: Toolbox | null = null;
     servers!: McpServers;
     private settle!: (failure: Error | null) => void;
@@ -138,7 +138,15 @@ export class AiApp {
         moveHomeFolder(path.join(root, "browser", "home"), path.join(root, "home"));
         const home = new HomeFolder(path.join(root, "home"));
         home.ensure();
-        const apps = new Apps({ home, portFile: path.join(root, "apps.json") });
+        const apps = new Apps({
+            home,
+            portFile: path.join(root, "apps.json"),
+            infoFile: path.join(root, "app-info.json"),
+            picturesDir: path.join(root, "app-pictures"),
+            picture: (url) => this.computer.picture(url),
+            post: (entry) => this.conversation.post(entry),
+            onChange: () => this.ctx.setState({ apps: { revision: this.ctx.state.apps.revision + 1 } }),
+        });
         this.apps = apps;
         const checkpoints = new Checkpoints({ home, dir: path.join(root, "checkpoints") });
         const tools = toolbox([

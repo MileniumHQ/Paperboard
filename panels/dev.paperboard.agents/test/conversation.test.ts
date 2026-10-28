@@ -350,6 +350,16 @@ describe("the conversation", () => {
         expect(() => second.conv.send("re", "s1")).toThrow("no message [s1]");
     });
 
+    test("an app's card is kept in the transcript, and isn't a message to reply to", () => {
+        const first = setup();
+        first.conv.post({ id: "app1", at: Date.now(), kind: "app", app: "clock", title: "Clock", description: "The time, big." });
+        expect(first.emitted.map((e) => e.id)).toEqual(["app1"]);
+
+        const second = setup({ dir: first.dir });
+        expect(second.conv.history()).toEqual([{ id: "app1", at: expect.any(Number), kind: "app", app: "clock", title: "Clock", description: "The time, big." }]);
+        expect(() => second.conv.send("re", "app1")).toThrow("no message [app1]");
+    });
+
     test("damage before the last line is refused, not read as an empty conversation", () => {
         const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ai-conv-"));
         dirs.push(dir);

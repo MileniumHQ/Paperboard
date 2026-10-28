@@ -3,9 +3,11 @@ import { PaperButton, PaperFlex, PaperIcon, haptic, PaperMarkdown, PaperPageHead
 import { Face } from "../face/Face";
 import { skinFor } from "../face/skins";
 import type { FaceController } from "../face/controller";
-import type { ChatEntry, SignInEntry, WaitingMessage } from "../contract";
+import type { AppEntry, ChatEntry, SignInEntry, WaitingMessage } from "../contract";
 import type { Agent } from "../lib/agent";
 import type { Files } from "../lib/files";
+import AppCard from "../apps/AppCard";
+import type { Launcher } from "../apps/launcher";
 import Composer from "./Composer";
 import { AttachmentList, renderAgentImage } from "./Media";
 import { createTray } from "./tray";
@@ -31,7 +33,7 @@ interface Row {
     entry: ChatEntry | null;
     /** a message not yet read by the agent */
     waiting: WaitingMessage | null;
-    side: "me" | "them" | "note" | "card";
+    side: "me" | "them" | "note" | "card" | "app";
     /** a timestamp to show above this row, if any */
     stamp: number | null;
     joinsPrev: boolean;
@@ -45,7 +47,7 @@ const stampText = (at: number) => {
 };
 
 /** One conversation, like texting a friend. */
-export default function Chat(props: { agent: Agent; face: FaceController; onMenu: () => void }) {
+export default function Chat(props: { agent: Agent; face: FaceController; apps: Launcher; onMenu: () => void }) {
     const { agent, face } = props;
     const name = () => agent.state.settings?.name ?? "Your agent";
 
@@ -89,9 +91,9 @@ export default function Chat(props: { agent: Agent; face: FaceController; onMenu
         for (const id of drafts.keys()) if (!agent.entries.some((e) => e.id === id)) drafts.delete(id);
     });
 
-    // Old transcripts held tool-call entries; only messages, errors and sign-in requests are shown.
+    // Old transcripts held tool-call entries; only messages, errors, sign-in requests and apps are shown.
     const rows = createMemo<Row[]>(() => {
-        const shown = agent.entries.filter((e) => e.kind === "user" || e.kind === "agent" || e.kind === "error" || e.kind === "sign-in");
+        const shown = agent.entries.filter((e) => e.kind === "user" || e.kind === "agent" || e.kind === "error" || e.kind === "sign-in" || e.kind === "app");
         const items: Pick<Row, "key" | "entry" | "waiting" | "side">[] = [
             ...shown.map((entry) => ({ key: entry.id, entry, waiting: null, side: sideOf(entry) })),
             ...agent.state.chat.waiting.map((w) => ({ key: w.id, entry: null, waiting: w, side: "me" as const })),
@@ -220,6 +222,9 @@ export default function Chat(props: { agent: Agent; face: FaceController; onMenu
                                     onDone={() => drafts.delete(row.key)}
                                 />
                             </Show>
+                            <Show when={row.side === "app"}>
+                                <AppCard entry={row.entry as AppEntry} apps={props.apps} />
+                            </Show>
                             <Show when={row.side === "me" || row.side === "them"}>
                                 <Bubble
                                     files={agent.files}
@@ -286,7 +291,8 @@ export default function Chat(props: { agent: Agent; face: FaceController; onMenu
     );
 }
 
-const sideOf = (e: ChatEntry): Row["side"] => (e.kind === "user" ? "me" : e.kind === "agent" ? "them" : e.kind === "sign-in" ? "card" : "note");
+const SIDES: Partial<Record<ChatEntry["kind"], Row["side"]>> = { user: "me", agent: "them", "sign-in": "card", app: "app" };
+const sideOf = (e: ChatEntry): Row["side"] => SIDES[e.kind] ?? "note";
 
 function Bubble(props: {
     row: Row;

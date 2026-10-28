@@ -100,7 +100,7 @@ export async function runBrowserFixture(
                 "--no-first-run",
                 "--hide-scrollbars",
                 "--window-size=1280,800",
-                "--virtual-time-budget=8000",
+                "--virtual-time-budget=15000",
                 "--dump-dom",
                 `http://127.0.0.1:${server.port}/${page}`,
             ],

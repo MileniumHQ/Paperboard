@@ -10,7 +10,8 @@ import os from "node:os";
 import path from "node:path";
 import vm from "node:vm";
 import zlib from "node:zlib";
-import { Apps } from "../src/service/apps";
+import type { AppEntry } from "../src/contract";
+import { Apps, type AppsOptions } from "../src/service/apps";
 import { HomeFolder } from "../src/service/homeFolder";
 
 const cleanups: (() => unknown)[] = [];
@@ -89,15 +90,41 @@ async function registry(pkgs: Record<string, Record<string, FakeVersion>>) {
     return url;
 }
 
+/** a JPEG's first bytes: what the browser's picture of a page starts with */
+const JPEG = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]).toString("base64");
+/** what a new app is called and is for */
+const about = { title: "An app", description: "For a test." };
+
+/** the service's side of the apps: where it keeps them, and what it hears from them */
+function options(storage: string, home: HomeFolder) {
+    const posted: AppEntry[] = [];
+    const pictured: string[] = [];
+    const changes = { count: 0 };
+    const o: AppsOptions = {
+        home,
+        portFile: path.join(storage, "apps.json"),
+        infoFile: path.join(storage, "app-info.json"),
+        picturesDir: path.join(storage, "app-pictures"),
+        picture: async (url) => {
+            pictured.push(url);
+            return JPEG;
+        },
+        post: (e) => posted.push(e),
+        onChange: () => changes.count++,
+    };
+    return { o, posted, pictured, changes };
+}
+
 async function setup(pkgs: Record<string, Record<string, FakeVersion>> = {}) {
     const storage = tempDir();
     const home = new HomeFolder(path.join(storage, "home"));
     home.ensure();
-    const apps = new Apps({ home, portFile: path.join(storage, "apps.json"), registry: await registry(pkgs) });
+    const heard = options(storage, home);
+    const apps = new Apps({ ...heard.o, registry: await registry(pkgs) });
     cleanups.push(() => apps.close());
     const tools = apps.toolset();
-    const call = (name: string, args: Record<string, unknown>) => tools.call(name, args);
-    return { storage, home, apps, call };
+    const call = (name: string, args: Record<string, unknown>) => tools.call(name, name === "start_app" ? { ...about, ...args } : args);
+    return { storage, home, apps, tools, call, ...heard };
 }
 
 /** a request to an app as the browser sends it, to a name at the app server */
@@ -254,9 +281,115 @@ describe("the agent's apps", () => {
         await call("start_app", { name: "keep" });
         const port = apps.port;
         await apps.close();
-        const again = new Apps({ home, portFile: path.join(storage, "apps.json") });
+        const again = new Apps(options(storage, home).o);
         cleanups.push(() => again.close());
         expect((await again.toolset().call("start_app", { name: "keep" })).text).toContain(`http://keep.localhost:${port}/`);
+    });
+});
+
+describe("the user's side of the apps", () => {
+    test("a new app needs a title and a description, kept by the service, and a later start can change them", async () => {
+        const { storage, home, tools, apps, changes } = await setup();
+        expect(await tools.call("start_app", { name: "nameless" })).toEqual({ text: "give a new app a title and a description: they're how the user knows it", isError: true });
+        expect(fs.existsSync(home.resolve("~/Apps/nameless"))).toBe(false);
+        expect((await tools.call("start_app", { name: "plan", title: " ", description: "x" })).isError).toBe(true);
+        expect((await tools.call("start_app", { name: "plan", title: "x".repeat(61), description: "x" })).isError).toBe(true);
+
+        expect((await tools.call("start_app", { name: "plan", title: "Assignment  planner", description: "What's due, by class." })).isError).toBeUndefined();
+        expect(changes.count).toBe(1);
+        // nothing of it in the agent's files
+        expect(fs.readdirSync(home.resolve("~/Apps/plan"))).toEqual(["package.json"]);
+        expect(JSON.parse(fs.readFileSync(path.join(storage, "app-info.json"), "utf8"))).toEqual({ apps: { plan: { title: "Assignment planner", description: "What's due, by class." } } });
+        // started again with neither: it keeps them, and nothing changed
+        await tools.call("start_app", { name: "plan" });
+        expect(changes.count).toBe(1);
+        await tools.call("start_app", { name: "plan", title: "Planner" });
+        expect(apps.list()).toEqual([{ name: "plan", title: "Planner", description: "What's due, by class.", picture: false }]);
+        expect(changes.count).toBe(2);
+    });
+
+    test("show_app posts a card with the app's picture, taken of its own address; it never gives the agent a link to send", async () => {
+        const { home, apps, call, posted, pictured, changes } = await setup();
+        await call("start_app", { name: "clock", title: "Clock", description: "The time, big." });
+        expect(await call("show_app", { app: "clock" })).toEqual({ text: "~/Apps/clock has no index.html to show yet", isError: true });
+        expect(await call("show_app", { app: "nope" })).toEqual({ text: "there's no app called nope", isError: true });
+        expect(posted).toEqual([]);
+
+        home.write("~/Apps/clock/index.html", Buffer.from("<h1>12:00</h1>"));
+        const before = changes.count;
+        const shown = await call("show_app", { app: "clock" });
+        expect(shown).toEqual({ text: "Showed Clock to the user as a card in the chat. They open it from there, beside the chat." });
+        expect(shown.text).not.toContain("localhost");
+        expect(pictured).toEqual([apps.url("clock")]);
+        expect(posted).toHaveLength(1);
+        expect(posted[0]).toMatchObject({ kind: "app", app: "clock", title: "Clock", description: "The time, big." });
+        expect(changes.count).toBe(before + 1);
+        expect(apps.pictureOf("clock")).toEqual({ image: JPEG });
+        expect(apps.list()[0]!.picture).toBe(true);
+        expect(await apps.open("clock")).toEqual({ url: apps.url("clock"), title: "Clock" });
+    });
+
+    test("a picture that can't be taken shows nothing, and says why", async () => {
+        const storage = tempDir();
+        const home = new HomeFolder(path.join(storage, "home"));
+        home.ensure();
+        const heard = options(storage, home);
+        const apps = new Apps({ ...heard.o, picture: async () => Promise.reject(new Error("your computer is off")) });
+        cleanups.push(() => apps.close());
+        const tools = apps.toolset();
+        await tools.call("start_app", { name: "dark", ...about });
+        home.write("~/Apps/dark/index.html", Buffer.from("hi"));
+        expect(await tools.call("show_app", { app: "dark" })).toEqual({ text: "dark wasn't shown: its picture couldn't be taken (your computer is off)", isError: true });
+        expect(heard.posted).toEqual([]);
+        expect(() => apps.pictureOf("dark")).toThrow("there's no picture of dark yet");
+    });
+
+    test("the list is every folder in ~/Apps, newest first; delete_app takes the folder, its title and its picture", async () => {
+        const { storage, home, apps, call } = await setup();
+        expect(apps.list()).toEqual([]);
+        await call("start_app", { name: "older", title: "Older", description: "First." });
+        await Bun.sleep(20);
+        await call("start_app", { name: "newer", title: "Newer", description: "Second." });
+        // one the agent made by hand goes by its name
+        await Bun.sleep(20);
+        fs.mkdirSync(home.resolve("~/Apps/by-hand"));
+        home.write("~/Apps/older/index.html", Buffer.from("old"));
+        await call("show_app", { app: "older" });
+        expect(apps.list().map((a) => [a.name, a.title, a.picture])).toEqual([
+            ["by-hand", "by-hand", false],
+            ["newer", "Newer", false],
+            ["older", "Older", true],
+        ]);
+
+        expect(await call("delete_app", { app: "older" })).toEqual({ text: "~/Apps/older is deleted. A checkpoint from before now still has it." });
+        expect(fs.existsSync(home.resolve("~/Apps/older"))).toBe(false);
+        expect(fs.readdirSync(path.join(storage, "app-pictures"))).toEqual([]);
+        expect(Object.keys(JSON.parse(fs.readFileSync(path.join(storage, "app-info.json"), "utf8")).apps)).toEqual(["newer"]);
+        expect(apps.list().map((a) => a.name)).toEqual(["by-hand", "newer"]);
+        expect((await call("delete_app", { app: "older" })).isError).toBe(true);
+        expect((await call("delete_app", { app: "../home" })).isError).toBe(true);
+        // its address answers that there's no such app now
+        expect((await get(apps.port!, apps.url("older"))).status).toBe(404);
+        // the user deletes the same way
+        apps.remove("newer");
+        expect(apps.list().map((a) => a.name)).toEqual(["by-hand"]);
+    });
+
+    test("only the panel can show an app in a frame, and a frame of it is the only cross-site request let through", async () => {
+        const { home, apps, call } = await setup();
+        await call("start_app", { name: "framed" });
+        home.write("~/Apps/framed/index.html", Buffer.from("in a frame"));
+        const framing = { "Sec-Fetch-Site": "cross-site", "Sec-Fetch-Dest": "iframe", "Sec-Fetch-Mode": "navigate" };
+        const page = await get(apps.port!, apps.url("framed"), framing);
+        expect(page.status).toBe(200);
+        expect(page.body).toBe("in a frame");
+        const ancestors = page.headers["content-security-policy"]!.match(/frame-ancestors ([^;]+)/)![1]!.split(" ");
+        expect(ancestors).toEqual(["paperboard:", "panel:", "http://localhost:*", "http://paperboard.localhost:*", "http://*.paperboard.localhost:*"]);
+        // no other app's page, and no web page
+        expect(ancestors.some((a) => a.includes("https") || a === "http://*.localhost:*" || a === "*")).toBe(false);
+        // the same site's script tag, or a fetch, still isn't
+        expect((await get(apps.port!, apps.url("framed"), { "Sec-Fetch-Site": "cross-site", "Sec-Fetch-Dest": "script", "Sec-Fetch-Mode": "no-cors" })).status).toBe(403);
+        expect((await get(apps.port!, apps.url("framed"), { "Sec-Fetch-Site": "cross-site", "Sec-Fetch-Dest": "iframe", "Sec-Fetch-Mode": "cors" })).status).toBe(403);
     });
 });
 

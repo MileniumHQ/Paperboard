@@ -1,0 +1,23 @@
+/* a page's picture, small, in the proportions of a window */
+.picture,
+.glyph {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: calc(var(--paper-uigap) * 6);
+    aspect-ratio: 16 / 10;
+    box-sizing: border-box;
+    border-radius: var(--paper-border-radius);
+    border: var(--paper-border-width) solid var(--paper-border);
+}
+
+.picture {
+    object-fit: cover;
+    object-position: top;
+}
+
+.glyph {
+    background: var(--paper-surface);
+    color: var(--paper-text-muted);
+}

@@ -31,7 +31,7 @@
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { LIMITS, PANEL_ID, type Attachment, type ChatEntry, type ChatState, type Harness, type PastConversation, type Settings, type SignInEntry, type WaitingMessage } from "../contract";
+import { LIMITS, PANEL_ID, type AppEntry, type Attachment, type ChatEntry, type ChatState, type Harness, type PastConversation, type Settings, type SignInEntry, type WaitingMessage } from "../contract";
 import type { StartOptions } from "./browser";
 import { Attachments, sizeText } from "./attachments";
 import { AcpTurn, type AcpEvent } from "./acp";
@@ -229,8 +229,8 @@ export class Conversation {
         this.pump();
     }
 
-    /** Add or update a sign-in request's bubble (signIn.ts owns the request; this only shows it). */
-    post(entry: SignInEntry) {
+    /** Add or update a card: a sign-in request (signIn.ts owns it; this only shows it) or an app shown to the user. */
+    post(entry: SignInEntry | AppEntry) {
         if (this.closed) return;
         this.put(entry);
     }
@@ -863,7 +863,7 @@ export class Conversation {
                 throw new Error(`${file} line ${n + 1} is unreadable: ${(err as Error).message}`);
             }
             // transcripts from before the chat was only a chat hold tool-call entries: not messages, not shown
-            if (e.kind !== "user" && e.kind !== "agent" && e.kind !== "error" && e.kind !== "sign-in") return;
+            if (e.kind !== "user" && e.kind !== "agent" && e.kind !== "error" && e.kind !== "sign-in" && e.kind !== "app") return;
             // a sign-in request lives only as long as the service that asked for it
             if (e.kind === "sign-in" && (e.status === "waiting" || e.status === "submitting")) e = { ...e, status: "expired" };
             byId.delete(e.id); // re-insert so a changed entry keeps its newest position

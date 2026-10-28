@@ -1,0 +1,17 @@
+.view {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    background: var(--paper-surface);
+}
+
+/* the app takes everything below the bar, edge to edge */
+.frame {
+    flex: 1;
+    min-height: 0;
+    width: 100%;
+    border: none;
+    border-top: var(--paper-border-width) solid var(--paper-border);
+    background: var(--paper-surface-app);
+}

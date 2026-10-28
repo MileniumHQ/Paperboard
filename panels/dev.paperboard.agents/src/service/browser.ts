@@ -986,8 +986,14 @@ export class BrowserComputer {
 
     async open(args: Record<string, unknown>): Promise<ToolResult> {
         const url = webAddress(args.what, true);
-        if (this.tabs.size >= MAX_TABS) throw new ToolError(`${MAX_TABS} windows are open already; close some first.`);
         const before = this.ids();
+        const { tab, still } = await this.openWindow(url);
+        return { text: `Opened window ${tab.id} "${tab.title || tab.url}" <${tab.url}>.${still}` + this.changes(new Set([...before, tab.id]), tab) };
+    }
+
+    /** A window of its own at an address, once its page has loaded (or is still loading: `still` says so). */
+    private async openWindow(url: string): Promise<{ tab: Tab; still: string }> {
+        if (this.tabs.size >= MAX_TABS) throw new ToolError(`${MAX_TABS} windows are open already; close some first.`);
         // a window of its own, not a tab: a headless browser draws only its front tab, so a background tab never
         // answers a screenshot (the user's view of it hung), and resizing one tab's window resized them all
         const { targetId } = await this.connection().send<{ targetId: string }>("Target.createTarget", { url: "about:blank", newWindow: true });
@@ -1007,7 +1013,7 @@ export class BrowserComputer {
             throw e;
         }
         await this.refreshInfo(tab);
-        return { text: `Opened window ${tab.id} "${tab.title || tab.url}" <${tab.url}>.${still}` + this.changes(new Set([...before, tab.id]), tab) };
+        return { tab, still };
     }
 
     async go(args: Record<string, unknown>): Promise<ToolResult> {
@@ -1192,6 +1198,20 @@ export class BrowserComputer {
         await this.connection().send("Target.closeTarget", { targetId: tab.targetId });
         this.untrack(tab.targetId);
         return { text: "Closed." };
+    }
+
+    /** A JPEG of a page, taken in a window opened for it and closed again: an app's picture on its card. */
+    async picture(url: string): Promise<string> {
+        if (this.state.phase !== "ready" || !this.cdp?.open) throw new Error("your computer is off, and an app's picture is taken in its browser");
+        const { tab } = await this.openWindow(url);
+        try {
+            const s = await this.session(tab);
+            const { data } = await this.connection().send<{ data: string }>("Page.captureScreenshot", { format: "jpeg", quality: 80 }, s, 10_000);
+            return data;
+        } finally {
+            await this.connection().send("Target.closeTarget", { targetId: tab.targetId });
+            this.untrack(tab.targetId);
+        }
     }
 
     async upload(args: Record<string, unknown>): Promise<ToolResult> {

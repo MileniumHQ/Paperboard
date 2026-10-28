@@ -2,3 +2,59 @@
 .layout {
     height: var(--agents-workspace-height);
 }
+
+/* the chat, and an app beside it: the chat steps aside to a column as the app
+   slides in from the right, and off to the left when the app takes it all */
+.split {
+    display: flex;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.chatPane {
+    flex: 0 0 100%;
+    display: flex;
+    /* held to its right edge, so the chat leaves to the left as its column narrows to nothing */
+    justify-content: flex-end;
+    min-width: 0;
+    overflow: hidden;
+    transition: flex-basis var(--paper-mid-transition) var(--paper-ease-slide);
+}
+
+.chat {
+    flex: 0 0 100%;
+    min-width: var(--paper-size-split-side);
+    height: 100%;
+}
+
+.appPane {
+    flex: 1 1 0;
+    min-width: 0;
+    transform: translateX(100%);
+    transition: transform var(--paper-mid-transition) var(--paper-ease-slide);
+}
+
+.open .chatPane {
+    flex-basis: var(--paper-size-split-side);
+}
+
+.open .appPane {
+    transform: none;
+    border-left: var(--paper-border-width) solid var(--paper-border);
+}
+
+.extended .chatPane {
+    flex-basis: 0;
+}
+
+.extended .appPane {
+    border-left: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .chatPane,
+    .appPane {
+        transition: none;
+    }
+}

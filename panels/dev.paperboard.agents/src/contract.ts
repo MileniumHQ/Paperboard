@@ -54,6 +54,11 @@ export const UI_ACTION_IDS = {
     signInShot: "ui-sign-in-shot",
     signIn: "ui-sign-in",
     declineSignIn: "ui-decline-sign-in",
+    // the apps the agent made: list them, open one (its address), its picture, or delete it
+    apps: "ui-apps",
+    openApp: "ui-open-app",
+    appPicture: "ui-app-picture",
+    deleteApp: "ui-delete-app",
 } as const;
 
 export const EVENTS = {
@@ -127,6 +132,10 @@ export const LIMITS = {
         /** what the agent can look at directly; bigger images go to its computer */
         viewBytes: 4 * 1024 * 1024,
     },
+    apps: {
+        titleChars: 60,
+        descriptionChars: 200,
+    },
     signIn: {
         fields: 4,
         labelChars: 40,
@@ -189,6 +198,11 @@ export interface RoutinesState {
     revision: number;
     /** the routines can't be read; none run until they can */
     error: string | null;
+}
+
+export interface AppsState {
+    /** counts every change to the apps (made, shown, retitled, deleted), so open lists know to read again */
+    revision: number;
 }
 
 export interface MemoryState {
@@ -300,6 +314,7 @@ export interface AiState {
     chat: ChatState;
     memory: MemoryState;
     routines: RoutinesState;
+    apps: AppsState;
 }
 
 /** A file in the conversation: one the user attached, or one the agent shared from its computer. */
@@ -323,7 +338,31 @@ export type ChatEntry =
     | { id: string; at: number; kind: "agent"; text: string; replyTo?: string }
     // title: the operation that didn't happen, like "Not answered"; entries written before it have none
     | { id: string; at: number; kind: "error"; title?: string; text: string }
-    | SignInEntry;
+    | SignInEntry
+    | AppEntry;
+
+/** An app the agent made, as the user's list shows it. */
+export interface AppInfo {
+    /** its folder in ~/Apps, and its address */
+    name: string;
+    /** what the agent calls it, like "Assignment planner" */
+    title: string;
+    /** one line on what it's for */
+    description: string;
+    /** a picture of it was taken when the agent last showed it */
+    picture: boolean;
+}
+
+/** The agent showing the user one of its apps: a card with its picture that opens it beside the chat. */
+export interface AppEntry {
+    id: string;
+    at: number;
+    kind: "app";
+    app: string;
+    /** its title and description when it was shown; the app may have changed or gone since */
+    title: string;
+    description: string;
+}
 
 /**
  * The agent asking the user to sign in on a site in its browser. The values the user types are never part
@@ -350,4 +389,5 @@ export const DEFAULT_STATE: AiState = {
     chat: { busy: false, typing: false, waiting: [], held: false, compacting: false },
     memory: { revision: 0, error: null },
     routines: { revision: 0, error: null },
+    apps: { revision: 0 },
 };

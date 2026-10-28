@@ -10,14 +10,21 @@
 // answers only a request for <name>.localhost:<port> (no other name can be
 // pointed at it, DNS rebinding included) from the app's own pages or typed
 // in. The agent's browser opens apps through its proxy, which lets this one
-// server through and nothing else on this computer.
+// server through and nothing else on this computer. The user opens an app in
+// the panel, in a frame; only the panel's own pages may frame one.
+//
+// The agent names each app and says what it's for. It shows the user an app
+// with show_app: a card in the chat with a picture of it, taken in its
+// browser. It never opens one on the user's screen itself.
 
+import crypto from "node:crypto";
 import fs from "node:fs";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import path from "node:path";
 import { BuildError, bundle, forgetBuilds, SCRIPT } from "./appBundler";
 import { installPackages, REGISTRY } from "./appPackages";
+import { LIMITS, type AppEntry, type AppInfo } from "../contract";
 import type { ToolResult } from "./computerMcp";
 import type { ToolSpec } from "./computerTools";
 import type { HomeFolder } from "./homeFolder";
@@ -68,6 +75,9 @@ const HEADERS = {
         "connect-src 'self'",
         "worker-src 'self' blob:",
         "frame-src 'none'",
+        // the user's view of it, in the panel and the shell around it: Electron's paperboard: and panel: pages,
+        // its development shell on localhost, or browser mode's. Not another app: those are <name>.localhost
+        "frame-ancestors paperboard: panel: http://localhost:* http://paperboard.localhost:* http://*.paperboard.localhost:*",
         "object-src 'none'",
         "base-uri 'self'",
         "form-action 'self'",
@@ -79,12 +89,14 @@ const HEADERS = {
 };
 
 export const APPS_INSTRUCTIONS = `How to make an app: when the user would be helped by something they can look at or use (a planner for their assignments, a tracker, a page of results), make them an app, a web page of your own in ${APPS}/<name>.
-- \`start_app\` makes its folder with a package.json and gives the URL it's served at. Open that URL in your browser to try it, and reload after each change.
+- \`start_app\` makes its folder with a package.json and gives the URL it's served at. Give it a title the user will know it by ("Assignment planner") and one line on what it's for; call it again to change them. Open that URL in your browser to try it, and reload after each change.
 - ${APPS}/<name>/index.html is the page. Make the app as simple as the need: five lines of HTML is a fine app, and so is a React app. Write its files with bash.
 - A page's scripts (\`<script type="module" src="/src/main.tsx">\`) can be TypeScript, JSX or plain JavaScript, and import its other files, its CSS and its packages. They're bundled each time they load: there's no build step, no dev server and no Node to run.
 - \`add_package\` adds packages from npm (react, react-dom, date-fns…). Everything runs in the browser, so only browser packages are any use: nothing for Node (express, fs, servers, database drivers) is needed or works.
 - An app has no network: it loads only its own files. Gather what it shows with your own tools (the browser, bash, js-exec) and save it in its folder, e.g. as data.json it fetches. It can keep what the user does in it in localStorage.
-- If a script doesn't build, the page says why.`;
+- If a script doesn't build, the page says why.
+- When it works, \`show_app\` shows it to the user: a card in the chat with its picture, which they open beside the chat. Show it again after a change they should see. Never write its address in a message: it opens only from the card or their list of apps.
+- \`delete_app\` deletes one for good, when the user asks or it's been replaced. The user can open and delete their apps too.`;
 
 export const APPS_TOOLS: ToolSpec[] = [
     {
@@ -92,8 +104,30 @@ export const APPS_TOOLS: ToolSpec[] = [
         description: `Make an app's folder, ${APPS}/<name>, with a package.json, and get the URL it's served at (again any time, for one that's made).`,
         inputSchema: {
             type: "object",
-            properties: { name: { type: "string", description: `The app's name and folder: ${NAME_RULE}.` } },
+            properties: {
+                name: { type: "string", description: `The app's name and folder: ${NAME_RULE}.` },
+                title: { type: "string", description: `What the user knows it by, like "Assignment planner", up to ${LIMITS.apps.titleChars} characters. Needed for a new app.` },
+                description: { type: "string", description: `One line on what it's for, up to ${LIMITS.apps.descriptionChars} characters. Needed for a new app.` },
+            },
             required: ["name"],
+        },
+    },
+    {
+        name: "show_app",
+        description: "Show the user one of your apps: a card in the chat with a picture of it (taken in your browser) and its title and description, which opens it beside the chat. Returns once it's posted.",
+        inputSchema: {
+            type: "object",
+            properties: { app: { type: "string", description: "The app's name." } },
+            required: ["app"],
+        },
+    },
+    {
+        name: "delete_app",
+        description: `Delete an app for good: its folder in ${APPS} and its picture. Cards that showed it can't open it anymore.`,
+        inputSchema: {
+            type: "object",
+            properties: { app: { type: "string", description: "The app's name." } },
+            required: ["app"],
         },
     },
     {
@@ -124,13 +158,34 @@ document.readyState === "loading" ? addEventListener("DOMContentLoaded", show) :
 `;
 }
 
+export interface AppsOptions {
+    home: HomeFolder;
+    portFile: string;
+    /** each app's title and description, kept by the service rather than in the agent's files */
+    infoFile: string;
+    /** each app's picture, <name>.jpg */
+    picturesDir: string;
+    registry?: string;
+    /** a JPEG of a page, from the agent's browser */
+    picture(url: string): Promise<string>;
+    /** add a card to the conversation */
+    post(entry: AppEntry): void;
+    /** an app was made, shown, changed or deleted: open lists read again */
+    onChange(): void;
+}
+
+interface Info {
+    title: string;
+    description: string;
+}
+
 export class Apps {
     private server: http.Server | null = null;
     private starting: Promise<number> | null = null;
     private installing = new Map<string, Promise<unknown>>();
     port: number | null = null;
 
-    constructor(private o: { home: HomeFolder; portFile: string; registry?: string }) {}
+    constructor(private o: AppsOptions) {}
 
     /** Whether a host and port the browser asks for is one of the apps. */
     serves(host: string, port: number): boolean {
@@ -148,8 +203,13 @@ export class Apps {
             instructions: () => APPS_INSTRUCTIONS,
             call: async (name, args): Promise<ToolResult> => {
                 try {
-                    if (name === "start_app") return { text: await this.startApp(args.name) };
+                    if (name === "start_app") return { text: await this.startApp(args.name, args.title, args.description) };
                     if (name === "add_package") return { text: await this.addPackage(args.app, args.packages) };
+                    if (name === "show_app") return { text: await this.show(args.app) };
+                    if (name === "delete_app") {
+                        const { name: app } = this.remove(args.app);
+                        return { text: `${APPS}/${app} is deleted. A checkpoint from before now still has it.` };
+                    }
                     return { text: `unknown tool ${name}`, isError: true };
                 } catch (e) {
                     return { text: e instanceof Error ? e.message : String(e), isError: true };
@@ -163,13 +223,27 @@ export class Apps {
         return { name, dir: this.o.home.resolve(`${APPS}/${name}`) };
     }
 
-    private async startApp(n: unknown): Promise<string> {
+    private async startApp(n: unknown, title: unknown, description: unknown): Promise<string> {
         const { name, dir } = this.folder(n);
+        const infos = this.readInfo();
+        const was = infos[name];
+        const given = (v: unknown, what: string, max: number) => {
+            if (v === undefined) return undefined;
+            if (typeof v !== "string" || !v.trim() || v.trim().length > max) throw new Error(`an app's ${what} is up to ${max} characters`);
+            return v.trim().replace(/\s+/g, " ");
+        };
+        const t = given(title, "title", LIMITS.apps.titleChars) ?? was?.title;
+        const d = given(description, "description", LIMITS.apps.descriptionChars) ?? was?.description;
+        if (!t || !d) throw new Error("give a new app a title and a description: they're how the user knows it");
         this.o.home.ensure();
         fs.mkdirSync(dir, { recursive: true });
         this.o.home.resolve(`${APPS}/${name}`); // the folders just made are still inside
         const pj = path.join(dir, "package.json");
         if (!fs.existsSync(pj)) fs.writeFileSync(pj, `${JSON.stringify({ name, private: true, dependencies: {} }, null, 2)}\n`);
+        if (was?.title !== t || was?.description !== d) {
+            this.writeInfo({ ...infos, [name]: { title: t, description: d } });
+            this.o.onChange();
+        }
         await this.start();
         const page = fs.existsSync(path.join(dir, "index.html")) ? "" : ` It shows ${APPS}/${name}/index.html once there is one.`;
         return `${APPS}/${name} is served at ${this.url(name)}${page}`;
@@ -190,6 +264,105 @@ export class Apps {
         return done.direct.length
             ? `${APPS}/${name} has ${list} (${done.count} package${done.count === 1 ? "" : "s"} in all). Its scripts import them by name.`
             : `${APPS}/${name}'s package.json lists no packages.`;
+    }
+
+    private async show(n: unknown): Promise<string> {
+        const { name, dir } = this.existing(n);
+        const info = this.readInfo()[name];
+        if (!info) throw new Error(`give ${name} a title and a description first, with start_app`);
+        if (!fs.existsSync(path.join(dir, "index.html"))) throw new Error(`${APPS}/${name} has no index.html to show yet`);
+        await this.start();
+        let image: string;
+        try {
+            image = await this.o.picture(this.url(name));
+        } catch (e) {
+            throw new Error(`${name} wasn't shown: its picture couldn't be taken (${e instanceof Error ? e.message : String(e)})`);
+        }
+        fs.mkdirSync(this.o.picturesDir, { recursive: true });
+        fs.writeFileSync(path.join(this.o.picturesDir, `${name}.jpg`), Buffer.from(image, "base64"));
+        this.o.post({ id: crypto.randomBytes(6).toString("hex"), at: Date.now(), kind: "app", app: name, title: info.title, description: info.description });
+        this.o.onChange();
+        return `Showed ${info.title} to the user as a card in the chat. They open it from there, beside the chat.`;
+    }
+
+    /** The apps in ~/Apps, newest first. A folder made some other way than start_app goes by its name. */
+    list(): AppInfo[] {
+        let names: string[];
+        try {
+            names = fs.readdirSync(this.o.home.resolve(APPS), { withFileTypes: true }).filter((e) => e.isDirectory() && NAME.test(e.name)).map((e) => e.name);
+        } catch (e) {
+            if ((e as NodeJS.ErrnoException).code === "ENOENT") return [];
+            throw e;
+        }
+        const infos = this.readInfo();
+        const made = (name: string) => {
+            const st = fs.statSync(this.folder(name).dir);
+            return st.birthtimeMs || st.mtimeMs;
+        };
+        return names
+            .sort((a, b) => made(b) - made(a))
+            .map((name) => ({
+                name,
+                title: infos[name]?.title ?? name,
+                description: infos[name]?.description ?? "",
+                picture: fs.existsSync(path.join(this.o.picturesDir, `${name}.jpg`)),
+            }));
+    }
+
+    /** Where the user's view opens an app: its address, with the server started for it. */
+    async open(n: unknown): Promise<{ url: string; title: string }> {
+        const { name } = this.existing(n);
+        await this.start();
+        return { url: this.url(name), title: this.readInfo()[name]?.title ?? name };
+    }
+
+    pictureOf(n: unknown): { image: string } {
+        const { name } = this.existing(n);
+        const file = path.join(this.o.picturesDir, `${name}.jpg`);
+        if (!fs.existsSync(file)) throw new Error(`there's no picture of ${name} yet`);
+        return { image: fs.readFileSync(file).toString("base64") };
+    }
+
+    /** Delete an app for good: its folder, its title and description, and its picture. */
+    remove(n: unknown): { name: string } {
+        const { name, dir } = this.existing(n);
+        forgetBuilds(dir);
+        fs.rmSync(dir, { recursive: true, force: true });
+        const infos = this.readInfo();
+        if (infos[name]) {
+            delete infos[name];
+            this.writeInfo(infos);
+        }
+        fs.rmSync(path.join(this.o.picturesDir, `${name}.jpg`), { force: true });
+        this.o.onChange();
+        return { name };
+    }
+
+    private existing(n: unknown): { name: string; dir: string } {
+        const f = this.folder(n);
+        if (!fs.statSync(f.dir, { throwIfNoEntry: false })?.isDirectory()) throw new Error(`there's no app called ${f.name}`);
+        return f;
+    }
+
+    private readInfo(): Record<string, Info> {
+        let raw: string;
+        try {
+            raw = fs.readFileSync(this.o.infoFile, "utf8");
+        } catch (e) {
+            if ((e as NodeJS.ErrnoException).code === "ENOENT") return {};
+            throw e;
+        }
+        try {
+            return JSON.parse(raw).apps ?? {};
+        } catch (e) {
+            // never replaced by an empty list: every app's title would go
+            throw new Error(`the apps' titles can't be read (${this.o.infoFile}): ${e instanceof Error ? e.message : String(e)}`);
+        }
+    }
+
+    private writeInfo(apps: Record<string, Info>) {
+        fs.writeFileSync(`${this.o.infoFile}.tmp`, JSON.stringify({ apps }));
+        fs.renameSync(`${this.o.infoFile}.tmp`, this.o.infoFile);
     }
 
     /** The server, started once; on the port it had before when that's free. */
@@ -237,9 +410,11 @@ export class Apps {
         const text = (status: number, body: string) => res.writeHead(status, { ...HEADERS, "Content-Type": "text/plain; charset=utf-8" }).end(body);
         const m = (req.headers.host ?? "").match(HOST);
         if (!m || Number(m[2]) !== this.port || !NAME.test(m[1]!)) return text(421, "This server only serves the agent's apps, at <name>.localhost.");
-        // another site's page asking for an app's files (a script tag, a form) is refused; the app's own pages and a typed address aren't
+        // another site's page asking for an app's files (a script tag, a form) is refused; the app's own pages, a typed
+        // address and opening it in a frame aren't (who may frame it is the page's frame-ancestors: only the panel)
         const site = req.headers["sec-fetch-site"];
-        if (site && site !== "same-origin" && site !== "none") return text(403, "An app's files are only for its own pages.");
+        const framed = req.headers["sec-fetch-dest"] === "iframe" && req.headers["sec-fetch-mode"] === "navigate";
+        if (site && site !== "same-origin" && site !== "none" && !framed) return text(403, "An app's files are only for its own pages.");
         if (req.method !== "GET" && req.method !== "HEAD") return text(405, "An app's server only sends its files.");
         const name = m[1]!;
         const { dir } = this.folder(name);

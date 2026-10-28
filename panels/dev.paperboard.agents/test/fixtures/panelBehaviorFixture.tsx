@@ -2,7 +2,9 @@
 // agentsApi.ts, driven through what a person does in its menu: settings
 // while the brains can't be looked for, erasing the computer and removing a
 // tool server when the service refuses, and reading the routines.
-// The chat opens on a turn that failed, which must say what didn't happen.
+// The chat opens on a turn that failed, which must say what didn't happen,
+// and on an app's card, which opens the app beside the chat, and the Apps
+// page lists the app and deletes it after asking.
 // Results are base64 JSON in #results so the test can read them from Chrome's
 // --dump-dom output.
 import { render } from "solid-js/web";
@@ -26,6 +28,11 @@ service.refuse[UI_ACTION_IDS.detect] = "harness detection is down";
 service.history = [
     { id: "m1", at: Date.now() - 1000, kind: "user", text: "hi" },
     { id: "m2", at: Date.now(), kind: "error", title: "Not answered", text: "usage limit reached" },
+    { id: "m3", at: Date.now(), kind: "app", app: "planner", title: "Assignment planner", description: "What's due, by class." },
+];
+service.apps = [
+    { name: "planner", title: "Assignment planner", description: "What's due, by class.", picture: true },
+    { name: "clock", title: "Clock", description: "The time, big.", picture: false },
 ];
 
 const root = document.getElementById("app")!;
@@ -35,6 +42,8 @@ const openDialogs = () => [...document.querySelectorAll<HTMLElement>('[role="dia
 const dialogTitled = (title: string) => openDialogs().find((d) => d.textContent?.includes(title));
 const button = (within: ParentNode, text: string) =>
     [...within.querySelectorAll("button")].find((b) => b.textContent?.trim().endsWith(text) && !b.disabled);
+// Open is a word and an icon
+const openIn = (within: ParentNode) => [...within.querySelectorAll("button")].find((b) => b.textContent?.trim().startsWith("Open"))!;
 const alertSaying = (within: ParentNode | undefined, text: string) =>
     Boolean(within && [...within.querySelectorAll('[role="alert"]')].some((a) => a.textContent?.includes(text)));
 const page = async (value: string) => {
@@ -52,6 +61,59 @@ async function run() {
     // a failed turn in the conversation names what didn't happen, beside why
     const failed = [...document.querySelectorAll('[role="alert"]')].find((a) => a.textContent?.includes("usage limit reached"));
     c.chatFailureTitled = Boolean(failed?.textContent?.includes("Not answered"));
+
+    // an app's card: its picture, name and what it's for, and Open; never a link
+    const card = document.querySelector<HTMLElement>('section[aria-label="Assignment planner"]');
+    c.cardShown = Boolean(card?.textContent?.includes("What's due, by class.") && card.querySelector("img"));
+    c.cardLinks = card ? card.querySelectorAll("a").length : -1;
+    const frame = () => document.querySelector<HTMLIFrameElement>('iframe[title="Assignment planner"]');
+    const chatInert = () => Boolean(menu.closest("[inert]"));
+    c.frameBeforeOpen = Boolean(frame());
+    openIn(card!).click();
+    await sleep(400);
+    c.frameOpened = frame()?.getAttribute("src") ?? null;
+    // the address never shows
+    c.addressShown = document.body.innerText.includes("about:blank");
+    c.chatBesideApp = !chatInert();
+    // extend: the chat leaves; again: it comes back
+    document.querySelector<HTMLButtonElement>('button[aria-label="Hide the chat"]')!.click();
+    await sleep(400);
+    c.chatGoneWhenExtended = chatInert();
+    document.querySelector<HTMLButtonElement>('button[aria-label="Show the chat"]')!.click();
+    await sleep(400);
+    c.chatBackFromExtended = !chatInert();
+    // close: the app slides away and goes
+    const bar = frame()!.previousElementSibling!;
+    [...bar.querySelectorAll<HTMLButtonElement>('button[aria-label="Close"]')][0]!.click();
+    await sleep(500);
+    c.frameAfterClose = Boolean(frame());
+    c.chatFullAfterClose = !chatInert();
+
+    menu.click();
+    await sleep(300);
+
+    // the Apps page: each app, opened or deleted from the list
+    await page("apps");
+    const appsList = () => [...document.querySelectorAll<HTMLInputElement>('input[name="agents-apps"]')].map((i) => i.value);
+    c.appsListed = appsList();
+    const deleteClock = document.querySelector<HTMLButtonElement>('button[aria-label="Delete “Clock”"]');
+    if (!deleteClock) throw new Error("no way to delete an app");
+    deleteClock.click();
+    await sleep(300);
+    const confirmDelete = dialogTitled("Delete this app?");
+    c.deleteAsked = Boolean(confirmDelete?.textContent?.includes("~/Apps/clock"));
+    button(confirmDelete!, "Delete")!.click();
+    await sleep(300);
+    c.deleteCalled = service.calls.includes(UI_ACTION_IDS.deleteApp);
+    c.appsAfterDelete = appsList();
+    // opening one from the list closes the menu and shows it beside the chat
+    const fromList = [...document.querySelectorAll<HTMLElement>("label")].find((l) => l.querySelector('input[name="agents-apps"][value="planner"]'));
+    openIn(fromList!).click();
+    await sleep(400);
+    c.menuClosedOnOpen = !dialogTitled("Apps");
+    c.frameFromList = frame()?.getAttribute("src") ?? null;
+    [...frame()!.previousElementSibling!.querySelectorAll<HTMLButtonElement>('button[aria-label="Close"]')][0]!.click();
+    await sleep(500);
 
     menu.click();
     await sleep(300);
