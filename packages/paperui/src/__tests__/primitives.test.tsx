@@ -20,6 +20,23 @@ describe("PaperAvatar", () => {
         expect(container.firstElementChild!.className).toContain("large");
     });
 
+    test("onEdit adds a labelled edit button over the avatar", () => {
+        const onEdit = vi.fn();
+        const { getByRole, container } = render(() => (
+            <PaperAvatar src="https://cdn.example/a.png" onEdit={onEdit} editLabel="Change icon" />
+        ));
+        const button = getByRole("button", { name: "Change icon" });
+        expect(button.textContent).toBe("edit");
+        expect(container.firstElementChild!.className).toContain("editable");
+        button.click();
+        expect(onEdit).toHaveBeenCalledTimes(1);
+    });
+
+    test("without onEdit the avatar is not a button", () => {
+        const { container } = render(() => <PaperAvatar src="https://cdn.example/a.png" />);
+        expect(container.querySelector("button")).toBeNull();
+    });
+
     test("falls back to an icon when src is missing", () => {
         const { container } = render(() => (
             <PaperAvatar fallbackIcon="dns" />

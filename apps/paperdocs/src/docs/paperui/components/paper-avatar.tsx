@@ -95,6 +95,18 @@ export function Example() {
                             <td>No default</td>
                             <td>Tints the fallback chip with a role, such as success for the active item. Ignored when src is set.</td>
                         </tr>
+                        <tr>
+                            <td><PaperCode>onEdit</PaperCode></td>
+                            <td><PaperCode>{"() => void"}</PaperCode></td>
+                            <td>No default</td>
+                            <td>Makes the avatar a button. Hovering or focusing it darkens the avatar under an edit glyph; clicking calls onEdit.</td>
+                        </tr>
+                        <tr>
+                            <td><PaperCode>editLabel</PaperCode></td>
+                            <td><PaperCode>string</PaperCode></td>
+                            <td><PaperCode>"Edit"</PaperCode></td>
+                            <td>The edit button's accessible name and tooltip, such as "Change server icon".</td>
+                        </tr>
                     </tbody>
                 </PaperTable>
 
@@ -103,6 +115,11 @@ export function Example() {
                 PaperAvatar renders an HTML span containing either an img element or a PaperIcon component.
                 The square shape matches application launcher tiles and plugin icons.
                 The surface chip background is applied only when the fallback icon is shown, so an image with transparency does not sit on an opaque tile.
+            </PaperText>
+            <PaperText preset="body">
+                With onEdit set, a button covers the whole avatar.
+                It stays invisible until it is hovered or focused, then darkens the avatar with the scrim and shows an edit glyph in the center.
+                Opening a picker or a modal is up to onEdit.
             </PaperText>
 
             <PaperText preset="subheader" id="recipes">Recipes</PaperText>
@@ -123,6 +140,24 @@ export function Example() {
                     <PaperAvatar size="medium" fallbackIcon="person" />
                     <PaperAvatar size="large" fallbackIcon="person" />
                     <PaperAvatar size="xlarge" fallbackIcon="person" />
+                </PaperFlex>
+            </PaperCard>
+
+            <PaperText preset="body">
+                Let people replace an icon by giving it onEdit. Hover the tile below to see the edit state.
+            </PaperText>
+            <PaperCode block language="tsx">
+{`<PaperAvatar
+    size="xlarge"
+    shape="square"
+    fallbackIcon="image"
+    editLabel="Change icon"
+    onEdit={() => pickIcon()}
+/>`}
+            </PaperCode>
+            <PaperCard padding="double" surface="front">
+                <PaperFlex direction="row" gap="full" align="center">
+                    <PaperAvatar size="xlarge" shape="square" fallbackIcon="image" editLabel="Change icon" onEdit={() => {}} />
                 </PaperFlex>
             </PaperCard>
         </PaperFlex>

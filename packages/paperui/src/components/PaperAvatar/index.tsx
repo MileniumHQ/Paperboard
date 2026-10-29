@@ -16,6 +16,10 @@ export interface PaperAvatarProps extends JSX.HTMLAttributes<HTMLSpanElement> {
     fallbackIcon?: string;
     /** tint the fallback chip with a semantic role (the active item of a set) */
     accent?: PaperRole;
+    /** makes the avatar a button: hovering darkens it under an edit glyph */
+    onEdit?: () => void;
+    /** the edit button's accessible name and tooltip */
+    editLabel?: string;
 }
 
 /**
@@ -31,6 +35,8 @@ export function PaperAvatar(props: PaperAvatarProps) {
         "shape",
         "fallbackIcon",
         "accent",
+        "onEdit",
+        "editLabel",
         "class",
         "classList",
         "style",
@@ -43,6 +49,7 @@ export function PaperAvatar(props: PaperAvatarProps) {
             local.shape === "square" ? styles.square : "",
             local.src ? "" : styles.chip,
             !local.src && local.accent ? styles.accent : "",
+            local.onEdit ? styles.editable : "",
             local.class,
         ]
             .filter(Boolean)
@@ -67,6 +74,19 @@ export function PaperAvatar(props: PaperAvatarProps) {
                 }
             >
                 <img src={local.src} alt={local.alt || ""} class={styles.image} />
+            </Show>
+            <Show when={local.onEdit}>
+                {(onEdit) => (
+                    <button
+                        type="button"
+                        class={styles.edit}
+                        title={local.editLabel || "Edit"}
+                        aria-label={local.editLabel || "Edit"}
+                        onClick={() => onEdit()()}
+                    >
+                        <PaperIcon>edit</PaperIcon>
+                    </button>
+                )}
             </Show>
         </span>
     );

@@ -69,3 +69,40 @@
 .xlarge .fallback {
     font-size: var(--paper-icon-size-large);
 }
+
+/* onEdit: a button over the whole avatar, hidden until hover or focus, when
+   it darkens the avatar under an edit glyph */
+.PaperAvatar.editable {
+    position: relative;
+}
+
+.edit {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: inherit;
+    background: var(--paper-scrim);
+    color: var(--paper-on-color);
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity var(--paper-short-transition);
+}
+
+.edit:hover,
+.edit:focus-visible {
+    opacity: 1;
+}
+
+.small .edit {
+    font-size: var(--paper-icon-size-small);
+}
+
+.large .edit,
+.xlarge .edit {
+    font-size: var(--paper-icon-size-large);
+}
