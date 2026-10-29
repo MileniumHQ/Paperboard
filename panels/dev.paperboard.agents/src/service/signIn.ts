@@ -11,8 +11,10 @@ import type { ToolResult } from "./computerMcp";
 import type { ToolSpec } from "./computerTools";
 import type { Toolset } from "./toolsets";
 
-export const SIGN_IN_INSTRUCTIONS = `Signing in: the user types their own email, username, password and codes, always through \`ask_to_sign_in\`, and you never see them. When a site needs a sign-in, open its sign-in page in your browser, \`look\`, then call \`ask_to_sign_in\` with the marks of the fields (email or username, password, a one-time code) and of the button that submits them. A button that's greyed out until something is typed is still the right pick; if there's no button you can mark, leave \`submit\` out and Enter is pressed in the last field. The user sees the site and a picture of your picks, and types the values in themselves. You'll be told when it's done or they said no: then \`look\` again to see whether it worked. A site that splits sign-in over two pages (email first, then password) is two asks. A code split into a box per digit is one field: mark only the first box, and the code is typed across the rest.
-Never type a sign-in value yourself, and never offer to: not an email or username you know from the conversation, and not any account details about the user that came with your instructions or your environment (those aren't for signing in to sites). If the user offers to tell you one, or sends one in the chat, don't use it: say you'd rather they type it into the sign-in request, and call \`ask_to_sign_in\`.`;
+export const SIGN_IN_INSTRUCTIONS = `**Signing in:** the user types their own details through \`ask_to_sign_in\`, and you never see them.
+- **How:** open the sign-in page, \`look\`, then \`ask_to_sign_in\` with the marks of the fields and the submit button (even a greyed-out one; leave \`submit\` out to press Enter). You're told when it's done or declined; \`look\` again to check.
+- **Two pages:** email, then password, is two asks. A code with a box per digit is one field: mark the first box.
+- **Never type a sign-in value yourself:** not one from the conversation, your instructions or your environment. If the user offers one, ask them to use the sign-in request instead.`;
 
 export const SIGN_IN_TOOLS: ToolSpec[] = [
     {

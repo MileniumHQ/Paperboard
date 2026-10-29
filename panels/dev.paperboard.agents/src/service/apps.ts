@@ -88,15 +88,14 @@ const HEADERS = {
     "Cache-Control": "no-store",
 };
 
-export const APPS_INSTRUCTIONS = `How to make an app: when the user would be helped by something they can look at or use (a planner for their assignments, a tracker, a page of results), make them an app, a web page of your own in ${APPS}/<name>.
-- \`start_app\` makes its folder with a package.json and gives the URL it's served at. Give it a title the user will know it by ("Assignment planner") and one line on what it's for; call it again to change them. Open that URL in your browser to try it, and reload after each change.
-- ${APPS}/<name>/index.html is the page. Make the app as simple as the need: five lines of HTML is a fine app, and so is a React app. Write its files with bash.
-- A page's scripts (\`<script type="module" src="/src/main.tsx">\`) can be TypeScript, JSX or plain JavaScript, and import its other files, its CSS and its packages. They're bundled each time they load: there's no build step, no dev server and no Node to run.
-- \`add_package\` adds packages from npm (react, react-dom, date-fns…). Everything runs in the browser, so only browser packages are any use: nothing for Node (express, fs, servers, database drivers) is needed or works.
-- An app has no network: it loads only its own files. Gather what it shows with your own tools (the browser, bash, js-exec) and save it in its folder, e.g. as data.json it fetches. It can keep what the user does in it in localStorage.
-- If a script doesn't build, the page says why.
-- When it works, \`show_app\` shows it to the user: a card in the chat with its picture, which they open beside the chat. Show it again after a change they should see. Never write its address in a message: it opens only from the card or their list of apps.
-- \`delete_app\` deletes one for good, when the user asks or it's been replaced. The user can open and delete their apps too.`;
+export const APPS_INSTRUCTIONS = `**Apps:** when something to look at or use would help (a planner, a tracker, a page of results), make an app: a web page of your own in ${APPS}/<name>.
+- **Start:** \`start_app\` makes its folder and gives its URL. Give it a title the user will know it by and one line on what it's for. Open the URL to try it; reload after each change.
+- **Build:** write ${APPS}/<name>/index.html and its files with bash, as simply as the need allows. Scripts can be TypeScript, JSX or JavaScript and import files, CSS and packages; they're bundled as they load, with no build step or server.
+- **Packages:** \`add_package\` adds browser packages from npm (react, date-fns...). Nothing for Node works.
+- **No network:** an app loads only its own files. Save what it shows in its folder (like data.json); it can keep the user's changes in localStorage.
+- **Errors:** a script that doesn't build says why on the page.
+- **Show it:** \`show_app\` puts a card in the chat that opens it. Show it again after a change worth seeing. Never write its address.
+- **Delete:** \`delete_app\`, when the user asks or it's been replaced.`;
 
 const SHOW_APP_LINE = APPS_INSTRUCTIONS.split("\n").find((l) => l.includes("`show_app`"))!;
 export const APPS_FLOW_INSTRUCTIONS = APPS_INSTRUCTIONS.replace(`\n${SHOW_APP_LINE}`, "");

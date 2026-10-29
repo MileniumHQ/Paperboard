@@ -281,7 +281,7 @@ export class Routines {
         const all = this.list();
         const listed = all.length ? all.map(line).join("\n") : "(none)";
         return `${head}
-Routines are things you do on a schedule: when one is due you get a turn that says so. \`add_routine\` when the user asks for something later or regularly ("text me at 9 every weekday", "check this every hour and tell me if it changes"); \`remove_routine\` when they want it stopped. Your routines:
+**Routines:** things you do on a schedule. When one is due, you get a turn that says so. \`add_routine\` when the user wants something later or regularly ("text me at 9 every weekday"); \`remove_routine\` to stop one. Yours:
 ${listed}`;
     }
 }

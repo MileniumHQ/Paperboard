@@ -140,9 +140,9 @@ describe("a name that brings a character", () => {
 describe("dashes", () => {
     test("the agent is told not to write em or en dashes, and its instructions don't use them either", () => {
         const text = instructions("Verity", [MESSAGES_INSTRUCTIONS, COMPUTER_INSTRUCTIONS]);
-        expect(text).toContain("Never write an em dash (—) or an en dash (–) in a text.");
+        expect(text).toContain("never write an em dash (—) or an en dash (–) in a text.");
         // an example of what not to write is the only one there
-        expect(text.replace("Never write an em dash (—) or an en dash (–) in a text.", "")).not.toMatch(/[—–]/);
+        expect(text.replace("never write an em dash (—) or an en dash (–) in a text.", "")).not.toMatch(/[—–]/);
     });
 });
 

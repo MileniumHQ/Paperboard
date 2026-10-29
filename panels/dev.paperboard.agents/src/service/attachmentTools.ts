@@ -12,8 +12,9 @@ import { USER_TURN, type Toolset, type TurnMode } from "./toolsets";
 
 const TEXT_BYTES = 64 * 1024;
 
-export const FILES_INSTRUCTIONS = `Files: a message can come with files the user attached, listed like "(attached: [file a1b2c3d4e5f6] cat.jpg, image, 1.2 MB)". \`open_file\` shows you an image or a text file; \`put_file_on_computer\` copies any file to your computer, to open it there or upload it to a site.
-To show the user an image or a video inline, put \`![a short caption](attachment:<id>)\` on its own line in \`send_message\`: any file already in the conversation shows that way, the user's included. One on your computer, \`share_file\` first to get its id (download it there first if it's on the web). An image on the web can be shown straight from its https URL the same way, and a YouTube video shows as a playable thumbnail with \`![its title](https://www.youtube.com/watch?v=…)\`. Files up to ${LIMITS.attachments.fileBytes / 1024 / 1024} MB.`;
+export const FILES_INSTRUCTIONS = `**Files:** messages can come with files, listed like "(attached: [file a1b2c3d4e5f6] cat.jpg, image, 1.2 MB)". \`open_file\` shows you an image or a text file; \`put_file_on_computer\` copies any file to your computer. Files go up to ${LIMITS.attachments.fileBytes / 1024 / 1024} MB.
+- **Show one:** put \`![a short caption](attachment:<id>)\` on its own line in \`send_message\`. Any file in the conversation works; one on your computer, \`share_file\` first.
+- **From the web:** an https image shows the same way, and \`![its title](https://www.youtube.com/watch?v=...)\` shows a YouTube video.`;
 
 export const FILES_FLOW_INSTRUCTIONS = FILES_INSTRUCTIONS.split("\n")[0]!;
 

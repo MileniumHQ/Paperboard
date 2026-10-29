@@ -251,12 +251,15 @@ export class Memory {
         }
         const facts = list.facts.length ? list.facts.map((f) => `- [${f.id}] ${f.text}`).join("\n") : "(nothing yet)";
         const notes = list.notes.length ? list.notes.map((n) => `- ${n.key}: ${n.when}`).join("\n") : "(none yet)";
-        return `Your memory is shared with the user, who can read and edit it, and it's the only memory you have.
+        return `**Memory:** your only one, shared with the user, who can read and edit it.
 Facts, always with you:
 ${facts}
 Notes, read one with \`read_note\` when its description applies:
 ${notes}
-\`remember\` short durable things about the user and their world. \`save_note\` (key, when it's needed, markdown body) anything long or only sometimes relevant, so your context stays clean. \`forget\` what's stale. Never store secrets (tokens, passwords, keys): they don't belong in memory.`;
+- **Facts:** \`remember\` short, durable things about the user and their world.
+- **Notes:** \`save_note\` (key, when it's needed, markdown body) anything long or only sometimes relevant.
+- **Forget:** \`forget\` what's stale.
+- **No secrets:** never store tokens, passwords or keys.`;
     }
 }
 

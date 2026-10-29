@@ -47,10 +47,10 @@ interface Changes {
     removed: string[];
 }
 
-export const CHECKPOINT_INSTRUCTIONS = `How to use checkpoints: \`checkpoint\` keeps what every file in your home folder is now, so any of it can be brought back with \`restore\`. Packages in node_modules aren't kept; add_package installs what an app's package.json lists.
-- Make one before a change that could go wrong (reworking an app, sorting out or deleting files) and once something works, with a note saying what it is.
-- When the user wants something undone, \`checkpoints\` lists them and what's changed since, and \`restore\` brings back the whole folder or just one path, like one app's folder.
-- A restore first keeps a checkpoint of how things were, so it can be undone too.`;
+export const CHECKPOINT_INSTRUCTIONS = `**Checkpoints:** \`checkpoint\` keeps your whole home folder as it is now, with a note. node_modules isn't kept; \`add_package\` reinstalls it.
+- **When:** before a change that could go wrong, and once something works.
+- **Undo:** \`checkpoints\` lists them and what's changed since; \`restore\` brings back everything or one path.
+- **Undoable:** a restore checkpoints first.`;
 
 export const CHECKPOINT_TOOLS: ToolSpec[] = [
     {

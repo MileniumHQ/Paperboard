@@ -15,14 +15,14 @@ const where = {
 };
 
 /** The computer's part of the agent's instructions. */
-export const COMPUTER_INSTRUCTIONS = `How to use your computer:
-- Your computer is a web browser (Helium); each window is a tab. \`open\` a web address, \`go\` to another one (or back, forward, reload) in the same window.
-- \`look\` at a window, act on a numbered mark (\`click\` with mark, then \`type\`/\`key\`), then \`look\` again to check what happened. Marks are only valid for the latest look.
-- When something isn't marked, is tiny, or the text is too small to read (canvas, games, custom widgets), \`zoom\` into that region and click with the x/y its grid shows. \`hover\` opens hover menus; \`drag\` moves sliders and drags things.
-- What the browser downloads goes to ~/Downloads in your home folder. To upload, click the page's upload button, then \`upload\` files from your home folder.
-- It can't reach this computer or its local network, only the internet. You can search the web directly, too.
-- \`close\` each window once you're done with it, so the browser holds only what you're still using.
-- Don't claim you did something you didn't verify.`;
+export const COMPUTER_INSTRUCTIONS = `**Your computer** is a web browser (Helium); each window is a tab.
+- **Go places:** \`open\` an address; \`go\` to another, or back, forward, reload.
+- **Act:** \`look\`, act on a numbered mark (\`click\`, then \`type\`/\`key\`), then \`look\` again. Marks last until the next look.
+- **Unmarked or tiny things:** \`zoom\` in and click the x/y its grid shows. \`hover\` opens menus; \`drag\` moves sliders.
+- **Files:** downloads land in ~/Downloads. To upload, click the page's upload button, then \`upload\` from your home folder.
+- **Internet only:** it can't reach this computer or its local network. You can also search the web directly.
+- **Tidy up:** \`close\` each window you're done with.
+- **Check:** never claim you did something you didn't verify.`;
 
 export const COMPUTER_TOOLS: ToolSpec[] = [
     {

@@ -117,7 +117,7 @@ export function actionsToolset(deps: ActionsToolsetDeps): Toolset {
             }
             const named = panels.slice(0, MAX_PANEL_NAMES).join(", ") + (panels.length > MAX_PANEL_NAMES ? `, and ${panels.length - MAX_PANEL_NAMES} more` : "");
             if (!panels.length) return "Other Paperboard panels offer no actions right now.";
-            return `Other Paperboard panels can do things for you: ${named}. Use \`find_actions\` to search what they offer, then \`run_action\`. Never run an action the user wouldn't expect; say what you did.`;
+            return `**Other panels:** ${named} can do things for you. Search them with \`find_actions\`, then \`run_action\`. Never run one the user wouldn't expect, and say what you did.`;
         },
         call: async (name, args) => {
             if (!deps.enabled()) return fault("The user has switched Paperboard actions off for you.");
