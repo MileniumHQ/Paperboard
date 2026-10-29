@@ -35,6 +35,19 @@ describe("Theme & Token Resolution Tests", () => {
         expect(resolveColor(undefined)).toBeUndefined();
     });
 
+    test("passes any CSS colour function through untouched", () => {
+        for (const css of [
+            "rgb(1 2 3)",
+            "hsl(10 50% 50%)",
+            "oklch(0.5 0.2 275)",
+            "light-dark(#000000, #ffffff)",
+            "color-mix(in oklch, red, blue)",
+            "var(--paper-primary)",
+        ]) {
+            expect(resolveColor(css)).toBe(css);
+        }
+    });
+
     test("formats getVarCss accurately", () => {
         expect(getVarCss("text-subtle")).toBe("var(--paper-text-subtle)");
         expect(getVarCss("--paper-primary")).toBe("var(--paper-primary)");

@@ -32,7 +32,9 @@ export function resolveBackground(val?: PaperBackgroundSurface | string): string
 
 export function resolveColor(val?: PaperColor | string): string | undefined {
     if (!val) return undefined;
-    if (val.startsWith("var(") || val.startsWith("#") || val.startsWith("rgb") || val.startsWith("hsl") || val === "currentColor" || val === "transparent") {
+    // hex, keywords and any CSS colour function (rgb(), oklch(), light-dark(),
+    // color-mix(), var()) are already CSS
+    if (val.startsWith("#") || /^[a-z-]+\(/i.test(val) || val === "currentColor" || val === "transparent") {
         return val;
     }
     // roles and token suffixes resolve to --paper-<name>
