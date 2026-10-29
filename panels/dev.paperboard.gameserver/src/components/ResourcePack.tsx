@@ -28,6 +28,8 @@ const promptProblem = (prompt: string): string => {
         promptToProperty(prompt);
         return "";
     } catch (err) {
+        // the field says why; typing a half-written component is not an error to report
+        console.debug("[Resource Pack] prompt not valid yet:", err);
         return errorMessage(err);
     }
 };

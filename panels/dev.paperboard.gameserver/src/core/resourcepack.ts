@@ -137,7 +137,9 @@ export function promptFromProperty(stored: string): string {
     try {
         const parsed: unknown = JSON.parse(stored);
         return typeof parsed === "string" ? parsed : stored;
-    } catch {
+    } catch (err) {
+        // not a JSON string after all: show the value as the file holds it
+        console.debug("[Resource Pack] prompt is not a JSON string:", err);
         return stored;
     }
 }
