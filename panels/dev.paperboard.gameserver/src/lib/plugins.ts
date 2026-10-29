@@ -871,9 +871,12 @@ export async function installProjectVersion(
         }
     };
 
+    // a dependency that is already installed stays as it is: a second
+    // copy of a mod (another Fabric API version) stops the server starting
+    const installedProjects = new Set(Object.values(await getInstallRecords()).map((r) => r.projectId));
     await installOne({ kind: "main" });
     for (const dep of [...preview.required, ...preview.transitive]) {
-        if (!dep.file) continue;
+        if (!dep.file || (dep.projectId && installedProjects.has(dep.projectId))) continue;
         await installOne({ kind: "required", dep });
     }
     for (const dep of chosenOptional) {

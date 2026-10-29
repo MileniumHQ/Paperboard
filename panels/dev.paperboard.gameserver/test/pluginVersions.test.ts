@@ -62,7 +62,7 @@ describe("listProjectVersions + dependencies + installProjectVersion", () => {
             read: async () => null,
         },
         config: {
-            get: async () => ({}),
+            get: async () => ({ pluginInstalls: { ...records } }),
             set: async () => true,
         },
         processApi: {},
@@ -209,6 +209,31 @@ describe("listProjectVersions + dependencies + installProjectVersion", () => {
         expect(records["dep1.jar"].projectId).toBe("dep1");
         expect(records["dep1.jar"].version).toBe("1.0");
         expect(records["dep1.jar"].title).toBe("Dep One");
+    });
+
+    test("a required dep that is already installed is not installed twice", async () => {
+        const server = await import("../src/lib/server");
+        server.setServerSoftware("fabric");
+        server.setServerVersion("1.21");
+        records["fabric-api-0.90.jar"] = { projectId: "dep1", slug: "fabric-api", version: "0.90" };
+        stubFetch({
+            "/version/main-v2": () => ({
+                id: "main-v2",
+                version_number: "2.0",
+                game_versions: ["1.21"],
+                loaders: ["fabric"],
+                files: [file("main.jar")],
+                dependencies: [{ project_id: "dep1", dependency_type: "required" }],
+            }),
+            "/project/dep1/version": () => [
+                { id: "dep-v2", project_id: "dep1", version_number: "0.95", game_versions: ["1.21"], loaders: ["fabric"], files: [file("fabric-api-0.95.jar")] },
+            ],
+            "/project/dep1": () => ({ id: "dep1", slug: "fabric-api", title: "Fabric API" }),
+        });
+        const { installProjectVersion } = await import("../src/lib/plugins");
+        const installed = await installProjectVersion({ projectId: "proj1", slug: "proj1", versionId: "main-v2" });
+        expect(installed.map((i) => i.filename)).toEqual(["main.jar"]);
+        expect(downloadCalls.map((c) => c.targetPath)).toEqual(["mods/main.jar"]);
     });
 
     test("a missing required dep fails before anything installs", async () => {
