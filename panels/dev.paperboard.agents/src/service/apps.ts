@@ -98,6 +98,9 @@ export const APPS_INSTRUCTIONS = `How to make an app: when the user would be hel
 - When it works, \`show_app\` shows it to the user: a card in the chat with its picture, which they open beside the chat. Show it again after a change they should see. Never write its address in a message: it opens only from the card or their list of apps.
 - \`delete_app\` deletes one for good, when the user asks or it's been replaced. The user can open and delete their apps too.`;
 
+const SHOW_APP_LINE = APPS_INSTRUCTIONS.split("\n").find((l) => l.includes("`show_app`"))!;
+export const APPS_FLOW_INSTRUCTIONS = APPS_INSTRUCTIONS.replace(`\n${SHOW_APP_LINE}`, "");
+
 export const APPS_TOOLS: ToolSpec[] = [
     {
         name: "start_app",
@@ -199,8 +202,9 @@ export class Apps {
     toolset(): Toolset {
         return {
             id: "apps",
-            tools: () => APPS_TOOLS,
-            instructions: () => APPS_INSTRUCTIONS,
+            // a flow can't open a card
+            tools: (mode) => (mode.fromFlow ? APPS_TOOLS.filter((t) => t.name !== "show_app") : APPS_TOOLS),
+            instructions: (mode) => (mode.fromFlow ? APPS_FLOW_INSTRUCTIONS : APPS_INSTRUCTIONS),
             call: async (name, args): Promise<ToolResult> => {
                 try {
                     if (name === "start_app") return { text: await this.startApp(args.name, args.title, args.description) };

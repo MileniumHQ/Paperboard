@@ -344,7 +344,8 @@ function Bubble(props: {
         onArm: () => haptic("light"),
         onReply: () => props.onReply(entry()!),
     });
-    const attachments = () => (entry()?.kind === "user" ? (entry() as Extract<Said, { kind: "user" }>).attachments : props.row.waiting?.attachments) ?? [];
+    // the user's files, or the ones the agent sent with a reply to a flow
+    const attachments = () => (entry() ? entry()!.attachments : props.row.waiting?.attachments) ?? [];
 
     return (
         <div
@@ -377,7 +378,17 @@ function Bubble(props: {
                             <span class={styles.quoteText}>{quote()?.text ?? ""}</span>
                         </button>
                     </Show>
-                    <Show when={me()} fallback={<PaperMarkdown class={styles.markdown} text={text()} renderImage={props.renderImage} />}>
+                    <Show
+                        when={me()}
+                        fallback={
+                            <>
+                                <PaperMarkdown class={styles.markdown} text={text()} renderImage={props.renderImage} />
+                                <Show when={attachments().length}>
+                                    <AttachmentList class={styles.attachments} files={props.files} list={attachments()} />
+                                </Show>
+                            </>
+                        }
+                    >
                         <Show when={attachments().length}>
                             <AttachmentList class={styles.attachments} files={props.files} list={attachments()} />
                         </Show>

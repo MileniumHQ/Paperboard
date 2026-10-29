@@ -76,8 +76,9 @@ export class SignIns {
     toolset(): Toolset {
         return {
             id: "sign-in",
-            tools: () => SIGN_IN_TOOLS,
-            instructions: () => SIGN_IN_INSTRUCTIONS,
+            // a flow can't type them in
+            tools: (mode) => (mode.fromFlow ? [] : SIGN_IN_TOOLS),
+            instructions: (mode) => (mode.fromFlow ? "" : SIGN_IN_INSTRUCTIONS),
             call: async (name, args) => (name === "ask_to_sign_in" ? this.ask(args) : { isError: true, text: `unknown tool ${name}` }),
         };
     }

@@ -35,6 +35,8 @@ export default function Settings(props: { agent: Agent }) {
             <ComputerSettings agent={agent} />
             <PaperSeparator />
             <ConversationSettings agent={agent} />
+            <PaperSeparator />
+            <AutomationSettings agent={agent} />
         </PaperFlex>
     );
 }
@@ -359,6 +361,52 @@ function ConversationSettings(props: { agent: Agent }) {
                 </PaperQuote>
             </Show>
             <StartOver agent={props.agent} open={open()} onClose={() => setOpen(false)} />
+        </PaperFlex>
+    );
+}
+
+function AutomationSettings(props: { agent: Agent }) {
+    const current = () => props.agent.state.settings!;
+    // typed, so it saves when the field is left
+    const [text, setText] = createSignal(current().automationInstructions ?? "");
+    const [error, setError] = createSignal<string | null>(null);
+    createEffect(on(() => current().automationInstructions, (t) => setText(t ?? "")));
+    const save = () => {
+        const next = text().trim();
+        if (next === (current().automationInstructions ?? "")) return;
+        setError(null);
+        const { automationInstructions: _, ...rest } = current();
+        props.agent.setup(next ? { ...rest, automationInstructions: next } : rest).catch((e) => {
+            setError(errorText(e));
+            setText(current().automationInstructions ?? "");
+        });
+    };
+    return (
+        <PaperFlex gap="full" role="region" aria-label="Automations">
+            <PaperSectionHeader icon="bolt" title="Automations" role="heading" aria-level={2} />
+            <PaperSettingList autoHeight>
+                <PaperSettingItem
+                    title="Instructions"
+                    description={`Added to what ${current().name} is told when a flow messages or asks it. A flow's own instructions replace these.`}
+                >
+                    <PaperInput
+                        name="automationInstructions"
+                        label="Instructions"
+                        multiline
+                        rows={4}
+                        placeholder="Keep answers to one sentence."
+                        value={text()}
+                        maxLength={LIMITS.instructions}
+                        onInput={(e) => setText(e.currentTarget.value)}
+                        onChange={save}
+                    />
+                </PaperSettingItem>
+            </PaperSettingList>
+            <Show when={error()}>
+                <PaperQuote variant="danger" icon="error" title="Instructions not saved" role="alert">
+                    {error()}
+                </PaperQuote>
+            </Show>
         </PaperFlex>
     );
 }

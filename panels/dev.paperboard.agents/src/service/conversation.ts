@@ -32,6 +32,7 @@ import { Attachments, sizeText } from "./attachments";
 import { AcpTurn, type AcpEvent } from "./acp";
 import { HARNESS_NAMES, codexContext, parseTurnLine, turnLaunch } from "./harness";
 import { writeLine } from "./mcpClient";
+import type { TurnMode } from "./toolsets";
 
 export const TURN_PROC_ID = `${PANEL_ID}.turn`;
 const TRANSCRIPT = "transcript.jsonl";
@@ -137,6 +138,10 @@ export class Conversation {
     private context: Context | null = null;
     private carry: Carry | null = null;
     private compactingNow = false;
+    /** the running turn answers a flow's messages */
+    private turnFromFlow = false;
+    /** and the flow's own instructions for it */
+    private turnInstructions: string | undefined;
 
     /** the current conversation's files */
     readonly attachments: Attachments;
@@ -164,8 +169,11 @@ export class Conversation {
         return this.entries.slice(-Math.max(1, Math.min(limit, LIMITS.history)));
     }
 
-    /** Send a message: read now, stopping what the agent was doing, or once a compaction is done. */
-    send(text: string, replyTo: string | null = null, attachmentIds: unknown = []): { id: string; waiting: boolean } {
+    /**
+     * Send a message: read now, stopping what the agent was doing, or once a compaction is done. A flow's message
+     * (fromFlow) is answered for the flow: see TurnMode.
+     */
+    send(text: string, replyTo: string | null = null, attachmentIds: unknown = [], o: { fromFlow?: boolean; instructions?: string } = {}): { id: string; waiting: boolean } {
         const message = text.trim();
         const files = this.sentFiles(attachmentIds);
         if (!message && files.length === 0) throw new Error("say something first");
@@ -173,16 +181,24 @@ export class Conversation {
         if (!this.deps.settings()) throw new Error("finish setting up first");
         if (this.queue.length >= MAX_QUEUED) throw new Error("that's a lot of messages at once; wait for a reply");
         if (replyTo !== null) this.checkReplyTarget(replyTo);
+        const instructions = o.fromFlow ? o.instructions?.trim() : undefined;
+        if (instructions && instructions.length > LIMITS.instructions) throw new Error(`instructions are limited to ${LIMITS.instructions} characters`);
         const id = this.newId();
-        this.queue.push({ id, text: message, ...(replyTo === null ? {} : { replyTo }), ...(files.length ? { attachments: files } : {}) });
+        this.queue.push({ id, text: message, ...(replyTo === null ? {} : { replyTo }), ...(files.length ? { attachments: files } : {}), ...(o.fromFlow ? { fromFlow: true } : {}), ...(instructions ? { instructions } : {}) });
         const waiting = this.running !== null;
-        if (waiting) this.interrupt();
+        // the user's message stops the turn; a flow's waits for it, so an automation never cuts the user off
+        if (waiting && !o.fromFlow) this.interrupt();
         this.pump();
         return { id, waiting };
     }
 
     get compacting() {
         return this.compactingNow;
+    }
+
+    /** Who the running turn answers: the user, or a flow. */
+    mode(): TurnMode {
+        return { fromFlow: this.turnFromFlow, ...(this.turnInstructions ? { instructions: this.turnInstructions } : {}) };
     }
 
     /** The files a message carries: finished uploads in this conversation, each once, up to the limit. */
@@ -336,7 +352,7 @@ export class Conversation {
      * The agent's bubble, from its send_message tool: shown at once, mid-turn.
      * Refused (the model sees why) with no text, or a replyTo that isn't a message in the conversation.
      */
-    say(text: string, replyTo: string | null = null): { id: string } {
+    say(text: string, replyTo: string | null = null, fileIds: string[] = []): { id: string } {
         if (!this.running) throw new Error("there's no conversation going on right now");
         const message = text.trim();
         if (!message) throw new Error("say something first");
@@ -344,9 +360,10 @@ export class Conversation {
         if (replyTo !== null) this.checkReplyTarget(replyTo);
         // a file it shows has to be one of the conversation's, or the bubble would show nothing
         for (const m of message.matchAll(/\]\(\s*<?attachment:([^)\s>]*)/g)) this.attachments.get(m[1]);
+        const files = this.sentFiles(fileIds);
         // quoting the one message this turn answers says nothing the bubble above doesn't: shown plain, as a text would be
         if (replyTo !== null && this.answering.length === 1 && this.answering[0] === replyTo) replyTo = null;
-        const entry: ChatEntry = { id: this.newId(), at: Date.now(), kind: "agent", text: message, ...(replyTo === null ? {} : { replyTo }) };
+        const entry: ChatEntry = { id: this.newId(), at: Date.now(), kind: "agent", text: message, ...(replyTo === null ? {} : { replyTo }), ...(files.length ? { attachments: files } : {}) };
         this.unanswered = false;
         this.setTyping(false);
         this.put(entry);
@@ -465,7 +482,12 @@ export class Conversation {
     private pump() {
         this.state();
         if (this.running || this.closed || this.switching || (this.queue.length === 0 && this.notices.length === 0)) return;
-        const batch = this.queue.splice(0);
+        // a turn answers the user, or flows with the same instructions, never both: the rest wait for the next
+        const first = this.queue[0];
+        const other = this.queue.findIndex((m) => (m.fromFlow === true) !== (first?.fromFlow === true) || m.instructions !== first?.instructions);
+        const batch = this.queue.splice(0, other < 0 ? this.queue.length : other);
+        this.turnFromFlow = first?.fromFlow === true;
+        this.turnInstructions = first?.instructions;
         const notices = this.notices.splice(0);
         this.turnNotices = notices;
         this.stopRequested = false; // a stop asked of an earlier turn doesn't silence this one
@@ -487,6 +509,8 @@ export class Conversation {
                 this.answering = [];
                 this.typing = false;
                 this.stopRequested = false;
+                this.turnFromFlow = false;
+                this.turnInstructions = undefined;
                 this.pump();
             });
         this.state();
@@ -684,6 +708,8 @@ export class Conversation {
         if (c.used < budget) return;
         this.answering = [];
         this.typing = false;
+        this.turnFromFlow = false;
+        this.turnInstructions = undefined;
         this.compactingNow = true;
         this.state();
         try {

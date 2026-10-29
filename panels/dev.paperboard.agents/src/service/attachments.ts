@@ -170,6 +170,12 @@ export class Attachments {
         }
     }
 
+    /** Where the file is on this computer now; it moves with its conversation when that's put away. */
+    path(id: unknown): string {
+        this.get(id);
+        return this.file(id);
+    }
+
     /** The whole file, for the agent's tools; bounded by the file size limit. */
     bytes(id: unknown): Buffer {
         this.get(id);

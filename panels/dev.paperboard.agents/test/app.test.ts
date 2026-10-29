@@ -59,6 +59,7 @@ describe("the service's agent", () => {
             writeSettings: async (s) => void writes.push(s),
             harnessHomes: { claude: "/nonexistent/claude", codex: path.join(dir, "codex") },
             which: (c) => (installed.includes(c) ? `/usr/bin/${c}` : null),
+            registerAction: async () => {},
             tools: {
                 write: async () => {},
                 readTools: async () => null,
@@ -79,6 +80,7 @@ describe("the service's agent", () => {
             },
             setState: (patch) => (state = { ...state, ...patch }),
             emit: () => {},
+            trigger: () => {},
         });
         return { app, procs, writes, vault, toolDocs, state: () => state };
     }

@@ -8,12 +8,14 @@ import type { Attachments } from "./attachments";
 import { sizeText } from "./attachments";
 import type { ToolResult } from "./computerMcp";
 import type { ToolSpec } from "./computerTools";
-import type { Toolset } from "./toolsets";
+import { USER_TURN, type Toolset, type TurnMode } from "./toolsets";
 
 const TEXT_BYTES = 64 * 1024;
 
 export const FILES_INSTRUCTIONS = `Files: a message can come with files the user attached, listed like "(attached: [file a1b2c3d4e5f6] cat.jpg, image, 1.2 MB)". \`open_file\` shows you an image or a text file; \`put_file_on_computer\` copies any file to your computer, to open it there or upload it to a site.
 To show the user an image or a video inline, put \`![a short caption](attachment:<id>)\` on its own line in \`send_message\`: any file already in the conversation shows that way, the user's included. One on your computer, \`share_file\` first to get its id (download it there first if it's on the web). An image on the web can be shown straight from its https URL the same way, and a YouTube video shows as a playable thumbnail with \`![its title](https://www.youtube.com/watch?v=…)\`. Files up to ${LIMITS.attachments.fileBytes / 1024 / 1024} MB.`;
+
+export const FILES_FLOW_INSTRUCTIONS = FILES_INSTRUCTIONS.split("\n")[0]!;
 
 export const FILE_TOOLS: ToolSpec[] = [
     {
@@ -40,6 +42,11 @@ export const FILE_TOOLS: ToolSpec[] = [
     },
 ];
 
+// the same tools, but a shared file goes with a reply rather than inside it
+const FILE_FLOW_TOOLS: ToolSpec[] = FILE_TOOLS.map((t) =>
+    t.name === "share_file" ? { ...t, description: "Add a file from your computer's home folder to the conversation, so a reply can send it in send_message's files. Returns its id." } : t,
+);
+
 /** What the toolset needs: the conversation's files, and the computer to move them to and from. */
 export interface FilesDeps {
     files: () => Attachments;
@@ -48,7 +55,7 @@ export interface FilesDeps {
 }
 
 export function filesToolset(deps: FilesDeps): Toolset {
-    const run = async (name: string, args: Record<string, unknown>): Promise<ToolResult> => {
+    const run = async (name: string, args: Record<string, unknown>, mode: TurnMode): Promise<ToolResult> => {
         if (name === "open_file") {
             const a = deps.files().get(args.id);
             const about = `${a.name}, ${a.kind === "file" ? a.type : a.kind}, ${sizeText(a.bytes)}`;
@@ -67,17 +74,18 @@ export function filesToolset(deps: FilesDeps): Toolset {
             if (typeof args.path !== "string" || !args.path.trim()) return { isError: true, text: "give the file's path" };
             const got = await deps.getFile(args.path);
             const a = deps.files().add(got.path.split("/").pop() ?? "file", got.data);
-            return { text: `Shared as [file ${a.id}] (${a.kind}, ${sizeText(a.bytes)}). Show it with ![a caption](attachment:${a.id})` };
+            const use = mode.fromFlow ? `Pass ${a.id} in send_message's files to send it` : `Show it with ![a caption](attachment:${a.id})`;
+            return { text: `Shared as [file ${a.id}] (${a.kind}, ${sizeText(a.bytes)}). ${use}` };
         }
         return { isError: true, text: `unknown tool ${name}` };
     };
     return {
         id: "files",
-        tools: () => FILE_TOOLS,
-        instructions: () => FILES_INSTRUCTIONS,
-        call: async (name, args) => {
+        tools: (mode) => (mode.fromFlow ? FILE_FLOW_TOOLS : FILE_TOOLS),
+        instructions: (mode) => (mode.fromFlow ? FILES_FLOW_INSTRUCTIONS : FILES_INSTRUCTIONS),
+        call: async (name, args, mode = USER_TURN) => {
             try {
-                return await run(name, args);
+                return await run(name, args, mode);
             } catch (e) {
                 // a missing file, a full conversation, a computer that's off: the model reads why and can fix it
                 return { isError: true, text: e instanceof Error ? e.message : String(e) };

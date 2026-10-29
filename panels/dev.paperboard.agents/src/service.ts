@@ -48,6 +48,7 @@ const host: AppHost = {
     },
     // where the harnesses look for their own files: their documented overrides, else their defaults. The
     // harnesses run with this service's environment, so they and the panel agree on it.
+    registerAction: (def) => actionsApi.register(def, undefined, PANEL_ID),
     harnessHomes: {
         claude: process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), ".claude"),
         codex: process.env.CODEX_HOME || path.join(os.homedir(), ".codex"),
@@ -74,6 +75,8 @@ export const aiService = definePanelService({
     id: PANEL_ID,
     state: DEFAULT_STATE,
     actions: [
+        // registered again with the history in the dropdown once the conversation is read
+        ...app.flowActions(),
         ui(UI_ACTION_IDS.setup, "Save the agent's settings", (i) => app.setup(i)),
         ui(UI_ACTION_IDS.detect, "Find installed agent harnesses", () => app.detect()),
         ui(UI_ACTION_IDS.models, "List a brain's models", (i) => app.models(i)),
@@ -98,7 +101,7 @@ export const aiService = definePanelService({
         ui(UI_ACTION_IDS.newConversation, "Start a new conversation, keeping this one in the history", () => app.newConversation()),
         ui(UI_ACTION_IDS.conversations, "List the conversations", () => ({ current: app.conversation.current(), past: app.conversation.past() })),
         ui(UI_ACTION_IDS.openConversation, "Continue a past conversation", (i) => app.openConversation(i.id)),
-        ui(UI_ACTION_IDS.deleteConversation, "Delete a past conversation", (i) => app.conversation.deletePast(i.id)),
+        ui(UI_ACTION_IDS.deleteConversation, "Delete a past conversation", (i) => app.deleteConversation(i.id)),
         ui(UI_ACTION_IDS.memory, "List what the agent remembers", () => app.memory.list()),
         ui(UI_ACTION_IDS.deleteFact, "Forget a fact", (i) => app.memory.deleteFact(i.id)),
         ui(UI_ACTION_IDS.readNote, "Read a note from the agent's memory", (i) => app.memory.readNote(i.key)),
@@ -128,7 +131,9 @@ export const aiService = definePanelService({
             },
             setState: (patch) => ctx.setState(patch),
             emit: (event, payload) => ctx.emit(event, payload),
+            trigger: (id, payload) => ctx.emitTrigger(id, payload),
         });
+        await app.publish();
     },
 });
 

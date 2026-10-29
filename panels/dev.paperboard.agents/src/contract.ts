@@ -7,6 +7,18 @@
 
 export const PANEL_ID = "dev.paperboard.agents";
 
+/** The actions flows use: the panel's public face in the Actions library. */
+export const ACTION_IDS = {
+    switchConversation: "switch-conversation",
+    sendMessage: "send-message",
+    getAnswer: "get-answer",
+} as const;
+
+/** The events flows start from. */
+export const TRIGGER_IDS = {
+    messageReceived: "message-received",
+} as const;
+
 export const UI_ACTION_IDS = {
     // onboarding: name and brain
     setup: "ui-setup",
@@ -86,6 +98,8 @@ export interface Settings {
     model: string | null;
     /** what happens to a conversation that's grown long: summarized into a fresh thread, or its older part forgotten */
     compaction: Compaction;
+    /** added to what the agent is told when an automation messages or asks it; an action's own instructions replace these */
+    automationInstructions?: string;
 }
 
 export const COMPACTIONS = ["summarize", "forget"] as const;
@@ -95,6 +109,8 @@ export const LIMITS = {
     name: 32,
     model: 64,
     message: 16_000,
+    /** the user's instructions for automations */
+    instructions: 4_000,
     history: 200,
     /** past conversations kept; past this, starting a new one asks to delete some first */
     pastConversations: 200,
@@ -303,6 +319,10 @@ export interface WaitingMessage {
     /** id of the message it answers */
     replyTo?: string;
     attachments?: Attachment[];
+    /** sent by a flow (the Send Message action): it's answered in a turn of its own, for the flow */
+    fromFlow?: boolean;
+    /** the flow's instructions for its turn, in place of the ones in settings */
+    instructions?: string;
 }
 
 export interface AiState {
@@ -333,7 +353,8 @@ export const ATTACHMENT_ID = /^[a-f0-9]{12}$/;
 export type ChatEntry =
     // replyTo: the id of an earlier user or agent entry this bubble answers
     | { id: string; at: number; kind: "user"; text: string; replyTo?: string; attachments?: Attachment[] }
-    | { id: string; at: number; kind: "agent"; text: string; replyTo?: string }
+    // attachments: files sent along with the text, the way a reply to a flow sends them
+    | { id: string; at: number; kind: "agent"; text: string; replyTo?: string; attachments?: Attachment[] }
     // title: the operation that didn't happen, like "Not answered"; entries written before it have none
     | { id: string; at: number; kind: "error"; title?: string; text: string }
     | SignInEntry

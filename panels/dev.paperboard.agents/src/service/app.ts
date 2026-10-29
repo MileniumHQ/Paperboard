@@ -11,6 +11,7 @@ import {
     LIMITS,
     PANEL_ID,
     EVENTS,
+    TRIGGER_IDS,
     type AiState,
     type Compaction,
     type Harness,
@@ -24,7 +25,7 @@ import { Apps } from "./apps";
 import { BrowserComputer, type ComputerHost } from "./browser";
 import { startComputerMcp, type ComputerMcp } from "./computerMcp";
 import { Conversation, type TurnHost } from "./conversation";
-import { HARNESS_COMMANDS, HARNESS_NAMES } from "./harness";
+import { HARNESS_COMMANDS, HARNESS_NAMES, customSection } from "./harness";
 import { COMPUTER_INSTRUCTIONS, COMPUTER_TOOLS } from "./computerTools";
 import { filesToolset } from "./attachmentTools";
 import { actionsToolset, type ActionsHost } from "./actionsToolset";
@@ -38,6 +39,9 @@ import { Routines } from "./routines";
 import { SignIns } from "./signIn";
 import { describeSchedule, localStamp } from "../routineText";
 import { toolbox, type Toolbox } from "./toolsets";
+import { Asker } from "./ask";
+import { flowActions, type ConversationChoice, type MessageReceived } from "./flowActions";
+import type { ActionDefinition } from "@mileniumhq/paperapi";
 export { which } from "./which";
 
 /** What the tool servers and the actions toolset need from the daemon. */
@@ -62,12 +66,16 @@ export interface AppHost extends ComputerHost, Omit<TurnHost, "write"> {
     which(command: string): string | null;
     /** where each harness keeps its own files, for its model catalog */
     harnessHomes: HarnessHomes;
+    /** register an action again, as it is now: the flow actions' conversation dropdown follows the history */
+    registerAction(def: ActionDefinition): Promise<void>;
 }
 
 export interface AppContext {
     state: AiState;
     setState(patch: Partial<AiState>): void;
     emit(event: string, payload: unknown): void;
+    /** an event flows start from */
+    trigger(id: string, payload: unknown): void;
 }
 
 export class AiApp {
@@ -81,6 +89,10 @@ export class AiApp {
     apps!: Apps;
     private tools: Toolbox | null = null;
     servers!: McpServers;
+    asker!: Asker;
+    /** the conversation dropdown as flows last got it, and the registration in flight */
+    private published = "";
+    private publishing: Promise<void> = Promise.resolve();
     private settle!: (failure: Error | null) => void;
     private readonly settled = new Promise<Error | null>((ok) => (this.settle = ok));
 
@@ -151,7 +163,7 @@ export class AiApp {
         const checkpoints = new Checkpoints({ home, dir: path.join(root, "checkpoints") });
         const tools = toolbox([
             { id: "computer", tools: () => COMPUTER_TOOLS, call: (name, args) => this.computer.callTool(name, args), instructions: () => COMPUTER_INSTRUCTIONS },
-            messagesToolset({ say: (text, replyTo) => this.conversation.say(text, replyTo) }),
+            messagesToolset({ say: (text, replyTo, files) => this.conversation.say(text, replyTo, files) }),
             shellToolset(home),
             apps.toolset(),
             checkpoints.toolset(),
@@ -165,10 +177,17 @@ export class AiApp {
             this.signIns.toolset(),
             mcpToolset(this.servers),
             actionsToolset({ host: t.actions, enabled: () => this.servers.config.actions }),
-        ]);
+        ], () => this.conversation?.mode() ?? { fromFlow: false });
         // any tool but its messages means the agent is working, not typing, whatever its harness reports
         this.tools = {
             ...tools,
+            // a flow's turn ends with the user's instructions for it: the flow's own, or else the ones in settings
+            instructions: async () => {
+                const own = await tools.instructions();
+                const mode = this.conversation?.mode();
+                const custom = mode?.fromFlow ? (mode.instructions ?? this.ctx.state.settings?.automationInstructions ?? null) : null;
+                return custom ? [...own, customSection(custom)] : own;
+            },
             call: async (name, args) => {
                 // a summary is written from what it already knows: no texting, no work
                 if (this.conversation?.compacting) return { text: "You're writing a summary of the conversation: no texts and no tools until it's done.", isError: true };
@@ -193,11 +212,31 @@ export class AiApp {
             resolve: (h) => this.host.which(HARNESS_COMMANDS[h]),
             mcp: () => ({ url: this.mcp!.url, token: this.mcp!.token, onToolsListed: (cb) => this.mcp!.onToolsListed(cb) }),
             instructions: () => this.tools!.instructions(),
-            emit: (entry) => this.ctx.emit(EVENTS.entry, entry),
+            emit: (entry) => {
+                this.ctx.emit(EVENTS.entry, entry);
+                if (entry.kind === "agent") {
+                    const message: MessageReceived = {
+                        text: entry.text,
+                        attachments: (entry.attachments ?? []).map((a) => ({ name: a.name, kind: a.kind, type: a.type, bytes: a.bytes, path: this.conversation.attachments.path(a.id) })),
+                        messageId: entry.id,
+                        conversationId: this.conversation.id(),
+                        replyTo: entry.replyTo ?? "",
+                    };
+                    this.ctx.trigger(TRIGGER_IDS.messageReceived, message);
+                }
+                // its first message names the current conversation in the dropdown
+                if (entry.kind === "user" || entry.kind === "agent") this.publish();
+            },
             onState: (chat) => this.ctx.setState({ chat }),
             codexHome: this.host.harnessHomes.codex,
         });
         this.conversation.init();
+        this.asker = new Asker({
+            host: { ...this.host, write: this.host.tools.write },
+            settings: () => this.ctx.state.settings,
+            resolve: (h) => this.host.which(HARNESS_COMMANDS[h]),
+            workdir: path.join(root, "ask"),
+        });
         // after the conversation exists: a one-off missed while the service was down runs as soon as it's read
         await this.routines.load();
         // a broken index shows in state.memory.error from the start; the failure itself is reported there
@@ -210,7 +249,7 @@ export class AiApp {
     async shutdown() {
         // before the conversation closes, so a waiting request's bubble says it lapsed
         this.signIns?.shutdown();
-        const stops = await Promise.allSettled([this.routines?.shutdown(), this.conversation?.shutdown(), this.computer?.shutdown(), this.servers?.shutdown()]);
+        const stops = await Promise.allSettled([this.routines?.shutdown(), this.conversation?.shutdown(), this.asker?.shutdown(), this.computer?.shutdown(), this.servers?.shutdown()]);
         for (const r of stops) if (r.status === "rejected") console.error("[ai] shutdown:", String(r.reason));
         await Promise.all([this.mcp?.close(), this.apps?.close()]);
     }
@@ -219,6 +258,10 @@ export class AiApp {
 
     async setup(input: unknown) {
         const i = (input ?? {}) as Record<string, unknown>;
+        const asked = (i.settings ?? {}) as Record<string, unknown>;
+        if (typeof asked.automationInstructions === "string" && asked.automationInstructions.trim().length > LIMITS.instructions) {
+            throw new Error(`instructions for automations are limited to ${LIMITS.instructions} characters`);
+        }
         const settings = parseSettings(i.settings);
         if (!settings) throw new Error("name and brain are required");
         if (!this.host.which(HARNESS_COMMANDS[settings.harness])) throw new Error(`${HARNESS_NAMES[settings.harness]} isn't installed on this computer`);
@@ -267,6 +310,7 @@ export class AiApp {
     async startOver() {
         const r = await this.conversation.clear();
         this.ctx.emit(EVENTS.cleared, {});
+        this.publish();
         return r;
     }
 
@@ -275,6 +319,7 @@ export class AiApp {
         this.signIns?.shutdown();
         const r = await this.conversation.newConversation();
         this.ctx.emit(EVENTS.switched, {});
+        this.publish();
         return r;
     }
 
@@ -282,7 +327,69 @@ export class AiApp {
         this.signIns?.shutdown();
         const r = await this.conversation.open(id);
         this.ctx.emit(EVENTS.switched, {});
+        this.publish();
         return r;
+    }
+
+    deleteConversation(id: unknown) {
+        const r = this.conversation.deletePast(id);
+        this.publish();
+        return r;
+    }
+
+    // ------------------------------------------------------------- flows
+
+    /** The actions flows use, with the conversation dropdown as the history is now. */
+    flowActions(): ActionDefinition[] {
+        return flowActions(
+            {
+                ready: () => this.ready(),
+                switchConversation: async (id) => {
+                    if (id === null) await this.newConversation();
+                    else if (id !== this.conversation.id()) await this.openConversation(id);
+                    return this.conversation.id();
+                },
+                send: (text, instructions) => this.conversation.send(text, null, [], { fromFlow: true, instructions }).id,
+                ask: (question, instructions) => this.asker.ask(question, instructions),
+            },
+            this.conversation ? this.conversationChoices() : [],
+        );
+    }
+
+    /** The current conversation (once it has messages), then the history, newest first. */
+    conversationChoices(): ConversationChoice[] {
+        const current = this.conversation.current();
+        return [
+            ...(current ? [{ label: current.title, value: this.conversation.id() }] : []),
+            ...this.conversation.past().map((c) => ({ label: c.title, value: c.id })),
+        ];
+    }
+
+    /**
+     * Register the flow actions again when the dropdown has changed. In order, one at a time; a failure leaves
+     * flows with the last list they got, so it's reported and the next change tries again.
+     */
+    publish(): Promise<void> {
+        this.publishing = this.publishing.then(async () => {
+            let choices: string;
+            try {
+                choices = JSON.stringify(this.conversationChoices());
+            } catch (e) {
+                console.error("[ai] the conversation dropdown can't be listed:", String(e));
+                return;
+            }
+            if (choices === this.published) return;
+            this.published = choices;
+            for (const def of this.flowActions()) {
+                try {
+                    await this.host.registerAction(def);
+                } catch (e) {
+                    this.published = "";
+                    console.error(`[ai] couldn't update the "${def.id}" action:`, String(e));
+                }
+            }
+        });
+        return this.publishing;
     }
 
     // ------------------------------------------------------------- the Tools page
@@ -357,5 +464,8 @@ export function parseSettings(v: unknown): Settings | null {
     // settings saved before compaction was a choice summarize, as it's done since
     if (s.compaction !== undefined && !COMPACTIONS.includes(s.compaction as Compaction)) return null;
     const compaction = (s.compaction as Compaction | undefined) ?? "summarize";
-    return { name, harness: s.harness as Harness, model, compaction };
+    if (s.automationInstructions !== undefined && typeof s.automationInstructions !== "string") return null;
+    const automationInstructions = s.automationInstructions?.trim() ?? "";
+    if (automationInstructions.length > LIMITS.instructions) return null;
+    return { name, harness: s.harness as Harness, model, compaction, ...(automationInstructions ? { automationInstructions } : {}) };
 }

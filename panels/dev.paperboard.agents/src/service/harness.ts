@@ -176,6 +176,86 @@ export function turnLaunch(spec: TurnSpec): TurnLaunch {
     return { command: spec.command, args, tokenEnv: MCP_TOKEN_ENV, env: { ...CLAUDE_MEMORY_OFF, ...CLAUDE_COMPACT_OFF }, thread: session };
 }
 
+/** What the agent is told when a flow asks it something (Get Answer): only the question, and web search. */
+export function askInstructions(name: string, custom: string | null = null): string {
+    return [
+        `You are ${name}, the user's agent, answering a question from one of their Paperboard automations.
+- **Answer only:** the answer itself, in plain text. No greeting, no follow-up questions.
+- **Current facts:** use web search when the answer depends on them.
+- **No dashes:** never write an em dash or an en dash.`,
+        ...(custom ? [customSection(custom)] : []),
+    ].join("\n\n");
+}
+
+/** The user's own instructions for an automation, after the panel's. */
+export function customSection(custom: string): string {
+    return `**The user's instructions:**\n${custom}`;
+}
+
+export interface AskSpec {
+    harness: Harness;
+    /** absolute path of the harness's executable */
+    command: string;
+    model: string | null;
+    name: string;
+    question: string;
+    /** the user's instructions for it, if any */
+    instructions: string | null;
+}
+
+/**
+ * One question, answered in a thread of its own that isn't kept where the harness can (Codex's --ephemeral,
+ * Claude's --no-session-persistence; OpenCode keeps its sessions). No MCP server: the answer can't text the
+ * user or use the computer. The question comes after `--`, so it's never read as a flag.
+ */
+export function askLaunch(spec: AskSpec): { command: string; args: string[]; env: Record<string, string> } {
+    const system = askInstructions(spec.name, spec.instructions);
+    if (spec.harness === "opencode") {
+        const config = {
+            share: "disabled",
+            autoupdate: false,
+            agents: { build: { system } },
+            permissions: [
+                { action: "*", resource: "*", effect: "deny" },
+                { action: "websearch", resource: "*", effect: "allow" },
+            ],
+        };
+        // the question goes over ACP, never in argv
+        return { command: spec.command, args: ["acp"], env: { OPENCODE_CONFIG_CONTENT: JSON.stringify(config), OPENCODE_DISABLE_PROJECT_CONFIG: "1", OPENCODE_DISABLE_CLAUDE_CODE: "1" } };
+    }
+    if (spec.harness === "codex") {
+        const config = [
+            `approval_policy="never"`,
+            `sandbox_mode="read-only"`,
+            `web_search="live"`,
+            `developer_instructions=${JSON.stringify(system)}`,
+            ...CODEX_MEMORY_OFF,
+        ].flatMap((c) => ["-c", c]);
+        const args = [
+            "exec", "--json", "--skip-git-repo-check", "--ephemeral",
+            ...(spec.model ? ["-m", spec.model] : []),
+            ...CODEX_FEATURES_OFF.flatMap((f) => ["--disable", f]),
+            "--disable", "memories",
+            ...config,
+            "--", spec.question,
+        ];
+        return { command: spec.command, args, env: {} };
+    }
+    const args = [
+        "-p", "--output-format", "stream-json", "--verbose",
+        ...(spec.model ? ["--model", spec.model] : []),
+        "--tools", "WebSearch",
+        "--allowedTools", "WebSearch",
+        "--permission-mode", "dontAsk",
+        // no --mcp-config: strict means no MCP server at all, the user's included
+        "--strict-mcp-config",
+        "--no-session-persistence",
+        "--append-system-prompt", system,
+        "--", spec.question,
+    ];
+    return { command: spec.command, args, env: { ...CLAUDE_MEMORY_OFF } };
+}
+
 export type TurnEvent =
     | { type: "thread"; id: string }
     | { type: "message"; text: string }
