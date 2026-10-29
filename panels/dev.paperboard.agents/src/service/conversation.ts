@@ -40,6 +40,8 @@ const ATTACHMENTS = "attachments";
 const PAST = "past";
 const CARRY = "carry.json";
 const PAST_META = "meta.json";
+/** the current conversation's id: it keeps it through being put away and reopened, so a flow can name it */
+const ID = "id";
 const PAST_ID = /^[a-f0-9]{12}$/;
 const TITLE_CHARS = 80;
 const KEEP_IN_MEMORY = 500;
@@ -253,6 +255,23 @@ export class Conversation {
         }).then(() => ({ started: true }));
     }
 
+    /**
+     * The current conversation's own id, the one it's put away under; made the first time it's asked for.
+     * The UI lists it as CURRENT_CONVERSATION; flows name it by this id, which it keeps when it's reopened.
+     */
+    id(): string {
+        const file = path.join(this.deps.dir, ID);
+        if (fs.existsSync(file)) {
+            const id = fs.readFileSync(file, "utf8").trim();
+            if (!PAST_ID.test(id)) throw new Error(`${file} isn't a conversation's id`);
+            // one the history has already is left from a put-away that was interrupted: it's that one's
+            if (!fs.existsSync(path.join(this.pastDir(), id))) return id;
+        }
+        const id = randomUUID().replace(/-/g, "").slice(0, 12);
+        atomicWrite(file, id);
+        return id;
+    }
+
     /** The conversation going on now, listed with the history; none while it's empty. Its id is no past one's. */
     current(): PastConversation | null {
         return this.entries.length ? this.summary(CURRENT_CONVERSATION) : null;
@@ -296,6 +315,7 @@ export class Conversation {
             // a carry is only there if it was compacted and not yet carried on
             const carry = path.join(dir, CARRY);
             if (fs.existsSync(carry)) fs.renameSync(carry, path.join(this.deps.dir, CARRY));
+            atomicWrite(path.join(this.deps.dir, ID), id as string);
             fs.rmSync(dir, { recursive: true });
             this.entries = this.load();
             this.threads = JSON.parse(fs.readFileSync(path.join(this.deps.dir, THREADS), "utf8"));
@@ -406,7 +426,7 @@ export class Conversation {
      * so an interruption at any point leaves every message somewhere, never nowhere.
      */
     private putAway() {
-        const id = randomUUID().replace(/-/g, "").slice(0, 12);
+        const id = this.id();
         const meta = this.summary(id);
         const tmp = path.join(this.pastDir(), `.${id}`);
         fs.mkdirSync(tmp, { recursive: true });
@@ -417,6 +437,8 @@ export class Conversation {
             const from = path.join(this.deps.dir, name);
             if (fs.existsSync(from)) fs.renameSync(from, path.join(dir, name));
         }
+        // the next conversation gets an id of its own
+        fs.rmSync(path.join(this.deps.dir, ID), { force: true });
         this.entries = [];
         this.threads = {};
         this.carry = null;

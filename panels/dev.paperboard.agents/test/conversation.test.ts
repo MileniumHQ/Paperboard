@@ -205,6 +205,32 @@ describe("the conversation", () => {
         expect(second.conv.history().map((e) => (e as { text: string }).text)).toEqual(["hello again", "hey"]);
     });
 
+    test("a conversation keeps one id: it's put away under it, and again under it after it's reopened, even across a restart", async () => {
+        const first = setup();
+        const id = first.conv.id();
+        expect(first.conv.id()).toBe(id);
+        first.conv.send("plan my trip to Oslo");
+        await until(() => first.host.started.length === 1);
+        first.host.stdout(TURN_PROC_ID, reply("sure"));
+        first.host.exit(TURN_PROC_ID, 0);
+        await until(() => busy(first.states) === false);
+        await first.conv.newConversation();
+        expect(first.conv.past().map((p) => p.id)).toEqual([id]);
+        expect(first.conv.id()).not.toBe(id);
+
+        await first.conv.shutdown();
+        const second = setup({ dir: first.dir });
+        await second.conv.open(id);
+        expect(second.conv.id()).toBe(id);
+        second.conv.send("and hotels?");
+        await until(() => second.host.started.length === 1);
+        second.host.stdout(TURN_PROC_ID, reply("on it"));
+        second.host.exit(TURN_PROC_ID, 0);
+        await until(() => busy(second.states) === false);
+        await second.conv.newConversation();
+        expect(second.conv.past().map((p) => p.id)).toEqual([id]);
+    });
+
     test("a new conversation puts the current one in the history with its thread; reopening it continues that thread", async () => {
         const first = setup();
         first.conv.send("plan my trip to Oslo");
