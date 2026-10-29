@@ -155,23 +155,6 @@ const ADVANCED_PROPERTY_FIELDS: PropertyField[] = [
         defaultValue: "true",
         capability: "logIps",
     },
-    {
-        key: "require-resource-pack",
-        title: "Require Resource Pack",
-        description: "Players must accept the server's resource pack to join.",
-        control: "toggle",
-        defaultValue: "false",
-        capability: "requireResourcePack",
-    },
-    {
-        key: "resource-pack",
-        title: "Resource Pack URL",
-        description: "Direct download URL for the resource pack.",
-        control: "text",
-        defaultValue: "",
-        capability: "requireResourcePack",
-        dependsOn: { key: "require-resource-pack", equals: "true" },
-    },
 ];
 
 // a field whose capability this Minecraft version lacks is hidden, not

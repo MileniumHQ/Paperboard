@@ -52,6 +52,14 @@ import { locateAddonConfig } from "./addonConfig";
 import { liveInstallDeps } from "./softwareInstallDeps";
 import { installDatapack, listDatapacks, listDatapackVersions, removeDatapack } from "./datapacks";
 import { liveDatapackDeps } from "./datapackDeps";
+import {
+    listResourcePackVersions,
+    readResourcePack,
+    removeResourcePack,
+    selectCustomResourcePack,
+    selectModrinthResourcePack,
+} from "./resourcepack";
+import { liveResourcePackDeps } from "./resourcepackDeps";
 import { installModpack, listModpackVersions, readModpack, removeModpack } from "./modpacks";
 import { liveModpackDeps } from "./modpackDeps";
 import { assertPlayerName, assertSingleLine } from "../core/players";
@@ -1218,6 +1226,84 @@ export const panelActions: ActionDefinition[] = [
         icon: "delete",
         run: async (ctx: ServiceContext<GameServerState>, inputs: { name?: string }) => {
             await removeDatapack(inputs?.name, liveDatapackDeps(ctx));
+            return true;
+        },
+    }),
+
+    defineAction({
+        id: ACTION_IDS.readResourcePack,
+        name: "Read Resource Pack",
+        category: "Server",
+        description: "Reads the server's resource pack URL and hash, and what the panel remembers about the pack",
+        internal: true,
+        template: "Read resource pack",
+        inputs: {},
+        output: { type: "object", label: "Resource pack" },
+        quick: false,
+        icon: "texture",
+        run: async (ctx: ServiceContext<GameServerState>) => readResourcePack(liveResourcePackDeps(ctx)),
+    }),
+
+    defineAction({
+        id: ACTION_IDS.listResourcePackVersions,
+        name: "List Resource Pack Versions",
+        category: "Server",
+        description: "Lists a Modrinth resource pack's builds for the server's Minecraft version",
+        internal: true,
+        template: "List versions of resource pack {projectId}",
+        inputs: {
+            projectId: { type: "string", label: "Project", required: true },
+        },
+        output: { type: "object", label: "Versions" },
+        quick: false,
+        icon: "texture",
+        run: async (ctx: ServiceContext<GameServerState>, inputs: { projectId?: string }) =>
+            listResourcePackVersions(inputs?.projectId, ctx.state.serverVersion, liveResourcePackDeps(ctx)),
+    }),
+
+    defineAction({
+        id: ACTION_IDS.selectResourcePack,
+        name: "Set Resource Pack",
+        category: "Server",
+        description: "Points server.properties at a Modrinth resource pack build, or at a direct URL after hashing it",
+        internal: true,
+        template: "Set resource pack",
+        inputs: {
+            projectId: { type: "string", label: "Modrinth project" },
+            versionId: { type: "string", label: "Version" },
+            url: { type: "string", label: "Direct URL" },
+        },
+        output: { type: "object", label: "Resource pack" },
+        quick: false,
+        icon: "texture",
+        run: async (
+            ctx: ServiceContext<GameServerState>,
+            inputs: { projectId?: string; versionId?: string; url?: string },
+        ) => {
+            const deps = liveResourcePackDeps(ctx);
+            if (inputs?.projectId && inputs?.url) throw new Error("Choose a Modrinth pack or a URL, not both");
+            if (inputs?.url) return selectCustomResourcePack({ url: inputs.url }, deps);
+            return selectModrinthResourcePack(
+                { projectId: inputs?.projectId, versionId: inputs?.versionId },
+                ctx.state.serverVersion,
+                deps,
+            );
+        },
+    }),
+
+    defineAction({
+        id: ACTION_IDS.removeResourcePack,
+        name: "Remove Resource Pack",
+        category: "Server",
+        description: "Clears the server's resource pack URL and hash",
+        internal: true,
+        template: "Remove resource pack",
+        inputs: {},
+        output: { type: "boolean", label: "Removed" },
+        quick: false,
+        icon: "delete",
+        run: async (ctx: ServiceContext<GameServerState>) => {
+            await removeResourcePack(liveResourcePackDeps(ctx));
             return true;
         },
     }),
