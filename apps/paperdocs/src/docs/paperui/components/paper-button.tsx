@@ -83,7 +83,7 @@ export function Example() {
                         <td><PaperCode>icon</PaperCode></td>
                         <td><PaperCode>boolean</PaperCode></td>
                         <td><PaperCode>false</PaperCode></td>
-                        <td>When true, formats the button as a square icon button without horizontal text padding.</td>
+                        <td>When true, formats the button as a square icon button without horizontal text padding. Every size has a square: tiny, small and medium for toolbars, large for a few big controls on their own, like a call's buttons.</td>
                     </tr>
                     <tr>
                         <td><PaperCode>fullWidth</PaperCode></td>
@@ -174,6 +174,21 @@ export function EffectExample() {
                     <PaperButton size="small">Small</PaperButton>
                     <PaperButton size="medium">Medium</PaperButton>
                     <PaperButton size="large">Large</PaperButton>
+                </PaperFlex>
+            </PaperCard>
+            <PaperText preset="body">
+                A large icon button is for a screen with only a few controls, where each one is meant to be hit without looking, like hanging up a call.
+            </PaperText>
+            <PaperCode block language="tsx">
+{`<PaperFlex direction="row" gap="double" align="center">
+    <PaperButton size="large" icon variant="outline" title="Mute">mic</PaperButton>
+    <PaperButton size="large" icon variant="danger" title="Hang up">call_end</PaperButton>
+</PaperFlex>`}
+            </PaperCode>
+            <PaperCard padding="double" surface="front">
+                <PaperFlex direction="row" gap="double" align="center">
+                    <PaperButton size="large" icon variant="outline" title="Mute">mic</PaperButton>
+                    <PaperButton size="large" icon variant="danger" title="Hang up">call_end</PaperButton>
                 </PaperFlex>
             </PaperCard>
         </PaperFlex>

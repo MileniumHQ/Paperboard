@@ -219,6 +219,12 @@
        and the [class*="PaperIcon"] rules below size embedded icons. */
 }
 
+.PaperButton.icon.size-large {
+    height: var(--paper-control-size-large);
+    width: var(--paper-control-size-large);
+    font-size: var(--paper-icon-size-large);
+}
+
 .PaperButton.icon.size-medium {
     height: var(--paper-control-size-medium);
     width: var(--paper-control-size-medium);
