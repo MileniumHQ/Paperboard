@@ -1,7 +1,7 @@
 // The server-list MOTD preview. Kept apart from the editor in Motd.tsx so
 // the widget page can draw it without loading the panel's bridge.
 import { createEffect, createSignal, For, onCleanup, Show } from "solid-js";
-import { MOTD_COLOR_HEX, parseMotd, type MotdStyle } from "../core/motd";
+import { MOTD_COLOR_CODES, parseMotd, type MotdStyle } from "../core/motd";
 import styles from "./Motd.module.css";
 
 const OBFUSCATED_GLYPHS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
@@ -22,7 +22,7 @@ function scramble(text: string): string {
 /** the classes that draw one run of MOTD text; `editing` blurs obfuscated text */
 export function motdClasses(style: MotdStyle, editing: boolean): string {
     return [
-        style.color && MOTD_COLOR_HEX.has(style.color) ? styles[`color-${style.color}`] : styles.plain,
+        style.color && MOTD_COLOR_CODES.has(style.color) ? styles[`color-${style.color}`] : styles.plain,
         style.bold && styles.bold,
         style.italic && styles.italic,
         style.underline && styles.underline,

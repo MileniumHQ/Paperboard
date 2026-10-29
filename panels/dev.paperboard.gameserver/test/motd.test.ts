@@ -10,7 +10,7 @@ mock.module("@mileniumhq/paperapi", () => ({
     system: { getLocalIP: async () => "127.0.0.1" },
 }));
 
-const { applyCode, docFromMotd, MAX_MOTD_CHARS, MOTD_COLORS, motdFromDoc, parseMotd, replaceRange, styleAt } = await import(
+const { applyCode, docFromMotd, MAX_MOTD_CHARS, MOTD_COLORS, motdColorCss, motdFromDoc, parseMotd, replaceRange, styleAt } = await import(
     "../src/core/motd"
 );
 const { loadConfigAndProperties } = await import("../src/service/config");
@@ -88,10 +88,66 @@ describe("the service's MOTD", () => {
 });
 
 describe("the MOTD stylesheet", () => {
-    test("draws every colour code in the game's own colour", () => {
-        const css = readFileSync(new URL("../src/components/Motd.module.css", import.meta.url), "utf8");
+    const css = readFileSync(new URL("../src/components/Motd.module.css", import.meta.url), "utf8");
+
+    test("draws every colour code from the table, as a light/dark pair", () => {
         for (const color of MOTD_COLORS) {
-            expect(css).toContain(`.color-${color.code} {\n    color: ${color.hex};\n}`);
+            expect(css).toContain(`.color-${color.code} {\n    color: ${motdColorCss(color)};\n}`);
+        }
+        // uncoloured text is the list's gray, §7
+        const gray = MOTD_COLORS.find((c) => c.code === "7")!;
+        expect(css).toContain(`.plain {\n    color: ${motdColorCss(gray)};\n}`);
+    });
+
+    // PaperUI's own surfaces, read from its stylesheet: the message sits on a card
+    const paperColors = readFileSync(new URL("../../../packages/paperui/src/styles/colors.css", import.meta.url), "utf8");
+    const surfaces = (block: string) => {
+        const body = paperColors.slice(paperColors.indexOf(block));
+        const value = (name: string) => body.match(new RegExp(`--paper-${name}: (#[0-9a-f]{6});`))![1];
+        return ["surface", "surface-raised"].map(value);
+    };
+
+    const srgbLuminance = (hex: string) =>
+        [1, 3, 5]
+            .map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
+            .map((c) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4))
+            .reduce((sum, c, i) => sum + c * [0.2126, 0.7152, 0.0722][i], 0);
+
+    // OKLCH to linear sRGB (clipped into gamut, as the browser draws it)
+    const oklchLuminance = (css: string) => {
+        const [L, C, h] = css.match(/oklch\(([\d.]+) ([\d.]+) ([\d.]+)\)/)!.slice(1).map(Number);
+        const a = C * Math.cos((h * Math.PI) / 180);
+        const b = C * Math.sin((h * Math.PI) / 180);
+        const l = (L + 0.3963377774 * a + 0.2158037573 * b) ** 3;
+        const m = (L - 0.1055613458 * a - 0.0638541728 * b) ** 3;
+        const s = (L - 0.0894841775 * a - 1.291485548 * b) ** 3;
+        const rgb = [
+            4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
+            -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
+            -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s,
+        ].map((c) => Math.min(1, Math.max(0, c)));
+        return 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2];
+    };
+
+    const contrast = (x: number, y: number) => (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+
+    test("every colour reads on PaperUI's light and dark surfaces", () => {
+        const themes = [
+            { theme: "light", surfaces: surfaces(":root {") },
+            { theme: "dark", surfaces: surfaces('[data-theme="dark"] {') },
+        ] as const;
+        for (const { theme, surfaces: backgrounds } of themes) {
+            for (const color of MOTD_COLORS) {
+                for (const background of backgrounds) {
+                    const ratio = contrast(oklchLuminance(color[theme]), srgbLuminance(background));
+                    expect({ color: color.name, theme, background, readable: ratio >= 4 }).toEqual({
+                        color: color.name,
+                        theme,
+                        background,
+                        readable: true,
+                    });
+                }
+            }
         }
     });
 });

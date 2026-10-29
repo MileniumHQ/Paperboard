@@ -12,6 +12,7 @@ import {
     docFromMotd,
     MOTD_COLORS,
     MOTD_FORMATS,
+    motdColorCss,
     motdFromDoc,
     plainStyle,
     replaceRange,
@@ -341,7 +342,7 @@ export function MotdEditor(props: { open: boolean; onClose: () => void }) {
                 }
             >
                 <PaperFlex direction="column" gap="half" fullWidth>
-                    <PaperFlex direction="row" gap="onefourth" align="center" wrap>
+                    <PaperFlex direction="row" gap="onefourth" align="center" wrap class={styles.palette}>
                         <For each={MOTD_FORMATS}>
                             {(format) => (
                                 <PaperButton
@@ -381,7 +382,7 @@ export function MotdEditor(props: { open: boolean; onClose: () => void }) {
                                     onMouseDown={keepSelection}
                                     onClick={() => applyFormat(color.code)}
                                 >
-                                    <PaperSwatch color={color.hex} />
+                                    <PaperSwatch color={motdColorCss(color)} />
                                 </PaperButton>
                             )}
                         </For>

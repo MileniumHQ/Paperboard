@@ -16,24 +16,34 @@ export const MOTD_LINES = 2;
 /** characters kept, not counting § codes or line breaks */
 export const MAX_MOTD_CHARS = 256;
 
+/**
+ * Minecraft's sixteen colours, redrawn to read on Paperboard's light and
+ * dark surfaces instead of the game's black list box: each keeps the game
+ * colour's hue, at a lightness with at least 4:1 contrast in its theme. The
+ * grays keep their order from darkest to lightest in both themes, so White
+ * is a light gray on a light surface rather than invisible.
+ */
 export const MOTD_COLORS = [
-    { code: "0", name: "Black", hex: "#000000" },
-    { code: "1", name: "Dark Blue", hex: "#0000AA" },
-    { code: "2", name: "Dark Green", hex: "#00AA00" },
-    { code: "3", name: "Dark Aqua", hex: "#00AAAA" },
-    { code: "4", name: "Dark Red", hex: "#AA0000" },
-    { code: "5", name: "Dark Purple", hex: "#AA00AA" },
-    { code: "6", name: "Gold", hex: "#FFAA00" },
-    { code: "7", name: "Gray", hex: "#AAAAAA" },
-    { code: "8", name: "Dark Gray", hex: "#555555" },
-    { code: "9", name: "Blue", hex: "#5555FF" },
-    { code: "a", name: "Green", hex: "#55FF55" },
-    { code: "b", name: "Aqua", hex: "#55FFFF" },
-    { code: "c", name: "Red", hex: "#FF5555" },
-    { code: "d", name: "Light Purple", hex: "#FF55FF" },
-    { code: "e", name: "Yellow", hex: "#FFFF55" },
-    { code: "f", name: "White", hex: "#FFFFFF" },
+    { code: "0", name: "Black", light: "oklch(0.2 0 0)", dark: "oklch(0.64 0 0)" },
+    { code: "1", name: "Dark Blue", light: "oklch(0.42 0.19 264)", dark: "oklch(0.66 0.16 264)" },
+    { code: "2", name: "Dark Green", light: "oklch(0.45 0.14 142)", dark: "oklch(0.68 0.17 142)" },
+    { code: "3", name: "Dark Aqua", light: "oklch(0.45 0.09 195)", dark: "oklch(0.68 0.11 195)" },
+    { code: "4", name: "Dark Red", light: "oklch(0.45 0.17 27)", dark: "oklch(0.67 0.18 27)" },
+    { code: "5", name: "Dark Purple", light: "oklch(0.42 0.18 328)", dark: "oklch(0.67 0.19 328)" },
+    { code: "6", name: "Gold", light: "oklch(0.55 0.14 70)", dark: "oklch(0.8 0.16 70)" },
+    { code: "7", name: "Gray", light: "oklch(0.48 0 0)", dark: "oklch(0.84 0 0)" },
+    { code: "8", name: "Dark Gray", light: "oklch(0.36 0 0)", dark: "oklch(0.74 0 0)" },
+    { code: "9", name: "Blue", light: "oklch(0.5 0.2 275)", dark: "oklch(0.74 0.15 275)" },
+    { code: "a", name: "Green", light: "oklch(0.53 0.17 142)", dark: "oklch(0.86 0.2 142)" },
+    { code: "b", name: "Aqua", light: "oklch(0.53 0.1 195)", dark: "oklch(0.86 0.12 195)" },
+    { code: "c", name: "Red", light: "oklch(0.53 0.2 25)", dark: "oklch(0.74 0.17 25)" },
+    { code: "d", name: "Light Purple", light: "oklch(0.52 0.22 328)", dark: "oklch(0.78 0.17 328)" },
+    { code: "e", name: "Yellow", light: "oklch(0.54 0.13 105)", dark: "oklch(0.92 0.17 105)" },
+    { code: "f", name: "White", light: "oklch(0.58 0 0)", dark: "oklch(1 0 0)" },
 ] as const;
+
+/** a colour as one CSS value that follows the element's colour scheme */
+export const motdColorCss = (color: { light: string; dark: string }) => `light-dark(${color.light}, ${color.dark})`;
 
 export const MOTD_FORMATS = [
     { code: "l", key: "bold", name: "Bold" },
@@ -43,7 +53,7 @@ export const MOTD_FORMATS = [
     { code: "k", key: "obfuscated", name: "Obfuscated" },
 ] as const;
 
-export const MOTD_COLOR_HEX = new Map<string, string>(MOTD_COLORS.map((c) => [c.code, c.hex]));
+export const MOTD_COLOR_CODES = new Set<string>(MOTD_COLORS.map((c) => c.code));
 
 export interface MotdStyle {
     /** a MOTD_COLORS code; undefined is the list's default gray */
@@ -84,7 +94,7 @@ export const sameStyle = (a: MotdStyle, b: MotdStyle): boolean =>
 
 /** the style after a code, the way the game reads it */
 function readCode(style: MotdStyle, code: string): MotdStyle {
-    if (MOTD_COLOR_HEX.has(code)) return plainStyle(code);
+    if (MOTD_COLOR_CODES.has(code)) return plainStyle(code);
     if (code === "r") return plainStyle();
     const key = FORMAT_BY_CODE.get(code);
     return key ? { ...style, [key]: true } : style;
@@ -189,7 +199,7 @@ export function replaceRange(
 
 /** a code applied to a style: a color or §r replaces, a format toggles */
 export function styleWithCode(style: MotdStyle, code: string): MotdStyle {
-    if (MOTD_COLOR_HEX.has(code)) return { ...style, color: code };
+    if (MOTD_COLOR_CODES.has(code)) return { ...style, color: code };
     if (code === "r") return plainStyle();
     const key = FORMAT_BY_CODE.get(code);
     return key ? { ...style, [key]: !style[key] } : style;

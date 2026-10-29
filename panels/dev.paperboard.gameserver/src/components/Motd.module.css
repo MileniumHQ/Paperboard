@@ -1,4 +1,27 @@
-/* paper-literal-ok-file: Minecraft's own text colours, not theme colours */
+/* paper-literal-ok-file: Minecraft's colours redrawn per theme (core/motd.ts MOTD_COLORS) */
+
+/* the colours below are light-dark() pairs, so the message and the editor's
+   swatches take the colour scheme of the theme they sit in, the same way
+   PaperUI's colors.css picks its ramp */
+.palette,
+.listBox {
+    color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+    .palette,
+    .listBox {
+        color-scheme: dark;
+    }
+}
+
+:global(:is([data-paperui-theme="light"], [data-theme="light"])) :is(.palette, .listBox) {
+    color-scheme: light;
+}
+
+:global(:is([data-paperui-theme="dark"], [data-theme="dark"])) :is(.palette, .listBox) {
+    color-scheme: dark;
+}
 
 /* The server-list message as the Multiplayer list draws it: the text sits on
    the panel's own surface, not the game's black list box. */
@@ -24,74 +47,74 @@
     outline: var(--paper-focus-ring);
 }
 
-/* text with no colour code is the list's gray */
+/* text with no colour code is the list's gray (§7) */
 .plain {
-    color: #AAAAAA;
+    color: light-dark(oklch(0.48 0 0), oklch(0.84 0 0));
 }
 
-/* one class per colour code (core/motd.ts MOTD_COLORS) */
+/* one class per colour code, generated from core/motd.ts MOTD_COLORS */
 .color-0 {
-    color: #000000;
+    color: light-dark(oklch(0.2 0 0), oklch(0.64 0 0));
 }
 
 .color-1 {
-    color: #0000AA;
+    color: light-dark(oklch(0.42 0.19 264), oklch(0.66 0.16 264));
 }
 
 .color-2 {
-    color: #00AA00;
+    color: light-dark(oklch(0.45 0.14 142), oklch(0.68 0.17 142));
 }
 
 .color-3 {
-    color: #00AAAA;
+    color: light-dark(oklch(0.45 0.09 195), oklch(0.68 0.11 195));
 }
 
 .color-4 {
-    color: #AA0000;
+    color: light-dark(oklch(0.45 0.17 27), oklch(0.67 0.18 27));
 }
 
 .color-5 {
-    color: #AA00AA;
+    color: light-dark(oklch(0.42 0.18 328), oklch(0.67 0.19 328));
 }
 
 .color-6 {
-    color: #FFAA00;
+    color: light-dark(oklch(0.55 0.14 70), oklch(0.8 0.16 70));
 }
 
 .color-7 {
-    color: #AAAAAA;
+    color: light-dark(oklch(0.48 0 0), oklch(0.84 0 0));
 }
 
 .color-8 {
-    color: #555555;
+    color: light-dark(oklch(0.36 0 0), oklch(0.74 0 0));
 }
 
 .color-9 {
-    color: #5555FF;
+    color: light-dark(oklch(0.5 0.2 275), oklch(0.74 0.15 275));
 }
 
 .color-a {
-    color: #55FF55;
+    color: light-dark(oklch(0.53 0.17 142), oklch(0.86 0.2 142));
 }
 
 .color-b {
-    color: #55FFFF;
+    color: light-dark(oklch(0.53 0.1 195), oklch(0.86 0.12 195));
 }
 
 .color-c {
-    color: #FF5555;
+    color: light-dark(oklch(0.53 0.2 25), oklch(0.74 0.17 25));
 }
 
 .color-d {
-    color: #FF55FF;
+    color: light-dark(oklch(0.52 0.22 328), oklch(0.78 0.17 328));
 }
 
 .color-e {
-    color: #FFFF55;
+    color: light-dark(oklch(0.54 0.13 105), oklch(0.92 0.17 105));
 }
 
 .color-f {
-    color: #FFFFFF;
+    color: light-dark(oklch(0.58 0 0), oklch(1 0 0));
 }
 
 .bold {
