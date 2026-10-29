@@ -4,6 +4,7 @@ import {
     PaperCode,
     PaperFlex,
     PaperRange,
+    PaperSettingItem,
     PaperTable,
     PaperText,
 } from "@mileniumhq/paperui";
@@ -11,6 +12,7 @@ import {
 export default function PaperRangeDoc() {
     const [value, setValue] = createSignal(40);
     const [level, setLevel] = createSignal(0.6);
+    const [chunks, setChunks] = createSignal(10);
 
     return (
         <PaperFlex direction="column" gap="double" fullWidth>
@@ -154,6 +156,41 @@ export function Example() {
                     valueText={(v) => `${Math.round(v * 100)}%`}
                     onInput={setLevel}
                 />
+            </PaperCard>
+
+            <PaperText preset="body">
+                A horizontal slider fills its parent, and a settings row gives its control side no width of its own.
+                Wrap the slider in a <PaperCode>PaperFlex</PaperCode> with <PaperCode>width="field-wide"</PaperCode> to size it.
+                Pass <PaperCode>onChange</PaperCode> to save once a drag ends, and <PaperCode>onInput</PaperCode> to keep the label live while it moves.
+            </PaperText>
+            <PaperCode block language="tsx">
+{`<PaperSettingItem title="Render distance" description="Chunks sent to each player.">
+    <PaperFlex width="field-wide">
+        <PaperRange
+            label="Distance"
+            min={2}
+            max={32}
+            value={chunks()}
+            formatValue={(n) => \`\${n} chunks\`}
+            onInput={setChunks}
+            onChange={save}
+        />
+    </PaperFlex>
+</PaperSettingItem>`}
+            </PaperCode>
+            <PaperCard padding="double" surface="front">
+                <PaperSettingItem title="Render distance" description="Chunks sent to each player.">
+                    <PaperFlex width="field-wide">
+                        <PaperRange
+                            label="Distance"
+                            min={2}
+                            max={32}
+                            value={chunks()}
+                            formatValue={(n) => `${n} chunks`}
+                            onInput={setChunks}
+                        />
+                    </PaperFlex>
+                </PaperSettingItem>
             </PaperCard>
         </PaperFlex>
     );
