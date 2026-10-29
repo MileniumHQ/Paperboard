@@ -26,6 +26,8 @@ import { onServerOnline } from "./gamerules";
 import { applyPendingRuntimeProperties } from "./runtimeProperties";
 import { observeSavingLine } from "./saving";
 import { writeServerLineBestEffort } from "./serverConsole";
+import { prepareServerPorts } from "./ports";
+import { livePortDeps } from "./portDeps";
 import { type GameServerState, SERVER_PROC_ID, appendCapped, PANEL_ID } from "./types";
 import { TRIGGER_IDS } from "./contract";
 
@@ -121,6 +123,14 @@ export async function startServerInstance(
         );
         const javaBin = javaBinaryPath(javaPath, isWin);
 
+        // the port files are the install's while one runs
+        if (isInstallRunning()) {
+            throw new Error("A server install is running; start the server once it finishes.");
+        }
+        // throws, with who has it, when a port is taken and the user's
+        // setting refuses to move it
+        const moves = await prepareServerPorts(ctx.state.serverSoftware, livePortDeps());
+
         // an install owns the server folder until it activates or rolls
         // back. Checked with no await before the status flips: the install
         // action likewise checks "offline" and claims the folder in one
@@ -136,6 +146,10 @@ export async function startServerInstance(
                     type: "info",
                     content: `[Server] Starting ${softwareName} ${version || "server"} using ${javaPkg}...`,
                 },
+                ...moves.map((move) => ({
+                    type: "warn" as const,
+                    content: `[Server] Port ${move.from} is taken, so ${move.label} uses ${move.to}.`,
+                })),
             ],
         });
 

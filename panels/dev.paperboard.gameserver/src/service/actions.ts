@@ -50,6 +50,8 @@ import { readLoaderSettings, writeLoaderSetting } from "./loaderSettings";
 import { listServerFiles, readServerFile, writeServerFile } from "./serverFiles";
 import { locateAddonConfig } from "./addonConfig";
 import { prepareCrossplay, readCrossplay, writeCrossplaySetting } from "./crossplay";
+import { claimBedrockPort } from "./ports";
+import { livePortDeps } from "./portDeps";
 import { readServerIcon, setServerIcon } from "./serverIcon";
 import { liveInstallDeps } from "./softwareInstallDeps";
 import { installDatapack, listDatapacks, listDatapackVersions, removeDatapack } from "./datapacks";
@@ -1056,7 +1058,9 @@ export const panelActions: ActionDefinition[] = [
             if (isInstallRunning()) {
                 throw new Error("A server install is running; turn crossplay on once it finishes.");
             }
-            return prepareCrossplay(ctx.state.serverSoftware, loaderDeps);
+            await prepareCrossplay(ctx.state.serverSoftware, loaderDeps);
+            await claimBedrockPort(ctx.state.serverSoftware, false, livePortDeps());
+            return readCrossplay(ctx.state.serverSoftware, loaderDeps);
         },
     }),
 

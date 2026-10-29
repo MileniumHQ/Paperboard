@@ -1,12 +1,14 @@
 // offline runtime edits are parked in panel config: an unreadable config must
 // fail the apply, never be treated as empty and overwritten
 import { describe, expect, mock, test } from "bun:test";
+import { portApiStub } from "./portApiStub";
 
 let readError: Error | null = null;
 let savedConfig: Record<string, unknown> | null = null;
 const configSets: Record<string, unknown>[] = [];
 
 mock.module("@mileniumhq/paperapi", () => ({
+    portApi: portApiStub(),
     config: {
         get: async () => {
             if (readError) throw readError;

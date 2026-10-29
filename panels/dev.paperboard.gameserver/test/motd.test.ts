@@ -1,10 +1,12 @@
 // The Overview's server list message: § codes render instead of being
 // stripped, and the editor writes back what the game reads.
 import { describe, expect, mock, test } from "bun:test";
+import { portApiStub } from "./portApiStub";
 import { readFileSync } from "node:fs";
 
 let propertiesFile: string | null = null;
 mock.module("@mileniumhq/paperapi", () => ({
+    portApi: portApiStub(),
     config: { get: async () => ({}) },
     files: { read: async () => propertiesFile },
     system: { getLocalIP: async () => "127.0.0.1" },

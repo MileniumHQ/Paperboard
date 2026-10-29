@@ -1,10 +1,12 @@
 import { describe, expect, test, mock, beforeEach } from "bun:test";
+import { portApiStub } from "./portApiStub";
 
 const calls: string[] = [];
 let installed = false;
 let failDownload = false;
 
 mock.module("@mileniumhq/paperapi", () => ({
+    portApi: portApiStub(),
     packageApi: {
         isInstalled: async (_id: string) => installed,
         download: async (_id: string, onProgress: (progress: any) => void) => {

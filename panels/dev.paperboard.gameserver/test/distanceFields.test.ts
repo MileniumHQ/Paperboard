@@ -2,6 +2,7 @@
 // store through the same writeServerProperties path as every other field, and
 // the slider's bounds are the field's bounds.
 import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { portApiStub } from "./portApiStub";
 import { createSignal } from "solid-js";
 
 const [serverVersion, setServerVersion] = createSignal("1.21.4");
@@ -10,6 +11,7 @@ mock.module("../src/lib/server", () => ({ serverVersion, setServerVersion }));
 let disk = "";
 const writes: string[] = [];
 mock.module("@mileniumhq/paperapi", () => ({
+    portApi: portApiStub(),
     fileApi: {
         read: async () => disk,
         write: async (_path: string, content: string) => {

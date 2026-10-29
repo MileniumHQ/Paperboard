@@ -2,10 +2,12 @@
 // modpack change cannot be settled, starting the server and installing stay
 // blocked, the reason is in state for the UI, and a retry lifts the block.
 import { describe, it, expect, mock, beforeEach } from "bun:test";
+import { portApiStub } from "./portApiStub";
 
 const filesFake = { read: async () => null, write: async () => "/fake", exists: async () => true, getPath: async () => "/srv/mc", delete: async () => true };
 
 mock.module("@mileniumhq/paperapi", () => ({
+    portApi: portApiStub(),
     config: { get: async () => ({}), set: async () => true },
     processApi: { write: async () => {}, kill: async () => {}, exists: async () => false, start: async () => ({ success: true }), run: async () => ({}), onData: () => () => {}, onExit: () => () => {} },
     files: filesFake,

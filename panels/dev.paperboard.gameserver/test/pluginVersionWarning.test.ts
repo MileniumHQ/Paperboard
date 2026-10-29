@@ -1,6 +1,7 @@
 // The install-warning sentence picks the side of the running version a
 // build's target list sits on, so the copy never recites 20 version ids.
 import { describe, expect, test, mock } from "bun:test";
+import { portApiStub } from "./portApiStub";
 
 mock.module("../src/lib/server", () => ({
     serverSoftware: () => "paper",
@@ -16,6 +17,7 @@ mock.module("../src/lib/server", () => ({
 }));
 
 mock.module("@mileniumhq/paperapi", () => ({
+    portApi: portApiStub(),
     fileApi: {},
     files: {},
     config: { get: async () => ({}), set: async () => true },

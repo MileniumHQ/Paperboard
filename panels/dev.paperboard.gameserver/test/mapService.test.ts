@@ -4,6 +4,7 @@
 // for both palette formats Minecraft has shipped. The 26.x string palette
 // is the one that used to paint every chunk as air (an all-black map).
 import { describe, it, expect, mock, beforeEach } from "bun:test";
+import { portApiStub } from "./portApiStub";
 import * as fs from "node:fs";
 import { deflateSync } from "node:zlib";
 import { join } from "node:path";
@@ -33,6 +34,7 @@ const fileApiFake = {
 };
 
 mock.module("@mileniumhq/paperapi", () => ({
+    portApi: portApiStub(),
     config: {
         get: async () => null,
         set: async () => true,

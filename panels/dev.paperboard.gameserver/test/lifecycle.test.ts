@@ -2,7 +2,15 @@
 // the server — status, presence, chat, gamerule values — comes from
 // handleProcessData/handleProcessExit, so every transition is pinned here:
 // start marker, join/leave player events, gamerule readouts, exit handling.
-import { describe, it, expect, mock, beforeEach } from "bun:test";
+import { afterAll, describe, it, expect, mock, beforeEach } from "bun:test";
+import * as nodeFs from "node:fs";
+import * as nodeOs from "node:os";
+import * as nodePath from "node:path";
+import { portApiStub } from "./portApiStub";
+
+// a real, empty server folder: the start reads its port files
+const serverDir = nodeFs.mkdtempSync(nodePath.join(nodeOs.tmpdir(), "pb-lifecycle-"));
+afterAll(() => nodeFs.rmSync(serverDir, { recursive: true, force: true }));
 
 const writes: string[] = [];
 const kills: string[] = [];
@@ -11,6 +19,7 @@ let savedConfig: Record<string, unknown> = {};
 const configSets: Record<string, unknown>[] = [];
 
 mock.module("@mileniumhq/paperapi", () => ({
+    portApi: portApiStub(),
     config: {
         get: async () => savedConfig,
         set: async (value: Record<string, unknown>) => {
@@ -39,7 +48,7 @@ mock.module("@mileniumhq/paperapi", () => ({
         read: async () => null,
         write: async () => "/fake",
         exists: async () => true,
-        getPath: async () => "/srv/mc",
+        getPath: async () => serverDir,
         download: async () => "/fake",
         clear: async () => true,
         delete: async () => true,
@@ -48,7 +57,7 @@ mock.module("@mileniumhq/paperapi", () => ({
         read: async () => null,
         write: async () => "/fake",
         exists: async () => true,
-        getPath: async () => "/srv/mc",
+        getPath: async () => serverDir,
         download: async () => "/fake",
         clear: async () => true,
         delete: async () => true,

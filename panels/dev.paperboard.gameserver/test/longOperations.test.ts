@@ -2,10 +2,12 @@
 // takes minutes, so the bridge call must not be cut off at its 30 s default
 // while the service is still working.
 import { describe, it, expect, mock, beforeAll } from "bun:test";
+import { portApiStub } from "./portApiStub";
 
 const calls: { action: string; options: unknown }[] = [];
 
 mock.module("@mileniumhq/paperapi", () => ({
+    portApi: portApiStub(),
     createPanelBridge: () => ({
         onStateChange: () => {},
         refreshState: async () => ({}),

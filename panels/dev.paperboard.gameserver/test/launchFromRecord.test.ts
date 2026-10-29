@@ -1,6 +1,14 @@
 // startServerInstance launches whatever the last install recorded, and
 // refuses while an install holds the server folder.
-import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import * as nodeFs from "node:fs";
+import * as nodeOs from "node:os";
+import * as nodePath from "node:path";
+import { portApiStub } from "./portApiStub";
+
+// a real, empty server folder: the start reads its port files
+const serverDir = nodeFs.mkdtempSync(nodePath.join(nodeOs.tmpdir(), "pb-launch-"));
+afterAll(() => nodeFs.rmSync(serverDir, { recursive: true, force: true }));
 
 let savedConfig: Record<string, unknown> = {};
 let os = "linux";
@@ -11,10 +19,11 @@ const files = {
     read: async () => null,
     write: async () => "/fake",
     exists: async (p: string) => present.has(p),
-    getPath: async () => "/srv/mc",
+    getPath: async () => serverDir,
     download: async () => "/fake",
 };
 mock.module("@mileniumhq/paperapi", () => ({
+    portApi: portApiStub(),
     config: { get: async () => savedConfig, set: async () => true },
     processApi: {
         start: async (o: any) => {
@@ -78,7 +87,7 @@ describe("startServerInstance", () => {
         expect(starts[0]).toMatchObject({
             command: "/pkgs/java-21/bin/java",
             args: ["-Xmx6G", "-Xms6G", "@libraries/net/neoforged/neoforge/21.1.256/unix_args.txt", "nogui"],
-            cwd: "/srv/mc",
+            cwd: serverDir,
         });
         expect(ctx.state.serverStatus).toBe("starting");
     });
