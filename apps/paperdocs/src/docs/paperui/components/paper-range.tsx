@@ -115,6 +115,30 @@ export function Example() {
                             <td><PaperCode>undefined</PaperCode></td>
                             <td>Text that assistive technology reads for the value, for example <PaperCode>"60%"</PaperCode>.</td>
                         </tr>
+                        <tr>
+                            <td><PaperCode>label</PaperCode></td>
+                            <td><PaperCode>string</PaperCode></td>
+                            <td><PaperCode>undefined</PaperCode></td>
+                            <td>Shown above a horizontal track. Also the slider's accessible name unless <PaperCode>aria-label</PaperCode> is set.</td>
+                        </tr>
+                        <tr>
+                            <td><PaperCode>formatValue</PaperCode></td>
+                            <td><PaperCode>(value: number) =&gt; string</PaperCode></td>
+                            <td><PaperCode>undefined</PaperCode></td>
+                            <td>Shows the current value above a horizontal track, for example <PaperCode>"8 GB"</PaperCode>.</td>
+                        </tr>
+                        <tr>
+                            <td><PaperCode>marks</PaperCode></td>
+                            <td><PaperCode>{"{ value: number; label?: string }[]"}</PaperCode></td>
+                            <td><PaperCode>undefined</PaperCode></td>
+                            <td>Ticks under a horizontal track. A label prints under its tick, and clicking it selects that value. Marks hang below the slider without taking room, so a range with marks fits a row like one without. Leave space under it when nothing else does.</td>
+                        </tr>
+                        <tr>
+                            <td><PaperCode>snapToMarks</PaperCode></td>
+                            <td><PaperCode>boolean</PaperCode></td>
+                            <td><PaperCode>false</PaperCode></td>
+                            <td>Only the marks are selectable. Dragging and the arrow keys move between them.</td>
+                        </tr>
                     </tbody>
                 </PaperTable>
 

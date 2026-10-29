@@ -85,9 +85,13 @@
     font-variant-numeric: tabular-nums;
 }
 
+/* Marks hang below the track without taking room: the negative margin
+   cancels their height and the gap above them, so a range with marks sits
+   in a row exactly like one without. */
 .marks {
     position: relative;
     height: calc(var(--paper-text-size-1) * 1.6 + var(--paper-uigap-onefourth));
+    margin-bottom: calc(-1 * (var(--paper-text-size-1) * 1.6 + var(--paper-uigap-onefourth) + var(--paper-uigap-half)));
 }
 
 .mark {
