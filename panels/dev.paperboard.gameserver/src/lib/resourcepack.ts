@@ -1,6 +1,6 @@
 import { serverBridge, serverVersion } from "./server";
 import { ACTION_IDS } from "../service/contract";
-import { modrinthFetch, parseSearchHits, SEARCH_LIMIT, type ModrinthHit, type RawHit } from "./plugins";
+import { searchProjects, type ModrinthHit } from "./modrinth";
 import { RESOURCEPACK_PROJECT_TYPE, type ResourcePackSelection } from "../core/resourcepack";
 import type { ResourcePackView } from "../service/resourcepack";
 import type { ModrinthVersion } from "../core/modrinth";
@@ -13,17 +13,11 @@ export type { ModrinthHit, ModrinthVersion, ResourcePackSelection, ResourcePackV
 export async function searchResourcePacks(query: string, signal?: AbortSignal): Promise<ModrinthHit[]> {
     const mcVersion = serverVersion();
     if (!mcVersion) throw new Error("Choose a server version before browsing resource packs.");
-    const data = await modrinthFetch<{ hits?: RawHit[] }>(
-        "/search",
-        {
-            query,
-            limit: String(SEARCH_LIMIT),
-            facets: JSON.stringify([[`project_type:${RESOURCEPACK_PROJECT_TYPE}`], [`versions:${mcVersion}`]]),
-            index: query ? "relevance" : "downloads",
-        },
+    return searchProjects({
+        query,
         signal,
-    );
-    return parseSearchHits(data.hits);
+        facets: [[`project_type:${RESOURCEPACK_PROJECT_TYPE}`], [`versions:${mcVersion}`]],
+    });
 }
 
 export const readResourcePack = () => serverBridge.call<ResourcePackView>(ACTION_IDS.readResourcePack);

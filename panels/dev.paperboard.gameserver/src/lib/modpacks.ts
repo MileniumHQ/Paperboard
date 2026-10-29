@@ -1,6 +1,6 @@
 import { serverBridge, serverSoftware } from "./server";
 import { ACTION_IDS } from "../service/contract";
-import { modrinthFetch, parseSearchHits, SEARCH_LIMIT, type ModrinthHit, type RawHit } from "./plugins";
+import { searchProjects, type ModrinthHit } from "./modrinth";
 import { MODPACK_LOADER, type ModpackRecord } from "../core/modpack";
 import type { ModpackInstallOutcome } from "../service/modpacks";
 import type { ModrinthVersion } from "../core/modrinth";
@@ -13,22 +13,17 @@ export type { ModpackInstallOutcome, ModpackRecord, ModrinthHit, ModrinthVersion
 export async function searchModpacks(query: string, signal?: AbortSignal): Promise<ModrinthHit[]> {
     const loader = MODPACK_LOADER[serverSoftware()];
     if (!loader) return [];
-    const data = await modrinthFetch<{ hits?: (RawHit & { server_side?: string })[] }>(
-        "/search",
-        {
-            query,
-            limit: String(SEARCH_LIMIT),
-            facets: JSON.stringify([
-                ["project_type:modpack"],
-                [`categories:${loader.modrinth}`],
-                ["server_side:required", "server_side:optional"],
-            ]),
-            index: query ? "relevance" : "downloads",
-        },
+    return searchProjects({
+        query,
         signal,
-    );
-    // the facet lets a few client-only packs through; they install nothing on a server
-    return parseSearchHits(data.hits?.filter((hit) => hit.server_side !== "unsupported"));
+        facets: [
+            ["project_type:modpack"],
+            [`categories:${loader.modrinth}`],
+            ["server_side:required", "server_side:optional"],
+        ],
+        // the facet lets a few client-only packs through; they install nothing on a server
+        keep: (hit) => hit.server_side !== "unsupported",
+    });
 }
 
 export const readModpack = () => serverBridge.call<{ modpack: ModpackRecord | null }>(ACTION_IDS.readModpack);
