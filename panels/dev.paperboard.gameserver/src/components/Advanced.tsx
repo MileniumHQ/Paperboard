@@ -3,8 +3,7 @@ import {
     PaperFlex,
     PaperInput,
     PaperQuote,
-    PaperSelectMenu,
-    PaperSelectMenuItem,
+    PaperRange,
     PaperSettingItem,
     PaperSettingList,
     PaperText,
@@ -22,7 +21,9 @@ import {
     updatePanelConfig,
 } from "../lib/server";
 import {
+    DISTANCE_PROPERTY_FIELDS,
     defaultValueFor,
+    isValidFieldValue,
     readServerPropertiesStrict,
     writeServerProperties,
 } from "../lib/properties";
@@ -31,14 +32,16 @@ import { errorMessage } from "../lib/failure";
 
 const SAVE_DEBOUNCE_MS = 400;
 
-const RAM_CHOICES = Array.from(
+// a tick at the smallest size and at every fourth gigabyte
+const RAM_MARKS = Array.from(
     { length: MAX_RAM_GB - MIN_RAM_GB + 1 },
     (_, i) => MIN_RAM_GB + i,
-);
+).filter((gb) => gb === MIN_RAM_GB || gb % 4 === 0);
 
 // server.properties entries not exposed in the Options, Worlds or Game Rules
 // tabs, or by the Overview's MOTD editor
 const ADVANCED_PROPERTY_FIELDS: PropertyField[] = [
+    ...DISTANCE_PROPERTY_FIELDS,
     {
         key: "online-mode",
         title: "Online Mode",
@@ -199,6 +202,8 @@ export default function Advanced() {
 
     const [ramError, setRamError] = createSignal("");
     const [ramSaved, setRamSaved] = createSignal(false);
+    // the size under the thumb while dragging; stored when the drag ends
+    const [ramDraft, setRamDraft] = createSignal<number | null>(null);
 
     let saveTimer: ReturnType<typeof setTimeout> | null = null;
     let ramSavedTimer: ReturnType<typeof setTimeout> | null = null;
@@ -229,6 +234,7 @@ export default function Advanced() {
         const gb = Number(value);
         if (!Number.isInteger(gb) || gb < MIN_RAM_GB || gb > MAX_RAM_GB) return;
         const previous = ramAllocation();
+        if (gb === previous) return;
         setRamAllocation(gb);
         try {
             await updatePanelConfig({ ramGB: gb });
@@ -247,13 +253,7 @@ export default function Advanced() {
         values()?.[field.key] ?? defaultValueFor(field);
 
     const updateValue = (field: PropertyField, value: string) => {
-        if (field.control === "number") {
-            if (value.trim() === "") return;
-            const num = Number(value);
-            if (!Number.isFinite(num)) return;
-            if (field.min !== undefined && num < field.min) return;
-            if (field.max !== undefined && num > field.max) return;
-        }
+        if (!isValidFieldValue(field, value)) return;
         setValues((prev) => ({ ...(prev ?? {}), [field.key]: value }));
         scheduleSave();
     };
@@ -337,19 +337,21 @@ export default function Advanced() {
                     title="Memory Allocation"
                     description={`Java heap size (-Xmx/-Xms) for the server process, from ${MIN_RAM_GB} GB to ${MAX_RAM_GB} GB.`}
                 >
-                    <PaperSelectMenu
-                        name="ramAllocation"
-                        value={String(ramAllocation())}
-                        onValueChange={(val) => void changeRam(String(val))}
-                    >
-                        <For each={RAM_CHOICES}>
-                            {(gb) => (
-                                <PaperSelectMenuItem value={String(gb)}>
-                                    {gb} GB
-                                </PaperSelectMenuItem>
-                            )}
-                        </For>
-                    </PaperSelectMenu>
+                    <PaperFlex width="field-wide">
+                        <PaperRange
+                            aria-label="Memory Allocation"
+                            min={MIN_RAM_GB}
+                            max={MAX_RAM_GB}
+                            marks={RAM_MARKS}
+                            value={ramDraft() ?? ramAllocation()}
+                            formatValue={(gb) => `${gb} GB`}
+                            onInput={setRamDraft}
+                            onChange={(gb) => {
+                                void changeRam(String(gb));
+                                setRamDraft(null);
+                            }}
+                        />
+                    </PaperFlex>
                 </PaperSettingItem>
 
                 <Show when={values()}>

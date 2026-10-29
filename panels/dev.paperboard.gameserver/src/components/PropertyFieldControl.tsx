@@ -1,6 +1,8 @@
 import { createSignal, For } from "solid-js";
 import {
+    PaperFlex,
     PaperInput,
+    PaperRange,
     PaperSelectMenu,
     PaperSelectMenuItem,
     PaperToggle,
@@ -70,6 +72,37 @@ export function FieldControl(props: {
                     }}
                     onBlur={() => setDraft(null)}
                 />
+            );
+        }
+        case "slider": {
+            if (field.min === undefined || field.max === undefined) {
+                throw new Error(`Slider field ${field.key} needs a min and a max`);
+            }
+            // dragging moves the draft; the value is stored once the drag ends
+            const [draft, setDraft] = createSignal<number | null>(null);
+            // a stored value that isn't a number reads as the field's default,
+            // as the Minecraft server itself treats it
+            const stored = () => {
+                const num = Number(props.value());
+                return Number.isFinite(num) ? num : Number(field.defaultValue);
+            };
+            const shown = () => draft() ?? stored();
+            return (
+                <PaperFlex width="field-wide">
+                    <PaperRange
+                        aria-label={field.title}
+                        min={field.min}
+                        max={field.max}
+                        value={shown()}
+                        formatValue={(n) => (field.unit ? `${n} ${field.unit}` : String(n))}
+                        disabled={!hasKnownMcVersion()}
+                        onInput={setDraft}
+                        onChange={(next) => {
+                            props.onUpdate(String(next));
+                            setDraft(null);
+                        }}
+                    />
+                </PaperFlex>
             );
         }
         default:

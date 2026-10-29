@@ -10,12 +10,14 @@ export interface PropertyField {
     key: string;
     title: string;
     description?: string;
-    control: "toggle" | "number" | "select" | "text";
+    control: "toggle" | "number" | "slider" | "select" | "text";
     defaultValue: string;
     min?: number;
     max?: number;
     /** number inputs: "any" allows fractions (the browser's default step of 1 rejects them) */
     step?: "any";
+    /** sliders: the value's unit, shown after the number ("10 chunks"); a slider needs min and max */
+    unit?: string;
     options?: () => { value: string; label: string }[];
     capability?: CapabilityName;
     /** show this field only when another field holds the given value */
@@ -121,6 +123,31 @@ export function visiblePropertyFields(): PropertyField[] {
 // whose *stored* representation is era-dependent get a version-aware
 // resolution here, so a missing key on an old server is never seeded with
 // a value that server cannot parse.
+/** How far the server loads and ticks the world around each player (Advanced tab) */
+export const DISTANCE_PROPERTY_FIELDS: PropertyField[] = [
+    {
+        key: "view-distance",
+        title: "Render Distance",
+        description: "Chunks sent to each player around them. Lower is lighter on the server.",
+        control: "slider",
+        defaultValue: "10",
+        min: 2,
+        max: 32,
+        unit: "chunks",
+    },
+    {
+        key: "simulation-distance",
+        title: "Simulation Distance",
+        description: "Chunks around each player where mobs, crops and redstone keep running.",
+        control: "slider",
+        defaultValue: "10",
+        min: 2,
+        max: 32,
+        unit: "chunks",
+        capability: "simulationDistance",
+    },
+];
+
 /** white-list's default for the running version (26.3 turned it on) */
 export function whitelistDefault(): string {
     return supports("whitelistOnByDefault") ? "true" : "false";
@@ -131,6 +158,22 @@ export function defaultValueFor(field: PropertyField): string {
     if (field.key === "gamemode" && !supports("namedGameSettings")) return "0";
     if (field.key === "white-list") return whitelistDefault();
     return field.defaultValue;
+}
+
+/**
+ * Whether an edit may be stored for this field. A number or slider holds a
+ * finite number inside its bounds (a slider an integer too); every other
+ * control takes any text.
+ */
+export function isValidFieldValue(field: PropertyField, value: string): boolean {
+    if (field.control !== "number" && field.control !== "slider") return true;
+    if (value.trim() === "") return false;
+    const num = Number(value);
+    if (!Number.isFinite(num)) return false;
+    if (field.control === "slider" && !Number.isInteger(num)) return false;
+    if (field.min !== undefined && num < field.min) return false;
+    if (field.max !== undefined && num > field.max) return false;
+    return true;
 }
 
 // a missing file is empty; a failed read throws, so nothing treats an
