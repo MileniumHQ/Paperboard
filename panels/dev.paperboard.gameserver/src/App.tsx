@@ -26,6 +26,7 @@ import Logs from "./components/Logs";
 import Versions from "./components/Versions";
 import Loader from "./components/Loader";
 import Datapacks from "./components/Datapacks";
+import ResourcePack from "./components/ResourcePack";
 import Modpacks from "./components/Modpacks";
 import { MODPACK_LOADER } from "./core/modpack";
 import Files from "./components/Files";
@@ -131,6 +132,9 @@ export default function App() {
                                 Datapacks
                             </PaperMenuItem>
                         </Show>
+                        <PaperMenuItem value="resourcepack" icon="texture">
+                            Resource Pack
+                        </PaperMenuItem>
                         <PaperMenuLabel>Software</PaperMenuLabel>
                         <PaperMenuItem value="versions" icon="deployed_code">
                             Versions
@@ -230,6 +234,9 @@ export default function App() {
                                 <Datapacks active={activeTab() === "datapacks"} />
                             </PaperInterfaceItem>
                         </Show>
+                        <PaperInterfaceItem value="resourcepack">
+                            <ResourcePack active={activeTab() === "resourcepack"} />
+                        </PaperInterfaceItem>
                         <PaperInterfaceItem value="files" variant="fill">
                             <Files reveal={filesReveal()} />
                         </PaperInterfaceItem>
