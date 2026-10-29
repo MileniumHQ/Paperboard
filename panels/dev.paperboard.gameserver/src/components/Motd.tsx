@@ -321,7 +321,7 @@ export function MotdEditor(props: { open: boolean; onClose: () => void }) {
             size="medium"
             footer={
                 <>
-                    <PaperButton onClick={props.onClose}>Cancel</PaperButton>
+                    <PaperButton variant="text" onClick={props.onClose}>Cancel</PaperButton>
                     <PaperButton variant="primary" disabled={!loaded() || saving()} onClick={() => void save()}>
                         Save
                     </PaperButton>
