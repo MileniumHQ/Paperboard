@@ -21,6 +21,10 @@ export const SHELL_INVOKE_CHANNELS = [
     "panel-file-export",
     "panel-file-import",
     "backup-gdrive-connect",
+    "panel-permission-answer",
+    "panel-permissions-list",
+    "panel-permission-set",
+    "open-system-privacy",
 ] as const;
 
 export const SHELL_SEND_CHANNELS = [
@@ -40,4 +44,8 @@ export const SHELL_ON_CHANNELS = [
     "package-updates-changed",
     "computers-changed",
     "discovery-changed",
+    "panel-permission-ask",
+    "panel-screen-pick",
+    "panel-permission-system",
+    "panel-permissions-changed",
 ] as const;

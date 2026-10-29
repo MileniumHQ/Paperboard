@@ -6,6 +6,7 @@ import { broadcastAppSettings, syncTitleBarOverlays, applyNativeTheme, applyRunO
 import * as fs from "fs";
 import * as path from "path";
 import { getLocalDir } from "../../../papercrane/paths";
+import { sanitizeId } from "../../../papercrane/storage";
 import { logger } from "../../../papercrane/logger";
 import { getAppUpdateState } from "../appUpdateSession";
 import { collectPackageUpdates } from "../packageUpdates";
@@ -18,6 +19,8 @@ import { paperboardGoogleClient, signInToGoogleDrive } from "../googleOAuth";
 import { googleSignInPage } from "../googleSignInPage";
 import connectionPool from "./papercrane/ConnectionPool";
 import { launchOptionsFromArgv } from "../../shared/launchOptions";
+import { answerPanelPermissionAsk, openSystemPrivacySettings, panelPermissionStore } from "../panelPermissionHost";
+import { isPanelPermission } from "../panelPermissions";
 
 // native dialogs, modal to the window whose panel asked
 function nativeFileDialogs(event: IpcMainInvokeEvent): PanelFileTransferDeps {
@@ -99,6 +102,30 @@ export default function registerShellIpc(ipcMain: IpcMain) {
             return handler(args);
         });
     }
+
+    // panel permissions: your answer to a question the window was asked,
+    // and the saved answers App Settings lists and changes
+    ipcMain.handle("panel-permission-answer", (event, args) => {
+        assertShellFrame(event, "panel-permission-answer");
+        answerPanelPermissionAsk(event.sender, args);
+    });
+    ipcMain.handle("panel-permissions-list", (event) => {
+        assertShellFrame(event, "panel-permissions-list");
+        return panelPermissionStore().list();
+    });
+    ipcMain.handle("panel-permission-set", (event, args) => {
+        assertShellFrame(event, "panel-permission-set");
+        const a = (args && typeof args === "object" ? args : {}) as Record<string, unknown>;
+        const panelId = typeof a.panelId === "string" ? sanitizeId(a.panelId) : null;
+        if (!panelId) throw new Error("Invalid parameter: panelId");
+        if (!isPanelPermission(a.permission)) throw new Error("Invalid parameter: permission");
+        if (a.answer !== "allowed" && a.answer !== "denied") throw new Error("Invalid parameter: answer");
+        panelPermissionStore().set(panelId, a.permission, a.answer);
+    });
+    ipcMain.handle("open-system-privacy", (event, permission) => {
+        assertShellFrame(event, "open-system-privacy");
+        return openSystemPrivacySettings(permission);
+    });
 
     // a panel's save and open dialogs; the shell names the asking frame
     ipcMain.handle("panel-file-export", (event, args) => {

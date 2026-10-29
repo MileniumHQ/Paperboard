@@ -17,6 +17,7 @@ import {
 } from "@mileniumhq/paperui";
 import { isBrowserShell, shellIpc } from "../../lib/shell";
 import type { SettingsFailure } from "../../hooks/useAppSettings";
+import PanelPermissionSettings from "./PanelPermissionSettings";
 import styles from "./AppSettings.module.css";
 // Inlined at build time: the viewer always shows the exact files shipped
 // in this repo, so the text cannot drift from the license on disk.
@@ -60,6 +61,8 @@ export default function AppSettings(props: {
     onChange: (next: AppSettingsData) => void;
     /** reopens Paperboard's own tutorial */
     onShowTutorial: () => void;
+    /** a panel's name, for the permissions you've given panels */
+    panelName?: (panelId: string) => string;
     /** the phone layout: grouped rows, the way phones lay out settings */
     compact?: boolean;
     /** a load or save that didn't go through */
@@ -226,6 +229,11 @@ export default function AppSettings(props: {
                     </PaperSettingItem>
                 </Show>
             </PaperSettingList>
+
+            {/* browser mode: the browser keeps its own permissions */}
+            <Show when={!isBrowserShell() && props.panelName}>
+                {(panelName) => <PanelPermissionSettings panelName={panelName()} />}
+            </Show>
 
             <PaperText preset="subtitle">Licenses</PaperText>
             <PaperSettingList autoHeight>

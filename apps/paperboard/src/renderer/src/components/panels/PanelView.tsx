@@ -76,7 +76,7 @@ const PanelFrame: Component<{ panelKey: string; computerName: string; current: b
     return <div class={styles.panelLayer} classList={{ [styles.away]: !props.current }}>
         <iframe ref={frame} data-panel-key={props.panelKey} title={panelId}
             sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-            allow="clipboard-read; clipboard-write"
+            allow="clipboard-read; clipboard-write; microphone; camera; display-capture"
             onLoad={() => frame?.contentWindow?.postMessage({ type: "paperboard:initialize", generation, computerName: props.computerName }, "*")}
             class={`${styles.frame} ${styles.panelFrame}`} classList={{ [styles.unpainted]: !ready() || Boolean(failure()) || Boolean(props.restart) }} />
         <BackupLocationChooser computerId={computerId} computerName={props.computerName} panelId={panelId} open={chooser() !== null} onDone={(result) => {

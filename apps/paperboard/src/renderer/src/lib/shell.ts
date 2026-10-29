@@ -1,6 +1,7 @@
 // Privileged shell-only IPC; panels speak PaperCrane directly over WebSocket.
 import { createBrowserBridge, type ShellIpc } from "./browserBridge";
 import type { LaunchOptions } from "../../../shared/launchOptions";
+import type { PanelPermission, PanelPermissionEntry, PermissionAnswer, PermissionAsk, ScreenPick, SystemBlock } from "../../../shared/panelPermissions";
 
 export interface ComputerInfo {
     id: string;
@@ -192,4 +193,28 @@ export function logToMain(
         // Logging must never break the caller, but the failure itself is logged
         console.warn("[shell.ts] logToMain failed (IPC unavailable):", err);
     }
+}
+
+// Panels ask for the microphone, camera or screen; main asks the window the
+// panel is in (PanelPermissionPrompt) and keeps the answers per panel.
+export const panelPermissionsApi = {
+    list: (): Promise<PanelPermissionEntry[]> =>
+        requireIpc().invoke<PanelPermissionEntry[]>("panel-permissions-list"),
+    set: (panelId: string, permission: PanelPermission, answer: PermissionAnswer): Promise<void> =>
+        requireIpc().invoke<void>("panel-permission-set", { panelId, permission, answer }),
+    /** a PermissionAnswer for an ask, a source id (or null) for a screen pick */
+    answer: (askId: string, answer: string | null): Promise<void> =>
+        requireIpc().invoke<void>("panel-permission-answer", { askId, answer }),
+    openSystemSettings: (permission: PanelPermission): Promise<void> =>
+        requireIpc().invoke<void>("open-system-privacy", permission),
+    onAsk: (cb: (ask: PermissionAsk) => void) => listen("panel-permission-ask", cb),
+    onScreenPick: (cb: (pick: ScreenPick) => void) => listen("panel-screen-pick", cb),
+    onSystemBlock: (cb: (block: SystemBlock) => void) => listen("panel-permission-system", cb),
+    onChanged: (cb: () => void) => listen("panel-permissions-changed", cb),
+};
+
+function listen<T>(channel: string, cb: (payload: T) => void): () => void {
+    const handler = (_event: unknown, payload: T) => cb(payload);
+    requireIpc().on(channel, handler);
+    return () => requireIpc().removeListener?.(channel, handler);
 }

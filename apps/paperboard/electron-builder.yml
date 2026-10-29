@@ -42,6 +42,9 @@ nsis:
     uninstallerIcon: build/icon.ico
 mac:
     entitlementsInherit: build/entitlements.mac.plist
+    extendInfo:
+        NSMicrophoneUsageDescription: A panel you allowed wants to hear you.
+        NSCameraUsageDescription: A panel you allowed wants to see you.
     icon: build/icon.icns
     category: public.app-category.utilities
     target:

@@ -19,6 +19,7 @@ import {
 } from "@mileniumhq/paperapi";
 import {
     computersApi,
+    isBrowserShell,
     logToMain,
     shellApi,
     panelUrl,
@@ -27,6 +28,7 @@ import {
 } from "./lib/shell";
 import type { LaunchOptions } from "../../shared/launchOptions";
 import AppSettings from "./components/settings/AppSettings";
+import PanelPermissionPrompt from "./components/panels/PanelPermissionPrompt";
 import PanelView from "./components/panels/PanelView";
 import LibraryFrame from "./components/panels/LibraryFrame";
 import PanelContextMenu from "./components/panels/PanelContextMenu";
@@ -654,6 +656,7 @@ const App: Component = () => {
                             >
                                 <AppSettings
                                     settings={appSettings()}
+                                    panelName={(panelId) => Object.values(panelsByComputer()).flat().find((p) => p.id === panelId)?.name || panelId}
                                     onChange={handleAppSettingsChange}
                                     onShowTutorial={() => setOpenTutorial("app")}
                                     failure={settingsFailure()}
@@ -955,6 +958,12 @@ const App: Component = () => {
                 </PaperSlidePage>
             </Show>
 
+            {/* browser mode: the browser asks itself */}
+            <Show when={!isBrowserShell()}>
+                <PanelPermissionPrompt
+                    panelName={(compId, panelId) => panelsByComputer()[compId]?.find((p) => p.id === panelId)?.name || panelId}
+                />
+            </Show>
             <AppUpdateModal state={appUpdate.state()} open={appUpdate.open()} onClose={() => appUpdate.setOpen(false)} />
             <PackageUpdateModal
                 state={packageUpdates.state()}

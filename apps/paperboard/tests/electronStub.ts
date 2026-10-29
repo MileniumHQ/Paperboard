@@ -18,7 +18,7 @@ export function electronStub() {
             off: () => undefined,
         },
         clipboard: { readText: async () => "", writeText: async () => undefined },
-        shell: { openPath: async () => "" },
+        shell: { openPath: async () => "", openExternal: async () => undefined },
         BrowserWindow: class {},
         Menu: {},
         protocol: {},
@@ -37,5 +37,10 @@ export function electronStub() {
         webContents: {},
         webFrameMain: {},
         dialog: {},
+        desktopCapturer: { getSources: async () => [] },
+        systemPreferences: {
+            getMediaAccessStatus: () => "granted",
+            askForMediaAccess: async () => true,
+        },
     };
 }
