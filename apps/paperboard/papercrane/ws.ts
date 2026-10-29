@@ -18,6 +18,7 @@ import { handleActions } from "./rpc/actions";
 import { handleSystem } from "./rpc/system";
 import { handleSecrets } from "./rpc/secrets";
 import { handleBackups } from "./rpc/backups";
+import { handlePorts } from "./rpc/ports";
 import { PROTOCOL_VERSION, ErrorCode } from "./protocol";
 import { rpcErrorCode, assertPanelId, assertStr } from "./rpc/params";
 import { requireHost } from "./principal";
@@ -749,7 +750,8 @@ export function setupWebSocketServer(
                     (await handleActions(action, id, params, rpcCtx)) ||
                     (await handleSystem(action, id, params, rpcCtx)) ||
                     (await handleSecrets(action, id, params, rpcCtx)) ||
-                    (await handleBackups(action, id, params, rpcCtx))
+                    (await handleBackups(action, id, params, rpcCtx)) ||
+                    (await handlePorts(action, id, params, rpcCtx))
                 ) {
                     return;
                 }

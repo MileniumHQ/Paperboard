@@ -386,6 +386,10 @@
                         "name": "Permissions",
                         "file": "permissions"
                     },
+                    "ports": {
+                        "name": "Ports API",
+                        "file": "ports"
+                    },
                     "process": {
                         "name": "Process API",
                         "file": "process"

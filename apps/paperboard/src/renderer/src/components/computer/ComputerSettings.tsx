@@ -10,6 +10,7 @@ import {
 import type { ComputerItem } from "../../App";
 import { computerIcon } from "./computerIcon";
 import BackupLocations from "../backups/BackupLocations";
+import ComputerPorts from "./ComputerPorts";
 
 export interface ComputerSettingsProps {
     computer?: ComputerItem;
@@ -57,6 +58,9 @@ const ComputerSettings: Component<ComputerSettingsProps> = (props) => {
             <PaperFlex direction="column" gap="double" fullWidth>
                 <Show when={props.computer}>
                     {(computer) => <BackupLocations computerId={computer().id} computerName={computer().name || "This Computer"} />}
+                </Show>
+                <Show when={props.computer}>
+                    {(computer) => <ComputerPorts computerId={computer().id} />}
                 </Show>
 
                 <Show when={!isLocal()}>
