@@ -12,7 +12,7 @@ import {
     PaperText,
 } from "@mileniumhq/paperui";
 import type { AddonKind, AddonListing, AddonTarget, AddonVersion } from "../../lib/addons/kind";
-import type { createAddonInstall, createAddonRemove } from "./state";
+import type { AddonBrowserState, createAddonInstall, createAddonRemove } from "./state";
 
 /** What a kind's own part of the install dialog is given. */
 export interface InstallExtrasProps {
@@ -153,6 +153,34 @@ export function AddonRemoveModal<Meta>(props: {
                         {remove().error()}
                     </PaperQuote>
                 </Show>
+            </PaperFlex>
+        </PaperModal>
+    );
+}
+
+/** Asks before an upload that replaces what the server has. */
+export function AddonUploadConfirmModal<Meta>(props: { kind: AddonKind<Meta>; browser: AddonBrowserState<Meta> }) {
+    const confirm = () => props.kind.upload?.confirm;
+    return (
+        <PaperModal
+            open={props.browser.pendingUpload() !== null}
+            onClose={() => void props.browser.cancelUpload()}
+            title={confirm()?.title ?? "Upload"}
+            size="small"
+            footer={
+                <>
+                    <PaperButton onClick={() => void props.browser.cancelUpload()}>Cancel</PaperButton>
+                    <PaperButton variant="success" onClick={() => void props.browser.confirmUpload()}>
+                        <PaperIcon aria-hidden="true">{props.kind.install.icon}</PaperIcon>
+                        {confirm()?.action}
+                    </PaperButton>
+                </>
+            }
+        >
+            <PaperFlex direction="column" gap="half">
+                <PaperText preset="body">
+                    {props.browser.pendingUpload()?.name}: {confirm()?.text}
+                </PaperText>
             </PaperFlex>
         </PaperModal>
     );

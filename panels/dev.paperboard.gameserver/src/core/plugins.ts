@@ -12,6 +12,8 @@ export interface InstalledRecord {
 export interface InstalledPlugin {
     filename: string;
     record?: InstalledRecord;
+    /** added through Upload, so no Modrinth record describes it */
+    uploaded?: true;
 }
 
 export const INSTALL_RECORDS_KEY = "pluginInstalls";
@@ -42,16 +44,18 @@ export function parseInstallRecords(raw: unknown): Record<string, InstalledRecor
     return records;
 }
 
+/**
+ * Strict jar names only, without importing filesystem. `+` is allowed:
+ * Modrinth build metadata uses it in filenames and nothing here is
+ * shell-interpolated.
+ */
+export function isPluginFilename(name: string): boolean {
+    return /^[A-Za-z0-9][A-Za-z0-9._ ()+-]*$/.test(name) && !name.includes("..") && name.toLowerCase().endsWith(".jar");
+}
+
 export function validatePluginFilename(filename: string): string {
     const trimmed = filename.trim();
-    // strict jar names only, without importing filesystem. `+` is allowed:
-    // Modrinth build metadata uses it in filenames and nothing here is
-    // shell-interpolated.
-    const ok =
-        /^[A-Za-z0-9][A-Za-z0-9._ ()+-]*$/.test(trimmed) &&
-        !trimmed.includes("..") &&
-        trimmed.toLowerCase().endsWith(".jar");
-    if (!ok) {
+    if (!isPluginFilename(trimmed)) {
         throw new Error(`Refusing to delete unsafe path: "${filename}"`);
     }
     return trimmed;

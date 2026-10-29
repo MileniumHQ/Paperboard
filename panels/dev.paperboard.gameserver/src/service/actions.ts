@@ -62,6 +62,8 @@ import {
 } from "./resourcepack";
 import { liveResourcePackDeps } from "./resourcepackDeps";
 import { installModpack, listModpackVersions, readModpack, removeModpack } from "./modpacks";
+import { discardUpload, uploadDatapacks, uploadModpack, uploadPlugins } from "./addonUploads";
+import { liveUploadDeps } from "./addonUploadDeps";
 import { liveModpackDeps } from "./modpackDeps";
 import { assertPlayerName, assertSingleLine } from "../core/players";
 import type { GameServerState } from "./types";
@@ -1411,6 +1413,76 @@ export const panelActions: ActionDefinition[] = [
                 throw new Error("Stop the server before removing the modpack");
             }
             return withInstallLock(() => removeModpack(liveModpackDeps(ctx)));
+        },
+    }),
+
+    defineAction({
+        id: ACTION_IDS.uploadPlugins,
+        name: "Upload Plugins",
+        category: "Plugins",
+        description: "Adds .jar files the page staged to plugins/ or mods/ after checking each one",
+        internal: true,
+        template: "Upload plugins {stage}",
+        inputs: { stage: { type: "string", label: "Upload", required: true } },
+        output: { type: "object", label: "Added" },
+        quick: false,
+        icon: "upload",
+        run: async (ctx: ServiceContext<GameServerState>, inputs: { stage?: string }) =>
+            withInstallLock(() => uploadPlugins(inputs?.stage, ctx.state.serverSoftware, liveUploadDeps(ctx))),
+    }),
+
+    defineAction({
+        id: ACTION_IDS.uploadDatapacks,
+        name: "Upload Datapacks",
+        category: "Worlds",
+        description: "Adds .zip files and folders the page staged to the active world's datapacks after checking each one",
+        internal: true,
+        template: "Upload datapacks {stage}",
+        inputs: { stage: { type: "string", label: "Upload", required: true } },
+        output: { type: "object", label: "Added" },
+        quick: false,
+        icon: "upload",
+        run: async (ctx: ServiceContext<GameServerState>, inputs: { stage?: string }) => {
+            if (!versionSupports(ctx.state.serverVersion, "datapacks")) {
+                throw new Error("Datapacks need Minecraft 1.13 or newer.");
+            }
+            return withInstallLock(() => uploadDatapacks(inputs?.stage, liveUploadDeps(ctx)));
+        },
+    }),
+
+    defineAction({
+        id: ACTION_IDS.uploadModpack,
+        name: "Upload Modpack",
+        category: "Server",
+        description: "Installs a .mrpack the page staged, replacing the server's mods (offline only)",
+        internal: true,
+        template: "Upload modpack {stage}",
+        inputs: { stage: { type: "string", label: "Upload", required: true } },
+        output: { type: "object", label: "Installed" },
+        quick: false,
+        icon: "package_2",
+        run: async (ctx: ServiceContext<GameServerState>, inputs: { stage?: string }) => {
+            if (ctx.state.serverStatus !== "offline") {
+                throw new Error("Stop the server before installing a modpack");
+            }
+            const outcome = await withInstallLock(() => uploadModpack(inputs?.stage, ctx.state.serverSoftware, liveModpackDeps(ctx)));
+            if (outcome.switchedServer) await republishDynamicActions(ctx);
+            return outcome;
+        },
+    }),
+
+    defineAction({
+        id: ACTION_IDS.discardAddonUpload,
+        name: "Discard Upload",
+        category: "Server",
+        description: "Removes files the page staged for an upload it gave up on",
+        internal: true,
+        template: "Discard upload {stage}",
+        inputs: { stage: { type: "string", label: "Upload", required: true } },
+        output: { type: "boolean", label: "Done" },
+        run: async (ctx: ServiceContext<GameServerState>, inputs: { stage?: string }) => {
+            await discardUpload(inputs?.stage, liveUploadDeps(ctx));
+            return true;
         },
     }),
 

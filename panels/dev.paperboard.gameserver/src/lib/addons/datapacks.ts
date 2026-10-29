@@ -2,6 +2,7 @@ import { serverStatus, serverVersion } from "../server";
 import { installDatapack, listDatapacks, listDatapackVersions, removeDatapack, searchDatapacks } from "../datapacks";
 import { versionLabel } from "./presentation";
 import type { DatapackListing } from "../../service/datapacks";
+import { commitDatapacks, discardUpload, listAdded, pickFiles, pickFolder, type UploadOutcome } from "./upload";
 import type { AddonKind, AddonListing, InstalledAddon } from "./kind";
 
 // Datapacks: the active world's datapacks/ folder, plus Modrinth's datapack
@@ -13,11 +14,15 @@ export function installedDatapacks(listing: DatapackListing): InstalledAddon[] {
         title: pack.record?.title ?? pack.name.replace(/\.zip$/i, ""),
         subtitle: pack.name,
         iconUrl: pack.record?.iconUrl,
-        badge: pack.kind === "folder" ? { label: "Folder", variant: "monochrome" } : { label: "Installed", variant: "success" },
-        footer: pack.record?.version ? versionLabel(pack.record.version) : "Added by hand",
+        badge: pack.uploaded
+            ? { label: "Uploaded", variant: "monochrome" }
+            : pack.kind === "folder"
+              ? { label: "Folder", variant: "monochrome" }
+              : { label: "Installed", variant: "success" },
+        footer: pack.record?.version ? versionLabel(pack.record.version) : pack.uploaded ? "Uploaded by you" : "Added by hand",
         project: pack.record ? { projectId: pack.record.projectId, slug: pack.record.slug } : undefined,
         version: pack.record?.version,
-        uploaded: false,
+        uploaded: pack.uploaded === true,
     }));
 }
 
@@ -51,6 +56,17 @@ export const datapacksKind: AddonKind<DatapackListing> = {
     },
 
     itemClick: "remove",
+
+    upload: {
+        sources: [pickFiles("Upload zips", ["zip"]), pickFolder("Upload folder")],
+        failureTitle: "Not added",
+        commit: commitDatapacks,
+        discard: discardUpload,
+        describe: (result) => ({
+            title: "Added",
+            message: `${listAdded((result as UploadOutcome).added)} loads after a reload or restart.`,
+        }),
+    },
 
     install: {
         title: (target) => `Install ${target.title}`,

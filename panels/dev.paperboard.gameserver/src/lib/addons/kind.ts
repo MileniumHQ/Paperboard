@@ -62,6 +62,30 @@ export interface AddonItemAction {
     disabled?(): boolean;
 }
 
+/** One way to bring files in from the user's disk. */
+export interface AddonUploadSource {
+    label: string;
+    icon: string;
+    /** asks the user for the files and copies them into `dir` in the panel's storage */
+    pick(dir: string): Promise<{ status: "imported" | "canceled"; name?: string }>;
+}
+
+export interface AddonUpload {
+    sources: AddonUploadSource[];
+    /** the title over a failed upload */
+    failureTitle: string;
+    /** asks before adding what was picked, for an upload that replaces things */
+    confirm?: { title: string; text: string; action: string };
+    /** the upload cannot start, e.g. while the server runs */
+    disabled?(): boolean;
+    /** the service checks what `pick` staged and adds it; whatever it was, it clears the staging folder */
+    commit(stage: string): Promise<unknown>;
+    /** removes what `pick` staged when the upload ended before or inside `commit` */
+    discard(stage: string): Promise<void>;
+    /** the notice after a finished upload; null when the tab reports the outcome itself */
+    describe(result: unknown): { title: string; message: string } | null;
+}
+
 export interface AddonKind<Meta = undefined> {
     /** the page header */
     title: string;
@@ -100,6 +124,9 @@ export interface AddonKind<Meta = undefined> {
     /** what clicking an installed card does */
     itemClick: "detail" | "remove" | "none";
     itemActions?: AddonItemAction[];
+
+    /** bring add-ons in from disk; absent when the server cannot use them (a resource pack is a URL) */
+    upload?: AddonUpload;
 
     install: {
         title(target: AddonTarget): string;

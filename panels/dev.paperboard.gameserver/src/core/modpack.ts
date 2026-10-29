@@ -235,9 +235,12 @@ export function overrideTarget(
 }
 
 export interface ModpackRecord {
-    projectId: string;
-    versionId: string;
-    slug: string;
+    /** the Modrinth project and version; absent for a pack the user uploaded */
+    projectId?: string;
+    versionId?: string;
+    slug?: string;
+    /** installed from a .mrpack on the user's disk, so no Modrinth record describes it */
+    uploaded?: true;
     title: string;
     versionNumber: string;
     iconUrl?: string;
@@ -252,9 +255,11 @@ export function parseModpackRecord(raw: unknown): ModpackRecord | null {
     if (raw === undefined || raw === null) return null;
     const rec = raw as Record<string, unknown>;
     const str = (key: string) => typeof rec[key] === "string";
+    const uploaded = typeof raw === "object" && rec.uploaded === true;
     if (
         typeof raw !== "object" ||
-        !["projectId", "versionId", "slug", "title", "versionNumber", "mcVersion", "loaderVersion"].every(str) ||
+        !(uploaded ? ["title", "versionNumber", "mcVersion", "loaderVersion"] : ["projectId", "versionId", "slug", "title", "versionNumber", "mcVersion", "loaderVersion"]).every(str) ||
+        (rec.uploaded !== undefined && rec.uploaded !== true) ||
         (rec.iconUrl !== undefined && typeof rec.iconUrl !== "string") ||
         !Array.isArray(rec.files) ||
         !rec.files.every((path) => safePackPath(path) !== null)

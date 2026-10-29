@@ -8,6 +8,7 @@ import {
     pluginDirName,
     searchModrinth,
 } from "../plugins";
+import { commitPlugins, discardUpload, listAdded, pickFiles, type UploadOutcome } from "./upload";
 import type { AddonKind, AddonListing, InstalledAddon } from "./kind";
 
 // Plugins on a plugin server, mods on a mod loader: the same tab, the same
@@ -26,11 +27,11 @@ export function installedPlugins(
         title: entry.record?.title ?? entry.record?.slug ?? pluginTitle(entry.filename),
         subtitle: entry.filename,
         iconUrl: entry.record?.iconUrl,
-        badge: { label: "Installed", variant: "success" },
-        footer: entry.record?.version ? `v${entry.record.version}` : "Unknown version",
+        badge: entry.uploaded ? { label: "Uploaded", variant: "monochrome" } : { label: "Installed", variant: "success" },
+        footer: entry.record?.version ? `v${entry.record.version}` : entry.uploaded ? "Uploaded by you" : "Unknown version",
         project: entry.record ? { projectId: entry.record.projectId, slug: entry.record.slug } : undefined,
         version: entry.record?.version,
-        uploaded: false,
+        uploaded: entry.uploaded === true,
     }));
 }
 
@@ -78,6 +79,19 @@ export const pluginsKind: AddonKind = {
 
     detail: true,
     itemClick: "detail",
+
+    upload: {
+        get sources() {
+            return [pickFiles(isMods() ? "Upload mods" : "Upload plugins", ["jar"])];
+        },
+        failureTitle: "Not added",
+        commit: commitPlugins,
+        discard: discardUpload,
+        describe: (result) => ({
+            title: "Added",
+            message: `${listAdded((result as UploadOutcome).added)} will load the next time the server starts.`,
+        }),
+    },
 
     install: {
         title: (target) => `Install ${target.title}`,

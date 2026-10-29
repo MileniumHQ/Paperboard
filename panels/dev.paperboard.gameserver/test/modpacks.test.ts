@@ -10,8 +10,10 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { zipSync, strToU8 } from "fflate";
 import { installModpack, removeModpack, type ModpackDeps } from "../src/service/modpacks";
+import { uploadModpack } from "../src/service/addonUploads";
+import { addonStageDir } from "../src/core/addonUpload";
 import { activatePack, newPackStagingName, packFilesPath, recoverStagedPacks } from "../src/service/packActivation";
-import { isKeptPath, parsePackIndex, safePackPath, MODPACK_RECORD_KEY, MODPACK_STAGING_KEY } from "../src/core/modpack";
+import { isKeptPath, parseModpackRecord, parsePackIndex, safePackPath, MODPACK_RECORD_KEY, MODPACK_STAGING_KEY } from "../src/core/modpack";
 import { INSTALL_RECORDS_KEY } from "../src/core/plugins";
 import type { ServerSoftwareType } from "../src/software/catalog";
 
@@ -404,4 +406,62 @@ test("a refused combined record restores both server software and pack files", a
     expect(h.read("mods/old.jar")).toBe("old mods");
     expect(h.has("mods/new.jar")).toBe(false);
     expect(h.config().install).toBeUndefined();
+});
+
+describe("a modpack uploaded from disk", () => {
+    const STAGE = "0a1b2c3d-1111-4222-8333-444455556666";
+    const stage = (h: ReturnType<typeof harness>, archive: Uint8Array | string) => {
+        h.write(`${addonStageDir(STAGE)}/pack.mrpack`, "");
+        fs.writeFileSync(path.join(h.root, addonStageDir(STAGE), "pack.mrpack"), archive);
+    };
+
+    test("installs like a Modrinth pack and records that it was uploaded", async () => {
+        const h = harness();
+        const sodium = { path: "mods/sodium.jar", bytes: strToU8("sodium") };
+        h.serve([sodium]);
+        h.write("mods/old.jar", "old");
+        stage(h, mrpack(index([sodium]), { "overrides/config/a.toml": "a=1" }));
+        const outcome = await uploadModpack(STAGE, "fabric", h.deps);
+        expect(outcome).toMatchObject({ title: "Test Pack", versionNumber: "1.0.0", switchedServer: false });
+        expect(h.read("mods/sodium.jar")).toBe("sodium");
+        expect(h.read("config/a.toml")).toBe("a=1");
+        expect(h.trashed("mods/old.jar")).toBe(true);
+        const record = parseModpackRecord(h.config()[MODPACK_RECORD_KEY])!;
+        expect(record).toMatchObject({ uploaded: true, title: "Test Pack", versionNumber: "1.0.0", mcVersion: "1.21.1" });
+        expect(record.projectId).toBeUndefined();
+        expect(h.has(addonStageDir(STAGE))).toBe(false);
+        expect(h.leftovers()).toEqual([]);
+
+        // removing it works from the same record
+        await removeModpack(h.deps);
+        expect(h.has("mods/sodium.jar")).toBe(false);
+    });
+
+    test("a file that is not a zip is refused and cleaned up", async () => {
+        const h = harness();
+        stage(h, "<html>not a pack</html>");
+        await expect(uploadModpack(STAGE, "fabric", h.deps)).rejects.toThrow("The uploaded modpack is not a zip file");
+        expect(h.has(addonStageDir(STAGE))).toBe(false);
+        expect(h.config()[MODPACK_RECORD_KEY]).toBeUndefined();
+        expect(h.leftovers()).toEqual([]);
+    });
+
+    test("a pack for another loader, or one whose file does not match its hash, changes nothing", async () => {
+        const h = harness();
+        h.write("mods/keep.jar", "keep");
+        stage(h, mrpack(index([], { minecraft: "1.21.1", "neoforge": "21.1.1" })));
+        await expect(uploadModpack(STAGE, "fabric", h.deps)).rejects.toThrow("built for neoforge");
+
+        const bad = { path: "mods/x.jar", bytes: strToU8("real"), sha512: "0".repeat(128) };
+        h.serve([bad]);
+        stage(h, mrpack(index([bad])));
+        await expect(uploadModpack(STAGE, "fabric", h.deps)).rejects.toThrow("does not match its sha512");
+        expect(h.read("mods/keep.jar")).toBe("keep");
+        expect(h.config()[MODPACK_RECORD_KEY]).toBeUndefined();
+    });
+
+    test("a missing upload fails with a message, not a crash", async () => {
+        const h = harness();
+        await expect(uploadModpack(STAGE, "fabric", h.deps)).rejects.toThrow("The uploaded modpack is gone");
+    });
 });

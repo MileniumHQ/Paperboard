@@ -1,8 +1,8 @@
-import { Show, type Component, type JSX } from "solid-js";
-import { PaperButton, PaperFlex, PaperPageHeader, PaperQuote } from "@mileniumhq/paperui";
+import { For, Show, type Component, type JSX } from "solid-js";
+import { PaperButton, PaperFlex, PaperIcon, PaperPageHeader, PaperQuote } from "@mileniumhq/paperui";
 import { AddonInstalledList, AddonResults, AddonSearchCard } from "./AddonCards";
 import { AddonDetail, type DetailExtras } from "./AddonDetail";
-import { AddonInstallModal, AddonRemoveModal, type InstallExtrasProps } from "./AddonModals";
+import { AddonInstallModal, AddonRemoveModal, AddonUploadConfirmModal, type InstallExtrasProps } from "./AddonModals";
 import type { AddonBrowserState } from "./state";
 
 export interface AddonBrowserProps<Meta> {
@@ -31,10 +31,31 @@ export default function AddonBrowser<Meta = undefined>(props: AddonBrowserProps<
     return (
         <>
             <PaperPageHeader icon={b().kind.icon} title={b().kind.title}>
+                <For each={b().kind.upload?.sources}>
+                    {(source) => (
+                        <PaperButton disabled={b().busy() || b().kind.upload?.disabled?.()} onClick={() => void b().upload(source)}>
+                            <PaperIcon aria-hidden="true">{b().uploading() ? "hourglass_top" : source.icon}</PaperIcon>
+                            {source.label}
+                        </PaperButton>
+                    )}
+                </For>
                 {props.actions}
             </PaperPageHeader>
 
             {props.notices}
+
+            <Show when={b().uploadError()}>
+                <PaperQuote variant="danger" icon="warning" title={b().kind.upload?.failureTitle ?? "Upload failed"}>
+                    {b().uploadError()}
+                </PaperQuote>
+            </Show>
+            <Show when={b().uploadNotice()}>
+                {(notice) => (
+                    <PaperQuote variant="success" icon="check_circle" title={notice().title}>
+                        {notice().message}
+                    </PaperQuote>
+                )}
+            </Show>
 
             <Show when={b().listError()}>
                 <PaperQuote variant="danger" icon="warning" title={b().kind.listFailureTitle()}>
@@ -95,6 +116,7 @@ export default function AddonBrowser<Meta = undefined>(props: AddonBrowserProps<
             />
             <AddonInstallModal kind={b().kind} install={b().install} extras={props.installExtras} />
             <AddonRemoveModal kind={b().kind} remove={b().remove} listing={b().listing()} />
+            <AddonUploadConfirmModal kind={b().kind} browser={b()} />
             {props.children}
         </>
     );

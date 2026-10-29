@@ -18,6 +18,27 @@ const STAGE_LABEL = {
     error: "Failed",
 } as const;
 
+// where an install is, from the service's progress
+function InstallStages() {
+    return (
+        <Show when={modpackProgress()}>
+            {(p) => (
+                <PaperFlex direction="column" gap="half">
+                    <PaperText size={2} color="text-subtle">
+                        {STAGE_LABEL[p().stage]}
+                        {p().stage === "downloading" ? ` ${p().done} of ${p().total}` : ""}
+                    </PaperText>
+                    <PaperProgress
+                        value={p().stage === "downloading" ? p().done : undefined}
+                        max={Math.max(1, p().total)}
+                        aria-label={STAGE_LABEL[p().stage]}
+                    />
+                </PaperFlex>
+            )}
+        </Show>
+    );
+}
+
 // Installing a pack replaces the mod set and may move the server to the
 // pack's Minecraft version, so the dialog says so and shows the stages.
 function ModpackInstallNotes(props: InstallExtrasProps) {
@@ -35,20 +56,8 @@ function ModpackInstallNotes(props: InstallExtrasProps) {
                     The server switches to Minecraft {props.version!.gameVersions!.join(", ")}; a world opened by a newer version cannot go back.
                 </Show>
             </PaperQuote>
-            <Show when={props.installing && modpackProgress()}>
-                {(p) => (
-                    <PaperFlex direction="column" gap="half">
-                        <PaperText size={2} color="text-subtle">
-                            {STAGE_LABEL[p().stage]}
-                            {p().stage === "downloading" ? ` ${p().done} of ${p().total}` : ""}
-                        </PaperText>
-                        <PaperProgress
-                            value={p().stage === "downloading" ? p().done : undefined}
-                            max={Math.max(1, p().total)}
-                            aria-label={STAGE_LABEL[p().stage]}
-                        />
-                    </PaperFlex>
-                )}
+            <Show when={props.installing}>
+                <InstallStages />
             </Show>
         </>
     );
@@ -73,6 +82,11 @@ export default function Modpacks(props: { active: boolean }) {
             notices={
                 <>
                     <RecoveryNotice />
+                    <Show when={browser.uploading()}>
+                        <PaperQuote icon="info" title="Installing the uploaded modpack">
+                            <InstallStages />
+                        </PaperQuote>
+                    </Show>
                     <Show when={serverStatus() !== "offline"}>
                         <PaperQuote icon="info" title="The server is running">
                             Stop the server to install, update or remove a modpack.

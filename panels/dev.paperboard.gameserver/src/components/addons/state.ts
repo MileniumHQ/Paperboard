@@ -2,7 +2,16 @@ import { createEffect, createSignal, on, onCleanup, type Accessor } from "solid-
 import { errorMessage } from "../../lib/failure";
 import type { ModrinthHit } from "../../lib/modrinth";
 import { versionLabel } from "../../lib/addons/presentation";
-import { defaultVersion, type AddonKind, type AddonListing, type AddonTarget, type AddonVersion, type InstalledAddon } from "../../lib/addons/kind";
+import {
+    defaultVersion,
+    type AddonKind,
+    type AddonListing,
+    type AddonTarget,
+    type AddonUploadSource,
+    type AddonVersion,
+    type InstalledAddon,
+} from "../../lib/addons/kind";
+import { newStage, stageFolder } from "../../lib/addons/upload";
 
 // The state every add-on tab shares: what is installed, the Modrinth search,
 // the install dialog and the remove confirmation. Each is a function of the
@@ -244,7 +253,83 @@ export function createAddonBrowser<Meta = undefined>(options: {
     const [recoverError, setRecoverError] = createSignal("");
     const [recovering, setRecovering] = createSignal(false);
 
-    const busy = () => install.installing() || remove.removing();
+    const [uploading, setUploading] = createSignal(false);
+    const [uploadError, setUploadError] = createSignal("");
+    const [uploadNotice, setUploadNotice] = createSignal<{ title: string; message: string } | null>(null);
+
+    const busy = () => install.installing() || remove.removing() || uploading();
+
+    const [pendingUpload, setPendingUpload] = createSignal<{ stage: string; name: string } | null>(null);
+
+    /** removes what a pick staged, saying so when it cannot */
+    const discardStage = async (stage: string, message = "") => {
+        const way = kind.upload!;
+        try {
+            await way.discard(stage);
+        } catch (cleanup) {
+            console.error(`[${kind.title}] Could not remove the staged upload:`, cleanup);
+            message += ` The files Paperboard staged could not be removed: ${errorMessage(cleanup)}`;
+        }
+        if (message) setUploadError(message.trim());
+    };
+
+    /** has the service check what is staged and add it */
+    const commitUpload = async (stage: string) => {
+        const way = kind.upload!;
+        setUploading(true);
+        try {
+            const result = await way.commit(stage);
+            options.installed?.(result);
+            setUploadNotice(way.describe(result));
+            await reload();
+        } catch (err) {
+            console.error(`[${kind.title}] Upload failed:`, err);
+            // the service clears the staging folder when it got that far; stopping before it leaves the files
+            await discardStage(stage, errorMessage(err));
+            await reload();
+        } finally {
+            setUploading(false);
+        }
+    };
+
+    /** copies the user's pick into a staging folder; the service checks and adds it, after a confirmation if the kind asks for one */
+    const upload = async (source: AddonUploadSource) => {
+        const way = kind.upload;
+        if (!way || busy() || pendingUpload()) return;
+        setUploading(true);
+        setUploadError("");
+        setUploadNotice(null);
+        const stage = newStage();
+        try {
+            const picked = await source.pick(stageFolder(stage));
+            if (picked.status === "canceled") return;
+            if (way.confirm) {
+                setPendingUpload({ stage, name: picked.name ?? "this file" });
+                return;
+            }
+        } catch (err) {
+            console.error(`[${kind.title}] Upload failed:`, err);
+            await discardStage(stage, errorMessage(err));
+            return;
+        } finally {
+            setUploading(false);
+        }
+        await commitUpload(stage);
+    };
+
+    const confirmUpload = async () => {
+        const pending = pendingUpload();
+        if (!pending) return;
+        setPendingUpload(null);
+        await commitUpload(pending.stage);
+    };
+
+    const cancelUpload = async () => {
+        const pending = pendingUpload();
+        if (!pending) return;
+        setPendingUpload(null);
+        await discardStage(pending.stage);
+    };
 
     // what exists depends on the server, so the tab reads again whenever it opens
     createEffect(
@@ -307,6 +392,14 @@ export function createAddonBrowser<Meta = undefined>(options: {
                 });
             }
         },
+        upload,
+        pendingUpload,
+        confirmUpload,
+        cancelUpload,
+        uploading,
+        uploadError,
+        uploadNotice,
+        dismissUploadNotice: () => setUploadNotice(null),
         recoverError,
         recovering,
         recover: async () => {

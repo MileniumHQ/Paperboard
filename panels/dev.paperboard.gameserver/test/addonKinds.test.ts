@@ -126,7 +126,7 @@ test("the modpack tab lists the one pack and opens on the version for this Minec
     software = "neoforge";
     const listing = await modpacksKind.list();
     expect(listing.items).toHaveLength(1);
-    expect(listing.items[0]).toMatchObject({ title: "Pack", footer: "2 files", subtitle: "Minecraft 1.21.1 · NeoForge 21.1.1" });
+    expect(listing.items[0]).toMatchObject({ title: "Pack", footer: "v2.0 · 2 files", subtitle: "Minecraft 1.21.1 · NeoForge 21.1.1" });
 
     answers[ACTION_IDS.listModpackVersions] = [
         { id: "new", versionNumber: "3", name: "", gameVersions: ["1.21.4"] },
