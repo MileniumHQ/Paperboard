@@ -1,9 +1,9 @@
 import { invoke, on } from "./ipc";
 import { newClientId } from "./channels";
 import { requirePanelId } from "./panelIdentity";
-import { importFile, exportFile } from "./fileTransfer";
+import { importFile, importFiles, importFolder, exportFile } from "./fileTransfer";
 
-export { FileTransferError, type FileTransferErrorCode, type FileTypeFilter, type ImportFileOptions, type ImportFileResult, type ExportFileOptions, type ExportFileResult } from "./fileTransfer";
+export { FileTransferError, type FileTransferErrorCode, type FileTypeFilter, type ImportFileOptions, type ImportFileResult, type ImportFilesResult, type ImportFolderResult, type ImportedFile, type ExportFileOptions, type ExportFileResult } from "./fileTransfer";
 
 // every file call names the panel whose storage it touches: an omitted id
 // used to fall back to "whoever this document is", which is ambient identity
@@ -93,6 +93,12 @@ export const fileApi = {
 
     /** asks the user for a file and copies it into targetPath in the panel's storage */
     importFile,
+
+    /** asks the user for one or more files and copies each into the folder targetDir in the panel's storage */
+    importFiles,
+
+    /** asks the user for a folder and copies it, with everything in it, into targetDir in the panel's storage */
+    importFolder,
 };
 
 export const files = fileApi;

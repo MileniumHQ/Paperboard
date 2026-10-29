@@ -4,7 +4,14 @@
 // Identity comes from the frame the message arrived on; the panelId the
 // panel names must agree with it. The request's fields are checked once,
 // by the host that runs the dialog (src/shared/fileTransfer.ts).
-import type { FileTypeFilter, PanelFileTransferResult } from "../../../shared/fileTransfer";
+import {
+    isImportableName,
+    PANEL_IMPORT_MAX_BYTES,
+    PANEL_IMPORT_MAX_FILES,
+    type FileTypeFilter,
+    type ImportedPanelFile,
+    type PanelFileTransferResult,
+} from "../../../shared/fileTransfer";
 import { isBrowserShell, shellIpc } from "./shell";
 
 export const FILE_TRANSFER_REQUEST = "paperboard:file-transfer";
@@ -17,6 +24,7 @@ export interface PanelFileTransferMessage {
     path: unknown;
     suggestedName?: unknown;
     filters?: unknown;
+    selection?: unknown;
 }
 
 /** routing fields only; null for anything that is not a dialog request */
@@ -33,6 +41,7 @@ export function parseFileTransferMessage(data: unknown): PanelFileTransferMessag
         path: message.path,
         suggestedName: message.suggestedName,
         filters: message.filters,
+        selection: message.selection,
     };
 }
 
@@ -54,6 +63,7 @@ export async function runPanelFileTransfer(
         path: message.path,
         suggestedName: message.suggestedName,
         filters: message.filters,
+        selection: message.selection,
     };
     try {
         if (!isBrowserShell()) {
@@ -136,27 +146,75 @@ async function browserSave(request: Record<string, unknown>): Promise<PanelFileT
 }
 
 // <input type=file> works in every browser and reports a cancel
-function pickFile(filters: unknown): Promise<File | null> {
+function pickFiles(filters: unknown, mode: "file" | "files" | "folder"): Promise<File[] | null> {
     return new Promise((resolve) => {
         const input = document.createElement("input");
         input.type = "file";
-        const types = pickerTypes(filters);
-        if (types) input.accept = types.flatMap((t) => Object.values(t.accept).flat()).join(",");
-        input.addEventListener("change", () => resolve(input.files?.[0] ?? null), { once: true });
+        if (mode === "folder") input.webkitdirectory = true;
+        else {
+            input.multiple = mode === "files";
+            const types = pickerTypes(filters);
+            if (types) input.accept = types.flatMap((t) => Object.values(t.accept).flat()).join(",");
+        }
+        input.addEventListener("change", () => resolve(input.files?.length ? [...input.files] : null), { once: true });
         input.addEventListener("cancel", () => resolve(null), { once: true });
         input.click();
     });
 }
 
-async function browserOpen(request: Record<string, unknown>): Promise<PanelFileTransferResult> {
-    const file = await pickFile(request.filters);
-    if (!file) return { status: "canceled" };
+async function writeToHost(request: Record<string, unknown>, file: File): Promise<PanelFileTransferResult> {
     const res = await fetch(`/_shell/panel-file/write?request=${encodeURIComponent(JSON.stringify(request))}`, {
         method: "POST",
         headers: { "Content-Type": "application/octet-stream" },
         body: file,
     });
     if (!res.ok) return failureFrom(res);
-    const result = (await res.json()) as PanelFileTransferResult;
-    return result.status === "imported" ? { ...result, name: file.name } : result;
+    return (await res.json()) as PanelFileTransferResult;
+}
+
+function refused(message: string): PanelFileTransferResult {
+    return failed("failed", message);
+}
+
+async function browserOpen(request: Record<string, unknown>): Promise<PanelFileTransferResult> {
+    const selection = request.selection === "files" || request.selection === "folder" ? request.selection : "file";
+    const picked = await pickFiles(request.filters, selection);
+    if (!picked) return { status: "canceled" };
+    if (selection === "file") {
+        const result = await writeToHost(request, picked[0]!);
+        return result.status === "imported" ? { ...result, name: picked[0]!.name } : result;
+    }
+
+    // a folder arrives as files named by their path below it; the same
+    // names and limits as the desktop shell's
+    const folder = selection === "folder" ? picked[0]!.webkitRelativePath.split("/")[0]! : "";
+    const planned = picked.map((file) => ({
+        file,
+        name: selection === "folder" ? file.webkitRelativePath.split("/").slice(1).join("/") : file.name,
+    }));
+    if (planned.length > PANEL_IMPORT_MAX_FILES) return refused(`Choose at most ${PANEL_IMPORT_MAX_FILES} files`);
+    if (planned.reduce((sum, item) => sum + item.file.size, 0) > PANEL_IMPORT_MAX_BYTES) {
+        return refused(`The files are larger than Paperboard copies (${PANEL_IMPORT_MAX_BYTES} bytes)`);
+    }
+    if (selection === "folder" && !isImportableName(folder)) return refused(`"${folder}" has a name that cannot be copied`);
+    const seen = new Set<string>();
+    for (const item of planned) {
+        if (!item.name.split("/").every(isImportableName)) return refused(`"${item.name}" has a name that cannot be copied`);
+        if (seen.has(item.name)) return refused(`Two chosen files are both called "${item.name}"`);
+        seen.add(item.name);
+    }
+
+    const base = String(request.path).replace(/\/+$/, "") + (selection === "folder" ? `/${folder}` : "");
+    const files: ImportedPanelFile[] = [];
+    let bytes = 0;
+    for (const item of planned) {
+        const result = await writeToHost({ ...request, path: `${base}/${item.name}` }, item.file);
+        if (result.status === "failed") {
+            return { ...result, message: `${item.name}: ${result.message}${files.length ? ` (${files.length === 1 ? "1 file was" : `${files.length} files were`} already copied)` : ""}` };
+        }
+        files.push({ name: item.name, bytes: item.file.size });
+        bytes += item.file.size;
+    }
+    const name = selection === "folder" ? folder : files.length === 1 ? files[0]!.name : `${files.length} files`;
+    return { status: "imported", name, bytes, files };
 }

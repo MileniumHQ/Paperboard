@@ -9,11 +9,21 @@ export interface FileTypeFilter {
     extensions: string[];
 }
 
+/** what an import asks the user to pick: one file (path is the file), several files, or a folder (path is the folder to copy them into) */
+export type PanelImportSelection = "file" | "files" | "folder";
+
+export interface ImportedPanelFile {
+    name: string;
+    bytes: number;
+}
+
 export interface PanelFileTransferRequest {
     computerId: string;
     panelId: string;
     /** a path in the panel's own file storage on that computer */
     path: string;
+    /** import only */
+    selection: PanelImportSelection;
     /** save only: the file name the dialog starts with */
     suggestedName?: string;
     filters: FileTypeFilter[];
@@ -30,7 +40,7 @@ export type PanelFileTransferFailure =
 
 export type PanelFileTransferResult =
     | { status: "exported"; name: string; bytes: number }
-    | { status: "imported"; name: string; bytes: number }
+    | { status: "imported"; name: string; bytes: number; files?: ImportedPanelFile[] }
     | { status: "canceled" }
     | { status: "failed"; code: PanelFileTransferFailure; message: string };
 
@@ -44,6 +54,14 @@ export class PanelFileTransferError extends Error {
 }
 
 export const PANEL_FILE_PATH_MAX = 1024;
+/** a picked folder or selection larger than this is refused before anything is copied */
+export const PANEL_IMPORT_MAX_FILES = 5000;
+export const PANEL_IMPORT_MAX_BYTES = 2 * 1024 * 1024 * 1024;
+
+/** A name from the user's disk that may become one path segment in a panel's storage. */
+export function isImportableName(name: string): boolean {
+    return name !== "" && name !== "." && name !== ".." && name.length <= NAME_MAX && !/[\\/\0]/.test(name);
+}
 const NAME_MAX = 255;
 const FILTERS_MAX = 16;
 const EXTENSIONS_MAX = 32;
@@ -82,12 +100,14 @@ export function parsePanelFileTransferRequest(args: unknown): PanelFileTransferR
     const panelId = field(args, "panelId");
     const path = field(args, "path");
     const suggestedName = field(args, "suggestedName");
+    const selection = field(args, "selection") ?? "file";
     // which computers exist is the connection pool's answer, not a pattern's
     if (typeof computerId !== "string" || !computerId || computerId.length > 128) invalid("Invalid computer id");
     if (!isPanelId(panelId)) invalid("Invalid panel id");
     if (typeof path !== "string" || !path.trim() || path.length > PANEL_FILE_PATH_MAX || path.includes("\0")) {
         invalid(`path must be a file path in the panel's storage, at most ${PANEL_FILE_PATH_MAX} characters`);
     }
+    if (selection !== "file" && selection !== "files" && selection !== "folder") invalid("selection must be file, files or folder");
     if (
         suggestedName !== undefined &&
         (typeof suggestedName !== "string" || !suggestedName.trim() || suggestedName.length > NAME_MAX || /[\\/\0]/.test(suggestedName))
@@ -98,6 +118,7 @@ export function parsePanelFileTransferRequest(args: unknown): PanelFileTransferR
         computerId,
         panelId,
         path,
+        selection,
         ...(suggestedName !== undefined ? { suggestedName: suggestedName as string } : {}),
         filters: parseFilters(field(args, "filters")),
     };
