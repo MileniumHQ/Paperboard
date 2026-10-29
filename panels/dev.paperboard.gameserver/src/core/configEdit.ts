@@ -47,6 +47,30 @@ export function setYamlValue(text: string, path: string[], value: ScalarText): s
     return text.slice(0, start) + literal + text.slice(valueEnd);
 }
 
+export type YamlScalarType = "boolean" | "number" | "string";
+
+/**
+ * For files the software reads partially (Geyser, Floodgate): an existing
+ * key is edited in place like setYamlValue; a missing one is added,
+ * creating its parent maps. Adding re-serializes the document, which is
+ * why only seeded files use this.
+ */
+export function upsertYamlValue(text: string, path: string[], value: ScalarText, type: YamlScalarType): string {
+    const doc = parseDocument(text);
+    if (doc.errors.length > 0) throw new Error(`Could not parse the file: ${doc.errors[0]!.message}`);
+    if (isScalar(doc.getIn(path, true))) return setYamlValue(text, path, value);
+    for (let depth = 1; depth < path.length; depth++) {
+        const node = doc.getIn(path.slice(0, depth), true);
+        if (node !== undefined && !isMap(node)) throw new Error(`${path.slice(0, depth).join(".")} is not a section in the file`);
+    }
+    if (doc.getIn(path, true) !== undefined) throw new Error(`${path.join(".")} is not a single value in the file`);
+    const typed = type === "boolean" ? value === "true" : type === "number" ? Number(value) : value;
+    // an empty file (a seed being started) has no map to add into yet
+    if (doc.contents === null) doc.contents = doc.createNode({}) as unknown as typeof doc.contents;
+    doc.setIn(path, typed);
+    return doc.toString();
+}
+
 // ─── TOML (NeoForge, Forge) ───────────────────────────────────────────
 
 const TOML_SECTION = /^\s*\[([^\]]+)\]\s*$/;

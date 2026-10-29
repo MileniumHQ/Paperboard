@@ -109,6 +109,7 @@ export function FieldControl(props: {
             return (
                 <PaperInput
                     value={props.value()}
+                    maxLength={props.field.maxLength}
                     disabled={!hasKnownMcVersion()}
                     onInput={(e) => props.onUpdate(e.currentTarget.value)}
                 />

@@ -20,6 +20,13 @@ export interface LoaderFile {
      * most specific first. `world` is server.properties' level-name.
      */
     locations(world: string): string[];
+    /**
+     * The software writes this file on its first start but also reads a
+     * partial one, filling in the rest itself. Before that start, settings
+     * show at their `defaultValue` and an edit creates the file with just
+     * that key; a key missing from an existing file is added the same way.
+     */
+    seeded?: true;
 }
 
 export interface LoaderSetting {
@@ -32,8 +39,12 @@ export interface LoaderSetting {
     path: string[];
     title: string;
     description: string;
-    control: "toggle" | "number" | "select";
+    control: "toggle" | "number" | "select" | "text";
     options?: { value: string; label: string }[];
+    /** text: the longest value accepted */
+    maxLength?: number;
+    /** what the software uses while a seeded file does not hold the key */
+    defaultValue?: string;
     min?: number;
     max?: number;
     /** numbers may have a fractional part */
@@ -502,6 +513,14 @@ export function normalizeLoaderValue(setting: LoaderSetting, raw: unknown): stri
                 throw new Error(`${setting.title} must be one of ${setting.options?.map((o) => o.value).join(", ")}`);
             }
             return value;
+        case "text": {
+            // one line of printable text: a newline or control character
+            // would end the YAML scalar and start a key of its own
+            if (/[\u0000-\u001f\u007f]/.test(value)) throw new Error(`${setting.title} must be one line of text`);
+            const max = setting.maxLength ?? 64;
+            if (value.length > max) throw new Error(`${setting.title} must be at most ${max} characters`);
+            return value;
+        }
         case "number": {
             const pattern = setting.decimal ? /^-?\d+(\.\d+)?$/ : /^-?\d+$/;
             if (!pattern.test(value)) {

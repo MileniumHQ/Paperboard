@@ -49,6 +49,7 @@ import { settleInterruptedWork } from "./recovery";
 import { readLoaderSettings, writeLoaderSetting } from "./loaderSettings";
 import { listServerFiles, readServerFile, writeServerFile } from "./serverFiles";
 import { locateAddonConfig } from "./addonConfig";
+import { prepareCrossplay, readCrossplay, writeCrossplaySetting } from "./crossplay";
 import { readServerIcon, setServerIcon } from "./serverIcon";
 import { liveInstallDeps } from "./softwareInstallDeps";
 import { installDatapack, listDatapacks, listDatapackVersions, removeDatapack } from "./datapacks";
@@ -1001,6 +1002,61 @@ export const panelActions: ActionDefinition[] = [
                 throw new Error("A server install is running; change loader settings once it finishes.");
             }
             return writeLoaderSetting(ctx.state.serverSoftware, inputs?.id, inputs?.value, loaderDeps);
+        },
+    }),
+
+    defineAction({
+        id: ACTION_IDS.readCrossplay,
+        name: "Read Crossplay",
+        category: "Server",
+        description: "Reads whether Geyser and Floodgate are installed, and their settings",
+        internal: true,
+        template: "Read crossplay",
+        inputs: {},
+        output: { type: "object", label: "Crossplay" },
+        quick: false,
+        icon: "devices",
+        run: async (ctx: ServiceContext<GameServerState>) => readCrossplay(ctx.state.serverSoftware, loaderDeps),
+    }),
+
+    defineAction({
+        id: ACTION_IDS.writeCrossplaySetting,
+        name: "Write Crossplay Setting",
+        category: "Server",
+        description: "Changes one of Geyser's or Floodgate's settings",
+        internal: true,
+        template: "Set crossplay setting {id} to {value}",
+        inputs: {
+            id: { type: "string", label: "Setting", required: true },
+            value: { type: "string", label: "Value", required: true },
+        },
+        output: { type: "object", label: "Written" },
+        quick: false,
+        icon: "devices",
+        run: async (ctx: ServiceContext<GameServerState>, inputs: { id?: string; value?: string }) => {
+            if (isInstallRunning()) {
+                throw new Error("A server install is running; change crossplay settings once it finishes.");
+            }
+            return writeCrossplaySetting(ctx.state.serverSoftware, inputs?.id, inputs?.value, loaderDeps);
+        },
+    }),
+
+    defineAction({
+        id: ACTION_IDS.prepareCrossplay,
+        name: "Prepare Crossplay",
+        category: "Server",
+        description: "Sets Geyser to let Bedrock players in through Floodgate",
+        internal: true,
+        template: "Prepare crossplay",
+        inputs: {},
+        output: { type: "object", label: "Crossplay" },
+        quick: false,
+        icon: "devices",
+        run: async (ctx: ServiceContext<GameServerState>) => {
+            if (isInstallRunning()) {
+                throw new Error("A server install is running; turn crossplay on once it finishes.");
+            }
+            return prepareCrossplay(ctx.state.serverSoftware, loaderDeps);
         },
     }),
 

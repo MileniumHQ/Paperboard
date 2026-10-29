@@ -20,8 +20,8 @@ export interface AddonConfigLocation {
     message?: string;
 }
 
-const PLUGIN_DESCRIPTORS = ["paper-plugin.yml", "plugin.yml"] as const;
-const MOD_DESCRIPTORS = ["fabric.mod.json", "quilt.mod.json", "META-INF/neoforge.mods.toml", "META-INF/mods.toml"] as const;
+export const PLUGIN_DESCRIPTORS = ["paper-plugin.yml", "plugin.yml"] as const;
+export const MOD_DESCRIPTORS = ["fabric.mod.json", "quilt.mod.json", "META-INF/neoforge.mods.toml", "META-INF/mods.toml"] as const;
 
 function stringField(value: unknown): string | null {
     return typeof value === "string" && value.trim() ? value.trim() : null;

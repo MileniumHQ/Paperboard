@@ -17,6 +17,8 @@ export interface PropertyField {
     step?: "any";
     /** sliders: the value's unit, shown after the number ("10 chunks"); a slider needs min and max */
     unit?: string;
+    /** text inputs: the longest value accepted */
+    maxLength?: number;
     options?: () => { value: string; label: string }[];
     capability?: CapabilityName;
     /** show this field only when another field holds the given value */

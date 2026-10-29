@@ -27,6 +27,8 @@ import Versions from "./components/Versions";
 import Loader from "./components/Loader";
 import Datapacks from "./components/Datapacks";
 import ResourcePack from "./components/ResourcePack";
+import Crossplay from "./components/Crossplay";
+import { CROSSPLAY } from "./software/crossplay";
 import Modpacks from "./components/Modpacks";
 import { MODPACK_LOADER } from "./core/modpack";
 import Files from "./components/Files";
@@ -50,6 +52,8 @@ export default function App() {
     const hasLoaderTab = () => serverSoftware() !== "vanilla";
     // modpacks are built for one loader: only the loaders that run them show the tab
     const hasModpackTab = () => MODPACK_LOADER[serverSoftware()] !== undefined;
+    // Geyser runs on Paper, Fabric and NeoForge only
+    const hasCrossplayTab = () => CROSSPLAY[serverSoftware()] !== undefined;
 
     // whole-feature floors: hide the tab rather than show half its controls
     // doing nothing. Unknown version stays permissive so nothing flashes out
@@ -65,6 +69,7 @@ export default function App() {
     createEffect(() => {
         if (!hasPluginTab() && activeTab() === "plugins") setActiveTab("overview");
         if (!hasModpackTab() && activeTab() === "modpacks") setActiveTab("overview");
+        if (!hasCrossplayTab() && activeTab() === "crossplay") setActiveTab("overview");
         if (!showMap() && activeTab() === "map") setActiveTab("overview");
         if (!showPlayers() && activeTab() === "players") setActiveTab("overview");
         if (!showWorlds() && activeTab() === "worlds") setActiveTab("overview");
@@ -116,6 +121,11 @@ export default function App() {
                         <Show when={showMap()}>
                             <PaperMenuItem value="map" icon="map">
                                 Map
+                            </PaperMenuItem>
+                        </Show>
+                        <Show when={hasCrossplayTab()}>
+                            <PaperMenuItem value="crossplay" icon="devices">
+                                Crossplay
                             </PaperMenuItem>
                         </Show>
                         <PaperMenuLabel>World</PaperMenuLabel>
@@ -232,6 +242,11 @@ export default function App() {
                         <Show when={showDatapacks()}>
                             <PaperInterfaceItem value="datapacks">
                                 <Datapacks active={activeTab() === "datapacks"} />
+                            </PaperInterfaceItem>
+                        </Show>
+                        <Show when={hasCrossplayTab()}>
+                            <PaperInterfaceItem value="crossplay">
+                                <Crossplay active={activeTab() === "crossplay"} />
                             </PaperInterfaceItem>
                         </Show>
                         <PaperInterfaceItem value="resourcepack">

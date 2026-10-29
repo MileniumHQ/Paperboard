@@ -4,6 +4,7 @@ import type { ServerSoftwareType } from "../software/catalog";
 import {
     LOADER_SETTINGS,
     loaderSetting,
+    type LoaderSettingsSchema,
     normalizeLoaderValue,
     type LoaderFile,
     type LoaderSetting,
@@ -15,6 +16,7 @@ import {
     setCfgValue,
     setTomlValue,
     setYamlValue,
+    upsertYamlValue,
 } from "../core/configEdit";
 import { parseProperties } from "../core/properties";
 import { isListableDirArg } from "../core/dirs";
@@ -33,6 +35,7 @@ export interface LoaderFs {
     rename(from: string, to: string): Promise<void>;
     stat(path: string): Promise<{ size: number }>;
     rm(path: string, opts: { force: true }): Promise<void>;
+    mkdir(path: string, opts: { recursive: true }): Promise<unknown>;
 }
 
 export interface LoaderDeps {
@@ -49,6 +52,7 @@ export interface LoaderSettingView {
     min?: number;
     max?: number;
     decimal?: boolean;
+    maxLength?: number;
     warning?: string;
     value: string;
 }
@@ -60,6 +64,8 @@ export interface LoaderGroupView {
     settings: LoaderSettingView[];
     /** the file exists but could not be read */
     error?: string;
+    /** a seeded file the server has not written yet: values are its defaults */
+    pending?: true;
 }
 
 export interface LoaderSettingsView {
@@ -124,6 +130,11 @@ function readValue(file: LoaderFile, text: string, setting: LoaderSetting): stri
 }
 
 function writeValue(file: LoaderFile, text: string, setting: LoaderSetting, value: string): string {
+    if (file.seeded) {
+        if (file.format !== "yaml") throw new Error(`${file.label}: only YAML files can be seeded`);
+        const type = setting.control === "toggle" ? "boolean" : setting.control === "number" ? "number" : "string";
+        return upsertYamlValue(text, setting.path, value, type);
+    }
     switch (file.format) {
         case "yaml":
             return setYamlValue(text, setting.path, value);
@@ -135,34 +146,51 @@ function writeValue(file: LoaderFile, text: string, setting: LoaderSetting, valu
 }
 
 function view(setting: LoaderSetting, value: string): LoaderSettingView {
-    const { id, title, description, control, options, min, max, decimal, warning } = setting;
-    return { id, title, description, control, options, min, max, decimal, warning, value };
+    const { id, title, description, control, options, min, max, decimal, maxLength, warning } = setting;
+    return { id, title, description, control, options, min, max, decimal, maxLength, warning, value };
 }
 
-export async function readLoaderSettings(
-    software: ServerSoftwareType,
+/** a seeded file's settings before it holds them: the software's defaults */
+function defaultOf(setting: LoaderSetting): string {
+    if (setting.defaultValue === undefined) throw new Error(`${setting.title} has no default to show`);
+    return setting.defaultValue;
+}
+
+/**
+ * Reads every setting a schema describes. Shared by the Loader tab and
+ * every other tab that edits a config file the server software owns.
+ */
+export async function readSchemaSettings(
+    schema: LoaderSettingsSchema,
     deps: LoaderDeps,
-): Promise<LoaderSettingsView> {
-    const info = LOADER_SETTINGS[software];
-    if (!info.schema) return { software, emptyMessage: info.emptyMessage, groups: [], missing: [] };
+): Promise<{ groups: LoaderGroupView[]; missing: string[] }> {
     const fs = fsOf(deps);
     const root = await deps.serverDir();
     const world = await activeWorld(fs, root);
 
     const groups: LoaderGroupView[] = [];
     const missing: string[] = [];
-    for (const file of info.schema.files) {
+    for (const file of schema.files) {
         const relative = await locate(fs, root, file, world);
-        const settings = info.schema.settings.filter((setting) => setting.file === file.id);
+        const settings = schema.settings.filter((setting) => setting.file === file.id);
         if (!relative) {
-            missing.push(file.label);
+            if (file.seeded) {
+                groups.push({
+                    label: file.label,
+                    path: file.locations(world)[0]!,
+                    settings: settings.map((setting) => view(setting, defaultOf(setting))),
+                    pending: true,
+                });
+            } else {
+                missing.push(file.label);
+            }
             continue;
         }
         try {
             const text = await readCapped(fs, nodePath.join(root, ...relative.split("/")));
             const shown: LoaderSettingView[] = [];
             for (const setting of settings) {
-                const value = readValue(file, text, setting);
+                const value = readValue(file, text, setting) ?? (file.seeded ? defaultOf(setting) : null);
                 // a key this version's file does not have is not this version's setting
                 if (value !== null) shown.push(view(setting, value));
             }
@@ -176,7 +204,47 @@ export async function readLoaderSettings(
             });
         }
     }
-    return { software, emptyMessage: null, groups, missing };
+    return { groups, missing };
+}
+
+export async function readLoaderSettings(
+    software: ServerSoftwareType,
+    deps: LoaderDeps,
+): Promise<LoaderSettingsView> {
+    const info = LOADER_SETTINGS[software];
+    if (!info.schema) return { software, emptyMessage: info.emptyMessage, groups: [], missing: [] };
+    return { software, emptyMessage: null, ...(await readSchemaSettings(info.schema, deps)) };
+}
+
+/** Writes one validated value into the file `setting` lives in. */
+export async function writeSchemaSetting(
+    schema: LoaderSettingsSchema,
+    setting: LoaderSetting,
+    raw: unknown,
+    deps: LoaderDeps,
+): Promise<{ id: string; value: string; path: string }> {
+    const value = normalizeLoaderValue(setting, raw);
+    const file = schema.files.find((f) => f.id === setting.file);
+    if (!file) throw new Error(`${setting.title} names a file the schema does not have`);
+    const fs = fsOf(deps);
+    const root = await deps.serverDir();
+    const world = await activeWorld(fs, root);
+    const found = await locate(fs, root, file, world);
+    if (!found && !file.seeded) throw new Error(`${file.label} does not exist yet. Start the server once so it creates it.`);
+    const relative = found ?? file.locations(world)[0]!;
+    const absolute = nodePath.join(root, ...relative.split("/"));
+
+    return serializedFileTask(absolute, async () => {
+        let text = "";
+        if (found) {
+            text = await readCapped(fs, absolute);
+        } else {
+            await fs.mkdir(nodePath.dirname(absolute), { recursive: true });
+        }
+        // written whole or not at all: the server reads this file at start
+        await writeFileAtomic(fs, absolute, writeValue(file, text, setting, value));
+        return { id: setting.id, value, path: relative };
+    });
 }
 
 export async function writeLoaderSetting(
@@ -187,19 +255,5 @@ export async function writeLoaderSetting(
 ): Promise<{ id: string; value: string; path: string }> {
     const setting = loaderSetting(software, id);
     if (!setting) throw new Error(`Unknown loader setting for this software: ${JSON.stringify(id)}`);
-    const value = normalizeLoaderValue(setting, raw);
-    const file = LOADER_SETTINGS[software].schema!.files.find((f) => f.id === setting.file)!;
-    const fs = fsOf(deps);
-    const root = await deps.serverDir();
-    const world = await activeWorld(fs, root);
-    const relative = await locate(fs, root, file, world);
-    if (!relative) throw new Error(`${file.label} does not exist yet. Start the server once so it creates it.`);
-    const absolute = nodePath.join(root, ...relative.split("/"));
-
-    return serializedFileTask(absolute, async () => {
-        const text = await readCapped(fs, absolute);
-        // written whole or not at all: the server reads this file at start
-        await writeFileAtomic(fs, absolute, writeValue(file, text, setting, value));
-        return { id: setting.id, value, path: relative };
-    });
+    return writeSchemaSetting(LOADER_SETTINGS[software].schema!, setting, raw, deps);
 }
