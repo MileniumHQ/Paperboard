@@ -57,6 +57,29 @@ describe("file export and import", () => {
         expect(err.code).toBe("too-large");
     });
 
+    it("asks for several files, or a folder, to copy below a folder of the panel's storage", async () => {
+        const files = fileApi.importFiles("staging/a", PANEL, { filters: [{ name: "Jar", extensions: ["jar"] }] });
+        expect(posted[0]).toMatchObject({ kind: "import", panelId: PANEL, path: "staging/a", selection: "files", filters: [{ name: "Jar", extensions: ["jar"] }] });
+        const picked = { status: "imported", name: "2 files", bytes: 5, files: [{ name: "a.jar", bytes: 2 }, { name: "b.jar", bytes: 3 }] };
+        reply({ type: "paperboard:file-transfer-result", generation: "gen-1", requestId: posted[0].requestId, result: picked });
+        expect(await files).toEqual(picked);
+
+        const folder = fileApi.importFolder("staging/b", PANEL);
+        expect(posted[1]).toMatchObject({ kind: "import", path: "staging/b", selection: "folder" });
+        const copied = { status: "imported", name: "pack", bytes: 2, files: [{ name: "pack.mcmeta", bytes: 2 }] };
+        reply({ type: "paperboard:file-transfer-result", generation: "gen-1", requestId: posted[1].requestId, result: copied });
+        expect(await folder).toEqual(copied);
+        expect(listeners.size).toBe(0);
+    });
+
+    it("throws when an import of several files comes back without its file list", async () => {
+        const result = fileApi.importFiles("staging/c", PANEL);
+        reply({ type: "paperboard:file-transfer-result", generation: "gen-1", requestId: posted[0].requestId, result: { status: "imported", name: "x", bytes: 1 } });
+        const err = await result.catch((e) => e);
+        expect(err instanceof FileTransferError).toBe(true);
+        expect(err.code).toBe("failed");
+    });
+
     it("refuses a second dialog while one is open", async () => {
         const first = fileApi.importFile("a.txt", PANEL);
         const second = await fileApi.exportFile("b.txt", PANEL).catch((e) => e);

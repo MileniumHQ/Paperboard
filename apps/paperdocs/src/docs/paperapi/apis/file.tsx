@@ -94,6 +94,16 @@ const content = await fileApi.read("data/log.txt", PANEL_ID);`}
                         <td><PaperCode>importFile(targetPath, appId, options?): Promise&lt;ImportFileResult&gt;</PaperCode></td>
                         <td>Asks the user for a file, then copies it into panel storage at targetPath.</td>
                     </tr>
+                    <tr>
+                        <td><PaperCode>importFiles</PaperCode></td>
+                        <td><PaperCode>importFiles(targetDir, appId, options?): Promise&lt;ImportFilesResult&gt;</PaperCode></td>
+                        <td>Asks the user for one or more files, then copies each into the panel storage folder targetDir under its own name.</td>
+                    </tr>
+                    <tr>
+                        <td><PaperCode>importFolder</PaperCode></td>
+                        <td><PaperCode>importFolder(targetDir, appId): Promise&lt;ImportFolderResult&gt;</PaperCode></td>
+                        <td>Asks the user for a folder, then copies it and everything in it into targetDir/&lt;folder name&gt; in panel storage.</td>
+                    </tr>
                 </tbody>
             </PaperTable>
 
@@ -125,7 +135,13 @@ try {
 } catch (err) {
     if (err instanceof FileTransferError && err.code === "too-large") console.log("The file is over the limit");
     else throw err;
-}`}
+}
+
+const many = await fileApi.importFiles("imports/batch", PANEL_ID, { filters });
+if (many.status === "imported") console.log(many.files.map((file) => file.name));
+
+const folder = await fileApi.importFolder("imports/batch", PANEL_ID);
+if (folder.status === "imported") console.log(\`Copied \${folder.files.length} files into imports/batch/\${folder.name}\`);`}
             </PaperCode>
 
             <PaperText preset="subheader" id="export-and-import-options">Export and import options</PaperText>
@@ -158,6 +174,7 @@ try {
             <PaperText preset="body">
                 Both methods resolve with what the user did and throw a FileTransferError when the copy fails. A canceled picker resolves with <PaperCode>{"{ status: \"canceled\" }"}</PaperCode> and changes no file.
                 A finished exportFile resolves with <PaperCode>{"{ status: \"exported\", name, bytes }"}</PaperCode> and a finished importFile with <PaperCode>{"{ status: \"imported\", name, bytes }"}</PaperCode>. The name is the file name the user picked, without its folder.
+                importFiles resolves with <PaperCode>{"{ status: \"imported\", name, bytes, files }"}</PaperCode> and importFolder with the same shape, where name is the folder's name. Each entry of files is <PaperCode>{"{ name, bytes }"}</PaperCode>: a file's own name, or for a folder its path below the folder, separated by slashes.
             </PaperText>
             <PaperTable>
                 <thead>
@@ -207,6 +224,8 @@ try {
                 The picker opens on the machine showing Paperboard. When the panel runs on another computer, the file travels between that computer's panel storage and this machine.
                 An export writes the picked location only after the whole file arrives. A broken transfer leaves an existing file at that location as it was.
                 An import replaces targetPath only after the whole file arrives, and creates its parent folders. The computer that stores the file checks that targetPath stays inside the panel's storage.
+                importFiles and importFolder copy one file at a time the same way. If a later file fails, the files before it stay in targetDir and the error names the file that failed and how many had arrived, so copy into a scratch folder and move the result into place once the call resolves.
+                A folder copy is refused before anything is copied when the folder holds a link or another file that is not a regular file, holds no files, holds more than 5,000 files, or is over 2 GiB in total. Empty subfolders are not copied. importFiles refuses the same limits for the files chosen, and two chosen files with one name.
                 exportFile copies files up to 2 GiB. importFile copies files up to the receiving computer's upload limit, 512 MiB unless PAPERCRANE_DAV_MAX_UPLOAD sets another byte count.
                 One export or import per panel runs at a time. A second call while one is open throws <PaperCode>busy</PaperCode>.
             </PaperText>

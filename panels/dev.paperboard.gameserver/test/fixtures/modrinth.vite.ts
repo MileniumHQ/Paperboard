@@ -6,7 +6,8 @@ export default defineConfig({
     optimizeDeps: { entries: ["test/fixtures/modrinth.html"] },
     resolve: {
         dedupe: ["solid-js", "solid-js/web", "solid-js/store"],
-        alias: [{ find: /^(\.\.\/lib\/server|\.\/server)$/, replacement: fileURLToPath(new URL("./modrinthServer.ts", import.meta.url)) }],
+        alias: [{ find: /^(\.\.\/lib\/server|\.\.?\/server)$/, replacement: fileURLToPath(new URL("./modrinthServer.ts", import.meta.url)) }],
     },
+    build: { target: "esnext", rollupOptions: { input: "test/fixtures/modrinth.html" } },
     server: { host: "127.0.0.1" },
 });

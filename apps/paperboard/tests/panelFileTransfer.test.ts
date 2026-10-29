@@ -41,7 +41,7 @@ const endpoint = (): DaemonEndpoint => ({ host: "127.0.0.1", port, token: TOKEN 
 const panelFile = (panelId: string, rel: string) => path.join(dataDir, "files", panelId, rel);
 const ref = (p: string, extra: Record<string, unknown> = {}) => ({ computerId: "local", panelId: PANEL, path: p, ...extra });
 
-function pickers(choice: { save?: string | null; open?: string | null }, calls: string[] = []): PanelFileTransferDeps {
+function pickers(choice: { save?: string | null; open?: string | null; many?: string[] | null }, calls: string[] = []): PanelFileTransferDeps {
     return {
         endpoint,
         pickSavePath: async (options) => {
@@ -51,6 +51,10 @@ function pickers(choice: { save?: string | null; open?: string | null }, calls: 
         pickOpenPath: async () => {
             calls.push("open");
             return choice.open ?? null;
+        },
+        pickOpenPaths: async (options) => {
+            calls.push(`many:${options.selection}`);
+            return choice.many ?? null;
         },
     };
 }
@@ -331,6 +335,96 @@ describe("import", () => {
     });
 });
 
+describe("import of several files and of a folder", () => {
+    const local = (...names: string[]) => path.join(localDir, ...names);
+    const write = (rel: string, content: string) => {
+        fs.mkdirSync(path.dirname(local(rel)), { recursive: true });
+        fs.writeFileSync(local(rel), content);
+    };
+    const request = (selection: "files" | "folder", target = "stage/one") => ref(target, { selection });
+
+    it("copies every chosen file into the target folder under its own name", async () => {
+        write("multi/a.jar", "aaa");
+        write("multi/b.jar", "bbbb");
+        const calls: string[] = [];
+        const result = await runPanelImport(request("files"), pickers({ many: [local("multi/a.jar"), local("multi/b.jar")] }, calls));
+        expect(result).toEqual({
+            status: "imported",
+            name: "2 files",
+            bytes: 7,
+            files: [{ name: "a.jar", bytes: 3 }, { name: "b.jar", bytes: 4 }],
+        });
+        expect(calls).toEqual(["many:files"]);
+        expect(fs.readFileSync(panelFile(PANEL, "stage/one/a.jar"), "utf8")).toBe("aaa");
+        expect(fs.readFileSync(panelFile(PANEL, "stage/one/b.jar"), "utf8")).toBe("bbbb");
+    });
+
+    it("copies a folder with its subfolders below the target, named after the folder", async () => {
+        write("pack/pack.mcmeta", "{}");
+        write("pack/data/minecraft/tags/x.json", "[]");
+        const result = await runPanelImport(request("folder", "stage/two"), pickers({ many: [local("pack")] }));
+        expect(result).toMatchObject({ status: "imported", name: "pack", bytes: 4 });
+        expect((result as { files: { name: string }[] }).files.map((f) => f.name).sort()).toEqual(["data/minecraft/tags/x.json", "pack.mcmeta"]);
+        expect(fs.readFileSync(panelFile(PANEL, "stage/two/pack/data/minecraft/tags/x.json"), "utf8")).toBe("[]");
+    });
+
+    it("copies nothing when a folder holds a link", async () => {
+        write("linked/real.txt", "real");
+        fs.symlinkSync(local("linked/real.txt"), local("linked/alias.txt"));
+        const result = await runPanelImport(request("folder", "stage/three"), pickers({ many: [local("linked")] }));
+        expect(result).toMatchObject({ status: "failed", code: "failed" });
+        expect((result as { message: string }).message).toContain("alias.txt");
+        expect(fs.existsSync(panelFile(PANEL, "stage/three"))).toBe(false);
+    });
+
+    it("refuses an empty folder and a folder that is a file", async () => {
+        fs.mkdirSync(local("empty"), { recursive: true });
+        expect(await runPanelImport(request("folder", "stage/four"), pickers({ many: [local("empty")] }))).toMatchObject({
+            status: "failed",
+            message: expect.stringContaining("holds no files"),
+        });
+        write("plain.txt", "x");
+        expect(await runPanelImport(request("folder", "stage/four"), pickers({ many: [local("plain.txt")] }))).toMatchObject({
+            status: "failed",
+            message: expect.stringContaining("is not a folder"),
+        });
+    });
+
+    it("tells which file broke a batch and how many had already arrived", async () => {
+        write("batch/small.txt", "ok");
+        write("batch/big.txt", "x".repeat(4096));
+        process.env.PAPERCRANE_DAV_MAX_UPLOAD = "1024";
+        const result = await runPanelImport(request("files", "stage/five"), pickers({ many: [local("batch/small.txt"), local("batch/big.txt")] }));
+        expect(result).toMatchObject({ status: "failed", code: "too-large" });
+        expect((result as { message: string }).message).toContain("big.txt");
+        expect((result as { message: string }).message).toContain("1 file was already copied");
+        expect(fs.existsSync(panelFile(PANEL, "stage/five/big.txt"))).toBe(false);
+    });
+
+    it("keeps the target inside the panel's storage and writes nothing when canceled", async () => {
+        write("evil/a.txt", "a");
+        expect(await runPanelImport(request("files", `../${OTHER}/stage`), pickers({ many: [local("evil/a.txt")] }))).toMatchObject({ status: "failed" });
+        expect(fs.existsSync(panelFile(OTHER, "stage/a.txt"))).toBe(false);
+        expect(await runPanelImport(request("files", "stage/six"), pickers({ many: null }))).toEqual({ status: "canceled" });
+        expect(fs.existsSync(panelFile(PANEL, "stage/six"))).toBe(false);
+    });
+
+    it("refuses two chosen files with one name", async () => {
+        write("x/dup.txt", "1");
+        write("y/dup.txt", "2");
+        const result = await runPanelImport(request("files", "stage/seven"), pickers({ many: [local("x/dup.txt"), local("y/dup.txt")] }));
+        expect(result).toMatchObject({ status: "failed", code: "invalid-request" });
+        expect(fs.existsSync(panelFile(PANEL, "stage/seven"))).toBe(false);
+    });
+
+    it("refuses an unknown selection before any dialog", async () => {
+        const calls: string[] = [];
+        const result = await runPanelImport(ref("a", { selection: "everything" }), pickers({ many: [] }, calls));
+        expect(result).toMatchObject({ status: "failed", code: "invalid-request" });
+        expect(calls).toEqual([]);
+    });
+});
+
 describe("request contract", () => {
     it("refuses malformed requests before any dialog", async () => {
         const calls: string[] = [];
@@ -394,6 +488,13 @@ describe("browser-mode routes", () => {
         const ok = await call("write", "from shell", { origin: browser.origin }, query);
         expect(JSON.parse(ok.body.toString())).toMatchObject({ status: "imported", bytes: 10 });
         expect(fs.readFileSync(panelFile(PANEL, "uploaded.txt"), "utf8")).toBe("from shell");
+    });
+
+    it("writes a file below nested folders, which is how a folder arrives", async () => {
+        const query = `?request=${encodeURIComponent(JSON.stringify(ref("stage/pack/data/x.json", { selection: "folder" })))}`;
+        const ok = await call("write", "[]", { origin: browser.origin }, query);
+        expect(JSON.parse(ok.body.toString())).toMatchObject({ status: "imported", name: "x.json", bytes: 2 });
+        expect(fs.readFileSync(panelFile(PANEL, "stage/pack/data/x.json"), "utf8")).toBe("[]");
     });
 
     it("reports a missing file as a typed failure", async () => {

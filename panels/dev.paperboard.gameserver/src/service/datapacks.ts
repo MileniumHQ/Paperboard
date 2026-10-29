@@ -19,6 +19,8 @@ import {
     type RawModrinthVersion,
 } from "../core/modrinth";
 import { isListableDirArg } from "../core/dirs";
+import { UPLOAD_RECORDS_KEY, parseUploadRecords } from "../core/addonUpload";
+import { forgetUploads } from "./uploadRecords";
 
 // The Datapacks tab's owner: lists the active world's datapacks/ folder,
 // installs Modrinth datapack builds into it, and moves removed packs to
@@ -51,6 +53,8 @@ export interface InstalledDatapack {
     name: string;
     kind: "zip" | "folder";
     record?: DatapackRecord;
+    /** added through Upload, so no Modrinth record describes it */
+    uploaded?: true;
 }
 
 export interface DatapackListing {
@@ -75,7 +79,7 @@ async function exists(fs: DatapackFs, path: string): Promise<boolean> {
     }
 }
 
-async function datapacksDir(deps: DatapackDeps): Promise<{ world: string; relative: string }> {
+export async function datapacksDir(deps: Pick<DatapackDeps, "levelName">): Promise<{ world: string; relative: string }> {
     const world = await deps.levelName();
     const relative = `${world}/datapacks`;
     if (!isListableDirArg(relative)) {
@@ -99,7 +103,9 @@ export async function listDatapacks(deps: DatapackDeps): Promise<DatapackListing
         if (errorCode(err) !== "ENOENT") throw err;
         entries = [];
     }
-    const records = parseDatapackRecords((await deps.readConfig())[DATAPACK_RECORDS_KEY]);
+    const saved = await deps.readConfig();
+    const records = parseDatapackRecords(saved[DATAPACK_RECORDS_KEY]);
+    const uploads = parseUploadRecords(saved[UPLOAD_RECORDS_KEY]);
     const packs: InstalledDatapack[] = [];
     for (const entry of entries) {
         const isZip = entry.isFile() && entry.name.toLowerCase().endsWith(".zip");
@@ -115,6 +121,7 @@ export async function listDatapacks(deps: DatapackDeps): Promise<DatapackListing
             name: entry.name,
             kind: isZip ? "zip" : "folder",
             record: records[datapackRecordKey(world, entry.name)],
+            ...(`${relative}/${entry.name}` in uploads ? { uploaded: true as const } : {}),
         });
     }
     packs.sort((a, b) => a.name.localeCompare(b.name));
@@ -208,4 +215,5 @@ export async function removeDatapack(name: unknown, deps: DatapackDeps): Promise
     await updateRecords(deps, (records) => {
         delete records[datapackRecordKey(world, safe)];
     });
+    await forgetUploads(deps, [`${relative}/${safe}`]);
 }

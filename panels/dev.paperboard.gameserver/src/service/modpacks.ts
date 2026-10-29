@@ -11,6 +11,7 @@ import {
     parsePackIndex,
     type ModpackRecord,
     type PackDownload,
+    type PackIndex,
 } from "../core/modpack";
 import {
     MODRINTH_API,
@@ -25,6 +26,7 @@ import { INSTALL_RECORDS_KEY, parseInstallRecords } from "../core/plugins";
 import type { ModpackProgress } from "../core/state";
 import { SOFTWARE, type ServerSoftwareType } from "../software/catalog";
 import { extractMrpack } from "./mrpack";
+import { assertZipFile } from "./zipFiles";
 import { activatePack, newPackStagingName, packFilesPath, recoverStagedPacks, type PackFs } from "./packActivation";
 
 // The Modpacks tab's owner. Installing a Modrinth pack:
@@ -166,6 +168,28 @@ async function verifyDownload(
     if (digest !== expected.sha512) throw new Error(`${label} does not match its sha512; refusing it`);
 }
 
+/** Whose pack it is, as the record keeps it. */
+interface PackIdentity {
+    projectId?: string;
+    versionId?: string;
+    slug?: string;
+    title: string;
+    versionNumber: string;
+    iconUrl?: string;
+    uploaded?: true;
+}
+
+/**
+ * Puts the pack's .mrpack in the staging folder, verified as far as its
+ * source allows, and says whose it is once its index has been read.
+ */
+type FetchPack = (where: {
+    root: string;
+    staging: string;
+    stagingDir: string;
+    fs: PackFs;
+}) => Promise<{ archive: string; identity(index: PackIndex): PackIdentity }>;
+
 export async function installModpack(
     input: { projectId: unknown; versionId: unknown },
     software: ServerSoftwareType,
@@ -174,24 +198,8 @@ export async function installModpack(
     const projectId = assertModrinthId(input.projectId, "Project");
     const versionId = assertModrinthId(input.versionId, "Version");
     const loader = modpackLoaderFor(software);
-    const fs = fsOf(deps);
-    let progress: ModpackProgress = { stage: "preparing", done: 0, total: 0 };
-    const publish = (next: ModpackProgress) => {
-        progress = next;
-        deps.publish(next);
-    };
-    publish(progress);
 
-    const root = await deps.serverDir();
-    const staging = newPackStagingName();
-    const stagingDir = nodePath.join(root, staging);
-    let activated = false;
-    try {
-        // read first: an unreadable record stops here, before anything moves
-        const config = await deps.readConfig();
-        const previous = parseModpackRecord(config[MODPACK_RECORD_KEY]);
-        const levelName = await deps.levelName();
-
+    return installPack(software, deps, async ({ stagingDir, staging, root, fs }) => {
         const version = parseModrinthVersion(
             await deps.fetchJson<RawModrinthVersion>(`${MODRINTH_API}/version/${encodeURIComponent(versionId)}`),
         );
@@ -221,10 +229,83 @@ export async function installModpack(
         const archiveSize = ((await fs.lstat(archive)) as { size?: number }).size ?? 0;
         if (archiveSize > MAX_MRPACK_BYTES) throw new Error("This modpack's archive is over the 256 MiB limit");
         await verifyDownload(deps, fs, archive, { sha512: packFile.sha512, size: null }, "The modpack archive");
+        return {
+            archive,
+            identity: () => ({
+                projectId,
+                versionId,
+                slug: project.slug,
+                title: project.title,
+                versionNumber: version.versionNumber,
+                ...(project.iconUrl ? { iconUrl: project.iconUrl } : {}),
+            }),
+        };
+    });
+}
+
+/**
+ * Installs a .mrpack the user uploaded (staged at `archivePath`, relative
+ * to the server folder) the same way as a Modrinth pack, minus Modrinth's
+ * record: the archive is checked for size and zip magic, its files are
+ * still verified against the index's hashes, and the record marks it
+ * uploaded. The staged archive is moved out, never read in place.
+ */
+export async function installUploadedModpack(
+    archivePath: string,
+    software: ServerSoftwareType,
+    deps: ModpackDeps,
+): Promise<ModpackInstallOutcome> {
+    modpackLoaderFor(software);
+    return installPack(software, deps, async ({ root, staging, stagingDir, fs }) => {
+        const source = inDir(root, archivePath);
+        let stat: { size?: number; isFile(): boolean };
+        try {
+            stat = (await fs.lstat(source)) as { size?: number; isFile(): boolean };
+        } catch (err) {
+            if (errorCode(err) === "ENOENT") throw new Error("The uploaded modpack is gone; choose it again");
+            throw err;
+        }
+        if (!stat.isFile()) throw new Error("The uploaded modpack is not a file");
+        if ((stat.size ?? 0) > MAX_MRPACK_BYTES) throw new Error("This modpack's archive is over the 256 MiB limit");
+        await assertZipFile(source, "The uploaded modpack");
+        await fs.mkdir(stagingDir, { recursive: true });
+        const archive = inDir(root, `${staging}/pack.mrpack`);
+        await fs.rename(source, archive);
+        return {
+            archive,
+            identity: (index) => {
+                if (!index.versionId && !index.name) throw new Error("This modpack cannot be installed: its index names neither the pack nor a version");
+                return { title: index.name || "Uploaded modpack", versionNumber: index.versionId || "uploaded", uploaded: true };
+            },
+        };
+    });
+}
+
+async function installPack(software: ServerSoftwareType, deps: ModpackDeps, fetchPack: FetchPack): Promise<ModpackInstallOutcome> {
+    const fs = fsOf(deps);
+    let progress: ModpackProgress = { stage: "preparing", done: 0, total: 0 };
+    const publish = (next: ModpackProgress) => {
+        progress = next;
+        deps.publish(next);
+    };
+    publish(progress);
+
+    const root = await deps.serverDir();
+    const staging = newPackStagingName();
+    const stagingDir = nodePath.join(root, staging);
+    let activated = false;
+    try {
+        // read first: an unreadable record stops here, before anything moves
+        const config = await deps.readConfig();
+        const previous = parseModpackRecord(config[MODPACK_RECORD_KEY]);
+        const levelName = await deps.levelName();
+
+        const { archive, identity } = await fetchPack({ root, staging, stagingDir, fs });
 
         const layersDir = nodePath.join(stagingDir, "layers");
         const extracted = await extractMrpack({ archive, layersDir, levelName });
         const index = parsePackIndex(extracted.index, software, levelName);
+        const pack = identity(index);
 
         // later layers win: server-overrides over overrides over downloads
         const placed = new Map<string, { path: string; layer: number | null }>();
@@ -285,12 +366,7 @@ export async function installModpack(
                 installed.version !== index.mcVersion ||
                 installed.build !== index.loaderVersion;
             const record: ModpackRecord = {
-                projectId,
-                versionId,
-                slug: project.slug,
-                title: project.title,
-                versionNumber: version.versionNumber,
-                ...(project.iconUrl ? { iconUrl: project.iconUrl } : {}),
+                ...pack,
                 mcVersion: index.mcVersion,
                 loaderVersion: index.loaderVersion,
                 files: staged.sort(),
@@ -326,14 +402,14 @@ export async function installModpack(
         try {
             await activation.commit();
         } catch (err) {
-            const cleanup = `${project.title} is installed, but moving the replaced files to the trash failed (${messageOf(err)}). Paperboard retries when the panel service restarts.`;
+            const cleanup = `${pack.title} is installed, but moving the replaced files to the trash failed (${messageOf(err)}). Paperboard retries when the panel service restarts.`;
             warning = warning ? `${warning} ${cleanup}` : cleanup;
             console.error("[Service:Modpacks] commit cleanup failed:", err);
         }
         publish({ stage: "completed", done: staged.length, total: staged.length });
         return {
-            title: project.title,
-            versionNumber: version.versionNumber,
+            title: pack.title,
+            versionNumber: pack.versionNumber,
             mcVersion: index.mcVersion,
             loaderVersion: index.loaderVersion,
             switchedServer: switchServer,

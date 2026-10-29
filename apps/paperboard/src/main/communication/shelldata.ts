@@ -35,6 +35,14 @@ function nativeFileDialogs(event: IpcMainInvokeEvent): PanelFileTransferDeps {
             const result = window ? await dialog.showOpenDialog(window, options) : await dialog.showOpenDialog(options);
             return result.canceled ? null : (result.filePaths[0] ?? null);
         },
+        pickOpenPaths: async ({ filters: list, selection }) => {
+            const options =
+                selection === "folder"
+                    ? { properties: ["openDirectory" as const] }
+                    : { properties: ["openFile" as const, "multiSelections" as const], filters: filters(list) };
+            const result = window ? await dialog.showOpenDialog(window, options) : await dialog.showOpenDialog(options);
+            return result.canceled ? null : result.filePaths;
+        },
     };
 }
 

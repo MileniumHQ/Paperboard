@@ -17,13 +17,13 @@ import {
     type PluginUpdateStatus as CoreUpdateStatus,
 } from "../core/plugins";
 import type { InstalledPlugin, InstalledRecord } from "../core/plugins";
-import { apiFetch } from "./userAgent";
+import { SEARCH_LIMIT, getProject, modrinthFetch, parseSearchHits, type ModrinthHit, type ModrinthProject, type RawHit, type RawProject } from "./modrinth";
 
-export type { InstalledPlugin, InstalledRecord };
+export type { InstalledPlugin, InstalledRecord, ModrinthHit, ModrinthProject };
+export { SEARCH_LIMIT, getProject, modrinthFetch, parseSearchHits };
+export type { RawHit };
 export { INSTALL_RECORDS_KEY, isInstallRecord, pluginDirName, validatePluginFilename };
 
-const MODRINTH_API = "https://api.modrinth.com/v2";
-export const SEARCH_LIMIT = 24;
 // Environments with functionality on a dedicated server, per Modrinth.
 const SERVER_ENVIRONMENTS = [
     "client_and_server", "server_only", "server_only_client_optional",
@@ -62,30 +62,6 @@ export async function deletePlugin(filename: string): Promise<void> {
     await serverBridge.call(ACTION_IDS.deletePlugin, { filename });
 }
 
-export interface ModrinthHit {
-    projectId: string;
-    slug: string;
-    title: string;
-    description: string;
-    downloads: number;
-    follows: number;
-    iconUrl?: string;
-}
-
-export interface ModrinthProject {
-    projectId: string;
-    slug: string;
-    title: string;
-    description: string;
-    body: string;
-    downloads: number;
-    follows: number;
-    loaders: string[];
-    license: string;
-    dateModified: string;
-    iconUrl?: string;
-}
-
 export interface ResolvedDownload {
     url: string;
     filename: string;
@@ -97,30 +73,6 @@ export interface ResolvedDownload {
     gameVersions: string[];
     /** false when the version-filtered lookup had no match and this is a cross-version fallback */
     exactMatch: boolean;
-}
-
-export interface RawHit {
-    project_id?: string;
-    slug?: string;
-    title?: string;
-    description?: string;
-    downloads?: number;
-    follows?: number;
-    icon_url?: string;
-}
-
-interface RawProject {
-    id?: string;
-    slug?: string;
-    title?: string;
-    description?: string;
-    body?: string;
-    downloads?: number;
-    followers?: number;
-    loaders?: string[];
-    license?: { id?: string; name?: string; url?: string };
-    updated?: string;
-    icon_url?: string;
 }
 
 export interface RawVersionDependency {
@@ -147,63 +99,6 @@ interface RawVersion {
         primary?: boolean;
         hashes?: { sha1?: string; sha512?: string };
     }[];
-}
-
-// text first so non-JSON answers fail with a clear message
-export async function modrinthFetch<T>(
-    path: string,
-    params?: Record<string, string>,
-    signal?: AbortSignal,
-): Promise<T> {
-    const query = params
-        ? `?${new URLSearchParams(params).toString()}`
-        : "";
-    const res = await apiFetch(`${MODRINTH_API}${path}${query}`, {
-        signal: signal
-            ? AbortSignal.any([signal, AbortSignal.timeout(15_000)])
-            : AbortSignal.timeout(15_000),
-    });
-    const text = await res.text();
-
-    let data: unknown;
-    try {
-        data = JSON.parse(text);
-    } catch {
-        throw new Error(
-            `Modrinth returned a non-JSON response (HTTP ${res.status})`,
-        );
-    }
-
-    if (!res.ok) {
-        const description =
-            typeof data === "object" &&
-            data !== null &&
-            "description" in data &&
-            typeof (data as { description: unknown }).description === "string"
-                ? (data as { description: string }).description
-                : `HTTP ${res.status}`;
-        throw new Error(`Modrinth request failed: ${description}`);
-    }
-
-    return data as T;
-}
-
-/** a Modrinth search page as cards; hits missing an id, slug or title are dropped */
-export function parseSearchHits(raw: RawHit[] | undefined): ModrinthHit[] {
-    const hits: ModrinthHit[] = [];
-    for (const hit of (raw ?? []).slice(0, SEARCH_LIMIT)) {
-        if (!hit.project_id || !hit.slug || !hit.title) continue;
-        hits.push({
-            projectId: hit.project_id,
-            slug: hit.slug,
-            title: hit.title,
-            description: hit.description ?? "",
-            downloads: typeof hit.downloads === "number" ? hit.downloads : 0,
-            follows: typeof hit.follows === "number" ? hit.follows : 0,
-            iconUrl: hit.icon_url || undefined,
-        });
-    }
-    return hits;
 }
 
 export interface EcosystemInfo {
@@ -287,32 +182,6 @@ export async function searchModrinth(query: string, signal?: AbortSignal): Promi
     return hits.filter((_, index) => compatible[index]);
 }
 
-export async function getProject(projectIdOrSlug: string): Promise<ModrinthProject> {
-    const data = await modrinthFetch<RawProject>(
-        `/project/${encodeURIComponent(projectIdOrSlug)}`,
-    );
-    if (!data.id || !data.slug || !data.title) {
-        throw new Error("Modrinth returned an incomplete project");
-    }
-    const licenseName =
-        data.license?.name ||
-        (data.license?.id ? data.license.id.toUpperCase() : undefined) ||
-        data.license?.url ||
-        "Unknown";
-    return {
-        projectId: data.id,
-        slug: data.slug,
-        title: data.title,
-        description: data.description ?? "",
-        body: data.body ?? "",
-        downloads: typeof data.downloads === "number" ? data.downloads : 0,
-        follows: typeof data.followers === "number" ? data.followers : 0,
-        loaders: Array.isArray(data.loaders) ? data.loaders : [],
-        license: licenseName,
-        dateModified: data.updated ?? "",
-        iconUrl: data.icon_url || undefined,
-    };
-}
 
 // newest file matching the game version, else any loader build.
 // The fallback pick is returned with exactMatch:false — callers must surface

@@ -11,6 +11,9 @@ import {
     pluginDirName,
     validatePluginFilename,
 } from "../core/plugins";
+import { UPLOAD_RECORDS_KEY, parseUploadRecords } from "../core/addonUpload";
+import { forgetUploads } from "./uploadRecords";
+import { liveUploadDeps } from "./addonUploadDeps";
 import { trashRemovePathsWith } from "./trash";
 import { SOFTWARE_IDS } from "../software/catalog";
 import { makeTrashRemoveDeps } from "./trashDeps";
@@ -54,7 +57,8 @@ export async function listInstalledPlugins(
     if (!dirExists) return { plugins: [] };
     const records = await getInstallRecords();
     const listing = await tryListDirectory(dirName);
-    const plugins = await collectInstalledPlugins({
+    const uploads = parseUploadRecords((await config.get<Record<string, unknown>>(PANEL_ID))?.[UPLOAD_RECORDS_KEY]);
+    const collected = await collectInstalledPlugins({
         records,
         listingEntries: listing.entries,
         exists: (path) => fileApi.exists(path, PANEL_ID),
@@ -62,6 +66,9 @@ export async function listInstalledPlugins(
         dirName,
     });
 
+    // an uploaded jar has no record Modrinth describes; saying so beats a bare "Unknown version"
+    // (a Modrinth install over it has a record and is no longer the upload)
+    const plugins = collected.map((plugin) => (!plugin.record && `${dirName}/${plugin.filename}` in uploads ? { ...plugin, uploaded: true as const } : plugin));
     return {
         plugins,
         warning: listing.error,
@@ -84,6 +91,7 @@ export async function deletePlugin(
         delete records[safe];
         await writeInstallRecords(records);
     }
+    await forgetUploads(liveUploadDeps(ctx), [`${pluginDirName(ctx.state.serverSoftware)}/${safe}`]);
 }
 
 // every add-on dir regardless of software: switching software changes
@@ -91,7 +99,7 @@ export async function deletePlugin(
 const ALL_PLUGIN_DIRS = [...new Set(SOFTWARE_IDS.map((id) => pluginDirName(id)))];
 
 export async function uninstallAllPlugins(
-    _ctx: ServiceContext<GameServerState>,
+    ctx: ServiceContext<GameServerState>,
 ): Promise<number> {
     const paths: string[] = [];
     for (const dir of ALL_PLUGIN_DIRS) {
@@ -115,5 +123,6 @@ export async function uninstallAllPlugins(
         );
     }
     await writeInstallRecords({});
+    await forgetUploads(liveUploadDeps(ctx), paths);
     return paths.length;
 }
