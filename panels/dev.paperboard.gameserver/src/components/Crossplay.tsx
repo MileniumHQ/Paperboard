@@ -68,15 +68,13 @@ export default function Crossplay(props: { active: boolean }) {
     const half = () => {
         const current = view();
         if (!current || enabled()) return null;
-        if (current.geyser) return "Geyser is installed without Floodgate.";
-        if (current.floodgate) return "Floodgate is installed without Geyser.";
-        return null;
+        return current.geyser || current.floodgate ? "Crossplay is only partly installed." : null;
     };
 
     const status = () => {
-        if (working() === "on") return "Installing Geyser and Floodgate…";
-        if (working() === "off") return "Removing Geyser and Floodgate…";
-        return "Bedrock players on phones, consoles and Windows can join. Installs Geyser and Floodgate.";
+        if (working() === "on") return "Turning on…";
+        if (working() === "off") return "Turning off…";
+        return "Bedrock players can join.";
     };
 
     return (
@@ -121,7 +119,7 @@ export default function Crossplay(props: { active: boolean }) {
                     <PaperSettingList autoHeight>
                         <PaperSettingItem
                             title="Bedrock address"
-                            description="What Bedrock players add under Servers. The port is separate from the Java one."
+                            description="What Bedrock players add under Servers."
                         >
                             <PaperFlex direction="row" gap="half" align="center">
                                 <PaperText weight={700}>
@@ -135,7 +133,11 @@ export default function Crossplay(props: { active: boolean }) {
                         groups={view()!.groups}
                         write={(id, value) => serverBridge.call(ACTION_IDS.writeCrossplaySetting, { id, value })}
                         reload={load}
+                        plain
                     />
+                    <PaperText size={2} color="text-subtle">
+                        Crossplay runs on Geyser and Floodgate by GeyserMC.
+                    </PaperText>
                 </Show>
             </Show>
         </>

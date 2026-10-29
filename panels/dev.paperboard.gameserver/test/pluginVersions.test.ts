@@ -19,6 +19,8 @@ describe("listProjectVersions + dependencies + installProjectVersion", () => {
     // outlives any single file's paperapi mock in full-suite runs. Stubbing
     // the whole seam keeps every dependency of lib/plugins in this file.
     let stubSoftware = "paper";
+    // what the service answers per action id, for the update check's listing
+    const bridgeAnswers: Record<string, unknown> = {};
     let stubVersion = "";
     mock.module("../src/lib/server", () => ({
         serverSoftware: () => stubSoftware,
@@ -36,7 +38,7 @@ describe("listProjectVersions + dependencies + installProjectVersion", () => {
             if (recs) Object.assign(records, recs);
         },
         serverBridge: {
-            call: async () => ({}),
+            call: async (id: string) => bridgeAnswers[id] ?? {},
             refreshState: async () => ({}),
             onStateChange: () => {},
         },
@@ -86,6 +88,7 @@ describe("listProjectVersions + dependencies + installProjectVersion", () => {
                         ok: true,
                         status: 200,
                         text: async () => JSON.stringify(body(url)),
+                        json: async () => body(url),
                     };
                 }
             }
@@ -234,6 +237,36 @@ describe("listProjectVersions + dependencies + installProjectVersion", () => {
         const installed = await installProjectVersion({ projectId: "proj1", slug: "proj1", versionId: "main-v2" });
         expect(installed.map((i) => i.filename)).toEqual(["main.jar"]);
         expect(downloadCalls.map((c) => c.targetPath)).toEqual(["mods/main.jar"]);
+    });
+
+    test("Update plugins finds and installs a newer GeyserMC build (Floodgate for Paper)", async () => {
+        const server = await import("../src/lib/server");
+        server.setServerSoftware("paper");
+        server.setServerVersion("26.3");
+        const source = { kind: "geysermc", project: "floodgate", platform: "spigot" };
+        records["floodgate-spigot.jar"] = { projectId: "floodgate", slug: "floodgate", version: "2.2.5-b140", title: "Floodgate", source };
+        bridgeAnswers["list-installed-plugins"] = { plugins: [{ filename: "floodgate-spigot.jar", record: records["floodgate-spigot.jar"] }] };
+        stubFetch({
+            "download.geysermc.org/v2/projects/floodgate/versions/latest/builds/latest": () => ({
+                version: "2.2.5",
+                build: 141,
+                downloads: { spigot: { name: "floodgate-spigot.jar", sha256: "f".repeat(64) } },
+            }),
+        });
+        const { checkPluginUpdates, updatePlugin } = await import("../src/lib/plugins");
+        const [check] = await checkPluginUpdates();
+        expect(check!.status).toBe("update-available");
+        await updatePlugin(check!);
+        expect(downloadCalls).toEqual([
+            {
+                url: "https://download.geysermc.org/v2/projects/floodgate/versions/2.2.5/builds/141/downloads/spigot",
+                targetPath: "plugins/floodgate-spigot.jar",
+                appId: "dev.paperboard.gameserver",
+                sha256: "f".repeat(64),
+            },
+        ]);
+        expect(records["floodgate-spigot.jar"]).toEqual({ ...records["floodgate-spigot.jar"], version: "2.2.5-b141", source });
+        delete bridgeAnswers["list-installed-plugins"];
     });
 
     test("a missing required dep fails before anything installs", async () => {

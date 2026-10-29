@@ -1,19 +1,14 @@
-import { fileApi } from "@mileniumhq/paperapi";
-import { pluginDirName } from "../core/plugins";
 import { SOFTWARE } from "../software/catalog";
-import { CROSSPLAY, GEYSER_MODRINTH_ID, type CrossplayPlatform, type FloodgateSource } from "../software/crossplay";
-import { ACTION_IDS, PANEL_ID } from "../service/contract";
+import { CROSSPLAY, GEYSER_MODRINTH_ID, type CrossplayPlatform } from "../software/crossplay";
+import { ACTION_IDS } from "../service/contract";
 import type { CrossplayView } from "../service/crossplay";
 import { serverBridge, serverSoftware, serverVersion } from "./server";
-import { getProject, installProjectVersion, modrinthFetch, uninstallPlugin } from "./plugins";
-import { apiFetch } from "./userAgent";
+import { getProject, installGeyserMCProject, installProjectVersion, modrinthFetch, uninstallPlugin } from "./plugins";
 
 // Turning crossplay on installs Geyser and Floodgate the same way the
 // Plugins tab installs anything (Modrinth, checksummed, recorded, so updates
-// show there too), except Floodgate for Paper: GeyserMC publishes that build
-// only on its own download API, which gives a sha256 for every file.
-
-const GEYSERMC_API = "https://download.geysermc.org/v2/projects";
+// show there too). Floodgate for Paper is only on GeyserMC's own download
+// API; it is recorded too, so Update plugins covers it the same way.
 
 export function crossplayPlatform(): CrossplayPlatform | null {
     return CROSSPLAY[serverSoftware()] ?? null;
@@ -48,30 +43,6 @@ async function installFromModrinth(projectId: string): Promise<void> {
     });
 }
 
-interface GeyserBuild {
-    build: number;
-    downloads: Record<string, { name: string; sha256: string }>;
-}
-
-async function installFromGeyserMC(source: Extract<FloodgateSource, { kind: "geysermc" }>): Promise<void> {
-    const res = await apiFetch(`${GEYSERMC_API}/${source.project}/versions/latest/builds/latest`, {
-        signal: AbortSignal.timeout(15_000),
-    });
-    if (!res.ok) throw new Error(`GeyserMC's download service answered HTTP ${res.status}`);
-    const latest = (await res.json()) as GeyserBuild;
-    const file = latest.downloads?.[source.platform];
-    if (!Number.isInteger(latest.build) || !file?.sha256) {
-        throw new Error(`GeyserMC's latest ${source.project} build has no ${source.platform} download`);
-    }
-    await fileApi.download({
-        // the build number pins the file the sha256 describes
-        url: `${GEYSERMC_API}/${source.project}/versions/latest/builds/${latest.build}/downloads/${source.platform}`,
-        targetPath: `${pluginDirName(serverSoftware())}/${source.filename}`,
-        appId: PANEL_ID,
-        sha256: file.sha256,
-    });
-}
-
 export async function readCrossplay(): Promise<CrossplayView> {
     return serverBridge.call<CrossplayView>(ACTION_IDS.readCrossplay);
 }
@@ -82,7 +53,10 @@ export async function enableCrossplay(current: CrossplayView): Promise<Crossplay
     if (!current.geyser) await installFromModrinth(GEYSER_MODRINTH_ID);
     if (!current.floodgate) {
         if (platform.floodgate.kind === "modrinth") await installFromModrinth(platform.floodgate.projectId);
-        else await installFromGeyserMC(platform.floodgate);
+        else {
+            const { kind, project, platform: target, filename } = platform.floodgate;
+            await installGeyserMCProject({ kind, project, platform: target }, filename, "Floodgate");
+        }
     }
     return serverBridge.call<CrossplayView>(ACTION_IDS.prepareCrossplay);
 }

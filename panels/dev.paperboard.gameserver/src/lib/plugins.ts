@@ -17,6 +17,8 @@ import {
     type PluginUpdateStatus as CoreUpdateStatus,
 } from "../core/plugins";
 import type { InstalledPlugin, InstalledRecord } from "../core/plugins";
+import { resolveGeyserMCLatest } from "./geysermc";
+import type { GeyserMCSource } from "../core/plugins";
 import { SEARCH_LIMIT, getProject, modrinthFetch, parseSearchHits, type ModrinthHit, type ModrinthProject, type RawHit, type RawProject } from "./modrinth";
 
 export type { InstalledPlugin, InstalledRecord, ModrinthHit, ModrinthProject };
@@ -69,6 +71,8 @@ export interface ResolvedDownload {
     /** Modrinth file hashes, passed through to fileApi.download (vanilla/Paper already do) */
     sha1?: string;
     sha512?: string;
+    /** GeyserMC's hash; Modrinth gives sha1 and sha512 */
+    sha256?: string;
     /** MC versions the picked build targets; empty when the API omits them */
     gameVersions: string[];
     /** false when the version-filtered lookup had no match and this is a cross-version fallback */
@@ -922,7 +926,9 @@ export async function checkPluginUpdates(): Promise<PluginUpdateCheck[]> {
             continue;
         }
         try {
-            const latest = await resolveLatestFile(plugin.record.projectId);
+            const latest = plugin.record.source
+                ? await resolveGeyserMCLatest(plugin.record.source, plugin.filename)
+                : await resolveLatestFile(plugin.record.projectId);
             const status = classifyPluginUpdate(
                 plugin.record.version,
                 latest.versionNumber,
@@ -968,6 +974,7 @@ export async function updatePlugin(check: PluginUpdateCheck): Promise<void> {
         targetPath: `${pluginDirName(serverSoftware())}/${safe}`,
         appId: PANEL_ID,
         ...(file.sha1 ? { sha1: file.sha1 } : {}),
+        ...(file.sha256 ? { sha256: file.sha256 } : {}),
         ...(file.sha512 ? { checksum: { algorithm: "sha512", value: file.sha512 } } : {}),
     });
 
@@ -984,7 +991,22 @@ export async function updatePlugin(check: PluginUpdateCheck): Promise<void> {
         version: file.versionNumber || "latest",
         title: check.record.title,
         iconUrl: check.record.iconUrl,
+        ...(check.record.source ? { source: check.record.source } : {}),
     };
+    await writeInstallRecords(records);
+}
+
+/** Installs the newest build GeyserMC publishes for `source`, checked against its sha256, and records it. */
+export async function installGeyserMCProject(source: GeyserMCSource, filename: string, title: string): Promise<void> {
+    const latest = await resolveGeyserMCLatest(source, filename);
+    await fileApi.download({
+        url: latest.url,
+        targetPath: `${pluginDirName(serverSoftware())}/${latest.filename}`,
+        appId: PANEL_ID,
+        sha256: latest.sha256,
+    });
+    const records = await getInstallRecords();
+    records[latest.filename] = { projectId: source.project, slug: source.project, version: latest.versionNumber, title, source };
     await writeInstallRecords(records);
 }
 

@@ -1,12 +1,25 @@
 import { SOFTWARE, type ServerSoftwareType } from "../software/catalog";
 
+/**
+ * A jar published outside Modrinth, on GeyserMC's download API (Floodgate
+ * for Paper is only there). `project` and `platform` name the file.
+ */
+export interface GeyserMCSource {
+    kind: "geysermc";
+    project: string;
+    platform: string;
+}
+
 export interface InstalledRecord {
+    /** a Modrinth project id, or the GeyserMC project when `source` says so */
     projectId: string;
     slug: string;
     version: string;
     /** Modrinth project title, kept so cards survive a reload without refetching */
     title?: string;
     iconUrl?: string;
+    /** absent for Modrinth installs */
+    source?: GeyserMCSource;
 }
 
 export interface InstalledPlugin {
@@ -23,6 +36,12 @@ export function pluginDirName(software: ServerSoftwareType): string {
     return SOFTWARE[software].addons?.dir ?? "plugins";
 }
 
+function isGeyserMCSource(value: unknown): value is GeyserMCSource {
+    if (typeof value !== "object" || value === null) return false;
+    const source = value as Record<string, unknown>;
+    return source.kind === "geysermc" && typeof source.project === "string" && typeof source.platform === "string";
+}
+
 export function isInstallRecord(value: unknown): value is InstalledRecord {
     if (typeof value !== "object" || value === null) return false;
     const rec = value as Record<string, unknown>;
@@ -31,7 +50,8 @@ export function isInstallRecord(value: unknown): value is InstalledRecord {
         typeof rec.slug === "string" &&
         typeof rec.version === "string" &&
         (rec.title === undefined || typeof rec.title === "string") &&
-        (rec.iconUrl === undefined || typeof rec.iconUrl === "string")
+        (rec.iconUrl === undefined || typeof rec.iconUrl === "string") &&
+        (rec.source === undefined || isGeyserMCSource(rec.source))
     );
 }
 

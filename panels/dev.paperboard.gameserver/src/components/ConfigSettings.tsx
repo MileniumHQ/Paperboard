@@ -14,6 +14,8 @@ export default function ConfigSettings(props: {
     groups: LoaderGroupView[];
     write: (id: string, value: string) => Promise<unknown>;
     reload: () => Promise<void>;
+    /** one list with no file names: for a tab where the files are an implementation detail */
+    plain?: boolean;
 }) {
     const [values, setValues] = createSignal<Record<string, string>>({});
     const [saveError, setSaveError] = createSignal("");
@@ -83,6 +85,35 @@ export default function ConfigSettings(props: {
         options: setting.options ? () => setting.options! : undefined,
     });
 
+    const item = (setting: LoaderSettingView) => (
+        <PaperSettingItem
+            title={setting.title}
+            description={
+                setting.warning ? (
+                    <>
+                        {setting.description} <strong>{setting.warning}</strong>
+                    </>
+                ) : (
+                    setting.description
+                )
+            }
+        >
+            <FieldControl
+                field={asField(setting)}
+                value={() => values()[setting.id] ?? setting.value}
+                onUpdate={(value) => update(setting, value)}
+            />
+        </PaperSettingItem>
+    );
+
+    const fileError = (group: LoaderGroupView) => (
+        <Show when={group.error}>
+            <PaperQuote variant="danger" icon="warning" title={`Could not read ${group.path}`}>
+                {group.error}
+            </PaperQuote>
+        </Show>
+    );
+
     return (
         <>
             <Show when={saveError()}>
@@ -90,49 +121,36 @@ export default function ConfigSettings(props: {
                     {saveError()}
                 </PaperQuote>
             </Show>
-            <For each={props.groups}>
-                {(group) => (
-                    <PaperFlex direction="column" gap="half">
-                        <PaperFlex direction="row" justify="space-between" align="center" fullWidth>
-                            <PaperText size={3} weight={700}>
-                                {group.label}
-                            </PaperText>
-                            <PaperText size={2} color="text-subtle">
-                                {group.path}
-                            </PaperText>
-                        </PaperFlex>
-                        <Show when={group.error}>
-                            <PaperQuote variant="danger" icon="warning" title="Could not read this file">
-                                {group.error}
-                            </PaperQuote>
-                        </Show>
+            <Show
+                when={!props.plain}
+                fallback={
+                    <>
+                        <For each={props.groups}>{fileError}</For>
                         <PaperSettingList autoHeight>
-                            <For each={group.settings}>
-                                {(setting) => (
-                                    <PaperSettingItem
-                                        title={setting.title}
-                                        description={
-                                            setting.warning ? (
-                                                <>
-                                                    {setting.description} <strong>{setting.warning}</strong>
-                                                </>
-                                            ) : (
-                                                setting.description
-                                            )
-                                        }
-                                    >
-                                        <FieldControl
-                                            field={asField(setting)}
-                                            value={() => values()[setting.id] ?? setting.value}
-                                            onUpdate={(value) => update(setting, value)}
-                                        />
-                                    </PaperSettingItem>
-                                )}
-                            </For>
+                            <For each={props.groups.flatMap((group) => group.settings)}>{item}</For>
                         </PaperSettingList>
-                    </PaperFlex>
-                )}
-            </For>
+                    </>
+                }
+            >
+                <For each={props.groups}>
+                    {(group) => (
+                        <PaperFlex direction="column" gap="half">
+                            <PaperFlex direction="row" justify="space-between" align="center" fullWidth>
+                                <PaperText size={3} weight={700}>
+                                    {group.label}
+                                </PaperText>
+                                <PaperText size={2} color="text-subtle">
+                                    {group.path}
+                                </PaperText>
+                            </PaperFlex>
+                            {fileError(group)}
+                            <PaperSettingList autoHeight>
+                                <For each={group.settings}>{item}</For>
+                            </PaperSettingList>
+                        </PaperFlex>
+                    )}
+                </For>
+            </Show>
         </>
     );
 }

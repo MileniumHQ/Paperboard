@@ -29,7 +29,8 @@ export function installedPlugins(
         iconUrl: entry.record?.iconUrl,
         badge: entry.uploaded ? { label: "Uploaded", variant: "monochrome" } : { label: "Installed", variant: "success" },
         footer: entry.record?.version ? `v${entry.record.version}` : entry.uploaded ? "Uploaded by you" : "Unknown version",
-        project: entry.record ? { projectId: entry.record.projectId, slug: entry.record.slug } : undefined,
+        // a GeyserMC build has no Modrinth page to open
+        project: entry.record && !entry.record.source ? { projectId: entry.record.projectId, slug: entry.record.slug } : undefined,
         version: entry.record?.version,
         uploaded: entry.uploaded === true,
     }));
