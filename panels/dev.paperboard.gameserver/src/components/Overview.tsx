@@ -11,6 +11,7 @@ import {
     PaperBadge,
     PaperEffect,
     PaperQuote,
+    PaperAvatar,
 } from "@mileniumhq/paperui";
 import {
     serverActionError,
@@ -38,6 +39,8 @@ import { PANEL_ID } from "../service/contract";
 import { parseProperties } from "../core/properties";
 import { whitelistDefault } from "../lib/properties";
 import { countJsonEntries, joinRestriction, type JoinRestriction } from "../core/whitelist";
+import { readServerIcon, setServerIconFromFile } from "../lib/serverIcon";
+import { errorMessage } from "../lib/failure";
 
 export default function Overview(props: {
     /** true while this tab is shown: the whitelist check re-runs then */
@@ -73,36 +76,91 @@ export default function Overview(props: {
         }),
     );
 
+    // the server list icon: the avatar's edit button opens the file picker
+    const [icon, setIcon] = createSignal<string | null>(null);
+    const [iconError, setIconError] = createSignal<{ title: string; message: string } | null>(null);
+    let iconPicker!: HTMLInputElement;
+
+    const loadIcon = async () => {
+        try {
+            setIcon(await readServerIcon());
+        } catch (err) {
+            setIconError({ title: "Couldn't read the server icon", message: errorMessage(err) });
+        }
+    };
+
+    const changeIcon = async (file: File | undefined) => {
+        if (!file) return;
+        setIconError(null);
+        try {
+            setIcon(await setServerIconFromFile(file));
+        } catch (err) {
+            setIconError({ title: "Server icon not changed", message: errorMessage(err) });
+        }
+    };
+
     onMount(() => {
         loadServerConfig();
         initServerListeners();
+        void loadIcon();
     });
 
     const badge = () => getStatusBadge(serverStatus());
 
     return (
         <>
-            <PaperCard shrink={false} padding="full" gap="onefourth">
-                <PaperFlex direction="row" gap="half" align="center">
-                    <PaperText weight={700} size={8}>
-                        {localIp()}:{serverPort()}
-                    </PaperText>
-                    <PaperCopyButton text={`${localIp()}:${serverPort()}`} title="Copy address" />
-                    <PaperBadge variant={badge().variant}>
-                        {badge().label}
-                    </PaperBadge>
-                </PaperFlex>
-                <PaperFlex direction="row" gap="half" align="center">
-                    <MotdPreview motd={serverMotd()} />
-                    <PaperButton size="tiny"
-                        icon
-                        onClick={() => setMotdOpen(true)}
-                        title="Edit server list message"
-                        aria-label="Edit server list message">
-                        edit
-                    </PaperButton>
+            <PaperCard shrink={false} padding="full">
+                <PaperFlex direction="row" gap="full" align="center">
+                    <PaperAvatar
+                        size="xlarge"
+                        shape="square"
+                        src={icon() ?? undefined}
+                        alt="Server icon"
+                        fallbackIcon="image"
+                        editLabel="Change server icon"
+                        onEdit={() => iconPicker.click()}
+                    />
+                    <input
+                        ref={iconPicker}
+                        type="file"
+                        accept="image/*"
+                        hidden
+                        onChange={(e) => {
+                            void changeIcon(e.currentTarget.files?.[0]);
+                            e.currentTarget.value = "";
+                        }}
+                    />
+                    <PaperFlex direction="column" gap="onefourth" minWidth={0}>
+                        <PaperFlex direction="row" gap="half" align="center">
+                            <PaperText preset="title">
+                                {localIp()}:{serverPort()}
+                            </PaperText>
+                            <PaperCopyButton text={`${localIp()}:${serverPort()}`} title="Copy address" />
+                            <PaperBadge variant={badge().variant}>
+                                {badge().label}
+                            </PaperBadge>
+                        </PaperFlex>
+                        <PaperFlex direction="row" gap="half" align="center">
+                            <MotdPreview motd={serverMotd()} />
+                            <PaperButton size="tiny"
+                                icon
+                                onClick={() => setMotdOpen(true)}
+                                title="Edit server list message"
+                                aria-label="Edit server list message">
+                                edit
+                            </PaperButton>
+                        </PaperFlex>
+                    </PaperFlex>
                 </PaperFlex>
             </PaperCard>
+
+            <Show when={iconError()}>
+                {(error) => (
+                    <PaperQuote variant="danger" icon="warning" title={error().title} onDismiss={() => setIconError(null)}>
+                        {error().message}
+                    </PaperQuote>
+                )}
+            </Show>
 
             <PaperFlex
                 justify="space-between"

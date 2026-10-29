@@ -49,6 +49,7 @@ import { settleInterruptedWork } from "./recovery";
 import { readLoaderSettings, writeLoaderSetting } from "./loaderSettings";
 import { listServerFiles, readServerFile, writeServerFile } from "./serverFiles";
 import { locateAddonConfig } from "./addonConfig";
+import { readServerIcon, setServerIcon } from "./serverIcon";
 import { liveInstallDeps } from "./softwareInstallDeps";
 import { installDatapack, listDatapacks, listDatapackVersions, removeDatapack } from "./datapacks";
 import { liveDatapackDeps } from "./datapackDeps";
@@ -1008,6 +1009,30 @@ export const panelActions: ActionDefinition[] = [
         icon: "folder",
         run: async (_ctx: ServiceContext<GameServerState>, inputs: { path?: string }) =>
             listServerFiles(inputs?.path ?? "", loaderDeps),
+    }),
+
+    defineAction({
+        id: ACTION_IDS.readServerIcon,
+        name: "Read Server Icon",
+        category: "Server",
+        description: "The server list icon as a data URL, or null when there is none",
+        internal: true,
+        template: "Read the server icon",
+        inputs: {},
+        output: { type: "string", label: "Icon" },
+        run: async () => readServerIcon(loaderDeps),
+    }),
+
+    defineAction({
+        id: ACTION_IDS.setServerIcon,
+        name: "Set Server Icon",
+        category: "Server",
+        description: "Replaces the server list icon with a 64×64 PNG",
+        internal: true,
+        template: "Set the server icon",
+        inputs: { png: { type: "string", label: "PNG (base64)", required: true } },
+        output: { type: "string", label: "Icon" },
+        run: async (_ctx, inputs) => setServerIcon(inputs?.png, loaderDeps),
     }),
 
     defineAction({
