@@ -68,6 +68,7 @@ export const paperSizes = [
     "field-small",
     "field-medium",
     "field",
+    "field-wide",
     "bar",
     "card-min",
     "split-side",

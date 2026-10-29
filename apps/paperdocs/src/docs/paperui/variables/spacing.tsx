@@ -292,6 +292,12 @@ export default function SpacingDoc() {
                         <td>Default input or grid column</td>
                     </tr>
                     <tr>
+                        <td><PaperCode>"field-wide"</PaperCode></td>
+                        <td><PaperCode>--paper-size-field-wide</PaperCode></td>
+                        <td>240px</td>
+                        <td>Slider in a settings row</td>
+                    </tr>
+                    <tr>
                         <td><PaperCode>"bar"</PaperCode></td>
                         <td><PaperCode>--paper-size-bar</PaperCode></td>
                         <td>54px</td>

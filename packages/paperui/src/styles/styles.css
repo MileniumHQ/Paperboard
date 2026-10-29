@@ -210,6 +210,7 @@ body[data-unselectable="true"],
     --paper-size-field-small: 88px;
     --paper-size-field-medium: 120px;
     --paper-size-field: 160px;
+    --paper-size-field-wide: 240px;
     --paper-size-bar: 54px;
     --paper-size-card-min: 256px;
     /* master-detail side pane (PaperSplit): a roster/list rail beside a
