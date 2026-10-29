@@ -1,7 +1,6 @@
 import { PANEL_ID } from "../service/types";
 import {   fileApi } from "@mileniumhq/paperapi";
-import properties from "dot-properties";
-import { parseProperties } from "../core/properties";
+import { parseProperties, stringifyServerProperties } from "../core/properties";
 import { supports, type CapabilityName } from "./capabilities";
 
 export type { CapabilityName };
@@ -147,21 +146,6 @@ export async function readServerProperties(): Promise<Record<string, string>> {
         console.error("[Options] Failed to read server.properties:", err);
         return {};
     }
-}
-
-// Java reads server.properties as Latin-1 on older versions, so a raw UTF-8
-// "§" arrives as "Â§". Escape every non-ASCII character as \uXXXX, like
-// Java's own Properties.store, which every version reads back correctly.
-function stringifyServerProperties(values: Record<string, string>): string {
-    const content = properties.stringify(values, {
-        keySep: "=",
-        lineWidth: null,
-        latin1: false,
-    });
-    return content.replace(
-        /[^\x00-\x7f]/g,
-        (ch) => `\\u${ch.charCodeAt(0).toString(16).toUpperCase().padStart(4, "0")}`,
-    );
 }
 
 export async function writeServerProperties(values: Record<string, string>) {
