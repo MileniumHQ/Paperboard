@@ -5,7 +5,7 @@
 //
 // Chrome is discovered via PAPERBOARD_CHROME / CHROME_BIN or PATH. A suite
 // without it is skipped with a visible reason rather than passing silently.
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -84,6 +84,8 @@ export async function runBrowserFixture(
                 }
                 const file = join(dist, pathname);
                 if (!file.startsWith(dist + "/")) return new Response("not found", { status: 404 });
+                // a directory (Chrome asks for "/" on its own) is no file to serve
+                if (!existsSync(file) || !statSync(file).isFile()) return new Response("not found", { status: 404 });
                 const blob = Bun.file(file);
                 if (blob.size === 0) return new Response("not found", { status: 404 });
                 return new Response(blob);
