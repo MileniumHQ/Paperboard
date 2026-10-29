@@ -1,3 +1,4 @@
+import { formatCount, versionLabel } from "./addonPresentation";
 import { createEffect, createSignal, For, on, onCleanup, Show } from "solid-js";
 import {
     PaperAvatar,
@@ -34,14 +35,8 @@ import type { InstalledDatapack } from "../service/datapacks";
 
 const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
-function formatCount(count: number): string {
-    if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1)}M`;
-    if (count >= 1_000) return `${(count / 1_000).toFixed(1)}k`;
-    return String(count);
-}
 
-// Modrinth version numbers are free text: "4.4.4" and "v4.4.4" both occur
-const versionLabel = (version: string) => (/^v\d/i.test(version) ? version : `v${version}`);
+
 
 const packIcon = (iconUrl?: string) => (
     <PaperAvatar src={iconUrl} shape="square" size="large" fallbackIcon="dataset" />
