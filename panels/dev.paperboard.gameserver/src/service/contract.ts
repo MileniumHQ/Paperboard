@@ -45,6 +45,7 @@ export const ACTION_IDS = {
     readServerFile: "read-server-file",
     readServerIcon: "read-server-icon",
     setServerIcon: "set-server-icon",
+    removeServerIcon: "remove-server-icon",
     writeServerFile: "write-server-file",
     locateAddonConfig: "locate-addon-config",
     deleteWorld: "delete-world",

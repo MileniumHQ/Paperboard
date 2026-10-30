@@ -52,7 +52,7 @@ import { locateAddonConfig } from "./addonConfig";
 import { prepareCrossplay, readCrossplay, writeCrossplaySetting } from "./crossplay";
 import { claimBedrockPort } from "./ports";
 import { livePortDeps } from "./portDeps";
-import { readServerIcon, setServerIcon } from "./serverIcon";
+import { readServerIcon, removeServerIcon, setServerIcon } from "./serverIcon";
 import { liveInstallDeps } from "./softwareInstallDeps";
 import { installDatapack, listDatapacks, listDatapackVersions, removeDatapack } from "./datapacks";
 import { liveDatapackDeps } from "./datapackDeps";
@@ -1103,6 +1103,21 @@ export const panelActions: ActionDefinition[] = [
         inputs: { png: { type: "string", label: "PNG (base64)", required: true } },
         output: { type: "string", label: "Icon" },
         run: async (_ctx, inputs) => setServerIcon(inputs?.png, loaderDeps),
+    }),
+
+    defineAction({
+        id: ACTION_IDS.removeServerIcon,
+        name: "Remove Server Icon",
+        category: "Server",
+        description: "Deletes the server list icon, so the game shows its default",
+        internal: true,
+        template: "Remove the server icon",
+        inputs: {},
+        output: { type: "boolean", label: "Removed" },
+        run: async () => {
+            await removeServerIcon(loaderDeps);
+            return true;
+        },
     }),
 
     defineAction({

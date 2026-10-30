@@ -12,6 +12,9 @@ import {
     PaperEffect,
     PaperQuote,
     PaperAvatar,
+    PaperContextMenu,
+    PaperContextMenuItem,
+    useContextMenuState,
 } from "@mileniumhq/paperui";
 import {
     serverActionError,
@@ -39,7 +42,7 @@ import { PANEL_ID } from "../service/contract";
 import { parseProperties } from "../core/properties";
 import { whitelistDefault } from "../lib/properties";
 import { countJsonEntries, joinRestriction, type JoinRestriction } from "../core/whitelist";
-import { readServerIcon, setServerIconFromFile } from "../lib/serverIcon";
+import { readServerIcon, removeServerIcon, setServerIconFromFile } from "../lib/serverIcon";
 import { errorMessage } from "../lib/failure";
 
 export default function Overview(props: {
@@ -76,7 +79,8 @@ export default function Overview(props: {
         }),
     );
 
-    // the server list icon: the avatar's edit button opens the file picker
+    // the server list icon: the avatar's edit button opens the file picker,
+    // and a right click offers to change or remove it
     const [icon, setIcon] = createSignal<string | null>(null);
     const [iconError, setIconError] = createSignal<{ title: string; message: string } | null>(null);
     let iconPicker!: HTMLInputElement;
@@ -96,6 +100,18 @@ export default function Overview(props: {
             setIcon(await setServerIconFromFile(file));
         } catch (err) {
             setIconError({ title: "Server icon not changed", message: errorMessage(err) });
+        }
+    };
+
+    const iconMenu = useContextMenuState("mouse");
+    const removeIcon = async () => {
+        iconMenu.close();
+        setIconError(null);
+        try {
+            await removeServerIcon();
+            setIcon(null);
+        } catch (err) {
+            setIconError({ title: "Server icon not removed", message: errorMessage(err) });
         }
     };
 
@@ -119,7 +135,22 @@ export default function Overview(props: {
                         fallbackIcon="image"
                         editLabel="Change server icon"
                         onEdit={() => iconPicker.click()}
+                        onContextMenu={iconMenu.openAtCursor}
                     />
+                    <PaperContextMenu open={iconMenu.isOpen()} target={iconMenu.target()} placement={iconMenu.placement()} onClose={iconMenu.close}>
+                        <PaperContextMenuItem
+                            icon="image"
+                            onClick={() => {
+                                iconMenu.close();
+                                iconPicker.click();
+                            }}
+                        >
+                            Change
+                        </PaperContextMenuItem>
+                        <PaperContextMenuItem icon="delete" danger disabled={icon() === null} onClick={() => void removeIcon()}>
+                            Remove
+                        </PaperContextMenuItem>
+                    </PaperContextMenu>
                     <input
                         ref={iconPicker}
                         type="file"

@@ -1,12 +1,12 @@
 // The server list icon against a real temp server folder and real PNGs: only
 // a 64×64 PNG replaces server-icon.png, and anything else is refused with a
-// reason while the old icon stays.
+// reason while the old icon stays. Removing it deletes only that file.
 import { afterEach, describe, expect, test } from "bun:test";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { PNG } from "pngjs";
-import { readServerIcon, setServerIcon } from "../src/service/serverIcon";
+import { readServerIcon, removeServerIcon, setServerIcon } from "../src/service/serverIcon";
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -79,5 +79,22 @@ describe("readServerIcon", () => {
         const { dir, deps } = server();
         fs.mkdirSync(iconPath(dir));
         await expect(readServerIcon(deps)).rejects.toThrow();
+    });
+});
+
+describe("removeServerIcon", () => {
+    test("deletes server-icon.png and leaves the rest of the folder", async () => {
+        const { dir, deps } = server();
+        fs.writeFileSync(iconPath(dir), png(64, 64));
+        fs.writeFileSync(path.join(dir, "server.properties"), "motd=hi\n");
+        await removeServerIcon(deps);
+        expect(fs.readdirSync(dir)).toEqual(["server.properties"]);
+        expect(await readServerIcon(deps)).toBeNull();
+    });
+
+    test("is done already when there is no icon", async () => {
+        const { dir, deps } = server();
+        await removeServerIcon(deps);
+        expect(fs.readdirSync(dir)).toEqual([]);
     });
 });

@@ -6,6 +6,7 @@ import { ACTION_IDS } from "../service/contract";
 import { SERVER_ICON_SIZE } from "../core/serverIcon";
 
 export const readServerIcon = () => serverBridge.call<string | null>(ACTION_IDS.readServerIcon, {});
+export const removeServerIcon = () => serverBridge.call<boolean>(ACTION_IDS.removeServerIcon, {});
 
 /**
  * The picked image as the game wants it: the centre square, at 64×64. A

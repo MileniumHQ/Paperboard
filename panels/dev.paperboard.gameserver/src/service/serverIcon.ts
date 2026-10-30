@@ -51,3 +51,9 @@ export async function setServerIcon(png: unknown, deps: ServerIconDeps): Promise
     await serializedFileTask(file, () => writeFileAtomic(nodeFs, file, bytes));
     return dataUrl(bytes);
 }
+
+/** deletes the icon; a server without one shows the game's default */
+export async function removeServerIcon(deps: ServerIconDeps): Promise<void> {
+    const file = nodePath.join(await deps.serverDir(), SERVER_ICON_FILE);
+    await serializedFileTask(file, () => nodeFs.rm(file, { force: true }));
+}
