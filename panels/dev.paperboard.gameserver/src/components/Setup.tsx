@@ -17,7 +17,7 @@ import {
     type LoaderStatus,
 } from "@mileniumhq/paperui";
 import InstallLoaders from "./InstallLoaders";
-import { fileApi } from "@mileniumhq/paperapi";
+import { fileApi } from "../lib/api";
 import { createInstallRun } from "../lib/installRun";
 import {
     SOFTWARE,
@@ -284,9 +284,6 @@ export default function Setup(props: SetupProps) {
                         <PaperSelector name="gameType" value="minecraftJava">
                             <PaperSelectorItem value="minecraftJava">
                                 Minecraft: Java Edition
-                            </PaperSelectorItem>
-                            <PaperSelectorItem value="othergames" disabled>
-                                <em>Other games coming soon&trade;</em>
                             </PaperSelectorItem>
                         </PaperSelector>
                     </PaperFlex>

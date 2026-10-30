@@ -1,4 +1,4 @@
-import { packages as packageApi, system } from "@mileniumhq/paperapi";
+import { packages as packageApi, system } from "./api";
 import { getRequiredJavaVersion } from "../lib/software";
 import { isWindowsTarget } from "../lib/platform";
 

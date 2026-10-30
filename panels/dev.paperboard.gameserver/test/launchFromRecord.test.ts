@@ -22,7 +22,7 @@ const files = {
     getPath: async () => serverDir,
     download: async () => "/fake",
 };
-mock.module("@mileniumhq/paperapi", () => ({
+mock.module("../src/service/api", () => ({
     portApi: portApiStub(),
     config: { get: async () => savedConfig, set: async () => true },
     processApi: {

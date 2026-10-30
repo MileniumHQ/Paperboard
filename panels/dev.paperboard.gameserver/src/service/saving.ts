@@ -1,5 +1,8 @@
-import { files as fileApi, processApi, type ServiceContext } from "@mileniumhq/paperapi";
+import { serverLocal } from "./scope";
+import { files as fileApi, processApi, type ServiceContext } from "./api";
 import { PANEL_ID, SERVER_PROC_ID, type GameServerState } from "./types";
+
+const local = serverLocal(() => ({ waiters: new Set<Waiter>(), pausing: false }));
 
 // Copying a running world: the server writes region files whenever it
 // autosaves, so a copy taken meanwhile can catch half a write. Saving is
@@ -19,14 +22,12 @@ const COMMAND_TIMEOUT_MS = 15_000;
 
 type Waiter = { match: (line: string) => boolean; resolve: () => void };
 // at most one pause at a time, so at most two waiters (off, flushed)
-const waiters = new Set<Waiter>();
-let pausing = false;
 
 /** every console line passes here (lifecycle.handleProcessData) */
 export function observeSavingLine(line: string): void {
-    for (const waiter of waiters) {
+    for (const waiter of local().waiters) {
         if (waiter.match(line)) {
-            waiters.delete(waiter);
+            local().waiters.delete(waiter);
             waiter.resolve();
         }
     }
@@ -38,12 +39,12 @@ function waitForLine(match: (line: string) => boolean, timeoutMs: number, what: 
     const done = new Promise<void>((resolve, reject) => {
         waiter = { match, resolve: () => { clearTimeout(timer); resolve(); } };
         timer = setTimeout(() => {
-            waiters.delete(waiter);
+            local().waiters.delete(waiter);
             reject(new Error(`The server did not confirm ${what} within ${Math.round(timeoutMs / 1000)} seconds`));
         }, timeoutMs);
-        waiters.add(waiter);
+        local().waiters.add(waiter);
     });
-    return { done, cancel: () => { clearTimeout(timer); waiters.delete(waiter); } };
+    return { done, cancel: () => { clearTimeout(timer); local().waiters.delete(waiter); } };
 }
 
 // "Automatic saving is now disabled", "Saving is already turned off"
@@ -72,8 +73,8 @@ async function send(command: string, confirm: (line: string) => boolean, timeout
 export async function withSavingPaused<T>(ctx: ServiceContext<GameServerState>, work: () => Promise<T>): Promise<T> {
     if (ctx.state.serverStatus === "offline") return work();
     if (ctx.state.serverStatus !== "online") throw new Error("Wait until the server has finished starting or stopping");
-    if (pausing) throw new Error("Saving is already paused for another copy");
-    pausing = true;
+    if (local().pausing) throw new Error("Saving is already paused for another copy");
+    local().pausing = true;
     try {
         let result!: T;
         let workError: unknown;
@@ -97,7 +98,7 @@ export async function withSavingPaused<T>(ctx: ServiceContext<GameServerState>, 
         if (workFailed) throw workError;
         return result;
     } finally {
-        pausing = false;
+        local().pausing = false;
     }
 }
 
@@ -118,8 +119,8 @@ async function pauseSaving(): Promise<void> {
 export async function pauseSavingForBackup(ctx: ServiceContext<GameServerState>): Promise<void> {
     if (ctx.state.serverStatus === "offline") return;
     if (ctx.state.serverStatus !== "online") throw new Error("The server is starting or stopping; back it up when it has finished");
-    if (pausing) throw new Error("A world download is copying the world; back up when it has finished");
-    pausing = true;
+    if (local().pausing) throw new Error("A world download is copying the world; back up when it has finished");
+    local().pausing = true;
     try {
         await pauseSaving();
     } catch (err) {
@@ -131,7 +132,7 @@ export async function pauseSavingForBackup(ctx: ServiceContext<GameServerState>)
         }
         throw err;
     } finally {
-        pausing = false;
+        local().pausing = false;
     }
 }
 

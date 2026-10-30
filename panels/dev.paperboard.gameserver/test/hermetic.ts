@@ -1,3 +1,12 @@
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+// Discovery must not even read the developer's .paperboard before the
+// no-network guard below refuses a connection.
+const testData = fs.mkdtempSync(path.join(os.tmpdir(), "gameserver-unit-"));
+process.env.PAPERBOARD_DIR = testData;
+process.once("exit", () => fs.rmSync(testData, { recursive: true, force: true }));
+
 // Hermetic test guard: unit tests must never open network connections.
 // The panel SDK discovers a running daemon through ~/.paperboard/local/crane.json,
 // so on a dev machine with Paperboard live, a lazy transport connect reaches the

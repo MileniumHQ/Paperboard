@@ -37,7 +37,7 @@ import { SOFTWARE_NAMES } from "../lib/software";
 import ServerIssueModal from "./ServerIssueModal";
 import RecoveryNotice from "./RecoveryNotice";
 import { MotdEditor, MotdPreview } from "./Motd";
-import { fileApi } from "@mileniumhq/paperapi";
+import { fileApi } from "../lib/api";
 import { PANEL_ID } from "../service/contract";
 import { parseProperties } from "../core/properties";
 import { whitelistDefault } from "../lib/properties";

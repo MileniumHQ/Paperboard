@@ -1,4 +1,4 @@
-import { config, files as fileApi, type ServiceContext } from "@mileniumhq/paperapi";
+import { config, files as fileApi, type ServiceContext } from "./api";
 import { updatePanelConfig } from "./config";
 import { fetchJson } from "../software/http";
 import { resolveLevelName } from "./worlds";

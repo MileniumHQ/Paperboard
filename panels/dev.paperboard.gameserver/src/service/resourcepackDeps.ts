@@ -1,4 +1,4 @@
-import { config, files as fileApi, type ServiceContext } from "@mileniumhq/paperapi";
+import { config, files as fileApi, type ServiceContext } from "./api";
 import { parseProperties, stringifyServerProperties } from "../core/properties";
 import { apiFetch } from "../lib/userAgent";
 import { fetchJson } from "../software/http";

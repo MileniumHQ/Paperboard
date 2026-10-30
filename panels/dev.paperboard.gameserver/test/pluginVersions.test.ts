@@ -44,7 +44,7 @@ describe("listProjectVersions + dependencies + installProjectVersion", () => {
         },
     }));
 
-    mock.module("@mileniumhq/paperapi", () => ({
+    mock.module("../src/lib/api", () => ({
         fileApi: {
             download: async (opts: any) => {
                 downloadCalls.push(opts);

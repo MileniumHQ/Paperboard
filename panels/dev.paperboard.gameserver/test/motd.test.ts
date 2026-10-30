@@ -5,7 +5,7 @@ import { portApiStub } from "./portApiStub";
 import { readFileSync } from "node:fs";
 
 let propertiesFile: string | null = null;
-mock.module("@mileniumhq/paperapi", () => ({
+mock.module("../src/service/api", () => ({
     portApi: portApiStub(),
     config: { get: async () => ({}) },
     files: { read: async () => propertiesFile },

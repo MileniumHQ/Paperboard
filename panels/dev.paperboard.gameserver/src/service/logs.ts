@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import { gunzipSync } from "node:zlib";
-import { files as fileApi, type ServiceContext } from "@mileniumhq/paperapi";
-import { listDirectory } from "../lib/filesystem";
+import { files as fileApi, type ServiceContext } from "./api";
+import { listDirectory } from "./filesystem";
 import { isLogFileName, tailChars } from "../core/logs";
 import { type GameServerState, PANEL_ID } from "./types";
 

@@ -1,5 +1,5 @@
-import { files as fileApi, type ServiceContext } from "@mileniumhq/paperapi";
-import { listDirectory } from "../lib/filesystem";
+import { files as fileApi, type ServiceContext } from "./api";
+import { listDirectory } from "./filesystem";
 import {
     parsePlayerStats,
     type PlayerStatSummary,

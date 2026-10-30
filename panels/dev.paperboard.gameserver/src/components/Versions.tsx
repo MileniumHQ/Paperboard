@@ -12,7 +12,7 @@ import {
     PaperText,
     PaperCard,
 } from "@mileniumhq/paperui";
-import { config } from "@mileniumhq/paperapi";
+import { config } from "../lib/api";
 import InstallLoaders from "./InstallLoaders";
 import { PANEL_ID } from "../service/types";
 import { serverStatus } from "../lib/server";

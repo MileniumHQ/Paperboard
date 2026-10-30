@@ -1,4 +1,4 @@
-import { portApi } from "@mileniumhq/paperapi";
+import { portApi } from "./api";
 import { SOFTWARE } from "../software/catalog";
 import { CROSSPLAY, GEYSER_MODRINTH_ID, type CrossplayPlatform } from "../software/crossplay";
 import { ACTION_IDS } from "../service/contract";

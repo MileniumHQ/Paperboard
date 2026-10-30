@@ -119,7 +119,7 @@ describe("installProject (mocked network + fileApi)", () => {
     let exactVersions: any[];
     let fallbackVersions: any[];
 
-    mock.module("@mileniumhq/paperapi", () => ({
+    mock.module("../src/lib/api", () => ({
         fileApi: {
             download: async (opts: any) => {
                 downloadCalls.push(opts);

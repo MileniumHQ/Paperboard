@@ -28,7 +28,7 @@ import {
     PaperToggle,
     type PaperColor,
 } from "@mileniumhq/paperui";
-import { fileApi } from "@mileniumhq/paperapi";
+import { fileApi } from "../lib/api";
 import {
     forgetPlayerData,
     getPlayerPlaytimeSeconds,

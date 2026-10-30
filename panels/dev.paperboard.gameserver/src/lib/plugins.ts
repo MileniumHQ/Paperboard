@@ -1,5 +1,5 @@
 import semver from "semver";
-import { fileApi, config } from "@mileniumhq/paperapi";
+import { fileApi, config } from "./api";
 import { PANEL_ID } from "../service/types";
 import { serverSoftware, serverVersion, updatePanelConfig, serverBridge } from "./server";
 import { behaviorVersionOf } from "./versionProfile";

@@ -1,4 +1,4 @@
-import { config, processApi, type ServiceContext } from "@mileniumhq/paperapi";
+import { config, processApi, type ServiceContext } from "./api";
 import { PANEL_ID, SERVER_PROC_ID, type GameServerState } from "./types";
 
 // Runtime-applicable server.properties values. Most keys (port, motd,

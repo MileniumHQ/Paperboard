@@ -10,7 +10,7 @@ mock.module("../src/lib/server", () => ({ serverVersion, setServerVersion }));
 
 let disk = "";
 const writes: string[] = [];
-mock.module("@mileniumhq/paperapi", () => ({
+mock.module("../src/lib/api", () => ({
     portApi: portApiStub(),
     fileApi: {
         read: async () => disk,

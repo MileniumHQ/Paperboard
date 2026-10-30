@@ -1,8 +1,9 @@
+import { serverLocal } from "./scope";
 import * as nodeFs from "node:fs/promises";
 import * as nodePath from "node:path";
 import { randomUUID } from "node:crypto";
 import { Unzip, UnzipInflate, Zip, ZipDeflate, ZipPassThrough, type UnzipFile } from "fflate";
-import { files as fileApi, type ServiceContext } from "@mileniumhq/paperapi";
+import { files as fileApi, type ServiceContext } from "./api";
 import {
     DIMENSION_SUFFIXES,
     MAX_WORLD_EXPORT_BYTES,
@@ -19,21 +20,22 @@ import { withSavingPaused } from "./saving";
 import { resolveLevelName } from "./worlds";
 import { PANEL_ID, type GameServerState } from "./types";
 
+const local = serverLocal(() => ({ running: false }));
+
 // Worlds as zip files: a download zips a world's folders into the transfer
 // folder for the page to export; an upload is a zip the page imported
 // there, unpacked into new world folders. One transfer runs at a time, and
 // its file in the transfer folder is removed when it is done with.
 
 const READ_CHUNK = 64 * 1024;
-let running = false;
 
 async function exclusive<T>(work: () => Promise<T>): Promise<T> {
-    if (running) throw new Error("Another world upload or download is running");
-    running = true;
+    if (local().running) throw new Error("Another world upload or download is running");
+    local().running = true;
     try {
         return await work();
     } finally {
-        running = false;
+        local().running = false;
     }
 }
 

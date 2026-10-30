@@ -1,5 +1,5 @@
 import { PANEL_ID } from "../service/types";
-import {   fileApi } from "@mileniumhq/paperapi";
+import {   fileApi } from "./api";
 import { parseProperties, stringifyServerProperties } from "../core/properties";
 import { supports, type CapabilityName } from "./capabilities";
 

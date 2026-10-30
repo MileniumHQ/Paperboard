@@ -164,6 +164,7 @@ await actionsApi.call("dev.example.runtime", "install", { version: "1.2.0" }, {
             </PaperCode>
 
             <PaperText preset="subheader" id="projects">Projects</PaperText>
+            <PaperText preset="body">Game Server gives each server its own project, using its stable server id. Choose that project’s blocks to target that server. Project-less blocks from before several servers are deprecated forwarders to the migrated server until v0.5. Status, players, console and MOTD widgets choose a Server independently.</PaperText>
             <PaperText preset="body">
                 A panel that runs several of one thing (game servers, bots) can keep each one's actions
                 in a project. A project's action is registered as project/action, so survival/send and

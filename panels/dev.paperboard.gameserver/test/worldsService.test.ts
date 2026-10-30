@@ -31,7 +31,7 @@ const fileApiFake = {
     getPath: async (path: string) => inRoot(path),
 };
 
-mock.module("@mileniumhq/paperapi", () => ({
+mock.module("../src/service/api", () => ({
     config: {
         get: async () => {
             if (configReadError) throw configReadError;

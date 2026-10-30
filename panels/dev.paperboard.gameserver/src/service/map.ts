@@ -1,9 +1,10 @@
+import { serverLocal } from "./scope";
 import * as fs from "node:fs";
 import { gunzipSync, inflateSync } from "node:zlib";
 import nbt from "prismarine-nbt";
 import { PNG } from "pngjs";
-import { files as fileApi, type ServiceContext } from "@mileniumhq/paperapi";
-import { tryListDirectory } from "../lib/filesystem";
+import { files as fileApi, type ServiceContext } from "./api";
+import { tryListDirectory } from "./filesystem";
 import { resolveVersionProfile, worldPathsFor, type VersionProfile } from "../lib/versionProfile";
 import {
     blockColor,
@@ -25,6 +26,8 @@ import {
 } from "../core/map";
 import { type GameServerState, PANEL_ID } from "./types";
 import { resolveLevelName } from "./worlds";
+
+const local = serverLocal(() => ({ tileCache: new Map<string, CachedTile>() }));
 
 // Minimum build height per dimension: heightmap values are stored relative
 // to it (overworld surface y=72 with a -64 floor is stored as 137; nether
@@ -217,15 +220,14 @@ interface CachedTile {
 // Bounded tile cache: maps change under us, so entries are invalidated by
 // the region file's mtime, and the map never grows past CACHE_MAX.
 const CACHE_MAX = 48;
-const tileCache = new Map<string, CachedTile>();
 
 function cacheSet(key: string, value: CachedTile): void {
-    tileCache.delete(key);
-    tileCache.set(key, value);
-    while (tileCache.size > CACHE_MAX) {
-        const oldest = tileCache.keys().next().value;
+    local().tileCache.delete(key);
+    local().tileCache.set(key, value);
+    while (local().tileCache.size > CACHE_MAX) {
+        const oldest = local().tileCache.keys().next().value;
         if (oldest === undefined) break;
-        tileCache.delete(oldest);
+        local().tileCache.delete(oldest);
     }
 }
 
@@ -264,7 +266,7 @@ export async function renderMapTile(
         );
     }
 
-    const cached = tileCache.get(absolute);
+    const cached = local().tileCache.get(absolute);
     if (cached && cached.mtimeMs === mtimeMs) {
         return { dataUrl: cached.dataUrl, dimension, rx, rz };
     }

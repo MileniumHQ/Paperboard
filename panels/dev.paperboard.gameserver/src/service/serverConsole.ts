@@ -1,4 +1,4 @@
-import { processApi } from "@mileniumhq/paperapi";
+import { processApi } from "./api";
 import { SERVER_PROC_ID } from "./types";
 
 /**

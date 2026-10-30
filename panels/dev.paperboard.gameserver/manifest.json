@@ -1,7 +1,7 @@
 {
     "name": "Game Server",
     "id": "dev.paperboard.gameserver",
-    "version": "0.3.0",
+    "version": "0.4.0",
     "description": "Dedicated Minecraft & game server manager",
     "publisher": "Paperboard",
     "base": "./dist/index.html",
@@ -12,25 +12,29 @@
             "id": "status",
             "name": "Server status",
             "description": "Online or offline, players and version, with a start and stop button",
-            "sizes": ["2x1", "2x2"]
+            "sizes": ["2x1", "2x2"],
+            "options": [{ "id": "server", "label": "Server" }]
         },
         {
             "id": "players",
             "name": "Players online",
             "description": "Who is playing right now",
-            "sizes": ["2x2"]
+            "sizes": ["2x2"],
+            "options": [{ "id": "server", "label": "Server" }]
         },
         {
             "id": "console",
             "name": "Console",
             "description": "The server log's latest lines, errors marked",
-            "sizes": ["4x1"]
+            "sizes": ["4x1"],
+            "options": [{ "id": "server", "label": "Server" }]
         },
         {
             "id": "motd",
             "name": "Server list message",
             "description": "The MOTD as players see it in their server list",
-            "sizes": ["4x1"]
+            "sizes": ["4x1"],
+            "options": [{ "id": "server", "label": "Server" }]
         }
     ],
     "tutorial": [

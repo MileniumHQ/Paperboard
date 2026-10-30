@@ -16,7 +16,7 @@ mock.module("../src/lib/server", () => ({
     },
 }));
 
-mock.module("@mileniumhq/paperapi", () => ({
+mock.module("../src/lib/api", () => ({
     portApi: portApiStub(),
     fileApi: {},
     files: {},

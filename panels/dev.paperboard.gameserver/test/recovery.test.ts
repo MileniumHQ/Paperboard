@@ -6,7 +6,7 @@ import { portApiStub } from "./portApiStub";
 
 const filesFake = { read: async () => null, write: async () => "/fake", exists: async () => true, getPath: async () => "/srv/mc", delete: async () => true };
 
-mock.module("@mileniumhq/paperapi", () => ({
+mock.module("../src/service/api", () => ({
     portApi: portApiStub(),
     config: { get: async () => ({}), set: async () => true },
     processApi: { write: async () => {}, kill: async () => {}, exists: async () => false, start: async () => ({ success: true }), run: async () => ({}), onData: () => () => {}, onExit: () => () => {} },

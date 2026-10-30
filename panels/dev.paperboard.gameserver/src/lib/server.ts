@@ -1,6 +1,6 @@
 import { PANEL_ID, ACTION_IDS } from "../service/contract";
 import { createSignal } from "solid-js";
-import { createPanelBridge } from "@mileniumhq/paperapi";
+import { createPanelBridge } from "./api";
 import type { PaperConsoleEntry } from "@mileniumhq/paperui";
 import stripAnsi from "strip-ansi";
 import { SOFTWARE_NAMES, type ServerSoftwareType } from "./software";
@@ -95,9 +95,7 @@ serverBridge.onStateChange((patch) => {
     applyStatePatch(patch as Record<string, unknown>, currentSetters());
 });
 
-serverBridge.refreshState().then((state: any) => {
-    applyStatePatch(state as Record<string, unknown>, currentSetters());
-});
+/* Initial projection is requested after App resolves the selected server. */
 
 // config lives in the service (service/config.ts owns read-merge-write
 // with an explicit PANEL_ID). The UI only triggers a reload and pulls the
@@ -106,22 +104,20 @@ serverBridge.refreshState().then((state: any) => {
 export async function loadServerConfig() {
     try {
         await serverBridge.call(ACTION_IDS.loadConfig);
-        await serverBridge.refreshState();
+        applyStatePatch(await serverBridge.refreshState() as any, currentSetters());
     } catch (err) {
-        console.debug("[gameserver] service-side loadServerConfig failed:", String(err));
+        reportActionError("load-server-config", err);
     }
 }
 
-loadServerConfig();
-
 export async function updatePanelConfig(patch: Record<string, unknown>) {
     await serverBridge.call(ACTION_IDS.updatePanelConfig, { patch });
-    await serverBridge.refreshState();
+    applyStatePatch(await serverBridge.refreshState() as any, currentSetters());
 }
 
 export async function initServerListeners() {
     await loadServerConfig();
-    await serverBridge.refreshState();
+    applyStatePatch(await serverBridge.refreshState() as any, currentSetters());
 }
 
 function reportActionError(action: string, err: unknown): void {

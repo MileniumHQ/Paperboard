@@ -3,7 +3,7 @@ import {
     files as fileApi,
     system,
     type ServiceContext,
-} from "@mileniumhq/paperapi";
+} from "./api";
 import { parseProperties, extractServerPort } from "../core/properties";
 import { DEFAULT_MOTD } from "../core/motd";
 import type { GameServerState } from "./types";
@@ -49,6 +49,7 @@ export async function loadConfigAndProperties(
         ctx.setState(patch);
     } catch (err) {
         console.error("[Service:Config] Error loading server config:", err);
+        throw err;
     }
 }
 

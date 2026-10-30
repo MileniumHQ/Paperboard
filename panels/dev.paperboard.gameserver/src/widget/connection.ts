@@ -4,7 +4,9 @@
 // answer, never an empty server.
 import { createSignal, onCleanup, type Accessor } from "solid-js";
 import { createPanelBridge, type WidgetContext } from "@mileniumhq/paperapi";
+import { serverStateOf } from "../servers";
 import { PANEL_ID } from "../service/contract";
+import type { ServersState } from "../service";
 import type { GameServerState } from "../service/types";
 
 /** the last log lines a widget keeps; the console tail shows two */
@@ -46,6 +48,15 @@ export function viewOf(state: Partial<GameServerState>): ServerView {
     };
 }
 
+/** The option is explicit; only widgets from before several servers use the legacy server. */
+export function selectedWidgetServer(state: ServersState, option: string | undefined): { id: string; view: ServerView } {
+    if (state.serversError) throw new Error(state.serversError);
+    const id = option || state.legacyServer;
+    const server = state.servers.find((s) => s.id === id);
+    if (!server) throw new Error("No server is chosen, or it was removed. Choose a Server in the widget options.");
+    return { id: server.id, view: viewOf(serverStateOf(state, server.id)) };
+}
+
 export interface WidgetServer {
     connection: Accessor<Connection>;
     visible: Accessor<boolean>;
@@ -60,7 +71,7 @@ const messageOf = (err: unknown) => (err instanceof Error ? err.message : String
 export function useWidgetServer(widget: WidgetContext): WidgetServer {
     const [visible, setVisible] = createSignal(widget.visible());
     const [connection, setConnection] = createSignal<Connection>({ phase: "loading" });
-    let bridge: ReturnType<typeof createPanelBridge<GameServerState>> | null = null;
+    let bridge: ReturnType<typeof createPanelBridge<ServersState>> | null = null;
     let generation = 0;
 
     const close = () => {
@@ -69,6 +80,12 @@ export function useWidgetServer(widget: WidgetContext): WidgetServer {
         bridge = null;
     };
 
+    let chosen: string | null = null;
+    const project = (state: ServersState): ServerView => {
+        const selected = selectedWidgetServer(state, widget.options.server);
+        chosen = selected.id;
+        return selected.view;
+    };
     const refresh = () => {
         const mine = generation;
         const current = bridge;
@@ -76,7 +93,7 @@ export function useWidgetServer(widget: WidgetContext): WidgetServer {
         current
             .refreshState()
             .then((state) => {
-                if (mine === generation) setConnection({ phase: "ready", server: viewOf(state) });
+                if (mine === generation) setConnection({ phase: "ready", server: project(state) });
             })
             .catch((err) => {
                 if (mine === generation) setConnection({ phase: "unavailable", message: messageOf(err) });
@@ -86,12 +103,13 @@ export function useWidgetServer(widget: WidgetContext): WidgetServer {
     const open = () => {
         close();
         const mine = generation;
-        const next = createPanelBridge<GameServerState>({ panelId: PANEL_ID });
+        const next = createPanelBridge<ServersState>({ panelId: PANEL_ID });
         bridge = next;
         // pushes before the first full read are partial; wait for it
         next.onStateChange((_patch, full) => {
             if (mine === generation && next.getStatus().ready) {
-                setConnection({ phase: "ready", server: viewOf(full) });
+                try { setConnection({ phase: "ready", server: project(full) }); }
+                catch (err) { setConnection({ phase: "unavailable", message: messageOf(err) }); }
             }
         });
         refresh();
@@ -118,6 +136,6 @@ export function useWidgetServer(widget: WidgetContext): WidgetServer {
             refresh();
         },
         call: <R,>(action: string, ...args: unknown[]) =>
-            bridge ? bridge.call<R>(action, ...args) : Promise.reject(new Error("The widget is hidden")),
+            bridge && chosen ? bridge.call<R>(`${chosen}/${action}`, ...args) : Promise.reject(new Error("Choose a server in the widget options")),
     };
 }

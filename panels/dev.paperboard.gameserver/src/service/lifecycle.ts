@@ -1,3 +1,4 @@
+import { serverLocal } from "./scope";
 import {
     processApi,
     files as fileApi,
@@ -5,7 +6,7 @@ import {
     config,
     system,
     type ServiceContext,
-} from "@mileniumhq/paperapi";
+} from "./api";
 import stripAnsi from "strip-ansi";
 import { getRequiredJavaVersion, SOFTWARE_NAMES } from "../lib/software";
 import { isWindowsTarget } from "../lib/platform";
@@ -31,14 +32,12 @@ import { livePortDeps } from "./portDeps";
 import { type GameServerState, SERVER_PROC_ID, appendCapped, PANEL_ID } from "./types";
 import { TRIGGER_IDS } from "./contract";
 
-let lineBuffer = "";
-let isRestarting = false;
-let stopTimeout: ReturnType<typeof setTimeout> | null = null;
+const local = serverLocal(() => ({ lineBuffer: "", isRestarting: false, stopTimeout: null as ReturnType<typeof setTimeout> | null }));
 
 function cancelStopForceKill(): void {
-    if (stopTimeout) {
-        clearTimeout(stopTimeout);
-        stopTimeout = null;
+    if (local().stopTimeout) {
+        clearTimeout(local().stopTimeout!);
+        local().stopTimeout = null;
     }
 }
 
@@ -51,19 +50,19 @@ function scheduleStopForceKill(
     delayMs: number = 15000,
 ): void {
     cancelStopForceKill();
-    stopTimeout = setTimeout(() => {
-        stopTimeout = null;
+    local().stopTimeout = setTimeout(() => {
+        local().stopTimeout = null;
         processApi.kill(SERVER_PROC_ID, "SIGKILL");
         watchForceKill(ctx);
     }, delayMs);
-    (stopTimeout as unknown as { unref?: () => void }).unref?.();
+    (local().stopTimeout as unknown as { unref?: () => void }).unref?.();
 }
 
 // test seam: the force-kill is time-based, so tests drive it with short
 // delays instead of waiting out the real 15s window
 export const __lifecycleTest = {
     scheduleStopForceKill,
-    isStopForceKillPending: () => stopTimeout !== null,
+    isStopForceKillPending: () => local().stopTimeout !== null,
 };
 
 export async function startServerInstance(
@@ -203,7 +202,7 @@ export async function restartServerInstance(
     ctx: ServiceContext<GameServerState>,
 ): Promise<void> {
     if (ctx.state.serverStatus !== "online") return;
-    isRestarting = true;
+    local().isRestarting = true;
     ctx.setState({
         serverStatus: "restarting",
         serverEntries: appendCapped(
@@ -314,9 +313,9 @@ function handleGameruleResponse(
 export function handleProcessData(
     ctx: ServiceContext<GameServerState>,
     chunk: string,
-): void {    lineBuffer += chunk;
-    const lines = lineBuffer.split("\n");
-    lineBuffer = lines.pop() ?? "";
+): void {    local().lineBuffer += chunk;
+    const lines = local().lineBuffer.split("\n");
+    local().lineBuffer = lines.pop() ?? "";
 
     for (const line of lines) {
         const clean = stripAnsi(line);
@@ -396,8 +395,8 @@ export function handleProcessData(
 export function handleProcessExit(ctx: ServiceContext<GameServerState>): void {
     cancelStopForceKill();
 
-    if (lineBuffer.trim()) {
-        const lastChat = parseChatMessage(lineBuffer);
+    if (local().lineBuffer.trim()) {
+        const lastChat = parseChatMessage(local().lineBuffer);
         if (lastChat) {
             ctx.setState({
                 chatMessages: appendCapped(ctx.state.chatMessages, lastChat),
@@ -406,14 +405,14 @@ export function handleProcessExit(ctx: ServiceContext<GameServerState>): void {
         ctx.setState({
             serverEntries: appendCapped(
                 ctx.state.serverEntries,
-                parseLogLine(lineBuffer),
+                parseLogLine(local().lineBuffer),
             ),
         });
-        lineBuffer = "";
+        local().lineBuffer = "";
     }
 
-    if (isRestarting) {
-        isRestarting = false;
+    if (local().isRestarting) {
+        local().isRestarting = false;
         // startServerInstance only proceeds from "offline"; setting
         // "starting" here made its guard reject the restart's start half, so
         // a restart just stopped the server. Hand it an offline state and let
@@ -452,8 +451,8 @@ function watchForceKill(ctx: ServiceContext<GameServerState>): void {
                 cancelStopForceKill();
                 // a forced kill during a restart must still restart; the
                 // old code dropped the restart on the floor here
-                const wasRestarting = isRestarting;
-                isRestarting = false;
+                const wasRestarting = local().isRestarting;
+                local().isRestarting = false;
                 ctx.setState({
                     serverStatus: "offline",
                     maxPlayers: null,

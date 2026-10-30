@@ -1,13 +1,16 @@
-import { createEffect, createSignal, onMount, Show } from "solid-js";
+import { createEffect, createSignal, onMount, onCleanup, Show } from "solid-js";
 import {
-    PaperPanel,
+    PaperPanel, PaperButton, PaperModal, PaperQuote, PaperLoader, PaperFlex, PaperText,
     PaperMenu,
     PaperMenuItem,
     PaperMenuLabel,
     PaperInterfaceGroup,
     PaperInterfaceItem,
 } from "@mileniumhq/paperui";
-import { config } from "@mileniumhq/paperapi";
+import { serversBridge, selectedServerId, selectedServer, openServer } from "./lib/api";
+import { loadServerConfig } from "./lib/server";
+import type { ServersState } from "./service";
+import ServersHome from "./components/ServersHome";
 import { PANEL_ID } from "./service/contract";
 import { serverSoftware } from "./lib/server";
 import { SOFTWARE } from "./software/catalog";
@@ -76,29 +79,38 @@ export default function App() {
         if (!showDatapacks() && activeTab() === "datapacks") setActiveTab("overview");
     });
 
-    const checkConfig = async () => {
-        try {
-            const saved = await config.get<any>(PANEL_ID);
-            if (saved && typeof saved === "object") {
-                setConfigured(Boolean(saved.configured));
-            } else {
-                setConfigured(false);
-            }
-        } catch (err) {
-            console.debug("[gameserver] saved config unreadable, treating as unconfigured:", String(err));
-            setConfigured(false);
-        }
+    const [servers, setServers] = createSignal<ServersState | null>(null);
+    const [failure, setFailure] = createSignal("");
+    const apply = (state: ServersState) => {
+        setServers(state);
+        if (selectedServerId) setConfigured(selectedServer(state).configured);
     };
-
+    const load = async () => {
+        try {
+            apply(await serversBridge.refreshState());
+            if (selectedServerId) await loadServerConfig();
+        } catch (err) { setFailure(err instanceof Error ? err.message : String(err)); }
+    };
     onMount(() => {
-        checkConfig();
+        const off = serversBridge.onStateChange((_patch, full) => {
+            try { apply(full); } catch (err) { setFailure(err instanceof Error ? err.message : String(err)); }
+        });
+        onCleanup(off);
+        void load();
     });
 
     return (
-        <Show when={configured() !== null}>
+        <Show when={!failure()} fallback={<PaperQuote variant="danger" title="Servers could not be loaded" role="alert">{failure()}<PaperButton onClick={() => openServer(null)}>Servers</PaperButton></PaperQuote>}>
+        <Show when={servers()} fallback={<PaperLoader loaderStatus="indeterminate" label="Loading servers" />}>
+        <Show when={selectedServerId} fallback={<ServersHome state={servers()!} />}>
+        <PaperFlex direction="column" fullWidth fullHeight>
+            <PaperFlex direction="row" align="center" gap="half" padding="half">
+                <PaperButton variant="text" onClick={() => openServer(null)}>Back to Servers</PaperButton>
+                <PaperText>{selectedServer(servers()!).name}</PaperText>
+            </PaperFlex>
             <Show
                 when={configured()}
-                fallback={<Setup onComplete={() => setConfigured(true)} />}
+                fallback={<ServersHome state={servers()!} />}
             >
                 <PaperPanel>
                     <PaperMenu
@@ -272,6 +284,14 @@ export default function App() {
                     </PaperInterfaceGroup>
                 </PaperPanel>
             </Show>
+            <PaperModal open={configured() === false} title="Set up server" size="large" noPadding onClose={() => openServer(null)}>
+                <PaperFlex direction="column" height="panel-height-large" fullWidth>
+                    <Setup initialSoftware={selectedServer(servers()!).state.serverSoftware} initialVersion={selectedServer(servers()!).state.serverVersion} onComplete={() => setConfigured(true)} />
+                </PaperFlex>
+            </PaperModal>
+        </PaperFlex>
+        </Show>
+        </Show>
         </Show>
     );
 }

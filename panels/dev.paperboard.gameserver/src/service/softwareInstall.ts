@@ -1,7 +1,8 @@
+import { serverLocal } from "./scope";
 import * as nodeFs from "node:fs/promises";
 import * as nodePath from "node:path";
-import type { ServiceContext } from "@mileniumhq/paperapi";
-import type { FileDownloadProgress } from "@mileniumhq/paperapi";
+import type { ServiceContext } from "./api";
+import type { FileDownloadProgress } from "./api";
 import { SOFTWARE, type ServerSoftwareType } from "../software/catalog";
 import { providerFor } from "../software/providers";
 import type { SoftwareProvider } from "../software/types";
@@ -19,6 +20,8 @@ import { InstallerStillRunningError, type InstallerResult, type InstallerRun } f
 import { shouldRelayInstallProgress, toInstallProgress, type InstallProgress } from "./installProgress";
 import { assertRecoverySettled } from "./recoveryState";
 import type { GameServerState } from "./types";
+
+const local = serverLocal(() => ({ running: false }));
 
 // Installs a server software for a Minecraft version: resolve the build,
 // download it (and run its installer when it has one) into a staging
@@ -53,11 +56,9 @@ export interface InstallOutcome {
     warning?: string;
 }
 
-let running = false;
-
 /** True while an install owns the server folder; starting the server is refused. */
 export function isInstallRunning(): boolean {
-    return running;
+    return local().running;
 }
 
 function fsOf(deps: InstallDeps): ActivationFs {
@@ -72,12 +73,12 @@ function fsOf(deps: InstallDeps): ActivationFs {
  */
 export async function withInstallLock<T>(work: () => Promise<T>): Promise<T> {
     assertRecoverySettled("installing");
-    if (running) throw new Error("A server install is already running");
-    running = true;
+    if (local().running) throw new Error("A server install is already running");
+    local().running = true;
     try {
         return await work();
     } finally {
-        running = false;
+        local().running = false;
     }
 }
 
@@ -99,7 +100,7 @@ export async function installServerSoftwareLocked(
     deps: InstallDeps,
     opts: { build?: string; configPatch?: Record<string, unknown> } = {},
 ): Promise<InstallOutcome> {
-    if (!running) throw new Error("installServerSoftwareLocked called without the install lock");
+    if (!local().running) throw new Error("installServerSoftwareLocked called without the install lock");
     return install(ctx, software, version, deps, opts.build, opts.configPatch);
 }
 

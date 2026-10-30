@@ -25,7 +25,7 @@ import {
     PaperCard,
     PaperAvatar,
 } from "@mileniumhq/paperui";
-import { fileApi } from "@mileniumhq/paperapi";
+import { fileApi } from "../lib/api";
 import { FieldControl } from "./PropertyFieldControl";
 import { readServerProperties, writeServerProperties } from "../lib/properties";
 import {

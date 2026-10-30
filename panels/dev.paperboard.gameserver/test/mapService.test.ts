@@ -33,7 +33,7 @@ const fileApiFake = {
     getPath: async () => regionFile,
 };
 
-mock.module("@mileniumhq/paperapi", () => ({
+mock.module("../src/service/api", () => ({
     portApi: portApiStub(),
     config: {
         get: async () => null,

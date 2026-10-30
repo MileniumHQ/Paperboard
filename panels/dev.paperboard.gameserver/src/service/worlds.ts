@@ -1,6 +1,6 @@
-import { config, files as fileApi, type ServiceContext } from "@mileniumhq/paperapi";
+import { config, files as fileApi, type ServiceContext } from "./api";
 import properties from "dot-properties";
-import { sanitizeFileName, listDirectory } from "../lib/filesystem";
+import { sanitizeFileName, listDirectory } from "./filesystem";
 import {
     buildWorldInfos,
     collectWorldDirs,

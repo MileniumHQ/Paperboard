@@ -1,4 +1,4 @@
-import { config, processApi, type ServiceContext } from "@mileniumhq/paperapi";
+import { config, processApi, type ServiceContext } from "./api";
 import { writeServerLineBestEffort } from "./serverConsole";
 import {
     assertGameruleName,

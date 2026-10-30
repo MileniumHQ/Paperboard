@@ -34,6 +34,7 @@ afterEach(() => {
 describe("backup routes", () => {
     it("panel backups and host locations reach the daemon's backup actions", () => {
         const expected: Record<string, string> = {
+            "backup-source-define": "backup:source-define",
             "backup-status": "backup:status",
             "backup-create": "backup:create",
             "backup-list": "backup:list",
@@ -91,5 +92,20 @@ describe("chooseLocation", () => {
         const widgetErr = await backupApi.chooseLocation(PANEL).catch((e) => e);
         expect(widgetErr instanceof BackupLocationError && widgetErr.code === "unavailable").toBe(true);
         expect(listeners.size).toBe(0);
+    });
+});
+
+describe("named sources", () => {
+    it("refuses missing or malformed source ids before a handle can target panel backups", () => {
+        for (const id of [undefined, null, "", "../other", "x".repeat(65)]) {
+            expect(() => backupApi.forSource(PANEL, id as any)).toThrow("explicit backup source id");
+        }
+        expect(posted).toEqual([]);
+    });
+    it("carries the source through its location request", async () => {
+        const result = backupApi.forSource(PANEL, "project-one").chooseLocation();
+        expect(posted[0]).toMatchObject({ panelId: PANEL, sourceId: "project-one" });
+        reply({ type: "paperboard:backup-location-result", generation: "gen-1", requestId: posted[0].requestId, result: { status: "canceled" } });
+        expect(await result).toEqual({ status: "canceled" });
     });
 });

@@ -1,7 +1,7 @@
 import { expect, test, mock } from "bun:test";
 let unreadable = true;
 let writes = 0;
-mock.module("@mileniumhq/paperapi", () => ({
+mock.module("../src/service/api", () => ({
     config: {
         get: async () => { if (unreadable) throw new Error("Config unreadable"); return null; },
         set: async () => { writes++; throw new Error("Config save failed"); },

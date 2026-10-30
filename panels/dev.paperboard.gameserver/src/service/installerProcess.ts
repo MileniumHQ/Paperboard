@@ -1,4 +1,4 @@
-import { processApi } from "@mileniumhq/paperapi";
+import { processApi } from "./api";
 
 // Runs a software installer (Forge, NeoForge) as a daemon-supervised child
 // under a fixed id the panel owns, so its exit is observed rather than

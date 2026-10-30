@@ -1,4 +1,4 @@
-import { fileApi } from "@mileniumhq/paperapi";
+import { fileApi } from "../api";
 import { addonStageDir } from "../../core/addonUpload";
 import { serverBridge } from "../server";
 import { ACTION_IDS } from "../../service/contract";

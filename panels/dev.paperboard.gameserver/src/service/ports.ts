@@ -1,6 +1,6 @@
 import * as nodeFs from "node:fs/promises";
 import * as nodePath from "node:path";
-import type { PortClaim, PortRequest } from "@mileniumhq/paperapi";
+import type { PortClaim, PortRequest } from "./api";
 import { BEDROCK_PORT_NAME, JAVA_PORT_NAME } from "../core/portNames";
 import { parseProperties, stringifyServerProperties } from "../core/properties";
 import type { ServerSoftwareType } from "../software/catalog";

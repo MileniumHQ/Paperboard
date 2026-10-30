@@ -1,4 +1,4 @@
-import { files as fileApi, portApi } from "@mileniumhq/paperapi";
+import { files as fileApi, portApi } from "./api";
 import type { PortDeps } from "./ports";
 import { PANEL_ID } from "./types";
 

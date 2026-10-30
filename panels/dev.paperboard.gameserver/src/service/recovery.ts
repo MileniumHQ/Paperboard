@@ -1,10 +1,13 @@
-import type { ServiceContext } from "@mileniumhq/paperapi";
+import { serverLocal } from "./scope";
+import type { ServiceContext } from "./api";
 import { recoverInterruptedInstall } from "./softwareInstall";
 import { liveRecoveryDeps } from "./softwareInstallDeps";
 import { recoverInterruptedModpack } from "./modpacks";
 import { liveModpackRecoveryDeps } from "./modpackDeps";
 import { setRecoveryBlock } from "./recoveryState";
 import { appendCapped, type GameServerState } from "./types";
+
+const local = serverLocal(() => ({ settling: null as Promise<boolean> | null }));
 
 type Recovered = { committed: unknown[]; rolledBack: unknown[]; discarded: unknown[] };
 
@@ -18,8 +21,6 @@ const liveSteps: RecoverySteps = {
     modpack: () => recoverInterruptedModpack(liveModpackRecoveryDeps()),
 };
 
-let settling: Promise<boolean> | null = null;
-
 /**
  * Settles what an interrupted install and then an interrupted modpack
  * change left in the server folder. A step that fails blocks starting the
@@ -31,11 +32,11 @@ export function settleInterruptedWork(
     ctx: ServiceContext<GameServerState>,
     steps: RecoverySteps = liveSteps,
 ): Promise<boolean> {
-    if (settling) return settling;
-    settling = run(ctx, steps).finally(() => {
-        settling = null;
+    if (local().settling) return local().settling!;
+    local().settling = run(ctx, steps).finally(() => {
+        local().settling = null;
     });
-    return settling;
+    return local().settling!;
 }
 
 async function run(ctx: ServiceContext<GameServerState>, steps: RecoverySteps): Promise<boolean> {

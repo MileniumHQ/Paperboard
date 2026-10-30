@@ -5,7 +5,7 @@ const calls: string[] = [];
 let installed = false;
 let failDownload = false;
 
-mock.module("@mileniumhq/paperapi", () => ({
+mock.module("../src/lib/api", () => ({
     portApi: portApiStub(),
     packageApi: {
         isInstalled: async (_id: string) => installed,

@@ -8,7 +8,7 @@ mock.module("../src/lib/server", () => ({ serverVersion, setServerVersion }));
 
 let readResult: () => Promise<string | null>;
 const writes: string[] = [];
-mock.module("@mileniumhq/paperapi", () => ({
+mock.module("../src/lib/api", () => ({
     fileApi: {
         read: () => readResult(),
         write: async (_path: string, content: string) => {

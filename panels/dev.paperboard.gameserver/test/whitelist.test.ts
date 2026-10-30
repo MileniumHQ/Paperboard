@@ -8,7 +8,7 @@ import { createSignal } from "solid-js";
 // the real version signal, without the panel bridge it lives beside
 const [serverVersion, setServerVersion] = createSignal("");
 mock.module("../src/lib/server", () => ({ serverVersion, setServerVersion }));
-mock.module("@mileniumhq/paperapi", () => ({ fileApi: {} }));
+mock.module("../src/lib/api", () => ({ fileApi: {} }));
 
 const { countJsonEntries, joinRestriction } = await import("../src/core/whitelist");
 const { defaultValueFor, whitelistDefault, SERVER_PROPERTY_FIELDS } = await import("../src/lib/properties");

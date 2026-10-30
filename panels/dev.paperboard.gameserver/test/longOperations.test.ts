@@ -6,7 +6,7 @@ import { portApiStub } from "./portApiStub";
 
 const calls: { action: string; options: unknown }[] = [];
 
-mock.module("@mileniumhq/paperapi", () => ({
+mock.module("../src/lib/api", () => ({
     portApi: portApiStub(),
     createPanelBridge: () => ({
         onStateChange: () => {},

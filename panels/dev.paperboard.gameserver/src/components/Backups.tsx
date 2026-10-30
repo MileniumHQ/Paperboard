@@ -21,7 +21,8 @@ import {
     type BackupRecord,
     type BackupSchedule,
     type BackupStatus,
-} from "@mileniumhq/paperapi";
+} from "../lib/api";
+import { selectedServerId } from "../lib/api";
 import { PANEL_ID } from "../service/contract";
 import { errorMessage, type Outcome } from "../lib/failure";
 
@@ -49,6 +50,8 @@ function sizeText(bytes: number): string {
 const dateText = (iso: string) => new Date(iso).toLocaleString();
 
 export default function Backups(props: { active: boolean }) {
+    if (!selectedServerId) throw new Error("Choose a server before opening backups");
+    const backupsApi = backupApi.forSource(PANEL_ID, selectedServerId);
     const [status, setStatus] = createSignal<BackupStatus | null>(null);
     const [backups, setBackups] = createSignal<BackupRecord[] | null>(null);
     const [loadError, setLoadError] = createSignal("");
@@ -59,9 +62,9 @@ export default function Backups(props: { active: boolean }) {
     const load = async () => {
         setLoadError("");
         try {
-            const now = await backupApi.status(PANEL_ID);
+            const now = await backupsApi.status();
             setStatus(now);
-            setBackups(now.location ? await backupApi.list(PANEL_ID) : []);
+            setBackups(now.location ? await backupsApi.list() : []);
         } catch (err) {
             setLoadError(`Backups could not be loaded: ${errorMessage(err)}`);
         }
@@ -92,11 +95,11 @@ export default function Backups(props: { active: boolean }) {
     // a backup needs somewhere to go; the first one asks where
     const ensureLocation = async (): Promise<boolean> => {
         if (status()?.location) return true;
-        return (await backupApi.chooseLocation(PANEL_ID)).status === "chosen";
+        return (await backupsApi.chooseLocation()).status === "chosen";
     };
 
     const changeLocation = () => act("schedule", "Location not changed", async () => {
-        const result = await backupApi.chooseLocation(PANEL_ID);
+        const result = await backupsApi.chooseLocation();
         return result.status === "chosen"
             ? { title: "Location changed", message: `Backups now go to ${result.location.label}.` }
             : null;
@@ -104,13 +107,13 @@ export default function Backups(props: { active: boolean }) {
 
     const backUpNow = () => act("create", "Backup failed", async () => {
         if (!(await ensureLocation())) return null;
-        const record = await backupApi.create(PANEL_ID);
+        const record = await backupsApi.create();
         return { title: "Backed up", message: `Backed up the server (${sizeText(record.size)}).` };
     });
 
     const setSchedule = (next: { everyHours: BackupSchedule["everyHours"]; keep: number } | null) => act("schedule", "Schedule not saved", async () => {
         if (next && !(await ensureLocation())) return null;
-        await backupApi.setSchedule(PANEL_ID, next);
+        await backupsApi.setSchedule(next);
         return null;
     });
 
@@ -139,8 +142,8 @@ export default function Backups(props: { active: boolean }) {
         setConfirmBusy(true);
         setConfirmError("");
         try {
-            if (target.kind === "restore") await backupApi.restore(PANEL_ID, target.record.id);
-            else await backupApi.delete(PANEL_ID, target.record.id);
+            if (target.kind === "restore") await backupsApi.restore(target.record.id);
+            else await backupsApi.delete(target.record.id);
         } catch (err) {
             setConfirmError(`${target.kind === "restore" ? "The backup was not restored" : "The backup was not deleted"}: ${errorMessage(err)}`);
             return;

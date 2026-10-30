@@ -1,6 +1,6 @@
 import * as crypto from "node:crypto";
 import * as nodeFs from "node:fs";
-import { config, files as fileApi, type ServiceContext } from "@mileniumhq/paperapi";
+import { config, files as fileApi, type ServiceContext } from "./api";
 import { updatePanelConfig } from "./config";
 import { fetchJson } from "../software/http";
 import { currentInstall } from "../software/installRecord";

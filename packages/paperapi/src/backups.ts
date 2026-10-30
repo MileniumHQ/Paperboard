@@ -115,11 +115,16 @@ export interface BackupSource {
     legacy?: boolean;
 }
 
+function requireSourceId(value: unknown): string {
+    if (typeof value !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(value)) throw new Error("Choose an explicit backup source id");
+    return value;
+}
+
 export const backupApi = {
     defineSource: (appId: string, source: BackupSource, scope?: string): Promise<void> =>
         invokeIn<void>(scope, "backup-source-define", { panelId: requirePanelId(appId), source }),
     forSource: (appId: string, sourceId: string, scope?: string) => {
-        const identity = { panelId: requirePanelId(appId), sourceId };
+        const identity = { panelId: requirePanelId(appId), sourceId: requireSourceId(sourceId) };
         return {
             status: async (): Promise<BackupStatus> => status(await invokeIn(scope, "backup-status", identity)),
             list: (): Promise<BackupRecord[]> => invokeIn(scope, "backup-list", identity),
@@ -161,7 +166,7 @@ export const backupApi = {
     chooseLocation: (appId: string, sourceId?: string): Promise<ChooseBackupLocationResult> =>
         requestShell<ChooseBackupLocationResult>({
             type: "paperboard:backup-location",
-            fields: { panelId: requirePanelId(appId), ...(sourceId ? { sourceId } : {}) },
+            fields: { panelId: requirePanelId(appId), ...(sourceId !== undefined ? { sourceId: requireSourceId(sourceId) } : {}) },
             unavailable: () => new BackupLocationError("unavailable", "Choosing a backup location needs a panel shown in Paperboard"),
             widget: () => new BackupLocationError("unavailable", "A widget cannot choose a backup location; open its panel instead"),
             busy: () => new BackupLocationError("busy", "The backup location window is already open"),

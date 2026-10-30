@@ -18,7 +18,7 @@ const starts: string[] = [];
 let savedConfig: Record<string, unknown> = {};
 const configSets: Record<string, unknown>[] = [];
 
-mock.module("@mileniumhq/paperapi", () => ({
+mock.module("../src/service/api", () => ({
     portApi: portApiStub(),
     config: {
         get: async () => savedConfig,

@@ -2,8 +2,8 @@ import {
     files as fileApi,
     config,
     type ServiceContext,
-} from "@mileniumhq/paperapi";
-import { sanitizeFileName, tryListDirectory, listDirectory } from "../lib/filesystem";
+} from "./api";
+import { sanitizeFileName, tryListDirectory, listDirectory } from "./filesystem";
 import {
     INSTALL_RECORDS_KEY,
     collectInstalledPlugins,

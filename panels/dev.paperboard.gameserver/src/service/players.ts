@@ -1,4 +1,5 @@
-import { type ServiceContext } from "@mileniumhq/paperapi";
+import { serverLocal } from "./scope";
+import { type ServiceContext } from "./api";
 import { writeServerLineBestEffort } from "./serverConsole";
 import {
     type GameServerState,
@@ -29,65 +30,62 @@ import { makeTrashRemoveDeps } from "./trashDeps";
 import { PANEL_ID } from "./types";
 import { TRIGGER_IDS } from "./contract";
 
+const local = serverLocal(() => ({ lastJoinAt: new Map<string, number>(), pendingStatFields: [] as { player: string; field: keyof PlayerStatData }[], recentNames: [] as string[], onNamesChanged: null as (() => void) | null, pendingPositionQueries: [] as PendingPositionQuery[] }));
+
 export { usernameFromUuid } from "./playerStats";
 
 export type { PlayerStatData };
 export { PLAYER_NAME_PATTERN, SERVER_PROC_ID, STAT_QUERIES };
 
-const lastJoinAt = new Map<string, number>();
-let pendingStatFields: { player: string; field: keyof PlayerStatData }[] = [];
-
 // Recently seen player names in their original casing (state keys are
 // normalized), newest last. This backs the join/leave triggers' player
 // dropdown: the options must match the event payload's casing, and the list
 // must stay bounded like every other buffer in the panel.
-const recentNames: string[] = [];
-let onNamesChanged: (() => void) | null = null;
 
 /** The gameserver service wires this to republish the triggers' options. */
 export function setPlayerNamesChangedHandler(handler: (() => void) | null): void {
-    onNamesChanged = handler;
+    local().onNamesChanged = handler;
 }
 
 function rememberPlayerName(name: string): void {
     const key = normalizePlayerKey(name);
-    const existing = recentNames.findIndex((n) => normalizePlayerKey(n) === key);
-    if (existing >= 0) recentNames.splice(existing, 1);
-    recentNames.push(name);
-    while (recentNames.length > MAX_BUFFERED_ENTRIES) recentNames.shift();
-    onNamesChanged?.();
+    const existing = local().recentNames.findIndex((n) => normalizePlayerKey(n) === key);
+    if (existing >= 0) local().recentNames.splice(existing, 1);
+    local().recentNames.push(name);
+    while (local().recentNames.length > MAX_BUFFERED_ENTRIES) local().recentNames.shift();
+    local().onNamesChanged?.();
 }
 
 function nameKnown(name: string): boolean {
     const key = normalizePlayerKey(name);
-    return recentNames.some((n) => normalizePlayerKey(n) === key);
+    return local().recentNames.some((n) => normalizePlayerKey(n) === key);
 }
 
 /** Newest first, original casing — the order the trigger dropdown shows. */
 export function playerNameOptions(): string[] {
-    return [...recentNames].reverse();
+    return [...local().recentNames].reverse();
 }
 
 // join timestamps are keyed per username and only deleted on leave —
 // without a cap, spoofed joins grow the map forever. Map preserves
 // insertion order, so evict oldest first.
 function rememberJoin(key: string, ts: number): void {
-    lastJoinAt.delete(key);
-    lastJoinAt.set(key, ts);
-    while (lastJoinAt.size > MAX_BUFFERED_ENTRIES) {
-        const oldest = lastJoinAt.keys().next();
+    local().lastJoinAt.delete(key);
+    local().lastJoinAt.set(key, ts);
+    while (local().lastJoinAt.size > MAX_BUFFERED_ENTRIES) {
+        const oldest = local().lastJoinAt.keys().next();
         if (oldest.done) break;
-        lastJoinAt.delete(oldest.value);
+        local().lastJoinAt.delete(oldest.value);
     }
 }
 
 // test seam: lets tests assert the bound without 1000 log lines of setup
 export const __playersTest = {
-    lastJoinSize: () => lastJoinAt.size,
-    clearJoins: () => lastJoinAt.clear(),
+    lastJoinSize: () => local().lastJoinAt.size,
+    clearJoins: () => local().lastJoinAt.clear(),
     clearNames: () => {
-        recentNames.length = 0;
-        onNamesChanged = null;
+        local().recentNames.length = 0;
+        local().onNamesChanged = null;
     },
     remember: (name: string) => rememberPlayerName(name),
 };
@@ -134,13 +132,13 @@ export function trackPlayerActivity(
     const left = extractLeftName(clean);
     if (left) {
         const key = normalizePlayerKey(left);
-        const joinAt = lastJoinAt.get(key);
+        const joinAt = local().lastJoinAt.get(key);
         let sessionSeconds = 0;
         if (ts !== undefined && joinAt !== undefined) {
             sessionSeconds = ts - joinAt;
             if (sessionSeconds < 0) sessionSeconds += 86400;
         }
-        lastJoinAt.delete(key);
+        local().lastJoinAt.delete(key);
 
         ctx.setState((prev) => {
             const online = prev.onlinePlayers.filter((p) => p !== key);
@@ -162,7 +160,7 @@ export function trackPlayerActivity(
     const names = extractListedNames(clean);
     if (names) {
         for (const name of names) {
-            if (ts !== undefined && !lastJoinAt.has(name)) rememberJoin(name, ts);
+            if (ts !== undefined && !local().lastJoinAt.has(name)) rememberJoin(name, ts);
             // the list lowercases names; keep the join's original casing when
             // one is already known so the options match the event payload
             if (!nameKnown(name)) rememberPlayerName(name);
@@ -184,7 +182,7 @@ export function handleStatResponse(
 ): boolean {
     const value = extractStatValue(clean);
     if (value === undefined) return false;
-    const pending = pendingStatFields.shift();
+    const pending = local().pendingStatFields.shift();
     if (!pending) return true;
     ctx.setState((prev) => {
         const stats = { ...prev.playerStats };
@@ -210,14 +208,14 @@ export function queryPlayerStats(
     // boundary: the name reaches `data get entity` raw — UI checks don't count
     const safe = assertPlayerName(name);
     const key = normalizePlayerKey(safe);
-    pendingStatFields = pendingStatFields.filter((p) => p.player !== key);
+    local().pendingStatFields = local().pendingStatFields.filter((p) => p.player !== key);
     for (const { field, path } of STAT_QUERIES) {
-        pendingStatFields.push({ player: key, field });
+        local().pendingStatFields.push({ player: key, field });
         writeServerLineBestEffort(`data get entity ${safe} ${path}\n`);
     }
     // bounded: bursts of stat queries from many players evict oldest first
-    while (pendingStatFields.length > MAX_BUFFERED_ENTRIES) {
-        pendingStatFields.shift();
+    while (local().pendingStatFields.length > MAX_BUFFERED_ENTRIES) {
+        local().pendingStatFields.shift();
     }
 }
 
@@ -226,7 +224,6 @@ export function queryPlayerStats(
 // same FIFO order the commands were written. Results land in state so the
 // map updates through the normal bridge sync.
 type PendingPositionQuery = { player: string; kind: "pos" | "dim" };
-let pendingPositionQueries: PendingPositionQuery[] = [];
 
 export function queryPlayerPositions(ctx: ServiceContext<GameServerState>): void {
     if (ctx.state.serverStatus !== "online") return;
@@ -237,7 +234,7 @@ export function queryPlayerPositions(ctx: ServiceContext<GameServerState>): void
         return;
     }
     const queried = new Set(players.map(normalizePlayerKey));
-    pendingPositionQueries = pendingPositionQueries.filter(
+    local().pendingPositionQueries = local().pendingPositionQueries.filter(
         (p) => !queried.has(p.player),
     );
     for (const name of players) {
@@ -249,13 +246,13 @@ export function queryPlayerPositions(ctx: ServiceContext<GameServerState>): void
             continue;
         }
         const key = normalizePlayerKey(safe);
-        pendingPositionQueries.push({ player: key, kind: "pos" });
-        pendingPositionQueries.push({ player: key, kind: "dim" });
+        local().pendingPositionQueries.push({ player: key, kind: "pos" });
+        local().pendingPositionQueries.push({ player: key, kind: "dim" });
         writeServerLineBestEffort(`data get entity ${safe} Pos\n`);
         writeServerLineBestEffort(`data get entity ${safe} Dimension\n`);
     }
-    while (pendingPositionQueries.length > MAX_BUFFERED_ENTRIES) {
-        pendingPositionQueries.shift();
+    while (local().pendingPositionQueries.length > MAX_BUFFERED_ENTRIES) {
+        local().pendingPositionQueries.shift();
     }
     // drop markers for players who left since the last poll
     ctx.setState((prev) => {
@@ -271,13 +268,13 @@ export function handlePositionResponse(
     ctx: ServiceContext<GameServerState>,
     clean: string,
 ): boolean {
-    const pending = pendingPositionQueries[0];
+    const pending = local().pendingPositionQueries[0];
     if (!pending) return false;
 
     if (pending.kind === "pos") {
         const pos = extractPosition(clean);
         if (!pos) return false;
-        pendingPositionQueries.shift();
+        local().pendingPositionQueries.shift();
         ctx.setState((prev) => {
             const existing = prev.playerPositions[pending.player];
             return {
@@ -295,7 +292,7 @@ export function handlePositionResponse(
 
     const dimension = extractDimension(clean);
     if (!dimension) return false;
-    pendingPositionQueries.shift();
+    local().pendingPositionQueries.shift();
     ctx.setState((prev) => {
         const existing = prev.playerPositions[pending.player];
         return {
@@ -318,7 +315,7 @@ export function forgetPlayerData(
     name: string,
 ): void {
     const key = normalizePlayerKey(assertPlayerName(name));
-    lastJoinAt.delete(key);
+    local().lastJoinAt.delete(key);
     ctx.setState((prev) => {
         const seen = prev.seenPlayers.filter((p) => p !== key);
         const online = prev.onlinePlayers.filter((p) => p !== key);

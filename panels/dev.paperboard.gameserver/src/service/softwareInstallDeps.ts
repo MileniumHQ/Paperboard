@@ -1,4 +1,4 @@
-import { config, files as fileApi, type ServiceContext } from "@mileniumhq/paperapi";
+import { config, files as fileApi, type ServiceContext } from "./api";
 import { updatePanelConfig } from "./config";
 import { ensureJavaFor } from "./java";
 import { runInstallerProcess, stopLeftoverInstaller } from "./installerProcess";

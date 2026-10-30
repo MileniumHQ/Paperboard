@@ -1,3 +1,4 @@
+import { serverLocal } from "./scope";
 import * as nodeFs from "node:fs/promises";
 import * as nodePath from "node:path";
 import {
@@ -21,6 +22,8 @@ import {
 import { isListableDirArg } from "../core/dirs";
 import { UPLOAD_RECORDS_KEY, parseUploadRecords } from "../core/addonUpload";
 import { forgetUploads } from "./uploadRecords";
+
+const local = serverLocal(() => ({ recordsQueue: Promise.resolve() as Promise<unknown> }));
 
 // The Datapacks tab's owner: lists the active world's datapacks/ folder,
 // installs Modrinth datapack builds into it, and moves removed packs to
@@ -135,15 +138,14 @@ export async function listDatapacks(deps: DatapackDeps): Promise<DatapackListing
 
 // one records write at a time: two quick installs must not both read the
 // old records and the second drop the first's entry
-let recordsQueue: Promise<unknown> = Promise.resolve();
 
 function updateRecords(deps: DatapackDeps, change: (records: Record<string, DatapackRecord>) => void): Promise<void> {
-    const run = recordsQueue.then(async () => {
+    const run = local().recordsQueue.then(async () => {
         const records = parseDatapackRecords((await deps.readConfig())[DATAPACK_RECORDS_KEY]);
         change(records);
         await deps.writeConfig({ [DATAPACK_RECORDS_KEY]: records });
     });
-    recordsQueue = run.then(
+    local().recordsQueue = run.then(
         () => undefined,
         () => undefined,
     );

@@ -3,7 +3,7 @@
 // service through useWidgetServer, so what they show is what the service
 // holds: a service that doesn't answer is "unavailable", never an empty server.
 import { createEffect, createMemo, createSignal, Match, on, onCleanup, Show, Switch, type JSX } from "solid-js";
-import { fileApi, type WidgetContext } from "@mileniumhq/paperapi";
+import { type WidgetContext } from "@mileniumhq/paperapi";
 import {
     PaperButton,
     PaperWidget,
@@ -79,7 +79,7 @@ function Connected(props: {
                     <PaperWidgetMessage
                         tone="danger"
                         title="Game Server isn't answering"
-                        description={props.short ? undefined : "Its service may be stopped or updating."}
+                        description={props.short ? undefined : (props.server.connection() as { message: string }).message}
                     >
                         <PaperButton size="tiny" onClick={() => props.server.retry()}>
                             Retry
@@ -246,9 +246,10 @@ function useNameCasing(server: WidgetServer) {
     createEffect(
         on(server.visible, (shown) => {
             if (!shown) return;
-            fileApi
-                .read("usercache.json", PANEL_ID)
-                .then((raw) => {
+            server.call<{ kind: string; text?: string }>(ACTION_IDS.readServerFile, { path: "usercache.json" })
+                .then((file) => {
+                    if (file.kind !== "text") throw new Error("The player cache is not text");
+                    const raw = file.text;
                     const next = new Map<string, string>();
                     const parsed: unknown = raw ? JSON.parse(raw) : [];
                     if (Array.isArray(parsed)) {

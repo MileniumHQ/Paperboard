@@ -7,7 +7,7 @@ let readError: Error | null = null;
 let savedConfig: Record<string, unknown> | null = null;
 const configSets: Record<string, unknown>[] = [];
 
-mock.module("@mileniumhq/paperapi", () => ({
+mock.module("../src/service/api", () => ({
     portApi: portApiStub(),
     config: {
         get: async () => {

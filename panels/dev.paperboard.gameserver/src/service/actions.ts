@@ -1,3 +1,4 @@
+import { serverLocal } from "./scope";
 import {
     actionsApi,
     defineType,
@@ -6,7 +7,7 @@ import {
     type ActionDefinition,
     type CustomTypeDefinition,
     type ServiceContext,
-} from "@mileniumhq/paperapi";
+} from "./api";
 import {
     startServerInstance,
     stopServerInstance,
@@ -78,6 +79,8 @@ import { providerFor } from "../software/providers";
 import { isSupportedMcVersion, MIN_SUPPORTED_MC_VERSION, versionSupports } from "../lib/versionProfile";
 import { gamerulesFor } from "../core/gamerules";
 
+const local = serverLocal(() => ({ republishTimer: null as ReturnType<typeof setTimeout> | null }));
+
 export const playerType = defineType({
     id: "player",
     name: "Player",
@@ -122,14 +125,19 @@ export const customTypes: CustomTypeDefinition[] = [
 // actions so the picker's dropdowns never go stale.
 // One bounded trailing timer: a burst of joins republishes once, not once
 // per log line. The timer lives for the service's lifetime.
-let republishTimer: ReturnType<typeof setTimeout> | null = null;
+
+export function cancelDynamicActions(): void {
+    const timer = local().republishTimer;
+    if (timer) clearTimeout(timer);
+    local().republishTimer = null;
+}
 
 export function scheduleRepublishDynamicActions(
     ctx: ServiceContext<GameServerState>,
 ): void {
-    if (republishTimer) return;
-    republishTimer = setTimeout(() => {
-        republishTimer = null;
+    if (local().republishTimer) return;
+    local().republishTimer = setTimeout(() => {
+        local().republishTimer = null;
         void republishDynamicActions(ctx).catch((err) =>
             console.error("[Gameserver] scheduled republish failed:", err),
         );

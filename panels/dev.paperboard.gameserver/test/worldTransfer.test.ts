@@ -23,7 +23,7 @@ const filesFake = {
         delete: async (path: string) => { fs.rmSync(inRoot(path), { force: true }); return true; },
 };
 
-mock.module("@mileniumhq/paperapi", () => ({
+mock.module("../src/service/api", () => ({
     files: filesFake,
     fileApi: filesFake,
     config: { get: async () => null, set: async () => true },
