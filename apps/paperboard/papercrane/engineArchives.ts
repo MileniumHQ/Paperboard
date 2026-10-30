@@ -2,10 +2,9 @@
 import path from "path";
 import { logger } from "./logger";
 import fs from "fs";
-import * as tar from "tar";
 import AdmZip from "adm-zip";
 import { spawn } from "child_process";
-import { moveFileSafe, makeSafeTarFilter, scanTarMembers, TAR_BUDGET } from "./storage";
+import { moveFileSafe, extractTarSafely, validateExtractedLinks, TAR_BUDGET } from "./storage";
 import type { PackageRecipe } from "./packageRecipe";
 
 // Extracts .tar.gz, .tgz, .zip or single files
@@ -22,15 +21,7 @@ export async function extractArchive(
     const isZip = archivePath.endsWith(".zip");
 
     if (isTar) {
-        // scan first: an escape member refuses the whole archive before
-        // anything is written, and the budget is enforced on real members
-        await scanTarMembers(archivePath, path.resolve(destDir));
-        await tar.extract({
-            file: archivePath,
-            cwd: destDir,
-            strip: 0,
-            filter: makeSafeTarFilter(path.resolve(destDir)),
-        });
+        await extractTarSafely(archivePath, destDir);
     } else if (isZip) {
         // pure-JS unzip with zip-slip guard
         const dest = path.resolve(destDir);
@@ -138,26 +129,16 @@ export async function extractPackageArchive(
         return;
     }
     if (layout !== "wrapped") {
-        await scanTarMembers(archivePath, path.resolve(dest));
-        await tar.extract({ file: archivePath, cwd: dest, strip: 0, filter: makeSafeTarFilter(path.resolve(dest)) });
+        await extractTarSafely(archivePath, dest);
         return;
     }
     // wrapped: strip the wrapper dir; a wrapper-less archive leaves no bin/
     // behind, so it is re-extracted flat
-    try {
-        await scanTarMembers(archivePath, path.resolve(pkgDir), 1);
-        await tar.extract({ file: archivePath, cwd: pkgDir, strip: 1, filter: makeSafeTarFilter(path.resolve(pkgDir), 1) });
-        if (fs.existsSync(path.join(pkgDir, "bin"))) return;
-    } catch (err) {
-        // the scan's refusals (budget, escapes) are failures, not evidence
-        // of a wrapper-less layout — never retried with a fresh budget
-        if (err instanceof Error && (err.name === "LimitError" || /escapes destination/i.test(err.message))) throw err;
-        logger.debug(`[engineArchives.ts] wrapped tar extraction failed; retrying flat:`, err);
-    }
+    await extractTarSafely(archivePath, pkgDir, 1);
+    if (fs.existsSync(path.join(pkgDir, "bin"))) return;
     await fs.promises.rm(pkgDir, { recursive: true, force: true });
     fs.mkdirSync(pkgDir, { recursive: true });
-    await scanTarMembers(archivePath, path.resolve(pkgDir));
-    await tar.extract({ file: archivePath, cwd: pkgDir, strip: 0, filter: makeSafeTarFilter(path.resolve(pkgDir)) });
+    await extractTarSafely(archivePath, pkgDir);
 }
 
 // ─── Package recipes ─────────────────────────────────────────────────────────
@@ -209,8 +190,7 @@ function runTool(command: string, args: string[], stdout?: fs.WriteStream, limit
 }
 
 async function extractTar(archivePath: string, dest: string): Promise<void> {
-    await scanTarMembers(archivePath, path.resolve(dest));
-    await tar.extract({ file: archivePath, cwd: dest, strip: 0, filter: makeSafeTarFilter(path.resolve(dest)) });
+    await extractTarSafely(archivePath, dest);
 }
 
 // a take's source must be inside the unpacked tree after symlinks resolve
@@ -267,5 +247,6 @@ export async function applyPackageRecipe(archivePath: string, pkgDir: string, re
         }
         await fs.promises.rm(scratch, { recursive: true, force: true });
     }
+    validateExtractedLinks(pkgDir);
     if (!fs.existsSync(path.join(pkgDir, "bin"))) throw new Error("Package recipe left no bin/ directory");
 }

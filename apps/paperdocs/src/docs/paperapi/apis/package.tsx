@@ -38,6 +38,16 @@ export default function PackageApiDoc() {
                 game launch or server management behavior to a panel.
             </PaperText>
 
+            <PaperText preset="body">
+                Tar packages preserve relative symbolic links, including chains
+                and links to later archive members. The daemon checks their full
+                targets before extraction and after recipe moves. Absolute or
+                escaping links, loops, special files, and writes through linked
+                directories fail installation. Extraction warnings or missing
+                members also fail installation instead of publishing a partial
+                package.
+            </PaperText>
+
             <PaperText preset="subheader" id="overview">
                 Overview
             </PaperText>
