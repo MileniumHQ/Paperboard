@@ -1,8 +1,8 @@
-import { createSignal, Show } from "solid-js";
-import { PaperAvatar, PaperButton, PaperFlex, PaperIcon, PaperQuote, PaperText } from "@mileniumhq/paperui";
+import { createEffect, createSignal, on, Show } from "solid-js";
+import { PaperAvatar, PaperButton, PaperCopyButton, PaperFlex, PaperIcon, PaperQuote, PaperText } from "@mileniumhq/paperui";
 import ServerOverview from "../../components/ServerOverview";
 import { MotdEditor, MotdPreview } from "../../components/Motd";
-import { serverBridge, serverMotd } from "../../lib/server";
+import { gameSettings, localIp, serverBridge, serverMotd, serverPort } from "../../lib/server";
 import { errorMessage } from "../../lib/failure";
 import { terraria } from "./index";
 import { terrariaMotd } from "./motd";
@@ -12,6 +12,23 @@ export default function TerrariaOverview() {
     const [saveError, setSaveError] = createSignal("");
     const [motdOpen, setMotdOpen] = createSignal(false);
     const [motdPending, setMotdPending] = createSignal(false);
+    const [password, setPassword] = createSignal<string | null | undefined>();
+    const [inviteError, setInviteError] = createSignal("");
+
+    // options carry whether a password is set; read it again whenever they change
+    createEffect(on(gameSettings, async () => {
+        try {
+            setPassword((await serverBridge.call<{ password: string | null }>("terraria-invite")).password);
+            setInviteError("");
+        } catch (err) {
+            setInviteError(errorMessage(err));
+        }
+    }));
+    const invite = () => [
+        "Join my Terraria server",
+        `Address: ${localIp()}:${serverPort()}`,
+        ...(password() ? [`Password: ${password()}`] : []),
+    ].join("\n");
 
     const save = async () => {
         setSaving(true);
@@ -51,15 +68,28 @@ export default function TerrariaOverview() {
             }
             software="Vanilla"
             actions={
-                <PaperButton onClick={() => void save()} disabled={saving()}>
-                    <PaperIcon>save</PaperIcon>
-                    {saving() ? "Saving..." : "Save world"}
-                </PaperButton>
+                <>
+                    <PaperCopyButton
+                        label="Copy invite"
+                        text={invite()}
+                        title={password() ? "Copy the address and join password" : "Copy the address"}
+                        disabled={password() === undefined}
+                    />
+                    <PaperButton onClick={() => void save()} disabled={saving()}>
+                        <PaperIcon>save</PaperIcon>
+                        {saving() ? "Saving..." : "Save world"}
+                    </PaperButton>
+                </>
             }
         >
             <Show when={saveError()}>
                 <PaperQuote variant="danger" icon="warning" title="World not saved" onDismiss={() => setSaveError("")}>
                     {saveError()}
+                </PaperQuote>
+            </Show>
+            <Show when={inviteError()}>
+                <PaperQuote variant="danger" icon="warning" title="Couldn't read the join password" onDismiss={() => setInviteError("")}>
+                    {inviteError()}
                 </PaperQuote>
             </Show>
             <Show when={motdPending()}>

@@ -1,4 +1,4 @@
-import type { GameDefinition, GameOption } from "../types";
+import type { GameDefinition, GameOption, OptionSection } from "../types";
 import { ACTION_IDS as A } from "../../service/contract";
 import { gameArt } from "../art";
 
@@ -11,7 +11,24 @@ export const options: readonly GameOption[] = [
     { id: "seed", label: "Seed", description: "Leave empty for a random world.", kind: "text", default: "", restartRequired: true, scope: "world" },
     { id: "motd", label: "Message of the day", kind: "text", default: "", restartRequired: false, scope: "overview" },
     { id: "secure", label: "Additional cheat protection", kind: "boolean", default: true, restartRequired: true },
+    ...journeyPermissions(),
 ];
+function journeyPermissions(): GameOption[] {
+    const section: OptionSection = { title: "Journey powers", description: "Who may use each power in a Journey world. The host is a player joining from the computer the server runs on." };
+    // Terraria's CreativePowerManager names; each defaults to everyone
+    const powers: [string, string][] = [
+        ["time_setfrozen", "Freeze time"], ["time_setdawn", "Set time to dawn"], ["time_setnoon", "Set time to noon"],
+        ["time_setdusk", "Set time to dusk"], ["time_setmidnight", "Set time to midnight"], ["time_setspeed", "Time speed"],
+        ["godmode", "Godmode"], ["increaseplacementrange", "Placement range"], ["setdifficulty", "Difficulty"],
+        ["setspawnrate", "Enemy spawn rate"], ["biomespread_setfrozen", "Freeze biome spread"],
+        ["rain_setstrength", "Rain strength"], ["rain_setfrozen", "Freeze rain"],
+        ["wind_setstrength", "Wind strength"], ["wind_setfrozen", "Freeze wind"],
+    ];
+    return powers.map(([power, label]) => ({
+        id: `journeypermission_${power}`, label, kind: "select", section, default: "2", restartRequired: true,
+        choices: [{ value: "2", label: "Everyone" }, { value: "1", label: "Host only" }, { value: "0", label: "No one" }],
+    }));
+}
 /** The options a new world is generated with, asked for in New World rather than Options. */
 export const WORLD_GENERATION: readonly string[] = options.filter(o => o.scope === "world").map(o => o.id);
 export const terraria: GameDefinition = {
@@ -26,9 +43,11 @@ export const terraria: GameDefinition = {
         if (software !== "vanilla") throw new Error(`Unsupported Terraria software: ${software}`);
         return {
             options, control: { kind: "stdin" }, packages: [], widgets: ["status", "console"],
-            actions: [A.startServer, A.stopServer, A.restartServer, A.runCommand, A.loadConfig, A.sayChat, A.listServerFiles, A.readServerFile, A.writeServerFile, A.listLogFiles, A.readLogFile, "read-game-options", "write-game-options", "terraria-versions", "terraria-install", "terraria-worlds", "terraria-world", "terraria-world-delete", "terraria-world-inspect", "terraria-world-import", "terraria-world-discard", "terraria-save", "terraria-motd", "backup-server"],
+            actions: [A.startServer, A.stopServer, A.restartServer, A.runCommand, A.loadConfig, A.sayChat, A.listServerFiles, A.readServerFile, A.writeServerFile, A.listLogFiles, A.readLogFile, "read-game-options", "write-game-options", "terraria-versions", "terraria-install", "terraria-worlds", "terraria-world", "terraria-world-delete", "terraria-world-inspect", "terraria-world-import", "terraria-world-discard", "terraria-save", "terraria-motd", "terraria-invite", "terraria-players", "terraria-kick", "terraria-ban", "terraria-unban", "backup-server"],
             tabs: [
                 { id: "overview", label: "Overview", icon: "dashboard", owner: "game", variant: "fill" },
+                { id: "chat", label: "Chat", icon: "chat", group: "Play", owner: "game", variant: "fill" },
+                { id: "players", label: "Players", icon: "group", group: "Play", owner: "game", variant: "fill", width: "full" },
                 { id: "worlds", label: "Worlds", icon: "public", group: "World", owner: "game" },
                 { id: "versions", label: "Versions", icon: "deployed_code", group: "Software", owner: "game" },
                 { id: "options", label: "Options", icon: "tune", group: "Server", owner: "shared" },

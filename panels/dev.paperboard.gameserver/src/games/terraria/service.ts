@@ -14,9 +14,13 @@ import { releases, releaseFor, entrypoint } from "./catalog";
 import { install, recoverRelease } from "./install";
 import { discardUpload, importUpload, inspectUpload, listWorlds, trashWorld } from "./worldStore";
 import { WORLD_GENERATION } from "./index";
+import { parseConsoleLine, playerName, PlayerStore, stripPrompt, type ConsoleEvent } from "./roster";
+import { TRIGGER_IDS } from "../../service/contract";
+import { chatId } from "../../lib/logs";
+import type { ChatMessage } from "../../service/types";
 const PROC = "terraria-server";
 type Context = ServiceContext<GameServerState>;
-const local = serverLocal(() => ({ busy: false, ready: false, password: "", prompts: 0, partialPrompt: false, logTimer: null as ReturnType<typeof setTimeout> | null, pending: [] as string[] }));
+const local = serverLocal(() => ({ busy: false, ready: false, password: "", prompts: 0, partialPrompt: false, logTimer: null as ReturnType<typeof setTimeout> | null, pending: [] as string[], queries: 0, listed: [] as { name: string; address: string }[], store: null as PlayerStore | null }));
 const root = () => files.getPath("", PANEL_ID);
 const settings = async () => await config.get<Record<string, unknown>>(PANEL_ID) ?? {};
 function host() { const support = terraria.hostSupport({ os: process.platform, arch: process.arch }, { software: "vanilla", version: "" }); if (!support.supported) throw new Error(support.reason); }
@@ -80,6 +84,81 @@ async function exclusive<T>(ctx: Context, work: () => Promise<T>): Promise<T> {
     local().busy = true;
     try { return await work(); } finally { local().busy = false; }
 }
+/** Set up by initialize, so console lines can queue roster writes before they publish state. */
+function store() { const s = local().store; if (!s) throw new Error("Terraria's player roster is not ready"); return s; }
+const sameName = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
+/** Background roster work has no caller to throw to, so its failures land in the console. */
+function report(ctx: Context, what: string, err: unknown) {
+    ctx.setState(prev => ({ serverEntries: appendCapped(prev.serverEntries, { type: "error", content: `[Paperboard] ${what}: ${err instanceof Error ? err.message : String(err)}` }) }));
+}
+/** Asks the server who is connected; the answer is read back by observeLine and kept out of the console. */
+function queryPlayers(ctx: Context) {
+    local().queries++;
+    processApi.write(PROC, "playing\n").catch(err => { local().queries = Math.max(0, local().queries - 1); report(ctx, "Could not list Terraria's players", err); });
+}
+/** The online player's name as Terraria spells it; kick and ban match it exactly. */
+function onlineName(ctx: Context, name: string) {
+    const status = ctx.state.serverStatus;
+    if (status !== "online" && status !== "offline") throw new Error("Wait for Terraria to finish starting or stopping");
+    return status === "online" ? ctx.state.onlinePlayers.find(p => sameName(p, name)) : undefined;
+}
+function chat(ctx: Context, message: Omit<ChatMessage, "id" | "timestamp">) {
+    const entry = { ...message, id: chatId(), timestamp: new Date().toTimeString().slice(0, 8) };
+    ctx.setState(prev => ({ chatMessages: appendCapped(prev.chatMessages, entry) }));
+    return entry;
+}
+/** Applies a console line to the roster and chat. Returns true for an answer to Paperboard's own `playing`. */
+function observePlayers(ctx: Context, event: ConsoleEvent): boolean {
+    switch (event.kind) {
+        case "join": {
+            ctx.setState(prev => ({
+                onlinePlayers: prev.onlinePlayers.some(p => sameName(p, event.name)) ? prev.onlinePlayers : [...prev.onlinePlayers, event.name],
+                seenPlayers: prev.seenPlayers.some(p => sameName(p, event.name)) ? prev.seenPlayers : appendCapped(prev.seenPlayers, event.name),
+            }));
+            chat(ctx, { event: "join", sender: event.name, text: `${event.name} has joined.` });
+            ctx.emitTrigger(TRIGGER_IDS.playerJoined, event.name);
+            // the join line has no address; `playing` lists it for bans
+            queryPlayers(ctx);
+            return false;
+        }
+        case "leave": {
+            store().remember(event.name).catch(err => report(ctx, `Could not record ${event.name} leaving`, err));
+            ctx.setState(prev => ({ onlinePlayers: prev.onlinePlayers.filter(p => !sameName(p, event.name)) }));
+            chat(ctx, { event: "leave", sender: event.name, text: `${event.name} has left.` });
+            ctx.emitTrigger(TRIGGER_IDS.playerLeft, event.name);
+            return false;
+        }
+        case "chat": {
+            ctx.emitTrigger(TRIGGER_IDS.chatMessage, chat(ctx, { sender: event.sender, content: event.content, text: `<${event.sender}> ${event.content}` }));
+            return false;
+        }
+        case "server": {
+            chat(ctx, { event: "server", content: event.content, text: `<Server> ${event.content}` });
+            return false;
+        }
+        case "listed": {
+            local().listed = [...local().listed, { name: event.name, address: event.address }];
+            return local().queries > 0;
+        }
+        case "count": {
+            const listed = local().listed; local().listed = [];
+            const ours = local().queries > 0;
+            if (ours) local().queries--;
+            const s = store();
+            Promise.all(listed.map(p => s.remember(p.name, p.address))).catch(err => report(ctx, "Could not record Terraria's players", err));
+            ctx.setState(prev => ({
+                onlinePlayers: listed.map(p => p.name),
+                seenPlayers: listed.reduce((seen, p) => seen.some(s => sameName(s, p.name)) ? seen : appendCapped(seen, p.name), prev.seenPlayers),
+            }));
+            return ours;
+        }
+    }
+}
+async function onServerStarted(ctx: Context) {
+    const max = Number((await settings()).maxplayers ?? 8);
+    ctx.setState({ maxPlayers: max });
+    queryPlayers(ctx);
+}
 const action = (id: string, name: string, run: (ctx: Context, input: any) => any) => defineAction({ id, name, category: "Server", description: name, internal: true, inputs: {}, run });
 export const terrariaService: GameService = {
     primaryProcessId: PROC, processIds: [PROC],
@@ -124,6 +203,25 @@ export const terrariaService: GameService = {
         action("terraria-world-import", "Add uploaded world", async (_ctx, { file, name }) => { await importUpload(await root(), file, name); return true; }),
         action("terraria-world-discard", "Discard uploaded world", async (_ctx, { file }) => { await discardUpload(await root(), file); return true; }),
         action("terraria-save", "Save Terraria world", save),
+        // the join password, for the invite players copy from the Overview
+        action("terraria-invite", "Join password", async () => ({ password: (await secretsApi.get(secretKey(), PANEL_ID)).value ?? null })),
+        action("terraria-players", "Terraria players", async () => ({ seen: await store().seen(), bans: await store().bans() })),
+        action("terraria-kick", "Kick player", async (ctx, { name }) => {
+            const online = onlineName(ctx, playerName(name));
+            if (!online) throw new Error(`${name} is not online`);
+            await processApi.write(PROC, `kick ${online}\n`);
+            return true;
+        }),
+        action("terraria-ban", "Ban player", async (ctx, { name }) => {
+            const checked = playerName(name);
+            const online = onlineName(ctx, checked);
+            // an online ban kicks them and records their address itself
+            if (online) await processApi.write(PROC, `ban ${online}\n`);
+            else await store().banOffline(checked);
+            return true;
+        }),
+        // Terraria re-reads banlist.txt on every connection, so an unban applies at once
+        action("terraria-unban", "Unban player", async (_ctx, { name }) => { await store().unban(playerName(name)); return true; }),
         action("terraria-motd", "Set message of the day", async (ctx, { motd }) => {
             if (local().busy) throw new Error("Wait for the Terraria operation to finish");
             const status = ctx.state.serverStatus;
@@ -142,6 +240,9 @@ export const terrariaService: GameService = {
     loadOptions,
     async initialize(ctx, running) {
         local().password = (await secretsApi.get(secretKey(), PANEL_ID)).value ?? "";
+        local().store = new PlayerStore(await root());
+        // reattaching to a running server: learn who is on it
+        if (running) await onServerStarted(ctx);
         if (!running) {
             for (const release of releases) await recoverRelease(path.join(await root(), "install", release.directory));
             await generate("");
@@ -188,6 +289,9 @@ export const terrariaService: GameService = {
         const line = local().password ? raw.replaceAll(local().password, "[redacted]") : raw;
         if (/Server started|Listening on port/i.test(line)) local().ready = true;
         local().partialPrompt = false;
+        if (stripPrompt(line) === "Server started") void onServerStarted(ctx).catch(err => report(ctx, "Could not read Terraria's player limit", err));
+        const event = parseConsoleLine(line);
+        if (event && observePlayers(ctx, event)) return;
         local().pending = [...local().pending, line.replace(/\r/g, "")].slice(-1000);
         if (!local().logTimer) local().logTimer = setTimeout(() => {
             local().logTimer = null;

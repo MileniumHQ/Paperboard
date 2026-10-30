@@ -32,7 +32,8 @@ test("Terraria host/capability metadata has no Minecraft operations or uncertifi
         const support = terraria.hostSupport({ os: os!, arch: arch! }, options); expect(support.supported).toBe(false); expect(support.reason).toBeTruthy();
     }
     expect(terraria.describe(options).widgets).toEqual(["status", "console"]);
-    expect(terraria.describe(options).tabs.some(t => t.id === "players")).toBe(false);
+    // Terraria's players and chat are its own tabs, never Minecraft's
+    expect(terraria.describe(options).tabs.filter(t => t.id === "players" || t.id === "chat").map(t => t.owner)).toEqual(["game", "game"]);
     for (const action of ["op-player", "install-modpack", "reset-world-files", "set-gamerule"]) expect(() => assertGameAction(terraria, options, action)).toThrow("does not support");
     expect(() => terraria.describe({ ...options, software: "tmodloader" })).toThrow("Unsupported");
 });
