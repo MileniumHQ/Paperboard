@@ -86,6 +86,12 @@ export function Example() {
                             <td><PaperCode>undefined</PaperCode></td>
                             <td>Status caption rendered next to the indicator.</td>
                         </tr>
+                        <tr>
+                            <td><PaperCode>delay</PaperCode></td>
+                            <td><PaperCode>number</PaperCode></td>
+                            <td><PaperCode>undefined</PaperCode></td>
+                            <td>Milliseconds to wait before appearing, so a short wait never flashes a loader.</td>
+                        </tr>
                     </tbody>
                 </PaperTable>
 
@@ -93,6 +99,7 @@ export function Example() {
             <PaperText preset="body">
                 Determinate and indeterminate states use distinct SVG path definitions to prevent rotation snapping during state changes.
                 Terminal states ("success" and "error") fill the circle and display status colors.
+                Give an indeterminate loader a <PaperCode>delay</PaperCode> when the wait is usually instant, such as loading local state; it renders nothing until the delay passes.
             </PaperText>
 
             <PaperText preset="subheader" id="recipes">Recipes</PaperText>

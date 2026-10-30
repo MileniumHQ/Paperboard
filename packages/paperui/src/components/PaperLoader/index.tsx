@@ -1,5 +1,5 @@
 import styles from "./index.module.css";
-import { splitProps, Show, type JSX } from "solid-js";
+import { createSignal, onCleanup, splitProps, Show, type JSX } from "solid-js";
 import { LoaderStatus } from "../../types";
 import { PaperIcon } from "../PaperIcon";
 import { PaperText } from "../PaperText";
@@ -11,6 +11,11 @@ export interface PaperLoaderProps extends JSX.HTMLAttributes<HTMLDivElement> {
     loaderStatus: LoaderStatus;
     size?: PaperLoaderSize;
     label?: JSX.Element | string;
+    /**
+     * Milliseconds to wait before appearing. A wait that ends sooner never
+     * flashes a loader on screen.
+     */
+    delay?: number;
 }
 
 export interface PaperLoaderGroupProps extends JSX.HTMLAttributes<HTMLDivElement> {}
@@ -26,7 +31,14 @@ export function PaperLoader(props: PaperLoaderProps) {
         "class",
         "classList",
         "style",
+        "delay",
     ]);
+
+    const [due, setDue] = createSignal(!local.delay);
+    if (local.delay) {
+        const timer = setTimeout(() => setDue(true), local.delay);
+        onCleanup(() => clearTimeout(timer));
+    }
 
     const loaderClass = () =>
         [styles.PaperLoader, local.class].filter(Boolean).join(" ");
@@ -40,6 +52,7 @@ export function PaperLoader(props: PaperLoaderProps) {
     const strokeDashoffset = () => CIRCUMFERENCE * (1 - clampedPercent() / 100);
 
     return (
+        <Show when={due()}>
         <div
             {...rest}
             class={styles.elWrapper}
@@ -115,6 +128,7 @@ export function PaperLoader(props: PaperLoaderProps) {
                 </PaperText>
             </Show>
         </div>
+        </Show>
     );
 }
 
