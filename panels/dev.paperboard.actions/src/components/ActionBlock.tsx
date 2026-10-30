@@ -275,7 +275,7 @@ export default function ActionBlock(props: ActionBlockProps) {
                             {(key) => {
                                 const def = schemaInputs()[key];
                                 return (
-                                    <div class="actionMoreOptionsRow">
+                                    <div class={`actionMoreOptionsRow ${def?.multiline ? "isMultiline" : ""}`}>
                                         <PaperText size={3} weight={500}>
                                             {def?.label || formatFallbackLabel(key)}
                                         </PaperText>

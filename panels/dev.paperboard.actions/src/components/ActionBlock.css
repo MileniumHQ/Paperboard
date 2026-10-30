@@ -562,6 +562,13 @@
     min-width: 0;
 }
 
+/* a multiline option's box takes the row's width: its label sits above it */
+.actionMoreOptionsRow.isMultiline {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--paper-uigap-onefourth);
+}
+
 /* variable footer overlays, reserved space below */
 .action:has(.actionVariableFooter) {
     padding-bottom: calc(var(--paper-uigap-threefourths) + var(--paper-text-size-1));
