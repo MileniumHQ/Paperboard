@@ -52,6 +52,7 @@ fs.appendFileSync('seen', mode + '\\n');
 const prepare = ${JSON.stringify(path.join(filesDir, "prepare.txt"))};
 process.on('message', (message) => {
     if (message?.type !== 'paperboard:before-backup') return;
+    fs.writeFileSync('prepared-source', JSON.stringify({ sourceId: message.sourceId }));
     const answer = fs.readFileSync(prepare, 'utf8');
     fs.appendFileSync('seen', 'prepare:' + answer + '\\n');
     process.send({ type: 'paperboard:before-backup-done', requestId: message.requestId, ...(answer === 'ok' ? {} : { error: 'the world would not save' }) });
@@ -270,6 +271,28 @@ describe("backups on this computer", () => {
 });
 
 describe("a service that takes part in backups", () => {
+    test("prepares whole panels, named sources and legacy sources with their identity", async () => {
+        const f = panelFixture();
+        f.writeData("first", { settings: { n: 1 }, other: { n: 2 } });
+        f.setPrepare("ok");
+        const backups = new BackupService(f.engine);
+        cleanups.push(() => backups.dispose());
+        f.services.startService(ID);
+        await f.services.waitUntilReady(ID);
+        const prepared = () => JSON.parse(fs.readFileSync(path.join(f.dir, "prepared-source"), "utf8"));
+        await backups.setPanelDestination(ID, "local");
+        await backups.create(ID, "Whole panel");
+        expect(prepared()).toEqual({});
+        backups.sources.define(ID, { id: "original", directory: "", config: ["settings"], processes: [], legacy: true });
+        await backups.create(ID, "Legacy source");
+        expect(prepared()).toEqual({ sourceId: "original" });
+        backups.sources.define(ID, { id: "other", directory: "other", config: ["other"], processes: [] });
+        const key = backups.sources.resolve(ID, "other");
+        await backups.setPanelDestination(key, "local");
+        await backups.create(key, "Named source");
+        expect(prepared()).toEqual({ sourceId: "other" });
+    });
+
     test("is asked to get ready before its data is copied", async () => {
         const f = panelFixture();
         f.writeData("first", { n: 1 });

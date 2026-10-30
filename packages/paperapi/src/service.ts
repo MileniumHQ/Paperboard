@@ -73,8 +73,10 @@ export interface DefinePanelServiceOptions<
      * to stop a process the service runs from writing (a game server's
      * save-off); undo that when the service starts again. Throwing refuses
      * the backup. Without it the service is simply stopped for the copy.
+     * options.sourceId identifies the named source being copied (including
+     * a legacy source). It is absent for a whole-panel backup.
      */
-    beforeBackup?: (ctx: ServiceContext<TState>) => void | Promise<void>;
+    beforeBackup?: (ctx: ServiceContext<TState>, options: { sourceId?: string }) => void | Promise<void>;
 }
 
 export function definePanelService<
@@ -214,7 +216,7 @@ export function definePanelService<
                 // the daemon asks once per backup and waits for the answer
                 process.on("message", (message: any) => {
                     if (message?.type !== "paperboard:before-backup" || typeof message.requestId !== "string") return;
-                    void (async () => beforeBackup(ctx))().then(
+                    void (async () => beforeBackup(ctx, { sourceId: message.sourceId }))().then(
                         () => process.send?.({ type: "paperboard:before-backup-done", requestId: message.requestId }),
                         (err) => process.send?.({
                             type: "paperboard:before-backup-done",

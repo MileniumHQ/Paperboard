@@ -381,10 +381,11 @@ export const gameServerService = definePanelService({
             console.error("[gameserver] servers could not be loaded:", err);
         }
     },
-    async beforeBackup() {
+    async beforeBackup(_ctx, { sourceId }) {
         const paused: ServerScope[] = [];
         try {
-            for (const entry of entries.values()) {
+            const selected = sourceId === undefined ? [...entries.values()] : [requireServer(sourceId)];
+            for (const entry of selected) {
                 await inServer(entry, () => {
                     const policy = currentGameService().backup;
                     if (policy.mode === "offline" && entry.ctx.state.serverStatus !== "offline")

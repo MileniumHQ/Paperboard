@@ -170,7 +170,7 @@ export class PanelServicesManager {
      * out and stops writing. Resolves false when the service does not take
      * part, rejects when it failed or did not answer in time.
      */
-    public async prepareForBackup(id: string, timeoutMs = 150_000): Promise<boolean> {
+    public async prepareForBackup(id: string, sourceId?: string, timeoutMs = 150_000): Promise<boolean> {
         const entry = this.services.get(requirePanelId(id));
         if (!entry || entry.stopped || entry.state !== "ready" || !entry.beforeBackup) return false;
         if (entry.backupPrepare) throw new Error(`Service ${id} is already getting ready for a backup`);
@@ -188,7 +188,7 @@ export class PanelServicesManager {
                 entry.backupPrepare = { requestId, settle };
                 timer = setTimeout(() => settle(new Error(`Service ${id} did not get ready for the backup within ${Math.round(timeoutMs / 1000)} s`)), timeoutMs);
                 timer.unref?.();
-                entry.process.send({ type: "paperboard:before-backup", requestId }, (err) => { if (err) settle(err); });
+                entry.process.send({ type: "paperboard:before-backup", requestId, sourceId }, (err) => { if (err) settle(err); });
             });
         } finally {
             clearTimeout(timer);

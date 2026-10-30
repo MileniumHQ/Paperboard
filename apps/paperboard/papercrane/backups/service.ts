@@ -405,7 +405,7 @@ export class BackupService {
                     // undoes a half-done preparation, and nothing is copied.
                     let notReady: unknown = null;
                     try {
-                        await this.engine.prepareServiceForBackup(this.sources.owner(panelId));
+                        await this.engine.prepareServiceForBackup(this.sources.owner(panelId), this.sources.get(panelId)?.id);
                     } catch (err) {
                         notReady = err;
                     }

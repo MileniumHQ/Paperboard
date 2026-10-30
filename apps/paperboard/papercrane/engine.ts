@@ -1537,8 +1537,8 @@ export class PaperCraneEngine {
 
     /** asks the panel's running service to get ready for a backup of its
      * data, when it takes part; see PanelServicesManager.prepareForBackup */
-    public prepareServiceForBackup(panelId: string): Promise<boolean> {
-        return this.services.prepareForBackup(requirePanelId(panelId));
+    public prepareServiceForBackup(panelId: string, sourceId?: string): Promise<boolean> {
+        return this.services.prepareForBackup(requirePanelId(panelId), sourceId);
     }
 
     /** runs fn (a backup copying the panel's data) with the panel's service

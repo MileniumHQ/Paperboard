@@ -401,6 +401,18 @@ test("persisted servers restart and recover paused saving through the daemon", a
         }
         expect(serverStateOf(state, first.id).serverStatus).toBe("online");
         expect(await fileApi.exists(marker, PANEL)).toBe(false);
+
+        // The first server refuses preparation while stopping. It must not
+        // prevent a backup of the second, offline server through SDK + IPC.
+        await actionsApi.call(PANEL, "survival/stop-server");
+        const secondKey = backups.sources.resolve(PANEL, "creative");
+        await backups.setPanelDestination(secondKey, LOCAL_DESTINATION_ID);
+        const record = await backupApi.forSource(PANEL, "creative").create({ label: "Offline creative" });
+        expect(record.sourceId).toBe("creative");
+        expect(await fileApi.exists(marker, PANEL)).toBe(false);
+        await actionsApi.call(PANEL, "survival/stop-server");
+        await expect(engine.prepareServiceForBackup(PANEL)).rejects.toThrow("starting or stopping");
+        await expect(engine.prepareServiceForBackup(PANEL, "missing")).rejects.toThrow("Choose a server");
     } finally {
         await services.stopService(PANEL);
         await engine.killProcess("survival-mc-server", "SIGKILL");
