@@ -42,7 +42,7 @@ let listed: number;
 
 function engine(): ChatEngine {
     return new ChatEngine({
-        ownPanelId: "dev.paperboard.agents",
+        ownPanelId: "dev.paperboard.ai",
         clientFor: () => new OllamaClient(fake.url),
         providerOf: () => "ollama",
         store,

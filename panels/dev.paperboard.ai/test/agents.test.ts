@@ -29,7 +29,7 @@ function makeHub(options: { idleMs?: number; cancelGraceMs?: number; resolve?: (
 function makeHubDeps(options: { idleMs?: number; cancelGraceMs?: number; resolve?: () => Promise<never> } = {}): ConstructorParameters<typeof AgentHub>[0] {
     return {
         host,
-        procId: (id) => `dev.paperboard.agents.agent.${id}`,
+        procId: (id) => `dev.paperboard.ai.agent.${id}`,
         resolve: options.resolve ?? (async (c) => ({ command: c.command!, args: c.args!, pathEnv: process.env.PATH ?? "" })),
         workDir: import.meta.dir,
         clientVersion: "0.0.0-test",
@@ -83,7 +83,7 @@ describe("agent hub", () => {
         const opened = await hub.openSession({ conversationId: "c1", connection: c, cwd: "/w" });
         expect(opened).toEqual({ sessionId: "s1", resumed: false, capabilities: { image: false, embeddedContext: true } });
         expect(states[c.id]).toMatchObject({ status: "ready", name: "Fake Agent", version: "1.2.3" });
-        expect(host.starts[0]).toMatchObject({ id: "dev.paperboard.agents.agent.agent-0000000a", command: NODE, args: [AGENT] });
+        expect(host.starts[0]).toMatchObject({ id: "dev.paperboard.ai.agent.agent-0000000a", command: NODE, args: [AGENT] });
 
         const turn = collect();
         expect(await hub.prompt(c, "s1", text("hello"), turn.handlers, new AbortController().signal)).toBe("end_turn");
@@ -225,7 +225,7 @@ describe("agent hub", () => {
 
     it("stops a process an earlier service run left behind before starting its own", async () => {
         const c = connection();
-        await host.start({ id: "dev.paperboard.agents.agent.agent-0000000a", command: NODE, args: [AGENT], cwd: import.meta.dir, env: {} });
+        await host.start({ id: "dev.paperboard.ai.agent.agent-0000000a", command: NODE, args: [AGENT], cwd: import.meta.dir, env: {} });
         await hub.stopLeftovers([c]);
         expect(host.children.size).toBe(0);
     });

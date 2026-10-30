@@ -3,7 +3,7 @@
 
 import { OLLAMA_PROVIDER } from "./core/providers";
 
-export const PANEL_ID = "dev.paperboard.agents";
+export const PANEL_ID = "dev.paperboard.ai";
 
 // supervised process ids share one daemon-wide namespace
 export const OLLAMA_PROC_ID = `${PANEL_ID}.ollama`;

@@ -29,7 +29,7 @@ const FAKE_EFFORTS = { efforts: ["low", "high"], defaultEffort: "low" };
 
 function engine(agents: Pick<AgentHub, "openSession" | "prompt" | "forget"> = hub): ChatEngine {
     return new ChatEngine({
-        ownPanelId: "dev.paperboard.agents",
+        ownPanelId: "dev.paperboard.ai",
         clientFor: () => {
             throw new Error("an agent chat never asks for a model client");
         },
@@ -76,7 +76,7 @@ beforeEach(async () => {
     host = new ChildHost();
     hub = new AgentHub({
         host,
-        procId: (id) => `dev.paperboard.agents.agent.${id}`,
+        procId: (id) => `dev.paperboard.ai.agent.${id}`,
         resolve: async (c) => ({ command: c.command!, args: c.args!, pathEnv: process.env.PATH ?? "" }),
         workDir: dir,
         clientVersion: "0.0.0-test",

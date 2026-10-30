@@ -16,7 +16,7 @@ import { ChildHost } from "./childHost";
 
 const FAKE = path.join(import.meta.dir, "fixtures", "fakeCodex.mjs");
 const NODE = process.execPath;
-const PROC = "dev.paperboard.agents.agent.agent-0000000d";
+const PROC = "dev.paperboard.ai.agent.agent-0000000d";
 
 let host: ChildHost;
 let dir: string;
@@ -29,7 +29,7 @@ const c: Connection = { id: "agent-0000000d", kind: "agent", label: "Codex", age
 function makeHubDeps(options: { idleMs?: number; cancelGraceMs?: number } = {}): ConstructorParameters<typeof AgentHub>[0] {
     return {
         host,
-        procId: (id) => `dev.paperboard.agents.agent.${id}`,
+        procId: (id) => `dev.paperboard.ai.agent.${id}`,
         resolve: async () => ({ command: NODE, args: [FAKE, dir], pathEnv: process.env.PATH ?? "" }),
         workDir: dir,
         clientVersion: "0.0.0-test",

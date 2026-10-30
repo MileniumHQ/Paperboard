@@ -889,7 +889,7 @@ describe("AiApp Ollama updates", () => {
         (app.runtime as any).start = async () => { calls.push("start"); };
         try {
             await app.init(ctx as any);
-            const waiting = { name: "ollama", version: "0.41.0", blockedBy: [{ processId: "dev.paperboard.agents.ollama", owner: "dev.paperboard.agents" }] };
+            const waiting = { name: "ollama", version: "0.41.0", blockedBy: [{ processId: "dev.paperboard.ai.ollama", owner: "dev.paperboard.ai" }] };
             ctx.setState({ runtime: { ...ctx.state.runtime, status: "ready" } });
             calls.length = 0;
 

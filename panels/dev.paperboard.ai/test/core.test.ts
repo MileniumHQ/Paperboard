@@ -189,7 +189,7 @@ const registry: RegistryAction[] = [
     },
     { panelId: "dev.paperboard.gameserver", action: "get-state", schema: { name: "State", internal: true } },
     { panelId: "dev.paperboard.gameserver", action: "player-joined", schema: { name: "Player Joined", eventOnly: true } },
-    { panelId: "dev.paperboard.agents", action: "ask", schema: { name: "Ask AI" } },
+    { panelId: "dev.paperboard.ai", action: "ask", schema: { name: "Ask AI" } },
     { panelId: "com.other.gameserver", action: "start-server", schema: { name: "Start Other" } },
     { panelId: "dev.paperboard.terminal", action: "bare-handler" },
 ];
@@ -228,7 +228,7 @@ function bigRegistry(panels: number): RegistryAction[] {
 }
 
 describe("app actions: searched, never all listed", () => {
-    const index = buildActionIndex(registry, "dev.paperboard.agents", { "dev.paperboard.gameserver": "Game Server" });
+    const index = buildActionIndex(registry, "dev.paperboard.ai", { "dev.paperboard.gameserver": "Game Server" });
 
     it("indexes only callable actions of other panels, by their exact panelId:action id", () => {
         expect([...index.byId.keys()].sort()).toEqual([
@@ -258,13 +258,13 @@ describe("app actions: searched, never all listed", () => {
         expect(resolveActionCall(index, '{"id":"dev.paperboard.gameserver:kick-player","player":"Alex"}').rawArguments).toEqual({ player: "Alex" });
         expect(() => resolveActionCall(index, { id: "kick-player" })).toThrow(/no app action with the id "kick-player"/);
         expect(() => resolveActionCall(index, { id: "dev.paperboard.gameserver:get-state" })).toThrow(ToolArgumentError); // internal
-        expect(() => resolveActionCall(index, { id: "dev.paperboard.agents:ask" })).toThrow(ToolArgumentError); // self
+        expect(() => resolveActionCall(index, { id: "dev.paperboard.ai:ask" })).toThrow(ToolArgumentError); // self
         expect(() => resolveActionCall(index, {})).toThrow(/missing required argument "id"/);
         expect(() => resolveActionCall(index, { id: "dev.paperboard.gameserver:kick-player", arguments: [1] })).toThrow(/JSON object/);
     });
 
     it("1000 panels: the offered tools stay fixed and a search stays under its cap", () => {
-        const big = buildActionIndex(bigRegistry(1000), "dev.paperboard.agents");
+        const big = buildActionIndex(bigRegistry(1000), "dev.paperboard.ai");
         expect(big.entries).toHaveLength(10_000);
         // what the model is offered does not depend on the registry at all
         expect(JSON.stringify(APP_ACTION_TOOLS).length).toBeLessThan(1500);
@@ -281,7 +281,7 @@ describe("app actions: searched, never all listed", () => {
     });
 
     it("says how many actions it left out past the index cap", () => {
-        const over = buildActionIndex(bigRegistry(MAX_INDEXED_ACTIONS / 10 + 1), "dev.paperboard.agents");
+        const over = buildActionIndex(bigRegistry(MAX_INDEXED_ACTIONS / 10 + 1), "dev.paperboard.ai");
         expect(over.entries).toHaveLength(MAX_INDEXED_ACTIONS);
         expect(over.omitted).toBe(10);
         expect(formatFoundActions(over, "thing")).toContain("10 actions were not searched");
@@ -450,7 +450,7 @@ describe("built-ins", () => {
     it("never offers the terminal panel's actions", () => {
         const index = buildActionIndex(
             [{ panelId: "dev.paperboard.terminal", action: "run", schema: { name: "Run" } }],
-            "dev.paperboard.agents",
+            "dev.paperboard.ai",
         );
         expect(index.entries).toHaveLength(0);
         expect(formatFoundActions(index, "run")).toBe("No other app offers actions right now.");

@@ -60,8 +60,8 @@ class ChildHost implements ProcessHost {
 const layout: RuntimeLayout = {
     command: "/pkg/ollama/bin/ollama",
     filesDir: process.cwd(),
-    modelsDir: "/files/dev.paperboard.agents/models",
-    homeDir: "/files/dev.paperboard.agents/home",
+    modelsDir: "/files/dev.paperboard.ai/models",
+    homeDir: "/files/dev.paperboard.ai/home",
     windows: false,
 };
 
@@ -77,7 +77,7 @@ function setup(mode = "", timeouts: { ready?: number; stop?: number } = {}) {
     const states: Partial<RuntimeState>[] = [];
     let state: Partial<RuntimeState> = {};
     const runtime = new OllamaRuntime({
-        procId: "dev.paperboard.agents.ollama",
+        procId: "dev.paperboard.ai.ollama",
         host,
         onState: (p) => {
             states.push(p);
@@ -93,12 +93,12 @@ describe("ollama runtime", () => {
     it("keeps everything Ollama writes inside the panel's files, loopback only", () => {
         expect(ollamaEnv(layout)).toEqual({
             OLLAMA_HOST: "127.0.0.1:0",
-            OLLAMA_MODELS: "/files/dev.paperboard.agents/models",
-            HOME: "/files/dev.paperboard.agents/home",
+            OLLAMA_MODELS: "/files/dev.paperboard.ai/models",
+            HOME: "/files/dev.paperboard.ai/home",
             OLLAMA_NO_CLOUD: "1",
             OLLAMA_NOHISTORY: "1",
         });
-        expect(ollamaEnv({ ...layout, windows: true }).USERPROFILE).toBe("/files/dev.paperboard.agents/home");
+        expect(ollamaEnv({ ...layout, windows: true }).USERPROFILE).toBe("/files/dev.paperboard.ai/home");
     });
 
     it("is ready only once the logged port answers, and reports Ollama's compute", async () => {
@@ -113,7 +113,7 @@ describe("ollama runtime", () => {
         await runtime.stop();
         expect(current().status).toBe("stopped");
         expect(runtime.api).toBeNull();
-        expect(await host.exists("dev.paperboard.agents.ollama")).toBe(false);
+        expect(await host.exists("dev.paperboard.ai.ollama")).toBe(false);
     });
 
     it("a child that dies at startup is an error with its output, not a hang", async () => {
@@ -126,7 +126,7 @@ describe("ollama runtime", () => {
     it("a crash after startup is reported and drops the API", async () => {
         const { host, runtime, current } = setup();
         await runtime.start(layout);
-        host.children.get("dev.paperboard.agents.ollama")!.kill("SIGKILL");
+        host.children.get("dev.paperboard.ai.ollama")!.kill("SIGKILL");
         const start = Date.now();
         while (current().status !== "error" && Date.now() - start < 3000) await new Promise((r) => setTimeout(r, 10));
         expect(current().status).toBe("error");
@@ -141,13 +141,13 @@ describe("ollama runtime", () => {
         await runtime.stop();
         expect(host.signals).toEqual(["SIGTERM", "SIGKILL"]);
         expect(current().status).toBe("stopped");
-        expect(await host.exists("dev.paperboard.agents.ollama")).toBe(false);
+        expect(await host.exists("dev.paperboard.ai.ollama")).toBe(false);
     });
 
     it("restart replaces the running child, never runs two", async () => {
         const { host, runtime } = setup();
         await runtime.start(layout);
-        const first = host.children.get("dev.paperboard.agents.ollama")!;
+        const first = host.children.get("dev.paperboard.ai.ollama")!;
         await runtime.start(layout);
         expect(first.exitCode !== null || first.signalCode !== null).toBe(true);
         expect(host.children.size).toBe(1);
@@ -160,8 +160,8 @@ describe("ollama runtime", () => {
         await leftover.runtime.start(layout);
         // a new service instance (new runtime) sharing the same host
         const states: Partial<RuntimeState>[] = [];
-        const runtime = new OllamaRuntime({ procId: "dev.paperboard.agents.ollama", host: leftover.host, onState: (p) => states.push(p), stopTimeoutMs: 3000 });
-        const old = leftover.host.children.get("dev.paperboard.agents.ollama")!;
+        const runtime = new OllamaRuntime({ procId: "dev.paperboard.ai.ollama", host: leftover.host, onState: (p) => states.push(p), stopTimeoutMs: 3000 });
+        const old = leftover.host.children.get("dev.paperboard.ai.ollama")!;
         await runtime.start(layout);
         expect(old.exitCode !== null || old.signalCode !== null).toBe(true);
         expect(states.some((s) => s.status === "ready")).toBe(true);
