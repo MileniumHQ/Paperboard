@@ -25,6 +25,19 @@ export default function PackageApiDoc() {
                 Minecraft module uses this boundary for Java.
             </PaperText>
 
+            <PaperText preset="body">
+                The steamcmd package supplies Valve's bootstrap under bin/ on
+                Linux, macOS and Windows x64. Copy it to a mutable workspace
+                before running it: SteamCMD self-updates beside its executable.
+                Linux requires the host's 32-bit libc (lib32-glibc or
+                libc6-i386). No arm64 SteamCMD platform is advertised.
+                The proton package supplies standalone GE-Proton on Linux x64
+                and arm64, with bin/proton and its relative runtime tree. It
+                does not require the Steam client. These packages are published
+                by Origami's operator updaters; installing them does not add
+                game launch or server management behavior to a panel.
+            </PaperText>
+
             <PaperText preset="subheader" id="overview">
                 Overview
             </PaperText>

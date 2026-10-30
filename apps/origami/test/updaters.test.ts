@@ -1,3 +1,5 @@
+import { STEAMCMD_BUILDS, buildSteamcmdRecord, buildLatestSteamcmdRecord } from "../scripts/update-steamcmd";
+import { buildProtonRecord, buildLatestProtonRecord } from "../scripts/update-proton";
 import { describe, it, expect } from "bun:test";
 import {
     buildJavaRecord,
@@ -296,5 +298,70 @@ describe("KV writer", () => {
         });
         expect(outcome.written).toEqual([]);
         expect(outcome.errors).toEqual({ ollama: "not logged in", "java-8": "no assets" });
+    });
+});
+
+// SteamCMD pins are immutable upstream facts, not values supplied by fetch.
+// The pure builder tests the observed digest boundary; the fetch test proves
+// bytes are hashed rather than trusting any response metadata.
+describe("update-steamcmd", () => {
+    const observed = () => Object.fromEntries(Object.entries(STEAMCMD_BUILDS).map(([key, build]) => [key, { sha256: build.sha256, size: 10 }]));
+    it("builds the three x64 recipes with reviewed pins", () => {
+        const record = buildSteamcmdRecord(observed());
+        assertValidRecord(record);
+        expect(record.version).toBe("2020.04.02");
+        expect(Object.keys(record.platforms)).toEqual(["linux-x64", "macos-x64", "windows-x64"]);
+        expect(record.platforms["linux-x64"]?.recipe).toEqual({ unpack: "tar", take: { "bin/steamcmd.sh": "steamcmd.sh", "bin/linux32": "linux32" } });
+        expect(record.platforms["macos-x64"]?.recipe?.take["bin/Frameworks"]).toBe("Frameworks");
+        expect(record.platforms["windows-x64"]?.recipe).toEqual({ unpack: "zip", take: { "bin/steamcmd.exe": "steamcmd.exe" } });
+    });
+    it("refuses changed or missing downloads", () => {
+        expect(() => buildSteamcmdRecord({ ...observed(), "linux-x64": { sha256: sha("0"), size: 10 } })).toThrow(/reviewed pin/);
+        expect(() => buildSteamcmdRecord({})).toThrow(/download missing/);
+    });
+    it("hashes fetched bytes and refuses HTTP errors", async () => {
+        await expect(buildLatestSteamcmdRecord((async () => new Response("changed")) as unknown as typeof fetch)).rejects.toThrow(/reviewed pin/);
+        await expect(buildLatestSteamcmdRecord((async () => new Response("missing", { status: 404 })) as unknown as typeof fetch)).rejects.toThrow(/404/);
+    });
+});
+
+function protonRelease(): GithubRelease {
+    const tag = "GE-Proton11-11";
+    return { tag_name: tag, assets: ["x86_64", "aarch64"].flatMap((arch) => ["tar.gz", "sha512sum"].map((suffix) => ({ name: `${tag}-${arch}.${suffix}`, digest: `sha256:${sha("a")}`, size: 100, browser_download_url: `https://github.com/GloriousEggroll/proton-ge-custom/releases/download/${tag}/${tag}-${arch}.${suffix}` }))) };
+}
+const protonSums = Object.fromEntries(["x86_64", "aarch64"].map((arch) => [`GE-Proton11-11-${arch}.sha512sum`, `${"b".repeat(128)}  GE-Proton11-11-${arch}.tar.gz\n`]));
+
+describe("update-proton", () => {
+    it("builds validated Linux recipes for both architectures", () => {
+        const record = buildProtonRecord(protonRelease(), protonSums);
+        assertValidRecord(record);
+        expect(record.version).toBe("GE-Proton11-11");
+        expect(Object.keys(record.platforms)).toEqual(["linux-x64", "linux-arm64"]);
+        for (const [key, arch] of [["linux-x64", "x86_64"], ["linux-arm64", "aarch64"]] as const) expect(record.platforms[key]?.recipe).toEqual({ unpack: "tar", take: { bin: `GE-Proton11-11-${arch}` } });
+    });
+    it("refuses missing archives, digests, and checksum companions", () => {
+        for (const suffix of ["tar.gz", "sha512sum"]) {
+            const r = protonRelease(); r.assets = r.assets.filter((a) => a.name !== `GE-Proton11-11-aarch64.${suffix}`);
+            expect(() => buildProtonRecord(r, protonSums)).toThrow(/missing/);
+        }
+        const r = protonRelease(); r.assets[0]!.digest = null;
+        expect(() => buildProtonRecord(r, protonSums)).toThrow(/no sha256/);
+        expect(() => buildProtonRecord(protonRelease(), {})).toThrow(/malformed checksum/);
+        expect(() => buildProtonRecord(protonRelease(), Object.fromEntries(Object.entries(protonSums).map(([k,v]) => [k, v.replace("tar.gz", "wrong.tar.gz")])))).toThrow(/malformed checksum/);
+    });
+    it("refuses prereleases, drafts, and unexpected tags", () => {
+        for (const change of [{ prerelease: true }, { draft: true }, { tag_name: "GE-Proton11-11-rc1" }]) expect(() => buildProtonRecord({ ...protonRelease(), ...change }, protonSums)).toThrow();
+    });
+    it("fetches metadata and checksum files, never archives", async () => {
+        const calls: string[] = [];
+        const fetchFn = (async (url: string) => {
+            calls.push(String(url));
+            if (String(url).endsWith("/latest")) return Response.json(protonRelease());
+            const name = String(url).split("/").pop()!;
+            if (!(name in protonSums)) throw new Error(`unexpected fetch ${url}`);
+            return new Response(protonSums[name]);
+        }) as unknown as typeof fetch;
+        expect((await buildLatestProtonRecord(fetchFn)).name).toBe("proton");
+        expect(calls).toHaveLength(3);
     });
 });
