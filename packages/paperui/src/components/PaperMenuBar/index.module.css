@@ -11,3 +11,10 @@
 .PaperMenuBar > .trigger[aria-expanded="true"]:not(:disabled) {
     background: color-mix(in srgb, var(--paper-contrast) 14%, transparent);
 }
+
+/* A menu bar's dropdown shows every item, like a desktop menu, instead of
+   scrolling after seven rows as a context menu does; only the window
+   limits it. The attribute outranks the shared menu rule. */
+.dropdown[data-menubar-menu] {
+    max-height: calc(100vh - var(--paper-uigap-double));
+}

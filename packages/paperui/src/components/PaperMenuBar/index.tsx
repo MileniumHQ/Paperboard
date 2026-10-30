@@ -231,6 +231,7 @@ export function PaperMenuBarMenu(props: PaperMenuBarMenuProps) {
                 placement="below-left"
                 overlay={false}
                 onClose={handleClose}
+                class={styles.dropdown}
                 data-menubar-menu={id}
                 aria-labelledby={`${id}-trigger`}
             >
