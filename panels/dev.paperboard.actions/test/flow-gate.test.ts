@@ -47,11 +47,12 @@ const trigger: CanvasBlock = {
 
 describe("bounded flow execution gate", () => {
     it("refuses the 9th concurrent run — stored or test — with a typed refusal", async () => {
+        __actionsTestState.clearProjects();
         __actionsTestState.setFlows([trigger]);
         // saturate the gate: 8 capped concurrent stored runs
         const runs: Promise<any>[] = [];
         for (let i = 0; i < 8; i++) {
-            runs.push(runStoredFlow({ emitTrigger: () => {}, setState: () => {} } as any, trigger, {}));
+            runs.push(runStoredFlow({ emitTrigger: () => {}, setState: () => {} } as any, __actionsTestState.project()!, trigger, {}));
         }
         await Bun.sleep(20);
         expect(__actionsTestState.running()).toBe(8);
@@ -64,6 +65,7 @@ describe("bounded flow execution gate", () => {
                     emitTrigger: (id: string, output: any) => emitted.push({ trigger: id, output }),
                     setState: () => {},
                 } as any,
+                __actionsTestState.project()!,
                 { triggerBlockId: "trig_gate", payload: {} },
             );
         } catch (err) {
@@ -73,7 +75,7 @@ describe("bounded flow execution gate", () => {
         expect((caught as Error).message).toMatch(/already running \(cap 8\)/);
 
         // stored runs swallow the refusal (console-log path), never crash
-        const refused = await runStoredFlow({ emitTrigger: () => {}, setState: () => {} } as any, trigger, {});
+        const refused = await runStoredFlow({ emitTrigger: () => {}, setState: () => {} } as any, __actionsTestState.project()!, trigger, {});
         expect(refused).toBe(null);
 
         await Promise.all(runs);
@@ -85,7 +87,7 @@ describe("bounded flow execution gate", () => {
             emitTrigger: (id: string, output: any) => emitted.push({ trigger: id, output }),
             setState: () => {},
         } as any;
-        const log = await runTestFlow(ctx, { triggerBlockId: "trig_gate", payload: {} });
+        const log = await runTestFlow(ctx, __actionsTestState.project()!, { triggerBlockId: "trig_gate", payload: {} });
         expect(log.status).toBe("success");
     });
 });

@@ -317,6 +317,14 @@ export function createCanvasInteraction(doc: CanvasDocumentState) {
         doc.addNote(toWorld(pos.x, pos.y));
     };
 
+    /** Adds a note in the part of the canvas on screen, clear of the Library. */
+    const addNoteInView = () => {
+        if (!viewport) throw new Error("The canvas is not on screen, so there is nowhere to add a note.");
+        const rect = viewport.getBoundingClientRect();
+        const left = rect.left + libraryInset();
+        doc.addNote(toWorld(left + (rect.right - left) / 3, rect.top + rect.height / 3));
+    };
+
     const moveNote = (id: string, newPos: { x: number; y: number }, clientX?: number, clientY?: number) => {
         setDraggingCanvasBlockId(id);
         doc.setNotes((n) => n.id === id, "pos", newPos);
@@ -442,6 +450,7 @@ export function createCanvasInteraction(doc: CanvasDocumentState) {
         ghostDrag,
         canvasMenu,
         addNoteAtMenu,
+        addNoteInView,
         onPointerDown,
         onPointerMove,
         onPointerUp,

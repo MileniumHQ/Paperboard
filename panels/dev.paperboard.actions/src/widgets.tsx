@@ -19,7 +19,7 @@ import { ACTIONS_PANEL_ID } from "./panelId";
 import type { ActionsServiceState } from "./service";
 import type { FlowRun } from "./lib/widgetFlows";
 
-const DEFAULT_STATE: ActionsServiceState = { flowCount: 0, functionCount: 0, rev: 0, runs: [], running: [] };
+const DEFAULT_STATE: ActionsServiceState = { rev: 0, projects: [], projectsError: null, runs: [], running: [] };
 
 const errorText = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
@@ -101,7 +101,7 @@ function RunButton(props: { widget: WidgetContext }) {
     const offResize = props.widget.onResize(setSize);
     onCleanup(offResize);
 
-    const [flow, setFlow] = createSignal<{ label: string } | { gone: true } | null>(null);
+    const [flow, setFlow] = createSignal<{ id: string; label: string } | { gone: true } | null>(null);
     const [starting, setStarting] = createSignal(false);
     // a run the service refused never reaches its history: kept here until the next run
     const [refused, setRefused] = createSignal<{ message: string; at: number } | null>(null);
@@ -111,7 +111,7 @@ function RunButton(props: { widget: WidgetContext }) {
         if (!flowId) { setFlow({ gone: true }); return; }
         describedRev = actions.state().rev;
         try {
-            setFlow(await actions.bridge.call<{ label: string } | { gone: true }>("widget-flow", { flowId }));
+            setFlow(await actions.bridge.call<{ id: string; label: string } | { gone: true }>("widget-flow", { flowId }));
             // the service answered: a failure an earlier describe recorded is over
             actions.setUnavailable(null);
         } catch (err) {
@@ -129,8 +129,10 @@ function RunButton(props: { widget: WidgetContext }) {
     });
     onCleanup(offRev);
 
-    const running = () => actions.state().running.includes(flowId);
-    const lastRun = (): FlowRun | undefined => actions.state().runs.find((r) => r.flowId === flowId);
+    // runs are kept by "project/flow", the id the service resolved the option to
+    const key = () => { const f = flow(); return f && "id" in f ? f.id : flowId; };
+    const running = () => actions.state().running.includes(key());
+    const lastRun = (): FlowRun | undefined => actions.state().runs.find((r) => r.flowId === key());
     const label = () => { const f = flow(); return f && "label" in f ? f.label : ""; };
     const gone = () => { const f = flow(); return Boolean(f && "gone" in f); };
     const runnable = () => !actions.unavailable() && Boolean(flow()) && !gone();

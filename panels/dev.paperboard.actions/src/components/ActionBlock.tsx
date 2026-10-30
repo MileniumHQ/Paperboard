@@ -10,6 +10,7 @@ import {
 } from "@mileniumhq/paperui";
 import { checkActionInput, type ActionSchema } from "@mileniumhq/paperapi";
 import type { CanvasBlock } from "../lib/tree";
+import { blockIconSrc } from "../lib/blockIcon";
 import { typeDisplayName } from "../lib/typeCatalog";
 import { actionParams, formatFallbackLabel, parseTemplateTokens, type TemplateToken } from "../lib/template";
 import type { ActionBlockProps } from "./actionBlockProps";
@@ -373,7 +374,7 @@ function FlowBranch(branchProps: {
                                         values={child.values}
                                         children={child.children}
                                         elseChildren={child.elseChildren}
-                                        iconSrc={child.iconSrc}
+                                        iconSrc={blockIconSrc(child)}
                                         static={false}
                                         variableName={child.variableName}
                                         activeDropTarget={block.activeDropTarget}

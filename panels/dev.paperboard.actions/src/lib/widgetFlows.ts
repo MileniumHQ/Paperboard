@@ -16,7 +16,7 @@ export const RUN_HISTORY_LIMIT = 12;
 export interface FlowRun {
     /** unique per run */
     id: string;
-    /** the flow's trigger block id */
+    /** "project/flow": the flow's project and trigger block id */
     flowId: string;
     /** what the flow was called when it ran */
     label: string;
@@ -64,15 +64,6 @@ export function flowLabels(flows: CanvasBlock[]): Map<string, string> {
         labels.set(flow.id, truncate(base, MAX_LABEL - suffix.length) + suffix);
     }
     return labels;
-}
-
-/** The flows a Run button can start, as Home's gallery lists them. */
-export function manualFlowChoices(flows: CanvasBlock[]): FlowChoice[] {
-    const labels = flowLabels(flows);
-    return flows
-        .filter(isManualFlow)
-        .slice(0, MAX_FLOW_CHOICES)
-        .map((flow) => ({ value: flow.id, label: labels.get(flow.id)! }));
 }
 
 /**

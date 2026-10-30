@@ -9,7 +9,7 @@ import { PaperProvider } from "@mileniumhq/paperui";
 import App from "../../src/App";
 import { ACTIONS_PANEL_ID } from "../../src/panelId";
 import { buildCallSchema, buildTriggerSchema, type FunctionDef } from "../../src/lib/functions";
-import { fixture } from "./canvasSyncApi";
+import { fixture, FIXTURE_PROJECT } from "./canvasSyncApi";
 
 const out = { checks: {} as Record<string, unknown>, error: "" };
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -66,6 +66,14 @@ const savedFlow = (id: string) => (fixture.saved?.flows ?? []).find((b: any) => 
 async function run() {
     const c = out.checks;
     await sleep(300);
+
+    // Actions opens on its projects; a project's card opens its canvas
+    const card = root.querySelector<HTMLElement>('[role="button"]');
+    c.homeShowsProject = card?.textContent?.includes(FIXTURE_PROJECT.name) ?? false;
+    if (!card) throw new Error(`no project card on the home screen: ${root.innerHTML.slice(0, 300)}`);
+    card.click();
+    await sleep(300);
+    c.editorNamesProject = hasExactText(root.querySelector(".editor-topbar") ?? undefined, FIXTURE_PROJECT.name);
 
     // the canvas can't be read: say so, with the reason and a way back
     const loadAlert = alertTitled("Canvas could not be loaded");

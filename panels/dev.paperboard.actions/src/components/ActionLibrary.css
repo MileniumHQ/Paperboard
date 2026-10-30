@@ -3,10 +3,10 @@
 
 .library-sidebar {
     position: fixed;
-    top: 0;
+    top: var(--actions-topbar-height);
     left: 0;
     width: auto;
-    height: 100%;
+    height: calc(100% - var(--actions-topbar-height));
     z-index: var(--paper-z-sticky);
     background: var(--paper-surface);
     border-right: var(--paper-border-width) solid var(--paper-border);
@@ -186,7 +186,7 @@
 
 .library-toggle-collapsed {
     position: fixed;
-    top: var(--paper-uigap);
+    top: calc(var(--actions-topbar-height) + var(--paper-uigap));
     left: var(--paper-uigap);
     z-index: var(--paper-z-sticky);
 }

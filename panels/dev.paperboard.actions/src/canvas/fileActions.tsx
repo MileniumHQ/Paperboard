@@ -1,17 +1,13 @@
 import { createSignal, For, Show } from "solid-js";
 import {
     PaperButton,
-    PaperContextMenu,
-    PaperContextMenuItem,
     PaperFlex,
-    PaperIcon,
     PaperLoader,
     PaperModal,
     PaperQuote,
     PaperSelector,
     PaperSelectorItem,
     PaperText,
-    useContextMenuState,
 } from "@mileniumhq/paperui";
 import { backupApi, fileApi, type BackupRecord, type BackupStatus } from "@mileniumhq/paperapi";
 import { ACTIONS_PANEL_ID } from "../panelId";
@@ -33,17 +29,24 @@ const addedText = (file: CanvasDocument) =>
         .filter((part) => !part.startsWith("0 "))
         .join(", ");
 
+// a name a file can have on any computer
+const fileName = (name: string) => name.replace(/[\\/:*?"<>|\u0000-\u001f]/g, "").trim() || "Flows";
+
 const dateText = (iso: string) => new Date(iso).toLocaleString();
 const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
 // what finished or failed: a title naming the operation, and what happened
 export type CanvasNotice = { kind: "done" | "failed"; title: string; text: string };
 
-// The menu beside Run: the canvas out to a file and back in, and backups of
-// everything Actions keeps (flows, notes, functions, variables).
-export default function CanvasFileMenu(props: {
+// The File menu's work: a project's canvas out to a file and back in, and
+// backups of everything Actions keeps (every project's flows, notes,
+// functions and variables). The operations go in the menu; the Load Backup
+// window is drawn by the returned component.
+export function createCanvasFileActions(props: {
     /** a stable id for this window, so two windows never share a temporary file */
     clientId: string;
+    /** the project's name, which an exported file is named after */
+    name: () => string;
     loaded: () => boolean;
     canvas: () => CanvasDocument;
     /** adds the file beside the canvas and saves */
@@ -54,7 +57,6 @@ export default function CanvasFileMenu(props: {
     reload: () => Promise<import("../lib/canvasSync").CanvasSyncResult>;
     onNotice: (notice: CanvasNotice) => void;
 }) {
-    const menu = useContextMenuState("below-right");
     const [busy, setBusy] = createSignal(false);
 
     const run = async (titles: { done: string; failed: string }, work: () => Promise<string | null>) => {
@@ -76,7 +78,7 @@ export default function CanvasFileMenu(props: {
         const path = `flows-export-${props.clientId}.json`;
         await fileApi.write(path, flowFileText(props.canvas()), ACTIONS_PANEL_ID);
         try {
-            const result = await fileApi.exportFile(path, ACTIONS_PANEL_ID, { suggestedName: "Flows.json", filters: FLOW_FILE_FILTERS });
+            const result = await fileApi.exportFile(path, ACTIONS_PANEL_ID, { suggestedName: `${fileName(props.name())}.json`, filters: FLOW_FILE_FILTERS });
             return result.status === "exported" ? `Exported to ${result.name}.` : null;
         } finally {
             await fileApi.delete(path, ACTIONS_PANEL_ID);
@@ -182,70 +184,61 @@ export default function CanvasFileMenu(props: {
         }
     };
 
-    return (
-        <>
-            <PaperButton icon disabled={busy()} title="Export, import and backups" aria-label="Export, import and backups"
-                onClick={(e) => menu.openBelow(e, { align: "right" })}>
-                <PaperIcon>{busy() ? "progress_activity" : "more_vert"}</PaperIcon>
-            </PaperButton>
-            <PaperContextMenu open={menu.isOpen()} target={menu.target()} placement={menu.placement()} onClose={menu.close}>
-                <PaperContextMenuItem icon="file_export" onClick={() => { menu.close(); void exportFlows(); }}>Export</PaperContextMenuItem>
-                <PaperContextMenuItem icon="file_open" onClick={() => { menu.close(); void importFlows(); }}>Import</PaperContextMenuItem>
-                <PaperContextMenuItem icon="backup" onClick={() => { menu.close(); void createBackup(); }}>Create Backup</PaperContextMenuItem>
-                <PaperContextMenuItem icon="settings_backup_restore" onClick={() => { menu.close(); void openLoad(); }}>Load Backup</PaperContextMenuItem>
-            </PaperContextMenu>
-            <PaperModal
-                open={loadOpen()}
-                title="Load a backup"
-                size="small"
-                onClose={() => { if (!restoring()) setLoadOpen(false); }}
-                footer={
-                    <>
-                        <PaperButton variant="text" disabled={restoring()} onClick={() => setLoadOpen(false)}>Cancel</PaperButton>
-                        <Show when={loadError() && !backups()} fallback={
-                            <PaperButton variant="danger" disabled={restoring() || !selected()} onClick={() => void restore()}>
-                                {restoring() ? "Loading..." : "Load backup"}
-                            </PaperButton>
-                        }>
-                            <PaperButton onClick={() => void loadBackups()}>Try again</PaperButton>
+    // always mounted: the modal opens and closes through its open prop
+    function LoadBackupModal() {
+        return <PaperModal
+            open={loadOpen()}
+            title="Load a backup"
+            size="small"
+            onClose={() => { if (!restoring()) setLoadOpen(false); }}
+            footer={
+                <>
+                    <PaperButton variant="text" disabled={restoring()} onClick={() => setLoadOpen(false)}>Cancel</PaperButton>
+                    <Show when={loadError() && !backups()} fallback={
+                        <PaperButton variant="danger" disabled={restoring() || !selected()} onClick={() => void restore()}>
+                            {restoring() ? "Loading..." : "Load backup"}
+                        </PaperButton>
+                    }>
+                        <PaperButton onClick={() => void loadBackups()}>Try again</PaperButton>
+                    </Show>
+                </>
+            }
+        >
+            <PaperFlex direction="column" gap="half">
+                <PaperText preset="body">Loading a backup replaces every project, with its flows, notes, functions and variables, with the backup's. Flows running now stop.</PaperText>
+                <Show when={backups()} fallback={<Show when={!loadError()}><PaperLoader loaderStatus="indeterminate" size="small" label="Loading backups" /></Show>}>
+                    {(list) => (
+                        <Show when={list().length > 0} fallback={<PaperText size={2} color="text-subtle">No backups here yet. Make one with File, then Create backup.</PaperText>}>
+                            <PaperSelector name="actions-backup" value={selected()} onValueChange={(value) => setSelected(String(value))}>
+                                <For each={list()}>
+                                    {(record) => (
+                                        <PaperSelectorItem value={record.id} icon="history" description={sizeText(record.size)}>
+                                            {record.label || dateText(record.createdAt)}
+                                        </PaperSelectorItem>
+                                    )}
+                                </For>
+                            </PaperSelector>
                         </Show>
-                    </>
-                }
-            >
-                <PaperFlex direction="column" gap="half">
-                    <PaperText preset="body">Loading a backup replaces all flows, notes, functions and variables with the backup's. Flows running now stop.</PaperText>
-                    <Show when={backups()} fallback={<Show when={!loadError()}><PaperLoader loaderStatus="indeterminate" size="small" label="Loading backups" /></Show>}>
-                        {(list) => (
-                            <Show when={list().length > 0} fallback={<PaperText size={2} color="text-subtle">No backups here yet. Make one with Create Backup.</PaperText>}>
-                                <PaperSelector name="actions-backup" value={selected()} onValueChange={(value) => setSelected(String(value))}>
-                                    <For each={list()}>
-                                        {(record) => (
-                                            <PaperSelectorItem value={record.id} icon="history" description={sizeText(record.size)}>
-                                                {record.label || dateText(record.createdAt)}
-                                            </PaperSelectorItem>
-                                        )}
-                                    </For>
-                                </PaperSelector>
-                            </Show>
-                        )}
-                    </Show>
-                    <Show when={status()?.location}>
-                        {(location) => (
-                            <PaperFlex direction="row" align="center" justify="space-between" gap="half" fullWidth>
-                                <PaperText size={2} color="text-subtle">Kept in {location().label}</PaperText>
-                                <PaperButton size="tiny" variant="text" disabled={restoring()} onClick={() => void changeLocation()}>Change</PaperButton>
-                            </PaperFlex>
-                        )}
-                    </Show>
-                    <Show when={loadError()}>
-                        {(failure) => (
-                            <PaperQuote variant="danger" icon="warning" title={failure().title} role="alert">
-                                {failure().text}
-                            </PaperQuote>
-                        )}
-                    </Show>
-                </PaperFlex>
-            </PaperModal>
-        </>
-    );
+                    )}
+                </Show>
+                <Show when={status()?.location}>
+                    {(location) => (
+                        <PaperFlex direction="row" align="center" justify="space-between" gap="half" fullWidth>
+                            <PaperText size={2} color="text-subtle">Kept in {location().label}</PaperText>
+                            <PaperButton size="tiny" variant="text" disabled={restoring()} onClick={() => void changeLocation()}>Change</PaperButton>
+                        </PaperFlex>
+                    )}
+                </Show>
+                <Show when={loadError()}>
+                    {(failure) => (
+                        <PaperQuote variant="danger" icon="warning" title={failure().title} role="alert">
+                            {failure().text}
+                        </PaperQuote>
+                    )}
+                </Show>
+            </PaperFlex>
+        </PaperModal>;
+    }
+
+    return { busy, exportFlows, importFlows, createBackup, openLoad, LoadBackupModal };
 }

@@ -1,10 +1,17 @@
 import { render } from "solid-js/web";
 import { PaperProvider } from "@mileniumhq/paperui";
 import App from "../../src/App";
-import { fixture } from "./canvasSyncApi";
+import { fixture, FIXTURE_PROJECT } from "./canvasSyncApi";
 
 const root = document.getElementById("app")!;
 const dispose = render(() => <PaperProvider fullWidth fullHeight><App /></PaperProvider>, root);
+// Actions opens on its projects: open the fixture's
+setTimeout(() => {
+    const card = [...root.querySelectorAll<HTMLElement>("[role='button'], a, button")]
+        .find((el) => el.textContent?.includes(FIXTURE_PROJECT.name));
+    if (!card) throw new Error("the home screen does not show the fixture's project");
+    card.click();
+}, 200);
 Object.assign(window, {
     canvasFixture: {
         fixture,
@@ -34,7 +41,7 @@ Object.assign(window, {
             base.notes[0].text = text;
             fixture.saved = base;
             fixture.revision += 1;
-            for (const cb of fixture.changed) cb({ revision: fixture.revision, clientId: "another-window" });
+            for (const cb of fixture.changed) cb({ revision: fixture.revision, clientId: "another-window", project: FIXTURE_PROJECT.id });
         },
         noteText() {
             return root.querySelector<HTMLTextAreaElement>("textarea")?.value ?? null;

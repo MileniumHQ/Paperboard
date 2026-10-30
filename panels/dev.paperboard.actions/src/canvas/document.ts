@@ -1,5 +1,5 @@
-// The canvas document: its flows, notes and functions, saved through the
-// service and followed as other windows save. The service owns the
+// One project's canvas document: its flows, notes and functions, saved
+// through the service and followed as other windows save. The service owns the
 // document; this window saves with the revision its edits were made on, and
 // follows revisions other windows (on any computer) save. Edits stay this
 // window's until saved.
@@ -34,7 +34,8 @@ import { type FunctionDef, createFunctionId, renameFunctionInFlows } from "../li
 
 export type CanvasDocumentState = ReturnType<typeof createCanvasDocument>;
 
-export function createCanvasDocument() {
+export function createCanvasDocument(projectId: string) {
+    const projectAction = (action: string) => `${projectId}/${action}`;
     const [blocks, setBlocks] = createStore<CanvasBlock[]>([]);
     const [notes, setNotes] = createStore<CanvasNote[]>([]);
     const [functions, setFunctions] = createSignal<FunctionDef[]>([]);
@@ -55,7 +56,7 @@ export function createCanvasDocument() {
     const sync = createCanvasSync<CanvasDocument>({
         save: async (snapshot) => {
             try {
-                lastSave = await actionsApi.call<CanvasSaveResult>(ACTIONS_PANEL_ID, "save-canvas", {
+                lastSave = await actionsApi.call<CanvasSaveResult>(ACTIONS_PANEL_ID, projectAction("save-canvas"), {
                     canvas: snapshot,
                     baseRevision: canvasRevision,
                     clientId,
@@ -110,7 +111,7 @@ export function createCanvasDocument() {
         }
         canvasRevision = snapshot.revision;
     };
-    const fetchCanvas = () => actionsApi.call<CanvasSnapshot>(ACTIONS_PANEL_ID, "get-canvas");
+    const fetchCanvas = () => actionsApi.call<CanvasSnapshot>(ACTIONS_PANEL_ID, projectAction("get-canvas"));
     const follower = createCanvasFollower<CanvasSnapshot>({
         clientId,
         fetch: fetchCanvas,
@@ -128,6 +129,7 @@ export function createCanvasDocument() {
     onCleanup(() => { disposed = true; sync.dispose(); follower.dispose(); });
     onMount(() => {
         const off = actionsApi.on(ACTIONS_PANEL_ID, CANVAS_CHANGED_EVENT, (change: any) => {
+            if (change?.project !== projectId) return;
             void follower.changed(change);
         });
         onCleanup(off);
@@ -308,6 +310,7 @@ export function createCanvasDocument() {
     };
 
     return {
+        projectId,
         blocks,
         setBlocks,
         notes,

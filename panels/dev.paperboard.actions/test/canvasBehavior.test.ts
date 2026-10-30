@@ -25,6 +25,9 @@ describe("canvas behavior", () => {
             expect(results.error, "the fixture threw").toBe("");
             const c = results.checks;
 
+            expect(c.homeShowsProject, "Actions must open on its projects").toBe(true);
+            expect(c.editorNamesProject, "the editor's top bar must name the open project").toBe(true);
+
             expect(c.loadFailureTitled, "a canvas that can't load needs a titled alert").toBe(true);
             expect(c.loadFailureReason, "the alert must give the reason on its own").toBe(true);
             expect(c.loadFailureRetry, "a canvas that can't load needs a retry").toBe(true);

@@ -3,7 +3,7 @@
 // restore went.
 import { Show } from "solid-js";
 import { PaperButton, PaperFlex, PaperQuote } from "@mileniumhq/paperui";
-import type { CanvasNotice } from "../components/CanvasFileMenu";
+import type { CanvasNotice } from "./fileActions";
 import type { CanvasDocumentState } from "./document";
 
 export default function Notices(props: {

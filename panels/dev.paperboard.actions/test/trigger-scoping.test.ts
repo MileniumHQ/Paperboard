@@ -34,6 +34,7 @@ async function fire(): Promise<void> {
 describe("handleTriggerEvent panel scoping", () => {
     beforeEach(() => {
         emitted.length = 0;
+        __actionsTestState.clearProjects();
     });
 
     it("refuses a flow with no source panel instead of firing for every panel", async () => {
@@ -65,6 +66,18 @@ describe("handleTriggerEvent panel scoping", () => {
         }
         expect(emitted.some((e) => e.trigger === "flow-start")).toBe(true);
         expect(warns.join("\n").includes("no panelId")).toBe(false);
+    });
+
+    it("a project switched off starts nothing; the projects still on do", async () => {
+        __actionsTestState.setFlows([flowWith("dev.paperboard.botcreator")], "p-off", "Parked");
+        __actionsTestState.setEnabled("p-off", false);
+        await fire();
+        expect(emitted.some((e) => e.trigger === "flow-start")).toBe(false);
+
+        __actionsTestState.setFlows([flowWith("dev.paperboard.botcreator")], "p-on", "Live");
+        await fire();
+        const started = emitted.filter((e) => e.trigger === "flow-start");
+        expect(started.map((e) => e.output.project)).toEqual(["p-on"]);
     });
 
     it("wildcard flows are refused until an explicit source is selected", async () => {

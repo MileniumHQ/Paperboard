@@ -2,6 +2,10 @@
 // actionMultiplicity test; this fixture checks the editor's visible outcome.
 export * from "../../../../packages/paperapi/dist/paperapi.es.js";
 
+// the one project the fixture's Actions has; the editor opens it from the
+// home screen
+export const FIXTURE_PROJECT = { id: "p-fixture", name: "Fixture flows" };
+
 export const fixture = {
     failApply: true,
     failLoad: new URLSearchParams(location.search).has("fail-load"),
@@ -19,6 +23,10 @@ export const fixture = {
     },
 };
 
+// a page outside Paperboard has no computer granted; a block's panel icon
+// gets an address all the same
+export const panelAssetUrl = (panelId: string, subpath = "") => `panel://fixture.${panelId}/${subpath}`;
+
 // the editor saves and loads through the service, never config directly
 export const config = {
     get: async () => {
@@ -28,8 +36,31 @@ export const config = {
         throw new Error("the editor must save the canvas through save-canvas");
     },
 };
+// the service's state, as the home screen reads it through the bridge
+const serviceState = () => ({
+    rev: 1,
+    projects: [{ ...FIXTURE_PROJECT, enabled: true, createdAt: 1, editedAt: Date.now(), flowCount: 1, preview: null }],
+    projectsError: null,
+    runs: [],
+    running: [],
+});
+export const createPanelBridge = () => ({
+    getState: serviceState,
+    refreshState: async () => serviceState(),
+    onStateChange: () => () => undefined,
+    dispose: () => undefined,
+});
+
+// the editor's calls name the project: "<project>/get-canvas"
+const projectAction = (action: string) => {
+    const prefix = `${FIXTURE_PROJECT.id}/`;
+    if (!action.startsWith(prefix)) throw new Error(`the editor called "${action}" outside its project`);
+    return action.slice(prefix.length);
+};
+
 export const actions = {
     list: async () => [],
+    listProjects: async () => [],
     onRegistryChange: (callback: () => void) => {
         fixture.registry.add(callback);
         return () => { fixture.registry.delete(callback); };
@@ -40,7 +71,8 @@ export const actions = {
         fixture.changed.add(callback);
         return () => { fixture.changed.delete(callback); };
     },
-    call: async (_panelId: string, action: string, inputs: any) => {
+    call: async (_panelId: string, called: string, inputs: any) => {
+        const action = projectAction(called);
         if (action === "get-canvas") {
             if (fixture.failLoad) throw new Error("document unavailable");
             return { revision: fixture.revision, canvas: structuredClone(fixture.saved ?? fixture.initial) };

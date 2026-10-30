@@ -25,7 +25,7 @@ export function createFlowRuns(doc: CanvasDocumentState, log: ConsoleLog) {
             if (!synced.ok) throw new Error(synced.message);
             const result = await actionsApi.call<any>(
                 ACTIONS_PANEL_ID,
-                "test-run-flow",
+                `${doc.projectId}/test-run-flow`,
                 { triggerBlockId: triggerBlock.id, payload: payload || {} },
             );
             // only failures reach the console; a clean run shows nothing and
@@ -75,7 +75,8 @@ export function createFlowRuns(doc: CanvasDocumentState, log: ConsoleLog) {
                 setBlockRunning(output.triggerBlockId, false);
                 return;
             }
-            if (data.trigger === "flow-log" && output) {
+            // another project's run logs to that project's console
+            if (data.trigger === "flow-log" && output && (!output.project || output.project === doc.projectId)) {
                 log.append({
                     time: output.time || new Date().toLocaleTimeString(),
                     message: String(output.message ?? ""),

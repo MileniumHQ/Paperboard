@@ -16,6 +16,9 @@
     --actions-note-width: 260px;
     --actions-note-min-height: 90px;
     --actions-note-max-height: 400px;
+    /* the editor's top bar: its name over its menus. The Library and the
+       controls pinned to the window start below it. */
+    --actions-topbar-height: calc(var(--paper-control-size-small) + var(--paper-control-size-medium) + var(--paper-uigap-half));
 }
 
 html,
@@ -31,9 +34,27 @@ body,
     font-family: inherit;
 }
 
+/* the editor: the top bar, then the canvas under it */
+.actions-editor {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+}
+
+.editor-topbar {
+    flex: none;
+    box-sizing: border-box;
+    height: var(--actions-topbar-height);
+    position: relative;
+    z-index: calc(var(--paper-z-sticky) + 1);
+    border-bottom: var(--paper-border-width) solid var(--paper-border);
+}
+
 .canvas-viewport {
-    width: 100vw;
-    height: 100vh;
+    width: 100%;
+    flex: 1;
+    min-height: 0;
     overflow: auto;
     position: relative;
     user-select: none;
@@ -118,7 +139,7 @@ body,
 
 .canvas-top-right-controls {
     position: fixed;
-    top: var(--paper-uigap);
+    top: calc(var(--actions-topbar-height) + var(--paper-uigap));
     right: var(--paper-uigap);
     z-index: var(--paper-z-sticky);
     display: flex;
@@ -130,13 +151,6 @@ body,
 
 .canvas-top-right-controls > * {
     pointer-events: auto;
-}
-
-.canvas-run-controls {
-    display: flex;
-    flex-direction: row;
-    align-items: flex-start;
-    gap: var(--paper-uigap-half);
 }
 
 /* a notice in the top-right stack stays narrow beside the canvas */
@@ -152,4 +166,34 @@ body,
     justify-content: center;
     padding: var(--paper-uigap-double);
     box-sizing: border-box;
+}
+
+/* a project's canvas in miniature, as its card's banner */
+.project-preview {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+.project-preview-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--paper-text-subtle);
+}
+
+.project-preview-flow,
+.project-preview-note {
+    stroke-width: var(--paper-border-width);
+    vector-effect: non-scaling-stroke;
+}
+
+.project-preview-flow {
+    fill: color-mix(in srgb, var(--paper-primary) 18%, var(--paper-surface));
+    stroke: var(--paper-primary);
+}
+
+.project-preview-note {
+    fill: color-mix(in srgb, var(--paper-warning) 22%, var(--paper-surface));
+    stroke: var(--paper-warning);
 }
