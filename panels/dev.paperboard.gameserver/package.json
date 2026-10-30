@@ -8,7 +8,7 @@
         "build": "tsc && vite build && bun build ./src/service.ts --outfile ./dist/service.js --target=node --external @mileniumhq/paperui",
         "pack": "bunx paperapi pack",
         "preview": "vite preview",
-        "test": "bun test --isolate"
+        "test": "bun test --isolate --conditions browser"
     },
     "dependencies": {
         "@mileniumhq/paperapi": "workspace:*",
