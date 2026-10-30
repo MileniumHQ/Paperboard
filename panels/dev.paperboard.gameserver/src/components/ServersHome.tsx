@@ -185,15 +185,15 @@ export default function ServersHome(props: { state: ServersState }) {
                           : `Remove ${target()?.name ?? "server"}?`
                 }
                 footer={
-                    <>
-                        <PaperButton
-                            variant="text"
-                            disabled={busy()}
-                            onClick={() => (dialog() === "add" && game() ? setGame(null) : setDialog(null))}
-                        >
-                            {dialog() === "add" && game() ? "Back" : "Cancel"}
-                        </PaperButton>
-                        <Show when={!choosingGame()}>
+                    choosingGame() ? undefined : (
+                        <>
+                            <PaperButton
+                                variant="text"
+                                disabled={busy()}
+                                onClick={() => (dialog() === "add" ? setGame(null) : setDialog(null))}
+                            >
+                                {dialog() === "add" ? "Back" : "Cancel"}
+                            </PaperButton>
                             <PaperButton
                                 disabled={busy() || (dialog() !== "remove" && !name().trim())}
                                 onClick={() => void submit()}
@@ -206,8 +206,8 @@ export default function ServersHome(props: { state: ServersState }) {
                                         ? "Remove server"
                                         : "Save name"}
                             </PaperButton>
-                        </Show>
-                    </>
+                        </>
+                    )
                 }
             >
                 <Show when={error()}>
