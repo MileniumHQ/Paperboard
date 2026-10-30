@@ -89,8 +89,8 @@ function ensureDesktopTray(): void {
 // before the single-instance lock: it lives in userData
 const electronDataError = relocateElectronData(app);
 
-// `--browser`: no windows; the shell opens in the user's browser, served by
-// browserHost.ts. `--browser-port=<n>` pins the port (default: any free one).
+// `--browser`: no windows; the shell is served to a browser by
+// browserHost.ts and its origin printed. `--browser-port=<n>` pins the port (default: any free one).
 const browserMode = app.commandLine.hasSwitch("browser");
 // `--mobile`: the phone layout in an iPhone-sized window (mobileMock.ts)
 const mobileMode = launchOptionsFromArgv(process.argv).mobile;
@@ -108,7 +108,7 @@ app.on("second-instance", (_event, argv) => {
     // browser session would silently swallow every later launch.
     switch (secondLaunchAction(argv, Boolean(mainWindowRef && !mainWindowRef.isDestroyed()))) {
         case "browser":
-            void openInBrowser();
+            void serveBrowserShell();
             return;
         case "focus":
             if (mainWindowRef!.isMinimized()) mainWindowRef!.restore();
@@ -315,21 +315,18 @@ function ensureBrowserHost(): Promise<BrowserHost> {
     return browserHostStarting;
 }
 
-// Browser mode is a development tool: there is no sign-in, so opening the
-// origin is all that is needed. Never expose the port beyond loopback.
-async function openInBrowser(): Promise<void> {
+// Browser mode is a development tool for agents: it serves the shell and
+// prints the origin, and never opens a tab itself (the agent's own browser
+// navigates there). There is no sign-in; never expose the port beyond loopback.
+async function serveBrowserShell(): Promise<void> {
     try {
         const host = await ensureBrowserHost();
         console.log(
             `\nPaperboard (browser, DEV TOOL) is running at ${host.origin}\n` +
                 "No sign-in is required; do not expose this port on a network.\n",
         );
-        // headless/SSH: there is no browser here to open; let the remote user
-        // open the origin themselves
-        if (process.env.PAPERBOARD_NO_BROWSER === "1") return;
-        await shell.openExternal(host.origin);
     } catch (err: any) {
-        log.error("[Browser] could not open Paperboard in the browser:", err?.message || err);
+        log.error("[Browser] could not serve Paperboard in the browser:", err?.message || err);
         if (browserMode && !browserHost) {
             // nothing is serving and there are no windows: exit visibly but
             // through quit, so before-quit can stop children and sockets
@@ -494,7 +491,7 @@ app.whenReady().then(async () => {
         for (const signal of ["SIGINT", "SIGTERM"] as const) {
             process.on(signal, () => app.quit());
         }
-        await openInBrowser();
+        await serveBrowserShell();
     } else if (shouldSkipUpdate(process.argv)) {
         createWindow();
     } else {
@@ -535,7 +532,7 @@ app.whenReady().then(async () => {
 
     app.on("activate", function () {
         if (browserMode) {
-            void openInBrowser();
+            void serveBrowserShell();
             return;
         }
         // click on the dock/Taskbar icon: bring back the (hidden) window

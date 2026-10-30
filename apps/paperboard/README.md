@@ -24,16 +24,16 @@ bun run dev
 This opens a local dev process.
 
 ### Browser mode
-Paperboard can run in your own browser instead of an Electron window:
+Browser mode is a dev tool for agents (screenshots, testing, browser use), not something shipped to users. It serves the app to a browser instead of an Electron window:
 ```zsh
 bun run dev:browser                        # from source
 Paperboard --browser                       # an installed build
 Paperboard --browser --browser-port=4700   # pin the port (default: any free port)
 ```
-No window opens. Paperboard serves the app at `http://paperboard.localhost:<port>` and opens a single-use sign-in link in your default browser (the link is also printed to the terminal). A tray icon offers **Open in browser** and **Quit Paperboard**. Launching Paperboard with `--browser` again while it's running opens a fresh signed-in tab.
+No window or browser tab opens. Paperboard serves the app at `http://paperboard.localhost:<port>` and prints that address to the terminal; point your agent's browser at it.
 
 - Each panel gets its own origin (`http://<computer>.<panel>.paperboard.localhost:<port>`), the same isolation panels have in the desktop app.
-- The server only listens on `127.0.0.1`, and nothing is served without the session cookie from the sign-in link.
+- There is no sign-in. The server only listens on `127.0.0.1`; never expose the port on a network.
 - Works in Chromium-based browsers and Firefox, which resolve `*.localhost` to your own machine. Safari may not.
 - The desktop-only parts don't exist here: no auto-update pass (updates apply on the next windowed launch) and no title-bar integration.
 
