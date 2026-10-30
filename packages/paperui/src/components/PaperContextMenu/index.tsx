@@ -57,6 +57,12 @@ export interface PaperContextMenuProps extends JSX.HTMLAttributes<HTMLDivElement
     matchTargetWidth?: boolean;
     /** Item highlighted as soon as the menu opens (dropdowns start on the chosen value). */
     initialHighlight?: string | number | null;
+    /**
+     * Covers the page with a transparent click-catcher while open (default).
+     * A menu bar turns it off: its other labels must stay reachable so
+     * hovering one can switch menus. Outside presses still dismiss.
+     */
+    overlay?: boolean;
 }
 
 export function positionFromTarget(
@@ -270,6 +276,7 @@ export function PaperContextMenu(props: ParentProps<PaperContextMenuProps>) {
         "keepMounted",
         "matchTargetWidth",
         "initialHighlight",
+        "overlay",
         "class",
         "classList",
         "children",
@@ -610,7 +617,7 @@ export function PaperContextMenu(props: ParentProps<PaperContextMenuProps>) {
     return (
         <Show when={local.open || local.keepMounted}>
             <Portal>
-                <Show when={local.open}>
+                <Show when={local.open && (local.overlay ?? true)}>
                     <div class={styles.contextMenuOverlay} onClick={handleClose} />
                 </Show>
                 <SubMenuLevelContext.Provider value={subMenuContextValue}>

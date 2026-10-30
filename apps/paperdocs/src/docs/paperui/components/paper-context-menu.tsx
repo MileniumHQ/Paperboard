@@ -135,6 +135,12 @@ export function Example() {
                             <td><PaperCode>true</PaperCode></td>
                             <td>Closes the menu when any non-disabled item is clicked.</td>
                         </tr>
+                        <tr>
+                            <td><PaperCode>overlay</PaperCode></td>
+                            <td><PaperCode>boolean</PaperCode></td>
+                            <td><PaperCode>true</PaperCode></td>
+                            <td>Covers the page with a transparent click-catcher while the menu is open. Turn it off when other controls must stay reachable, as in <PaperCode>PaperMenuBar</PaperCode>. A press outside the menu still closes it.</td>
+                        </tr>
                     </tbody>
                 </PaperTable>
 

@@ -1,0 +1,13 @@
+.PaperMenuBar {
+    display: flex;
+    align-items: center;
+    gap: var(--paper-uigap-onefourth);
+    font-family: var(--paper-font-family);
+}
+
+/* A label is a quiet text button; the one whose menu is open keeps the
+   pressed fill, so the bar always shows where its dropdown came from.
+   :not(:disabled) lifts the specificity above the text variant's hover. */
+.PaperMenuBar > .trigger[aria-expanded="true"]:not(:disabled) {
+    background: color-mix(in srgb, var(--paper-contrast) 14%, transparent);
+}

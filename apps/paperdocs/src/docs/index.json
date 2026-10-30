@@ -180,6 +180,10 @@
                         "name": "PaperMenu",
                         "file": "paper-menu"
                     },
+                    "papermenubar": {
+                        "name": "PaperMenuBar",
+                        "file": "paper-menu-bar"
+                    },
                     "papermodal": {
                         "name": "PaperModal",
                         "file": "paper-modal"
