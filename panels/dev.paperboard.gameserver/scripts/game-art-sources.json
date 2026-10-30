@@ -1,30 +1,37 @@
 {
     "minecraft": {
         "poster": "https://store-images.s-microsoft.com/image/apps.17382.13510798885735219.9735d495-578c-4a4c-b892-3eb3a780b3a0.d3792486-cf98-40c0-a2c1-d6443f0e2b70",
-        "banner": "https://store-images.s-microsoft.com/image/apps.608.13510798885735219.cf55aeca-e690-41e0-a88b-41b0e517a3be.c94e1bfa-1b68-4cf5-9954-f967168480b4"
+        "banner": "https://store-images.s-microsoft.com/image/apps.608.13510798885735219.cf55aeca-e690-41e0-a88b-41b0e517a3be.c94e1bfa-1b68-4cf5-9954-f967168480b4",
+        "taglineSource": "https://www.minecraft.net/en-us/article/how-minecraft"
     },
     "terraria": {
         "poster": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/105600/library_600x900_2x.jpg",
-        "banner": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/105600/library_hero.jpg"
+        "banner": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/105600/library_hero.jpg",
+        "taglineSource": "https://store.steampowered.com/app/105600/"
     },
     "counter-strike-2": {
         "poster": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/730/library_600x900_2x.jpg",
-        "banner": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/730/library_hero.jpg"
+        "banner": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/730/library_hero.jpg",
+        "taglineSource": "https://store.steampowered.com/app/730/"
     },
     "team-fortress-2": {
         "poster": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/440/library_600x900_2x.jpg",
-        "banner": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/440/library_hero.jpg"
+        "banner": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/440/library_hero.jpg",
+        "taglineSource": "https://store.steampowered.com/app/440/"
     },
     "garrys-mod": {
         "poster": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/4000/library_600x900_2x.jpg",
-        "banner": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/4000/library_hero.jpg"
+        "banner": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/4000/library_hero.jpg",
+        "taglineSource": "https://store.steampowered.com/app/4000/"
     },
     "palworld": {
         "poster": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/1623730/library_600x900_2x.jpg",
-        "banner": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/1623730/library_hero.jpg"
+        "banner": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/1623730/library_hero.jpg",
+        "taglineSource": "https://store.steampowered.com/app/1623730/"
     },
     "ark-survival-ascended": {
         "poster": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/2399830/library_600x900_2x.jpg",
-        "banner": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/2399830/library_hero.jpg"
+        "banner": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/2399830/library_hero.jpg",
+        "taglineSource": "https://store.steampowered.com/app/2399830/"
     }
 }

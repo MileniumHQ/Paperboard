@@ -209,3 +209,9 @@ Checked 2026-10-30; launch recipes above are implementation targets, not smoke-t
 - [Facepunch dedicated-server guide](https://wiki.facepunch.com/gmod/Downloading_a_Dedicated_Server) documents 4020, launchers, Workshop, GSLT and discontinued Mac builds.
 - Pocketpair: [deployment](https://docs.palworldgame.com/getting-started/deploy-dedicated-server/), [configuration](https://docs.palworldgame.com/settings-and-operation/configuration/), [RCON deprecation](https://docs.palworldgame.com/api/rcon/), [REST authentication/API](https://docs.palworldgame.com/api/rest-api/palwold-rest-api/) and [shutdown](https://docs.palworldgame.com/api/rest-api/shutdown/). REST-first is a deliberate change from the older RCON plan.
 - [ARK dedicated-server reference](https://ark.wiki.gg/wiki/Dedicated_server_setup) distinguishes ASA 2430930 from ASE; its search excerpt confirms the id, but full-page fetching was blocked. ASA port/query/RCON/save details and the GE-Proton route remain explicit real-server release checks, not borrowed ASE guarantees. [Valve Proton](https://github.com/ValveSoftware/Proton) describes the compatibility runtime; the separately supplied package is GE-Proton.
+
+Game picker artwork is bundled under `public/assets/games/<id>/`. Run
+`bun scripts/fetch-game-art.ts` to refresh it from the recorded sources. The
+script crops posters and banners to their display proportions before scaling;
+source URLs and tagline references are recorded in `scripts/game-art-sources.json`.
+Picker descriptions live alongside the art paths in `src/games/art.ts`.

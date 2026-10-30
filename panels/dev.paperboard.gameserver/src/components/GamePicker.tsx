@@ -11,6 +11,7 @@ export default function GamePicker(props: { games: readonly GameDefinition[]; on
                         poster={game.art.poster}
                         posterAlt={`${game.name} cover art`}
                         title={game.name}
+                        description={game.art.tagline}
                         onClick={() => props.onPick(game.id)}
                     />
                 )}

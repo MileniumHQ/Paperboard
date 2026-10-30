@@ -27,6 +27,7 @@ export interface GameFeatures {
 }
 /** Art under public/assets/games/<id>/, fetched once by scripts/fetch-game-art.ts. */
 export interface GameArt {
+    tagline: string;
     /** Portrait (2:3) cover. */
     poster: string;
     /** Wide band, about 3:1. */

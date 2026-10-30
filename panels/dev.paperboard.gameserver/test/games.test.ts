@@ -17,7 +17,8 @@ describe("bundled game modules", () => {
 
     test("every registered game has its poster and banner committed", async () => {
         for (const game of games) {
-            for (const url of Object.values(game.art)) {
+            expect(game.art.tagline.length).toBeGreaterThan(0);
+            for (const url of [game.art.poster, game.art.banner]) {
                 const file = Bun.file(new URL(`../public${url}`, import.meta.url));
                 expect(await file.exists(), `${game.id}: ${url}`).toBe(true);
                 expect(file.type).toBe("image/webp");

@@ -15,9 +15,10 @@
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { crop } from "./game-art-crop";
 
 type Source =
-    | { kind: "steam"; app: number }
+    | { kind: "steam"; app: number; bannerFocus?: number }
     | { kind: "microsoft"; product: string; /** where the 3:1 banner band starts in the 16:9 hero, 0 top – 1 bottom */ bannerFocus: number };
 
 const GAMES: Readonly<Record<string, Source>> = {
@@ -74,10 +75,8 @@ async function fetchGame(id: string, source: Source, work: string): Promise<{ po
     const banner = join(work, `${id}-banner`);
     await Bun.write(poster, await download(urls.poster));
     await Bun.write(banner, await download(urls.banner));
-    await ffmpeg(["-i", poster, "-vf", `scale=${POSTER.width}:${POSTER.height}:flags=lanczos`, "-c:v", "libwebp", "-quality", String(POSTER.quality), join(out, "poster.webp")]);
-    // a banner is a wide band: crop 16:9 sources to the 3:1 shape Steam's heroes already have
-    const band = source.kind === "microsoft" ? `crop=iw:iw/${(BANNER.width / BANNER.height).toFixed(4)}:0:(ih-iw/${(BANNER.width / BANNER.height).toFixed(4)})*${source.bannerFocus},` : "";
-    await ffmpeg(["-i", banner, "-vf", `${band}scale=${BANNER.width}:${BANNER.height}:flags=lanczos`, "-c:v", "libwebp", "-quality", String(BANNER.quality), join(out, "banner.webp")]);
+    await ffmpeg(["-i", poster, "-vf", crop(POSTER.width, POSTER.height), "-c:v", "libwebp", "-quality", String(POSTER.quality), join(out, "poster.webp")]);
+    await ffmpeg(["-i", banner, "-vf", crop(BANNER.width, BANNER.height, source.bannerFocus), "-c:v", "libwebp", "-quality", String(BANNER.quality), join(out, "banner.webp")]);
     return urls;
 }
 
@@ -88,7 +87,7 @@ try {
     const recorded: Record<string, { poster: string; banner: string }> = (await Bun.file(sourcesFile).exists()) ? await Bun.file(sourcesFile).json() : {};
     for (const [id, source] of Object.entries(GAMES)) {
         if (wanted.length && !wanted.includes(id)) continue;
-        recorded[id] = await fetchGame(id, source, work);
+        recorded[id] = { ...recorded[id], ...await fetchGame(id, source, work) };
         console.log(`${id}: poster and banner written`);
     }
     await Bun.write(sourcesFile, `${JSON.stringify(recorded, null, 4)}\n`);
