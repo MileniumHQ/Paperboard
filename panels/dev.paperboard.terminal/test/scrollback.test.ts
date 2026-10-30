@@ -3,6 +3,7 @@ import {
     SCROLLBACK_CHARS,
     applyScrollbackCap,
     readWholeLines,
+    joinScrollback,
 } from "../src/lib/scrollback";
 
 describe("applyScrollbackCap", () => {
@@ -56,5 +57,21 @@ describe("readWholeLines", () => {
 
     it("handles empty buffers", () => {
         expect(readWholeLines("", 5)).toBe("");
+    });
+});
+
+describe("joinScrollback", () => {
+    it("writes output the scrollback already holds once", () => {
+        // the service had seen the first two live chunks when it answered
+        expect(joinScrollback("$ ls\r\na b\r\n$ ", ["a b\r\n", "$ ", "x"])).toBe("$ ls\r\na b\r\n$ x");
+    });
+
+    it("keeps live output the scrollback has not seen", () => {
+        expect(joinScrollback("$ ", ["echo hi\r\n", "hi\r\n"])).toBe("$ echo hi\r\nhi\r\n");
+    });
+
+    it("keeps everything when there is no scrollback or no live output", () => {
+        expect(joinScrollback("", ["$ "])).toBe("$ ");
+        expect(joinScrollback("$ ", [])).toBe("$ ");
     });
 });

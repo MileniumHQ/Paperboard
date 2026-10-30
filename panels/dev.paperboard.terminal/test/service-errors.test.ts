@@ -24,27 +24,7 @@ describe("writeToTerminal refuses on missing sessions", () => {
         }
         await expect(
             writeToTerminal(null as any, { tabId: "tab_write_test", text: "do-not-lose" }),
-        ).rejects.toThrow(/could not be created/);
-    });
-});
-
-// trash-first close (bun test): the irrecoverable delete happens only
-// after a copy — the trashed name is a sibling of the live file, never its
-// replacement
-import { trashScrollbackName } from "../src/service";
-
-describe("trashScrollbackName", () => {
-    it("derives a .trash sibling name from the live scrollback", () => {
-        expect(trashScrollbackName("tab1", 1700000000000)).toBe(
-            ".trash-1700000000000-tab1.log",
-        );
-    });
-
-    it("never equals the live path and always carries the id", () => {
-        const name = trashScrollbackName("tab_live");
-        expect(name).not.toBe("terminal-scrollback/tab_live.log");
-        expect(name).toContain("tab_live");
-        expect(name.startsWith(".trash-")).toBe(true);
+        ).rejects.toThrow(/could not be created; keystrokes were not sent/);
     });
 });
 

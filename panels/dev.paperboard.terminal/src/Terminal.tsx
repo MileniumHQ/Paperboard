@@ -5,6 +5,7 @@ import { copyText, getVar, pasteText } from "@mileniumhq/paperui";
 import { terminalApi, actions as actionsApi } from "@mileniumhq/paperapi";
 import { terminalKeyAction } from "./keys";
 import { errorMessage, type Outcome } from "./lib/failure";
+import { joinScrollback } from "./lib/scrollback";
 import styles from "./Terminal.module.css";
 import "@xterm/xterm/css/xterm.css";
 
@@ -48,15 +49,8 @@ export interface TerminalComponentProps {
 
 export function TerminalComponent(props: TerminalComponentProps) {
     let containerRef!: HTMLDivElement;
-    let term: Terminal | null = null;
-    let fitAddon: FitAddon | null = null;
-    let resizeObserver: ResizeObserver | null = null;
 
     onMount(() => {
-        document.fonts?.ready?.then(() => safeFit()).catch((err) => {
-            console.debug("[terminal] font-ready fit failed:", String(err));
-        });
-
         const bg = token("surface-app");
         const fg = token("text");
         const blue = token("primary");
@@ -65,7 +59,7 @@ export function TerminalComponent(props: TerminalComponentProps) {
         const yellow = token("warning");
         const lightText = token("text-subtle");
 
-        term = new Terminal({
+        const term = new Terminal({
             fontFamily: token("font-family-code"),
             fontSize: Number.parseFloat(token("text-size-2")),
             cursorBlink: true,
@@ -88,52 +82,35 @@ export function TerminalComponent(props: TerminalComponentProps) {
                 brightWhite: fg,
             },
         });
-        fitAddon = new FitAddon();
+        const fitAddon = new FitAddon();
         term.loadAddon(fitAddon);
-
         term.open(containerRef);
         activeTerminals.set(props.id, term);
 
-        // fit before attach so the pty starts at real size, not 80x24
-        let lastCols = -1;
-        let lastRows = -1;
-        const sendResize = () => {
-            if (!term) return;
-            if (term.cols === lastCols && term.rows === lastRows) return;
-            const cols = term.cols;
-            const rows = term.rows;
-            // the sent size is recorded only on success: a failed send
-            // (daemon unreachable, session gone) must retry on the next
-            // fit instead of desyncing the shell's line wrapping forever
+        // the pty follows the screen: a resize the daemon refused is sent
+        // again on the next fit instead of leaving the shell's wrapping wrong
+        let sentCols = 0;
+        let sentRows = 0;
+        const fit = () => {
+            // a hidden tab has no size to fit to; it fits when it is shown
+            if (containerRef.clientWidth === 0 || containerRef.clientHeight === 0) return;
+            fitAddon.fit();
+            const { cols, rows } = term;
+            if (cols === sentCols && rows === sentRows) return;
             terminalApi
                 .resize(props.id, cols, rows)
                 .then(() => {
-                    lastCols = cols;
-                    lastRows = rows;
+                    sentCols = cols;
+                    sentRows = rows;
                 })
-                .catch((err) => {
-                    console.error(
-                        `[terminal] resize to ${cols}x${rows} for ${props.id} failed, will retry:`,
-                        err,
-                    );
-                });
+                .catch((err) => console.error(`[terminal] resize to ${cols}x${rows} for ${props.id} failed:`, err));
         };
-        const safeFit = () => {
-            if (
-                fitAddon &&
-                containerRef &&
-                containerRef.clientWidth > 50 &&
-                containerRef.clientHeight > 50
-            ) {
-                try {
-                    fitAddon.fit();
-                    sendResize();
-                } catch (err) {
-                    console.debug("[terminal] fit/resize failed:", String(err));
-                }
-            }
-        };
-        safeFit();
+        // fit before attach so the pty starts at its real size
+        fit();
+        // the cell size changes when the code font finishes loading
+        document.fonts.ready.then(fit);
+        const resizeObserver = new ResizeObserver(fit);
+        resizeObserver.observe(containerRef);
 
         term.attachCustomKeyEventHandler((arg) => {
             // paste is left to the native paste event (see keys.ts)
@@ -146,31 +123,65 @@ export function TerminalComponent(props: TerminalComponentProps) {
             return true;
         });
 
-        let disconnectData: (() => void) | null = null;
-        // set while the session could not be opened: the next keypress
-        // retries instead of typing into a shell that does not exist
-        let failedId: string | null = null;
-        const fail = (id: string, line: string) => {
-            if (props.id !== id || failedId === id) return;
-            failedId = id;
-            term?.write(`\x1b[31m${line}\x1b[0m\r\n` + "Press any key to try again.\r\n");
+        let disconnect: (() => void) | null = null;
+        // the latest connect; an older one's late answer is ignored
+        let attempt = 0;
+        // set while the session is not usable: the next keypress opens it
+        // again instead of typing into a shell that does not exist
+        let stopped = false;
+        const stop = (line: string, action: string) => {
+            if (stopped) return;
+            stopped = true;
+            term.write(`\r\n\x1b[31m${line}\x1b[0m\r\n${action}\r\n`);
+        };
+        const connect = () => {
+            const id = props.id;
+            const current = ++attempt;
+            stopped = false;
+            disconnect?.();
+            term.reset();
+            // output that arrives while the scrollback is on its way waits
+            // here, then joins it without repeating what the scrollback holds
+            let pending: string[] | null = [];
+            const offData = terminalApi.onData(id, (data) => {
+                if (pending) pending.push(data);
+                else term.write(data);
+            });
+            const offExit = terminalApi.onExit(id, (code) => {
+                stop(`This shell exited${code ? ` with code ${code}` : ""}.`, "Press any key to start a new one.");
+            });
+            disconnect = () => {
+                offData();
+                offExit();
+            };
+            actionsApi
+                .call<string>(TERMINAL_PANEL_ID, "open-tab", { id, cols: term.cols, rows: term.rows })
+                .then((scrollback) => {
+                    if (current !== attempt) return;
+                    term.write(joinScrollback(scrollback, pending!));
+                    pending = null;
+                })
+                .catch((err) => {
+                    if (current !== attempt) return;
+                    pending = null;
+                    // the shell could not start, or the computer is unreachable
+                    console.error("[terminal] could not open session:", err);
+                    stop(`Could not open this terminal: ${errorMessage(err)}`, "Press any key to try again.");
+                });
         };
         // a keystroke the daemon refused means the session is gone: say so,
         // and let the next key reconnect instead of typing into nothing
         const send = (data: string) => {
-            const id = props.id;
-            terminalApi.write(id, data).catch((err) => {
-                console.error("[terminal] write failed:", err);
-                fail(id, `Lost this terminal: ${errorMessage(err)}`);
-            });
-        };
-        term.onData((data) => {
-            if (failedId !== null) {
-                connect(failedId);
+            if (stopped) {
+                connect();
                 return;
             }
-            send(data);
-        });
+            terminalApi.write(props.id, data).catch((err) => {
+                console.error("[terminal] write failed:", err);
+                stop(`Lost this terminal: ${errorMessage(err)}`, "Press any key to try again.");
+            });
+        };
+        term.onData(send);
 
         // A native paste with focus outside xterm (for example the context
         // menu item) never reaches xterm's own paste listener. Route it here,
@@ -184,68 +195,34 @@ export function TerminalComponent(props: TerminalComponentProps) {
             const text = ev.clipboardData?.getData("text/plain");
             if (!text) return;
             ev.preventDefault();
-            if (failedId !== null) {
-                connect(failedId);
-                return;
-            }
             send(text);
         };
         document.addEventListener("paste", onPaste);
 
-        const connect = (id: string) => {
-            failedId = null;
-            disconnectData?.();
-            term?.clear();
-            disconnectData = terminalApi.onData(id, (data) => term?.write(data));
-            actionsApi
-                .call<string>(TERMINAL_PANEL_ID, "open-tab", {
-                    id,
-                    cols: term?.cols,
-                    rows: term?.rows,
-                })
-                .then((scrollback) => {
-                    if (scrollback) term?.write(scrollback);
-                })
-                .catch((err) => {
-                    // the session's shell could not start (or the computer
-                    // is unreachable): say so in the terminal itself
-                    console.error("[terminal] could not open session:", err);
-                    fail(id, `Could not open this terminal: ${errorMessage(err)}`);
-                });
-        };
-        createEffect(
-            on(
-                () => props.id,
-                (id) => connect(id),
-            ),
-        );
-
-        requestAnimationFrame(() => safeFit());
-        setTimeout(safeFit, 100);
-
-        resizeObserver = new ResizeObserver(() => safeFit());
-        resizeObserver.observe(containerRef);
+        createEffect(on(() => props.id, connect));
 
         onCleanup(() => {
             document.removeEventListener("paste", onPaste);
-            if (resizeObserver) resizeObserver.disconnect();
-            disconnectData?.();
+            resizeObserver.disconnect();
+            disconnect?.();
             activeTerminals.delete(props.id);
             // Sessions are service-owned and survive UI reloads; only the
             // local renderer is disposed here.
-            if (term) term.dispose();
+            term.dispose();
         });
     });
 
+    // xterm measures its parent to fit, so the padding sits outside it
     return (
         <div
-            ref={containerRef}
+            class={styles.screen}
             onContextMenu={(e) => {
                 e.preventDefault();
                 props.onContextMenu?.(e);
             }}
-            class={styles.screen}
-        />
+        >
+            <div ref={containerRef} class={styles.fit} />
+        </div>
     );
 }
 

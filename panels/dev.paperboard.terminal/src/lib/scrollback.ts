@@ -21,3 +21,18 @@ export function readWholeLines(buffer: string, lineCount: number): string {
     }
     return slice.join("\n");
 }
+
+// A viewer subscribes to a shell's output before it asks the service for the
+// scrollback, so nothing printed in between is lost. The service saw those
+// chunks in the same order, so its scrollback already ends with the first
+// few of them: write the scrollback, then only the chunks it doesn't hold.
+export function joinScrollback(scrollback: string, live: readonly string[]): string {
+    let held = 0;
+    let tail = "";
+    for (let i = 0; i < live.length; i++) {
+        tail += live[i];
+        if (tail.length > scrollback.length) break;
+        if (scrollback.endsWith(tail)) held = i + 1;
+    }
+    return scrollback + live.slice(held).join("");
+}
