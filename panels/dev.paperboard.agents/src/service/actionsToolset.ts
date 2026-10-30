@@ -11,8 +11,9 @@
 // every registered action and refuses another panel's `internal` ones
 // (papercrane/actions.ts, ActionsRegistry.call); this module hides the same
 // set up front and refuses it again at run time, plus its own panel's actions
-// (the agent has no business rewriting itself), event-only actions
-// (they aren't callable), and every action of the panels in WITHHELD_PANELS.
+// (the agent has no business rewriting itself) and every action of the panels
+// in WITHHELD_PANELS. Events are listed, with the fields they carry, because
+// they're what a flow starts from, but never run: they aren't callable.
 
 import { PANEL_ID } from "../contract";
 import type { ToolResult } from "./computerMcp";
@@ -54,6 +55,7 @@ export interface ActionEntry {
         deprecated?: string;
         eventOnly?: boolean;
         category?: string | { name?: string };
+        outputFields?: Record<string, string | { type?: string; label?: string }>;
         inputs?: Record<string, { type?: string; label?: string; description?: string; required?: boolean; options?: { label: string; value: unknown }[]; default?: unknown }>;
         output?: string | { type?: string; description?: string };
     };
@@ -83,7 +85,8 @@ export const ACTION_TOOLS: ToolSpec[] = [
         name: "list_actions",
         description:
             "What one Paperboard panel can do (start a game server, post to Discord, ...): every action it offers, with the inputs each takes, " +
-            "and its projects (a server, a bot, ...). Name a `project` to list that project's actions (\"project/action\"), " +
+            "its events (`event: true`, with the `fields` a flow started by one reads), and its projects (a server, a bot, ...). " +
+            "Name a `project` to list that project's actions (\"project/action\"), " +
             `or an \`action\` to see its whole description; a list cuts descriptions at ${MAX_DESCRIPTION} characters.`,
         inputSchema: {
             type: "object",
@@ -97,7 +100,7 @@ export const ACTION_TOOLS: ToolSpec[] = [
     },
     {
         name: "run_action",
-        description: "Run one action listed by `list_actions`, with its inputs as an object. Returns the action's output or its error.",
+        description: "Run one action listed by `list_actions`, with its inputs as an object. Events can't be run. Returns the action's output or its error.",
         inputSchema: {
             type: "object",
             properties: {
@@ -111,15 +114,17 @@ export const ACTION_TOOLS: ToolSpec[] = [
     },
 ];
 
-/** Is this one the agent may find and run? */
+/** Is this one the agent may find? Events among them are listed but never run. */
 export function offered(a: ActionEntry): boolean {
     const s = a.schema;
     if (a.panelId === PANEL_ID || WITHHELD_PANELS.has(a.panelId)) return false;
     // no schema: plumbing registered by name (state, reload), not something with a documented purpose
     if (!s) return false;
-    if (s.internal === true || s.eventOnly === true || s.deprecated) return false;
+    if (s.internal === true || s.deprecated) return false;
     return true;
 }
+
+const isEvent = (a: ActionEntry) => a.schema?.eventOnly === true;
 
 export function actionsToolset(deps: ActionsToolsetDeps): Toolset {
     const now = deps.now ?? Date.now;
@@ -145,7 +150,10 @@ export function actionsToolset(deps: ActionsToolsetDeps): Toolset {
             }
             const named = panels.slice(0, MAX_PANEL_NAMES).join(", ") + (panels.length > MAX_PANEL_NAMES ? `, and ${panels.length - MAX_PANEL_NAMES} more` : "");
             if (!panels.length) return "Other Paperboard panels offer no actions right now.";
-            return `**Other panels:** ${named} can do things for you. See what one offers with \`list_actions\`, then \`run_action\`. Never run one the user wouldn't expect, and say what you did.`;
+            return (
+                `**Other panels:** ${named} can do things for you. See what one offers with \`list_actions\`, then \`run_action\`. Never run one the user wouldn't expect, and say what you did. ` +
+                "To make something happen on its own (when a message arrives, when someone joins), build a flow in an Actions project: its trigger is an event from `list_actions`."
+            );
         },
         call: async (name, args) => {
             if (!deps.enabled()) return fault("The user has switched Paperboard actions off for you.");
@@ -206,6 +214,7 @@ export function actionsToolset(deps: ActionsToolsetDeps): Toolset {
         // fresh: what may run is decided against the registry as it is now, not as it was found
         const target = (await listed(true)).find((a) => a.panelId === panel && a.action === action);
         if (!target) return fault(`${panel}:${action} isn't an action you can run. See list_actions.`);
+        if (isEvent(target)) return fault(`${panel}:${action} is an event: it starts flows and can't be run. Use it as a flow's trigger.`);
         const seconds = Number(args.timeout_seconds);
         const timeoutMs = Number.isFinite(seconds) && seconds >= 1 ? Math.min(seconds * 1000, MAX_CALL_MS) : DEFAULT_CALL_MS;
         const result = await deps.host.call(panel, action, inputs, { timeoutMs });
@@ -232,15 +241,23 @@ function describe(a: ActionEntry, descriptionChars: number) {
         };
     }
     const output = typeof s.output === "string" ? s.output : s.output?.type;
+    const fields: Record<string, string> = {};
+    for (const [key, f] of Object.entries(s.outputFields ?? {}).slice(0, 24)) {
+        const type = typeof f === "string" ? f : f.type ?? "";
+        const label = typeof f === "string" ? "" : f.label ?? "";
+        fields[key] = label && label !== key ? `${type} (${label})` : type;
+    }
     return {
         panel: a.panelId,
         action: a.action,
         ...(a.project ? { project: a.project } : {}),
         name: s.name,
         ...(categoryOf(a) ? { category: categoryOf(a) } : {}),
+        ...(isEvent(a) ? { event: true } : {}),
         description: cut(s.description ?? "", descriptionChars),
         inputs,
-        ...(output ? { output } : {}),
+        ...(output && !isEvent(a) ? { output } : {}),
+        ...(Object.keys(fields).length ? { fields } : {}),
     };
 }
 

@@ -29,6 +29,12 @@ const registry = [
     act("dev.paperboard.agents", "send-message", { description: "the agent's own" }),
     act("dev.paperboard.actions", "ui-hidden", { internal: true }),
     act("dev.paperboard.actions", "on-output", { eventOnly: true }),
+    act("dev.paperboard.botcreator", "on-message", {
+        eventOnly: true,
+        description: "Fires whenever a message is sent",
+        output: { type: "object" },
+        outputFields: { content: { type: "string", label: "Message" }, authorId: { type: "discord-user", label: "User" }, guildId: "string" },
+    }),
     act("dev.paperboard.actions", "old", { deprecated: "use new" }),
     { panelId: "dev.paperboard.actions", action: "state:get" },
     // withheld whole: it runs shell commands on the user's own computer
@@ -48,11 +54,20 @@ describe("listing actions", () => {
         expect(bot.actions[0]).toMatchObject({ action: "send-message", output: "string" });
     });
 
-    test("the agent's own actions, internal, event-only, deprecated and schema-less ones are never listed", async () => {
+    test("the agent's own actions, internal, deprecated and schema-less ones are never listed", async () => {
         const { set } = fake(registry);
-        // everything the actions panel registers here is one of those kinds
-        expect(await set.call("list_actions", { panel: "dev.paperboard.actions" })).toMatchObject({ isError: true, text: expect.stringContaining("offers no actions") });
+        // the actions panel's only listable entry here is its event
+        expect((await listOf(set, { panel: "dev.paperboard.actions" })).actions.map((a: any) => a.action)).toEqual(["on-output"]);
         expect(await set.call("list_actions", { panel: "dev.paperboard.agents" })).toMatchObject({ isError: true });
+    });
+
+    test("events are listed as events, with the fields a flow started by one reads", async () => {
+        const { set } = fake(registry);
+        const bot = await listOf(set, { panel: "dev.paperboard.botcreator" });
+        const event = bot.actions.find((a: any) => a.action === "on-message");
+        expect(event).toMatchObject({ event: true, fields: { content: "string (Message)", authorId: "discord-user (User)", guildId: "string" } });
+        expect(event.output).toBeUndefined();
+        expect(bot.actions.find((a: any) => a.action === "send-message").event).toBeUndefined();
     });
 
     test("a withheld panel (the terminal: shell commands on the user's computer) is never listed or named", async () => {
@@ -91,7 +106,6 @@ describe("running actions", () => {
         for (const [panel, action] of [
             ["dev.paperboard.agents", "send-message"], // itself
             ["dev.paperboard.actions", "ui-hidden"], // internal
-            ["dev.paperboard.actions", "on-output"], // event-only
             ["dev.paperboard.actions", "old"], // deprecated
             ["dev.paperboard.actions", "state:get"], // plumbing
             ["dev.paperboard.terminal", "run-terminal-command"], // a withheld panel
@@ -99,6 +113,12 @@ describe("running actions", () => {
         ]) {
             expect(await set.call("run_action", { panel, action })).toMatchObject({ isError: true, text: expect.stringContaining("isn't an action you can run") });
         }
+        expect(calls).toEqual([]);
+    });
+
+    test("an event is found but never run: it starts flows", async () => {
+        const { set, calls } = fake(registry);
+        expect(await set.call("run_action", { panel: "dev.paperboard.botcreator", action: "on-message" })).toMatchObject({ isError: true, text: expect.stringContaining("is an event") });
         expect(calls).toEqual([]);
     });
 
