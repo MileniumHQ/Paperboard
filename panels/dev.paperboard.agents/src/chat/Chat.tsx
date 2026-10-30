@@ -173,7 +173,7 @@ export default function Chat(props: { agent: Agent; face: FaceController; apps: 
                 <PaperProgress class={styles.compacting} aria-label={`${name()} is compacting the conversation`} title="Compacting the conversation to save space" />
             </Show>
             <div class={styles.header}>
-                <PaperPageHeader icon={<Face face={face} size={40} frame="sphere" skin={skinFor(agent.state.settings?.name)} />} title={name()} subtitle={status()}>
+                <PaperPageHeader icon={<Face face={face} size={40} frame="sphere" skin={skinFor(agent.state.settings?.name)} />} title={name()} subtitle={status()} centerWhenStacked>
                     <PaperButton icon variant="text" aria-label="Past conversations" title="Past conversations" onClick={() => setHistoryOpen(true)}>
                         history
                     </PaperButton>
