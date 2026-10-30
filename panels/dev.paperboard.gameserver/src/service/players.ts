@@ -1,5 +1,5 @@
 import { serverLocal } from "./scope";
-import { type ServiceContext } from "./api";
+import { files as fileApi, type ServiceContext } from "./api";
 import { writeServerLineBestEffort } from "./serverConsole";
 import {
     type GameServerState,
@@ -323,11 +323,14 @@ export function forgetPlayerData(
         delete stats[key];
         const playtime = { ...prev.playerPlaytime };
         delete playtime[key];
+        const positions = { ...prev.playerPositions };
+        delete positions[key];
         return {
             seenPlayers: seen,
             onlinePlayers: online,
             playerStats: stats,
             playerPlaytime: playtime,
+            playerPositions: positions,
         };
     });
 }
@@ -356,14 +359,45 @@ export async function deletePlayerData(
         safeUuid = resolved;
     }
     const level = await resolveLevelName();
+    // both layouts: 26.x worlds nest player files under players/, older
+    // ones keep them at the world root, and an upgraded server can hold both
     await trashRemovePathsWith(
         makeTrashRemoveDeps(),
         [
+            `${level}/players/data/${safeUuid}.dat`,
+            `${level}/players/data/${safeUuid}.dat_old`,
+            `${level}/players/advancements/${safeUuid}.json`,
+            `${level}/players/stats/${safeUuid}.json`,
             `${level}/playerdata/${safeUuid}.dat`,
             `${level}/playerdata/${safeUuid}.dat_old`,
             `${level}/advancements/${safeUuid}.json`,
             `${level}/stats/${safeUuid}.json`,
         ],
     );
+    await forgetCachedProfile(safeUuid);
     forgetPlayerData(ctx, safeName);
+}
+
+// usercache.json is what lists a player who has only ever joined; leaving
+// the entry would keep a deleted player on the roster. ops, whitelist and
+// bans are the owner's settings and stay.
+async function forgetCachedProfile(uuid: string): Promise<void> {
+    const content = await fileApi.read("usercache.json", PANEL_ID);
+    if (!content) return;
+    let parsed: unknown;
+    try {
+        parsed = JSON.parse(content);
+    } catch (err) {
+        throw new Error(`usercache.json is not valid JSON: ${String(err)}`);
+    }
+    if (!Array.isArray(parsed)) {
+        throw new Error("usercache.json is not a list of players");
+    }
+    const wanted = uuid.toLowerCase();
+    const kept = parsed.filter(
+        (entry) =>
+            !(entry && typeof entry.uuid === "string" && entry.uuid.toLowerCase() === wanted),
+    );
+    if (kept.length === parsed.length) return;
+    await fileApi.write("usercache.json", JSON.stringify(kept), PANEL_ID);
 }

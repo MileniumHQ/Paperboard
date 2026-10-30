@@ -428,7 +428,7 @@ export default function Players() {
             return;
         }
 
-        forgetPlayerData(player.name);
+        forgetPlayerData(player.name, player.uuid);
         setPlayers((prev) =>
             prev.filter((p) => p.name.toLowerCase() !== player.name.toLowerCase()),
         );

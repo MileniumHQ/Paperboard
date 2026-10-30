@@ -52,8 +52,17 @@ export function getPlayerPlaytimeSeconds(name: string): number | undefined {
     return playerPlaytime().get(key);
 }
 
-export function forgetPlayerData(name: string) {
+// local echo of a delete; uuid also drops the offline stats summary, which
+// would otherwise list the player again until the next stats poll
+export function forgetPlayerData(name: string, uuid?: string) {
     const key = name.toLowerCase();
+    if (uuid) {
+        setPlayerStatSummaries((prev) => {
+            const next = new Map(prev);
+            next.delete(uuid.toLowerCase());
+            return next;
+        });
+    }
     setSeenPlayerNames((prev) => {
         const next = new Set(prev);
         next.delete(key);
