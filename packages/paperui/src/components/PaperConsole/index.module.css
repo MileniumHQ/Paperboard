@@ -11,8 +11,11 @@
 }
 
 .outputArea {
+    position: relative;
     flex: 1;
     overflow-y: auto;
+    /* the console keeps its own scroll anchor (see relayout) */
+    overflow-anchor: none;
     display: flex;
     flex-direction: column;
     box-sizing: border-box;
@@ -70,12 +73,24 @@
     box-sizing: border-box;
 }
 
-.PaperConsole.divided .entry {
-    border-bottom: var(--paper-border-width) solid var(--paper-border);
+/* spacer as tall as every entry; only the window of rows near the
+   viewport is mounted inside it */
+.entries {
+    position: relative;
+    flex-shrink: 0;
 }
 
-.PaperConsole.divided .entry:last-child {
-    border-bottom: none;
+.window {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+}
+
+/* dividers sit above each row so a row's height doesn't depend on whether
+   it happens to be the last one mounted */
+.PaperConsole.divided .entry:not(.firstEntry) {
+    border-top: var(--paper-border-width) solid var(--paper-border);
 }
 
 .prefixIcon {

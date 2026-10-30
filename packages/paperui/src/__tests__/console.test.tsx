@@ -1,5 +1,6 @@
 import { describe, test, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@solidjs/testing-library";
+import { createSignal } from "solid-js";
 import { PaperConsole, type PaperConsoleEntry } from "../components/PaperConsole";
 
 describe("PaperConsole Component Tests", () => {
@@ -63,5 +64,30 @@ describe("PaperConsole Component Tests", () => {
             fireEvent.keyDown(input, { key: "ArrowUp" });
         }
         expect(input.value).toBe("cmd-50");
+    });
+
+    test("a long log mounts only a window of rows, ending on the newest", () => {
+        const entries = Array.from({ length: 5000 }, (_, i) => `line ${i}`);
+        const { container } = render(() => <PaperConsole showInput={false} entries={entries} />);
+
+        const rows = container.querySelectorAll("[class*='entry']:not([class*='entries'])");
+        expect(rows.length).toBeGreaterThan(0);
+        expect(rows.length).toBeLessThan(200);
+        expect(screen.getByText("line 4999")).toBeDefined();
+        expect(screen.queryByText("line 0")).toBeNull();
+    });
+
+    test("a burst of lines lands in one frame and keeps the window bounded", async () => {
+        const [entries, setEntries] = createSignal<string[]>([]);
+        const { container } = render(() => <PaperConsole showInput={false} entries={entries()} />);
+
+        for (let i = 0; i < 3000; i++) {
+            setEntries((prev) => [...prev, `burst ${i}`]);
+        }
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        expect(screen.getByText("burst 2999")).toBeDefined();
+        const rows = container.querySelectorAll("[class*='entry']:not([class*='entries'])");
+        expect(rows.length).toBeLessThan(200);
     });
 });

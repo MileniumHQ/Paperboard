@@ -1,11 +1,57 @@
+import { createSignal, onCleanup } from "solid-js";
 import {
+    PaperButton,
     PaperCard,
     PaperCode,
     PaperConsole,
     PaperFlex,
     PaperTable,
     PaperText,
+    type PaperConsoleEntry,
 } from "@mileniumhq/paperui";
+
+const STREAM_CAP = 5000;
+const STREAM_TYPES = ["output", "output", "info", "output", "warn", "output", "error"] as const;
+
+function streamLine(i: number): PaperConsoleEntry {
+    return { type: STREAM_TYPES[i % STREAM_TYPES.length], content: `[worker ${i % 8}] processed job ${i}` };
+}
+
+function StreamingLogDemo() {
+    let next = 0;
+    const [entries, setEntries] = createSignal<PaperConsoleEntry[]>(
+        Array.from({ length: STREAM_CAP }, () => streamLine(next++)),
+    );
+    const [timer, setTimer] = createSignal<ReturnType<typeof setInterval>>();
+
+    const toggle = () => {
+        const running = timer();
+        if (running !== undefined) {
+            clearInterval(running);
+            setTimer(undefined);
+            return;
+        }
+        // about 500 lines a second, one at a time like a real process
+        setTimer(
+            setInterval(() => {
+                setEntries((prev) => {
+                    const all = [...prev, streamLine(next++)];
+                    return all.length > STREAM_CAP ? all.slice(all.length - STREAM_CAP) : all;
+                });
+            }, 2),
+        );
+    };
+    onCleanup(() => clearInterval(timer()));
+
+    return (
+        <PaperFlex direction="column" gap="half" fullWidth>
+            <PaperButton onClick={toggle}>{timer() !== undefined ? "Stop stream" : "Start stream"}</PaperButton>
+            <PaperCard padding="none" surface="front" height="panel-height-small">
+                <PaperConsole title="Worker log" showInput={false} entries={entries()} />
+            </PaperCard>
+        </PaperFlex>
+    );
+}
 
 export default function PaperConsoleDoc() {
     return (
@@ -14,7 +60,7 @@ export default function PaperConsoleDoc() {
             <PaperText preset="body">
                 PaperConsole renders an interactive terminal log interface with command entry and ANSI color parsing.
                 Reach for PaperConsole when inspecting live background logs, running REPL environments, or observing process outputs.
-                The console provides command history recall and automatic scroll anchoring.
+                The console provides command history recall, follows new output, and stays fast with thousands of lines.
             </PaperText>
 
             <PaperText preset="subheader" id="overview">Overview</PaperText>
@@ -110,7 +156,7 @@ export function Example() {
                             <td><PaperCode>autoScroll</PaperCode></td>
                             <td><PaperCode>boolean</PaperCode></td>
                             <td><PaperCode>true</PaperCode></td>
-                            <td>Automatically scrolls the output pane to the bottom when new items arrive.</td>
+                            <td>Follows new output while the reader is at the bottom. Scrolling up pauses following until they scroll back down or send a command.</td>
                         </tr>
                     </tbody>
                 </PaperTable>
@@ -120,6 +166,32 @@ export function Example() {
                 The command line maintains a ring buffer of the last 200 entered commands.
                 Pressing the ArrowUp and ArrowDown keys cycles through prior commands.
                 ANSI escape codes in text entries are converted into colored spans.
+            </PaperText>
+
+            <PaperText preset="subheader" id="large-logs">Large logs</PaperText>
+            <PaperText preset="body">
+                PaperConsole mounts only the entries near the visible area. The rest of the log is an empty spacer sized from measured row heights, so the scrollbar covers the whole log without rendering it.
+                Updates to entries are folded into one render per frame, so a process that prints hundreds of lines a second costs the same as one that prints sixty.
+            </PaperText>
+            <PaperText preset="body">
+                Scroll up while lines stream in and the rows you are reading stay put, even when old entries drop off the front of a capped log.
+                Cap entries in your own state. PaperConsole renders a long log cheaply, but the array itself still grows until you trim it.
+            </PaperText>
+            <PaperCode block language="tsx">
+{`const MAX_LINES = 5000;
+const [entries, setEntries] = createSignal<PaperConsoleEntry[]>([]);
+
+process.onLine((line) =>
+    setEntries((prev) => [...prev, line].slice(-MAX_LINES)),
+);
+
+<PaperCard padding="none" surface="front" height="panel-height-small">
+    <PaperConsole title="Worker log" showInput={false} entries={entries()} />
+</PaperCard>`}
+            </PaperCode>
+            <StreamingLogDemo />
+            <PaperText preset="body">
+                The text prop is not windowed. It renders one preformatted block, which suits a log file read once. Use entries for output that keeps arriving.
             </PaperText>
 
             <PaperText preset="subheader" id="recipes">Recipes</PaperText>
