@@ -36,20 +36,40 @@ export const config = {
         throw new Error("the editor must save the canvas through save-canvas");
     },
 };
-// the service's state, as the home screen reads it through the bridge
+// the service's state, as the home screen reads it through the bridge; a
+// project change announces the whole state again, as the service does
+const project = { ...FIXTURE_PROJECT, enabled: true, createdAt: 1, editedAt: Date.now(), flowCount: 1, preview: null };
+let rev = 1;
 const serviceState = () => ({
-    rev: 1,
-    projects: [{ ...FIXTURE_PROJECT, enabled: true, createdAt: 1, editedAt: Date.now(), flowCount: 1, preview: null }],
+    rev,
+    projects: [{ ...project }],
     projectsError: null,
     runs: [],
     running: [],
 });
+const stateListeners = new Set<(patch: unknown, full: any) => void>();
 export const createPanelBridge = () => ({
     getState: serviceState,
     refreshState: async () => serviceState(),
-    onStateChange: () => () => undefined,
+    onStateChange: (listener: (patch: unknown, full: any) => void) => {
+        stateListeners.add(listener);
+        return () => { stateListeners.delete(listener); };
+    },
     dispose: () => undefined,
 });
+// the service refuses this name, so the editor must say why and put the
+// old one back
+export const REFUSED_NAME = "Refused name";
+const updateProject = (inputs: { project: string; name?: string; enabled?: boolean }) => {
+    if (inputs.project !== project.id) throw new Error(`no project "${inputs.project}"`);
+    if (inputs.name === REFUSED_NAME) throw new Error("that name is taken");
+    if (inputs.name !== undefined) project.name = inputs.name;
+    if (inputs.enabled !== undefined) project.enabled = inputs.enabled;
+    rev += 1;
+    const full = serviceState();
+    for (const listener of stateListeners) listener({}, full);
+    return { ...project };
+};
 
 // the editor's calls name the project: "<project>/get-canvas"
 const projectAction = (action: string) => {
@@ -72,6 +92,10 @@ export const actions = {
         return () => { fixture.changed.delete(callback); };
     },
     call: async (_panelId: string, called: string, inputs: any) => {
+        if (called === "update-project") {
+            fixture.calls.push(called);
+            return updateProject(inputs);
+        }
         const action = projectAction(called);
         if (action === "get-canvas") {
             if (fixture.failLoad) throw new Error("document unavailable");

@@ -9,7 +9,7 @@ import { PaperProvider } from "@mileniumhq/paperui";
 import App from "../../src/App";
 import { ACTIONS_PANEL_ID } from "../../src/panelId";
 import { buildCallSchema, buildTriggerSchema, type FunctionDef } from "../../src/lib/functions";
-import { fixture, FIXTURE_PROJECT } from "./canvasSyncApi";
+import { fixture, FIXTURE_PROJECT, REFUSED_NAME } from "./canvasSyncApi";
 
 const out = { checks: {} as Record<string, unknown>, error: "" };
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -71,9 +71,25 @@ async function run() {
     const card = root.querySelector<HTMLElement>('[role="button"]');
     c.homeShowsProject = card?.textContent?.includes(FIXTURE_PROJECT.name) ?? false;
     if (!card) throw new Error(`no project card on the home screen: ${root.innerHTML.slice(0, 300)}`);
-    card.click();
+
+    // a card's switch flips in place when the service announces the change:
+    // a card rebuilt from the new list would drop the switch mid-slide
+    const cardSwitch = card.querySelector<HTMLElement>('[role="switch"]');
+    if (!cardSwitch) throw new Error("the project card has no switch");
+    cardSwitch.click();
+    await sleep(100);
+    c.switchTurnedOff = root.querySelector('[role="switch"]')?.getAttribute("aria-checked") === "false";
+    c.switchKeptItsCard = cardSwitch.isConnected && card.isConnected;
+    cardSwitch.click();
+    await sleep(100);
+
+    root.querySelector<HTMLElement>('[role="button"]')!.click();
     await sleep(300);
-    c.editorNamesProject = hasExactText(root.querySelector(".editor-topbar") ?? undefined, FIXTURE_PROJECT.name);
+    const topbar = root.querySelector<HTMLElement>(".editor-topbar")!;
+    const nameField = topbar.querySelector<HTMLInputElement>('input[aria-label="Project name"]');
+    c.editorNamesProject = nameField?.value === FIXTURE_PROJECT.name;
+    const back = topbar.querySelector<HTMLElement>('button[aria-label="All projects"]')!.getBoundingClientRect();
+    c.backButtonSquare = back.width === back.height;
 
     // the canvas can't be read: say so, with the reason and a way back
     const loadAlert = alertTitled("Canvas could not be loaded");
@@ -161,6 +177,21 @@ async function run() {
     retrySave?.click();
     await sleep(400);
     c.syncErrorCleared = !alertTitled("Canvas out of sync");
+
+    // the name renames in place: Enter saves it, a refused one goes back
+    // and says why
+    const rename = async (name: string) => {
+        nameField!.focus();
+        nameField!.value = name;
+        nameField!.dispatchEvent(new InputEvent("input", { bubbles: true }));
+        nameField!.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+        await sleep(200);
+    };
+    await rename("Greetings");
+    c.renamedInPlace = fixture.calls.includes("update-project") && nameField!.value === "Greetings";
+    await rename(REFUSED_NAME);
+    c.refusedNameReverted = nameField!.value === "Greetings";
+    c.refusedNameSaysWhy = Boolean(alertTitled("Not renamed")?.textContent?.includes("that name is taken"));
 }
 
 void run()

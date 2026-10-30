@@ -3,7 +3,8 @@
 // says why and can be retried, that a pressed or edited block rises above
 // every layer the canvas saved, that a function's call is never lost or
 // nested when dropped into its own body, and that a failed apply is shown
-// with its reason and a retry.
+// with its reason and a retry. On the way it checks a project card's
+// switch survives the service's announcement and the name renames in place.
 //
 // Without Chrome the test is skipped with a visible reason.
 import { describe, test, expect } from "bun:test";
@@ -26,7 +27,10 @@ describe("canvas behavior", () => {
             const c = results.checks;
 
             expect(c.homeShowsProject, "Actions must open on its projects").toBe(true);
+            expect(c.switchTurnedOff, "a card's switch must follow the service").toBe(true);
+            expect(c.switchKeptItsCard, "a card was rebuilt when its project changed, cutting the switch's slide").toBe(true);
             expect(c.editorNamesProject, "the editor's top bar must name the open project").toBe(true);
+            expect(c.backButtonSquare, "the top bar squashed its back button").toBe(true);
 
             expect(c.loadFailureTitled, "a canvas that can't load needs a titled alert").toBe(true);
             expect(c.loadFailureReason, "the alert must give the reason on its own").toBe(true);
@@ -52,6 +56,10 @@ describe("canvas behavior", () => {
             expect(c.syncErrorReason, "the alert must say what failed").toBe(true);
             expect(c.syncErrorRetry, "a failed apply needs a retry").toBe(true);
             expect(c.syncErrorCleared, "a successful retry must clear the alert").toBe(true);
+
+            expect(c.renamedInPlace, "Enter in the name field must rename the project").toBe(true);
+            expect(c.refusedNameReverted, "a refused name must go back to the saved one").toBe(true);
+            expect(c.refusedNameSaysWhy, "a refused name must say why").toBe(true);
         },
         60_000,
     );

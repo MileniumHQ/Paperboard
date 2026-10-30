@@ -16,9 +16,10 @@
     --actions-note-width: 260px;
     --actions-note-min-height: 90px;
     --actions-note-max-height: 400px;
-    /* the editor's top bar: its name over its menus. The Library and the
-       controls pinned to the window start below it. */
-    --actions-topbar-height: calc(var(--paper-control-size-small) + var(--paper-control-size-medium) + var(--paper-uigap-half));
+    /* the editor's top bar: its name field over its tiny menus, with room
+       above and below. The Library and the controls pinned to the window
+       start below it. */
+    --actions-topbar-height: calc(var(--paper-control-size-small) + var(--paper-control-size-tiny) + var(--paper-uigap-onefourth) + var(--paper-uigap-double));
 }
 
 html,

@@ -47,8 +47,10 @@ export default function ProjectsHome(props: { projects: ProjectsState; onOpen: (
 
     const create = () => change("Project not made", async () => props.onOpen(await projects.create()));
     const duplicate = (id: string) => change("Project not copied", async () => { await projects.duplicate(id); });
+    // a switch flips on its own, never waiting on another change
     const setEnabled = (id: string, enabled: boolean) =>
-        change(enabled ? "Flows not turned on" : "Flows not turned off", async () => { await projects.setEnabled(id, enabled); });
+        projects.setEnabled(id, enabled).catch((err) =>
+            setFailure({ title: enabled ? "Flows not turned on" : "Flows not turned off", text: message(err) }));
 
     const menu = useContextMenuState("below-right");
     const [menuFor, setMenuFor] = createSignal<ProjectSummary | null>(null);
@@ -68,7 +70,7 @@ export default function ProjectsHome(props: { projects: ProjectsState; onOpen: (
     return (
         <PaperFlex fullWidth fullHeight overflowY="auto">
             <PaperPage width="wide">
-                <PaperPageHeader icon="account_tree" title="Projects" subtitle="Each project is its own canvas of flows">
+                <PaperPageHeader icon="account_tree" title="Projects">
                     <PaperEffect variant="success">
                         <PaperButton variant="success" disabled={working() || !projects.ready()} onClick={() => void create()}>
                             <PaperIcon>add</PaperIcon>
@@ -112,6 +114,7 @@ export default function ProjectsHome(props: { projects: ProjectsState; onOpen: (
                             <For each={projects.list()}>
                                 {(project) => (
                                     <PaperMediaCard
+                                        effect={false}
                                         banner={<CanvasPreview preview={project.preview} />}
                                         title={project.name}
                                         subtitle={editedText(project.editedAt, now())}
@@ -125,7 +128,7 @@ export default function ProjectsHome(props: { projects: ProjectsState; onOpen: (
                                         footerLeft={
                                             <PaperToggle
                                                 checked={project.enabled}
-                                                disabled={working() || Boolean(project.loadError)}
+                                                disabled={Boolean(project.loadError)}
                                                 aria-label={`${project.name}: flows start on their events`}
                                                 title={project.enabled ? "Flows on" : "Flows off"}
                                                 onChange={(enabled) => void setEnabled(project.id, enabled)}

@@ -1,10 +1,66 @@
 // Renaming and deleting a project, the same from the home screen and the
 // editor. Each says what failed, in place, instead of closing on an error.
-import { createEffect, createSignal, Show } from "solid-js";
+import { createEffect, createSignal, on, Show } from "solid-js";
 import { PaperButton, PaperFlex, PaperInput, PaperModal, PaperQuote, PaperText } from "@mileniumhq/paperui";
 import { MAX_PROJECT_NAME } from "../lib/projects";
 
 const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
+
+/** The project's name in the editor's top bar, renamed in place: Enter or
+ * leaving the field saves it, Escape puts it back. A name the service
+ * refuses goes back too, and the reason goes to `onFailed`. */
+export function ProjectNameField(props: {
+    name: string;
+    onRename: (name: string) => Promise<unknown>;
+    onFailed: (reason: string) => void;
+}) {
+    const [draft, setDraft] = createSignal(props.name);
+    const [editing, setEditing] = createSignal(false);
+    // a name announced while nobody is typing is the one to show
+    createEffect(on(() => props.name, (name) => {
+        if (!editing()) setDraft(name);
+    }));
+    const commit = async () => {
+        if (!editing()) return;
+        const name = draft().trim();
+        setEditing(false);
+        if (!name || name === props.name) {
+            setDraft(props.name);
+            return;
+        }
+        try {
+            await props.onRename(name);
+        } catch (err) {
+            setDraft(props.name);
+            props.onFailed(message(err));
+        }
+    };
+    return (
+        <PaperInput
+            compact
+            aria-label="Project name"
+            title="Rename"
+            maxLength={MAX_PROJECT_NAME}
+            value={draft()}
+            onFocus={() => setEditing(true)}
+            onInput={(e) => {
+                setEditing(true);
+                setDraft(e.currentTarget.value);
+            }}
+            onBlur={() => void commit()}
+            onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                    void commit();
+                    e.currentTarget.blur();
+                } else if (e.key === "Escape") {
+                    setEditing(false);
+                    setDraft(props.name);
+                    e.currentTarget.blur();
+                }
+            }}
+        />
+    );
+}
 
 export function RenameProjectModal(props: {
     /** the project being renamed; closed when null */

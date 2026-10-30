@@ -37,7 +37,7 @@ import ConsolePanel, { createConsoleLog } from "./canvas/Console";
 import BlockMenu from "./canvas/BlockMenu";
 import Notices from "./canvas/Notices";
 import GhostBlock from "./canvas/GhostBlock";
-import { DeleteProjectModal, RenameProjectModal } from "./projects/ProjectDialogs";
+import { DeleteProjectModal, ProjectNameField, RenameProjectModal } from "./projects/ProjectDialogs";
 import type { ProjectsState } from "./projects/state";
 import type { ProjectSummary } from "./service";
 
@@ -106,9 +106,10 @@ export default function Editor(props: {
         if (!saved.ok) throw new Error(`Your latest changes are not saved, so the copy would miss them: ${saved.message}`);
         props.onOpen(await props.projects.duplicate(props.projectId));
     });
-    const setEnabled = (enabled: boolean) => change(enabled ? "Flows not turned on" : "Flows not turned off", async () => {
-        await props.projects.setEnabled(props.projectId, enabled);
-    });
+    // the switch flips on its own, never waiting on another change
+    const setEnabled = (enabled: boolean) =>
+        props.projects.setEnabled(props.projectId, enabled).catch((err) =>
+            setFileNotice({ kind: "failed", title: enabled ? "Flows not turned on" : "Flows not turned off", text: message(err) }));
     const addNote = () => {
         try {
             canvas.addNoteInView();
@@ -127,12 +128,14 @@ export default function Editor(props: {
                 <PaperButton icon variant="text" title="All projects" aria-label="All projects" onClick={props.onHome}>
                     <PaperIcon>arrow_back</PaperIcon>
                 </PaperButton>
-                <PaperFlex direction="column" align="flex-start" gap="none">
-                    <PaperButton variant="text" size="small" title="Rename" onClick={() => setRenaming(true)}>
-                        <PaperText preset="subheader">{props.project().name}</PaperText>
-                    </PaperButton>
+                <PaperFlex direction="column" align="flex-start" gap="onefourth">
+                    <ProjectNameField
+                        name={props.project().name}
+                        onRename={(name) => props.projects.rename(props.projectId, name)}
+                        onFailed={(text) => setFileNotice({ kind: "failed", title: "Not renamed", text })}
+                    />
                     <PaperMenuBar aria-label={props.project().name}>
-                        <PaperMenuBarMenu label="File">
+                        <PaperMenuBarMenu label="File" size="tiny">
                             <PaperContextMenuItem icon="add" disabled={working()} onClick={() => void newProject()}>New project</PaperContextMenuItem>
                             <PaperContextMenuItem icon="file_copy" disabled={working() || !doc.loaded()} onClick={() => void copyProject()}>Make a copy</PaperContextMenuItem>
                             <PaperContextMenuItem icon="edit" onClick={() => setRenaming(true)}>Rename</PaperContextMenuItem>
@@ -145,7 +148,7 @@ export default function Editor(props: {
                             <PaperSeparator role="separator" />
                             <PaperContextMenuItem icon="delete" danger onClick={() => setDeleting(true)}>Delete</PaperContextMenuItem>
                         </PaperMenuBarMenu>
-                        <PaperMenuBarMenu label="Insert">
+                        <PaperMenuBarMenu label="Insert" size="tiny">
                             <PaperContextMenuItem icon="note_add" disabled={!doc.loaded()} onClick={addNote}>Note</PaperContextMenuItem>
                         </PaperMenuBarMenu>
                     </PaperMenuBar>
@@ -154,7 +157,6 @@ export default function Editor(props: {
                     <PaperText size={2} color="text-subtle">{props.project().enabled ? "Flows on" : "Flows off"}</PaperText>
                     <PaperToggle
                         checked={props.project().enabled}
-                        disabled={working()}
                         aria-label="Flows start on their events"
                         title="When off, this project's flows don't start on their events"
                         onChange={(enabled) => void setEnabled(enabled)}
