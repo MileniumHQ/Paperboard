@@ -83,6 +83,12 @@ export function Example() {
                             <td><PaperCode>undefined</PaperCode></td>
                             <td>Icon glyph name or component rendered inside the leading framed chip.</td>
                         </tr>
+                        <tr>
+                            <td><PaperCode>centerWhenStacked</PaperCode></td>
+                            <td><PaperCode>boolean</PaperCode></td>
+                            <td><PaperCode>false</PaperCode></td>
+                            <td>Centers the titles and the actions once the actions wrap under the title.</td>
+                        </tr>
                     </tbody>
                 </PaperTable>
 
@@ -90,6 +96,8 @@ export function Example() {
             <PaperText preset="body">
                 PaperPageHeader places the icon chip and titles in a flex column or row depending on viewport width.
                 Trailing action buttons align along the right margin.
+                When there is too little room for both, the actions wrap under the title and keep to the leading edge.
+                Set centerWhenStacked to center both rows instead, which suits a short row of icon buttons such as a chat header on a phone.
             </PaperText>
 
             <PaperText preset="subheader" id="recipes">Recipes</PaperText>

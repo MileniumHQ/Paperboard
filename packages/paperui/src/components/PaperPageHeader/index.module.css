@@ -55,3 +55,19 @@
     gap: var(--paper-uigap-half);
     flex-shrink: 0;
 }
+
+/* centerWhenStacked: once the actions wrap under the title, both rows sit
+   on the header's center line instead of hugging its leading edge */
+.stacked {
+    justify-content: center;
+}
+
+.stacked .heading,
+.stacked .actions {
+    justify-content: center;
+}
+
+.stacked .text {
+    align-items: center;
+    text-align: center;
+}
